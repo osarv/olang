@@ -2102,6 +2102,7 @@ static struct list typeInstantiations;
 //syntax being checked again per instantiation (G16). Threaded as a static rather than through every
 //type-resolution signature, and cleared on the way out so nothing outside an instantiation sees it.
 static struct list* currentBindings;   //struct instantiation
+static struct list* currentConstVars; //G20/G22: see below
 //G8: the type parameters in scope while a declaration's own types are being resolved, so a bare IDEN
 //inside a "type-args" list can name one - "Box<T> inside a declaration that declares T". For a generic
 //TYPE that is its declared list, available before any field is resolved; for a FUNCTION there is no list
@@ -2149,6 +2150,84 @@ static void collectTypeVarToks(struct syntax* node, struct list* out) {
         struct syntaxPart* p = ListGetIdx(&node->parts, i);
         if (!p->isToken) collectTypeVarToks(p->sntx, out);
     }
+}
+//G22: a generic's variable is INTRODUCED by its first "<X>" - in a struct type or trait by its parameter list, in a function
+//by the first "<X>" read left to right (receiver, parameters, results) - and written bare, "X", everywhere after it: in
+//the rest of the declaration and in its body. "<X>" written again is an error, and a bare "X" before the introduction
+//names no variable. Constant variables follow the rule; type variables follow it once bareTypeVars is set, and are
+//written "<T>" everywhere until then (G8b)
+static const bool bareTypeVars = false;
+//the introduction of each variable of the signature being resolved - its first "<X>", by source position - or NULL
+//outside a signature
+static struct list* currentSigIntros; //struct token
+
+static void collectSigIntros(struct syntax* node, struct list* out) {
+    if (!node) return;
+    if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) {
+        struct token t = firstTokOfType(node, TOK_IDEN);
+        if (t.type != TOK_NONE) {
+            bool seen = false;
+            for (int i = 0; i < out->len && !seen; i++) {
+                struct token* o = ListGetIdx(out, i);
+                if (!StrCmp(strFromTok(*o), strFromTok(t))) continue;
+                seen = true;
+                if (t.str.ptr < o->str.ptr) *o = t;
+            }
+            if (!seen) ListAdd(out, &t);
+        }
+        struct syntax* c = firstPartOfType(node, SNTX_TYPE_EXPR); //"<V Shaped<<R>>>" introduces R too
+        if (c) collectSigIntros(c, out);
+        return;
+    }
+    for (int i = 0; i < node->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&node->parts, i);
+        if (!p->isToken) collectSigIntros(p->sntx, out);
+    }
+}
+static struct token* sigIntroOf(struct str name) {
+    for (int i = 0; currentSigIntros && i < currentSigIntros->len; i++) {
+        struct token* t = ListGetIdx(currentSigIntros, i);
+        if (StrCmp(strFromTok(*t), name)) return t;
+    }
+    return NULL;
+}
+//G22: whether "<X>" written at t is written again - after the variable's introduction: in a body or a type's own
+//declaration always, in a signature anywhere but its first "<X>"
+static bool varWrittenAgain(struct token t) {
+    struct str name = strFromTok(t);
+    if (currentBindings && bindingGet(currentBindings, name)) return true;
+    if (currentConstVars && bindingGet(currentConstVars, name)) return true;
+    struct token* intro = sigIntroOf(name);
+    return intro && intro->str.ptr != t.str.ptr;
+}
+//G22: what a bare name written at `at` is - 1 a variable of the declaration in scope there, -1 one of the signature's
+//introduced only after it, 0 no variable
+static int bareVarAt(struct str name, struct token at) {
+    if (currentBindings && bindingGet(currentBindings, name)) return 1;
+    if (currentConstVars && bindingGet(currentConstVars, name)) return 1;
+    struct token* intro = sigIntroOf(name);
+    if (intro) return intro->str.ptr < at.str.ptr ? 1 : -1;
+    //a type's own list, or an enclosing declaration's, introduced its type variables before anything they are read in
+    for (int i = 0; bareTypeVars && currentTypeParamNames && i < currentTypeParamNames->len; i++)
+        if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) return 1;
+    return 0;
+}
+//a node that is one bare name used as a value or a type - "N" as an operand, or as a whole type argument - its token,
+//else a token of type TOK_NONE
+static struct token bareNameTok(struct syntax* s) {
+    if (s && (s->type == SNTX_EXPR_PRIMARY || s->type == SNTX_NAME) && s->parts.len == 1 && partAt(s, 0)->isToken
+            && partAt(s, 0)->tok.type == TOK_IDEN) return partAt(s, 0)->tok;
+    return (struct token){0};
+}
+//the innermost node of a chain of nodes each holding exactly one node - what "N" as a whole expression comes down to
+static struct syntax* firstNodeOfChain(struct syntax* s) {
+    while (s && s->parts.len == 1 && !partAt(s, 0)->isToken) s = partSntx(s, 0);
+    return s;
+}
+//G22: the binding of the constant variable named so in the instantiation being checked, else NULL
+static struct type* boundConstVar(struct str name) {
+    struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
+    return b && b->bType == BASETYPE_CONST ? b : NULL;
 }
 static struct list pendingInstances; //int: indices into instantiations whose bodies are not yet checked
 //the same idea for generic STRUCT types: a copy's constructor/destructor bodies are built from the
@@ -2775,6 +2854,15 @@ static struct syntax* cfGlobalDecl(struct semaModule* mod, struct str name) {
     return NULL;
 }
 
+//whether a bare name means something in the module itself - a global, a function, a type, an import or a build constant -
+//and so is no constant variable of a generic of it (D3a, G22)
+bool nameIsImportAlias(struct semaModule* mod, struct str name);
+static bool cfNamesGlobal(struct semaModule* mod, struct str name) {
+    if (!mod) return false;
+    return cfGlobalDecl(mod, name) || VarGetList(&mod->vars, name) || buildConstVar(name) || nameIsAType(mod, name)
+           || nameIsImportAlias(mod, name);
+}
+
 static enum cfRes cfGlobal(struct cfCtx* c, struct semaModule* mod, struct token nameTok, struct cfVal* out) {
     struct str name = strFromTok(nameTok);
     struct syntax* decl = cfGlobalDecl(mod, name);
@@ -2834,9 +2922,16 @@ static enum cfRes cfCase(struct cfCtx* c, struct type* et, struct token caseTok,
     return cfFail(c, caseTok, "the enum has no such case");
 }
 
+static enum cfRes cfConstVar(struct cfCtx* c, struct token nameTok, struct cfVal* out);
 static enum cfRes cfNameChain(struct cfCtx* c, struct list idens, struct cfVal* out) {
     struct token last = *(struct token*)ListGetIdx(&idens, idens.len - 1);
     if (idens.len == 1) {
+        //G22: a constant variable written bare - in scope where the argument is resolved; in a substitution, the
+        //variables are what it binds, and what names nothing in the module (a variable not bound yet)
+        struct str n = strFromTok(last);
+        bool var = c->substituting ? (c->bindings && bindingGet(c->bindings, n)) || !cfNamesGlobal(c->mod, n)
+                                   : (c->bindings && bindingGet(c->bindings, n)) || bareVarAt(n, last) > 0;
+        if (var) return cfConstVar(c, last, out);
         if (nameIsAType(c->mod, strFromTok(last))) return cfFail(c, last, "it names a type, not a value");
         return cfGlobal(c, c->mod, last, out);
     }
@@ -3050,6 +3145,8 @@ struct constArgPend { struct str key; struct syntax* node; struct semaModule* mo
 static struct list constArgPends;
 
 static void spellSyntaxTokens(struct sbuf* b, struct syntax* s) {
+    //a variable is its name, written "<N>" or "N" and with or without the type its introduction may carry (G22)
+    if (s->type == SNTX_TYPE_VAR || s->type == SNTX_CONST_VAR) { sbufS(b, firstTokOfType(s, TOK_IDEN).str); sbufStr(b, " "); return; }
     for (int i = 0; i < s->parts.len; i++) {
         struct syntaxPart* p = partAt(s, i);
         if (p->isToken) { sbufS(b, p->tok.str); sbufStr(b, " "); }
@@ -3145,33 +3242,45 @@ static struct type constUndecided(struct type slot, struct token tok) {
 
 //G24: does a constant argument read a constant variable these bindings (or, with none, the instantiation being checked)
 //leave unbound - one evaluation would need, so that it is a pattern until they are bound, whatever it calls
-static bool constArgReadsUnbound(struct syntax* s, struct list* bindings) {
+static bool cfNamesGlobal(struct semaModule* mod, struct str name);
+static bool constArgReadsUnbound(struct syntax* s, struct semaModule* mod, struct list* bindings) {
     if (!s) return false;
-    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
-        struct str n = strFromTok(firstTokOfType(s, TOK_IDEN));
-        struct list* b = bindings ? bindings : currentBindings;
-        struct type* bt = b ? bindingGet(b, n) : NULL;
-        if (!bt) return true;
-        if (bt->bType == BASETYPE_CONST) return !bt->constKnown;
-        return TypeIsGeneric(*bt); //a type variable bound to a type is bound once that type is known
+    struct token bt = bareNameTok(s);
+    bool var = s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR;
+    if (!var && bt.type != TOK_NONE) {
+        //a bare name is a variable where one is in scope - in a substitution, wherever it names no global (D3a keeps
+        //the two apart)
+        struct str n = strFromTok(bt);
+        var = bindings ? (bindingGet(bindings, n) || !cfNamesGlobal(mod, n)) : bareVarAt(n, bt) > 0;
     }
-    for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken && constArgReadsUnbound(partSntx(s, i), bindings)) return true;
+    if (var) {
+        struct str n = strFromTok(bt.type != TOK_NONE ? bt : firstTokOfType(s, TOK_IDEN));
+        struct list* b = bindings ? bindings : currentBindings;
+        struct type* bound = b ? bindingGet(b, n) : NULL;
+        if (!bound) return true;
+        if (bound->bType == BASETYPE_CONST) return !bound->constKnown;
+        return TypeIsGeneric(*bound); //a type variable bound to a type is bound once that type is known
+    }
+    for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken && constArgReadsUnbound(partSntx(s, i), mod, bindings)) return true;
     return false;
 }
 
 //G22: the first constant variable a constant argument reads that no declaration in scope has - a token of type TOK_NONE
-//when every one is
+//when every one is. A variable written "<N>" after its introduction, or bare before it, is reported on the way
 static struct token constArgUnknownVar(struct syntax* s) {
     if (!s) return (struct token){0};
     if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
         struct token t = firstTokOfType(s, TOK_IDEN);
         struct str n = strFromTok(t);
+        if (varWrittenAgain(t)) Err(t, ERR_VAR_WRITTEN_AGAIN, n, n, n);
         if (currentBindings && bindingGet(currentBindings, n)) return (struct token){0};
         if (currentConstVars && bindingGet(currentConstVars, n)) return (struct token){0};
         for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++)
             if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), n)) return (struct token){0};
         return t;
     }
+    struct token bt = bareNameTok(s);
+    if (bt.type != TOK_NONE && bareVarAt(strFromTok(bt), bt) < 0) Err(bt, ERR_VAR_BEFORE_INTRO, bt, strFromTok(bt));
     for (int i = 0; i < s->parts.len; i++) {
         if (partAt(s, i)->isToken) continue;
         struct token t = constArgUnknownVar(partSntx(s, i));
@@ -3186,14 +3295,25 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
                                    struct str paramName) {
     struct type bad = TypeConst(slot, 0);
     bad.unknown = true;
-    //"<N>" as the whole argument
+    //a constant variable as the whole argument - "<N>" where it is introduced, "N" after
     struct syntax* ref = node->type == SNTX_TYPE_EXPR && node->parts.len == 1 && !partAt(node, 0)->isToken
                          ? partSntx(node, 0) : NULL;
-    if (ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 && partSntx(ref, 0)->type == SNTX_TYPE_VAR) {
-        struct syntax* varNode = partSntx(ref, 0);
-        struct token nameTok = firstTokOfType(varNode, TOK_IDEN);
+    struct syntax* whole = ref && ref->type == SNTX_TYPE_REF && ref->parts.len == 1 ? partSntx(ref, 0) : NULL;
+    bool written = whole && whole->type == SNTX_TYPE_VAR;
+    struct token bareTok = bareNameTok(whole);
+    int bare = bareTok.type == TOK_NONE ? 0 : bareVarAt(strFromTok(bareTok), bareTok);
+    if (bare < 0) { Err(bareTok, ERR_VAR_BEFORE_INTRO, bareTok, strFromTok(bareTok)); return bad; }
+    if (written || bare > 0) {
+        struct token nameTok = written ? firstTokOfType(whole, TOK_IDEN) : bareTok;
         struct str vname = strFromTok(nameTok);
-        if (firstPartOfType(varNode, SNTX_TYPE_EXPR)) { Err(nameTok, ERR_CONST_VAR_CONSTRAINED, vname); return bad; }
+        if (written && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname);
+        //"<N I64>": a constant variable's type written where it is introduced - the parameter's type, or none at all
+        struct syntax* typeNode = written ? firstPartOfType(whole, SNTX_TYPE_EXPR) : NULL;
+        if (typeNode) {
+            struct type wt = resolveTypeExpr(mod, typeNode, NULL);
+            if (wt.bType == BASETYPE_INTERFACE) { Err(nameTok, ERR_CONST_VAR_CONSTRAINED, vname); return bad; }
+            if (!wt.unknown && !slot.unknown && !TypeIsSame(wt, slot)) { Err(nameTok, ERR_CONST_VAR_TWO_TYPES, vname, &wt, &slot); return bad; }
+        }
         if (currentBindings) {
             struct type* b = bindingGet(currentBindings, vname);
             if (b) {
@@ -3239,7 +3359,7 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
         Err(c.errTok.type != TOK_NONE ? c.errTok : firstTokAnywhere(node), ERR_CONST_ARG_NOT_COMPUTABLE, c.why);
         return bad;
     }
-    if (r == CF_DEFER && constArgReadsUnbound(node, NULL)) r = CF_PATTERN; //"twice(<N>)" in a generic's signature
+    if (r == CF_DEFER && constArgReadsUnbound(node, mod, NULL)) r = CF_PATTERN; //"twice(<N>)" in a generic's signature
     if (r == CF_PATTERN) {
         struct type p = (struct type){0};
         p.bType = BASETYPE_CONST;
@@ -3281,7 +3401,7 @@ static bool constPatternValue(struct type p, struct list* bindings, long long* o
     c.substituting = true;
     struct cfVal v = (struct cfVal){0};
     enum cfRes r = cfExpr(&c, p.constExpr, &v);
-    if (r == CF_PATTERN || (r == CF_DEFER && constArgReadsUnbound(p.constExpr, bindings))) return false;
+    if (r == CF_PATTERN || (r == CF_DEFER && constArgReadsUnbound(p.constExpr, p.constMod, bindings))) return false;
     *out = 0;
     if (r == CF_OK) {
         if (!constFits(*p.constOf, v.i)) Err(p.tok, ERR_CONST_ARG_RANGE, v.i, p.constOf);
@@ -3427,6 +3547,8 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     if (varNode) {
         struct token nameTok = firstTokOfType(varNode, TOK_IDEN);
         struct str vname = strFromTok(nameTok);
+        //G22: a type variable following the introduction rule is written "<T>" once
+        if (bareTypeVars && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname);
         //inside an instantiation, a type variable IS its bound type - see currentBindings
         if (currentBindings) {
             struct type* bound = bindingGet(currentBindings, vname);
@@ -3455,6 +3577,20 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     if (idens.len == 1) {
         nameTok = *(struct token*)ListGetIdx(&idens, 0);
         struct str name = strFromTok(nameTok);
+        //G22: a variable written bare after its introduction - a constant one is a value, where a type belongs; a type
+        //variable is its type once type variables follow the rule
+        int bv = bareVarAt(name, nameTok);
+        if (bv != 0 && !TypeGetList(&mod->types, name)) {
+            struct type* bound = currentBindings ? bindingGet(currentBindings, name) : NULL;
+            if ((bound && (bound->bType == BASETYPE_CONST || bound->isConstVar)) || (currentConstVars && bindingGet(currentConstVars, name))) {
+                Err(nameTok, ERR_CONST_VAR_AS_TYPE, name);
+                return unknownTypeStandIn();
+            }
+            if (bareTypeVars) {
+                if (bv < 0) { Err(nameTok, ERR_VAR_BEFORE_INTRO, nameTok, name); return unknownTypeStandIn(); }
+                return bound ? *bound : TypeVar(name, nameTok);
+            }
+        }
         //G8: a bare IDEN here may name a type parameter in scope rather than a declared type, which is
         //what lets one generic be written in terms of another. Checked before the declared-type lookup so
         //G8b: a type variable is written "<T>" everywhere, type arguments included - "Cell<<T>>" - so a bare
@@ -4361,8 +4497,9 @@ static void finishTypeVarResult(struct type* t, struct token tok) {
 struct sigVarUse { struct str name; struct type* of; struct token tok; bool constant; };
 static void collectPatternVarUses(struct syntax* s, struct list* out) {
     if (!s) return;
-    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR) {
-        struct token t = firstTokOfType(s, TOK_IDEN);
+    struct token bt = bareNameTok(s); //G22: written bare after its introduction
+    if (s->type == SNTX_CONST_VAR || s->type == SNTX_TYPE_VAR || (bt.type != TOK_NONE && sigIntroOf(strFromTok(bt)))) {
+        struct token t = bt.type != TOK_NONE ? bt : firstTokOfType(s, TOK_IDEN);
         struct sigVarUse u = { strFromTok(t), NULL, t, true };
         ListAdd(out, &u);
         return;
@@ -4425,7 +4562,7 @@ static void checkSigConstVars(struct semaModule* mod, struct type* ft, struct li
         rejectConstVarClash(mod, u->name, u->tok);
         for (int j = 0; j < ft->vars.len; j++) {
             struct var* param = ListGetIdx(&ft->vars, j);
-            if (StrCmp(param->name, u->name)) Err(param->tok, ERR_CONST_VAR_SHADOWED, param->tok, u->name);
+            if (StrCmp(param->name, u->name)) Err(param->tok, ERR_CONST_VAR_SHADOWED, param->tok);
         }
     }
 }
@@ -4459,6 +4596,12 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         }
     }
     if (sigTypeVars.len > 0) currentTypeParamNames = &sigTypeVars;
+    //G22: the variables this signature introduces, each by its first "<X>". A signature inside it (a parameter's function
+    //type) introduces none of its own (G3a), and neither does one inside a generic's body, whose variables its own
+    //signature introduced
+    struct list* prevIntros = currentSigIntros;
+    struct list sigIntros = ListInit(sizeof(struct token));
+    if (!currentSigIntros && !currentBindings) { collectSigIntros(sigNode, &sigIntros); currentSigIntros = &sigIntros; }
     bool prevImplicit = implicitParamScopes;
     implicitParamScopes = true;
     resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars, &t.scopeVars);
@@ -4544,6 +4687,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     t.typeConstraints = ListInit(sizeof(struct type));
     TypeCollectConstraints(t, &t.typeConstraints);
     currentTypeParamNames = prevTPN;
+    currentSigIntros = prevIntros;
     scopeTagParams = prevTagParams;
     return t;
 }
@@ -5473,7 +5617,7 @@ static void rejectShadowing(struct semaModule* mod, struct str name, struct toke
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
-    else if (constVarNamed(name)) Err(tok, ERR_CONST_VAR_SHADOWED, tok, name); //G22
+    else if (constVarNamed(name)) Err(tok, ERR_CONST_VAR_SHADOWED, tok); //G22
 }
 
 struct var* scopeDeclare(struct semaModule* mod, struct scope* sc, struct str name, struct token tok, struct type type, bool mut) {
@@ -5497,13 +5641,6 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
-    //G23: a constant variable is written "<N>" as a value too - and "i <<N>" is a shift by a name, not "i < <N>"
-    struct type* cb = !v && currentBindings ? bindingGet(currentBindings, name) : NULL;
-    if (cb && cb->bType == BASETYPE_CONST) {
-        bool shifted = TokenBefore(tok).type == TOK_BTSFT_L;
-        Err(tok, shifted ? ERR_CONST_VAR_AFTER_SHIFT : ERR_CONST_VAR_BARE, name, name);
-        return NULL;
-    }
     if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
@@ -9765,6 +9902,7 @@ struct operand* OperandStructLiteral(struct var* callerFunc, struct type t, stru
     if (args.len != t.vars.len) { Err(tok, ERR_ARG_COUNT, t.vars.len, t.vars.len == 1 ? "" : "s", args.len); return op; }
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+        if (!arg) continue; //a field whose declaration was reported
         struct type memberType = (*(struct var*)ListGetIdx(&t.vars, i)).type;
         reportTypeFit(OperandFitsType(callerFunc, arg, memberType), arg->tok, arg, memberType);
     }
@@ -11890,9 +12028,10 @@ struct operand* OperandConstValue(struct type of, long long v, struct token tok)
     op->constVarValue = true;
     return op;
 }
-static struct operand* buildConstVarExpr(struct syntax* s) {
-    struct token nameTok = firstTokOfType(s, TOK_IDEN);
+//G23: a constant variable read as a value - "N", or "<N>" written again (G22), reported and read as "N"
+static struct operand* buildConstVarExpr(struct token nameTok, bool written) {
     struct str name = strFromTok(nameTok);
+    if (written && varWrittenAgain(nameTok)) Err(nameTok, ERR_VAR_WRITTEN_AGAIN, name, name, name);
     struct type* b = currentBindings ? bindingGet(currentBindings, name) : NULL;
     if (!b) { Err(nameTok, ERR_CONST_VAR_UNKNOWN, name); return unknownPlaceholder(nameTok); }
     if (b->bType != BASETYPE_CONST) { Err(nameTok, ERR_TYPE_VAR_AS_VALUE, name); return unknownPlaceholder(nameTok); }
@@ -11901,7 +12040,11 @@ static struct operand* buildConstVarExpr(struct syntax* s) {
 }
 
 struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
-    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_CONST_VAR) return buildConstVarExpr(partSntx(s, 0));
+    if (s->parts.len == 1 && !partAt(s, 0)->isToken && partSntx(s, 0)->type == SNTX_CONST_VAR)
+        return buildConstVarExpr(firstTokOfType(partSntx(s, 0), TOK_IDEN), true);
+    //G22/G23: a constant variable is written bare after its introduction - no local may have its name (D3a)
+    if (s->parts.len == 1 && partAt(s, 0)->isToken && partAt(s, 0)->tok.type == TOK_IDEN && boundConstVar(strFromTok(partAt(s, 0)->tok)))
+        return buildConstVarExpr(partAt(s, 0)->tok, false);
     if (s->parts.len == 1 && partAt(s, 0)->isToken) {
         struct token tok = partAt(s, 0)->tok;
         switch (tok.type) {
@@ -12048,6 +12191,17 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 recvTok = gTok;
                 recvStart = i + 1;
             }
+        }
+        //G22/G23: a constant variable as the receiver - "N.Hash()"
+        if (!recvVar && nameIdens.len == 2 && boundConstVar(strFromTok(recvTok))) {
+            bool mReported = false;
+            struct operand* recvOp = buildConstVarExpr(recvTok, false);
+            struct operand* mc = buildMethodCall(ctx, recvOp, nameTok, firstPartOfType(callNode, SNTX_EXPR_ARGS),
+                                                 scopeArgNodes, &mReported);
+            if (mc) return mc;
+            if (!mReported) reportUnknownMethod(recvOp, nameTok);
+            buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            return unknownPlaceholder(nameTok);
         }
         //M12/M19: a case of an enum with no payload, written as the receiver - "Color.Red.Hash()", "lib.Dir.North.Hash()"
         if (!recvVar && nameIdens.len >= 3) {
@@ -13220,6 +13374,7 @@ static enum tokenType compoundBinTokType(enum operation compoundOp) {
 }
 
 static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
+    if (target->args.len < 2) return (struct statement){0}; //an At call that failed, reported where it is written
     struct operand* base = *(struct operand**)ListGetIdx(&target->args, 0);
     struct operand* idx = *(struct operand**)ListGetIdx(&target->args, 1);
     //under "try" (E31): TrySetAt when declared, else SetAt after checking i against Len()
@@ -14053,6 +14208,8 @@ static struct operand* fixedLocalInit(struct var* local, void* ctx) {
 static bool syntaxReadsConstVar(struct syntax* s) {
     if (!s) return false;
     if (s->type == SNTX_CONST_VAR) return true;
+    struct token bt = bareNameTok(s);
+    if (bt.type != TOK_NONE && boundConstVar(strFromTok(bt))) return true; //G22: written bare
     for (int i = 0; i < s->parts.len; i++) if (!partAt(s, i)->isToken && syntaxReadsConstVar(partSntx(s, i))) return true;
     return false;
 }
@@ -15383,8 +15540,14 @@ static struct statement buildConstMatchStmnt(struct checkCtx* ctx, struct syntax
         if (guard) Err(firstTokOfType(guard, TOK_IF), ERR_TYPE_MATCH_GUARD);
         for (int k = 0; k < c->parts.len && !chosen; k++) {
             struct syntaxPart* p = partAt(c, k);
-            if (p->isToken || (p->sntx->type != SNTX_EXPR && p->sntx->type != SNTX_TYPE_EXPR)) continue;
-            if (constCaseMatches(ctx, p->sntx, bound) == 1) chosen = c;
+            if (p->isToken) continue;
+            struct syntax* alt = p->sntx;
+            //"case Layout.RowMajor" in a value match is read as a pattern - an enum case with no payload list is its value
+            if (alt->type == SNTX_CASE_PATTERN) {
+                if (alt->parts.len != 1) { Err(firstTokAnywhere(alt), ERR_CONST_ARG_KIND, bound.constOf); continue; }
+                alt = partSntx(alt, 0);
+            } else if (alt->type != SNTX_EXPR && alt->type != SNTX_TYPE_EXPR) continue;
+            if (constCaseMatches(ctx, alt, bound) == 1) chosen = c;
         }
     }
     if (!chosen) chosen = firstPartOfType(s, SNTX_STMNT_NOMATCH);
@@ -15401,15 +15564,16 @@ static struct statement buildConstMatchStmnt(struct checkCtx* ctx, struct syntax
     return stmt;
 }
 
-struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct syntax* varNode, bool asValue) {
+//G13/G26: "match <T>" or, after its introduction, "match N" (G22) - the variable is resolved directly against the
+//instantiation's own bindings rather than through the general type-expression path
+struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, struct token opTok, bool written, bool asValue) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;
-    struct token opTok = firstTokAnywhere(varNode);
-    //the operand is a bare SNTX_TYPE_VAR, not wrapped in a SNTX_TYPE_EXPR, so it is resolved directly
-    //against the instantiation's own bindings rather than through the general type-expression path
-    struct str vname = strFromTok(firstTokOfType(varNode, TOK_IDEN));
+    struct str vname = strFromTok(opTok);
     struct type* bound = currentBindings ? bindingGet(currentBindings, vname) : NULL;
     if (!bound) { Err(opTok, ERR_UNKNOWN_TYPE_VAR, vname); return buildEmptyIfStmnt(ctx, opTok); }
+    if (written && (bareTypeVars || bound->bType == BASETYPE_CONST) && varWrittenAgain(opTok))
+        Err(opTok, ERR_VAR_WRITTEN_AGAIN, vname, vname, vname); //G22: "match N"
     if (bound->bType == BASETYPE_CONST) return buildConstMatchStmnt(ctx, s, *bound, opTok, asValue);
     struct type operandT = *bound;
 
@@ -15666,7 +15830,12 @@ static bool patCaseCovered(struct list* rows, struct type t, int tag) { return p
 
 static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, bool asValue) {
     struct syntax* varNode = firstPartOfType(s, SNTX_TYPE_VAR);
-    if (varNode) return buildTypeMatchStmnt(ctx, s, varNode, asValue);
+    if (varNode) return buildTypeMatchStmnt(ctx, s, firstTokOfType(varNode, TOK_IDEN), true, asValue);
+    //G22/G26: "match N" over a constant variable picks its case per instantiation - and "match T" over a type variable,
+    //once type variables are written bare
+    struct token subj = bareNameTok(firstNodeOfChain(firstPartOfType(s, SNTX_EXPR)));
+    struct type* bound = subj.type != TOK_NONE && currentBindings ? bindingGet(currentBindings, strFromTok(subj)) : NULL;
+    if (bound && (bound->bType == BASETYPE_CONST || bareTypeVars)) return buildTypeMatchStmnt(ctx, s, subj, false, asValue);
     struct operand* matched = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_MATCH;

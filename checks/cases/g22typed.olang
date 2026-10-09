@@ -1,0 +1,4 @@
+# check: fail error[G22]: N fills constant parameters of two types, I32 and I64
+# G22: a type written at a constant variable's introduction is the type of every parameter it fills
+fn typed(a Array<I32, <N I32>>&) I64 { return N }
+fn main() ? { assert typed(I32[1]) == 1 }

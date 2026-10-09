@@ -11921,15 +11921,15 @@ test "O25h/O10c: pairs holding text and nodes pushed where their list lives" {
 
 # G20/G22/G27: a struct type over a type and a constant, the constant's rule an assert decided per instantiation
 type KRing<T, N I64> struct() {
-    assert <N> > 0 and (<N> & (<N> - 1)) == 0
-    items mut Array<<T>, <N>>
+    assert N > 0 and (N & (N - 1)) == 0
+    items mut Array<<T>, N>
     head mut I64
 }
 fn (r mut KRing<<T>, <N>>&) Put(x <T>) {
-    r.items[r.head & (<N> - 1)] = x
+    r.items[r.head & (N - 1)] = x
     r.head++
 }
-fn (r KRing<<T>, <N>>&) Cap() I64 { return <N> }
+fn (r KRing<<T>, <N>>&) Cap() I64 { return N }
 fn kRingSum() I64 {
     r := KRing<I64, 4>()
     for i in range 6 { r.Put(i + 1) }        # 5 and 6 overwrite 1 and 2
@@ -11945,15 +11945,15 @@ test "G20/G27: a ring over a constant capacity, its rule checked per instantiati
 }
 
 # G24: constant variables inferred from argument types - and an expression of them computed per instantiation
-fn kDot(a Array<<T>, <N>>&, b Array<<T>, <N>>&) <T> {
+fn kDot(a Array<<T>, <N>>&, b Array<<T>, N>&) <T> {
     s <T> = 0
-    for i in range <N> { s = s + a[i] * b[i] }
+    for i in range N { s = s + a[i] * b[i] }
     return s
 }
-fn kConcat(a Array<<T>, <N>>&, b Array<<T>, <M>>&) Array<<T>, <N> + <M>> {
-    out Array<<T>, <N> + <M>>
-    for i in range <N> { out[i] = a[i] }
-    for i in range <M> { out[<N> + i] = b[i] }
+fn kConcat(a Array<<T>, <N>>&, b Array<<T>, <M>>&) Array<<T>, N + M> {
+    out Array<<T>, N + M>
+    for i in range N { out[i] = a[i] }
+    for i in range M { out[N + i] = b[i] }
     return out
 }
 KDotBaked := kDot(I64[1, 2, 3], I64[4, 5, 6])          # an array literal binds N by its length (T7d)
@@ -11968,16 +11968,16 @@ test "G24: constant variables are inferred, and an expression of them computed p
 
 # G21/G22: a matrix whose storage length is computed from its dimensions, and a product whose shape the types check
 type KMat<T, R I64, C I64> struct() {
-    data mut Array<<T>, <R> * <C>>
+    data mut Array<<T>, R * C>
 }
-fn (m KMat<<T>, <R>, <C>>&) Get(r I64, c I64) <T> { return m.data[r * <C> + c] }
-fn (m mut KMat<<T>, <R>, <C>>&) Set(r I64, c I64, v <T>) { m.data[r * <C> + c] = v }
-fn (a KMat<<T>, <M>, <K>>&) Times(b KMat<<T>, <K>, <N>>&) KMat<<T>, <M>, <N>> {
-    out := KMat<<T>, <M>, <N>>()
-    for i in range <M> {
-        for j in range <N> {
+fn (m KMat<<T>, <R>, <C>>&) Get(r I64, c I64) <T> { return m.data[r * C + c] }
+fn (m mut KMat<<T>, <R>, <C>>&) Set(r I64, c I64, v <T>) { m.data[r * C + c] = v }
+fn (a KMat<<T>, <M>, <K>>&) Times(b KMat<<T>, K, <N>>&) KMat<<T>, M, N> {
+    out := KMat<<T>, M, N>()
+    for i in range M {
+        for j in range N {
             s <T> = 0
-            for k in range <K> { s = s + a.Get(i, k) * b.Get(k, j) }
+            for k in range K { s = s + a.Get(i, k) * b.Get(k, j) }
             out.Set(i, j, s)
         }
     }
@@ -11999,18 +11999,18 @@ test "G21: a matrix's dimensions are its type's, and a product's shape is checke
 # G26: a condition, a conditional and a match on a constant are decided per instantiation - only what is chosen is
 # checked, which is what ends this recursion
 fn kTotal(a Array<I64, <N>>&) I64 {
-    if <N> == 0 { return 0 } else { return a[0] + kTotal(a[1:] as Array<I64, <N> - 1>&) }
+    if N == 0 { return 0 } else { return a[0] + kTotal(a[1:] as Array<I64, N - 1>&) }
 }
 fn kSize(a Array<I32, <N>>&) String {
-    match <N> {
+    match N {
         case 0 { return "empty" }
         case 1, 2 { return "small" }
         nomatch { return "big" }
     }
 }
-fn kPick(a Array<I32, <N>>&) I64 { return 1 if <N> > 2 else 0 }
+fn kPick(a Array<I32, <N>>&) I64 { return 1 if N > 2 else 0 }
 fn kViaLocal(a Array<I32, <N>>&) I64 {
-    n := <N>                 # one parse serves every instantiation, so a condition on n is an ordinary one
+    n := N                 # one parse serves every instantiation, so a condition on n is an ordinary one
     if n > 3 { return 1 }
     return 0
 }
@@ -12033,9 +12033,9 @@ type KLayout enum {
 }
 type KGrid<L KLayout, KWide Bool> struct() { v mut I32 }
 fn (g KGrid<<L>, <W>>&) Name() String {
-    match <L> {
-        case KLayout.RowMajor { return "wide row" if <W> else "row" }
-        case KLayout.ColMajor { return "wide col" if <W> else "col" }
+    match L {
+        case KLayout.RowMajor { return "wide row" if W else "row" }
+        case KLayout.ColMajor { return "wide col" if W else "col" }
     }
 }
 KGridBaked := KGrid<KLayout.ColMajor, true>().Name()
@@ -12046,13 +12046,38 @@ test "G20: an enum's case and a Bool are constant arguments" {
 
 # G23: a constant variable is a value of its parameter's type, which flows only as such a value does
 fn kAsValue(a Array<U8, <N>>&) I64 {
-    n := <N>
-    m I32 = I32(<N>)
+    n := N
+    m I32 = I32(N)
     return n * 1000 + m
 }
 test "G23: a constant variable as a value" {
     a Array<U8, 7>
     assert kAsValue(a) == 7007
+}
+
+# G22: a variable is introduced by its first "<N>" - its type may be written there - and written bare after it: later in
+# the signature (a parameter, the result, a computed length) and in the body, as a value, a length or a match's subject
+fn kTwice(n I64) I64 { return n * 2 }
+fn kWiden(a Array<I32, <N I64>>&, pad I32) Array<I32, kTwice(N)> {
+    out Array<I32, kTwice(N)>
+    for i in range N { out[i] = a[i] }
+    for i in range N { out[N + i] = pad }
+    return out
+}
+fn kLast(a Array<I32, <N>>&, b Array<I32, N>&) I32 { return a[N - 1] + b[N - 1] }
+fn kScaled(a Array<I64, <N>>&) I64 {
+    times := fn(x I64) I64 { return x * N }         # a lambda reads it as its body does, capturing nothing
+    return times(N.Hash() & 7) + ($N).Len()
+}
+KWidenBaked := kWiden(I32[1, 2, 3], 9)
+KScaledBaked := kScaled(I64[1, 2, 3])
+test "G22: a variable is introduced once, by its first <N>, and written bare after it" {
+    w := kWiden(I32[4, 5], 7)
+    assert w.Len() == 4 and w[1] == 5 and w[3] == 7
+    assert KWidenBaked.Len() == 6 and KWidenBaked[2] == 3 and KWidenBaked[5] == 9
+    assert kLast(I32[1, 2], I32[3, 4]) == 6
+    three I64 = 3
+    assert kScaled(I64[4, 5, 6]) == (three.Hash() & 7) * 3 + 1 and KScaledBaked == kScaled(I64[4, 5, 6])
 }
 
 # G21: a constant argument computed by a call, or from a global computed by one - decided once the program has checked
@@ -12117,7 +12142,7 @@ fn kView(r Array<I32>&) I64 {
 }
 fn kTotalI32(a Array<I32, <N>>&) I64 {
     s I64 = 0
-    for i in range <N> { s = s + a[i] }
+    for i in range N { s = s + a[i] }
     return s
 }
 KViewBaked I64 = kView(I32[1, 2, 3]) * 10 + kView(I32[1, 2])
@@ -12143,13 +12168,13 @@ test "T29f: a declared type extends an Array<T, N>" {
 
 # G28: a trait's constant parameter, bound through the method that carries it
 type KSized<N I64> trait {
-    Items() Array<I32, <N>>
+    Items() Array<I32, N>
 }
 type KBag<N I64> struct() {
-    data mut Array<I32, <N>>
+    data mut Array<I32, N>
 }
-fn (b KBag<<N>>&) Items() Array<I32, <N>> { return b.data }
-fn kCountOf(x <V KSized<<N>>>&) I64 { return <N> * 10 + x.Items().Len() }
+fn (b KBag<<N>>&) Items() Array<I32, N> { return b.data }
+fn kCountOf(x <V KSized<<N>>>&) I64 { return N * 10 + x.Items().Len() }
 test "G28: a trait's constant parameter is bound through its methods" {
     b := KBag<3>()
     assert kCountOf(b) == 33

@@ -1,4 +1,5 @@
-# check: fail error[G22]: a constant variable takes no constraint - <N>'s type is its parameter's
-# G22: a constant variable's type is its parameter's, written nowhere else
-fn constrained(a Array<I32, <N I64>>&) { }
+# check: fail error[G22]: a constant variable takes no constraint
+# G22: a constant variable's introduction may write its type, "<N I64>", but never a trait
+type Shaped trait { Len() I64 }
+fn constrained(a Array<I32, <N Shaped>>&) { }
 fn main() ? { }

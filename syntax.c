@@ -39,6 +39,8 @@ struct syntaxContext {
     struct list localNames; //S8b: every parameter and local declared so far in the current top-level item
                             //- over-approximated (never removed as blocks close), which errs toward
                             //treating a name as a local and a condition as a runtime one
+    struct list genericNames; //G22/G26: every variable the current top-level item introduces - each "<X>" and each name
+                              //of a type's parameter list - so a condition reading one is decided per instantiation
     int blockDepth;         //S8b: nesting of "{ }" bodies, so a declaration inside one is a local
     bool itemIncomplete;    //S8b: the current top-level item skipped a branch still being decided
     int defaultListAt; //R9a: the token cursor where a "try ... default a, b" may take SEVERAL defaults - the
@@ -275,6 +277,17 @@ static struct syntax* firstPartOfTypeSntx(struct syntax* s, enum syntaxType t) {
     return NULL;
 }
 
+//the first name token anywhere under s, or a token of type TOK_NONE
+static struct token firstIdenAnywhere(struct syntax* s) {
+    for (int i = 0; s && i < s->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&s->parts, i);
+        if (p->isToken) { if (p->tok.type == TOK_IDEN) return p->tok; continue; }
+        struct token t = firstIdenAnywhere(p->sntx);
+        if (t.type != TOK_NONE) return t;
+    }
+    return (struct token){0};
+}
+
 //"<" IDEN ">" - a generic type variable written where a whole type expression would go (G1). Only ever
 //tried at the START of a type expression, so it can never be confused with a type-args list (which always
 //follows a name) or with the reference marker (now "&", see below).
@@ -298,6 +311,7 @@ struct syntax* parseTypeVar(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_TYPE_VAR);
     addTok(s, name);
     if (constraint) addSntx(s, constraint);
+    ListAdd(&sc->genericNames, &name.str); //G26
     return s;
 }
 
@@ -337,6 +351,8 @@ struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
         addSntx(s, item);
         //G19: a declared parameter may carry a constraint - "type Map<K Hashable<<K>>, V>"
         if (nodeType == SNTX_TYPE_PARAMS) {
+            struct token pn = firstIdenAnywhere(item);
+            if (pn.type != TOK_NONE) ListAdd(&sc->genericNames, &pn.str); //G26
             enum tokenType next = peekTok(sc).type;
             if (next != TOK_COMMA && next != TOK_GRT && next != TOK_BTSFT_R) {
                 struct syntax* constraint = parseTypeExpr(sc);
@@ -1821,6 +1837,18 @@ static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     struct syntax* typeOperand = parseTypeVar(sc);
     struct syntax* val = typeOperand ? typeOperand : parseExpr(sc);
     if (!val) return parseFail(sc, cur);
+    //G22: after its introduction a variable is written bare - "match N" over a constant, its cases read as "match <T>"'s
+    bool typeCases = typeOperand != NULL;
+    struct syntax* leaf = val;
+    while (!typeCases && leaf->parts.len == 1 && !((struct syntaxPart*)ListGetIdx(&leaf->parts, 0))->isToken)
+        leaf = ((struct syntaxPart*)ListGetIdx(&leaf->parts, 0))->sntx;
+    if (!typeCases && leaf->type == SNTX_EXPR_PRIMARY && leaf->parts.len == 1) {
+        struct syntaxPart* p0 = ListGetIdx(&leaf->parts, 0);
+        for (int i = 0; p0->isToken && p0->tok.type == TOK_IDEN && i < sc->genericNames.len && !typeCases; i++) {
+            struct str* g = ListGetIdx(&sc->genericNames, i);
+            typeCases = g->len == p0->tok.str.len && !strncmp(g->ptr, p0->tok.str.ptr, (size_t)g->len);
+        }
+    }
     struct token open = acceptTok(sc, TOK_CURLY_O);
     if (open.type == TOK_NONE) return parseFail(sc, cur);
     struct syntax* s = newNode(asValue ? SNTX_EXPR_MATCH : SNTX_STMNT_MATCH);
@@ -1828,7 +1856,7 @@ static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     addSntx(s, val);
     addTok(s, open);
     while (true) {
-        struct syntax* c = parseStmntCaseKind(sc, typeOperand != NULL);
+        struct syntax* c = parseStmntCaseKind(sc, typeCases);
         if (!c) break;
         addSntx(s, c);
     }
@@ -4129,9 +4157,9 @@ static bool evalLocalCond(SyntaxCtx sc, bool* value, bool* deferrable) {
     return decided;
 }
 
-//G26: does this condition read a generic's constant variable ("<N>" where an operand stands)? Such an if is decided
-//per instantiation by the checker - never queued to be decided once for every instantiation (S8b). The cursor is
-//left where it was.
+//G26: does this condition read a generic's variable - a name the current item introduces, or "<N>" where an operand
+//stands? Such an if is decided per instantiation by the checker - never queued to be decided once for every
+//instantiation (S8b). The cursor is left where it was.
 static bool condHasConstVar(SyntaxCtx sc, int start) {
     int cur = TokenGetCursor(sc->tc);
     TokenSetCursor(sc->tc, start);
@@ -4146,6 +4174,12 @@ static bool condHasConstVar(SyntaxCtx sc, int start) {
         bool operandBefore = prev == TOK_IDEN || prev == TOK_PAREN_C || prev == TOK_SQUARE_C || prev == TOK_GRT
                              || prev == TOK_INT_LIT || prev == TOK_FLOAT_LIT || prev == TOK_CHAR_LIT
                              || prev == TOK_STR_LIT || prev == TOK_BOOL_LIT;
+        if (t.type == TOK_IDEN && prev != TOK_DOT) {
+            for (int i = 0; i < sc->genericNames.len && !found; i++) {
+                struct str* g = ListGetIdx(&sc->genericNames, i);
+                if (g->len == t.str.len && !strncmp(g->ptr, t.str.ptr, (size_t)g->len)) found = true;
+            }
+        }
         if (t.type == TOK_LST && !operandBefore) {
             int at = TokenGetCursor(sc->tc);
             struct token n = TokenFeed(sc->tc);
@@ -4451,12 +4485,6 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(prev, ERR_TRAILING_COMMA, found, found);
         return true;
     }
-    //G23: "i <<N> {" - "<<" is a shift, so "i < <N>" needs its space
-    if (prev.type == TOK_GRT && TokenBefore(prev).type == TOK_IDEN && TokenBefore(TokenBefore(prev)).type == TOK_BTSFT_L
-            && TokenBefore(prev).lineNr == found.lineNr) {
-        ErrSyntax(TokenBefore(TokenBefore(prev)), ERR_CONST_VAR_AFTER_SHIFT, TokenBefore(prev).str, TokenBefore(prev).str);
-        return true;
-    }
     //G21: "Array<U8, 1 << 12>" - a comparison or shift in a constant argument reads across the list's own '>'
     if ((found.type == TOK_BTSFT_L || found.type == TOK_LST || found.type == TOK_LSE || found.type == TOK_GRE
             || found.type == TOK_BTSFT_R || found.type == TOK_GRT) && expected && !strcmp(expected, TokenStrFromType(TOK_GRT))) {
@@ -4521,6 +4549,7 @@ static void reportTopItemFailure(SyntaxCtx sc, int start) {
 
 static void parseTopItem(SyntaxCtx sc, struct list* out) {
     sc->localNames = ListInit(sizeof(struct str)); //S8b: a fresh function, test or type
+    sc->genericNames = ListInit(sizeof(struct str));
     sc->itemIncomplete = false;
     sc->tooDeep = false;
     sc->depth = 0;
@@ -4630,6 +4659,7 @@ struct syntaxModule ParseSyntax(TokenCtx tc, void* typeCtx, TypeNameLookup isKno
     struct syntaxContext sc = {0};
     sc.defaultListAt = -1;
     sc.localNames = ListInit(sizeof(struct str));
+    sc.genericNames = ListInit(sizeof(struct str));
     sc.tc = tc;
     sc.furthestPos = -1;
     sc.typeCtx = typeCtx;

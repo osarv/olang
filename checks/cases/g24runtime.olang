@@ -2,7 +2,7 @@
 # G24: an Array<T> has no length in its type, so it binds no constant variable - E32b's "as" is the way to give it one
 fn total(a Array<F32, <N>>&) F32 {
     s F32 = 0.0
-    for i in range <N> { s = s + a[i] }
+    for i in range N { s = s + a[i] }
     return s
 }
 fn main() ? {

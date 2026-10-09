@@ -10492,3 +10492,49 @@ from their original form.
   by the constant-argument fallback and is covered by an existing check.
   **Observed, not changed**: a trait method returning `T&` (built) is not satisfied by a method returning `T&p`
   (borrowed from its receiver) - O13's two contracts genuinely differ, so G28's example uses a by-value result.
+- **A generic's variable is introduced once and written bare after (G22/G23/G26, 2026-10-09).** The user, asked to
+  choose between `<N>` everywhere and bare `N` in bodies (my question 14), asked instead "can we make Ts appear as T
+  after being given as generics with <T>?" - and the coordinator turned that into the rule: a variable is introduced by
+  its first `<X>` - in a type by its parameter list, in a function by the first `<X>` reading left to right (receiver,
+  parameters, results), carrying any constraint or type written there - and written `X` everywhere after it, in the
+  rest of the signature and in the body; `<X>` again is an error, a bare `X` before it names nothing. Applied to
+  constants now; type variables keep G8b's `<T>` everywhere until a follow-up flips them and migrates the corpus. The
+  user also confirmed the library's `Dynamic` ("Do dynamic the way you want it") and, earlier, `Array<T, N>&` carrying
+  its length, so all three direction questions of the design are answered.
+  **What it replaced, and why it reads better.** The first build had `<N>` everywhere - `for i in range <N>`,
+  `i < <N>` with its space, `match <N>` - one spelling per variable, which is G8b's argument. Introduce-then-bare is the
+  declaration-list languages' reading recovered without a list: the signature says where the variable comes from once,
+  and the body reads as any code does. It also dropped two diagnostics written for the old form (a bare `N` "write
+  `<N>`", and `i <<N>` read as a shift).
+  **How it is resolved.** A signature's introductions are collected before it is resolved - for each name the first
+  `<X>` by source position, which is left to right whatever order the parser stores the receiver in - and every use
+  asks one predicate: a bare name is a variable when the instantiation binds it, when it is the type's own constant
+  parameter, or when its introduction precedes it; `<X>` is written again unless it is that introduction. A function
+  type inside a signature and a lambda's signature introduce nothing (G3a). In a pattern evaluated later per
+  instantiation (`Array<<T>, N + M>`), a bare name is a variable when the bindings name it or it names nothing in the
+  module - sound because D3a, now extended to constant variables (below), keeps the two namespaces apart; a pattern's
+  text spells a variable by its name, so `<N> + 1` and `N + 1` are one pattern. In a body a bare `N` is the bound
+  value (`OperandConstValue`, as `<N>` was), also as a method's receiver (`N.Hash()`, through the call path's own
+  receiver probe) and as `match N`, whose cases the parser reads as a `match <T>`'s when the subject is a name the item
+  introduced. The parser also uses those names to keep a local `if` reading one from S8b's single decision (G26's
+  per-instantiation decision needs it), which it used to recognize by the `<N>` spelling.
+  **`<N I64>`** - a type at the introduction - is new: a function's constant variable took its type from the slot it
+  filled, so one introduced inside an expression had none. Written, it must agree with every slot (G22's two-types
+  error) and is never a trait.
+  **The switch.** `bareTypeVars` in semantic.c makes type variables follow the same rule: `<T>` after its introduction is
+  the same error, a bare `T` resolves to the variable (the type's own list introducing its parameters), and `match T`
+  is a type match. Tried before committing: with the switch on and a mechanical migration of a copy of std (keep each
+  item's first `<X>`, write the rest bare; in a type, every listed name bare after the header), the prelude's tests,
+  std/linalg, std/chan and std/io all pass, and `fn biggest(a <T>, b T) T` and `type Box<T> struct(v mut T)` compile.
+  Two pre-existing crashes on error paths surfaced on the way and are fixed: `x[i] = v` where the `At` call had failed,
+  and a constructor assembling a field whose declaration had failed.
+  **G22's name rule, built.** The design said a constant variable's name may not be a global's, a function's, a build
+  constant's, a parameter's or a local's (D3a); it was not enforced until now - and with bare `N` it matters, since a
+  global `N` would otherwise be what `N` read. A type's constant parameter and a signature's introduction are checked
+  against the module's globals, functions and build constants (a type's name is G1's); a parameter or local named like
+  a constant variable is an error wherever D3a is checked, per instantiation, which reports it once per instantiation as
+  D3a's other errors are.
+  **Migrated**: the corpus's constant-parameter section, nine checks (and five new: written again in a signature, in a
+  body and in a type, before the introduction, a written type that disagrees), and fuzz/gen.olang's twelve inline
+  arrays, which the merge from master had brought in still written in C2e's superseded form. T7a's message names the
+  fixed form now (`write Array<I32>&, or a length, Array<T, N>, to hold it in place`).

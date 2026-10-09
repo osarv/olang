@@ -1,4 +1,4 @@
-# check: fail error[G22, D3a]: 'K' is constant variable <K> of this declaration
+# check: fail error[G22, D3a]: 'K' is a constant variable of this declaration
 # G22, D3a: a constructor's parameter may not take its type's constant parameter's name
 type Ring<T, K I64> struct(K I64) {
     data mut Array<<T>, <K>>

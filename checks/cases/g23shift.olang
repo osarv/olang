@@ -1,8 +1,0 @@
-# check: fail error[G23]: '<<' is a shift - a comparison before a constant variable is written with a space, 'i < <N>', not 'i <<N>'
-# G23: in an expression "<<" is always the shift operator
-fn count(a Array<I32, <N>>&) I64 {
-    s I64 = 0
-    for i := 0, i <<N>, i++ { s++ }
-    return s
-}
-fn main() ? { }

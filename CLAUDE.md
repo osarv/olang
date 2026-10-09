@@ -3693,15 +3693,20 @@ Go through this for every change to what olang means - a rule added, revised or 
   payload-free enums, none declaring `Eq` - identity is the value; floats are out (NaN, `-0.0`: Rust's reason), and so
   are text, structs and payload enums for now. **Arguments**: any expression the evaluator can compute (K1) of the
   parameter's type - literals adapting, narrower integers flowing, globals, `-D` constants, calls; comparisons and
-  shifts parenthesized inside `<...>` (C++'s rule). **Variables are `<N>` everywhere** - G8b's one spelling extended:
-  a function introduces one by writing `<N>` as a whole constant argument (its type the slot's), and `<N>` is also a
-  primary expression in the body (`for i in range <N>`), a value of its type that does not adapt like a literal (my
-  call over bare `N` in expressions, which reads better but would give one variable two spellings - flagged).
+  shifts parenthesized inside `<...>` (C++'s rule). **A variable is introduced by its first `<N>` and written bare after
+  it (G22, the user's call, 2026-10-09: "can we make Ts appear as T after being given as generics with <T>?")** - in a
+  type by its parameter list (its fields, constructor and destructor write `N`), in a function by the first `<N>` read
+  left to right (receiver, parameters, results), which may carry its type (`<N I64>`); after it `N` everywhere - the
+  rest of the signature (`b Array<<T>, N>&`, `Array<<T>, N + M>`) and the body (`for i in range N`, `match N`,
+  `N.Hash()`). `<N>` again is an error saying to write `N`; a bare `N` before the introduction is one too. A value of its
+  type that does not adapt like a literal. (The first build wrote `<N>` everywhere, G8b's rule; replaced the same day.)
+  The rule is meant for type variables as well and is built behind one switch (`bareTypeVars` in semantic.c): until
+  it is flipped, a type variable is `<T>` everywhere (G8b).
   **Inference binds by value only** (an `Array<F32, 3>` binds `N` = 3; two values for one variable is an error at the
   call, so a matmul shape mismatch is a compile error); an expression (`<N> + <M>`) is computed, never solved for -
   which sidesteps Rust's `generic_const_exprs` problem, since olang checks each instantiation anyway. **Identity** by
   value (`Matrix<F32, 2 + 1, 4>` is `Matrix<F32, 3, 4>`), G16a spelling the value; G17 also stops a chain of more than
-  1,000 instantiations. **G26**: an `if`, conditional or `match` whose condition reads a constant is decided per
+  1,000 instantiations. **G26**: an `if`, conditional or `match N` whose condition reads a constant is decided per
   instantiation and only the chosen branch is checked - D's `static if` / Zig's comptime `if` with no new keyword; it
   is configuration, never S8a's dead code, and it is what ends a recursion on a constant. **G27**: a constraint on a
   value is an `assert` in the constructor or body, decided per instantiation (S18c) and reported with the
@@ -3714,28 +3719,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   copy checked once per copy (C2e's rule) or the view `x as Array<T, N>&` (E32b, Go's slice-to-array-pointer conversion;
   `OUT_OF_BOUNDS` under `try`). A literal adapts to `Array<T, k>` like a numeric literal, and stays `Array<T>` for `:=`.
   `Array<T, N>()` is the zero value; there is no fill call (`Array<I64, 4>(4)` beside `Array<I64>(4)` would read as a
-  length). **Run-time-known dimensions are the library's** (recommended, a direction question): a constant is always
+  length). **Run-time-known dimensions are the library's** (confirmed by the user: "Do dynamic the way you want it"): a constant is always
   a compile-time value; `std/linalg` declares a sentinel (`Dynamic I64 = -1`) and stores rows/cols in the instance,
-  `Rows()` choosing `<R>` or the field by G26 - so `Matrix<F32, Dynamic, 784> x Matrix<F32, 784, 128>` checks 784 at
+  `Rows()` choosing `R` or the field by G26 - so `Matrix<F32, Dynamic, 784> x Matrix<F32, 784, 128>` checks 784 at
   compile time and gives `Matrix<F32, Dynamic, 128>`; a language-level `_` argument would need hidden storage and
   hidden checks in every generic. Precedents weighed: C++ NTTPs and Eigen, Rust const generics, Zig comptime, Go's
-  `[N]T`, D value parameters (HISTORY.md). **Built - `Array<T, N>&` carrying its length (D9a kept) confirmed by the user;
-  `Dynamic` in the library and `<N>` in expressions stand at their recommended defaults while still being explained.** A constant argument is a type
+  `[N]T`, D value parameters (HISTORY.md). **Built - all three direction questions answered by the user: `Array<T, N>&`
+  carrying its length (D9a kept), `Dynamic` in the library, and the introduction rule above.** A constant argument is a type
   of its own kind (`BASETYPE_CONST`: its type and value, or a pattern - the expression - until its variables are
   bound), so bindings, substitution, unification, identity and G16a naming carry constants with no parallel machinery;
   a fixed length is the representation literals already had. Arguments fold on their syntax while types resolve;
   one needing evaluation proper (a call, a computed global) is decided once the program has checked and the program
   checked again - C2e's loop, which is all of C2e that survives (the inline-field form is gone; four corpus fields
-  and five checks migrated). `<N>` in an expression is its value converted to its own type, so it never adapts like a
+  and five checks migrated). `N` in an expression is its value converted to its own type, so it never adapts like a
   literal and S8a reads it as configuration. Decided while building: G26 decides an `if`/conditional whose condition
-  has `<N>` written in it, and `match <N>` (values in its cases, no guard) - not a general `match` on a constant expression; a
+  has `N` written in it, and `match N` (values in its cases, no guard) - not a general `match` on a constant expression; a
   local condition in a generic with constants is never S8b-decided (one parse serves every instantiation); a
   mismatching copy into fixed storage aborts and is not caught by `try` (view first with `try (x as Array<T, N>&)`);
   M19's "a receiver with a length takes precedence" was dropped (only the prelude declares array methods, and it has
   none). **Found and fixed on the way**: a variable named only inside a constraint (`<V Shaped<<R>>>`) was not the
   signature's; a run-time array compared with a literal was rejected ("found Array<I32> and Array<I32>"); an extern
   handed a fixed array a copy, so what the foreign function wrote was lost; codegen still left a declared-size local
-  array uninitialized (dead until now); a method called on a value of unknown type added "'x' is no import here".
+  array uninitialized (dead until now); a method called on a value of unknown type added "'x' is no import here"; and,
+  behind the switch, an `At` call that failed crashed `x[i] = v` and a struct field whose declaration failed crashed the
+  constructor's assembly. **G22 also keeps a constant variable's name apart** from the module's globals, functions and
+  build constants and from parameters and locals (D3a), so a bare `N` means one thing.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

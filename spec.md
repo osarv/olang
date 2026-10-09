@@ -631,6 +631,11 @@ receiver included — **one set, not left-to-right**, as G3 already has it. The 
 closing `>>` of a type-argument list lex as the shift tokens and are split where a type-argument list is
 being parsed, and only there, so `x << 3 >> 1` is unaffected.
 
+A **constant** variable follows G22's introduction rule instead: introduced by its first `<N>` (in a type, by the
+parameter list), written bare, `N`, after it. That rule is the one intended for type variables as well; once they
+follow it, a type variable too is written `<T>` once and `T` after, and this paragraph's "everywhere" and "one set" give
+way to it.
+
 An application whose arguments are not all known is a **pattern**, not a type: it has no layout, nothing is
 emitted for it, and its constructor is not monomorphized — the same treatment G16 gives a generic function's
 body. Substituting into it re-derives the application, so `Cell<T>` inside `Wrap<T>` becomes `Cell<Point>`
@@ -1367,7 +1372,7 @@ must be a literal (an array literal or primitive literal — see §5), a **call*
 returns a value (E13, including a method call, a constructor call, `Array<T>(n)`, a `try` call, an array's
 `Len()` (E23), a float's `Bits()` and its reverse (E33), and an atomic method that gives a value (P9)), a **field read**
 (`c := l.head` — the field's declared type, as a call's is its callee's result), an **element read**
-(`t := a[i]` — the array's element type), a **slice** (E16a), an `as` (E32, E32b), a constant variable (`n := <N>`
+(`t := a[i]` — the array's element type), a **slice** (E16a), an `as` (E32, E32b), a constant variable (`n := N`
 — its parameter's type, §12.7 G23), or
 text built by `$` or a join (E11a/E11b); text declares a `String` (T29c). An array literal declares an
 `Array<T>` (T7): its length is not part of the type, and a later assignment may change it; a fixed length is
@@ -4163,7 +4168,7 @@ type Cursor struct(of List&) { list List&of = of }        # a Cursor may be shor
 
 **C2e (superseded by T7c).** An array stored in the instance itself is a field of a fixed-length array type,
 `m mut Array<F32, 16>` or `blob Array<I64, MutexWords>` - its length any constant argument (§12.7 G21), and in a
-generic type one its arguments compute (`Array<<T>, <N> * 2>`). Copying an array into one is T7d's checked copy. An
+generic type one its arguments compute (`Array<<T>, N * 2>`). Copying an array into one is T7d's checked copy. An
 `Array<T>` value field is T7a's error whatever initializes it - `m Array<F32> = Array<F32>(16)` is written
 `m Array<F32, 16>`.
 
@@ -4676,7 +4681,7 @@ compile-time error at its declaration. A trait may be (T35a).
 
 ### 12.1 Type variables
 
-**G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19), written where an entire `type-expr` (T2) would otherwise
+**G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19 - or, introducing a constant variable, its type, G22), written where an entire `type-expr` (T2) would otherwise
 appear. It names a **type variable**: a type that is not known at the declaration and is supplied
 per instantiation. `IDEN` must not name a type the referencing module can name - one it declares or imports by
 bare name (D2), a prelude type, `Array` or a primitive; writing such a name inside a `type-var` (or as a generic
@@ -4693,7 +4698,7 @@ unchanged once the variable is bound to a concrete type by instantiation.
 (`func-sig`, D8). It declares no type-parameter list: its set of type parameters is every *distinct*
 `type-var` name appearing in that signature, and repeating a name binds those positions to one and
 the same type. A `type-var` written as the argument of a constant parameter is a constant variable (G22), one of the
-function's parameters in the same way.
+function's parameters in the same way - introduced by its first `<N>` and written `N` after it.
 
 ```
 fn max(a<T>, b<T>) <T> { ... }
@@ -4837,7 +4842,7 @@ value and may be used wherever a function value is expected.
 **G13.** `match` (S12) accepts a `type-var` as its own operand, with each `case` naming one or more
 `type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
-`match <N>` over a constant variable is a value match instead, its cases values, decided per instantiation (G26).
+`match N` over a constant variable takes values in its cases instead, decided per instantiation (G26).
 
 ```
 fn writeVal(fd I32, v<T>) I64 ? error {
@@ -4871,7 +4876,7 @@ ever-growing set of further instantiations is a compile-time error, reported onc
 reported is implementation-defined: an instantiation whose type arguments nest more than 48 types deep (an array its
 element, an instance its arguments, a function its parameters and result) is taken to be one, and so is an
 instantiation reached through a chain of more than 1,000 instantiations each of which required the next - which is
-how a constant argument that keeps changing shows (`f` at `<N>` calling `f` at `<N> + 1`, G26).
+how a constant argument that keeps changing shows (`f` at `N` calling `f` at `N + 1`, G26).
 
 **G16b (where an instantiation was asked for).** A compile-time error found while checking an instantiation - in its
 body, its fields, a constraint (G19) or a value check (G27) - is reported where it is written, followed by a note
@@ -4889,7 +4894,7 @@ its parameter list with the parameter's type (G6):
 
 ```
 type Matrix<T, R I64, C I64> struct() {
-    data mut Array<<T>, <R> * <C>>
+    data mut Array<<T>, R * C>
 }
 type Ring<T, N I64> struct() { ... }
 type Grid<T, L Layout> struct() { ... }      # Layout an enum whose cases carry no payload
@@ -4905,7 +4910,7 @@ compiling. Which a parameter is, a type or a constant, is decided by what follow
 
 **G21 (constant arguments).** The argument for a constant parameter is a **constant argument**,
 `const-arg ::= expr`: an expression of the parameter's type that can be **evaluated at compile time** (§13 K1) - a
-literal, a literal-only expression (E4a), a constant variable (G22), an immutable global or a build constant (B10),
+literal, a literal-only expression (E4a), a constant variable (G22, written `N`), an immutable global or a build constant (B10),
 arithmetic on these, a call the evaluator can run. It fits the parameter's type as a value fits a target (E12): a
 literal adapts (T6) and a narrower integer flows (T6b), so `Array<F32, 3>`, `Array<F32, Width * 2>` and
 `Array<U8, pageSize()>` read as they are written. One that cannot be evaluated is a compile-time error naming the
@@ -4917,51 +4922,62 @@ constant parameter is a value - a global, a build constant (`Array<U8, BufSize>`
 type-argument list the comparison and shift operators `<`, `<=`, `>`, `>=`, `<<` and `>>` are written only within
 parentheses, since a bare `>` there ends the list: `Array<U8, (1 << 12)>`, `Flag<(Width > 64)>`.
 
-**G22 (constant variables).** Within a generic declaration a constant parameter is written `<N>`, as a type parameter is
-(G1, G8b). In a struct type or trait it is the parameter the list declares. In a function it is introduced by
-appearing (G3): a `type-var` written as the **whole argument of a constant parameter**, anywhere in the signature, is a
-**constant variable**, of that parameter's type.
+**G22 (constant variables; the introduction rule).** A generic's constant variable is **introduced** once and written
+bare after that. In a struct type or trait the parameter list introduces its constant parameters, and the whole
+declaration - fields, constructor, destructor, a trait's method signatures - writes each bare: `R`, `C`. In a function a
+constant variable is introduced by its **first** `type-var` `<N>`, reading the signature left to right - the receiver,
+the parameters, the results - and is written `N` everywhere after it, in the rest of the signature and in the body. An
+introduction stands as the whole argument of a constant parameter, or within a constant argument, and may carry the
+variable's type, `<N I64>`. Its type is that type, else that of the constant parameters it fills; a function's variable
+standing as no whole argument and carrying no type has none, and is G4's error anyway.
 
 ```
-fn Dot(a Array<<T>, <N>>&, b Array<<T>, <N>>&) <T> { ... }
-fn (a Matrix<<T>, <M>, <K>>&) Mul(b Matrix<<T>, <K>, <N>>&) Matrix<<T>, <M>, <N>> { ... }
-fn Concat(a Array<<T>, <N>>&, b Array<<T>, <M>>&) Array<<T>, <N> + <M>> { ... }
+fn Dot(a Array<<T>, <N>>&, b Array<<T>, N>&) <T> { ... }
+fn (a Matrix<<T>, <M>, <K>>&) Mul(b Matrix<<T>, K, <N>>&) Matrix<<T>, M, N> { ... }
+fn Concat(a Array<<T>, <N>>&, b Array<<T>, <M>>&) Array<<T>, N + M> { ... }
+fn Widen(a Array<I32, <N I64>>&) Array<I32, twice(N)> { ... }
 ```
 
-A name is a type variable or a constant variable, never both; every constant parameter one constant variable fills has
-the same type; and a constant variable carries no constraint - its type is its parameter's, written nowhere else.
-Each is a compile-time error at the declaration. A constant variable's name may not be that of a value the
-declaration can see - a global, a function, a build constant, a parameter or a local (D3a).
+`<N>` written after the introduction - again in the signature, in the body, or in a type's own declaration - is a
+compile-time error saying to write `N`; a bare `N` before its introduction names no variable, and where it would read
+one is a compile-time error saying so. A name is a type variable or a constant variable, never both; every constant
+parameter one constant variable fills has its type, and the type written at an introduction is never a trait (G19
+constrains types; what values a constant may take is G27's). Each is a compile-time error at the declaration. A
+constant variable's name may not be that of a value the declaration can see - a global, a function, a build constant,
+a parameter or a local (D3a) - so a bare `N` means one thing wherever it is written.
 
-**G23 (a constant variable is a value).** `const-var ::= "<" IDEN ">"` is also a **primary expression** (E1), wherever
-the constant variable `IDEN` is in scope - the declaration's body, its fields and constructor, its constant arguments.
-It is the instantiation's value of the parameter, of the parameter's type: a value, not a place, and not a literal - it
-adapts to no other type, flowing only as any value of its type does (T6b), so `I32(<N>)` narrows one. It is the same
-in every use within an instantiation, and a lambda (D16c) uses it without capturing anything.
+The rule is the one intended for type variables too: once they follow it, `T` is written bare after its first `<T>`
+(G8b's "everywhere" giving way), and nothing else in this section changes. Until then a type variable is written `<T>`
+everywhere (G8b), so `Array<<T>, N>` holds one of each.
+
+**G23 (a constant variable is a value).** A constant variable is also a **primary expression** (E1), written bare,
+wherever it is in scope - the declaration's body, its fields and constructor, its constant arguments; `<N>` there is
+G22's error. It is the instantiation's value of the parameter, of the parameter's type: a value, not a place, and not a
+literal - it adapts to no other type, flowing only as any value of its type does (T6b), so `I32(N)` narrows one. It is
+the same in every use within an instantiation, may be a method's receiver (`N.Hash()`), and a lambda (D16c) uses it
+without capturing anything.
 
 ```
-for i in range <N> { s = s + a[i] * b[i] }
-cells I64 = <R> * <C>
+for i in range N { s = s + a[i] * b[i] }
+cells I64 = R * C
 ```
 
-A `const-var` naming a type variable is a compile-time error (`match <T>`, G13, takes a type variable as its operand
-by a form of its own). In an expression `<<` is always the shift operator, so a comparison before a constant variable
-is written with a space - `i < <N>` - and `i <<N>` is a shift of `i` by a name; a `>>` or `>>=` right after the name
-is split as G8b splits one ending a type-argument list.
+A type variable is no value: reading one as a constant is a compile-time error (`match <T>`, G13, takes a type variable
+as its operand by a form of its own).
 
 **G24 (inference by value).** At a call, constant variables are bound by the same matching that binds type variables
-(G9): where a constant variable is the whole argument of a constant parameter in a parameter's type, the value the
-actual argument's type has there binds it. An `Array<F32, 3>` given for `Array<<T>, <N>>&` binds `T` to `F32` and `N`
-to 3; a `Matrix<F32, 32, 784>` and a `Matrix<F32, 784, 128>` given to `Mul` bind `M`, `K` and `N` to 32, 784 and 128.
+(G9): where a constant variable is the whole argument of a constant parameter in a parameter's type - `<N>` or `N` -
+the value the actual argument's type has there binds it. An `Array<F32, 3>` given for `Array<<T>, <N>>&` binds `T` to
+`F32` and `N` to 3; a `Matrix<F32, 32, 784>` and a `Matrix<F32, 784, 128>` given to `Mul` bind `M`, `K` and `N` to 32, 784 and 128.
 Two positions binding one variable to different values is a compile-time error at the call, naming both values - a
 `Matrix<F32, 32, 784>` times a `Matrix<F32, 10, 128>` is that error, with nothing run. An argument whose type does
 not hold the value - an `Array<T>`, whose length is known only at run time - binds nothing, and the call is a
 compile-time error saying to write `x as Array<T, N>&` (E32b). An array literal binds by its length (T7d).
 
-A constant argument that is an expression of constant variables (`<N> + <M>`) is never solved for: it is computed
+A constant argument that is an expression of constant variables (`N + M`) is never solved for: it is computed
 once its variables are bound, and the argument written at that position must then have exactly that type. A call
 writes no arguments for its callee's variables, so a constant no parameter carries - `fn Identity() Matrix<<T>, <N>,
-<N>>` - is G4's error; a value of such a type comes from its constructor, whose type's arguments are written
+N>` - is G4's error; a value of such a type comes from its constructor, whose type's arguments are written
 (`Matrix<F32, 3, 3>()`, G10a) or inferred from its own arguments as here (G10c).
 
 **G25 (identity).** Two applications of one generic are the same type exactly when every type argument is the same
@@ -4971,23 +4987,23 @@ is its own instantiation (G16), told apart by the parameter's type and the value
 `Array<F32, 4>` are two types (T7c).
 
 **G26 (decided per instantiation).** In an instantiation every constant variable has its value, so a condition reading
-one is known while compiling. An `if` whose condition reads a constant variable - `<N>` written in it - and can be evaluated at compile
+one is known while compiling. An `if` whose condition reads a constant variable - `N` written in it - and can be evaluated at compile
 time in the instantiation - by K1, reading no parameter and no local - is **decided per instantiation**, and so is a
-conditional expression (E28) whose condition is such, and a `match <N>` over a constant variable: only the branch,
+conditional expression (E28) whose condition is such, and a `match N` over a constant variable: only the branch,
 value or clause chosen is checked and compiled for that instantiation, and the others are not checked against it at
 all, as G14 says of a type match's other arms. Such a condition is configuration, as one reading a build constant is
 (S8b), never S8a's dead code; one that cannot be evaluated (it calls something that cannot be) is an ordinary condition,
 both branches checked. Every branch is still parsed, the body being one for all instantiations; the chosen one behaves
-as a block in its place, and an `if` none of whose branches is chosen is nothing. `match <N>` is written as G13's type
-match is, with values in its cases (`case 0`, `case 1, 2`, `case Layout.RowMajor`) and no guard (S13e): the first case
-holding the constant's value is chosen, else the `nomatch`; a `match <N>` statement choosing nothing is nothing, and one
+as a block in its place, and an `if` none of whose branches is chosen is nothing. `match N` takes values in its cases
+(`case 0`, `case 1, 2`, `case Layout.RowMajor`) and no guard (S13e): the first case holding the constant's value is
+chosen, else the `nomatch`; a `match N` statement choosing nothing is nothing, and one
 used as a value (S12b) choosing nothing is a compile-time error at the instantiation.
 
 That is what lets one generic do what only some of its instantiations can, and what ends a recursion on a constant:
 
 ```
 fn Total(a Array<I64, <N>>&) I64 {
-    if <N> == 0 { return 0 } else { return a[0] + Total(a[1:] as Array<I64, <N> - 1>&) }
+    if N == 0 { return 0 } else { return a[0] + Total(a[1:] as Array<I64, N - 1>&) }
 }
 ```
 
@@ -5002,15 +5018,15 @@ function's body, for every instantiation of the function. There is no other synt
 
 ```
 type Ring<T, N I64> struct() {
-    assert <N> > 0 and (<N> & (<N> - 1)) == 0       # Ring<I32, 6> is a compile-time error here
-    items mut Array<<T>, <N>>
+    assert N > 0 and (N & (N - 1)) == 0       # Ring<I32, 6> is a compile-time error here
+    items mut Array<<T>, N>
     head mut I64
 }
 ```
 
 **G28 (traits and constants).** A trait may declare constant parameters too (G20), its applications told apart by them
-as a struct type's are (G25), and a constant variable named only in a constraint's arguments (`<V Shaped<<R>, <C>>>`)
-is bound through the constrained type's methods, as G9c binds a type variable. No trait constrains a constant: what
+as a struct type's are (G25), and a constant variable introduced in a constraint's arguments (`<V Shaped<<R>, <C>>>`,
+written `R` and `C` after it) is bound through the constrained type's methods, as G9c binds a type variable. No trait constrains a constant: what
 values a constant may take is G27's.
 
 ## 13. Compile-time evaluation

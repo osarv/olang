@@ -1,0 +1,4 @@
+# check: fail error[G22]: N was introduced already - write it 'N', not '<N>'
+# G22: a constant variable is introduced by its first "<N>" and written bare after it, in the rest of the signature too
+fn count(a Array<I32, <N>>&, b Array<I32, <N>>&) I64 { return N }
+fn main() ? { assert count(I32[1], I32[2]) == 1 }

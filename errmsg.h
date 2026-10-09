@@ -137,21 +137,21 @@ struct type;
     X(ERR_CONST_ARG_NOT_COMPUTABLE,     "G21",   "a constant argument must be computable while compiling: %s") \
     X(ERR_CONST_ARG_RANGE,              "G21",   "%l does not fit %t") \
     X(ERR_CONST_ARG_KIND,               "G21",   "this constant argument is not a value of %t") \
-    X(ERR_CONST_VAR_UNKNOWN,            "G22",   "<%S> is no constant variable of this declaration") \
-    X(ERR_CONST_VAR_TYPE_AND_CONST,     "G22",   "<%S> is a type in one place and a constant in another") \
-    X(ERR_CONST_VAR_TWO_TYPES,          "G22",   "<%S> fills constant parameters of two types, %t and %t") \
-    X(ERR_CONST_VAR_CONSTRAINED,        "G22",   "a constant variable takes no constraint - <%S>'s type is its parameter's") \
-    X(ERR_CONST_VAR_AS_TYPE,            "G22",   "<%S> is a constant, not a type") \
+    X(ERR_CONST_VAR_UNKNOWN,            "G22",   "%S is no constant variable of this declaration") \
+    X(ERR_CONST_VAR_TYPE_AND_CONST,     "G22",   "%S is a type in one place and a constant in another") \
+    X(ERR_CONST_VAR_TWO_TYPES,          "G22",   "%S fills constant parameters of two types, %t and %t") \
+    X(ERR_CONST_VAR_CONSTRAINED,        "G22",   "a constant variable takes no constraint - %S's type is its parameter's, or one written '<N I64>' where it is introduced") \
+    X(ERR_CONST_VAR_AS_TYPE,            "G22",   "%S is a constant, not a type") \
     X(ERR_TYPE_VAR_AS_VALUE,            "G23",   "<%S> is a type variable, not a value") \
-    X(ERR_CONST_VAR_ONLY_IN_EXPR,       "G4, G24", "constant variable <%S> appears in no parameter's type as a whole argument, so no call can infer it") \
-    X(ERR_CONST_VAR_MISMATCH,           "G24",   "<%S> is %l by one argument and %l by another") \
+    X(ERR_CONST_VAR_ONLY_IN_EXPR,       "G4, G24", "constant variable %S appears in no parameter's type as a whole argument, so no call can infer it") \
+    X(ERR_CONST_VAR_MISMATCH,           "G24",   "%S is %l by one argument and %l by another") \
     X(ERR_CONST_VAR_NOT_IN_TYPE,        "G24, E32b", "%t's length is known only at run time - view it with 'x as Array<T, N>&'") \
     X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
     X(ERR_AS_ARRAY_SHAPE,               "E32b",  "an array is viewed with 'as' only as a reference to one of a known length and the same element type - %t is not %t") \
     X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
-    X(ERR_CONST_VAR_BARE,               "G23",   "%S is a constant variable - write it as a value '<%S>'") \
-    X(ERR_CONST_VAR_AFTER_SHIFT,        "G23",   "'<<' is a shift - a comparison before a constant variable is written with a space, 'i < <%S>', not 'i <<%S>'") \
-    X(ERR_CONST_VAR_SHADOWED,           "G22, D3a", "%n is constant variable <%S> of this declaration - a name means one thing, so name this apart") \
+    X(ERR_VAR_WRITTEN_AGAIN,            "G22",   "%S was introduced already - write it '%S', not '<%S>'") \
+    X(ERR_VAR_BEFORE_INTRO,             "G22",   "%n is introduced later in this signature - its first use is written '<%S>'") \
+    X(ERR_CONST_VAR_SHADOWED,           "G22, D3a", "%n is a constant variable of this declaration - a name means one thing, so name this apart") \
     X(ERR_CONST_ARG_PAREN,              "G21",   "%n in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") \
     X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "<%S> is a type variable, so its cases are types") \
     X(ERR_FIXED_ARRAY_CALL,             "T8",    "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") \
