@@ -30,7 +30,7 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg", "print"]
+                     "nestdeep", "nestparse", "diag", "linalg", "print", "protopriv"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -228,6 +228,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "bits" { try bits(r) }
         case "retslot" { try retslot(r) }
         case "opvis" { try opvis(r) }
+        case "protopriv" { try protopriv(r) }
         case "enumwords" { try enumwords(r) }
         case "listloop" { try listloop(r) }
         case "preludestale" { try preludestale(r) }
@@ -694,6 +695,26 @@ fn opvis(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/opvis/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0, "opvis", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b usepriv.olang > out.txt 2>&1") != 0, "usepriv.olang compiled", dir)
+}
+
+# M6b: every method the compiler calls by itself - operators, ==, $, indexing, for, in, Call, Hash - may be private: it
+# works in its own module, a generic of that module included, and using the operation anywhere else is an error naming
+# the method. A generic of another module sees with that module's eyes. Inside() is also baked while compiling (K2)
+test "a private protocol method works in its own module, and is an error elsewhere" { assert passed("protopriv") }
+
+fn protopriv(r mut report&) ? Failed {
+    dir := fresh("protopriv")
+    os.Run("cp checks/fixtures/protopriv/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0, "protopriv", dir)
+    try r.expect(sh(dir, "grep -q '@kk_Baked = .*i1 true' build/kk*.ll") == 0, "Inside() was not baked", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b bad.olang > out.txt 2>&1") != 0, "bad.olang compiled", dir)
+    for what in String&["'==' needs Key's eq", "'$' needs Key's str", "'+' needs Vec's plus", "'>' needs Vec's less",
+                        "'[' needs Bag's at", "'for' needs Bag's at", "'in' needs Bag's has", "'for' needs Gen's next",
+                        "needs Adder's call", "'Hash' needs Key's hash", "compilation failed with 14 errors"] {
+        try r.expect(outOf(dir).Contains(what), "bad.olang: expected " $what, dir)
+    }
+    try r.expect(sh(dir, "\"$OLANG\" -b badgen.olang > out.txt 2>&1") != 0, "badgen.olang compiled", dir)
+    try r.expect(outOf(dir).Contains("gen.olang:2:41: error[M6b]: '==' needs Mine's eq"), "badgen.olang: the error", dir)
 }
 
 # T17: an enum's payload is whole words, so copying one is word moves, not one byte at a time - which is what let

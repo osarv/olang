@@ -166,12 +166,14 @@ struct type;
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
     X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \
     X(ERR_TRY_FORM_MUST_FAIL,           "E31a",  "%s is a checked form, so it declares the errors it fails with") \
+    X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to write 'try'") \
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
     X(ERR_STR_SHAPE,                    "E11c",  "Str takes no parameters and gives a String") \
     X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s only reads - neither its receiver nor a parameter may be 'mut'") \
-    X(ERR_OPERATOR_BOTH_CASES,          "E31",   "this type declares %s twice, as %s and %s - one operator, one method") \
+    X(ERR_PROTOCOL_BOTH_SPELLINGS,      "M6b",   "%t declares %s twice, public and private - keep one: %s, or %s for its own module only") \
+    X(ERR_PROTOCOL_PRIVATE,             "M6b",   "%n needs %t's %S, which is private to its module - declare it %s to use it here") \
     X(ERR_OVERRIDE_SIGNATURE,           "M19e",  "%S does not have the signature of the default it overrides - match it, or choose another name") \
     X(ERR_DEFAULT_OUTSIDE_TRAIT,        "M19e",  "a default of trait %S is declared in that trait's module") \
     X(ERR_METHOD_ON_FOREIGN_TYPE,       "M19",   "a method of %t is declared in that type's module") \
@@ -245,6 +247,7 @@ struct type;
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
+    X(NOTE_PRIVATE_SPELLING,            "",      "'%S' is private to its module, and only a public %S meets the constraint") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \

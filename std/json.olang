@@ -505,7 +505,7 @@ fn (r mut reader&) name() ? JsonError {
     r.skipSpace()
     if r.pos == r.src.Len() { error JsonError.UNTERMINATED }
     if r.src[r.pos] != '"' { error JsonError.UNEXPECTED }
-    r.pushName(try r.str())
+    r.pushName(try r.string())
     r.skipSpace()
     if r.pos == r.src.Len() { error JsonError.UNTERMINATED }
     if r.src[r.pos] != ':' { error JsonError.UNEXPECTED }
@@ -515,7 +515,7 @@ fn (r mut reader&) name() ? JsonError {
 # a value that is no array or object, starting with c
 fn (r mut reader&) scalar(c Char) ? JsonError {
     if c == '"' {
-        r.push(Json.Str(try r.str()))
+        r.push(Json.Str(try r.string()))
     } else if c == '-' or c.IsDigit() {
         r.push(Json.Num(try r.number()))
     } else if c == 't' {
@@ -543,7 +543,7 @@ fn (r mut reader&) word(w String&) ? JsonError {
 # ---- reading a string ----
 
 # the string whose opening quote is at pos, decoded - new text, built where its caller puts it
-fn (r mut reader&) str() String& ? JsonError {
+fn (r mut reader&) string() String& ? JsonError {
     start I64 = r.pos + 1
     r.pos = plainEnd(r.src, start)
     if r.pos < r.src.Len() and r.src[r.pos] == '"' {   # the usual string: printable ASCII, no escapes - copied as it is

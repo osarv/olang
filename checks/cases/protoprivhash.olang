@@ -1,0 +1,9 @@
+# check: fail error[G19, E10b]: H does not satisfy the constraint Hashable on K
+# also: note: 'hash' is private to its module, and only a public Hash meets the constraint
+# M6b: a trait's method is met by its own name, so a private hash meets no Hashable
+type H struct(n I32) { n }
+fn (a H) Eq(b H) Bool { return a.n == b.n }
+fn (a H) hash() I64 { return I64(a.n) }
+fn main() ? {
+    m := Map<H, I32>()
+}
