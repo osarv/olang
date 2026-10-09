@@ -30,7 +30,7 @@ Workers I32 = 4
 Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
-                     "nestdeep", "nestparse", "diag", "linalg", "print", "protopriv"]
+                     "nestdeep", "nestparse", "diag", "linalg", "assertloc", "print", "protopriv"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -221,6 +221,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
+        case "assertloc" { try assertloc(r) }
         case "print" { try printing(r) }
         case "s18c" { try s18c(r) }
         case "static" { try static(r) }
@@ -603,6 +604,30 @@ fn printing(r mut report&) ? Failed {
                  "print to a closed output: the message", dir)
 }
 
+# S18a: a failed assert, abort or unreachable says where it is - and an assert the message written after it - built,
+# interpreted, and inside a test before the FAIL line
+test "a failed check says where it is" { assert passed("assertloc") }
+
+fn assertloc(r mut report&) ? Failed {
+    dir := fresh("assertloc")
+    os.Run("cp checks/fixtures/assertloc/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b located.olang > out.txt 2>&1") == 0, "located did not build", dir)
+    # the shell adds its own "Aborted" line after what the program printed
+    try r.expect(sh(dir, "./build/located > out.txt 2>&1") == 134
+                 and outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "an assert's location and message", dir)
+    try r.expect(sh(dir, "./build/located a > out.txt 2>&1") == 134 and outOf(dir).StartsWith("located.olang:6: aborted\n"),
+                 "an abort's location", dir)
+    try r.expect(sh(dir, "./build/located a b > out.txt 2>&1") == 134
+                 and outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "an unreachable's location", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i located.olang > out.txt 2>&1") == 134
+                 and outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "-i: an assert's location and message", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i located.olang a b > out.txt 2>&1") == 134
+                 and outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "-i: an unreachable's location", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -t tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
+    want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
+    try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)
+}
+
 # S18c: an assert the compiler proves emits no run-time check at all
 test "a proven assert leaves no run-time check" { assert passed("s18c") }
 
@@ -639,25 +664,31 @@ fn k2(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/k2/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b ct.olang > out.txt 2>&1 && ./build/ct") == 0, "k2", dir)
     ll String& = " build/ct.main.ll"
-    try r.expect(sh(dir, "grep -q '@ct_Fib = global i32 610'" $ll) == 0, "ct_Fib", dir)
+    try r.expect(sh(dir, "grep -q '@ct_Fib = constant i32 610'" $ll) == 0, "ct_Fib", dir)
     try r.expect(sh(dir, "grep -q '@ct_Table.k0 = internal constant \\[4 x i32\\] \\[ i32 55, i32 89, i32 144, i32 233 \\]'" $ll) == 0,
                  "ct_Table.k0", dir)
-    try r.expect(sh(dir, "grep -q '@ct_Table = global { i64, ptr } { i64 4, ptr @ct_Table.k0 }'" $ll) == 0,
+    try r.expect(sh(dir, "grep -q '@ct_Table = constant { i64, ptr } { i64 4, ptr @ct_Table.k0 }'" $ll) == 0,
                  "ct_Table", dir)
     try r.expect(sh(dir, "grep -q '@ct_Ring.k0 = internal global %ct.Node { i32 1, ptr @ct_Ring.k0 }'" $ll) == 0,
                  "ct_Ring.k0", dir)
-    try r.expect(sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0, "ct_Chain", dir)
+    try r.expect(sh(dir, "grep -q '@ct_Chain = constant ptr @ct_Chain.k0'" $ll) == 0, "ct_Chain", dir)
     # E10c: identity
-    try r.expect(sh(dir, "grep -q '@ct_Looped = global i1 true'" $ll) == 0, "ct_Looped", dir)
+    try r.expect(sh(dir, "grep -q '@ct_Looped = constant i1 true'" $ll) == 0, "ct_Looped", dir)
     # K2c: never destructs, so baked
-    try r.expect(sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0, "ct_Kept", dir)
+    try r.expect(sh(dir, "grep -q '@ct_Kept = constant ptr @ct_Kept.k0'" $ll) == 0, "ct_Kept", dir)
     # its temporary's destructor runs
     try r.expect(sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0, "ct_Dropped", dir)
-    try r.expect(sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0,
+    try r.expect(sh(dir, "grep -q '@ct_P = constant %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0,
                  "ct_P", dir)
     try r.expect(sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0, "ct_Later", dir)
     # S19: deferred code run while compiling
-    try r.expect(sh(dir, "grep -q '@ct_Deferred = global i32 7'" $ll) == 0, "ct_Deferred", dir)
+    try r.expect(sh(dir, "grep -q '@ct_Deferred = constant i32 7'" $ll) == 0, "ct_Deferred", dir)
+    # K2: an immutable baked global is a constant, which an importer declares with its value when it is plain data
+    try r.expect(sh(dir, "grep -qx '@ctlib_Tile = constant i64 12' build/ctlib.ll") == 0, "ctlib_Tile", dir)
+    try r.expect(sh(dir, "grep -qx '@ctlib_Tile = available_externally constant i64 12'" $ll) == 0, "ctlib_Tile imported", dir)
+    try r.expect(sh(dir, "grep -qx '@ctlib_Tiles = external global { i64, ptr }'" $ll) == 0, "ctlib_Tiles imported", dir)
+    try r.expect(sh(dir, "grep -qx '@ctlib_Counter = external global i64'" $ll) == 0, "ctlib_Counter imported", dir)
+    try r.expect(sh(dir, "grep -qx '@ct_seed = global i32 zeroinitializer'" $ll) == 0, "ct_seed", dir)
 }
 
 # E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
@@ -669,11 +700,11 @@ fn bits(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/bits/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b bits.olang > out.txt 2>&1 && ./build/bits") == 0, "bits", dir)
     ll String& = " build/bits.main.ll"
-    try r.expect(sh(dir, "grep -q '@bits_GS = global float 0x7FF0000020000000'" $ll) == 0, "bits_GS", dir)
-    try r.expect(sh(dir, "grep -q '@bits_GQ = global double 0xFFF8000000000123'" $ll) == 0, "bits_GQ", dir)
-    try r.expect(sh(dir, "grep -q '@bits_GH = global half 0xH7C01'" $ll) == 0, "bits_GH", dir)
-    try r.expect(sh(dir, "grep -q '@bits_GB = global bfloat 0xRFFC1'" $ll) == 0, "bits_GB", dir)
-    try r.expect(sh(dir, "grep -q '@bits_Baked = global i1 true'" $ll) == 0, "bits_Baked", dir)
+    try r.expect(sh(dir, "grep -q '@bits_GS = constant float 0x7FF0000020000000'" $ll) == 0, "bits_GS", dir)
+    try r.expect(sh(dir, "grep -q '@bits_GQ = constant double 0xFFF8000000000123'" $ll) == 0, "bits_GQ", dir)
+    try r.expect(sh(dir, "grep -q '@bits_GH = constant half 0xH7C01'" $ll) == 0, "bits_GH", dir)
+    try r.expect(sh(dir, "grep -q '@bits_GB = constant bfloat 0xRFFC1'" $ll) == 0, "bits_GB", dir)
+    try r.expect(sh(dir, "grep -q '@bits_Baked = constant i1 true'" $ll) == 0, "bits_Baked", dir)
 }
 
 # a function returning an aggregate returns it through one slot and one exit block, so that inlined, its result's
@@ -903,7 +934,7 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -i math.olang > i.txt 2>&1") == 0, "math -i", dir)
     try r.expect(sh(dir, "test $(wc -l < b.txt) = 12 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
     mll String& = " build/math.main.ll"
-    try r.expect(sh(dir, "grep -q '^@math_SqrtTwo = global double 0x3FF6A09E667F3BCD$'" $mll) == 0, "math baked", dir)
+    try r.expect(sh(dir, "grep -q '^@math_SqrtTwo = constant double 0x3FF6A09E667F3BCD$'" $mll) == 0, "math baked", dir)
     try r.expect(sh(dir, "grep -q '^declare double @sqrt(double) memory(none) nounwind willreturn$'" $mll) == 0, "math exact", dir)
     try r.expect(sh(dir, "grep -q '^declare double @exp(double) nobuiltin '" $mll) == 0, "math inexact", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b r17.olang > out.txt 2>&1") == 0, "r17", dir)
@@ -912,9 +943,9 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, "printf 'before\\nunhandled error\\n' | cmp -s - b.txt && cmp -s b.txt i.txt") == 0, "r17 output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b share.olang > out.txt 2>&1 && ./build/share") == 0, "share", dir)
     ll String& = " build/share.main.ll"
-    try r.expect(sh(dir, "grep -q '^@share_B = global ptr @share_A.k[0-9]*$'" $ll) == 0, "share_B", dir)
+    try r.expect(sh(dir, "grep -q '^@share_B = constant ptr @share_A.k[0-9]*$'" $ll) == 0, "share_B", dir)
     try r.expect(sh(dir, "grep -q '^@share_H.k[0-9]* = internal global .2 x i32.'" $ll) == 0, "share_H.k", dir)
-    try r.expect(sh(dir, "grep -q '^@share_Sl = global { i64, ptr } { i64 2, ptr getelementptr inbounds (.4 x i32., ptr @share_Arr.k[0-9]*, i64 0, i64 1) }'" $ll) == 0,
+    try r.expect(sh(dir, "grep -q '^@share_Sl = constant { i64, ptr } { i64 2, ptr getelementptr inbounds (.4 x i32., ptr @share_Arr.k[0-9]*, i64 0, i64 1) }'" $ll) == 0,
                  "share_Sl", dir)
 }
 
@@ -1016,7 +1047,7 @@ fn linalg(r mut report&) ? Failed {
 
 test "every diagnostic's call fits its message, and every rule it names is in the specification" {
     table := try os.ReadFile("errmsg.h") catch default ""
-    spec := try os.ReadFile("spec.md") catch default ""
+    spec := try os.ReadFile("SPEC.md") catch default ""
     assert table.Len() > 0 and spec.Len() > 0
     bad := 0
     entries := 0
@@ -1031,7 +1062,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
             end I64 = rules.Len() if comma < 0 else comma
             r := rules[:end]
             if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which spec.md does not state\n") catch { }
+                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n") catch { }
                 bad++
             }
             rules = rules[end:] if comma < 0 else rules[end + 2:]

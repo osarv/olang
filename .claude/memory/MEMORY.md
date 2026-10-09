@@ -20,3 +20,5 @@
 - [olang direction](user_olang_direction.md) — no manual memory mgmt, C-like perf, natural language, minimal syntax, multi-purpose; base of larger projects: solid and smooth
 - [Port is a redesign](feedback_port_clean_design.md) — self-hosted compiler: industry-standard designs (scanner, Pratt parser, separate passes), C only as the behaviour reference
 - [Decide details myself](feedback_decide_details.md) — authority over details within the direction; record as decisions, ask only direction questions; short reports
+- [Revisit rigid decisions](feedback_revisit_decisions.md) — the user's own past calls may be changed when they prove really rigid in real code, by PRINCIPLES.md; record as a reversal and report it
+- [Times in CEST](user_timezone.md) — the user is in Gothenburg: report times as Swedish local time (CEST, CET after 2026-10-25)

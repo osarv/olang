@@ -13,7 +13,7 @@ Rust-like compile-time memory/security guarantees (underway - see the ownership-
 Settled decisions below; scope-containment is checked at compile time, a general borrow checker is
 not).
 
-This file is a living design record, kept terse on purpose - it is not a spec (see `spec.md` for the
+This file is a living design record, kept terse on purpose - it is not a spec (see `SPEC.md` for the
 normative, current-state language reference) and not the full story either (see `HISTORY.md`
 for the complete discursive record behind every entry below: why each decision was made, what was
 tried and reverted, what bugs were found and fixed along the way). Whenever a design decision is
@@ -41,12 +41,14 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/feedback_numbered_questions.md
 @.claude/memory/feedback_port_clean_design.md
 @.claude/memory/feedback_record_flagged_decisions.md
+@.claude/memory/feedback_revisit_decisions.md
 @.claude/memory/feedback_style_form_conciseness.md
 @.claude/memory/feedback_surface_and_fix_bugs.md
 @.claude/memory/feedback_usage_and_agents.md
 @.claude/memory/user_olang_direction.md
 @.claude/memory/user_olang_natural_language.md
 @.claude/memory/user_dictation.md
+@.claude/memory/user_timezone.md
 @.claude/memory/project_olang_concurrency_gaps.md
 @.claude/memory/project_olang_next_steps.md
 @.claude/memory/project_olang_open_language_gaps.md
@@ -57,7 +59,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 
 Go through this for every change to what olang means - a rule added, revised or removed - before calling it done:
 
-1. **Spec first**: write or revise the rule in `spec.md`, grammar included.
+1. **Spec first**: write or revise the rule in `SPEC.md`, grammar included.
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
 3. **Compile-time evaluator** (`comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
@@ -2331,7 +2333,8 @@ Go through this for every change to what olang means - a rule added, revised or 
 - **Integer arithmetic wraps (E6c, 2026-10-05, the user's call).** `+ - *`, unary `-`, `++`/`--` and `<<` reduce
   modulo 2^w - two's complement for Int32/Int64, unsigned for Byte - never undefined, checked or trapped, and the
   compile-time evaluator wraps identically. It was already what codegen did (no `nsw`/`nuw`) but no rule said so,
-  and the prelude's hashes rely on it. Division by zero and MIN / -1 stay undefined (E6a).
+  and the prelude's hashes rely on it. Division by zero and MIN / -1 stay undefined (E6a). **Re-confirmed by the user 2026-10-09** after
+  the benchmarks priced it (no `nsw`: spectral-norm 1.4x C's time) - "keep overflow".
 - **The default error and BuiltinError (R15-R20, 2026-10-05, the user's design).** The bare error became **the
   default error**, with no name: `?` **alone** declares it, meaning "this can fail, without saying how". A function
   naming its errors (`? MathError`) fails with exactly those - `catch MathError` is complete, and a plain `error`
@@ -3370,7 +3373,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   form gcc and clang write, which editors and agents already read. A message says what is wrong here, naming the names,
   types and counts involved (`expected '}', found 'South'`, `2 names need as many values, found 1`, `-D X=1e400: beyond
   F64's range`) - lowercase, no period, the fix in a few words where it is plain; the explanation is the rule, which `-e`
-  prints from `../spec.md` beside the compiler (found as std is). One table (an X-macro in errmsg.h: id, rule, format),
+  prints from `../SPEC.md` beside the compiler (found as std is). One table (an X-macro in errmsg.h: id, rule, format),
   and calls taking typed arguments - `Err(tok, ERR_X, ...)`, `%n` a token as it reads, `%t` a type as source writes it -
   with `checks/checks.olang` holding every call to its message's argument count and every rule to the spec. Colour only
   on a terminal (never under `NO_COLOR` or `TERM=dumb`). **Decided (mine)**: no rule is invented - an error no rule
@@ -3685,9 +3688,36 @@ Go through this for every change to what olang means - a rule added, revised or 
   so a parallel computation bakes and decides asserts (K1) - `-i` still refuses tasks. **Decided (mine)**: a failing
   guaranteed check (a slice out of range, an array length, a copy into fixed storage) is in the same abort class; a
   global reached from another aborting one is reported once, at the first; the memory budget's size.
-- **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
+- **Small fixes: methods named like locals, constant globals, hex patterns, multi-index, located asserts, fast `$` on
+  floats (M19, K2, L10a, D9b, E31, S17/S18a/S18c, E11a, 2026-10-09).** **A local named like a method** (or another
+  module's function) made `x.f()` call the local as a function value - garbage or a segfault; the fuzzer batch found
+  the same line, one fix kept. **An immutable baked global is a constant** (K2) when no writable reference reaches it,
+  and an importer declares a plain-data one `available_externally` with its value, so its own optimizer reads it before
+  the link: std/linalg's micro-kernel with its tile bounds in named globals went 7.0 -> 16.6 GFLOPS, level with the
+  literals (a `constant` alone changed nothing: the kernel is instantiated in the root object, which saw only `external
+  global`). **A hex or binary literal adapting to an unsigned type is its bits read unsigned** (L10a, decided): `x U64 =
+  0x9E3779B97F4A7C15` and `0xFFFFFFFFFFFFFFFF` as U64's maximum fit; signed targets keep the I64 reading (-1), and a
+  literal-only expression is computed from the reading its target wants. **A generic's by-value parameter bound to an
+  array** (text a literal bound to String) is storage the call keeps, borrowed for a call like any value (it was O10d);
+  and a `mut` one is the callee's own copy (D9b, decided - it wrote through to the caller's array, and to constant data,
+  while the evaluator copied). **`x[i, j]` calls `At(i, j)`, `x[i, j] = v` `SetAt(i, j, v)`** (E31, decided): any number
+  of indices, in order, evaluated once in a compound store; the Try forms with the same arity, a derived (Len-checked)
+  form only for one index; built-in arrays keep one. **A failed `assert`, `abort` or `unreachable` says `FILE:LINE:`**
+  (S18a), and **`assert cond, message`** (S17, decided, the user's "sure"): any text, evaluated only when it fails, printed
+  after `assertion failed: `; while compiling a false assert's error carries it (S18c); inside a test the line goes to
+  stdout just before the `FAIL` line, so a test log says where. **`$` on a float is Schubfach in the runtime (IR) and the
+  evaluator (C)**, the prelude's `F64.ShortestDecimal` algorithm and table - 170x faster (2M renderings 34s -> 0.2s), the
+  table written only into objects that render a float. **Decided (mine)**: `$` is now exactly the shortest decimal
+  reading back, the closest of those (Python's repr) - the old definition (fewest digits whose *correctly rounded*
+  decimal reads back) gave one digit more at 14 powers of two in 6M values (`2^-1017`), the lopsided interval at a
+  binade's bottom; every other value unchanged (checked on 6.1M values and every F16/BF16, against an exact rational
+  reference for the narrow types); std/json writes numbers with `$`. **Diagnostics**: a missing `}` is said at its brace
+  ("the block opened on line N has no '}'") with the next item read from the declaration found, so a second one is found
+  too; a checked-only index recovers as unknown (one error). Study leftovers kvtool:89, matrix:127, calc:157 and
+  widgets:26 compile and run as first written (fixed by the merged batches; checked against their workarounds' output).
+- **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
   process anywhere in it. A language change is made spec-first: write or revise the relevant rule(s)
-  in `spec.md`, then implement so the code conforms to what was just written, then record the *why*
+  in `SPEC.md`, then implement so the code conforms to what was just written, then record the *why*
   here (extending HISTORY.md too, if there's a longer story worth keeping).
