@@ -1,4 +1,4 @@
-# check: fail without its '.olang' extension
+# check: fail error[M23]: an import names its file without '.olang'
 import "badform.olang"
 error E { X }
 fn main() ? E { }

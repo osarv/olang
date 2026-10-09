@@ -1,4 +1,4 @@
-# check: fail declare the local with ':='
+# check: fail error[O25]: a reference never narrows
 # O25a: a typed bare local lives in its block and never adopts its initializer's scope
 type N struct(v I32, nx N&) {
     v

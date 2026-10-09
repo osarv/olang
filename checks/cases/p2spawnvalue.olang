@@ -1,4 +1,4 @@
-# check: fail does not outlive the enclosing 'join' block
+# check: fail error[P2]: this argument refers to storage that closes before the join does
 # P2: a by-value argument is copied to the task, but what it refers to is the loop body's
 type W struct(a Array<I64>&) {
     a

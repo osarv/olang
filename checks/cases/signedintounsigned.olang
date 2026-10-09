@@ -1,4 +1,4 @@
-# check: fail a number flows implicitly only where nothing is lost
+# check: fail error[T6b]: I32 does not flow into U64
 # T6b: a signed value never flows into an unsigned type - a negative one has no place there
 fn main() ? {
     a I32 = 1

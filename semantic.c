@@ -380,27 +380,20 @@ static struct str suggestName(struct semaModule* mod, struct str name, bool with
     return best;
 }
 
-//"<what> 'Int32' - did you mean 'I32'?", or "<what> 'x' - <otherwise>"
-static void reportUnknownName(struct semaModule* mod, struct token tok, const char* what, bool withVars, const char* otherwise) {
-    struct str name = strFromTok(tok);
-    struct str best = suggestName(mod, name, withVars);
-    char msg[512];
-    if (best.len) {
-        bool number = PrimByName(best, &(enum baseType){0});
-        snprintf(msg, sizeof(msg), "%s '%.*s' - did you mean '%.*s'?%s", what, name.len, name.ptr, best.len, best.ptr,
-                 number ? " The numbers are I8 I16 I32 I64, U8 U16 U32 U64 and F16 BF16 F32 F64 (T4)" : "");
-    } else {
-        snprintf(msg, sizeof(msg), "%s '%.*s' - %s", what, name.len, name.ptr, otherwise);
-    }
-    ErrMsgSemantic(tok, msg);
+//"unknown type 'Int32' - did you mean 'I32'?", or plainly "unknown type 'x'": plain takes the token, meant the token
+//and the suggestion
+static void reportUnknownName(struct semaModule* mod, struct token tok, enum diag plain, enum diag meant, bool withVars) {
+    struct str best = suggestName(mod, strFromTok(tok), withVars);
+    if (!best.len) Err(tok, plain, tok);
+    else if (PrimByName(best, &(enum baseType){0})) Err(tok, ERR_UNKNOWN_NUMBER_TYPE, tok, best);
+    else Err(tok, meant, tok, best);
 }
 
 static struct type unknownTypeStandIn(void) { struct type t = TypeVanilla(BASETYPE_INT32); t.unknown = true; return t; }
 static struct operand* unknownPlaceholder(struct token tok);
 
 static void reportUnknownType(struct semaModule* mod, struct token nameTok) {
-    reportUnknownName(mod, nameTok, "unknown type", false,
-                      "no type of this name is declared in this module or the prelude; another module's type is written 'alias.Name'");
+    reportUnknownName(mod, nameTok, ERR_UNKNOWN_TYPE, ERR_UNKNOWN_TYPE_MEANT, false);
 }
 
 
@@ -947,7 +940,7 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
     char* at = strchr(repo, '@');
     if (at) { *at = '\0'; ref = at + 1; }
     if (!isRemoteNamePart(host) || !isRemoteNamePart(owner) || !isRemoteNamePart(repo) || (ref && !isRemoteNamePart(ref))) {
-        ErrMsgSemantic(tok, IMPORT_REMOTE_BAD_NAME);
+        Err(tok, ERR_IMPORT_REMOTE_BAD_NAME);
         return NULL;
     }
     char* env = getenv("OLANG_CACHE");
@@ -966,11 +959,11 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
         was = heapCopy(isCommitName(locked) ? locked : "");
         locked = NULL;
     }
-    if (locked && !isCommitName(locked)) { ErrMsgSemantic(tok, IMPORT_LOCK_NOT_A_COMMIT); return NULL; }
+    if (locked && !isCommitName(locked)) { Err(tok, ERR_IMPORT_LOCK_NOT_A_COMMIT, key); return NULL; }
     char head[128] = "";
     char* dir = locked ? StrFmt("%s/%s", parent, locked) : NULL;
     if (dir && pathIsDir(dir)) return dir;
-    if (MakeDirs(parent) != 0 || RemoveTree(tmp) != 0) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
+    if (MakeDirs(parent) != 0 || RemoveTree(tmp) != 0) { Err(tok, ERR_IMPORT_FETCH_FAILED, key); return NULL; }
     if (locked) {
         fprintf(stderr, "olang: fetching %s into %s at %.12s, as olang.lock says\n", key, cache, locked);
         //a shallow fetch of the one commit where the server allows it, else the whole history and a checkout
@@ -985,7 +978,7 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
         gitHead(tmp, head, sizeof(head));
         if (strcmp(head, locked) != 0 || (!pathIsDir(dir) && rename(tmp, dir) != 0)) {
             (void)RemoveTree(tmp);
-            ErrMsgSemantic(tok, IMPORT_LOCKED_FETCH_FAILED);
+            Err(tok, ERR_IMPORT_LOCKED_FETCH_FAILED, key);
             return NULL;
         }
         (void)RemoveTree(tmp); //another build placed it first
@@ -997,14 +990,14 @@ static char* fetchRemote(const char* host, const char* owner, const char* repoAt
     if (git(clone)) gitHead(tmp, head, sizeof(head));
     if (!head[0]) {
         (void)RemoveTree(tmp);
-        ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
+        Err(tok, ERR_IMPORT_FETCH_FAILED, key);
         return NULL;
     }
     dir = StrFmt("%s/%s", parent, head);
     if (pathIsDir(dir)) (void)RemoveTree(tmp); //fetched before, under another ref
     else if (rename(tmp, dir) != 0) {
         (void)RemoveTree(tmp);
-        ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
+        Err(tok, ERR_IMPORT_FETCH_FAILED, key);
         return NULL;
     }
     lockSet(key, head);
@@ -1065,11 +1058,11 @@ static char* firstElems(const char* p, int n) {
 struct resolvedImport { char* path; struct str identity; };
 
 static bool resolveImport(struct semaModule* from, struct str raw, struct token tok, struct resolvedImport* out) {
-    if (raw.len >= PATH_MAX) { ErrMsgSemantic(tok, IMPORT_FILE_NOT_FOUND); return false; } //no file has such a path
+    if (raw.len >= PATH_MAX) { Err(tok, ERR_IMPORT_PATH_TOO_LONG); return false; } //no file has such a path
     char spec[PATH_MAX];
     StrToCStr(raw, spec);
     size_t len = strlen(spec);
-    if (len >= 6 && !strcmp(spec + len - 6, ".olang")) { ErrMsgSemantic(tok, IMPORT_HAS_EXTENSION); return false; }
+    if (len >= 6 && !strcmp(spec + len - 6, ".olang")) { Err(tok, ERR_IMPORT_HAS_EXTENSION); return false; }
     char buf[PATH_MAX * 2];
     char* slash = strchr(spec, '/');
     size_t firstLen = slash ? (size_t)(slash - spec) : len;
@@ -1077,7 +1070,7 @@ static bool resolveImport(struct semaModule* from, struct str raw, struct token 
         snprintf(buf, sizeof(buf), "%s/%s.olang", stdRoot(), spec + 4);
         out->path = normalizePath(buf);
         out->identity = StrFromCStr(normalizePath(spec));
-        if (!hasPrefixElems(out->identity.ptr, "std")) { ErrMsgSemantic(tok, IMPORT_LEAVES_ROOT); return false; }
+        if (!hasPrefixElems(out->identity.ptr, "std")) { Err(tok, ERR_IMPORT_LEAVES_ROOT, "std"); return false; }
     } else if (memchr(spec, '.', firstLen) && firstLen != 1 && !(firstLen == 2 && spec[0] == '.' && spec[1] == '.')) {
         //host/owner/repo[@ref]/path - a host always has a dot, which a relative path's first element never does
         char* parts[64];
@@ -1085,7 +1078,7 @@ static bool resolveImport(struct semaModule* from, struct str raw, struct token 
         char tmp[PATH_MAX];
         snprintf(tmp, sizeof(tmp), "%s", spec);
         for (char* t = strtok(tmp, "/"); t && n < 64; t = strtok(NULL, "/")) parts[n++] = t;
-        if (n < 4) { ErrMsgSemantic(tok, IMPORT_REMOTE_NEEDS_FILE); return false; }
+        if (n < 4) { Err(tok, ERR_IMPORT_REMOTE_NEEDS_FILE); return false; }
         char* repoDir = fetchRemote(parts[0], parts[1], parts[2], tok);
         if (!repoDir) return false;
         snprintf(buf, sizeof(buf), "%s", repoDir);
@@ -1093,7 +1086,7 @@ static bool resolveImport(struct semaModule* from, struct str raw, struct token 
         strncat(buf, ".olang", sizeof(buf) - strlen(buf) - 1);
         out->path = normalizePath(buf);
         out->identity = StrFromCStr(normalizePath(spec));
-        if (!hasPrefixElems(out->identity.ptr, firstElems(spec, 3))) { ErrMsgSemantic(tok, IMPORT_LEAVES_ROOT); return false; }
+        if (!hasPrefixElems(out->identity.ptr, firstElems(spec, 3))) { Err(tok, ERR_IMPORT_LEAVES_ROOT, firstElems(spec, 3)); return false; }
     } else {
         char* rel = moduleDir(from);
         if (spec[0] == '/' || !strcmp(rel, ".")) snprintf(buf, sizeof(buf), "%s.olang", spec);
@@ -1104,10 +1097,10 @@ static bool resolveImport(struct semaModule* from, struct str raw, struct token 
         char* fromId = StrDupStr(from->identity);
         char* root = hasPrefixElems(fromId, "std") ? heapCopy("std")
                    : strchr(firstElems(fromId, 1), '.') && strchr(fromId, '/') ? firstElems(fromId, 3) : NULL;
-        if (root && !hasPrefixElems(out->identity.ptr, root)) { ErrMsgSemantic(tok, IMPORT_LEAVES_ROOT); return false; }
+        if (root && !hasPrefixElems(out->identity.ptr, root)) { Err(tok, ERR_IMPORT_LEAVES_ROOT, root); return false; }
     }
     if (!pathExists(out->path) || pathIsDir(out->path)) {
-        ErrMsgSemantic(tok, IMPORT_FILE_NOT_FOUND);
+        Err(tok, ERR_IMPORT_FILE_NOT_FOUND, out->path);
         return false;
     }
     return true;
@@ -1139,7 +1132,7 @@ static struct list olangFilesIn(const char* dir) {
 
 struct semaModule* semaLoadModule(struct str fileName) {
     char* buf = StrDupStr(fileName);
-    if (pathIsDir(buf)) ErrMsgFatal(StrFmt("%s: a module is a file, never a directory (M1) - name the .olang file", buf));
+    if (pathIsDir(buf)) ErrFatal(fileName, ERR_IS_DIRECTORY);
     //M22a: a root takes its identity from where it really is - its path from the working directory, or its
     //file name when outside it; a std module named directly ("olang -t std/list.olang") is the same module
     //its importers call "std/list", so it gets the identity - and the symbols and object names - they give it
@@ -1222,11 +1215,11 @@ static struct semaModule* semaLoadModuleAt(char* path, struct str identity, stru
 
     for (int i = 0; i < scanned.len; i++) {
         struct scannedImport* si = ListGetIdx(&scanned, i);
-        if (!isValidAliasShape(si->alias)) { ErrMsgSemantic(si->aliasTok, INVALID_IMPLICIT_IMPORT_ALIAS); continue; }
+        if (!isValidAliasShape(si->alias)) { Err(si->aliasTok, ERR_IMPORT_ALIAS_INVALID, si->alias); continue; }
         struct resolvedImport r;
         if (!resolveImport(mod, si->path, si->pathTok, &r)) continue;
         struct semaModule* target = semaLoadModuleAt(r.path, r.identity, si->pathTok);
-        if (findImport(mod, si->alias)) { ErrMsgSemantic(si->aliasTok, IMPORT_ALIAS_CONFLICT); continue; } //M5
+        if (findImport(mod, si->alias)) { Err(si->aliasTok, ERR_IMPORT_ALIAS_CONFLICT, si->alias); continue; } //M5
         struct semaImport imp = {0};
         imp.alias = si->alias;
         imp.aliasTok = si->aliasTok;
@@ -1271,11 +1264,11 @@ struct semaModule* resolveAliasChain(struct semaModule* mod, struct list idens, 
         struct token aliasTok = *(struct token*)ListGetIdx(&idens, i);
         struct str aliasName = strFromTok(aliasTok);
         struct semaModule* next = findImport(current, aliasName);
-        if (!next) { ErrMsgSemantic(aliasTok, UNKNOWN_NAMESPACE); return NULL; }
-        if (i > 0 && !isPublic(aliasName)) { ErrMsgSemantic(aliasTok, IMPORT_IS_PRIVATE); return NULL; }
+        if (!next) { Err(aliasTok, ERR_UNKNOWN_IMPORT, aliasTok); return NULL; }
+        if (i > 0 && !isPublic(aliasName)) { Err(aliasTok, ERR_IMPORT_IS_PRIVATE, aliasTok); return NULL; }
         for (int j = 0; j < visited.len; j++) {
             if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
-                ErrMsgSemantic(aliasTok, CYCLIC_IMPORT_REEXPORT);
+                Err(aliasTok, ERR_REEXPORT_CYCLE, aliasTok);
                 return NULL;
             }
         }
@@ -1307,10 +1300,10 @@ struct semaModule* resolveCatchAliasChain(struct semaModule* mod, struct list id
         struct str aliasName = strFromTok(aliasTok);
         struct semaModule* next = findImport(current, aliasName);
         if (!next) break;
-        if (i > 0 && !isPublic(aliasName)) { ErrMsgSemantic(aliasTok, IMPORT_IS_PRIVATE); return NULL; }
+        if (i > 0 && !isPublic(aliasName)) { Err(aliasTok, ERR_IMPORT_IS_PRIVATE, aliasTok); return NULL; }
         for (int j = 0; j < visited.len; j++) {
             if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
-                ErrMsgSemantic(aliasTok, CYCLIC_IMPORT_REEXPORT);
+                Err(aliasTok, ERR_REEXPORT_CYCLE, aliasTok);
                 return NULL;
             }
         }
@@ -1320,7 +1313,7 @@ struct semaModule* resolveCatchAliasChain(struct semaModule* mod, struct list id
     }
     if (idens.len - i > 2) {
         struct token tok = *(struct token*)ListGetIdx(&idens, i);
-        ErrMsgSemantic(tok, UNKNOWN_NAMESPACE);
+        Err(tok, ERR_UNKNOWN_IMPORT, tok);
         return NULL;
     }
     *outTrailingCount = idens.len - i;
@@ -1345,7 +1338,7 @@ struct list computePublicClosure(struct semaModule* mod) {
         struct semaImport* imp = ListGetIdx(&mod->imports, i);
         if (!isPublic(imp->alias)) continue;
         if (imp->mod->computingPublicClosure) {
-            ErrMsgSemantic(imp->aliasTok, CYCLIC_IMPORT_REEXPORT);
+            Err(imp->aliasTok, ERR_REEXPORT_CYCLE, imp->aliasTok);
             continue;
         }
         struct list sub = computePublicClosure(imp->mod);
@@ -1387,7 +1380,7 @@ void checkDuplicateImportReachability(void) {
                 for (int k = 0; k < seen.len; k++) {
                     if (*(struct semaModule**)ListGetIdx(&seen, k) == reached) { already = true; break; }
                 }
-                if (already) ErrMsgSemantic(imp->aliasTok, DUPLICATE_IMPORT_REACHABILITY);
+                if (already) Err(imp->aliasTok, ERR_IMPORT_REACHED_TWICE, imp->aliasTok);
                 else ListAdd(&seen, &reached);
             }
         }
@@ -1404,7 +1397,7 @@ struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNod
     if (idens.len == 1) {
         struct token nameTok = *(struct token*)ListGetIdx(&idens, 0);
         struct type* errType = typeNamed(mod, strFromTok(nameTok));
-        if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(nameTok, UNKNOWN_ERROR); return NULL; }
+        if (!errType || errType->bType != BASETYPE_ERROR) { Err(nameTok, ERR_UNKNOWN_ERROR_TYPE, nameTok); return NULL; }
         resolveTypeDecl(errType);
         return errType;
     }
@@ -1413,8 +1406,8 @@ struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNod
     struct token nameTok = *(struct token*)ListGetIdx(&idens, idens.len -1);
     struct str name = strFromTok(nameTok);
     struct type* errType = TypeGetList(&target->types, name);
-    if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(nameTok, UNKNOWN_ERROR); return NULL; }
-    if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return NULL; }
+    if (!errType || errType->bType != BASETYPE_ERROR) { Err(nameTok, ERR_UNKNOWN_ERROR_TYPE, nameTok); return NULL; }
+    if (!isPublic(name)) { Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok); return NULL; }
     resolveTypeDecl(errType);
     return errType;
 }
@@ -1473,16 +1466,16 @@ void checkNoAliasClash(struct semaModule* mod, struct str name, struct token tok
 bool numericPrimitiveBaseType(struct str name, enum baseType* out);
 void collectType(struct semaModule* mod, struct token nameTok, enum baseType bType) {
     struct str name = strFromTok(nameTok);
-    if (TypeGetList(&mod->types, name)) { ErrMsgSemantic(nameTok, TYPE_NAME_IN_USE); return; } //own list only
-    if (!isPreludeModule(mod) && SemanticBuiltinType(name)) ErrMsgSemantic(nameTok, BUILTIN_TYPE_REDECLARED); //still registered: later passes expect it
+    if (TypeGetList(&mod->types, name)) { Err(nameTok, ERR_TYPE_NAME_IN_USE, nameTok); return; } //own list only
+    if (!isPreludeModule(mod) && SemanticBuiltinType(name)) Err(nameTok, ERR_BUILTIN_TYPE_REDECLARED, nameTok); //still registered: later passes expect it
     enum baseType primB;
     if (StrCmp(name, StrFromCStr("Array")) || StrCmp(name, StrFromCStr("Bool")) || numericPrimitiveBaseType(name, &primB)) {
-        ErrMsgSemantic(nameTok, BUILTIN_TYPE_REDECLARED); //T7, T4: the language's own names
+        Err(nameTok, ERR_BUILTIN_TYPE_REDECLARED, nameTok); //T7, T4: the language's own names
     }
     checkNoAliasClash(mod, name, nameTok); //M20
     for (int i = 0; i < mod->vars.len; i++) { //D2: a function or global of this name, declared before it
         struct var* v = ListGetIdx(&mod->vars, i);
-        if (!v->isMethod && StrCmp(v->name, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IS_TYPE); break; }
+        if (!v->isMethod && StrCmp(v->name, name)) { Err(nameTok, ERR_NAME_IS_TYPE, nameTok); break; }
     }
     struct type t = (struct type){0};
     t.owner = mod;
@@ -1507,13 +1500,13 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
     //reservation applies to it - "Det" the function and "m.Det()" the method are distinct by construction
     //reported, and then declared anyway: later passes look the declaration up, and the module's own
     //name shadows the constant for the rest of the check, so nothing downstream trips over a missing var
-    if (!isMethod && mod != buildModule && buildConstVar(name)) ErrMsgSemantic(nameTok, BUILD_CONST_REDECLARED);
+    if (!isMethod && mod != buildModule && buildConstVar(name)) Err(nameTok, ERR_BUILD_CONST_REDECLARED, nameTok);
     if (!isMethod) {
         struct var* prev = VarGetList(&mod->vars, name);
-        if (prev && !(isFuncDecl && prev->isFuncDecl)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); return; }
+        if (prev && !(isFuncDecl && prev->isFuncDecl)) { Err(nameTok, ERR_NAME_IN_USE, nameTok); return; }
         if (!prev) checkNoAliasClash(mod, name, nameTok); //M20
         //D2: nor a type's name - a type declared later in the module is caught by collectType
-        if (!prev && (typeNamed(mod, name) || isBuiltinTypeName(name))) ErrMsgSemantic(nameTok, VAR_NAME_IS_TYPE);
+        if (!prev && (typeNamed(mod, name) || isBuiltinTypeName(name))) Err(nameTok, ERR_NAME_IS_TYPE, nameTok);
     }
     struct var v = (struct var){0};
     v.isMethod = isMethod;
@@ -1555,7 +1548,7 @@ bool nameIsImportAlias(struct semaModule* mod, struct str name) {
 }
 
 void checkNoAliasClash(struct semaModule* mod, struct str name, struct token tok) {
-    if (nameIsImportAlias(mod, name)) ErrMsgSemantic(tok, NAME_CLASHES_WITH_IMPORT);
+    if (nameIsImportAlias(mod, name)) Err(tok, ERR_NAME_CLASHES_WITH_IMPORT, tok);
 }
 
 void semaCollectNames(struct semaModule* mod) {
@@ -1680,7 +1673,7 @@ struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeVars) {
     if (hasTokOfType(markerNode, TOK_RET)) {
         struct var* f = scopeTagBodyFunc();
         if (!f || !f->type.resultScope) {
-            ErrMsgSemantic(firstTokOfType(markerNode, TOK_RET), RETURN_SCOPE_NONE);
+            Err(firstTokOfType(markerNode, TOK_RET), ERR_RETURN_SCOPE_NONE);
             return NULL;
         }
         scopeTagByVariable = true;
@@ -1697,7 +1690,7 @@ struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeVars) {
         scopeTagDepth = named->type.scopeParam ? 0 : named->type.scopeDepth;
         return named->type.scopeParam;
     }
-    ErrMsgSemantic(nameTok, UNKNOWN_SCOPE); //O4a: a scope has no name of its own
+    Err(nameTok, ERR_UNKNOWN_SCOPE_NAME, nameTok); //O4a: a scope has no name of its own
     return NULL;
 }
 
@@ -1953,7 +1946,7 @@ static void TypeCollectConstraints(struct type t, struct list* out) {
         for (int i = 0; i < out->len; i++) {
             struct type* o = ListGetIdx(out, i);
             if (!StrCmp(o->name, t.name)) continue;
-            if (!TypeIsSame(*o->varConstraint, *t.varConstraint)) ErrMsgSemantic(t.tok, CONSTRAINT_DISAGREES);
+            if (!TypeIsSame(*o->varConstraint, *t.varConstraint)) Err(t.tok, ERR_CONSTRAINT_DISAGREES, t.tok);
             return;
         }
         ListAdd(out, &t);
@@ -1973,7 +1966,6 @@ static void TypeCollectConstraints(struct type t, struct list* out) {
 //G19: binds what the constraints determine and checks each constrained variable's binding satisfies its
 //interface, reporting at tok. A variable named only in a constraint is bound through the methods of the type
 //its constrained variable is bound to (G9c). Returns false when a constraint is not met.
-void RdSpellType(struct type t, char* buf, size_t n);
 static bool unifyThroughMethods(struct type iface, struct type concrete, struct list* bindings);
 bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var** failed);
 static bool checkTypeConstraints(struct list* constraints, struct list* bindings, struct token tok) {
@@ -1991,18 +1983,10 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
         if (TypeIsGeneric(want)) continue;
         struct var* missing = NULL;
         if (TypeSatisfiesConstraint(*bound, want, &missing)) continue;
-        char tn[160], cn[160];
-        RdSpellType(*bound, tn, sizeof(tn));
         struct type wantNamed = want.genericOrigin ? *want.genericOrigin : want;
-        snprintf(cn, sizeof(cn), "%.*s", wantNamed.name.len, wantNamed.name.ptr);
-        char* msg = MallocOrCrash(900);
-        bool hash = missing && StrCmp(missing->name, StrFromCStr("Hash"));
-        if (missing) snprintf(msg, 900, "%s does not satisfy the constraint %s on %.*s: it has no method %.*s that fits (G19)%s",
-                              tn, cn, c->name.len, c->name.ptr, missing->name.len, missing->name.ptr,
-                              hash ? ". The compiler supplies Hash only for a struct, enum or array value with no Eq of its "
-                                     "own whose parts all have a hash (E10b) - declare 'Hash() I64', agreeing with '=='" : "");
-        else snprintf(msg, 900, "%s does not satisfy the constraint %s on %.*s (G19)", tn, cn, c->name.len, c->name.ptr);
-        ErrMsgSemantic(tok, msg);
+        if (!missing) Err(tok, ERR_CONSTRAINT_UNMET, bound, wantNamed.name, c->name);
+        else if (StrCmp(missing->name, StrFromCStr("Hash"))) Err(tok, ERR_CONSTRAINT_UNMET_HASH, bound, wantNamed.name, c->name);
+        else Err(tok, ERR_CONSTRAINT_UNMET_METHOD, bound, wantNamed.name, c->name, missing->name);
         ok = false;
     }
     return ok;
@@ -2227,7 +2211,7 @@ struct str instantiationNameFor(struct str base, struct list* typeParams, struct
 }
 
 //"instantiated here, with T = I32, U = String" - the note an error inside an instantiation's body carries
-void RdSpellType(struct type t, char* buf, size_t n);
+void DiagSpellType(struct type t, char* buf, size_t n);
 static char* instantiationNote(struct list* typeParams, struct list* bindings) {
     struct sbuf b = {0};
     sbufStr(&b, "instantiated here");
@@ -2236,7 +2220,7 @@ static char* instantiationNote(struct list* typeParams, struct list* bindings) {
         struct type* bt = bindingGet(bindings, pn);
         if (!bt) continue;
         char tn[200];
-        RdSpellType(*bt, tn, sizeof(tn));
+        DiagSpellType(*bt, tn, sizeof(tn));
         sbufStr(&b, i ? ", " : ", with ");
         sbufS(&b, pn);
         sbufStr(&b, " = ");
@@ -2294,7 +2278,7 @@ static void reportUnbounded(struct token tok) {
     if (unboundedReported.len) return;
     if (!unboundedReported.elemSize) unboundedReported = ListInit(sizeof(struct token));
     ListAdd(&unboundedReported, &tok);
-    ErrMsgSemantic(tok, UNBOUNDED_INSTANTIATION);
+    Err(tok, ERR_UNBOUNDED_INSTANTIATION);
 }
 
 struct var* instantiateFunc(struct var* generic, struct list* bindings) {
@@ -2436,7 +2420,7 @@ static void checkHoldsItself(struct type* t) {
         for (int k = 0; k < n; k++) {
             struct var* fld = t->bType == BASETYPE_CHOICE ? ListGetIdx(&f->type.vars, k) : f;
             if (!typeHoldsByValue(fld->type, t, 0)) continue;
-            ErrMsgSemantic(fld->tok, TYPE_HOLDS_ITSELF);
+            Err(fld->tok, ERR_TYPE_HOLDS_ITSELF, t->name);
             fld->type = unknownTypeStandIn();
         }
     }
@@ -2560,9 +2544,9 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
     t.tok = nameTok;
     t.arrElem = MallocOrCrash(sizeof(struct type));
     *t.arrElem = TypeVanilla(BASETYPE_INT32);
-    if (!argsNode) { ErrMsgSemantic(nameTok, MISSING_TYPE_ARGS); return t; }
+    if (!argsNode) { Err(nameTok, ERR_MISSING_TYPE_ARGS, nameTok, StrFromCStr("Array")); return t; }
     struct list argNodes = allSyntaxParts(argsNode);
-    if (argNodes.len != 1) { ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT); return t; }
+    if (argNodes.len != 1) { Err(firstTokAnywhere(argsNode), ERR_TYPE_ARG_COUNT, StrFromCStr("Array"), 1, argNodes.len); return t; }
     //an element's marker naming a variable is the one error - not also whether that variable is visible here
     struct syntax* elemNode = *(struct syntax**)ListGetIdx(&argNodes, 0);
     struct token named = markerNameIn(elemNode);
@@ -2570,16 +2554,16 @@ struct type builtinArrayType(struct semaModule* mod, struct syntax* argsNode, st
         ErrMsgMuteStart();
         *t.arrElem = resolveTypeExpr(mod, elemNode, scopeParams);
         ErrMsgMuteEnd();
-        ErrMsgSemantic(named, NAMED_SCOPE_ON_ELEMENT);
+        Err(named, ERR_NAMED_SCOPE_ON_ELEMENT);
         t.arrElem->scopeParam = NULL;
         t.arrElem->scopeWritten = false;
     } else {
         *t.arrElem = resolveTypeExpr(mod, elemNode, scopeParams);
-        if (t.arrElem->scopeParam) ErrMsgSemantic(firstTokAnywhere(argsNode), NAMED_SCOPE_ON_ELEMENT);
+        if (t.arrElem->scopeParam) Err(firstTokAnywhere(argsNode), ERR_NAMED_SCOPE_ON_ELEMENT);
     }
     //T7a: an array's storage lives apart from the value naming it, so copying an array of arrays would copy
     //the inner arrays' names and share their storage - an element array is written as a reference
-    if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc) ErrMsgSemantic(firstTokAnywhere(argsNode), ARRAY_NESTED_BY_VALUE);
+    if (t.arrElem->bType == BASETYPE_ARRAY && !t.arrElem->structMAlloc) Err(firstTokAnywhere(argsNode), ERR_ARRAY_NESTED_BY_VALUE, t.arrElem);
     return t;
 }
 static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, struct list* scopeParams);
@@ -2592,7 +2576,7 @@ static struct type* resolveConstraint(struct semaModule* mod, struct syntax* nod
     resolvingConstraint = true;
     struct type c = resolveTypeExpr(mod, node, scopeParams);
     resolvingConstraint = prev;
-    if (c.bType != BASETYPE_INTERFACE) { ErrMsgSemantic(firstTokAnywhere(node), CONSTRAINT_NOT_INTERFACE); return NULL; }
+    if (c.bType != BASETYPE_INTERFACE) { Err(firstTokAnywhere(node), ERR_CONSTRAINT_NOT_TRAIT, &c); return NULL; }
     struct type* out = MallocOrCrash(sizeof(struct type));
     *out = c;
     return out;
@@ -2642,7 +2626,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
             if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) namesVariable = true;
         }
         if (namesVariable && !TypeGetList(&mod->types, name)) {
-            ErrMsgSemantic(nameTok, TYPE_VAR_WRITTEN_BARE);
+            Err(nameTok, ERR_TYPE_VAR_WRITTEN_BARE, nameTok, name);
             return TypeVar(name, nameTok);
         }
         found = typeNamed(mod, name);
@@ -2666,7 +2650,7 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
         if (!found) { reportUnknownType(target, nameTok); return unknownTypeStandIn(); }
-        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return unknownTypeStandIn(); } //one error
+        if (!isPublic(name)) { Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok); return unknownTypeStandIn(); } //one error
     }
 
     //eager resolution is skipped only when found is ALREADY mid-resolution right now (found->resolving) -
@@ -2698,13 +2682,13 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
     //needs a declared list where a function, whose arguments are inferred, does not.
     struct syntax* argsNode = firstPartOfType(refNode, SNTX_TYPE_ARGS);
     if (found->typeParams.len == 0) {
-        if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
+        if (argsNode) Err(firstTokAnywhere(argsNode), ERR_TYPE_ARGS_ON_NON_GENERIC, found->name);
         return *found;
     }
-    if (!argsNode) { ErrMsgSemantic(nameTok, MISSING_TYPE_ARGS); return *found; }
+    if (!argsNode) { Err(nameTok, ERR_MISSING_TYPE_ARGS, nameTok, found->name); return *found; }
     struct list argNodes = allSyntaxParts(argsNode);
     if (argNodes.len != found->typeParams.len) {
-        ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
+        Err(firstTokAnywhere(argsNode), ERR_TYPE_ARG_COUNT, found->name, found->typeParams.len, argNodes.len);
         return unknownTypeStandIn(); //one error: what it is used for is not also a mismatch
     }
     struct list bindings = ListInit(sizeof(struct typeBinding));
@@ -2741,7 +2725,7 @@ static bool syntaxHasNamedMarker(struct syntax* s) {
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* node, struct list* scopeParams);
 static struct type resolveTypeArg(struct semaModule* mod, struct syntax* node, struct list* scopeParams) {
     if (!syntaxHasNamedMarker(node)) return resolveTypeExpr(mod, node, scopeParams);
-    ErrMsgSemantic(firstTokAnywhere(node), TYPE_ARG_HAS_REFERENCE_MARKER);
+    Err(firstTokAnywhere(node), ERR_TYPE_ARG_NAMED_SCOPE);
     ErrMsgMuteStart();
     struct type t = resolveTypeExpr(mod, node, scopeParams);
     ErrMsgMuteEnd();
@@ -2757,7 +2741,7 @@ struct type applyRefMarker(struct type t, struct syntax* markerNode, struct list
     //(a trait is reported as a trait - TRAIT_NOT_A_TYPE - not a second time here)
     if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_ARRAY && t.bType != BASETYPE_TYPEVAR
             && t.bType != BASETYPE_VOID && t.bType != BASETYPE_INTERFACE && t.bType != BASETYPE_CHOICE) {
-        ErrMsgSemantic(firstTokOfType(markerNode, TOK_BTWSE_AND), INVALID_REFERENCE_TARGET);
+        Err(firstTokOfType(markerNode, TOK_BTWSE_AND), ERR_INVALID_REFERENCE_TARGET, &t);
         return t;
     }
     t.structMAlloc = true;
@@ -2911,14 +2895,14 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     //T24: a type carries at most one marker, so a second one is that position written twice - "Point&s&a" -
     //with one of the two scope tags necessarily discarded, and a discarded scope tag is a discarded claim
     if (firstPartOfType(refNode, SNTX_REF_MARKER)) {
-        ErrMsgSemantic(firstTokAnywhere(refNode), DOUBLE_REFERENCE_MARKER);
+        Err(firstTokAnywhere(refNode), ERR_DOUBLE_REFERENCE_MARKER);
     }
     struct type t = applyRefMarker(base, firstPartOfType(refNode, SNTX_ELEM_REF_MARKER), scopeParams);
     if (typeHasBareDestructStruct(t)) {
-        ErrMsgSemantic(firstTokAnywhere(refNode), DESTRUCT_TYPE_MUST_BE_REFERENCE);
+        Err(firstTokAnywhere(refNode), ERR_DESTRUCT_TYPE_BY_VALUE, &t, &t);
     }
     //T30: a trait is a constraint (G19) and nothing else - never the type of a value, a reference, a field, an element
-    if (t.bType == BASETYPE_INTERFACE && !resolvingConstraint) ErrMsgSemantic(firstTokAnywhere(refNode), TRAIT_NOT_A_TYPE);
+    if (t.bType == BASETYPE_INTERFACE && !resolvingConstraint) Err(firstTokAnywhere(refNode), ERR_TRAIT_NOT_A_TYPE, &t);
     return t;
 }
 
@@ -2948,7 +2932,7 @@ struct type resolveLiteralBaseType(struct semaModule* mod, struct syntax* nameNo
         struct str name = strFromTok(nameTok);
         found = TypeGetList(&target->types, name);
         if (!found) { reportUnknownType(target, nameTok); return unknownTypeStandIn(); }
-        if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return unknownTypeStandIn(); } //one error
+        if (!isPublic(name)) { Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok); return unknownTypeStandIn(); } //one error
     }
     resolveTypeDecl(found);
     return *found;
@@ -2985,7 +2969,7 @@ struct type resolveChoiceBody(struct semaModule* mod, struct token nameTok, stru
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
         struct token nTok = firstTokOfType(c, TOK_IDEN);
         struct str name = strFromTok(nTok);
-        if (VarGetList(&t.vars, name)) { ErrMsgSemantic(nTok, CHOICE_CASE_ALREADY_IN_USE); continue; }
+        if (VarGetList(&t.vars, name)) { Err(nTok, ERR_ENUM_CASE_IN_USE, nTok); continue; }
         struct var v = (struct var){0};
         v.name = name;
         v.tok = nTok;
@@ -3044,7 +3028,7 @@ struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, s
         struct syntax* m = *(struct syntax**)ListGetIdx(&sigs, i);
         struct token mTok = firstTokOfType(m, TOK_IDEN);
         struct str name = strFromTok(mTok);
-        if (VarGetList(&t.vars, name)) { ErrMsgSemantic(mTok, VAR_NAME_IN_USE); continue; }
+        if (VarGetList(&t.vars, name)) { Err(mTok, ERR_DECLARED_TWICE, mTok); continue; }
         struct var v = (struct var){0};
         v.owner = mod; //M6: which module a private method name belongs to, and so who may supply it
         v.name = name;
@@ -3060,7 +3044,7 @@ struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, s
                 if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, q), tp)) { own++; break; }
             }
         }
-        if (v.type.typeParams.len > own) ErrMsgSemantic(mTok, INTERFACE_METHOD_IS_GENERIC);
+        if (v.type.typeParams.len > own) Err(mTok, ERR_TRAIT_METHOD_GENERIC, mTok);
         v.type.typeParams = ListInit(sizeof(struct str));
         ListAdd(&t.vars, &v);
     }
@@ -3197,7 +3181,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
         struct syntax* f = *(struct syntax**)ListGetIdx(&fieldNodes, i);
         struct token fieldNameTok = firstTokOfType(f, TOK_IDEN);
         struct str fieldName = strFromTok(fieldNameTok);
-        if (VarGetList(&t->vars, fieldName)) { ErrMsgSemantic(fieldNameTok, VAR_NAME_IN_USE); continue; }
+        if (VarGetList(&t->vars, fieldName)) { Err(fieldNameTok, ERR_DECLARED_TWICE, fieldNameTok); continue; }
 
         struct syntax* typeExprNode = firstPartOfType(f, SNTX_TYPE_EXPR);
         struct var v = (struct var){0};
@@ -3224,7 +3208,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
         } else {
             //bare pun - must match one of the constructor's own parameters by name
             struct var* param = VarGetList(&ctorParams, fieldName);
-            if (!param) { ErrMsgSemantic(fieldNameTok, CTOR_FIELD_NOT_INITIALIZED); continue; }
+            if (!param) { Err(fieldNameTok, ERR_CTOR_FIELD_NO_VALUE, fieldNameTok); continue; }
             v.type = param->type;
             //C2d: a pun of a bare reference parameter lives where the instance does - the parameter's own
             //scope is reached only by a field written "&p"
@@ -3233,7 +3217,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
                                  //which of the base's own via-tagged scopeBinding entries belong to this
                                  //field specifically
             //T25c: a field written "mut" holds a writable reference, which a read-only parameter is not
-            if (fieldDeclMut && TypeIsPermRef(v.type) && !v.type.refMut) ErrMsgSemantic(fieldNameTok, READ_ONLY_TO_WRITABLE);
+            if (fieldDeclMut && TypeIsPermRef(v.type) && !v.type.refMut) Err(fieldNameTok, ERR_READ_ONLY_TO_WRITABLE);
         }
         //C2e: "m Array<T>(n)" written as a value field, with n computed at compile time, is n elements stored
         //in the instance itself
@@ -3365,7 +3349,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         struct token nameTok = firstTokOfType(p, TOK_IDEN);
         struct str name = strFromTok(nameTok);
         rejectUnderscoreName(name, nameTok);
-        if (VarGetList(out, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
+        if (VarGetList(out, name)) { Err(nameTok, ERR_DECLARED_TWICE, nameTok); continue; }
         checkNoAliasClash(mod, name, nameTok); //M20
         struct syntax* typeExprNode = firstPartOfType(p, SNTX_TYPE_EXPR);
         struct var v = (struct var){0};
@@ -3385,7 +3369,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         //explicit marker) rather than on reference-shapedness, since T11 makes a runtime-length array
         //reference-SHAPED without one and that is exactly the case this rule exists to stop being implicit.
         if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) {
-            ErrMsgSemantic(nameTok, ARRAY_PARAM_NOT_REFERENCE);
+            Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type);
         }
         struct syntax* defNode = firstPartOfType(p, SNTX_EXPR);
         if (defNode) v.defaultVal = buildParamDefault(mod, defNode, v.type);
@@ -3398,7 +3382,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
     for (int i = 0; i < out->len; i++) {
         struct var* v = ListGetIdx(out, i);
         if (v->defaultVal) { seenDefault = true; continue; }
-        if (seenDefault) ErrMsgSemantic(v->tok, DEFAULT_NOT_TRAILING);
+        if (seenDefault) Err(v->tok, ERR_DEFAULT_NOT_TRAILING, v->tok);
     }
 }
 
@@ -3462,7 +3446,7 @@ bool structContainsBareScopeField(struct type t) {
 void declareScopeVars(struct list scopeDeclNodes, struct list* scopeVars) {
     (void)scopeVars;
     for (int i = 0; i < scopeDeclNodes.len; i++) {
-        ErrMsgSemantic(firstTokAnywhere(*(struct syntax**)ListGetIdx(&scopeDeclNodes, i)), SCOPE_DECL_REMOVED);
+        Err(firstTokAnywhere(*(struct syntax**)ListGetIdx(&scopeDeclNodes, i)), ERR_SCOPE_DECL);
     }
 }
 
@@ -3616,7 +3600,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
         if (!nameIsAType(mod, strFromTok(vt))) continue;
         bool enclosing = false; //a variable of the enclosing generic type, checked where that declares it
         for (int j = 0; prevTPN && j < prevTPN->len; j++) enclosing = enclosing || StrCmp(*(struct str*)ListGetIdx(prevTPN, j), strFromTok(vt));
-        if (!enclosing) ErrMsgSemantic(vt, TYPE_VAR_NAMES_TYPE);
+        if (!enclosing) Err(vt, ERR_TYPE_VAR_NAMES_TYPE, vt);
         for (int j = 0; j < sigTypeVars.len; j++) {
             if (StrCmp(*(struct str*)ListGetIdx(&sigTypeVars, j), strFromTok(vt))) { ListRemoveIdx(&sigTypeVars, j); break; }
         }
@@ -3689,7 +3673,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
                 if (StrCmp(*(struct str*)ListGetIdx(prevTPN, j), v)) inParams = true;
             }
             if (!inParams) {
-                ErrMsgSemantic(firstTokAnywhere(retTypeNode), TYPE_VAR_NOT_INFERABLE);
+                Err(firstTokAnywhere(retTypeNode), ERR_TYPE_VAR_NOT_INFERABLE, v);
                 *t.retType = unknownTypeStandIn(); //one error: what is returned is not also checked against it
                 break;
             }
@@ -3726,14 +3710,14 @@ void resolveExternParamList(struct semaModule* mod, struct syntax* paramListNode
         struct syntax* p = *(struct syntax**)ListGetIdx(&params, i);
         struct token nameTok = firstTokOfType(p, TOK_IDEN);
         struct str name = strFromTok(nameTok);
-        if (VarGetList(out, name)) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
+        if (VarGetList(out, name)) { Err(nameTok, ERR_DECLARED_TWICE, nameTok); continue; }
         struct syntax* typeExprNode = firstPartOfType(p, SNTX_TYPE_EXPR);
         struct var v = (struct var){0};
         v.name = name;
         v.tok = nameTok;
         //no scope params exist for an extern function - scope/"&" are never valid extern types anyway
         v.type = resolveTypeExpr(mod, typeExprNode, NULL);
-        if (!isExternAllowedType(v.type)) ErrMsgSemantic(nameTok, EXTERN_TYPE_NOT_ALLOWED);
+        if (!isExternAllowedType(v.type)) Err(nameTok, ERR_EXTERN_TYPE, &v.type);
         ListAdd(out, &v);
     }
 }
@@ -3758,7 +3742,7 @@ struct type resolveExternFuncSig(struct semaModule* mod, struct syntax* declNode
         //returns carries no length alongside it, so there's no sound way to rebuild a real "{ len, ptr }"
         //value from it (isExternAllowedType, deliberately scalar-only here, param-or-array-of-scalar there)
         if (!isNumericPrimitive(*t.retType)) {
-            ErrMsgSemantic(firstTokAnywhere(retTypeNode), EXTERN_TYPE_NOT_ALLOWED);
+            Err(firstTokAnywhere(retTypeNode), ERR_EXTERN_TYPE, t.retType);
         }
     }
     return t;
@@ -3785,7 +3769,7 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
     if (typeExprHasMut(typeExprNode)) {
         //a type variable may be bound to a reference, which it then makes writable (G8a)
         if (TypeIsPermRef(t) || t.bType == BASETYPE_TYPEVAR) t.refMut = true;
-        else ErrMsgSemantic(firstTokOfType(typeExprNode, TOK_MUT), MUT_ON_VALUE_TYPE);
+        else Err(firstTokOfType(typeExprNode, TOK_MUT), ERR_MUT_ON_VALUE_TYPE, &t);
     }
     return t;
 }
@@ -3821,7 +3805,7 @@ static struct type resolveTypeExprShape(struct semaModule* mod, struct syntax* t
 //respect, registered under the type's internal constructor name so "Percent(x)" reaches it.
 static void resolvePrimCtor(struct semaModule* mod, struct type* t, struct syntax* node) {
     struct token at = firstTokAnywhere(node);
-    if (!isTypeVanilla(t->bType) || t->bType == BASETYPE_VOID) { ErrMsgSemantic(at, PRIM_CTOR_NOT_PRIMITIVE); return; }
+    if (!isTypeVanilla(t->bType) || t->bType == BASETYPE_VOID) { Err(at, ERR_PRIM_CTOR_NOT_PRIMITIVE); return; }
     struct var* f = VarGetList(&mod->vars, internalCtorName(t->tok));
     if (!f) return;
     f->owner = mod;
@@ -3831,7 +3815,7 @@ static void resolvePrimCtor(struct semaModule* mod, struct type* t, struct synta
     resolveParamList(mod, firstPartOfType(node, SNTX_PARAM_LIST), &f->type.vars, &f->type.scopeVars);
     struct type underlying = TypeVanilla(t->bType);
     if (f->type.vars.len != 1 || !TypeIsSame((*(struct var*)ListGetIdx(&f->type.vars, 0)).type, underlying))
-        ErrMsgSemantic(at, PRIM_CTOR_PARAM);
+        Err(at, ERR_PRIM_CTOR_PARAM, &underlying);
     f->type.errors = ListInit(sizeof(struct type*));
     struct syntax* errListNode = firstPartOfType(node, SNTX_ERROR_LIST);
     if (errListNode) {
@@ -3854,7 +3838,7 @@ static void resolvePrimCtor(struct semaModule* mod, struct type* t, struct synta
 void resolveTypeDecl(struct type* t) {
     if (!t->placeholder) return;
     if (t->resolving) {
-        ErrMsgSemantic(t->tok, STRUCT_NOT_YET_DEFINED);
+        Err(t->tok, ERR_TYPE_DEFINED_THROUGH_ITSELF, t->name);
         t->placeholder = false;
         return;
     }
@@ -3876,7 +3860,7 @@ void resolveTypeDecl(struct type* t) {
                 struct token w = *(struct token*)ListGetIdx(&idens, j);
                 for (int k = 1; k < j; k++) {
                     struct token other = *(struct token*)ListGetIdx(&idens, k);
-                    if (StrCmp(strFromTok(w), strFromTok(other))) { ErrMsgSemantic(w, ERROR_WORD_ALREADY_IN_USE); break; }
+                    if (StrCmp(strFromTok(w), strFromTok(other))) { Err(w, ERR_ERROR_WORD_IN_USE, w); break; }
                 }
                 ListAdd(&t->words, &w);
             }
@@ -3919,8 +3903,8 @@ void resolveTypeDecl(struct type* t) {
                 for (int j = 0; j < declaredParams.len; j++) {
                     if (StrCmp(*(struct str*)ListGetIdx(&declaredParams, j), pname)) { dup = true; break; }
                 }
-                if (dup) { ErrMsgSemantic(nameTok, VAR_NAME_IN_USE); continue; }
-                if (nameIsAType(owner, pname)) ErrMsgSemantic(nameTok, TYPE_VAR_NAMES_TYPE); //G1
+                if (dup) { Err(nameTok, ERR_DECLARED_TWICE, nameTok); continue; }
+                if (nameIsAType(owner, pname)) Err(nameTok, ERR_TYPE_VAR_NAMES_TYPE, nameTok); //G1
                 ListAdd(&declaredParams, &pname);
             }
         }
@@ -3946,8 +3930,8 @@ void resolveTypeDecl(struct type* t) {
             struct list plainScopeDecls = teNode ? allPartsOfType(teNode, SNTX_SCOPE_DECL)
                                                  : ListInit(sizeof(struct syntax*));
             for (int i = 0; i < plainScopeDecls.len; i++) {
-                ErrMsgSemantic(firstTokAnywhere(*(struct syntax**)ListGetIdx(&plainScopeDecls, i)),
-                               SCOPE_DECL_ON_PLAIN_TYPE);
+                Err(firstTokAnywhere(*(struct syntax**)ListGetIdx(&plainScopeDecls, i)),
+                               ERR_SCOPE_DECL);
             }
         }
         if (ctorNode) {
@@ -3971,7 +3955,7 @@ void resolveTypeDecl(struct type* t) {
                 if (t->destructFunc) t->destructFunc->type.typeParams = declaredParams;
             }
             currentTypeParamNames = prevTPN;
-            if (hasTokOfType(actual, TOK_EXTENDS)) ErrMsgSemantic(firstTokOfType(actual, TOK_EXTENDS), EXTENDS_NOT_BASE);
+            if (hasTokOfType(actual, TOK_EXTENDS)) Err(firstTokOfType(actual, TOK_EXTENDS), ERR_EXTENDS_NOT_BASE);
             break;
         }
 
@@ -3983,7 +3967,7 @@ void resolveTypeDecl(struct type* t) {
         struct type resolved = resolveTypeExpr(owner, typeExprNode, NULL); //module-level, no function context
         //section 12: only a struct type or a trait is generic
         if (declaredParams.len && resolved.bType != BASETYPE_INTERFACE && !resolved.unknown) {
-            ErrMsgSemantic(firstTokAnywhere(paramsNode), GENERIC_TYPE_NOT_STRUCT);
+            Err(firstTokAnywhere(paramsNode), ERR_GENERIC_NOT_STRUCT);
             resolved.unknown = true; //and fits anything after, so its uses add nothing to the one error
         }
         struct str name = t->name;
@@ -3996,7 +3980,7 @@ void resolveTypeDecl(struct type* t) {
         bool overDeclared = resolved.owner && resolved.name.len && !resolved.unknown;
         if (overDeclared && (resolved.genericOrigin || resolved.bType == BASETYPE_STRUCT || resolved.bType == BASETYPE_CHOICE
                 || resolved.bType == BASETYPE_INTERFACE || resolved.bType == BASETYPE_ERROR)) {
-            ErrMsgSemantic(firstTokAnywhere(typeExprNode), DECLARED_OVER_AGGREGATE);
+            Err(firstTokAnywhere(typeExprNode), ERR_DECLARED_OVER_AGGREGATE, &resolved);
             resolved.unknown = true; //kept in shape, and fitting anything, so its uses add nothing to the one error
         }
         if (overDeclared) {
@@ -4017,7 +4001,7 @@ void resolveTypeDecl(struct type* t) {
         //T29f: "extends" - only a declared number or array has a base whose methods and operators it can take
         if (hasTokOfType(actual, TOK_EXTENDS)) {
             if (TypeIsNumeric(*t) || t->bType == BASETYPE_ARRAY) t->extendsBase = true;
-            else ErrMsgSemantic(firstTokOfType(actual, TOK_EXTENDS), EXTENDS_NOT_BASE);
+            else Err(firstTokOfType(actual, TOK_EXTENDS), ERR_EXTENDS_NOT_BASE);
         }
         struct syntax* primCtor = firstPartOfType(actual, SNTX_PRIM_CTOR);
         if (primCtor) resolvePrimCtor(owner, t, primCtor);
@@ -4190,13 +4174,13 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         //rendering belong to the type, not to one module's view of it: a private "eq" would make "==" in the declaring
         //module and in a Map from another disagree about the same two values
         if (priv && (!strcmp(sh->name, "Str") || !strcmp(sh->name, "Eq"))) continue;
-        if (a->type.vars.len != sh->operands + 1) ErrMsgSemantic(a->tok, OPERATOR_ARITY);
-        else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) ErrMsgSemantic(a->tok, OPERATOR_RESULT);
-        else if (!sh->result && a->type.hasRetType) ErrMsgSemantic(a->tok, OPERATOR_SETAT_RESULT);
-        else if (a->type.errors.len > 0 && !sh->mayFail) ErrMsgSemantic(a->tok, OPERATOR_FALLIBLE);
-        else if (a->type.errors.len == 0 && sh->mustFail) ErrMsgSemantic(a->tok, TRY_OPERATOR_MUST_FAIL);
-        else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) ErrMsgSemantic(a->tok, OPERATOR_LT_BOOL);
-        else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) ErrMsgSemantic(a->tok, LEN_SHAPE);
+        if (a->type.vars.len != sh->operands + 1) Err(a->tok, ERR_OPERATOR_ARITY, sh->name, sh->operands, a->type.vars.len - 1);
+        else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
+        else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
+        else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
+        else if (a->type.errors.len == 0 && sh->mustFail) Err(a->tok, ERR_TRY_FORM_MUST_FAIL, sh->name);
+        else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) Err(a->tok, ERR_LESS_NOT_BOOL);
+        else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) Err(a->tok, ERR_LEN_SHAPE);
         else if (!strcmp(sh->name, "Eq") || !strcmp(sh->name, "Str")) {
             //E10a/E11c: a comparison or a rendering reads its operands and writes nothing
             struct var* recv = ListGetIdx(&a->type.vars, 0);
@@ -4204,17 +4188,17 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
             if (!strcmp(sh->name, "Eq")) {
                 struct var* o = ListGetIdx(&a->type.vars, 1);
                 writes = writes || o->mut || o->type.refMut;
-                if (!eqWellShaped(a)) ErrMsgSemantic(a->tok, EQ_SHAPE);
+                if (!eqWellShaped(a)) Err(a->tok, ERR_EQ_SHAPE);
             } else if (!TypeIsByteArray(*a->type.retType)) {
-                ErrMsgSemantic(a->tok, STR_SHAPE);
+                Err(a->tok, ERR_STR_SHAPE);
             }
-            if (writes) ErrMsgSemantic(a->tok, EQ_STR_WRITES);
+            if (writes) Err(a->tok, ERR_EQ_STR_WRITES, sh->name);
         }
         if (pub) {
             char low[24];
             snprintf(low, sizeof(low), "%s", sh->name);
             low[0] = (char)(low[0] - 'A' + 'a');
-            if (varGetMethodIn(mod, StrFromCStr(low), *ra)) ErrMsgSemantic(a->tok, OPERATOR_BOTH_CASES);
+            if (varGetMethodIn(mod, StrFromCStr(low), *ra)) Err(a->tok, ERR_OPERATOR_BOTH_CASES, sh->name, sh->name, low);
         }
         return;
     }
@@ -4245,7 +4229,7 @@ static void checkDefaultClashesIn(struct semaModule* mod, struct var* a, struct 
         struct type full = TypeSubstitute(d->type, &b);
         if (TypeIsGeneric(full)) { //a family (Fold's U): the parameter count is what can be compared
             struct var* own = VarGetMethod(concrete.owner, a->name, concrete);
-            if (own && own->type.vars.len != d->type.vars.len) { ErrMsgSemantic(a->tok, OVERRIDE_SIGNATURE_DIFFERS); return; }
+            if (own && own->type.vars.len != d->type.vars.len) { Err(a->tok, ERR_OVERRIDE_SIGNATURE, a->name); return; }
             continue;
         }
         struct var asMethod = *d; //the default's signature without its receiver, as a trait method reads
@@ -4254,7 +4238,7 @@ static void checkDefaultClashesIn(struct semaModule* mod, struct var* a, struct 
         for (int k = 1; k < full.vars.len; k++) ListAdd(&asMethod.type.vars, ListGetIdx(&full.vars, k));
         asMethod.mut = (*(struct var*)ListGetIdx(&d->type.vars, 0)).mut;
         bool fits = InterfaceMethodImpl(concrete, &asMethod) != NULL;
-        if (!fits) { ErrMsgSemantic(a->tok, OVERRIDE_SIGNATURE_DIFFERS); return; }
+        if (!fits) { Err(a->tok, ERR_OVERRIDE_SIGNATURE, a->name); return; }
     }
 }
 
@@ -4287,19 +4271,19 @@ void checkMethodOverloads(struct semaModule* mod) {
             struct type* tr = traitOfDefault(a);
             if (tr) {
                 struct type* origin = tr->genericOrigin ? tr->genericOrigin : tr;
-                if (origin->owner != mod) { ErrMsgSemantic(a->tok, METHOD_ON_FOREIGN_TYPE); continue; }
-                if (VarGetList(&tr->vars, a->name)) { ErrMsgSemantic(a->tok, METHOD_SHADOWS_INTERFACE_METHOD); continue; }
+                if (origin->owner != mod) { Err(a->tok, ERR_DEFAULT_OUTSIDE_TRAIT, origin->name); continue; }
+                if (VarGetList(&tr->vars, a->name)) { Err(a->tok, ERR_DEFAULT_SHADOWS_REQUIRED, origin->name, a->name); continue; }
                 continue;
             }
             //coherence: only the module declaring a type may give it methods, so no two modules disagree
             //about what "x.f" means - and a built-in type is declared by the language, whose methods are
             //the prelude's alone (M19d)
-            if (!receiverIsBuiltin(*ra) && ra->owner != mod) { ErrMsgSemantic(a->tok, METHOD_ON_FOREIGN_TYPE); continue; }
+            if (!receiverIsBuiltin(*ra) && ra->owner != mod) { Err(a->tok, ERR_METHOD_ON_FOREIGN_TYPE, ra); continue; }
             //T29e: an inherited method is not overridden - a type extending its base naming one is an error, except the
             //protocol methods the compiler consults (E10a, E10b, E11c): a type's own Eq, Hash or Str replaces its base's
             bool protocol = StrCmp(a->name, StrFromCStr("Eq")) || StrCmp(a->name, StrFromCStr("Hash")) || StrCmp(a->name, StrFromCStr("Str"));
             if (isDeclaredArray(*ra) && !protocol && varGetMethodIn(mod, a->name, underlyingArray(*ra))) {
-                ErrMsgSemantic(a->tok, METHOD_CLASHES_INHERITED);
+                Err(a->tok, ERR_METHOD_CLASHES_INHERITED, ra, a->name);
                 continue;
             }
             //E23/E33: nor is a method the compiler supplies - Len() on every array, a declared one included, and the
@@ -4309,10 +4293,10 @@ void checkMethodOverloads(struct semaModule* mod) {
             if (!receiverIsBuiltin(*ra) && ((ra->bType == BASETYPE_ARRAY && StrCmp(a->name, StrFromCStr("Len")))
                                             || suppliedBitsMethod(*ra, a->name, &suppliedT)
                                             || suppliedAtomicMethod(*ra, a->name) != OPERATION_NONE)) {
-                ErrMsgSemantic(a->tok, METHOD_CLASHES_SUPPLIED);
+                Err(a->tok, ERR_METHOD_CLASHES_SUPPLIED, a->name, ra);
                 continue;
             }
-            if (receiverIsBuiltin(*ra) && !isPreludeModule(mod)) { ErrMsgSemantic(a->tok, METHOD_ON_BUILTIN_TYPE); continue; }
+            if (receiverIsBuiltin(*ra) && !isPreludeModule(mod)) { Err(a->tok, ERR_METHOD_ON_BUILTIN_TYPE, ra); continue; }
             //E31: an operator method's shape - one operand besides the receiver (none for negation), a result,
             //no errors (an operator has nowhere to write "try"), and "<" answering with a Bool
             checkOperatorMethod(mod, a, ra);
@@ -4320,9 +4304,9 @@ void checkMethodOverloads(struct semaModule* mod) {
         for (int j = 0; j < i; j++) {
             struct var* b = ListGetIdx(&mod->vars, j);
             if (!StrCmp(a->name, b->name) || a->isMethod != b->isMethod) continue;
-            if (!a->isMethod) { ErrMsgSemantic(a->tok, VAR_NAME_IN_USE); break; }
+            if (!a->isMethod) { Err(a->tok, ERR_NAME_IN_USE, a->tok); break; }
             struct type* rb = SemanticMethodReceiver(b);
-            if (ra && rb && sameReceiver(*ra, *rb)) { ErrMsgSemantic(a->tok, DUPLICATE_METHOD_FOR_TYPE); break; }
+            if (ra && rb && sameReceiver(*ra, *rb)) { Err(a->tok, ERR_METHOD_IN_USE, ra, a->name); break; }
         }
     }
 }
@@ -4554,7 +4538,7 @@ struct var* scopeFindUse(struct scope* sc, struct str name, struct token tok) {
 
 //D8c: "_" discards a value and names nothing, so nothing may be declared under it
 static void rejectUnderscoreName(struct str name, struct token tok) {
-    if (StrCmp(name, StrFromCStr("_"))) ErrMsgSemantic(tok, UNDERSCORE_NOT_A_NAME);
+    if (StrCmp(name, StrFromCStr("_"))) Err(tok, ERR_UNDERSCORE_DECLARED);
 }
 
 //D3a: no shadowing - a local or parameter may not reuse a name its module declares at the top level (a
@@ -4564,14 +4548,14 @@ static void rejectUnderscoreName(struct str name, struct token tok) {
 //name in a condition knowing whether it is a local or a global without knowing the scopes.
 static void rejectShadowing(struct semaModule* mod, struct str name, struct token tok) {
     if (!mod || (name.len && name.ptr[0] == '$')) return;
-    if (VarGetList(&mod->vars, name)) ErrMsgSemantic(tok, LOCAL_SHADOWS_GLOBAL);
-    else if (buildConstVar(name)) ErrMsgSemantic(tok, LOCAL_SHADOWS_BUILD_CONST);
-    else if (typeNamed(mod, name) || isBuiltinTypeName(name)) ErrMsgSemantic(tok, LOCAL_SHADOWS_TYPE);
+    if (VarGetList(&mod->vars, name)) Err(tok, ERR_SHADOWS_GLOBAL, tok);
+    else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+    else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
 }
 
 struct var* scopeDeclare(struct semaModule* mod, struct scope* sc, struct str name, struct token tok, struct type type, bool mut) {
     rejectUnderscoreName(name, tok);
-    if (scopeFindLocal(sc, name)) ErrMsgSemantic(tok, VAR_NAME_IN_USE);
+    if (scopeFindLocal(sc, name)) Err(tok, ERR_DECLARED_TWICE, tok);
     rejectShadowing(mod, name, tok); //D3a
     if (mod) checkNoAliasClash(mod, name, tok); //M20
     struct var* v = VarAllocSetOrigin();
@@ -4590,7 +4574,7 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
-    if (!v) { reportUnknownName(ctx->mod, tok, "unknown name", true, "nothing of this name is declared here, in this module or in the prelude"); return NULL; }
+    if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
     return v;
 }
 
@@ -4631,12 +4615,12 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
             if (t->hasCtor || t->unknown) return NULL; //already reported
             if (t->bType == BASETYPE_STRUCT || t->bType == BASETYPE_CHOICE || t->bType == BASETYPE_INTERFACE
                     || t->bType == BASETYPE_ERROR) {
-                ErrMsgSemantic(tok, TYPE_HAS_NO_CONSTRUCTOR);
+                Err(tok, ERR_TYPE_HAS_NO_CONSTRUCTOR, tok);
                 return NULL;
             }
         }
-        if (moduleHasMethodNamed(ctx->mod, name)) ErrMsgSemantic(tok, METHOD_CALLED_AS_FUNCTION);
-        else reportUnknownName(ctx->mod, tok, "unknown function or type", true, "nothing of this name is declared here, in this module or in the prelude");
+        if (moduleHasMethodNamed(ctx->mod, name)) Err(tok, ERR_METHOD_CALLED_AS_FUNCTION, tok, name);
+        else reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_FUNCTION, ERR_UNKNOWN_FUNCTION_MEANT, true);
         return NULL;
     }
 
@@ -4646,18 +4630,18 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
     struct str name = strFromTok(nameTok);
     struct var* v = VarGetList(&target->vars, name);
     if (v) {
-        if (!isPublic(name)) { ErrMsgSemantic(nameTok, VAR_IS_PRIVATE); return NULL; }
+        if (!isPublic(name)) { Err(nameTok, ERR_VAR_IS_PRIVATE, nameTok); return NULL; }
         return v;
     }
     struct type* t = TypeGetList(&target->types, name);
     if (t) {
         resolveTypeDecl(t);
         if (t->hasCtor) {
-            if (!isPublic(name)) { ErrMsgSemantic(nameTok, TYPE_IS_PRIVATE); return NULL; }
+            if (!isPublic(name)) { Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok); return NULL; }
             return ctorTargetFor(ctx, t, targsNode, nameTok);
         }
     }
-    ErrMsgSemantic(nameTok, moduleHasMethodNamed(target, name) ? METHOD_CALLED_AS_FUNCTION : UNKNOWN_VAR);
+    if (moduleHasMethodNamed(target, name)) Err(nameTok, ERR_METHOD_CALLED_AS_FUNCTION, nameTok, name); else Err(nameTok, ERR_NOT_IN_MODULE, target->identity, nameTok);
     return NULL;
 }
 
@@ -5209,7 +5193,7 @@ static void checkLiteralShifts(void) {
     for (int i = 0; i < literalShifts.len; i++) {
         struct operand* sh = *(struct operand**)ListGetIdx(&literalShifts, i);
         if (sh->litFoldedAway || (sh->opType != OPERATION_BTSFT_L && sh->opType != OPERATION_BTSFT_R)) continue;
-        ErrMsgSemantic((*(struct operand**)ListGetIdx(&sh->args, 1))->tok, SHIFT_OUT_OF_RANGE_UNADAPTED);
+        Err((*(struct operand**)ListGetIdx(&sh->args, 1))->tok, ERR_SHIFT_UNADAPTED);
     }
 }
 
@@ -5976,21 +5960,22 @@ static bool ownCameFromBareRefParam(struct operand* op, struct var* func) {
     return root->type.structMAlloc && !root->type.scopeParam;
 }
 
-static char* ownOutliveMsg(struct operand* op, struct var* func) {
-    return ownCameFromBareRefParam(op, func) ? OWN_FROM_BARE_REF_PARAM : OWN_CANNOT_OUTLIVE;
+static enum diag ownOutliveDiag(struct operand* op, struct var* func) {
+    return ownCameFromBareRefParam(op, func) ? ERR_OWN_FROM_BARE_REF_PARAM : ERR_OWN_CANNOT_OUTLIVE;
 }
 
-void reportTypeFit(enum typeFit fit, struct token tok) {
-    if (fit == TYPE_FIT_SCOPE_MISMATCH) ErrMsgSemantic(tok, SCOPE_MAY_NOT_OUTLIVE_TARGET);
-    else if (fit == TYPE_FIT_SCOPE_OWN) ErrMsgSemantic(tok, OWN_CANNOT_OUTLIVE);
-    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) ErrMsgSemantic(tok, ARRAY_SIZE_MISMATCH);
-    else if (fit == TYPE_FIT_LITERAL_RANGE) ErrMsgSemantic(tok, LITERAL_NOT_REPRESENTABLE);
-    else if (fit == TYPE_FIT_ELEM_REF_SHAPE) ErrMsgSemantic(tok, ELEM_REF_SHAPE_MISMATCH);
-    else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(tok, VALUE_TYPE_MISMATCH);
-    else if (fit == TYPE_FIT_NUMBER) ErrMsgSemantic(tok, NUMBER_DOES_NOT_FLOW);
-    else if (fit == TYPE_FIT_LITERAL_EXPR) ErrMsgSemantic(tok, LITERAL_EXPR_NOT_REPRESENTABLE);
-    else if (fit == TYPE_FIT_CTOR) ErrMsgSemantic(tok, PRIM_CTOR_LITERAL);
-    else if (fit == TYPE_FIT_READ_ONLY) ErrMsgSemantic(tok, READ_ONLY_TO_WRITABLE);
+//what does not fit, reported at tok: the value op against the type it was to fit, want
+void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struct type want) {
+    if (fit == TYPE_FIT_SCOPE_MISMATCH) Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
+    else if (fit == TYPE_FIT_SCOPE_OWN) Err(tok, ERR_OWN_CANNOT_OUTLIVE);
+    else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH);
+    else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
+    else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
+    else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
+    else if (fit == TYPE_FIT_NUMBER) Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want);
+    else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
+    else if (fit == TYPE_FIT_CTOR) Err(tok, ERR_LITERAL_NEEDS_CTOR, &want, &want);
+    else if (fit == TYPE_FIT_READ_ONLY) Err(tok, ERR_READ_ONLY_TO_WRITABLE);
 }
 
 //D15: ":=" reads the declared type off the initializer, which is only legible when the type is written at
@@ -6044,10 +6029,10 @@ bool OperandTypeIsWrittenHere(struct operand* op) {
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     FinalizeLambda(rhs, NULL); //D16b
-    if (!OperandTypeIsWrittenHere(rhs) && !rhs->type.unknown) ErrMsgSemantic(rhs->tok, TYPE_CANNOT_BE_INFERRED);
+    if (!OperandTypeIsWrittenHere(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
     struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
     if (textT && OperandIsWrittenText(rhs)) {
-        reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok);
+        reportTypeFit(OperandFitsType(func, rhs, *textT), rhs->tok, rhs, *textT);
         return *textT;
     }
     return declaredArrayType(rhs->type);
@@ -6122,6 +6107,17 @@ static bool writeIntoCallValue(struct operand* op) {
     return false;
 }
 
+//a write to in refused, reported at tok, saying why: a lambda's capture, a read-only reference on the way, a copy a
+//call gave back, or a variable not declared "mut"
+struct var* lvalueRootVar(struct operand* op);
+static void reportWriteBlocked(struct token tok, struct operand* in) {
+    struct var* root = lvalueRootVar(in);
+    if (root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture)) Err(tok, ERR_CAPTURE_READ_ONLY);
+    else if (writeBlockedByPermission(in)) Err(tok, ERR_READ_ONLY_REF_WRITE);
+    else if (writeIntoCallValue(in)) Err(tok, ERR_WRITE_INTO_CALL_VALUE);
+    else Err(tok, ERR_IMMUTABLE, root ? root->name : StrFromCStr("this"));
+}
+
 bool OperandIsMutableLvalue(struct operand* op) {
     switch (op->opType) {
         case OPERATION_READ_VAR: return op->readVar->mut;
@@ -6178,7 +6174,7 @@ struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode
     struct checkCtx dctx = {0};
     dctx.mod = mod;
     struct operand* def = buildExprFromSyntax(&dctx, defNode);
-    reportTypeFit(OperandFitsType(NULL, def, paramType), def->tok);
+    reportTypeFit(OperandFitsType(NULL, def, paramType), def->tok, def, paramType);
     if (!def->isLiteral) ListAdd(&defaultRecs, &(struct defaultRec){def, paramType});
     return def;
 }
@@ -6228,7 +6224,7 @@ struct var* resolveScopeArg(struct checkCtx* ctx, struct syntax* scopeArgNode, b
     *depth = 0;
     if (hasTokOfType(scopeArgNode, TOK_RET)) { //O26: "f&return(...)" builds in this function's result scope
         if (ctx && ctx->func && ctx->func->type.resultScope && !ctx->inCtor) return ctx->func->type.resultScope;
-        ErrMsgSemantic(firstTokOfType(scopeArgNode, TOK_RET), RETURN_SCOPE_NONE);
+        Err(firstTokOfType(scopeArgNode, TOK_RET), ERR_RETURN_SCOPE_NONE);
         *ok = false;
         return NULL;
     }
@@ -6239,17 +6235,17 @@ struct var* resolveScopeArg(struct checkCtx* ctx, struct syntax* scopeArgNode, b
     struct var* v = ctx && ctx->scope ? scopeFindUse(ctx->scope, name, nameTok) : NULL;
     if (v) {
         if (v->scopeUnnamed) { //O1b: a global's referent - reached by putting a result where it goes, not by a scope argument
-            ErrMsgSemantic(nameTok, SCOPE_ARG_PROGRAM);
+            Err(nameTok, ERR_SCOPE_ARG_PROGRAM, nameTok);
             *ok = false;
             return NULL;
         }
         if (v->type.scopeUnknown) { //O11/O12: a scope not known here
-            ErrMsgSemantic(nameTok, BUILD_INTO_UNKNOWN_SCOPE);
+            Err(nameTok, ERR_BUILD_INTO_UNKNOWN_SCOPE);
             *ok = false;
             return NULL;
         }
         if (v->type.scopeParam && v->type.scopeParam->derivedFrom) { //O23a: a scope nothing is built into
-            ErrMsgSemantic(nameTok, BUILD_THROUGH_UNKNOWN_SCOPE);
+            Err(nameTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
             *ok = false;
             return NULL;
         }
@@ -6258,8 +6254,8 @@ struct var* resolveScopeArg(struct checkCtx* ctx, struct syntax* scopeArgNode, b
         return NULL;
     }
     //a global's referent is in the program's scope, which a result reaches by being put there (O1b)
-    if (ctx && VarGetList(&ctx->mod->vars, name)) ErrMsgSemantic(nameTok, SCOPE_ARG_PROGRAM);
-    else ErrMsgSemantic(nameTok, SCOPE_ARG_UNKNOWN);
+    if (ctx && VarGetList(&ctx->mod->vars, name)) Err(nameTok, ERR_SCOPE_ARG_PROGRAM, nameTok);
+    else Err(nameTok, ERR_SCOPE_ARG_UNKNOWN, nameTok);
     *ok = false;
     return NULL;
 }
@@ -6529,11 +6525,13 @@ static struct operand* spreadSourceOf(struct operand* arg) {
     return base->isSpreadSource ? base : NULL;
 }
 
-//WRONG_ARG_COUNT, or - where the arguments are one call's spread results (D8d) - the message saying so
-void reportArgCount(struct list args, struct token tok) {
+//E14: the arguments are not between min and max in number - or, where they are one call's spread results (D8d),
+//the message saying so. A method's receiver is no argument the call writes, so skip of them go uncounted
+void reportArgCount(struct list args, struct token tok, int min, int max, int skip) {
     struct operand* a0 = args.len ? *(struct operand**)ListGetIdx(&args, 0) : NULL;
-    if (a0 && spreadSourceOf(a0)) ErrMsgSemantic(a0->tok, SPREAD_COUNT_MISMATCH);
-    else ErrMsgSemantic(tok, WRONG_ARG_COUNT);
+    if (a0 && spreadSourceOf(a0)) Err(a0->tok, ERR_SPREAD_COUNT);
+    else if (min == max) Err(tok, ERR_ARG_COUNT, min - skip, min - skip == 1 ? "" : "s", args.len - skip);
+    else Err(tok, ERR_ARG_COUNT_RANGE, min - skip, max - skip, args.len - skip);
 }
 
 //E12c/O17: an argument that makes its own storage - rendered or joined text, "Array<T>(n)", a comprehension, a lambda
@@ -6847,7 +6845,7 @@ static void recordCall(struct checkCtx* ctx, struct operand* op, struct var* fun
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                        struct token tok, struct list scopeArgNodes) {
     bool instanceArg = scopeArgNodes.len > 0 && firstScopeVarIndex(func) < 0;
-    if (scopeArgNodes.len > func->type.scopeVars.len && !instanceArg) ErrMsgSemantic(tok, SCOPE_ARG_NOT_ACCEPTED);
+    if (scopeArgNodes.len > func->type.scopeVars.len && !instanceArg) Err(tok, ERR_SCOPE_ARG_NOT_ACCEPTED, func->name);
     for (int i = 0; i < func->type.scopeVars.len; i++) {
         struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
         //O17: every already-reference-shaped argument whose parameter names this variable determines it,
@@ -6874,11 +6872,11 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 bool vu;
                 if (!valueRefsScope(ctx, arg, &vv, &vd, &vu)) continue;
                 if (determined && (!sameExactScope(vv, vd, boundTo, boundDepth) || vu != unnamed)) {
-                    ErrMsgSemantic(tok, SCOPE_ARGS_DISAGREE);
+                    Err(tok, ERR_SCOPE_ARGS_DISAGREE);
                     boundTo = SCOPE_AMBIGUOUS;
                     break;
                 }
-                if (vv == SCOPE_AMBIGUOUS && valueRefsAdmitStores(pt)) ErrMsgSemantic(arg->tok, BUILD_INTO_UNKNOWN_SCOPE);
+                if (vv == SCOPE_AMBIGUOUS && valueRefsAdmitStores(pt)) Err(arg->tok, ERR_BUILD_INTO_UNKNOWN_SCOPE);
                 boundTo = vv;
                 boundDepth = vd;
                 unnamed = vu;
@@ -6910,7 +6908,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 }
             }
             if (determined && (!sameExactScope(argScope, argDepth, boundTo, boundDepth) || argUnnamed != unnamed)) {
-                ErrMsgSemantic(tok, SCOPE_ARGS_DISAGREE);
+                Err(tok, ERR_SCOPE_ARGS_DISAGREE);
                 boundTo = SCOPE_AMBIGUOUS;
                 break;
             }
@@ -6925,7 +6923,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             if (RefNarrowingMatters(pt) && (scopeViaFallback(arg) || argScope == SCOPE_AMBIGUOUS)) {
                 struct var* pv = ListGetIdx(&func->type.vars, j);
                 if (pv->mut || results)
-                    ErrMsgSemantic(arg->tok, scopeViaFallback(arg) ? BUILD_THROUGH_UNKNOWN_SCOPE : BUILD_INTO_UNKNOWN_SCOPE);
+                    Err(arg->tok, scopeViaFallback(arg) ? ERR_BUILD_THROUGH_UNKNOWN_SCOPE : ERR_BUILD_INTO_UNKNOWN_SCOPE);
             }
             boundTo = argScope;
             boundDepth = argDepth;
@@ -6942,7 +6940,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             struct var* w = resolveScopeArg(ctx, *(struct syntax**)ListGetIdx(&scopeArgNodes, 0), &ok, &wDepth);
             if (ok) {
                 written = true;
-                if (determined && !sameExactScope(w, wDepth, boundTo, boundDepth)) ErrMsgSemantic(tok, SCOPE_ARGS_DISAGREE);
+                if (determined && !sameExactScope(w, wDepth, boundTo, boundDepth)) Err(tok, ERR_SCOPE_ARGS_DISAGREE);
                 else { boundTo = w; boundDepth = wDepth; }
             }
         }
@@ -7059,7 +7057,7 @@ static void dischargeLateObligations(void) {
 
 //O10c: point a failed discharge at the statement in the callee that required it
 static void obligationNote(struct scopeObligation* o) {
-    if (o->origin.owner && o->origin.type != TOK_NONE) ErrMsgSemanticNote(o->origin, OBLIGATION_ORIGIN_NOTE);
+    if (o->origin.owner && o->origin.type != TOK_NONE) Note(o->origin, NOTE_OBLIGATION_ORIGIN);
 }
 
 //O10c for one obligation of func's, at the call op
@@ -7090,7 +7088,7 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         shorter = resolveEffectiveScopeVar(arg, canonicalVar(o->shorter));
         struct scopeBinding* ab = callBinding(arg, o->shorter);
         if (ab && ab->containerFallback && !(ab->boundTo && ab->boundTo != SCOPE_AMBIGUOUS && canonicalVar(ab->boundTo)->derivedFrom)) {
-            ErrMsgSemantic(tok, FIELD_BINDING_UNKNOWN_WRITE); //O23: only the container's scope, an underestimate
+            Err(tok, ERR_FIELD_BINDING_UNKNOWN); //O23: only the container's scope, an underestimate
             obligationNote(o);
             return;
         }
@@ -7101,7 +7099,7 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
                 scopeObligationAddDerived(callerFn, longer, canonicalVar(o->shorter), argRoot, o->exact);
                 return;
             }
-            ErrMsgSemantic(tok, SCOPE_OBLIGATION_UNMET);
+            Err(tok, ERR_SCOPE_OBLIGATION_UNMET);
             obligationNote(o);
             return;
         }
@@ -7116,7 +7114,7 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         //its scope fell back to where the argument lives, which the field's real referent may outlive: storing
         //there could falsify the binding a reader of the instance relies on, so it cannot be judged (O11)
         if (instanceScopeFellBack && derivedScopeOf(func, o->shorter)) {
-            ErrMsgSemantic(tok, FIELD_BINDING_UNKNOWN_WRITE);
+            Err(tok, ERR_FIELD_BINDING_UNKNOWN);
             obligationNote(o);
             return;
         }
@@ -7129,7 +7127,7 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
     else ok = o->exact ? sameExactScope(canonicalVar(longer), lDepth, canonicalVar(shorter), sDepth)
                        : scopeCanFlowInto(ctx ? ctx->func : NULL, longer, normDepth(lDepth), shorter, normDepth(sDepth));
     if (!ok) {
-        ErrMsgSemantic(tok, o->exact ? REFERENCE_NARROWED : SCOPE_OBLIGATION_UNMET);
+        Err(tok, o->exact ? ERR_REFERENCE_NARROWED : ERR_SCOPE_OBLIGATION_UNMET);
         obligationNote(o);
     }
 }
@@ -7161,7 +7159,7 @@ void flushPendingDischarges(void) {
 }
 
 static struct operand* spreadSourceOf(struct operand* arg);
-void reportArgCount(struct list args, struct token tok);
+void reportArgCount(struct list args, struct token tok, int min, int max, int skip);
 static void ensureBodyChecked(struct var* func);
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
@@ -7256,7 +7254,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type* bt = bindingGet(&bindings, pt.name);
             if (bt && bt->bType != BASETYPE_STRUCT && bt->bType != BASETYPE_ARRAY && bt->bType != BASETYPE_CHOICE
                     && bt->bType != BASETYPE_TYPEVAR) {
-                ErrMsgSemantic(tok, REF_TYPEVAR_NOT_AGGREGATE);
+                Err(tok, ERR_REF_TYPEVAR_NOT_AGGREGATE, bt, pt.name);
                 ok = false;
             }
         }
@@ -7271,9 +7269,10 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             if (!bindingGet(&bindings, *(struct str*)ListGetIdx(&func->type.typeParams, i))) ok = false;
         }
         if (!ok) {
-            if (args.len < requiredG || args.len > func->type.vars.len) reportArgCount(args, tok); //D8d too
-            else ErrMsgSemantic(tok, func->type.hasRetType && func->type.retType->ctorFunc == func
-                                     ? CTOR_TYPE_ARGS_NOT_INFERABLE : TYPE_ARGS_NOT_INFERABLE);
+            if (args.len < requiredG || args.len > func->type.vars.len) reportArgCount(args, tok, requiredG, func->type.vars.len, func->isMethod); //D8d too
+            else if (func->type.hasRetType && func->type.retType->ctorFunc == func) {
+                Err(tok, ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, func->type.retType->name, func->type.retType->name);
+            } else Err(tok, ERR_TYPE_ARGS_NOT_INFERABLE, func->name);
             struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, TypeVanilla(BASETYPE_INT32));
             bad->readVar = func;
             bad->args = args;
@@ -7314,7 +7313,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     int required = func->type.vars.len;
     while (required > 0 && (*(struct var*)ListGetIdx(&func->type.vars, required -1)).defaultVal) required--;
     if (args.len < required || args.len > func->type.vars.len) {
-        reportArgCount(args, tok);
+        reportArgCount(args, tok, required, func->type.vars.len, func->isMethod);
         return op;
     }
     for (int i = 0; i < func->type.vars.len; i++) {
@@ -7322,7 +7321,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         if (i >= args.len) { ListAdd(&args, &param->defaultVal); continue; }
         struct operand* a = *(struct operand**)ListGetIdx(&args, i);
         if (!a->isDefaultArg) continue;
-        if (!param->defaultVal) { ErrMsgSemantic(a->tok, DEFAULT_ARG_NO_DEFAULT); return op; }
+        if (!param->defaultVal) { Err(a->tok, ERR_DEFAULT_ARG_NO_DEFAULT, param->name); return op; }
         *(struct operand**)ListGetIdx(&args, i) = param->defaultVal;
     }
     op->args = args;
@@ -7419,7 +7418,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                 paramType.scopeDepth = 0;
             }
         }
-        reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok);
+        reportTypeFit(OperandFitsType(callerFunc, arg, paramType), arg->tok, arg, paramType);
         //E12a is gone: an lvalue argument now BORROWS the caller's instance (E12c) instead of being
         //copied into the parameter, so "&" reliably names what the caller passed - which is exactly the
         //property E12a used to secure by rejecting the case outright, at the cost of forcing every
@@ -7454,20 +7453,20 @@ static struct operand* OperandAtomic(struct var* func, struct operand* target, s
     int want = (kind == OPERATION_ATOMIC_LOAD) ? 0 : (kind == OPERATION_ATOMIC_CAS ? 2 : 1);
     struct type resT = kind == OPERATION_ATOMIC_STORE ? TypeVanilla(BASETYPE_VOID) : target->type;
     if (args.len != want) {
-        reportArgCount(args, tok);
+        reportArgCount(args, tok, want, want, 0);
         return unknownPlaceholder(tok);
     }
     //P9: AtomicLoad only reads, so a read-only place serves - a flag set by one task is read by others through
     //read-only references
     if (!OperandIsLvalue(target) || (kind != OPERATION_ATOMIC_LOAD && !OperandIsMutableLvalue(target))) {
-        ErrMsgSemantic(target->tok, !OperandIsLvalue(target) ? ATOMIC_NOT_PLACE : ATOMIC_NOT_MUTABLE);
+        Err(target->tok, !OperandIsLvalue(target) ? ERR_ATOMIC_NOT_PLACE : ERR_ATOMIC_NOT_WRITABLE);
         return unknownPlaceholder(tok);
     }
     struct operand* op = operandNew(tok, kind, resT);
     ListAdd(&op->args, &target);
     for (int i = 0; i < args.len; i++) {
         struct operand* v = *(struct operand**)ListGetIdx(&args, i);
-        reportTypeFit(OperandFitsType(func, v, target->type), v->tok);
+        reportTypeFit(OperandFitsType(func, v, target->type), v->tok, v, target->type);
         ListAdd(&op->args, &v);
     }
     return op;
@@ -7531,7 +7530,7 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
     if (!TypeIsSameRepr(target, arg->type) && !sameElems
             && OperandFitsType(NULL, arg, underlying) != TYPE_FIT_OK
             && (baseElems.arrElem == underlying.arrElem || OperandFitsType(NULL, arg, baseElems) != TYPE_FIT_OK)) {
-        ErrMsgSemantic(arg->tok, NOMINAL_CONVERT_MISMATCH);
+        Err(arg->tok, ERR_CONVERSION_REPRESENTATION, &arg->type, &target);
     }
     //T29a: a conversion names its argument's storage - a variable, a field, an element or a slice read under the
     //declared type's name, so it may be written exactly as the argument may, and a borrow of it is checked against
@@ -7560,7 +7559,7 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
 
 struct operand* OperandNumericConversion(struct type target, struct operand* arg, struct token tok) {
     if (!TypeIsNumeric(arg->type)) {
-        ErrMsgSemantic(arg->tok, OPERATION_REQUIRES_NUMBER);
+        Err(arg->tok, ERR_CONVERT_NOT_NUMBER, &arg->type, &target);
         return operandNew(tok, OPERATION_NONE, target); //shaped like a successful conversion would be,
                                                           //so a caller expecting `target` doesn't also
                                                           //cascade a second, misleading mismatch error
@@ -7574,13 +7573,13 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
     if (base->type.bType != BASETYPE_ARRAY) {
         //an unknown base was reported where it was written. Either way the index keeps its operands, so what walks an
         //lvalue's chain (its mutability, its scope) finds them and nothing reads past the end of an empty list
-        if (!base->type.unknown) ErrMsgSemantic(tok, NOT_AN_ARRAY);
+        if (!base->type.unknown) Err(tok, ERR_NOT_INDEXABLE, &base->type);
         struct operand* op = operandNew(tok, OPERATION_INDEX, unknownTypeStandIn());
         ListAdd(&op->args, &base);
         ListAdd(&op->args, &index);
         return op;
     }
-    if (!TypeIsInt(index->type)) ErrMsgSemantic(index->tok, OPERATION_REQUIRES_INT);
+    if (!TypeIsInt(index->type)) Err(index->tok, ERR_INDEX_NOT_INT, &index->type);
 
     struct type elemT = *base->type.arrElem;
     elemT.scopeDepth = base->type.scopeDepth; //O2a/O20: an element lives where its container does
@@ -7594,7 +7593,7 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
     if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen) {
         long long n = base->type.arrLen->intLiteralVal;
         if (index->intLiteralVal < 0 || index->intLiteralVal >= n) {
-            ErrMsgSemantic(index->tok, INDEX_OUT_OF_RANGE);
+            Err(index->tok, ERR_INDEX_OUT_OF_RANGE, index->intLiteralVal, n);
         }
     }
     return op;
@@ -7608,7 +7607,7 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
 //has to know they could be missing.
 struct operand* OperandSlice(struct operand* base, struct operand* lo, struct operand* hi, struct token tok) {
     if (base->type.bType != BASETYPE_ARRAY) {
-        if (!base->type.unknown) ErrMsgSemantic(tok, SLICE_REQUIRES_ARRAY);
+        if (!base->type.unknown) Err(tok, ERR_NOT_SLICEABLE, &base->type);
         return unknownPlaceholder(tok); //not a slice with no base - nothing reads past what it has
     }
     if (!lo) {
@@ -7617,8 +7616,8 @@ struct operand* OperandSlice(struct operand* base, struct operand* lo, struct op
         lo->intLiteralVal = 0;
     }
     if (!hi) hi = OperandLen(base, tok);
-    if (!TypeIsInt(lo->type)) ErrMsgSemantic(lo->tok, OPERATION_REQUIRES_INT);
-    if (!TypeIsInt(hi->type)) ErrMsgSemantic(hi->tok, OPERATION_REQUIRES_INT);
+    if (!TypeIsInt(lo->type)) Err(lo->tok, ERR_SLICE_BOUND_NOT_INT, &lo->type);
+    if (!TypeIsInt(hi->type)) Err(hi->tok, ERR_SLICE_BOUND_NOT_INT, &hi->type);
 
     struct type t = (struct type){0};
     t.bType = BASETYPE_ARRAY;
@@ -7690,12 +7689,12 @@ bool scopeViaFallback(struct operand* op) {
 struct operand* OperandMember(struct semaModule* referencingMod, struct operand* base, struct str member, struct token tok) {
     if (base->type.unknown) return unknownPlaceholder(tok); //an unknown name or type, reported where it is written
     if (base->type.bType != BASETYPE_STRUCT) {
-        ErrMsgSemantic(tok, UNKNOWN_STRUCT_MEMBER);
+        Err(tok, ERR_NO_SUCH_MEMBER, &base->type, member);
         return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
     }
     struct var* memberVar = VarGetList(&base->type.vars, member);
     if (!memberVar) {
-        ErrMsgSemantic(tok, UNKNOWN_STRUCT_MEMBER);
+        Err(tok, ERR_NO_SUCH_MEMBER, &base->type, member);
         return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
     }
     //M6a. Report and CARRY ON with the member's real type: the member exists and its type is known, only
@@ -7703,7 +7702,7 @@ struct operand* OperandMember(struct semaModule* referencingMod, struct operand*
     //for a reason that was not the problem - "v.data[0]" reported the privacy error and then "operand is
     //not an array", which points at a non-problem. One error explains it; the rest were noise.
     if (referencingMod && base->type.owner && base->type.owner != referencingMod && !isPublic(member)) {
-        ErrMsgSemantic(tok, MEMBER_IS_PRIVATE);
+        Err(tok, ERR_MEMBER_IS_PRIVATE, member, &base->type);
     }
     struct operand* op = operandNew(tok, OPERATION_MEMBER, memberVar->type);
     op->memberName = member;
@@ -7855,14 +7854,11 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
     ListAdd(&op->args, &in);
     if (in->type.unknown) return op; //an unknown name, reported where it is written
     if (!OperandIsLvalue(in) || in->viaConversion) {
-        ErrMsgSemantic(tok, NOT_AN_LVALUE);
+        Err(tok, ERR_NOT_ASSIGNABLE);
         return op;
     }
-    if (!OperandIsNumeric(in)) ErrMsgSemantic(tok, OPERATION_REQUIRES_NUMBER);
-    if (!OperandIsMutableLvalue(in)) {
-        struct var* root = lvalueRootVar(in);
-        ErrMsgSemantic(tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(in) ? READ_ONLY_REF_WRITE : writeIntoCallValue(in) ? WRITE_INTO_CALL_VALUE : VAR_IMMUTABLE);
-    }
+    if (!OperandIsNumeric(in)) Err(tok, ERR_INCDEC_NOT_NUMBER, tok, &in->type);
+    if (!OperandIsMutableLvalue(in)) reportWriteBlocked(tok, in);
     return op;
 }
 
@@ -7881,12 +7877,13 @@ bool operandMeetsReq(struct operand* op, enum operandReq req) {
     }
 }
 
-char* operandReqErrMsg(enum operandReq req) {
+//an operand of the operator opTok that is not of the kind req asks for, reported at it
+static void reportOperandReq(struct token at, struct token opTok, enum operandReq req, struct type* found) {
     switch (req) {
-        case REQ_BOOL: return OPERATION_REQUIRES_BOOL;
-        case REQ_INT: return OPERATION_REQUIRES_INT;
-        case REQ_NUMERIC: return OPERATION_REQUIRES_NUMBER;
-        default: ErrorBugFound(); return NULL; //REQ_NONE never fails a check, so never needs a message
+        case REQ_BOOL: Err(at, ERR_OPERAND_NOT_BOOL, opTok, found); return;
+        case REQ_INT: Err(at, ERR_OPERAND_NOT_INT, opTok, found); return;
+        case REQ_NUMERIC: Err(at, ERR_OPERAND_NOT_NUMBER, opTok, found); return;
+        default: ErrorBugFound(); //REQ_NONE never fails a check, so never needs a message
     }
 }
 
@@ -7969,11 +7966,8 @@ static void checkStrPurity(void) {
         struct token where = e->m->tok;
         const char* why = CtWhyNotEvaluable(e->m, &where);
         if (!why) continue;
-        char* msg = MallocOrCrash(512);
-        snprintf(msg, 512, "Str must have no effect a program could observe - '$' calls it as often as building the "
-                 "text needs (E11c) - but it cannot be evaluated at compile time: %s", why);
-        ErrMsgSemantic(e->m->tok, msg);
-        if (where.lineNr != e->m->tok.lineNr || where.owner != e->m->tok.owner) ErrMsgSemanticNote(where, "here");
+        Err(e->m->tok, ERR_STR_HAS_EFFECT, why);
+        if (where.lineNr != e->m->tok.lineNr || where.owner != e->m->tok.owner) Note(where, NOTE_HERE);
     }
 }
 
@@ -8035,7 +8029,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
             struct operand* op = operandNew(tok, OPERATION_STR_OF, textValueType());
             ListAdd(&op->args, &in);
             if (!strOfRenderable(in->type)) {
-                ErrMsgSemantic(tok, STR_OF_UNSUPPORTED_TYPE);
+                Err(tok, ERR_STR_OF_NOTHING);
             }
             struct list seen = ListInit(sizeof(struct type));
             noteStrMethods(in->type, &seen);
@@ -8057,7 +8051,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
                 else if (in->type.bType == BASETYPE_U64) {
                     //a U64 literal (above I64's maximum, L10) negated: I64's minimum is the one such value with a negative
                     litWide v = -intLiteralExact(in);
-                    if (!intLiteralFitsIntType(v, TypeVanilla(BASETYPE_INT64))) ErrMsgSemantic(tok, INT_LITERAL_TOO_LARGE);
+                    if (!intLiteralFitsIntType(v, TypeVanilla(BASETYPE_INT64))) Err(tok, ERR_NEG_LITERAL_TOO_LARGE, in->tok);
                     op->type = TypeVanilla(BASETYPE_INT64);
                     op->intLiteralVal = (long long)v;
                 } else op->intLiteralVal = (long long)(0ULL - (unsigned long long)in->intLiteralVal);
@@ -8066,7 +8060,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
             struct unOpRule rule = unOpRules[opType];
             struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : in->type);
             ListAdd(&op->args, &in);
-            if (!operandMeetsReq(in, rule.require)) ErrMsgSemantic(tok, operandReqErrMsg(rule.require));
+            if (!operandMeetsReq(in, rule.require)) reportOperandReq(tok, tok, rule.require, &in->type);
             return op;
         }
         default:
@@ -8175,7 +8169,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     FinalizeLambda(a, b->pendingLambda ? NULL : &b->type);
     FinalizeLambda(b, &a->type);
     if (a->type.isTuple || b->type.isTuple) { //D8c: several results are not one operand
-        ErrMsgSemantic(tok, TUPLE_NOT_A_VALUE);
+        Err(tok, ERR_TUPLE_NOT_A_VALUE);
         return operandNew(tok, opType, TypeVanilla(BASETYPE_INT32));
     }
     struct binOpRule rule = binOpRules[opType];
@@ -8221,11 +8215,11 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
             enum litValueFail why = lit->isLiteral ? LIT_VALUE_OK : literalExprFold(lit);
             if (!saved.isLiteral && why == LIT_VALUE_OK) markFoldedAway(&saved);
             unfit = true;
-            if (why == LIT_VALUE_NONE) ErrMsgSemantic(lit->tok, LITERAL_EXPR_NOT_REPRESENTABLE);
+            if (why == LIT_VALUE_NONE) Err(lit->tok, ERR_LITERAL_EXPR_NO_VALUE);
             else if (why == LIT_VALUE_OK && NumericFlows(other->type, lit->type, true)) {
                 operandWidenInPlace(other, lit->type);
                 unfit = false;
-            } else if (why == LIT_VALUE_OK) ErrMsgSemantic(tok, LITERAL_DOES_NOT_MEET);
+            } else if (why == LIT_VALUE_OK) Err(tok, ERR_LITERAL_DOES_NOT_MEET, &other->type, &other->type, &lit->type);
         }
     }
     //both sides literals of differing numeric types ("'a' + 1", "1 + 2.5"): neither has a representation to
@@ -8257,14 +8251,14 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
         long long width = TypeGetSize(a->type) * 8;
         if (bv.i >= width && bv.i >= 0 && operandOnlyNumericLiterals(a)) deferShift = true;
         else if (bv.i < 0 || bv.i >= width) {
-            ErrMsgSemantic(b->tok, SHIFT_OUT_OF_RANGE_LITERAL);
+            Err(b->tok, ERR_SHIFT_OUT_OF_RANGE, &a->type, (long long)bv.i, width);
         }
     }
     //E6a: a constant zero divisor is settled here rather than left to abort at run time - the same split
     //E16 makes for a constant index and D14b for a constant array length. Only a literal, or a literal-only
     //expression (E4a): a divisor with a name in it is checked where it is evaluated.
     if ((opType == OPERATION_DIV || opType == OPERATION_MOD) && bConst && bv.i == 0) {
-        ErrMsgSemantic(b->tok, DIVIDE_BY_ZERO_LITERAL);
+        Err(b->tok, ERR_DIVIDE_BY_ZERO);
     }
     struct operand* op = operandNew(tok, opType, rule.resultBool ? TypeVanilla(BASETYPE_BOOL) : a->type);
     ListAdd(&op->args, &a);
@@ -8273,10 +8267,12 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
 
     bool aOk = operandMeetsReq(a, rule.require);
     bool bOk = operandMeetsReq(b, rule.require);
-    if (!aOk) ErrMsgSemantic(a->tok, operandReqErrMsg(rule.require));
-    if (!bOk) ErrMsgSemantic(b->tok, operandReqErrMsg(rule.require));
-    if (rule.sameType && aOk && bOk && !unfit && !a->type.unknown && !b->type.unknown && !TypeIsSame(a->type, b->type))
-        ErrMsgSemantic(tok, TypeIsNumeric(a->type) && TypeIsNumeric(b->type) ? NUMBERS_DO_NOT_MEET : OPERANDS_NOT_SAME_TYPE);
+    if (!aOk) reportOperandReq(a->tok, tok, rule.require, &a->type);
+    if (!bOk) reportOperandReq(b->tok, tok, rule.require, &b->type);
+    if (rule.sameType && aOk && bOk && !unfit && !a->type.unknown && !b->type.unknown && !TypeIsSame(a->type, b->type)) {
+        if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type)) Err(tok, ERR_NUMBERS_DO_NOT_MEET, &a->type, &b->type);
+        else Err(tok, ERR_OPERANDS_DIFFER, tok, &a->type, &b->type);
+    }
     return op;
 }
 
@@ -8355,7 +8351,7 @@ struct operand* OperandIntLiteral(struct token tok) {
     //L10/T6a: a decimal literal beyond 64 bits is an error, and one above I64's maximum is a U64 - the type E4a already
     //gives a literal-only expression folding to such a value. A hex or binary literal is a bit pattern (L10a): its
     //64 bits read as an I64, so 0xFFFFFFFFFFFFFFFF is -1
-    if (tooLarge) ErrMsgSemantic(tok, INT_LITERAL_TOO_LARGE);
+    if (tooLarge) Err(tok, ERR_INT_LITERAL_TOO_LARGE, tok);
     return OperandIntLiteralValue(tok, value, !tooLarge && value < 0 && buf[0] != '-' && intLiteralIsDecimal(tok.str));
 }
 
@@ -8383,7 +8379,7 @@ struct operand* OperandFloatLiteral(struct token tok) {
     stripDigitSeparators(buf); //L10b
     op->floatLiteralVal = strtod(buf, NULL);
     //L12b: beyond F64's range a literal would be an infinity nobody wrote; below it, it rounds to zero or a subnormal
-    if (isinf(op->floatLiteralVal)) ErrMsgSemantic(tok, FLOAT_LITERAL_OUT_OF_RANGE);
+    if (isinf(op->floatLiteralVal)) Err(tok, ERR_FLOAT_LITERAL_RANGE, tok);
     return op;
 }
 
@@ -8429,7 +8425,7 @@ struct operand* OperandErrorLiteral(struct type errType, struct token wordTok) {
             return op;
         }
     }
-    ErrMsgSemantic(wordTok, EXPECTED_ERROR_WORD);
+    Err(wordTok, ERR_NO_SUCH_ERROR_WORD, &errType, wordTok);
     return op;
 }
 
@@ -8455,14 +8451,14 @@ struct operand* OperandChoiceValue(struct checkCtx* ctx, struct type choiceType,
         struct var* v = ListGetIdx(&choiceType.vars, i);
         if (StrCmp(v->name, strFromTok(wordTok))) { op->intLiteralVal = i; c = v; break; }
     }
-    if (!c) { ErrMsgSemantic(wordTok, UNKNOWN_CHOICE_CASE); return op; }
+    if (!c) { Err(wordTok, ERR_NO_SUCH_CASE, &choiceType, wordTok); return op; }
     op->memberName = wordTok.str;
     //T17: the payload is checked exactly as a struct literal's fields are - same arity rule, same
     //assignability per field - because that is what it is. A case with no payload takes no arguments, and
     //writing some is the same mistake as giving a struct literal too many fields.
     struct list args = argsNode ? buildArgs(ctx, argsNode) : ListInit(sizeof(struct operand*));
     rejectDefaultArgs(args);
-    if (args.len != c->type.vars.len) { reportArgCount(args, wordTok); return op; }
+    if (args.len != c->type.vars.len) { reportArgCount(args, wordTok, c->type.vars.len, c->type.vars.len, 0); return op; }
     //O17: a payload's "&name" tag names one of the CHOICE TYPE's own scope variables, never anything in
     //the constructing function's frame - so it is bound here from the arguments, exactly as a call binds a
     //callee's own scope variables, and resolved through that binding before any fit check. Without the
@@ -8483,12 +8479,12 @@ struct operand* OperandChoiceValue(struct checkCtx* ctx, struct type choiceType,
         struct operand* a = *(struct operand**)ListGetIdx(&args, i);
         struct type want = (*(struct var*)ListGetIdx(&c->type.vars, i)).type;
         if (want.scopeParam) want.scopeParam = resolveEffectiveScopeVar(op, want.scopeParam);
-        reportTypeFit(OperandFitsType(ctx ? ctx->func : NULL, a, want), a->tok);
+        reportTypeFit(OperandFitsType(ctx ? ctx->func : NULL, a, want), a->tok, a, want);
     }
     //T17c/C2d: the payload lives where the value lands - existing storage stored in it held to that place
     if (ctx) bindEnumHere(ctx, op, &synth);
     //E25: a scope argument lands the value - and the temporaries built for its payload - where the named variable lives
-    if (scopeArgNodes.len > 1) ErrMsgSemantic(wordTok, SCOPE_ARG_NOT_ACCEPTED);
+    if (scopeArgNodes.len > 1) Err(wordTok, ERR_SCOPE_ARG_COUNT);
     if (scopeArgNodes.len > 0 && ctx) {
         bool ok = false;
         int wDepth = 0;
@@ -8505,11 +8501,11 @@ struct operand* OperandStructLiteral(struct var* callerFunc, struct type t, stru
     struct operand* op = operandNew(tok, OPERATION_NONE, t);
     op->isLiteral = true;
     op->args = args;
-    if (args.len != t.vars.len) { ErrMsgSemantic(tok, WRONG_ARG_COUNT); return op; }
+    if (args.len != t.vars.len) { Err(tok, ERR_ARG_COUNT, t.vars.len, t.vars.len == 1 ? "" : "s", args.len); return op; }
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type memberType = (*(struct var*)ListGetIdx(&t.vars, i)).type;
-        reportTypeFit(OperandFitsType(callerFunc, arg, memberType), arg->tok);
+        reportTypeFit(OperandFitsType(callerFunc, arg, memberType), arg->tok, arg, memberType);
     }
     return op;
 }
@@ -8623,7 +8619,7 @@ static const char* operatorFor(struct checkCtx* ctx, struct type t, const char* 
     const char* tn = tryOperatorName(ctx, t, capName);
     if (tn && ctx->checkingTry) return tn;
     const char* n = operatorMethodName(ctx, t, capName);
-    if (!n && tn) ErrMsgSemantic(tok, ONLY_TRY_VARIANT);
+    if (!n && tn) Err(tok, ERR_ONLY_TRY_FORM, &t, tn);
     return n;
 }
 
@@ -8675,18 +8671,18 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
             other = OperandReadVar(holdInHidden(ctx, a, opTok, "op", &seq->comprBody), opTok);
         }
         struct operand* call = operatorCall(ctx, recv, other, name, opTok);
-        if (StrCmp(StrFromCStr((char*)capName), StrFromCStr("Less")) && !OperandIsBool(call)) ErrMsgSemantic(opTok, OPERATOR_LT_BOOL);
+        if (StrCmp(StrFromCStr((char*)capName), StrFromCStr("Less")) && !OperandIsBool(call)) Err(opTok, ERR_LESS_NOT_BOOL);
         struct operand* r = call;
         if (seq) { seq->type = call->type; ListAdd(&seq->args, &call); r = seq; }
         return negate ? OperandUnary(r, OPERATION_NOT, opTok) : r;
     }
-    if (opTok.type == TOK_AT) { ErrMsgSemantic(opTok, OPERATOR_AT_UNDECLARED); return OperandIntLiteral(opTok); }
+    if (opTok.type == TOK_AT) { Err(opTok, ERR_MATMUL_UNDECLARED, &recv->type); return OperandIntLiteral(opTok); }
     //T29f: a declared number that does not extend its base has no built-in operator making a value of itself - two of
     //it is an error; beside a base value or a literal it reads as its base (T6b), and the result is the base's
     if (capName && strcmp(capName, "Less") != 0) {
         bool da = notExtendedNumber(a->type), db = notExtendedNumber(b->type);
         if ((da && TypeIsSame(a->type, b->type) && !b->isLiteral) || (db && TypeIsSame(a->type, b->type) && !a->isLiteral)) {
-            ErrMsgSemantic(opTok, NOT_EXTENDED_OP);
+            Err(opTok, ERR_NOT_EXTENDED_OP, da ? &a->type : &b->type, opTok, capName);
         } else {
             if (da) operandWidenInPlace(a, TypeVanilla(a->type.bType));
             if (db) operandWidenInPlace(b, TypeVanilla(b->type.bType));
@@ -8757,7 +8753,7 @@ static struct operand* eqAnd(struct operand* acc, struct operand* next, struct t
 static struct operand* eqCallOr(struct checkCtx* ctx, struct operand* call, struct token tok) {
     (void)ctx;
     if (call) return call;
-    if (!ErrMsgGetNErrors()) ErrMsgSemantic(tok, EQ_SHAPE);
+    if (!ErrMsgGetNErrors()) Err(tok, ERR_EQ_SHAPE);
     return OperandBoolLiteral(tok);
 }
 
@@ -8851,7 +8847,7 @@ static struct operand* buildEquality(struct checkCtx* ctx, struct operand* a, st
     } else {
         return OperandBinary(a, b, OPERATION_EQ, tok);
     }
-    if (!OperandIsBool(r)) ErrMsgSemantic(tok, EQ_SHAPE);
+    if (!OperandIsBool(r)) Err(tok, ERR_EQ_SHAPE);
     if (!seq->comprBody.len) return r;
     ListAdd(&seq->args, &r);
     return seq;
@@ -9030,7 +9026,7 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
     struct token ifTok = partAt(s, 1)->tok;
     struct operand* c = buildExprFromSyntax(ctx, partSntx(s, 2));
-    if (!OperandIsBool(c) && !c->type.unknown) ErrMsgSemantic(c->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(c) && !c->type.unknown) Err(c->tok, ERR_COND_NOT_BOOL_TYPE, &c->type);
     struct operand* b = buildExprFromSyntax(ctx, partSntx(s, 4));
     FinalizeLambda(a, b->pendingLambda ? NULL : &b->type);
     FinalizeLambda(b, &a->type);
@@ -9050,8 +9046,8 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
         t = a->type;
         t.arrMalloc = true;
         t.arrLen = NULL;
-        reportTypeFit(OperandFitsType(ctx->func, a, t), a->tok);
-        reportTypeFit(OperandFitsType(ctx->func, b, t), b->tok);
+        reportTypeFit(OperandFitsType(ctx->func, a, t), a->tok, a, t);
+        reportTypeFit(OperandFitsType(ctx->func, b, t), b->tok, b, t);
     } else if (!TypeIsSame(a->type, b->type)) {
         if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && operandIsLiteralLike(a) && operandIsLiteralLike(b)) {
             t = numericTypeRank(a->type) >= numericTypeRank(b->type) ? a->type : b->type;
@@ -9067,7 +9063,7 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
         } else if (refAndTemporary(b, a)) {
             t = b->type;
         } else {
-            ErrMsgSemantic(ifTok, COND_BRANCH_TYPES);
+            Err(ifTok, ERR_COND_BRANCH_TYPES, &a->type, &b->type);
         }
     }
     struct operand* op = operandNew(ifTok, OPERATION_COND, t);
@@ -9102,7 +9098,7 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
     struct type dt = x->type;
     bool unnamed = false;
     if (!(dt.structMAlloc && adoptInitializerScope(ctx, &dt, x, &unnamed))) dt.scopeDepth = ctx->blockDepth;
-    reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok);
+    reportTypeFit(OperandFitsType(ctx->func, x, dt), x->tok, x, dt);
     struct scope* sc = ctx->scope;
     if (!sc) { sc = MallocOrCrash(sizeof(struct scope)); *sc = scopePush(NULL); }
     struct var* hv = scopeDeclare(ctx->mod, sc, ht.str, ht, dt, true);
@@ -9135,7 +9131,7 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
                                         && ct.arrElem->bType == BASETYPE_BYTE);
     const char* mName = whole ? "Contains" : "Has";
     if (!methodNamedOn(c->type, mName)) {
-        ErrMsgSemantic(tok, MEMBERSHIP_NO_METHOD);
+        Err(tok, ERR_MEMBERSHIP_NO_METHOD, mName, &c->type);
         return OperandBoolLiteral(tok);
     }
     struct operand* seq = NULL;
@@ -9161,9 +9157,9 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     prebuiltMethodArgs = NULL;
     if (call->opType == OPERATION_FUNCCALL) {
         call->isOperatorCall = true;
-        if (call->readVar && call->readVar->type.errors.len && !ctx->checkingTry) ErrMsgSemantic(tok, MEMBERSHIP_NEEDS_TRY);
+        if (call->readVar && call->readVar->type.errors.len && !ctx->checkingTry) Err(tok, ERR_MEMBERSHIP_NEEDS_TRY, mName);
     }
-    if (!OperandIsBool(call)) ErrMsgSemantic(tok, MEMBERSHIP_NO_METHOD);
+    if (!OperandIsBool(call)) Err(tok, ERR_MEMBERSHIP_NOT_BOOL, mName);
     struct operand* result = call;
     if (seq) { ListAdd(&seq->args, &call); result = seq; }
     return negated ? OperandUnary(result, OPERATION_NOT, tok) : result;
@@ -9207,7 +9203,7 @@ struct operand* buildText(struct checkCtx* ctx, struct syntax* s) {
     return result;
 }
 
-static char* unknownMethodMsg(struct operand* recv, struct token name);
+static void reportUnknownMethod(struct operand* recv, struct token name);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok);
 struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     int n = s->parts.len;
@@ -9219,9 +9215,9 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
         const char* negName = opTok.type == TOK_SUB ? operatorFor(ctx, result->type, "Neg", opTok)
                             : opTok.type == TOK_BTWSE_INV ? operatorMethodName(ctx, result->type, "BitNot") : NULL;
         if (negName) { result = operatorCall(ctx, result, NULL, negName, opTok); continue; }
-        if ((opTok.type == TOK_SUB || opTok.type == TOK_BTWSE_INV) && notExtendedNumber(result->type)) ErrMsgSemantic(opTok, NOT_EXTENDED_OP); //T29f
+        if ((opTok.type == TOK_SUB || opTok.type == TOK_BTWSE_INV) && notExtendedNumber(result->type)) Err(opTok, ERR_NOT_EXTENDED_OP, &result->type, opTok, opTok.type == TOK_SUB ? "Neg" : "BitNot"); //T29f
         if (opTok.type == TOK_INC || opTok.type == TOK_DEC) {
-            if (!(s == ctx->incDecRoot && n == 2)) ErrMsgSemantic(opTok, INCDEC_IN_EXPRESSION); //S3a
+            if (!(s == ctx->incDecRoot && n == 2)) Err(opTok, ERR_INCDEC_IN_EXPRESSION, opTok); //S3a
             struct operand* r = buildIncDec(ctx, result, opTok.type == TOK_INC, true, opTok);
             if (r) { result = r; continue; }
         }
@@ -9277,10 +9273,10 @@ struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* 
         struct str nextName = strFromTok(nextTok);
         struct semaModule* next = findImport(target, nextName);
         if (!next) break;
-        if (!isPublic(nextName)) { ErrMsgSemantic(nextTok, IMPORT_IS_PRIVATE); *outConsumed = i +1; return OperandIntLiteral(nextTok); }
+        if (!isPublic(nextName)) { Err(nextTok, ERR_IMPORT_IS_PRIVATE, nextTok); *outConsumed = i +1; return OperandIntLiteral(nextTok); }
         for (int j = 0; j < visited.len; j++) {
             if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
-                ErrMsgSemantic(nextTok, CYCLIC_IMPORT_REEXPORT);
+                Err(nextTok, ERR_REEXPORT_CYCLE, nextTok);
                 *outConsumed = i +1;
                 return OperandIntLiteral(nextTok);
             }
@@ -9294,8 +9290,8 @@ struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* 
     struct str name = strFromTok(varTok);
     struct var* v = VarGetList(&target->vars, name);
     *outConsumed = i +1;
-    if (!v) { ErrMsgSemantic(varTok, UNKNOWN_VAR); return OperandIntLiteral(varTok); }
-    if (!isPublic(name)) { ErrMsgSemantic(varTok, VAR_IS_PRIVATE); return OperandIntLiteral(varTok); }
+    if (!v) { Err(varTok, ERR_NOT_IN_MODULE, target->identity, varTok); return OperandIntLiteral(varTok); }
+    if (!isPublic(name)) { Err(varTok, ERR_VAR_IS_PRIVATE, varTok); return OperandIntLiteral(varTok); }
     return OperandReadVar(v, varTok);
 }
 
@@ -9324,10 +9320,10 @@ static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* 
             ctx->allowFallibleCall = prevAllowed;
             return c;
         }
-        ErrMsgSemantic(tok, NOT_CALLABLE);
+        Err(tok, ERR_NOT_CALLABLE, &callee->type);
         return OperandIntLiteral(tok);
     }
-    if (callee->type.errors.len > 0 && !allowed) ErrMsgSemantic(tok, UNHANDLED_FALLIBLE_CALL);
+    if (callee->type.errors.len > 0 && !allowed) Err(tok, ERR_UNHANDLED_FALLIBLE_CALL);
     struct var* fv = MallocOrCrash(sizeof(struct var));
     *fv = (struct var){0};
     fv->name = StrFromCStr("$callee");
@@ -9349,7 +9345,7 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     //T29f: a declared number not extending its base increments only through an Inc or Plus of its own
     if (notExtendedNumber(target->type)) {
         if (!operatorFor(ctx, target->type, inc ? "Inc" : "Dec", tok) && !operatorFor(ctx, target->type, inc ? "Plus" : "Minus", tok)) {
-            ErrMsgSemantic(tok, NOT_EXTENDED_OP);
+            Err(tok, ERR_NOT_EXTENDED_OP, &target->type, tok, inc ? "Inc" : "Dec");
             return NULL;
         }
         num = false;
@@ -9416,11 +9412,11 @@ static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
     bool idA = a->isNullLiteral || a->type.structMAlloc || a->type.bType == BASETYPE_FUNC;
     bool idB = b->isNullLiteral || b->type.structMAlloc || b->type.bType == BASETYPE_FUNC;
     if (!idA || !idB || (a->isNullLiteral && b->isNullLiteral)) {
-        ErrMsgSemantic(kw, IS_NOT_REFERENCE);
+        Err(kw, ERR_IS_NOT_REFERENCES, &a->type, &b->type);
         return OperandBoolLiteral(kw);
     }
     if (!a->isNullLiteral && !b->isNullLiteral && !a->pendingLambda && !b->pendingLambda && !TypeIsSame(a->type, b->type)) {
-        ErrMsgSemantic(kw, IS_NOT_ONE_TYPE);
+        Err(kw, ERR_IS_NOT_ONE_TYPE, &a->type, &b->type);
         return OperandBoolLiteral(kw);
     }
     return OperandBinary(a, b, OPERATION_EQ, kw);
@@ -9430,9 +9426,24 @@ static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
 //qualified name is, the type and the case each visible from here, and the type the very enum xt is (owner and name, not
 //a same-named enum of another module). The case's index, or -1 once reported (mismatch the message when the type is
 //another one)
-static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt, char* mismatch, char* noCase) {
+//"'lib.Other.Dir'": the names written, all but the last drop of them - how a diagnostic tells two same-named types apart
+static char* writtenPath(struct list idens, int drop) {
+    char* out = StrFmt("'");
+    for (int i = 0; i < idens.len - drop; i++) {
+        struct str n = strFromTok(*(struct token*)ListGetIdx(&idens, i));
+        char* next = StrFmt("%s%s%.*s", out, i ? "." : "", n.len, n.ptr);
+        free(out);
+        out = next;
+    }
+    char* done = StrFmt("%s'", out);
+    free(out);
+    return done;
+}
+
+//mismatch takes the enum and what was written instead (a type and a "%s"), noCase the enum and the case's token
+static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt, enum diag mismatch, enum diag noCase) {
     if (idens.len < 2) {
-        if (idens.len) ErrMsgSemantic(*(struct token*)ListGetIdx(&idens, 0), mismatch);
+        if (idens.len) Err(*(struct token*)ListGetIdx(&idens, 0), mismatch, &xt, writtenPath(idens, 0));
         return -1;
     }
     struct token caseTok = *(struct token*)ListGetIdx(&idens, idens.len - 1);
@@ -9441,19 +9452,19 @@ static int resolveCaseOf(struct checkCtx* ctx, struct list idens, struct type xt
     if (!target) return -1; //reported
     struct type* t = target != ctx->mod ? TypeGetList(&target->types, strFromTok(typeTok)) : typeNamed(ctx->mod, strFromTok(typeTok));
     if (!t) { reportUnknownType(target, typeTok); return -1; }
-    if (t->owner && t->owner != ctx->mod && !isPublic(strFromTok(typeTok))) { ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE); return -1; }
+    if (t->owner && t->owner != ctx->mod && !isPublic(strFromTok(typeTok))) { Err(typeTok, ERR_TYPE_IS_PRIVATE, typeTok); return -1; }
     resolveTypeDecl(t);
     if (t->bType != BASETYPE_CHOICE || t->owner != xt.owner || !StrCmp(t->name, xt.name)) {
-        ErrMsgSemantic(typeTok, mismatch);
+        Err(typeTok, mismatch, &xt, writtenPath(idens, 1));
         return -1;
     }
     for (int i = 0; i < xt.vars.len; i++) {
         struct var* v = ListGetIdx(&xt.vars, i);
         if (!StrCmp(v->name, strFromTok(caseTok))) continue;
-        if (t->owner != ctx->mod && !isPublic(strFromTok(caseTok))) { ErrMsgSemantic(caseTok, CHOICE_CASE_IS_PRIVATE); return -1; }
+        if (t->owner != ctx->mod && !isPublic(strFromTok(caseTok))) { Err(caseTok, ERR_CASE_IS_PRIVATE, caseTok); return -1; }
         return i;
     }
-    ErrMsgSemantic(caseTok, noCase);
+    Err(caseTok, noCase, &xt, caseTok);
     return -1;
 }
 
@@ -9468,12 +9479,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     //lives - and no reference is made here. Said for what it is, since that reading is never what was meant
     struct token marked = markerNameIn(tNode);
     if (marked.type == TOK_IDEN) {
-        char* msg = MallocOrCrash(512);
-        snprintf(msg, 512, "'&%.*s' right after the type is read as part of it - a reference marker naming where '%.*s' "
-                 "lives - not as the operator '&'; to apply '&' to the result, parenthesize: '(x %s T) & %.*s' (E32)",
-                 marked.str.len, marked.str.ptr, marked.str.len, marked.str.ptr, isAs ? "as" : "is",
-                 marked.str.len, marked.str.ptr);
-        ErrMsgSemantic(marked, msg);
+        Err(marked, ERR_IS_AS_MARKER, marked.str, isAs ? "as" : "is", marked.str);
         if (isAs) op->type = unknownTypeStandIn(); //what it would have given is unknown - one error, not two
         return op;
     }
@@ -9481,7 +9487,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
     if (xt.bType == BASETYPE_CHOICE) {
         struct list idens = allTokOfTypeDeep(tNode, TOK_IDEN);
         struct var* c = NULL;
-        int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, AS_ENUM_CASE, AS_ENUM_CASE);
+        int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, ERR_AS_NEEDS_CASE, ERR_NO_SUCH_CASE);
         if (tag >= 0) { op->castTag = tag; c = ListGetIdx(&xt.vars, tag); }
         if (!c) {
             if (isAs) op->type = unknownTypeStandIn();
@@ -9489,7 +9495,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         }
         op->castEnum = true;
         if (!isAs) return op;
-        if (c->type.vars.len == 0) { ErrMsgSemantic(kw, AS_NOTHING); return op; }
+        if (c->type.vars.len == 0) { Err(kw, ERR_AS_NOTHING, c->name); return op; }
         if (c->type.vars.len == 1) op->type = ((struct var*)ListGetIdx(&c->type.vars, 0))->type;
         else {
             struct list ts = ListInit(sizeof(struct type));
@@ -9498,7 +9504,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         }
         return op;
     }
-    ErrMsgSemantic(kw, IS_AS_OPERAND);
+    Err(kw, ERR_IS_AS_NOT_ENUM, &x->type);
     return op;
 }
 
@@ -9537,7 +9543,7 @@ static struct operand* asParam(struct checkCtx* ctx, struct type t, const char* 
     struct var* m = methodNamedOn(t, method);
     if (!m || m->type.vars.len <= k) return x;
     struct type pt = ((struct var*)ListGetIdx(&m->type.vars, k))->type;
-    if (operandIsLiteralLike(x) && TypeIsNumeric(pt)) reportTypeFit(OperandFitsType(ctx->func, x, pt), x->tok);
+    if (operandIsLiteralLike(x) && TypeIsNumeric(pt)) reportTypeFit(OperandFitsType(ctx->func, x, pt), x->tok, x, pt);
     return x;
 }
 
@@ -9549,7 +9555,7 @@ static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base
     bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
     if (derived) {
         const char* lenName = operatorMethodName(ctx, base->type, "Len");
-        if (!lenName) ErrMsgSemantic(sq, TRY_INDEX_NEEDS_LEN);
+        if (!lenName) Err(sq, ERR_TRY_INDEX_NEEDS_LEN, &base->type);
         else {
             base = heldOnce(ctx, base, sq, "col", &seq);
             idx = asParam(ctx, base->type, atName, 1, idx);
@@ -9572,7 +9578,7 @@ static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base
     struct operand* seq = NULL;
     bool derived = ctx->checkingTry && strcmp(slName + 1, "rySlice") != 0;
     if ((derived || !hi) && !lenName) {
-        ErrMsgSemantic(sq, derived ? TRY_SLICE_NEEDS_LEN : SLICE_NEEDS_LEN);
+        Err(sq, derived ? ERR_TRY_SLICE_NEEDS_LEN : ERR_SLICE_NEEDS_LEN, &base->type);
         derived = false;
     }
     if (derived || !hi) base = heldOnce(ctx, base, sq, "col", &seq);
@@ -9616,7 +9622,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
         struct syntaxPart* p = partAt(s, i);
         if (p->isToken) {
             //S3a: an increment is a statement of its own, never part of an expression
-            if (!(s == ctx->incDecRoot && i == s->parts.len - 1)) ErrMsgSemantic(p->tok, INCDEC_IN_EXPRESSION);
+            if (!(s == ctx->incDecRoot && i == s->parts.len - 1)) Err(p->tok, ERR_INCDEC_IN_EXPRESSION, p->tok);
             struct operand* incDec = buildIncDec(ctx, result, p->tok.type == TOK_INC, false, p->tok); //E31
             if (incDec) result = incDec;
             else if (p->tok.type == TOK_INC) result = OperandUnary(result, OPERATION_POSTFIX_INC, p->tok);
@@ -9632,7 +9638,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 result = buildIndexCall(ctx, result, idx, sq);
             } else if (result->type.bType != BASETYPE_ARRAY && hasSet) {
                 //a type that only stores: "x[i]" is a place for SetAt, and nothing to read (E31)
-                if (!(asTarget && i == s->parts.len - 1)) ErrMsgSemantic(sq, AT_UNDECLARED);
+                if (!(asTarget && i == s->parts.len - 1)) Err(sq, ERR_AT_UNDECLARED, &result->type);
                 struct operand* place = operandNew(sq, OPERATION_INDEX, TypeVanilla(BASETYPE_INT32));
                 ListAdd(&place->args, &result);
                 ListAdd(&place->args, &idx);
@@ -9669,7 +9675,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 if (!lo) lo = OperandIntLiteral(sq);
                 if (!hi) {
                     if (methodNamedOn(result->type, "Len")) hi = operatorCall(ctx, result, NULL, "Len", sq);
-                    else { ErrMsgSemantic(sq, SLICE_NEEDS_LEN); hi = OperandIntLiteral(sq); }
+                    else { Err(sq, ERR_SLICE_NEEDS_LEN, &result->type); hi = OperandIntLiteral(sq); }
                 }
                 struct list sargs = ListInit(sizeof(struct operand*));
                 ListAdd(&sargs, &lo);
@@ -9690,7 +9696,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 struct operand* mc = buildMethodCall(ctx, result, memberTok, argsNode,
                                                      ListInit(sizeof(struct syntax*)), &mReported);
                 if (mc) { result = mc; continue; }
-                if (!result->type.unknown) ErrMsgSemantic(memberTok, unknownMethodMsg(result, memberTok));
+                if (!result->type.unknown) reportUnknownMethod(result, memberTok);
                 result = unknownPlaceholder(memberTok); //one error: not also a discarded value, or a mismatch
                 continue;
             }
@@ -9721,7 +9727,7 @@ struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
             }
             return result;
         }
-        if (op->type.isTuple) ErrMsgSemantic(op->tok, TUPLE_NOT_A_VALUE); //D8c
+        if (op->type.isTuple) Err(op->tok, ERR_TUPLE_NOT_A_VALUE); //D8c
         ListAdd(&result, &op);
     }
     return result;
@@ -9733,7 +9739,7 @@ struct list buildArgs(struct checkCtx* ctx, struct syntax* argsNode) {
 void rejectDefaultArgs(struct list args) {
     for (int i = 0; i < args.len; i++) {
         struct operand* a = *(struct operand**)ListGetIdx(&args, i);
-        if (a->isDefaultArg) ErrMsgSemantic(a->tok, DEFAULT_ARG_NOT_ALLOWED);
+        if (a->isDefaultArg) Err(a->tok, ERR_DEFAULT_ARG_NOT_ALLOWED);
     }
 }
 
@@ -9742,8 +9748,8 @@ void rejectDefaultArgs(struct list args) {
 //types a catch clause fully handles, not just the ones that actually escape - see the report, this is a
 //deliberate simplification (checking only the escaping subset would need catch-exhaustiveness analysis)
 void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
-    if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return; } //S19b
-    if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return; }
+    if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
+    if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
     for (int i = 0; i < calleeType.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&calleeType.errors, i);
@@ -9752,7 +9758,7 @@ void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type callee
             struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
             if (TypeIsSame(*e, *fe)) { found = true; break; }
         }
-        if (!found && !lambdaInferError(ctx->func, e)) { ErrMsgSemantic(tok, TRY_ERROR_NOT_IN_SIGNATURE); return; }
+        if (!found && !lambdaInferError(ctx->func, e)) { Err(tok, ERR_TRY_ERROR_NOT_DECLARED, e); return; }
     }
 }
 
@@ -9797,7 +9803,7 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
         ListAdd(&vals, &d);
     }
     int want = rt.isTuple ? rt.vars.len : 1;
-    if (vals.len != want) { ErrMsgSemantic(tok, TRY_DEFAULT_COUNT); return NULL; }
+    if (vals.len != want) { Err(tok, ERR_DEFAULT_COUNT, want, vals.len); return NULL; }
     struct type view = rt;
     if (rt.isTuple) {
         view.vars = ListInit(sizeof(struct var));
@@ -9806,10 +9812,10 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
     for (int i = 0; i < vals.len; i++) {
         struct operand* d = *(struct operand**)ListGetIdx(&vals, i);
         struct type* et = rt.isTuple ? &((struct var*)ListGetIdx(&view.vars, i))->type : &view;
-        if (d->type.isTuple) { ErrMsgSemantic(d->tok, TUPLE_NOT_A_VALUE); continue; }
+        if (d->type.isTuple) { Err(d->tok, ERR_TUPLE_NOT_A_VALUE); continue; }
         bool isRef = et->structMAlloc;
         if (!isRef && TypeHoldsReferences(*et)) {
-            ErrMsgSemantic(d->tok, TRY_DEFAULT_HOLDS_REFERENCES);
+            Err(d->tok, ERR_DEFAULT_HOLDS_REFERENCES);
             continue;
         }
         if (isRef) {
@@ -9832,7 +9838,7 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
                 continue;
             }
         }
-        reportTypeFit(OperandFitsType(ctx->func, d, *et), d->tok);
+        reportTypeFit(OperandFitsType(ctx->func, d, *et), d->tok, d, *et);
     }
     callOp->tryDefaultType = view;
     return rt.isTuple ? OperandStructLiteral(ctx->func, view, vals, tok) : *(struct operand**)ListGetIdx(&vals, 0);
@@ -9852,7 +9858,7 @@ static bool checkTryDefaultScope(struct checkCtx* ctx, struct operand* callOp, s
     bool asRef = d->type.structMAlloc;
     bool stored = !operandIsTemporary(ctx, d) && (asRef || OperandIsLvalue(d)) && RefExactScope(ctx, d, asRef, &dv, &dd, &du);
     bool ok = stored ? (cu && du) || (!cu && !du && sameExactScope(cv, cd, dv, dd)) : cv != SCOPE_AMBIGUOUS;
-    if (!ok) ErrMsgSemantic(d->tok, TRY_DEFAULT_SCOPE);
+    if (!ok) Err(d->tok, ERR_DEFAULT_SCOPE);
     return ok;
 }
 
@@ -9892,7 +9898,7 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
         struct catchClause cc = (struct catchClause){0};
         cc.tok = firstTokOfType(cn, TOK_CATCH);
         cc.matches = ListInit(sizeof(struct catchMatch));
-        if (sawAll) ErrMsgSemantic(cc.tok, CATCH_AFTER_CATCH_ALL);
+        if (sawAll) Err(cc.tok, ERR_CATCH_AFTER_CATCH_ALL);
         struct syntax* el = firstPartOfType(cn, SNTX_CATCH_ERR_LIST);
         if (!el) {
             cc.catchAll = true;
@@ -9903,7 +9909,7 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
             for (int i = 0; i < cc.matches.len; i++) {
                 if (!catchMatchCovered(&seen, ListGetIdx(&cc.matches, i))) anyNew = true;
             }
-            if (cc.matches.len > 0 && !anyNew && !sawAll) ErrMsgSemantic(cc.tok, CATCH_CLAUSE_UNREACHABLE);
+            if (cc.matches.len > 0 && !anyNew && !sawAll) Err(cc.tok, ERR_CATCH_UNREACHABLE);
             for (int i = 0; i < cc.matches.len; i++) ListAdd(&seen, ListGetIdx(&cc.matches, i));
         }
         struct syntax* blk = firstPartOfType(cn, SNTX_BLOCK);
@@ -9913,14 +9919,14 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
         }
         bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
         if (!valuePos) {
-            if (hasDefault) ErrMsgSemantic(firstTokOfType(cn, TOK_DEFAULT), DEFAULT_IN_CATCH_STATEMENT);
+            if (hasDefault) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_IN_STATEMENT);
         } else {
             bool leaves = blk && blockLeavesValue(&cc.block);
-            if (hasDefault && leaves) ErrMsgSemantic(firstTokOfType(cn, TOK_DEFAULT), TRY_DEFAULT_DEAD);
-            if (!hasDefault && !leaves) ErrMsgSemantic(cc.tok, CATCH_VALUE_MUST_LEAVE);
+            if (hasDefault && leaves) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_DEAD);
+            if (!hasDefault && !leaves) Err(cc.tok, ERR_CATCH_MUST_LEAVE);
             if (hasDefault && !leaves) {
                 if (!rt) {
-                    ErrMsgSemantic(cc.tok, TRY_DEFAULT_NO_VALUE);
+                    Err(cc.tok, ERR_DEFAULT_NO_VALUE);
                 } else {
                     struct list dn = ListInit(sizeof(struct syntax*));
                     for (int i = 0; i < cn->parts.len; i++) {
@@ -10036,7 +10042,7 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     //R9a's catch-everything shorthand, retired by R9b: a default belongs to a clause, and handling every
     //error is written as one - so what a default covers is always what is written to its left
     if (hasTokOfType(s, TOK_DEFAULT)) {
-        ErrMsgSemantic(firstTokOfType(s, TOK_DEFAULT), TRY_DEFAULT_NEEDS_CATCH);
+        Err(firstTokOfType(s, TOK_DEFAULT), ERR_DEFAULT_NEEDS_CATCH);
         callOp->isTried = true;
         return callOp;
     }
@@ -10067,7 +10073,7 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         errors = callOp->readVar->type.errors;
         rt = callOp->readVar->type.hasRetType ? callOp->readVar->type.retType : NULL;
     } else {
-        ErrMsgSemantic(tok, TRY_REQUIRES_FALLIBLE_CALL);
+        Err(tok, ERR_TRY_NOTHING_FAILS);
         return callOp;
     }
     callOp->isTried = true;
@@ -10091,7 +10097,7 @@ struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType,
 struct operand* buildArrLiteralItem(struct checkCtx* ctx, struct type elemType, struct syntax* item) {
     //E21: there is no multi-dimensional array, so no nested literal - an array of arrays holds references
     if (item->type == SNTX_ARR_LIT_NESTED) {
-        ErrMsgSemantic(firstTokOfType(item, TOK_SQUARE_O), NESTED_ARRAY_LITERAL);
+        Err(firstTokOfType(item, TOK_SQUARE_O), ERR_NESTED_ARRAY_LITERAL);
         return operandNew(firstTokOfType(item, TOK_SQUARE_O), OPERATION_NONE, elemType);
     }
     return buildExprFromSyntax(ctx, item);
@@ -10121,7 +10127,7 @@ struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType,
     struct type levelElemT = nested ? (*(struct operand**)ListGetIdx(&builtArgs, 0))->type : elemType;
     for (int i = 0; i < builtArgs.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&builtArgs, i);
-        reportTypeFit(OperandFitsType(ctx->func, arg, levelElemT), arg->tok);
+        reportTypeFit(OperandFitsType(ctx->func, arg, levelElemT), arg->tok, arg, levelElemT);
     }
 
     struct type t = (struct type){0};
@@ -10149,13 +10155,13 @@ struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType,
 //this can.
 struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct syntax* argsNode, struct token errTok) {
     if (found->typeParams.len == 0) {
-        if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
+        if (argsNode) Err(firstTokAnywhere(argsNode), ERR_TYPE_ARGS_ON_NON_GENERIC, found->name);
         return NULL;
     }
-    if (!argsNode) { ErrMsgSemantic(errTok, MISSING_TYPE_ARGS); return NULL; }
+    if (!argsNode) { Err(errTok, ERR_MISSING_TYPE_ARGS, errTok, found->name); return NULL; }
     struct list argNodes = allSyntaxParts(argsNode);
     if (argNodes.len != found->typeParams.len) {
-        ErrMsgSemantic(firstTokAnywhere(argsNode), WRONG_TYPE_ARG_COUNT);
+        Err(firstTokAnywhere(argsNode), ERR_TYPE_ARG_COUNT, found->name, found->typeParams.len, argNodes.len);
         return NULL;
     }
     struct list* scopeParams = ctx->func ? &ctx->func->type.scopeVars : NULL;
@@ -10172,7 +10178,7 @@ struct type* applyTypeArgsTo(struct checkCtx* ctx, struct type* found, struct sy
 //the by-value wrapper the two literal forms want: they hold a resolved base type, not the stable slot
 struct type applyTypeArgs(struct checkCtx* ctx, struct type base, struct syntax* argsNode, struct token errTok) {
     if (base.typeParams.len == 0) {
-        if (argsNode) ErrMsgSemantic(firstTokAnywhere(argsNode), TYPE_ARGS_ON_NON_GENERIC);
+        if (argsNode) Err(firstTokAnywhere(argsNode), ERR_TYPE_ARGS_ON_NON_GENERIC, base.name);
         return base;
     }
     struct type* found = typeNamed(ctx->mod, base.name);
@@ -10210,12 +10216,12 @@ struct operand* buildArrayLiteralExpr(struct checkCtx* ctx, struct syntax* s) {
     struct list* litScopeVars = ctx->func ? &ctx->func->type.scopeVars : NULL;
     elemType = applyRefMarker(elemType, firstPartOfType(s, SNTX_ELEM_REF_MARKER), litScopeVars);
     //an element is never itself a scope's name, only bare (T7), and an element array is a reference (T7a)
-    if (elemType.scopeParam) ErrMsgSemantic(tok, NAMED_SCOPE_ON_ELEMENT);
-    if (elemType.bType == BASETYPE_ARRAY && !elemType.structMAlloc) ErrMsgSemantic(tok, ARRAY_NESTED_BY_VALUE);
+    if (elemType.scopeParam) Err(tok, ERR_NAMED_SCOPE_ON_ELEMENT);
+    if (elemType.bType == BASETYPE_ARRAY && !elemType.structMAlloc) Err(tok, ERR_ARRAY_NESTED_BY_VALUE, &elemType);
     //an error type has no constructible values at all - every element would fail to type-check anyway, but
     //an *empty* literal ("MathError[]") would otherwise slip through with nothing to check at all
     if (elemType.bType == BASETYPE_ERROR) {
-        ErrMsgSemantic(tok, INVALID_ARRAY_LITERAL_TYPE);
+        Err(tok, ERR_ARRAY_OF_ERRORS, &elemType);
         return operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
     }
     struct syntax* comprNode = firstPartOfType(s, SNTX_COMPREHENSION);
@@ -10239,7 +10245,7 @@ struct operand* buildComprehension(struct checkCtx* ctx, struct type elemType, s
     t.scopeDepth = ctx->blockDepth;
     struct operand* op = operandNew(tok, OPERATION_COMPREHENSION, t);
     if (elemType.structMAlloc || TypeHoldsReferences(elemType)) {
-        ErrMsgSemantic(tok, COMPREHENSION_REFERENCE_ELEMENT);
+        Err(tok, ERR_COMPREHENSION_REFERENCES);
         return op;
     }
     struct list items = allSyntaxParts(firstPartOfType(s, SNTX_ARR_LIT_ARGS));
@@ -10294,17 +10300,17 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
         return unknownPlaceholder(wordTok);
     }
     if (crossModule && !isPublic(strFromTok(typeTok))) {
-        ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE);
+        Err(typeTok, ERR_TYPE_IS_PRIVATE, typeTok);
         return unknownPlaceholder(wordTok);
     }
     //M6a: and the WORD's own capitalization decides its visibility, as for a struct member or error word
     if (crossModule && !isPublic(strFromTok(wordTok))) {
-        ErrMsgSemantic(wordTok, CHOICE_CASE_IS_PRIVATE);
+        Err(wordTok, ERR_CASE_IS_PRIVATE, wordTok);
         return unknownPlaceholder(wordTok);
     }
     resolveTypeDecl(t);
     if (t->bType != BASETYPE_CHOICE) {
-        ErrMsgSemantic(typeTok, INVALID_CHOICE_VALUE_TYPE);
+        Err(typeTok, ERR_NOT_AN_ENUM, typeTok);
         return unknownPlaceholder(wordTok);
     }
     return OperandChoiceValue(ctx, *t, wordTok, firstPartOfType(s, SNTX_EXPR_ARGS),
@@ -10369,14 +10375,14 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     //T10: every array has "Len()", supplied by the compiler
     if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("Len"))) {
         *reported = true;
-        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
+        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
         return OperandLen(recvOp, mTok);
     }
     //E33: a float's bit pattern, and a float from one - supplied by the compiler too
     struct type bitsT;
     if (suppliedBitsMethod(recvType, mName, &bitsT)) {
         *reported = true;
-        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
+        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
         return OperandBitcast(recvOp, bitsT, mTok);
     }
     //P9: the atomic operations on an integer place - supplied by the compiler too
@@ -10403,7 +10409,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     if (textT && OperandIsWrittenText(recvOp)) recvType = *textT;
     struct var* m = VarGetMethod(recvType.owner, mName, recvType);
     if (!m && SemanticMethodAmbiguous) {
-        ErrMsgSemantic(mTok, METHOD_AMBIGUOUS);
+        Err(mTok, ERR_METHOD_AMBIGUOUS, mTok);
         *reported = true;
         return OperandIntLiteral(mTok);
     }
@@ -10415,7 +10421,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         int found = 0;
         m = interfaceMethodFor(ctx->mod, recvType, mName, &found);
         if (found > 1) {
-            ErrMsgSemantic(mTok, METHOD_FROM_TWO_INTERFACES);
+            Err(mTok, ERR_DEFAULT_AMBIGUOUS, &recvType, mTok);
             *reported = true;
             return OperandIntLiteral(mTok);
         }
@@ -10425,7 +10431,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     //E10b: a Hash the compiler supplies, for a value whose type has none and whose parts all hash
     if (!m && StrCmp(mName, StrFromCStr("Hash")) && typeAutoHashable(recvType, 0)) {
         *reported = true;
-        if (!noArgs) { ErrMsgSemantic(mTok, WRONG_ARG_COUNT); return OperandIntLiteral(mTok); }
+        if (!noArgs) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
         return buildAutoHash(ctx, recvOp, mTok);
     }
     if (!m || m->type.bType != BASETYPE_FUNC || m->type.vars.len == 0) return NULL;
@@ -10442,7 +10448,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     if (!viaInterface && !MethodReceiverAccepts(p0, recvType)) return NULL;
     *reported = true;
     if (m->owner != ctx->mod && !isPublic(mName)) {
-        ErrMsgSemantic(mTok, METHOD_IS_PRIVATE);
+        Err(mTok, ERR_METHOD_IS_PRIVATE, mTok);
         return unknownPlaceholder(mTok);
     }
     bool allowedM = ctx->allowFallibleCall;
@@ -10452,7 +10458,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct list withRecv = ListInit(sizeof(struct operand*));
     ListAdd(&withRecv, &recvOp);
     for (int i = 0; i < mArgs.len; i++) ListAdd(&withRecv, ListGetIdx(&mArgs, i));
-    if (m->type.errors.len > 0 && !allowedM) ErrMsgSemantic(mTok, UNHANDLED_FALLIBLE_CALL);
+    if (m->type.errors.len > 0 && !allowedM) Err(mTok, ERR_UNHANDLED_FALLIBLE_CALL);
     struct operand* call = OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
     //T29f: an array method a declared type inherits gives the declared type where it gives its receiver's own type -
     //a String's Filter is a String. Same representation, so only the type changes.
@@ -10472,8 +10478,8 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
 }
 
 
-//M19/T29f: why no method was found - pointing at "extends" when the base has one by that name
-static char* unknownMethodMsg(struct operand* recv, struct token name) {
+//M19/T29f: no method named name was found on recv - reported saying why, pointing at "extends" when the base has one
+static void reportUnknownMethod(struct operand* recv, struct token name) {
     struct type t = recv->type;
     struct type supplied;
     if (t.owner && t.name.len && !t.extendsBase && (TypeIsNumeric(t) || t.bType == BASETYPE_ARRAY)) {
@@ -10482,13 +10488,14 @@ static char* unknownMethodMsg(struct operand* recv, struct token name) {
         base.name = (struct str){0};
         if (VarGetMethod(NULL, strFromTok(name), base) || suppliedBitsMethod(base, strFromTok(name), &supplied)
             || suppliedAtomicMethod(base, strFromTok(name)) != OPERATION_NONE) {
-            return METHOD_NOT_INHERITED;
+            Err(name, ERR_METHOD_NOT_INHERITED, &t, name);
+            return;
         }
     }
     //P9: an atomic operation is a method of the integer types only
-    if (atomicMethodNamed(strFromTok(name)) != OPERATION_NONE && !TypeIsInt(t)) return ATOMIC_NOT_INTEGER;
-    if (TypeIsNumeric(t) && fromBitsTarget(strFromTok(name))) return FROM_BITS_RECEIVER; //E33: not that float's width
-    return UNKNOWN_METHOD;
+    if (atomicMethodNamed(strFromTok(name)) != OPERATION_NONE && !TypeIsInt(t)) Err(name, ERR_ATOMIC_NOT_INTEGER, &t);
+    else if (TypeIsNumeric(t) && fromBitsTarget(strFromTok(name))) Err(name, ERR_FROM_BITS_RECEIVER, name); //E33
+    else Err(name, ERR_UNKNOWN_METHOD, &t, name);
 }
 
 struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s);
@@ -10518,7 +10525,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 if (!v) return unknownPlaceholder(tok); //keeps checking the rest of the file
                 //G12: a generic function names a family, not one function to point at
                 if (v->isFuncDecl && v->type.bType == BASETYPE_FUNC && v->type.typeParams.len) {
-                    ErrMsgSemantic(tok, GENERIC_NOT_A_VALUE);
+                    Err(tok, ERR_GENERIC_NOT_A_VALUE, tok);
                     return unknownPlaceholder(tok);
                 }
                 if (v->isFuncDecl) noteFuncValueUse(v, tok); //T22a
@@ -10550,7 +10557,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         struct list scopeArgNodes = allPartsOfType(s, SNTX_SCOPE_ARG);
         if (firstPartOfType(s, SNTX_SCOPE_ARG) && nameIdens.len == 1
                 && numericPrimitiveBaseType(strFromTok(nameTok), &(enum baseType){0})) {
-            ErrMsgSemantic(nameTok, SCOPE_ARG_NOT_ACCEPTED);
+            Err(nameTok, ERR_SCOPE_ARG_NOT_ACCEPTED, strFromTok(nameTok));
         }
         //"int32(x)" etc. - the explicit numeric-conversion builtin (see the report) - intercepted the
         //same way "len" is, before the normal var/constructor lookup: a primitive type name is never a
@@ -10576,7 +10583,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list convArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(convArgs);
             ctx->allowFallibleCall = allowedNamed;
-            if (convArgs.len != 1) { reportArgCount(convArgs, nameTok); return OperandIntLiteral(nameTok); }
+            if (convArgs.len != 1) { reportArgCount(convArgs, nameTok, 1, 1, 0); return OperandIntLiteral(nameTok); }
             struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
             if (namedConv->bType == BASETYPE_ARRAY) return OperandNominalConversion(*namedConv, convArg, nameTok);
             return OperandNumericConversion(*namedConv, convArg, nameTok);
@@ -10594,7 +10601,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list convArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(convArgs);
             ctx->allowFallibleCall = allowedConv;
-            if (convArgs.len != 1) { reportArgCount(convArgs, nameTok); return OperandIntLiteral(nameTok); }
+            if (convArgs.len != 1) { reportArgCount(convArgs, nameTok, 1, 1, 0); return OperandIntLiteral(nameTok); }
             struct operand* convArg = *(struct operand**)ListGetIdx(&convArgs, 0);
             return OperandNumericConversion(TypeVanilla(convTo), convArg, nameTok);
         }
@@ -10644,14 +10651,14 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             if (ct) resolveTypeDecl(ct);
             struct var* cv = ct && ct->bType == BASETYPE_CHOICE ? VarGetList(&ct->vars, strFromTok(caseTok)) : NULL;
             if (cv && cv->type.vars.len == 0) {
-                if (ct->owner != ctx->mod && !isPublic(strFromTok(typeTok))) ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE);
-                else if (ct->owner != ctx->mod && !isPublic(strFromTok(caseTok))) ErrMsgSemantic(caseTok, CHOICE_CASE_IS_PRIVATE);
+                if (ct->owner != ctx->mod && !isPublic(strFromTok(typeTok))) Err(typeTok, ERR_TYPE_IS_PRIVATE, typeTok);
+                else if (ct->owner != ctx->mod && !isPublic(strFromTok(caseTok))) Err(caseTok, ERR_CASE_IS_PRIVATE, caseTok);
                 struct operand* recvOp = OperandChoiceValue(ctx, *ct, caseTok, NULL, ListInit(sizeof(struct syntax*)));
                 bool mReported = false;
                 struct operand* mc = buildMethodCall(ctx, recvOp, nameTok, firstPartOfType(callNode, SNTX_EXPR_ARGS),
                                                      scopeArgNodes, &mReported);
                 if (mc) return mc;
-                if (!mReported) ErrMsgSemantic(nameTok, unknownMethodMsg(recvOp, nameTok));
+                if (!mReported) reportUnknownMethod(recvOp, nameTok);
                 buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
                 return unknownPlaceholder(nameTok);
             }
@@ -10683,7 +10690,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                                                  firstPartOfType(callNode, SNTX_EXPR_ARGS), scopeArgNodes, &mReported);
             if (mc) return mc;
             //M20 means a value is never also an import alias, so there is no other reading to fall back to
-            if (!mReported && !recvOp->type.unknown) ErrMsgSemantic(nameTok, unknownMethodMsg(recvOp, nameTok));
+            if (!mReported && !recvOp->type.unknown) reportUnknownMethod(recvOp, nameTok);
             buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             return unknownPlaceholder(nameTok); //one error: not also a discarded value, or a mismatch
         }
@@ -10695,14 +10702,14 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             struct list aArgs = buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
             rejectDefaultArgs(aArgs);
             ctx->allowFallibleCall = allowedArr;
-            if (aArgs.len < 1 || aArgs.len > 2) { reportArgCount(aArgs, nameTok); return OperandIntLiteral(nameTok); }
+            if (aArgs.len < 1 || aArgs.len > 2) { reportArgCount(aArgs, nameTok, 1, 2, 0); return OperandIntLiteral(nameTok); }
             struct operand* sizeOp = *(struct operand**)ListGetIdx(&aArgs, 0);
-            if (!OperandIsInt(sizeOp)) ErrMsgSemantic(sizeOp->tok, OPERATION_REQUIRES_INT);
+            if (!OperandIsInt(sizeOp)) Err(sizeOp->tok, ERR_ARRAY_LENGTH_NOT_INT, &sizeOp->type);
             at.scopeDepth = ctx->blockDepth;
             struct operand* alloc = OperandSizedArrayAlloc(sizeOp, at, nameTok);
             if (aArgs.len == 2) {
                 struct operand* fill = *(struct operand**)ListGetIdx(&aArgs, 1);
-                reportTypeFit(OperandFitsType(ctx->func, fill, *at.arrElem), fill->tok);
+                reportTypeFit(OperandFitsType(ctx->func, fill, *at.arrElem), fill->tok, fill, *at.arrElem);
                 ListAdd(&alloc->args, &fill);
                 if (arrayHoldsExisting(alloc)) queueHereCheck(ctx, alloc); //T7: the fill lives where the array lands
             } else {
@@ -10727,10 +10734,10 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 ctx->allowFallibleCall = false;
                 return c;
             }
-            ErrMsgSemantic(nameTok, NOT_CALLABLE);
+            Err(nameTok, ERR_NOT_CALLABLE, &func->type);
             return OperandIntLiteral(nameTok);
         }
-        if (func->type.errors.len > 0 && !allowed) ErrMsgSemantic(nameTok, UNHANDLED_FALLIBLE_CALL);
+        if (func->type.errors.len > 0 && !allowed) Err(nameTok, ERR_UNHANDLED_FALLIBLE_CALL);
         struct operand* call = OperandFuncCall(ctx, func, args, nameTok, scopeArgNodes);
         //a constructor is exactly the function a struct type points at as its own - true for an
         //instantiation's monomorphized constructor too, since that points at the instantiation
@@ -10824,12 +10831,12 @@ static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct 
                                 struct list* out);
 static void buildParallel(struct checkCtx* ctx, struct list targets, struct list values, bool declare,
                           struct token opTok, struct list* out) {
-    if (values.len != targets.len) { ErrMsgSemantic(opTok, ASSIGN_LIST_COUNT); return; }
+    if (values.len != targets.len) { Err(opTok, ERR_ASSIGN_LIST_COUNT, targets.len, values.len); return; }
     if (declare) {
         for (int i = 0; i < targets.len; i++) {
             struct syntax* t = *(struct syntax**)ListGetIdx(&targets, i);
             struct token nameTok;
-            if (!destructTargetName(t, &nameTok)) { ErrMsgSemantic(firstTokAnywhere(t), DESTRUCT_DECLARES_NAMES); continue; }
+            if (!destructTargetName(t, &nameTok)) { Err(firstTokAnywhere(t), ERR_DESTRUCT_NOT_NAME); continue; }
             struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&values, i));
             if (StrCmp(strFromTok(nameTok), StrFromCStr("_"))) continue;
             struct statement st = buildVarDeclFromOperand(ctx, nameTok, v);
@@ -10862,10 +10869,10 @@ static void buildDestruct(struct checkCtx* ctx, struct syntax* s, struct list* o
     struct operand* rhs = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     //a call returning several values, or (E32) an enum case's payload of several fields taken with "as"
     if (!rhs->type.isTuple || (rhs->opType != OPERATION_FUNCCALL && rhs->opType != OPERATION_AS)) {
-        ErrMsgSemantic(rhs->tok, DESTRUCT_NEEDS_RESULTS);
+        Err(rhs->tok, ERR_DESTRUCT_ONE_VALUE, &rhs->type);
         return;
     }
-    if (rhs->type.vars.len != targets.len) { ErrMsgSemantic(opTok, DESTRUCT_COUNT_MISMATCH); return; }
+    if (rhs->type.vars.len != targets.len) { Err(opTok, ERR_DESTRUCT_COUNT, targets.len, rhs->type.vars.len); return; }
     //O18a: the targets are where the results go, so the call's result scope lands where they all live - and, where they
     //disagree or are new locals, in the block the statement stands in, which every read of a result then sees: left
     //landing, a result read through the hidden local claimed no block at all, and went anywhere (a use-after-free)
@@ -10899,7 +10906,7 @@ static void buildDestruct(struct checkCtx* ctx, struct syntax* s, struct list* o
         struct operand* elem = OperandMember(ctx->mod, OperandReadVar(hv, opTok), field->name, opTok);
         struct statement st;
         if (declare) {
-            if (!isName) { ErrMsgSemantic(firstTokAnywhere(t), DESTRUCT_DECLARES_NAMES); continue; }
+            if (!isName) { Err(firstTokAnywhere(t), ERR_DESTRUCT_NOT_NAME); continue; }
             //T7b: the result was built where these locals live, and nothing reads the hidden one again - so
             //an array result is taken, not copied
             elem->isMoveSource = true;
@@ -11245,11 +11252,11 @@ static bool adoptInitializerScope(struct checkCtx* ctx, struct type* declType, s
         //D16c: nothing is ever written THROUGH a function value, so it need only outlive where it is put
         if (declType->bType == BASETYPE_FUNC) {
             if (!un && !scopeCanFlowInto(ctx->func, sv, normDepth(sd), canonicalVar(declType->scopeParam), normDepth(dd)))
-                ErrMsgSemantic(rhs->tok, NESTED_SLOT_OUTLIVES_VALUE);
+                Err(rhs->tok, ERR_STORED_REF_OUTLIVED);
             return false;
         }
         if (un || !sameExactScope(canonicalVar(declType->scopeParam), dd, sv, sd)) {
-            ErrMsgSemantic(rhs->tok, REFERENCE_NARROWED);
+            Err(rhs->tok, ERR_REFERENCE_NARROWED);
         }
         return false;
     }
@@ -11357,7 +11364,7 @@ static void bindHereFrom(struct checkCtx* ctx, struct operand* call, struct var*
             bool bothVars = !su && !bu && sv && bv && sv != SCOPE_AMBIGUOUS && varIsOwnParam(canonicalVar(sv), ctx->func)
                             && (bv == SCOPE_AMBIGUOUS || varIsOwnParam(canonicalVar(bv), ctx->func));
             if (!bothVars) {
-                ErrMsgSemantic(arg->tok, namedBy ? SCOPE_ARGS_DISAGREE : ENUM_ARGS_DISAGREE);
+                Err(arg->tok, namedBy ? ERR_SCOPE_ARGS_DISAGREE : ERR_PAYLOAD_SCOPES_DISAGREE);
                 return;
             }
             if (bv != SCOPE_AMBIGUOUS) {
@@ -11428,7 +11435,7 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
                 else if (exact) ok = sameExactScope(ev, ed, dstVar, dstDepth);
                 else ok = ev != SCOPE_AMBIGUOUS && dstVar != SCOPE_AMBIGUOUS
                           && scopeCanFlowInto(ctx->func, ev, normDepth(ed), dstVar, normDepth(dstDepth));
-                if (!ok) ErrMsgSemantic(e->tok, exact ? ARRAY_ELEM_NOT_IN_SCOPE : ARRAY_ELEM_OUTLIVED);
+                if (!ok) Err(e->tok, exact ? ERR_ELEM_NOT_IN_ARRAY_SCOPE : ERR_ELEM_OUTLIVED);
                 continue;
             }
             checkCtorHereFits(ctx, e, dstVar, dstDepth, tok);
@@ -11460,7 +11467,7 @@ void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* ds
         else if (b->boundUnnamed) ok = !dstVar && !b->needExact;
         else if (b->needExact) ok = sameExactScope(b->boundTo, b->boundDepth, dstVar, dstDepth);
         else ok = scopeCanFlowInto(ctx->func, b->boundTo, normDepth(b->boundDepth), dstVar, normDepth(dstDepth));
-        if (!ok) ErrMsgSemantic(tok, isEnum ? ENUM_ARG_OUTLIVED : b->viaFieldOnly ? CTOR_FIELD_ARG_OUTLIVED : CTOR_ARG_OUTLIVED);
+        if (!ok) Err(tok, isEnum ? ERR_PAYLOAD_OUTLIVED : b->viaFieldOnly ? ERR_INSTANCE_OUTLIVES_REFERENT : ERR_INSTANCE_OUTLIVES_ARG);
     }
 }
 
@@ -11537,7 +11544,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool mut = true; //D11: a local is always mutable; "mut" is meaningful on globals, parameters and fields
     //D11a: so writing it on a local says nothing, and a keyword that says nothing is worse than none - a
     //reader takes its absence to mean "immutable", which it never did
-    if (ctx->hasOwnScope && hasTokOfType(s, TOK_MUT)) ErrMsgSemantic(firstTokOfType(s, TOK_MUT), MUT_ON_LOCAL);
+    if (ctx->hasOwnScope && hasTokOfType(s, TOK_MUT)) Err(firstTokOfType(s, TOK_MUT), ERR_MUT_ON_LOCAL);
     struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
     struct syntax* typeExprNode = firstPartOfType(s, SNTX_TYPE_EXPR);
     //ctx->func is NULL for a global initializer, which has no parameter list to tag a "&name" against
@@ -11566,10 +11573,10 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             if (TypeIsPermRef(declType)) declType.refMut = OperandGivesWritable(rhs);
             //O23a: a local naming where a derived scope's referent lives may hold what lives there, never what is new
             if (scopeIsDerived(declType.scopeParam) && ctx->hasOwnScope && operandIsTemporary(ctx, rhs))
-                ErrMsgSemantic(rhs->tok, BUILD_THROUGH_UNKNOWN_SCOPE);
+                Err(rhs->tok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
             if (declType.scopeParam || declType.scopeWritten) //O18a: built where it is declared
                 landCall(rhs, declType.scopeParam, declType.scopeWritten ? declType.scopeDepth : 0);
-            reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok);
+            reportTypeFit(OperandFitsType(ctx->func, rhs, declType), rhs->tok, rhs, declType);
         } else { // ":=" - type read straight off the initializer (D15)
             declType = inferredDeclType(ctx->func, rhs);
             //":=" writes no scope tag, so the local is a bare "&" one and takes its initializer's exact
@@ -11583,11 +11590,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     //O2/O2a: the local's storage belongs to the block it is declared in, and a bare "&" in its type names
     //that same block's scope. Stamped here, on the one path every local declaration goes through, so a
     //later read of it carries the depth with its type.
-    if (rhs && rhs->type.isTuple) ErrMsgSemantic(rhs->tok, TUPLE_NOT_A_VALUE); //D8c: destructure it instead
+    if (rhs && rhs->type.isTuple) Err(rhs->tok, ERR_TUPLE_NOT_A_VALUE); //D8c: destructure it instead
     bool homeChecked = false;
     //C2d/O23: a local holding such a field's referent would claim a scope it does not really have
     if (rhs && ctx->hasOwnScope && declType.structMAlloc && RefNarrowingMatters(declType) && scopeViaFallback(rhs))
-        ErrMsgSemantic(rhs->tok, BUILD_THROUGH_UNKNOWN_SCOPE);
+        Err(rhs->tok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
     //O18a: a by-value result holding references, landing in a value local, is built in the local's own block - as the
     //local is - so a loop body's value is reclaimed with the iteration; a copy of it out of that block is checked
     //where it is made (O25h)
@@ -11656,7 +11663,7 @@ enum operation compoundOpFromAssignTok(enum tokenType t, bool* isCompound) {
 //O5: a bare "&" slot reached THROUGH a reference-shaped container - "dst.field", "dst[i]" where dst is
 //itself a reference - lives in the CONTAINER's scope, not in this function's. O25 now states that as the
 //slot's exact scope (RefExactScope), and judges every store into it there.
-void checkBoundScopesOutlive(struct operand* val, struct type t, struct token tok, char* msg);
+void checkBoundScopesOutlive(struct operand* val, struct type t, struct token tok, enum diag d);
 
 //the scope the enclosing reference-shaped container is tagged to, for a target reached through one.
 //*found says whether there was such a container at all.
@@ -11725,12 +11732,12 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
     //under "try" (E31): TrySetAt when declared, else SetAt after checking i against Len()
     const char* setName = operatorFor(ctx, base->type, "SetAt", opTok);
     if (!setName) {
-        if (!tryOperatorName(ctx, base->type, "SetAt")) ErrMsgSemantic(opTok, SETAT_UNDECLARED);
+        if (!tryOperatorName(ctx, base->type, "SetAt")) Err(opTok, ERR_SETAT_UNDECLARED, &base->type);
         return (struct statement){0};
     }
     bool derived = ctx->checkingTry && strcmp(setName + 1, "rySetAt") != 0;
     const char* lenName = derived ? operatorMethodName(ctx, base->type, "Len") : NULL;
-    if (derived && !lenName) { ErrMsgSemantic(opTok, TRY_SETAT_NEEDS_LEN); derived = false; }
+    if (derived && !lenName) { Err(opTok, ERR_TRY_SETAT_NEEDS_LEN, &base->type); derived = false; }
     bool isCompound = false;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
     struct list pre = ListInit(sizeof(struct statement));
@@ -11743,7 +11750,7 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
         //"x[i] += v" reads x[i] first, through At
         const char* atName = operatorMethodName(ctx, base->type, "At");
         if (!atName && !(ctx->checkingTry && tryOperatorName(ctx, base->type, "At"))) {
-            ErrMsgSemantic(opTok, AT_UNDECLARED);
+            Err(opTok, ERR_AT_UNDECLARED, &base->type);
             return (struct statement){0};
         }
         struct operand* cur = ctx->checkingTry ? buildIndexCall(ctx, base, idx, opTok) : operatorCall(ctx, base, idx, atName, opTok);
@@ -11778,13 +11785,10 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     if (target->isAtCall) return buildSetAt(ctx, target, rhs, opTok);
     //D16a: a lambda is checked against what it is assigned to - before anything asks where it lives (D16d)
     if (rhs->pendingLambda && !target->type.unknown) FinalizeLambda(rhs, &target->type);
-    if (rhs->type.isTuple) ErrMsgSemantic(rhs->tok, TUPLE_NOT_A_VALUE);
+    if (rhs->type.isTuple) Err(rhs->tok, ERR_TUPLE_NOT_A_VALUE);
     if (target->type.unknown) {} //an unknown name, reported where it is written
-    else if (!OperandIsLvalue(target) || target->viaConversion) ErrMsgSemantic(target->tok, NOT_AN_LVALUE);
-    else if (!OperandIsMutableLvalue(target)) {
-        struct var* root = lvalueRootVar(target);
-        ErrMsgSemantic(target->tok, root && root->isCapture && (!root->type.structMAlloc || root->isBorrowedCapture) ? CAPTURE_READ_ONLY : writeBlockedByPermission(target) ? READ_ONLY_REF_WRITE : writeIntoCallValue(target) ? WRITE_INTO_CALL_VALUE : VAR_IMMUTABLE);
-    }
+    else if (!OperandIsLvalue(target) || target->viaConversion) Err(target->tok, ERR_NOT_ASSIGNABLE);
+    else if (!OperandIsMutableLvalue(target)) reportWriteBlocked(target->tok, target);
 
     bool isCompound;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
@@ -11809,7 +11813,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
         //"b += x" is "b = b + x", so the sum must fit b as an assignment's value does - with "x" an I32 and "b" a U8
         //the sum is an I32 (T6b) and does not
-        reportTypeFit(OperandFitsType(ctx->func, value, target->type), opTok);
+        reportTypeFit(OperandFitsType(ctx->func, value, target->type), opTok, value, target->type);
     }
     else {
         //a target's own "&name" tag may name a scope variable of the TYPE it is a field of, never anything
@@ -11829,7 +11833,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             bool du;
             if (RefExactScope(ctx, target, target->type.structMAlloc, &dv, &dd, &du) && !du && scopeIsDerived(dv)
                     && operandIsTemporary(ctx, rhs))
-                ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
+                Err(opTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
         }
         //O18a: a call whose result's scope follows the result is built where the target's referent lives
         //- or, for a value holding references, where the target's own storage is (O18a)
@@ -11848,7 +11852,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         //already lives there
         if (intoGlobal && ctx->hasOwnScope && !rhs->isNullLiteral && (rhs->type.structMAlloc || OperandIsLvalue(rhs))
                 && !argIsFreshTemp(rhs) && !storageInProgram(rhs))
-            ErrMsgSemantic(rhs->tok, GLOBAL_HOLDS_SHORTER);
+            Err(rhs->tok, ERR_GLOBAL_HOLDS_SHORTER);
         //O22: the target's tag may still be a scope variable of the TYPE it is a field of - resolution
         //found no binding because the container arrived as a parameter and was built somewhere else. This
         //body cannot decide the relation and cannot name it in its own signature, so it records a DERIVED
@@ -11872,13 +11876,13 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             struct var* srcScope = lvalueStorageScope(rhs, &srcGlobal, &srcDepthD);
             if (!srcGlobal) {
                 //own can satisfy no named scope - but say which kind of own this is (see ownOutliveMsg)
-                if (!srcScope) ErrMsgSemantic(opTok, ownOutliveMsg(rhs, ctx->func));
+                if (!srcScope) Err(opTok, ownOutliveDiag(rhs, ctx->func));
                 else scopeObligationAddDerived(ctx->func, srcScope, targetType.scopeParam, derivedVia,
                                                RefNarrowingMatters(target->type));
             }
             targetType.scopeParam = NULL; //checked by the obligation above, not by the generic fit below
         }
-        reportTypeFit(OperandFitsType(ctx->func, rhs, targetType), opTok);
+        reportTypeFit(OperandFitsType(ctx->func, rhs, targetType), opTok, rhs, targetType);
         //C2d: an instance assigned lands where the target's storage, or its referent, lives
         int errsBeforeHere = ErrMsgGetNErrors();
         {
@@ -11903,7 +11907,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                            && RefExactScope(ctx, rhs, rhsAsRef, &rv, &rd, &ru);
         if (ctx->hasOwnScope && !rhsExisting && !rhs->isNullLiteral
                 && (target->type.structMAlloc || TypeHoldsReferences(target->type)) && scopeViaFallback(target))
-            ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
+            Err(opTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
         //O23/O11: a field written "&p" of an instance reached through something its construction binding is not known
         //through - an element, a field of another instance - reads at its container's scope, an underestimate; storing
         //existing storage there could falsify the binding every reader of that instance relies on
@@ -11911,11 +11915,11 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             struct scopeBinding* tb = callBinding(target, target->type.scopeParam);
             if (tb && tb->containerFallback
                     && !(tb->boundTo && tb->boundTo != SCOPE_AMBIGUOUS && canonicalVar(tb->boundTo)->derivedFrom))
-                ErrMsgSemantic(opTok, FIELD_BINDING_UNKNOWN_WRITE);
+                Err(opTok, ERR_FIELD_BINDING_UNKNOWN);
         }
         if (ctx->hasOwnScope && target->opType == OPERATION_READ_VAR && rhsExisting && RefNarrowingMatters(target->type)
                 && scopeViaFallback(rhs))
-            ErrMsgSemantic(opTok, BUILD_THROUGH_UNKNOWN_SCOPE);
+            Err(opTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
         if (ctx->hasOwnScope && target->type.structMAlloc && !derivedVia) {
             struct var* tv;
             int td;
@@ -11931,11 +11935,11 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                                        && varIsOwnParam(canonicalVar(tv), ctx->func) && varIsOwnParam(canonicalVar(rv), ctx->func);
                     if (bothOwnVars && canonicalVar(tv) != canonicalVar(rv)) {
                         if (!scopeCanFlowInto(ctx->func, rv, 0, tv, 0) || !scopeCanFlowInto(ctx->func, tv, 0, rv, 0)) {
-                            ErrMsgSemantic(opTok, REFERENCE_NARROWED);
+                            Err(opTok, ERR_REFERENCE_NARROWED);
                         }
-                    } else if (ru || !sameExactScope(tv, td, rv, rd)) ErrMsgSemantic(opTok, REFERENCE_NARROWED);
+                    } else if (ru || !sameExactScope(tv, td, rv, rd)) Err(opTok, ERR_REFERENCE_NARROWED);
                 } else if (ru || !scopeCanFlowInto(ctx->func, rv, normDepth(rd), tv, normDepth(td))) {
-                    ErrMsgSemantic(opTok, NESTED_SLOT_OUTLIVES_VALUE);
+                    Err(opTok, ERR_STORED_REF_OUTLIVED);
                 }
             }
         }
@@ -11952,7 +11956,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                 bool ok = hv != SCOPE_AMBIGUOUS
                           && (valueRefsAdmitStores(target->type) ? sameExactScope(hv, hd, tv, td)
                                                                   : scopeCanFlowInto(ctx->func, hv, normDepth(hd), tv, normDepth(td)));
-                if (!ok) ErrMsgSemantic(opTok, VALUE_REFS_OUTLIVED);
+                if (!ok) Err(opTok, ERR_VALUE_REFS_OUTLIVED);
             }
         }
         //O20: a value stored into a slot inside a reference-shaped container must outlive that CONTAINER,
@@ -11993,12 +11997,12 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             int cd;
             bool cu = false;
             RefExactScope(ctx, cont, cont->type.structMAlloc, &cv, &cd, &cu);
-            if (cu && !intoGlobal) ErrMsgSemantic(opTok, BARE_REF_PARAM_CONTAINER_WRITE); //O1b: a global's is the program's
+            if (cu && !intoGlobal) Err(opTok, ERR_CONTAINER_SCOPE_UNBUILDABLE); //O1b: a global's is the program's
         }
         if (inContainer) {
             //a container in one of this function's scope variables outlives everything of its own; one in a
             //block of its own is judged by depth, below
-            if (containerScope) checkBoundScopesOutlive(rhs, rhs->type, opTok, NESTED_SLOT_OUTLIVES_VALUE);
+            if (containerScope) checkBoundScopesOutlive(rhs, rhs->type, opTok, ERR_STORED_REF_OUTLIVED);
             for (int i = 0; i < rhs->type.scopeVars.len; i++) {
                 struct var* sv = canonicalVar(*(struct var**)ListGetIdx(&rhs->type.scopeVars, i));
                 for (int j = 0; j < rhs->scopeBindings.len; j++) {
@@ -12013,10 +12017,10 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                             struct var* c = *(struct var**)ListGetIdx(&b->candidates, k);
                             ok = scopeCanFlowInto(ctx->func, c, c ? 0 : ctx->blockDepth, containerScope, containerDepth);
                         }
-                        if (!ok) ErrMsgSemantic(opTok, NESTED_SLOT_OUTLIVES_VALUE);
+                        if (!ok) Err(opTok, ERR_STORED_REF_OUTLIVED);
                     } else if (!b->landing && !scopeCanFlowInto(ctx->func, b->boundTo, normDepth(bd),
                                                                containerScope, containerDepth)) {
-                        ErrMsgSemantic(opTok, NESTED_SLOT_OUTLIVES_VALUE);
+                        Err(opTok, ERR_STORED_REF_OUTLIVED);
                     }
                     break;
                 }
@@ -12078,7 +12082,7 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
-    if (!exprCanStandAsStatement(op) && !op->type.unknown) ErrMsgSemantic(op->tok, EXPR_NOT_A_STATEMENT);
+    if (!exprCanStandAsStatement(op) && !op->type.unknown) Err(op->tok, ERR_NOT_A_STATEMENT);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_EXPR;
     stmt.op = op;
@@ -12491,7 +12495,7 @@ static struct operand* fixedLocalInit(struct var* local, void* ctx) {
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     int errs = ErrMsgGetNErrors();
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
     //S8b: decided, if it can be, after this attempt - but one that does not check is the running program's, so the
     //attempt that follows reports what is wrong with it rather than deciding it from a value it cannot have
     noteLocalCond(ctx, firstPartOfType(s, SNTX_EXPR), ErrMsgGetNErrors() == errs ? cond : NULL);
@@ -12500,9 +12504,9 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     //configuration (S8b).
     bool dependsOnBuild = false;
     if (firstPartOfType(s, SNTX_COND_DEAD)) {
-        ErrMsgSemantic(cond->tok, IF_CONDITION_CONSTANT); //found fixed by compile-time evaluation (S8b)
+        Err(cond->tok, ERR_CONDITION_CONSTANT); //found fixed by compile-time evaluation (S8b)
     } else if (OperandIsBool(cond) && condIsConstant(cond, &dependsOnBuild, 0) && !dependsOnBuild) {
-        ErrMsgSemantic(cond->tok, IF_CONDITION_CONSTANT);
+        Err(cond->tok, ERR_CONDITION_CONSTANT);
     }
 
     struct list blocks = allPartsOfType(s, SNTX_BLOCK);
@@ -12556,7 +12560,7 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     innerCtx->inLoop = true;
     if (condNode) {
         stmt.op = buildExprFromSyntax(innerCtx, condNode);
-        if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
+        if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     }
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
     struct list after = snapshotScopeBindings(innerCtx->scope);
@@ -12584,12 +12588,12 @@ static struct list forInBody(struct checkCtx* ctx, struct syntax* s, struct comp
     if (!spec) return buildBlock(ctx, firstPartOfType(s, SNTX_BLOCK));
     struct list out = ListInit(sizeof(struct statement));
     struct operand* elem = buildExprFromSyntax(ctx, spec->elemNode);
-    reportTypeFit(OperandFitsType(ctx->func, elem, spec->elemType), elem->tok);
+    reportTypeFit(OperandFitsType(ctx->func, elem, spec->elemType), elem->tok, elem, spec->elemType);
     finalizeOpLambdas(elem);
     struct statement push = comprOpStmt(OPERATION_COMPR_PUSH, elem, kw);
     if (!spec->condNode) { ListAdd(&out, &push); return out; }
     struct operand* cond = buildExprFromSyntax(ctx, spec->condNode);
-    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
     finalizeOpLambdas(cond);
     struct statement st = (struct statement){0};
     st.sType = STATEMENT_IF;
@@ -12658,7 +12662,7 @@ static struct var* rangeLocal(struct checkCtx* ctx, struct list* out, struct tok
     struct token nt = forInHiddenTok(kw, tag);
     struct type dt = t;
     dt.scopeDepth = ctx->blockDepth;
-    reportTypeFit(OperandFitsType(ctx->func, init, dt), init->tok);
+    reportTypeFit(OperandFitsType(ctx->func, init, dt), init->tok, init, dt);
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, nt.str, nt, dt, true);
     struct statement d = (struct statement){0};
     d.sType = STATEMENT_VAR_DECL;
@@ -12714,7 +12718,7 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     struct type T = TypeVanilla(BASETYPE_INT32);
     bool fixed = false;
     for (int i = 0; i < argNodes.len; i++) {
-        if (!TypeIsInt(args[i]->type)) { ErrMsgSemantic(args[i]->tok, RANGE_NEEDS_INTEGERS); return (struct statement){0}; }
+        if (!TypeIsInt(args[i]->type)) { Err(args[i]->tok, ERR_RANGE_NOT_INT, &args[i]->type); return (struct statement){0}; }
         if (!operandIsLiteralLike(args[i]) && !fixed) { T = args[i]->type; fixed = true; }
         if (!fixed && numericTypeRank(args[i]->type) > numericTypeRank(T)) T = args[i]->type;
     }
@@ -12722,7 +12726,7 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     T.structMAlloc = false;
     struct litValue step = {0};
     if (args[2] && operandOnlyNumericLiterals(args[2]) && literalExprValue(args[2], &step) == LIT_VALUE_OK && step.i <= 0)
-        ErrMsgSemantic(args[2]->tok, RANGE_ZERO_STEP);
+        Err(args[2]->tok, ERR_RANGE_STEP);
 
     //evaluated once, in the order written
     //one argument is the end; two or three are start, end [, step]
@@ -12827,7 +12831,7 @@ static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct opera
     int rest = 0;
     for (int i = 0; i < es->len; i++) rest += !(handled && TypeIsSame(**(struct type**)ListGetIdx(es, i), *handled));
     if (!rest) return;
-    if (!ft->on) { ErrMsgSemantic(ft->kw, ft->isCompr ? COMPR_NEEDS_TRY : FOR_IN_NEEDS_TRY); return; }
+    if (!ft->on) { Err(ft->kw, ft->isCompr ? ERR_COMPR_NEEDS_TRY : ERR_FOR_IN_NEEDS_TRY); return; }
     if (ft->inExpr) { call->isOperatorCall = true; return; }
     if (ft->calls.len >= 8) return;
     call->isTried = true;
@@ -12844,14 +12848,14 @@ static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct opera
 
 static void forInTryFinish(struct forInTry* ft) {
     if (!ft->on || ft->inExpr) return;
-    if (!ft->calls.len) { ErrMsgSemantic(ft->kw, FOR_IN_TRY_NOTHING); return; }
+    if (!ft->calls.len) { Err(ft->kw, ERR_FOR_IN_TRY_NOTHING); return; }
     bool hasClauses = firstPartOfType(ft->s, SNTX_CATCH_CLAUSE) != NULL;
     struct token bad = (struct token){0};
     for (int i = 0; hasClauses && i < ft->s->parts.len && bad.type == TOK_NONE; i++) {
         struct syntaxPart* p = partAt(ft->s, i);
         if (!p->isToken && p->sntx->type == SNTX_CATCH_CLAUSE) bad = clauseLoopExit(p->sntx);
     }
-    if (bad.type != TOK_NONE) ErrMsgSemantic(bad, FOR_IN_CLAUSE_LOOP_EXIT);
+    if (bad.type != TOK_NONE) Err(bad, ERR_FOR_IN_CLAUSE_EXIT);
     for (int c = 0; c < ft->calls.len; c++) {
         struct operand* call = *(struct operand**)ListGetIdx(&ft->calls, c);
         struct checkCtx* cctx = &ft->ctxs[c];
@@ -12899,7 +12903,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     for (int i = 0; i < names.len; i++) {
         struct token nt = *(struct token*)ListGetIdx(&names, i);
         if (scopeFindLocal(ctx->scope, strFromTok(nt)) || VarGetList(&ctx->mod->vars, strFromTok(nt))) {
-            ErrMsgSemantic(nt, FOR_IN_NAME_EXISTS);
+            Err(nt, ERR_FOR_IN_NAME_EXISTS, nt);
             return (struct statement){0};
         }
     }
@@ -12915,7 +12919,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     ft.kw = kw;
     ft.errors = ListInit(sizeof(struct type*));
     ft.calls = ListInit(sizeof(struct operand*));
-    if (rangeNode && ft.on) ErrMsgSemantic(firstTokOfType(s, TOK_TRY), FOR_IN_TRY_NOTHING);
+    if (rangeNode && ft.on) Err(firstTokOfType(s, TOK_TRY), ERR_FOR_IN_TRY_NOTHING);
     if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok, spec);
 
     //the block the whole lowering lives in, so its hidden names end with the loop
@@ -12944,7 +12948,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         refT.arrElem = src->type.arrElem;
         refT.arrMalloc = true;
         refT.structMAlloc = true;
-        reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok);
+        reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
         bool unnamed = false;
         if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         struct token at = forInHiddenTok(kw, "Arr");
@@ -12979,7 +12983,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         refT.structMAlloc = true;
         bool unnamed = false;
         if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
-        reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok);
+        reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
         struct token ct = forInHiddenTok(kw, "Col");
         arr = scopeDeclare(wctx.mod, wctx.scope, ct.str, ct, refT, true);
         arr->scopeUnnamed = unnamed;
@@ -13037,7 +13041,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
             ok = TypeSatisfiesInterface(concrete, *iterT, NULL);
         }
         if (!ok) {
-            ErrMsgSemantic(src->tok, FOR_IN_NOT_ITERABLE);
+            Err(src->tok, ERR_NOT_ITERABLE, &src->type);
             return (struct statement){0};
         }
         struct statement d = buildVarDeclFromOperand(&wctx, forInHiddenTok(kw, "It"), itOp);
@@ -13157,7 +13161,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!initNode) return buildForBareStmnt(&innerCtx, s); //S9: "for { }" or "for cond { }"
     struct token nameTok = firstTokOfType(initNode, TOK_IDEN);
     bool mut = true; //D11: a local is always mutable
-    if (hasTokOfType(initNode, TOK_MUT)) ErrMsgSemantic(firstTokOfType(initNode, TOK_MUT), MUT_ON_LOCAL); //D11a
+    if (hasTokOfType(initNode, TOK_MUT)) Err(firstTokOfType(initNode, TOK_MUT), ERR_MUT_ON_LOCAL); //D11a
     struct operand* initVal = buildExprFromSyntax(&innerCtx, firstPartOfType(initNode, SNTX_EXPR));
 
     struct syntax* typeExprNode = firstPartOfType(initNode, SNTX_TYPE_EXPR);
@@ -13169,7 +13173,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
         bareLocalLivesInBlock(&innerCtx, &declType);
         if (TypeIsPermRef(declType)) declType.refMut = OperandGivesWritable(initVal); //T25b
         if (declType.scopeParam || declType.scopeWritten) landCall(initVal, declType.scopeParam, declType.scopeWritten ? declType.scopeDepth : 0);
-        reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok);
+        reportTypeFit(OperandFitsType(ctx->func, initVal, declType), initVal->tok, initVal, declType);
     } else { // ":=" - type read straight off the (required-to-be-literal) initializer
         declType = inferredDeclType(ctx->func, initVal);
         declType.scopeParam = NULL; //as in buildVarDeclStmnt's ":="
@@ -13182,7 +13186,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
     struct operand* cond = buildExprFromSyntax(&innerCtx, *(struct syntax**)ListGetIdx(&exprs, 0));
-    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
     struct syntax* postNode = firstPartOfType(s, SNTX_STMNT_ASSIGN);
     if (!postNode) postNode = firstPartOfType(s, SNTX_STMNT_EXPR);
 
@@ -13222,7 +13226,7 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
     stmt.op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) ErrMsgSemantic(stmt.op->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     return stmt;
 }
 
@@ -13306,11 +13310,11 @@ static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, 
     } else {
         v = caseBindingNamed(clause, name);
         //a name reported here still counts as bound, so the one mistake is one error and not a second at the alternative
-        if (!v) { ErrMsgSemantic(tok, CASE_ALT_BINDINGS); ListAdd(bound, &v); return; }
+        if (!v) { Err(tok, ERR_ALT_BINDS_OTHER_NAMES); ListAdd(bound, &v); return; }
         for (int i = 0; i < bound->len; i++) {
-            if (*(struct var**)ListGetIdx(bound, i) == v) { ErrMsgSemantic(tok, VAR_NAME_IN_USE); return; }
+            if (*(struct var**)ListGetIdx(bound, i) == v) { Err(tok, ERR_BOUND_TWICE, tok); return; }
         }
-        if (!t.unknown && !v->type.unknown && !TypeIsSame(v->type, t)) { ErrMsgSemantic(tok, CASE_ALT_BINDING_TYPE); ListAdd(bound, &v); return; }
+        if (!t.unknown && !v->type.unknown && !TypeIsSame(v->type, t)) { Err(tok, ERR_ALT_BINDING_TYPE, tok, &v->type); ListAdd(bound, &v); return; }
         //S13c: the one local stands for whichever alternative matched - so it is writable only where every one is (T25c),
         //and where they put it in different scopes, it lives in one not known here: the shorter of them, read at this
         //block, with nothing built into it or stored through it (O12)
@@ -13345,7 +13349,7 @@ static bool buildPatternAt(struct checkCtx* ctx, struct syntax* p, struct operan
     }
     if (p->type == SNTX_PAT_VALUE) {
         struct operand* val = buildExprFromSyntax(ctx, firstPartOfType(p, SNTX_EXPR));
-        if (!caseValueFits(ctx, val, t)) { ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH); return false; }
+        if (!caseValueFits(ctx, val, t)) { Err(val->tok, ERR_CASE_VALUE_TYPE, &t, &val->type); return false; }
         if (at) *test = patAnd(*test, buildEquality(ctx, at, val, val->tok), val->tok);
         return false;
     }
@@ -13362,11 +13366,11 @@ static bool buildPatternAt(struct checkCtx* ctx, struct syntax* p, struct operan
     struct var* c = NULL;
     int tag = -1;
     if (at && !t.unknown) {
-        if (t.bType != BASETYPE_CHOICE) ErrMsgSemantic(typeTok, PATTERN_TYPE_MISMATCH);
+        if (t.bType != BASETYPE_CHOICE) Err(typeTok, ERR_PATTERN_TYPE, &t, writtenPath(idens, 1));
         else {
-            tag = resolveCaseOf(ctx, idens, t, PATTERN_TYPE_MISMATCH, UNKNOWN_CHOICE_CASE);
+            tag = resolveCaseOf(ctx, idens, t, ERR_PATTERN_TYPE, ERR_NO_SUCH_CASE);
             if (tag >= 0) c = ListGetIdx(&t.vars, tag);
-            if (c && hasList && subs.len != c->type.vars.len) { ErrMsgSemantic(caseTok, CHOICE_PATTERN_ARITY); c = NULL; }
+            if (c && hasList && subs.len != c->type.vars.len) { Err(caseTok, ERR_PATTERN_ARITY, c->name, c->type.vars.len); c = NULL; }
         }
     }
     if (c) *test = patAnd(*test, enumIsAs(at, tag, false, caseTok), caseTok);
@@ -13397,14 +13401,14 @@ static bool blockLeavesValue(struct list* block);
 static void buildCaseBody(struct checkCtx* ctx, struct syntax* s, bool asValue, struct list* block, struct operand** value) {
     struct syntax* valueNode = firstPartOfType(s, SNTX_CASE_VALUE);
     if (valueNode) {
-        if (!asValue) ErrMsgSemantic(firstTokOfType(valueNode, TOK_ARROW), MATCH_ARROW_IN_STATEMENT);
+        if (!asValue) Err(firstTokOfType(valueNode, TOK_ARROW), ERR_ARROW_IN_STATEMENT);
         *value = buildExprFromSyntax(ctx, firstPartOfType(valueNode, SNTX_EXPR));
         *block = ListInit(sizeof(struct statement));
         return;
     }
     struct syntax* b = firstPartOfType(s, SNTX_BLOCK);
     *block = buildBlock(ctx, b);
-    if (asValue && !blockLeavesValue(block)) ErrMsgSemantic(firstTokAnywhere(b), MATCH_VALUE_BLOCK_STAYS);
+    if (asValue && !blockLeavesValue(block)) Err(firstTokAnywhere(b), ERR_CASE_BLOCK_STAYS);
 }
 
 //S13-S13e: "case alt {, alt} [if guard] body". The clause's bindings live in a scope of its own, visible to the
@@ -13431,11 +13435,11 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
                            subject ? subject->type : unknownTypeStandIn(), &stmt, &alt, altIdx, &bound, &alt.test);
         } else {
             struct operand* val = buildExprFromSyntax(ctx, part->sntx);
-            if (subject && !caseValueFits(ctx, val, subject->type)) ErrMsgSemantic(val->tok, MATCH_CASE_TYPE_MISMATCH);
+            if (subject && !caseValueFits(ctx, val, subject->type)) Err(val->tok, ERR_CASE_VALUE_TYPE, &subject->type, &val->type);
             else if (subject) alt.test = buildEquality(ctx, patPath(subject), val, val->tok);
         }
         //S13c: a later alternative binds every name the first one did
-        if (altIdx > 0 && bound.len != stmt.caseBindings.len) ErrMsgSemantic(altTok, CASE_ALT_BINDINGS);
+        if (altIdx > 0 && bound.len != stmt.caseBindings.len) Err(altTok, ERR_ALT_BINDS_OTHER_NAMES);
         if (!alt.test) { alt.test = OperandBoolLiteral(altTok); alt.test->intLiteralVal = 0; alt.coversTag = -1; }
         ListAdd(&stmt.caseAlts, &alt);
         altIdx++;
@@ -13443,7 +13447,7 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
     struct syntax* guard = firstPartOfType(s, SNTX_CASE_GUARD);
     if (guard) {
         stmt.caseGuard = buildExprFromSyntax(ctx, firstPartOfType(guard, SNTX_EXPR));
-        if (!OperandIsBool(stmt.caseGuard)) ErrMsgSemantic(stmt.caseGuard->tok, CASE_GUARD_NOT_BOOL);
+        if (!OperandIsBool(stmt.caseGuard)) Err(stmt.caseGuard->tok, ERR_GUARD_NOT_BOOL, &stmt.caseGuard->type);
     }
     buildCaseBody(ctx, s, asValue, &stmt.block, &stmt.op);
     ctx->scope = saved;
@@ -13508,7 +13512,7 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
     //against the instantiation's own bindings rather than through the general type-expression path
     struct str vname = strFromTok(firstTokOfType(varNode, TOK_IDEN));
     struct type* bound = currentBindings ? bindingGet(currentBindings, vname) : NULL;
-    if (!bound) { ErrMsgSemantic(opTok, UNKNOWN_TYPE_VAR); return buildEmptyIfStmnt(ctx, opTok); }
+    if (!bound) { Err(opTok, ERR_UNKNOWN_TYPE_VAR, vname); return buildEmptyIfStmnt(ctx, opTok); }
     struct type operandT = *bound;
 
     struct list cases = allPartsOfType(s, SNTX_STMNT_CASE);
@@ -13516,7 +13520,7 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
         struct syntax* c = *(struct syntax**)ListGetIdx(&cases, i);
         //S13e: the arm is chosen while compiling, so there is nothing at run time for a guard to decide
         struct syntax* guard = firstPartOfType(c, SNTX_CASE_GUARD);
-        if (guard) ErrMsgSemantic(firstTokOfType(guard, TOK_IF), TYPE_MATCH_GUARD);
+        if (guard) Err(firstTokOfType(guard, TOK_IF), ERR_TYPE_MATCH_GUARD);
         //S13c: "case I32, I64 { }" - any one of the types selects the arm
         struct list caseTypeNodes = allPartsOfType(c, SNTX_TYPE_EXPR);
         bool hit = false;
@@ -13543,7 +13547,7 @@ struct statement buildTypeMatchStmnt(struct checkCtx* ctx, struct syntax* s, str
         buildCaseBody(ctx, nomatchNode, false, &stmt.block, &none);
         return stmt;
     }
-    ErrMsgSemantic(opTok, TYPE_MATCH_NOT_EXHAUSTIVE);
+    Err(opTok, ERR_TYPE_MATCH_UNCOVERED, bound);
     if (asValue) return typeMatchValueArm(ctx, NULL, opTok);
     return buildEmptyIfStmnt(ctx, opTok);
 }
@@ -13603,7 +13607,7 @@ static struct type matchValueType(struct checkCtx* ctx, struct list* vals) {
         if (v->type.unknown || t.unknown || TypeIsSame(v->type, t)) continue;
         if (t.structMAlloc && valueBuiltHere(v) && typeConvertsBetweenValueAndReference(v->type, t)) continue;
         if ((condAdapts(v) || numLits || allText) && OperandFitsType(ctx->func, v, t) == TYPE_FIT_OK) continue;
-        ErrMsgSemantic(v->tok, MATCH_VALUE_TYPES);
+        Err(v->tok, ERR_MATCH_VALUE_TYPES, &t, &v->type);
         bad = true;
     }
     return bad ? unknownTypeStandIn() : t; //reported - what it lands in is not asked again
@@ -13684,12 +13688,12 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
                     covered = ((struct caseAlt*)ListGetIdx(&cs->caseAlts, k))->coversTag == i;
                 }
             }
-            if (!covered) { ErrMsgSemantic(matched->tok, MATCH_NOT_EXHAUSTIVE); break; }
+            if (!covered) { Err(matched->tok, ERR_MATCH_NOT_EXHAUSTIVE, ((struct var*)ListGetIdx(&matched->type.vars, i))->name, &matched->type); break; }
         }
     }
     //S12b: a match used as a value gives one on every path - only an enum's cases can be known to be covered
     if (asValue && !stmt.hasNomatch && matched->type.bType != BASETYPE_CHOICE && !matched->type.unknown) {
-        ErrMsgSemantic(firstTokOfType(s, TOK_MATCH), MATCH_VALUE_NEEDS_NOMATCH);
+        Err(firstTokOfType(s, TOK_MATCH), ERR_MATCH_VALUE_NEEDS_NOMATCH, &matched->type);
     }
     //beyond that, this checker doesn't attempt exhaustiveness analysis, so "no case matched" is always
     //folded in as a live possibility (via merged's own initial "unchanged" value) - conservative, never
@@ -13707,7 +13711,7 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
 //straight back out - says nothing about its own scopes here, and its bindings belong to whoever built it;
 //treating "no entry" as "own" would reject every pass-through function. That leaves a known gap rather
 //than a silent claim: see the report.
-void checkBoundScopesOutlive(struct operand* val, struct type t, struct token tok, char* msg) {
+void checkBoundScopesOutlive(struct operand* val, struct type t, struct token tok, enum diag d) {
     for (int i = 0; i < t.scopeVars.len; i++) {
         struct var* sv = canonicalVar(*(struct var**)ListGetIdx(&t.scopeVars, i));
         for (int j = 0; j < val->scopeBindings.len; j++) {
@@ -13718,18 +13722,18 @@ void checkBoundScopesOutlive(struct operand* val, struct type t, struct token to
             //the target exactly when every candidate does. Only a candidate list that is empty - nothing
             //was traced at all - is unverifiable.
             if (b->boundTo == SCOPE_AMBIGUOUS) {
-                if (b->candidates.len == 0) ErrMsgSemantic(tok, msg);
+                if (b->candidates.len == 0) Err(tok, d);
                 for (int k = 0; k < b->candidates.len; k++) {
-                    if (*(struct var**)ListGetIdx(&b->candidates, k) == NULL) ErrMsgSemantic(tok, msg);
+                    if (*(struct var**)ListGetIdx(&b->candidates, k) == NULL) Err(tok, d);
                 }
-            } else if (b->boundTo == NULL) ErrMsgSemantic(tok, msg);
+            } else if (b->boundTo == NULL) Err(tok, d);
             break;
         }
     }
 }
 
 void checkReturnedScopeBindings(struct operand* val, struct type retType, struct token tok) {
-    checkBoundScopesOutlive(val, retType, tok, RETURNED_VALUE_BOUND_TO_OWN);
+    checkBoundScopesOutlive(val, retType, tok, ERR_RETURN_OWN_STORAGE);
 }
 
 //O14: a built result is in the result scope, so a reference into a parameter's data cannot be one - it is a
@@ -13758,7 +13762,7 @@ static bool checkBuiltResult(struct checkCtx* ctx, struct operand* v, struct typ
         if (RefNarrowingMatters(et)) scopeObligationAdd(ctx->func, canonicalVar(rs), canonicalVar(sv));
         return false;
     }
-    ErrMsgSemantic(v->tok, RETURN_BORROW_AS_BUILT);
+    Err(v->tok, ERR_RETURN_BORROW_AS_BUILT);
     return true;
 }
 
@@ -13781,7 +13785,7 @@ static void checkValueResult(struct checkCtx* ctx, struct operand* v, struct typ
     int hd;
     bool hu;
     if (!valueRefsScope(ctx, v, &hv, &hd, &hu) || hu) return; //the program's scope outlives every result
-    if (hv == SCOPE_AMBIGUOUS) { ErrMsgSemantic(v->tok, RETURNED_VALUE_BOUND_TO_OWN); return; }
+    if (hv == SCOPE_AMBIGUOUS) { Err(v->tok, ERR_RETURN_OWN_STORAGE); return; }
     if (!hv || canonicalVar(hv) == canonicalVar(rs) || !varIsOwnParam(canonicalVar(hv), ctx->func)) return;
     scopeObligationAdd(ctx->func, canonicalVar(hv), canonicalVar(rs));
     if (valueRefsAdmitStores(et)) scopeObligationAdd(ctx->func, canonicalVar(rs), canonicalVar(hv));
@@ -13789,7 +13793,7 @@ static void checkValueResult(struct checkCtx* ctx, struct operand* v, struct typ
 
 struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (ctx->inDefer) { //S19b: what it would return is beside the point - it may not leave at all
-        ErrMsgSemantic(firstTokOfType(s, TOK_RET), DEFER_RETURNS);
+        Err(firstTokOfType(s, TOK_RET), ERR_DEFER_RETURNS);
         return (struct statement){.sType = STATEMENT_RET};
     }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
@@ -13809,11 +13813,12 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         lambdaInferResult(ctx->func, &vals, tok); //D16b
         struct type rt = ctx->func && ctx->func->type.hasRetType ? *ctx->func->type.retType : TypeVanilla(BASETYPE_VOID);
         if (!rt.isTuple || rt.vars.len != vals.len) {
-            ErrMsgSemantic(tok, RETURN_COUNT_MISMATCH);
+            int n = rt.isTuple ? rt.vars.len : rt.bType != BASETYPE_VOID;
+            Err(tok, ERR_RETURN_COUNT, n, n == 1 ? "" : "s", vals.len);
         } else {
             for (int i = 0; i < vals.len; i++) {
                 struct operand* v = *(struct operand**)ListGetIdx(&vals, i);
-                if (v->type.isTuple) ErrMsgSemantic(v->tok, TUPLE_NOT_A_VALUE);
+                if (v->type.isTuple) Err(v->tok, ERR_TUPLE_NOT_A_VALUE);
                 //O25d, per result
                 struct type et = (*(struct var*)ListGetIdx(&rt.vars, i)).type;
                 //O18a: each result lands where it lives - its own scope, or the result scope
@@ -13828,7 +13833,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
                 if (et.structMAlloc && RefNarrowingMatters(et) && (asRef || OperandIsLvalue(v))
                         && RefExactScope(ctx, v, asRef, &rv, &rd, &ru)
                         && (ru || canonicalVar(rv) != canonicalVar(et.scopeParam)) && !typeVarResultObliged(ctx, rv, ru)) {
-                    ErrMsgSemantic(v->tok, REFERENCE_NARROWED);
+                    Err(v->tok, ERR_REFERENCE_NARROWED);
                 }
                 checkReturnedScopeBindings(v, et, v->tok);
                 checkValueResult(ctx, v, et); //O14c, per result
@@ -13850,20 +13855,20 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
     if (val && val->type.isTuple && !(ctx->func && ctx->func->type.hasRetType
                                      && TypeIsSame(val->type, *ctx->func->type.retType))) {
-        ErrMsgSemantic(val->tok, TUPLE_NOT_A_VALUE);
+        Err(val->tok, ERR_TUPLE_NOT_A_VALUE);
     }
     if (val && !val->type.isTuple && ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->isTuple) {
-        ErrMsgSemantic(tok, RETURN_COUNT_MISMATCH);
+        Err(tok, ERR_RETURN_COUNT, ctx->func->type.retType->vars.len, "s", 1);
         struct statement stmt = (struct statement){0};
         stmt.sType = STATEMENT_RET;
         stmt.op = val;
         return stmt;
     }
 
-    if (ctx->inCtor) ErrMsgSemantic(tok, RETURN_IN_CTOR);
-    else if (ctx->inTest && !ctx->func) ErrMsgSemantic(tok, RETURN_IN_TEST); //S15: a test is not a function
-    else if (val && ctx->func && !ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_VALUE_IN_VOID_FUNC);
-    else if (!val && ctx->func && ctx->func->type.hasRetType) ErrMsgSemantic(tok, RETURN_MISSING_VALUE);
+    if (ctx->inCtor) Err(tok, ERR_RETURN_IN_CTOR);
+    else if (ctx->inTest && !ctx->func) Err(tok, ERR_RETURN_IN_TEST); //S15: a test is not a function
+    else if (val && ctx->func && !ctx->func->type.hasRetType) Err(tok, ERR_RETURN_VALUE_IN_VOID);
+    else if (!val && ctx->func && ctx->func->type.hasRetType) Err(tok, ERR_RETURN_NEEDS_VALUE, ctx->func->type.retType);
     else if (val && ctx->func && ctx->func->type.hasRetType) {
         //O18a: a call whose result's scope follows the result is built in the scope the return type names
         struct var* resultHome = ctx->func->type.retType->scopeParam ? ctx->func->type.retType->scopeParam
@@ -13879,9 +13884,9 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         //every other outcome reads as it does at any fit site. This used to list four of them and drop the
         //rest, so a returned value that failed to satisfy an interface - or a literal out of range, or an
         //element of the wrong reference shape - was accepted silently and reached codegen
-        if (fit == TYPE_FIT_SCOPE_OWN) ErrMsgSemantic(val->tok, ownOutliveMsg(val, ctx->func));
-        else if (fit == TYPE_FIT_MISMATCH) ErrMsgSemantic(val->tok, RETURN_TYPE_MISMATCH);
-        else reportTypeFit(fit, val->tok);
+        if (fit == TYPE_FIT_SCOPE_OWN) Err(val->tok, ownOutliveDiag(val, ctx->func));
+        else if (fit == TYPE_FIT_MISMATCH) Err(val->tok, ERR_RETURN_TYPE_MISMATCH, ctx->func->type.retType, &val->type);
+        else reportTypeFit(fit, val->tok, val, *ctx->func->type.retType);
         checkReturnedScopeBindings(val, *ctx->func->type.retType, val->tok);
         checkValueResult(ctx, val, *ctx->func->type.retType); //O14c
         noteResultBindings(ctx, val); //O13c
@@ -13898,7 +13903,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (rt.structMAlloc && RefNarrowingMatters(rt) && (asRef || OperandIsLvalue(val))
                 && RefExactScope(ctx, val, asRef, &rv, &rd, &ru)
                 && (ru || canonicalVar(rv) != canonicalVar(rt.scopeParam)) && !typeVarResultObliged(ctx, rv, ru)) {
-            ErrMsgSemantic(val->tok, REFERENCE_NARROWED);
+            Err(val->tok, ERR_REFERENCE_NARROWED);
         }
     }
 
@@ -13915,8 +13920,8 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ERROR;
 
-    if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return stmt; } //S19b
-    if (!ctx->func) { ErrMsgSemantic(tok, ERROR_STMNT_OUTSIDE_FUNC); return stmt; }
+    if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return stmt; } //S19b
+    if (!ctx->func) { Err(tok, ERR_ERROR_OUTSIDE_FUNCTION); return stmt; }
 
     //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
     //parseStmntError's own bare-form grammar guarantees idens is empty exactly when this is the case
@@ -13929,7 +13934,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
                 break;
             }
         }
-        if (!declared) { ErrMsgSemantic(tok, ctx->func->type.errors.len ? PLAIN_ERROR_NAMED_SIG : ERROR_NOT_DECLARED_IN_SIG); return stmt; }
+        if (!declared) { Err(tok, ctx->func->type.errors.len ? ERR_DEFAULT_ERROR_NAMED_SIG : ERR_DEFAULT_ERROR_UNDECLARED); return stmt; }
         stmt.op = OperandErrorLiteral(bareErrorType, tok);
         return stmt;
     }
@@ -13946,11 +13951,11 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     struct type* errType = crossModule ? TypeGetList(&target->types, strFromTok(errTypeTok))
                                        : typeNamed(target, strFromTok(errTypeTok));
-    if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(errTypeTok, UNKNOWN_ERROR); return stmt; }
-    if (crossModule && !isPublic(strFromTok(errTypeTok))) { ErrMsgSemantic(errTypeTok, TYPE_IS_PRIVATE); return stmt; }
+    if (!errType || errType->bType != BASETYPE_ERROR) { Err(errTypeTok, ERR_UNKNOWN_ERROR_TYPE, errTypeTok); return stmt; }
+    if (crossModule && !isPublic(strFromTok(errTypeTok))) { Err(errTypeTok, ERR_TYPE_IS_PRIVATE, errTypeTok); return stmt; }
     //M6a: the WORD's own capitalization decides its visibility too, not just the type's - an exported error
     //type may keep some of its words to itself, the same way an exported struct keeps some of its fields
-    if (crossModule && !isPublic(strFromTok(wordTok))) { ErrMsgSemantic(wordTok, ERROR_WORD_IS_PRIVATE); return stmt; }
+    if (crossModule && !isPublic(strFromTok(wordTok))) { Err(wordTok, ERR_ERROR_WORD_IS_PRIVATE, wordTok); return stmt; }
     resolveTypeDecl(errType);
 
     lambdaInferError(ctx->func, errType); //D16b
@@ -13958,7 +13963,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     for (int i = 0; i < ctx->func->type.errors.len; i++) {
         if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == errType) { declared = true; break; }
     }
-    if (!declared) { ErrMsgSemantic(errTypeTok, ERROR_NOT_DECLARED_IN_SIG); return stmt; }
+    if (!declared) { Err(errTypeTok, ERR_ERROR_UNDECLARED, errTypeTok); return stmt; }
 
     stmt.op = OperandErrorLiteral(*errType, wordTok);
     return stmt;
@@ -14028,7 +14033,7 @@ struct statement buildJoinStmnt(struct checkCtx* ctx, struct syntax* s) {
     joinCtx.joinHasSpawn = &hasSpawn;
     joinCtx.joinDepth = ctx->blockDepth + 1; //the block buildBlock is about to open
     stmt.block = buildBlock(&joinCtx, firstPartOfType(s, SNTX_BLOCK));
-    if (!hasSpawn) ErrMsgSemantic(tok, JOIN_WITHOUT_SPAWN);
+    if (!hasSpawn) Err(tok, ERR_JOIN_WITHOUT_SPAWN);
     return stmt;
 }
 
@@ -14135,8 +14140,8 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct operand* t = NULL;
         if (!(destructTargetName(tn, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) {
             t = buildExprFromSyntax(ctx, tn);
-            if (!OperandIsLvalue(t) || t->viaConversion) ErrMsgSemantic(t->tok, NOT_AN_LVALUE);
-            else if (!OperandIsMutableLvalue(t)) ErrMsgSemantic(t->tok, VAR_IMMUTABLE);
+            if (!OperandIsLvalue(t) || t->viaConversion) Err(t->tok, ERR_NOT_ASSIGNABLE);
+            else if (!OperandIsMutableLvalue(t)) reportWriteBlocked(t->tok, t);
         }
         ListAdd(&stmt.spawnTargets, &t);
     }
@@ -14151,7 +14156,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool lambdaTask = false;
     if (call && call->pendingLambda) {
         FinalizeLambda(call, NULL);
-        if (call->readVar && call->readVar->type.vars.len) ErrMsgSemantic(call->tok, SPAWN_LAMBDA_PARAMS);
+        if (call->readVar && call->readVar->type.vars.len) Err(call->tok, ERR_SPAWN_LAMBDA_PARAMS);
         if (ctx->joinHasSpawn && call->readVar) {
             struct type dt = call->type;
             if (call->lambdaHomeSet) {
@@ -14175,17 +14180,17 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     }
     stmt.op = call;
 
-    if (!ctx->joinHasSpawn) { ErrMsgSemantic(tok, ctx->inDefer ? SPAWN_IN_DEFER : SPAWN_OUTSIDE_JOIN); return stmt; }
+    if (!ctx->joinHasSpawn) { Err(tok, ctx->inDefer ? ERR_SPAWN_IN_DEFER : ERR_SPAWN_OUTSIDE_JOIN); return stmt; }
     *ctx->joinHasSpawn = true;
 
     if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) {
-        ErrMsgSemantic(tok, SPAWN_REQUIRES_CALL);
+        Err(tok, ERR_SPAWN_NOT_CALL);
         return stmt;
     }
     //P4: an error raised on another thread has nowhere to propagate to - the join carries no value, and
     //the spawner is not at the call site any more
     if (call->readVar->type.errors.len != 0) {
-        ErrMsgSemantic(call->tok, SPAWN_CALLEE_FALLIBLE);
+        Err(call->tok, ERR_SPAWN_FALLIBLE);
         return stmt;
     }
     //P2: the task runs until the join, so everything it was handed has to still be there then. An
@@ -14206,17 +14211,17 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         //a value copied into the task holds its references where they live; a value borrowed, its own storage
         bool found = !asRef && !refParam ? valueRefsScope(ctx, arg, &sv, &sd, &su) : RefExactScope(ctx, arg, asRef, &sv, &sd, &su);
         if (storage && !operandIsTemporary(ctx, arg) && found && !lastsUntilJoin(ctx, sv, sd, su)) {
-            ErrMsgSemantic(arg->tok, (asRef || refParam) && arg->type.bType != BASETYPE_FUNC ? SPAWN_ARG_TOO_SHORT : SPAWN_ARG_HOLDS_SHORT);
+            Err(arg->tok, (asRef || refParam) && arg->type.bType != BASETYPE_FUNC ? ERR_SPAWN_ARG_TOO_SHORT : ERR_SPAWN_ARG_HOLDS_SHORT);
             continue;
         }
-        if (!argBindingsLastUntilJoin(ctx, arg)) ErrMsgSemantic(arg->tok, SPAWN_ARG_HOLDS_SHORT);
+        if (!argBindingsLastUntilJoin(ctx, arg)) Err(arg->tok, ERR_SPAWN_ARG_HOLDS_SHORT);
     }
     //...and so has the function value it calls: a lambda's closure lives where its local does (D16d) - and a spawned
     //lambda's, built to last until the join, where what it captured does
     struct var* fv = call->readVar;
     if (fv && !fv->owner && fv->type.bType == BASETYPE_FUNC && !fv->type.scopeParam
             && normDepth(fv->type.scopeDepth) > ctx->joinDepth) {
-        ErrMsgSemantic(call->tok, lambdaTask ? SPAWN_LAMBDA_CAPTURE_TOO_SHORT : SPAWN_FUNC_TOO_SHORT);
+        Err(call->tok, lambdaTask ? ERR_SPAWN_CAPTURE_TOO_SHORT : ERR_SPAWN_FUNC_TOO_SHORT);
     }
     //P1g: the result is stored when the call returns, which is somewhere between the spawn and the join -
     //so the target has to still be there then, on exactly the terms an argument does. The store is a
@@ -14225,18 +14230,18 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (stmt.spawnTargets.len > 0) {
         struct type rt = call->readVar->type.hasRetType ? *call->readVar->type.retType : TypeVanilla(BASETYPE_VOID);
         int results = rt.isTuple ? rt.vars.len : (call->readVar->type.hasRetType ? 1 : 0);
-        if (results == 0) ErrMsgSemantic(tok, SPAWN_RESULT_VOID);
-        else if (results != stmt.spawnTargets.len) ErrMsgSemantic(tok, DESTRUCT_COUNT_MISMATCH);
+        if (results == 0) Err(tok, ERR_SPAWN_RESULT_VOID);
+        else if (results != stmt.spawnTargets.len) Err(tok, ERR_DESTRUCT_COUNT, stmt.spawnTargets.len, results);
         bool fits = true;
         for (int i = 0; results == stmt.spawnTargets.len && i < results; i++) {
             struct operand* t = *(struct operand**)ListGetIdx(&stmt.spawnTargets, i);
             if (!t) continue;
             struct type want = rt.isTuple ? (*(struct var*)ListGetIdx(&rt.vars, i)).type : rt;
-            if (!TypeIsSame(t->type, want)) { ErrMsgSemantic(t->tok, SPAWN_RESULT_TYPE); fits = false; }
+            if (!TypeIsSame(t->type, want)) { Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type); fits = false; }
             if (!OperandIsMutableLvalue(t)) fits = false;
             struct var* troot = lvalueRootVar(t);
             if (troot && !troot->owner && !t->type.scopeParam && t->type.scopeDepth > ctx->joinDepth) {
-                ErrMsgSemantic(t->tok, SPAWN_RESULT_TOO_SHORT);
+                Err(t->tok, ERR_SPAWN_RESULT_TOO_SHORT);
             }
         }
         //O18a/P1g: the result is stored into its target as an assignment's value is - so a result built where it lands
@@ -14248,7 +14253,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             asTok.type = TOK_ASS; //checked as the plain assignment it is (no compound form exists, P1g)
             if (results == 1 && t0) buildAssignCore(ctx, t0, call, asTok);
             else if (callIsLanding(call) && !landAtTargets(ctx, call, &stmt.spawnTargets))
-                ErrMsgSemantic(tok, SPAWN_RESULTS_DISAGREE);
+                Err(tok, ERR_SPAWN_RESULTS_DISAGREE);
         }
     }
     if (lambdaTask) { //the closure, then the task - one block, run as written
@@ -14346,7 +14351,7 @@ static void noteFuncValueUse(struct var* f, struct token tok) {
 static void checkFuncValueUses(void) {
     for (int i = 0; i < funcValueUses.len; i++) {
         struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
-        if (canonicalVar(u->f)->type.scopeObligations.len > 0) ErrMsgSemantic(u->tok, FUNC_VALUE_HAS_OBLIGATIONS);
+        if (canonicalVar(u->f)->type.scopeObligations.len > 0) Err(u->tok, ERR_FUNC_VALUE_OBLIGATIONS, canonicalVar(u->f)->name);
     }
 }
 
@@ -14405,7 +14410,7 @@ static struct var* lambdaCapture(struct var* L, struct var* outer, struct token 
     //own storage, and the lambda lives no longer than that storage (D16d)
     bool borrowed = !isRef && inner->type.bType == BASETYPE_ARRAY;
     if (borrowed) { inner->type.structMAlloc = true; inner->isBorrowedCapture = true; }
-    else if (!isRef && TypeHoldsReferences(inner->type)) ErrMsgSemantic(tok, CAPTURE_HOLDS_REFERENCES);
+    else if (!isRef && TypeHoldsReferences(inner->type)) Err(tok, ERR_CAPTURE_HOLDS_REFERENCES);
     (void)tok;
     inner->mut = isRef && outer->mut;
     isRef = isRef || borrowed;
@@ -14441,12 +14446,12 @@ void lambdaInferResult(struct var* f, struct list* vals, struct token tok) {
     if (!vals || vals->len == 0) return;
     struct type rt;
     if (vals->len == 1) {
-        if (!lambdaValueType(f, *(struct operand**)ListGetIdx(vals, 0), &rt)) { ErrMsgSemantic(tok, LAMBDA_RESULT_UNINFERABLE); return; }
+        if (!lambdaValueType(f, *(struct operand**)ListGetIdx(vals, 0), &rt)) { Err(tok, ERR_LAMBDA_RESULT_UNINFERABLE); return; }
     } else {
         struct list elems = ListInit(sizeof(struct type));
         for (int i = 0; i < vals->len; i++) {
             struct type e;
-            if (!lambdaValueType(f, *(struct operand**)ListGetIdx(vals, i), &e)) { ErrMsgSemantic(tok, LAMBDA_RESULT_UNINFERABLE); return; }
+            if (!lambdaValueType(f, *(struct operand**)ListGetIdx(vals, i), &e)) { Err(tok, ERR_LAMBDA_RESULT_UNINFERABLE); return; }
             ListAdd(&elems, &e);
         }
         rt = TypeTuple(&elems);
@@ -14482,7 +14487,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
     struct type t = op->type;
     struct list params = allPartsOfType(firstPartOfType(sig, SNTX_PARAM_LIST), SNTX_PARAM);
     bool arityBad = exp && exp->vars.len != params.len;
-    if (arityBad) { ErrMsgSemantic(kw, LAMBDA_ARITY); exp = NULL; }
+    if (arityBad) { Err(kw, ERR_LAMBDA_ARITY, exp, exp->vars.len, exp->vars.len == 1 ? "" : "s", params.len); exp = NULL; }
     for (int i = 0; i < params.len; i++) {
         struct syntax* p = *(struct syntax**)ListGetIdx(&params, i);
         struct token nameTok = firstTokOfType(p, TOK_IDEN);
@@ -14490,7 +14495,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         v.name = strFromTok(nameTok);
         v.tok = nameTok;
         rejectUnderscoreName(v.name, nameTok);
-        if (VarGetList(&t.vars, v.name) || scopeFindLocal(octx->scope, v.name)) ErrMsgSemantic(nameTok, VAR_NAME_IN_USE);
+        if (VarGetList(&t.vars, v.name) || scopeFindLocal(octx->scope, v.name)) Err(nameTok, ERR_ALREADY_DECLARED, nameTok);
         v.mut = hasTokOfType(p, TOK_MUT);
         struct var* ep = exp ? ListGetIdx(&exp->vars, i) : NULL;
         struct syntax* typeNode = firstPartOfType(p, SNTX_TYPE_EXPR);
@@ -14498,20 +14503,20 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
             v.type = resolveTypeExpr(octx->mod, typeNode, &t.scopeVars);
             declPermission(&v); //T25b
             if (ep && !TypeIsGeneric(ep->type) && !TypeIsSame(v.type, ep->type)) {
-                ErrMsgSemantic(nameTok, LAMBDA_SIG_MISMATCH);
+                Err(nameTok, ERR_LAMBDA_SIGNATURE, exp);
                 v.type = lambdaOwnType(ep->type); //reported once, here - not again where the lambda lands
             }
         } else if (ep && !TypeIsGeneric(ep->type)) {
             v.type = lambdaOwnType(ep->type);
         } else {
-            if (!arityBad) ErrMsgSemantic(nameTok, LAMBDA_PARAM_UNTYPED);
+            if (!arityBad) Err(nameTok, ERR_LAMBDA_PARAM_UNTYPED, nameTok);
             v.type = TypeVanilla(BASETYPE_INT32);
         }
         if (ep) {
-            if (v.mut && !ep->mut) ErrMsgSemantic(nameTok, LAMBDA_SIG_MISMATCH);
+            if (v.mut && !ep->mut) Err(nameTok, ERR_LAMBDA_SIGNATURE, exp);
             if (!typeNode) v.mut = ep->mut;
         }
-        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) ErrMsgSemantic(nameTok, ARRAY_PARAM_NOT_REFERENCE); //D9a
+        if (v.type.bType == BASETYPE_ARRAY && !v.type.structMAlloc) Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type); //D9a
         giveImplicitScope(&v, &t.scopeVars); //O4b
         ListAdd(&t.vars, &v);
     }
@@ -14546,10 +14551,10 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         }
         finishResultScope(&t, kw);
         if (exp && exp->hasRetType && !TypeIsGeneric(*exp->retType) && !TypeIsSame(*t.retType, *exp->retType)) {
-            ErrMsgSemantic(kw, LAMBDA_SIG_MISMATCH);
+            Err(kw, ERR_LAMBDA_SIGNATURE, exp);
             *t.retType = lambdaOwnType(*exp->retType);
         }
-        if (exp && !exp->hasRetType) ErrMsgSemantic(kw, LAMBDA_SIG_MISMATCH);
+        if (exp && !exp->hasRetType) Err(kw, ERR_LAMBDA_SIGNATURE, exp);
     } else if (exp && exp->hasRetType && !TypeIsGeneric(*exp->retType)) {
         t.hasRetType = true;
         t.retType = MallocOrCrash(sizeof(struct type));
@@ -14573,7 +14578,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
                 same = TypeIsSame(**(struct type**)ListGetIdx(&t.errors, i), **(struct type**)ListGetIdx(&exp->errors, i));
             }
             if (!same) {
-                ErrMsgSemantic(kw, LAMBDA_SIG_MISMATCH);
+                Err(kw, ERR_LAMBDA_SIGNATURE, exp);
                 t.errors = ListInit(sizeof(struct type*));
                 for (int i = 0; i < exp->errors.len; i++) ListAdd(&t.errors, ListGetIdx(&exp->errors, i));
             }
@@ -14612,7 +14617,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
     pendingDischarges = savedDischarges;
     bodyEnd(c.bodyId, L->codeBlock);
     L->bodyHadErrors = ErrMsgGetNErrors() != errsBefore;
-    if (L->type.hasRetType && !blockAlwaysExits(&L->codeBlock)) ErrMsgSemantic(kw, MISSING_RETURN); //D10a
+    if (L->type.hasRetType && !blockAlwaysExits(&L->codeBlock)) Err(kw, ERR_MISSING_RETURN, L->type.retType); //D10a
     L->inferRet = false;
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
@@ -14689,8 +14694,8 @@ static bool blockLeavesValue(struct list* block) {
 //S11: valid only inside a loop body. The rule is about the enclosing LOOP, not the enclosing block, so
 //nesting an if/match/try inside the body changes nothing - ctx->inLoop is simply inherited by buildBlock.
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
-    if (!ctx->inLoop) ErrMsgSemantic(firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE),
-                                     ctx->inDefer ? DEFER_LOOP_JUMP : BREAK_OUTSIDE_LOOP); //S19b
+    struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
+    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b
     return (struct statement){.sType = kind};
 }
 
@@ -14714,7 +14719,7 @@ static struct list assertRecs;
 
 struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(cond) && !cond->type.unknown) ErrMsgSemantic(cond->tok, OPERATION_REQUIRES_BOOL);
+    if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
     struct assertRec r = { cond, ctx->bodyId, ctx->inTest };
     ListAdd(&assertRecs, &r);
     struct statement stmt = (struct statement){0};
@@ -14750,7 +14755,7 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
                 struct type* e = *(struct type**)ListGetIdx(errors, j);
                 if (e == &bareErrorType) { produces = true; break; }
             }
-            if (!produces) { ErrMsgSemantic(genericTok, CATCH_ERROR_NOT_PRODUCED_BY_CALL); continue; }
+            if (!produces) { Err(genericTok, ERR_CATCH_DEFAULT_NOT_PRODUCED); continue; }
             struct catchMatch cm = (struct catchMatch){0};
             cm.errType = bareErrorType;
             ListAdd(out, &cm);
@@ -14773,11 +14778,11 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
 
         struct type* errType = crossModule ? TypeGetList(&target->types, strFromTok(typeTok))
                                            : typeNamed(target, strFromTok(typeTok));
-        if (!errType || errType->bType != BASETYPE_ERROR) { ErrMsgSemantic(typeTok, UNKNOWN_ERROR); continue; }
+        if (!errType || errType->bType != BASETYPE_ERROR) { Err(typeTok, ERR_UNKNOWN_ERROR_TYPE, typeTok); continue; }
         //reported, and still taken as caught - the one error is the name, not also what is left uncaught
-        if (crossModule && !isPublic(strFromTok(typeTok))) ErrMsgSemantic(typeTok, TYPE_IS_PRIVATE);
+        if (crossModule && !isPublic(strFromTok(typeTok))) Err(typeTok, ERR_TYPE_IS_PRIVATE, typeTok);
         //M6a, same as the "error T.word" statement above: a lowercase word is the declaring module's own
-        else if (crossModule && hasWordTok && !isPublic(strFromTok(wordTok))) ErrMsgSemantic(wordTok, ERROR_WORD_IS_PRIVATE);
+        else if (crossModule && hasWordTok && !isPublic(strFromTok(wordTok))) Err(wordTok, ERR_ERROR_WORD_IS_PRIVATE, wordTok);
         resolveTypeDecl(errType);
 
         bool produces = false;
@@ -14785,7 +14790,7 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
             struct type* e = *(struct type**)ListGetIdx(errors, j);
             if (TypeIsSame(*e, *errType)) { produces = true; break; }
         }
-        if (!produces) { ErrMsgSemantic(typeTok, CATCH_ERROR_NOT_PRODUCED_BY_CALL); continue; }
+        if (!produces) { Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
 
         struct catchMatch cm = (struct catchMatch){0};
         cm.errType = *errType;
@@ -14795,7 +14800,7 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
                 struct token wt = *(struct token*)ListGetIdx(&errType->words, w);
                 if (StrCmp(strFromTok(wt), strFromTok(wordTok))) { wordIdx = w; break; }
             }
-            if (wordIdx < 0) { ErrMsgSemantic(wordTok, EXPECTED_ERROR_WORD); continue; }
+            if (wordIdx < 0) { Err(wordTok, ERR_NO_SUCH_ERROR_WORD, errType, wordTok); continue; }
             cm.hasWord = true;
             cm.wordOrdinal = wordIdx;
         }
@@ -14812,15 +14817,15 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
     for (int i = 0; i < errors->len; i++) {
         struct type* e = *(struct type**)ListGetIdx(errors, i);
         if (StatementCatchCoversType(matches, *e)) continue;
-        if (ctx->inDefer) { ErrMsgSemantic(tok, DEFER_ERROR_ESCAPES); return; } //S19b
-        if (!ctx->func) { ErrMsgSemantic(tok, TRY_OUTSIDE_FUNC); return; }
+        if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
+        if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
         bool found = false;
         for (int j = 0; j < ctx->func->type.errors.len; j++) {
             struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
             if (TypeIsSame(*e, *fe)) { found = true; break; }
         }
-        if (!found && !lambdaInferError(ctx->func, e)) { ErrMsgSemantic(tok, TRY_ERROR_NOT_IN_SIGNATURE); return; }
+        if (!found && !lambdaInferError(ctx->func, e)) { Err(tok, ERR_TRY_ERROR_NOT_DECLARED, e); return; }
     }
 
 }
@@ -14882,7 +14887,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct statement out = (struct statement){0};
     out.sType = STATEMENT_EXPR;
     out.op = root;
-    if (!w && !opErrs.len) { ErrMsgSemantic(tok, TRY_REQUIRES_FALLIBLE_CALL); return out; }
+    if (!w && !opErrs.len) { Err(tok, ERR_TRY_NOTHING_FAILS); return out; }
     struct list errors = ListInit(sizeof(struct type*));
     struct type* builtin = SemanticBuiltinErrorType();
     if (builtin && w) ListAdd(&errors, &builtin);
@@ -14925,11 +14930,11 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     //again to be used. Propagate it instead ("s := try a[lo:hi]") and catch at the call site, which is
     //where a value and its handling can meet.
     if (callOp->opType == OPERATION_SLICE) {
-        ErrMsgSemantic(tok, TRY_CATCH_ON_SLICE);
+        Err(tok, ERR_TRY_CATCH_ON_SLICE);
         return stmt;
     }
     if (callOp->opType != OPERATION_FUNCCALL || callOp->readVar->type.errors.len == 0) {
-        ErrMsgSemantic(tok, TRY_REQUIRES_FALLIBLE_CALL);
+        Err(tok, ERR_TRY_NOTHING_FAILS);
         return stmt;
     }
 
@@ -15025,7 +15030,7 @@ static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spe
     spec->codeBlock = buildBlock(&ctx, spec->bodySyntax);
     bodyEnd(ctx.bodyId, spec->codeBlock);
     if (spec->type.hasRetType && !blockAlwaysExits(&spec->codeBlock)) { //D10a, per instantiation (G18)
-        ErrMsgSemantic(spec->tok, MISSING_RETURN);
+        Err(spec->tok, ERR_MISSING_RETURN, spec->type.retType);
     }
     currentBindings = savedBindings; //restored, not nulled: instantiations can nest
 }
@@ -15046,7 +15051,7 @@ void semaDrainInstantiations(void) {
     while (pendingInstances.len != 0) {
         if (++rounds > 1000) { //G17 - implementation-defined depth
             struct instantiation* inst = ListGetIdx(&instantiations, *(int*)ListGetIdx(&pendingInstances, 0));
-            ErrMsgSemantic(inst->generic->tok, UNBOUNDED_INSTANTIATION);
+            Err(inst->generic->tok, ERR_UNBOUNDED_INSTANTIATION);
             return;
         }
         struct list batch = pendingInstances;
@@ -15064,7 +15069,7 @@ void drainTypeInstantiations(void) {
     while (pendingTypeInsts.len != 0) {
         if (++rounds > 1000) { //G17 - implementation-defined depth, same cap as the function case
             struct pendingTypeInst* p = ListGetIdx(&pendingTypeInsts, 0);
-            ErrMsgSemantic(p->spec->tok, UNBOUNDED_INSTANTIATION);
+            Err(p->spec->tok, ERR_UNBOUNDED_INSTANTIATION);
             return;
         }
         struct list batch = pendingTypeInsts;
@@ -15193,12 +15198,12 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
                 ListAdd(&inlinePendings, &ip);
             }
             if (typeExprNode) {
-                reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok);
+                reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok, fieldOp, field->type);
             } else { // ":=" - type read straight off the rhs (D15)
                 field->type = inferredDeclType(cctx.func, fieldOp);
                 //T25b: the field's own "mut" is its permission; a writable field cannot hold a read-only reference
                 if (TypeIsPermRef(field->type)) {
-                    if (field->mut && !OperandGivesWritable(fieldOp)) ErrMsgSemantic(fieldOp->tok, READ_ONLY_TO_WRITABLE);
+                    if (field->mut && !OperandGivesWritable(fieldOp)) Err(fieldOp->tok, ERR_READ_ONLY_TO_WRITABLE);
                     field->type.refMut = field->mut;
                 }
             }
@@ -15243,7 +15248,7 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         //T7a: a field holding an array by value would be shared, not copied, when the instance is
         if (field->type.bType == BASETYPE_ARRAY && field->type.arrMalloc && !field->type.structMAlloc
                 && field->inlineState != 2) {
-            ErrMsgSemantic(field->tok, field->inlineState == 0 ? ARRAY_NESTED_BY_VALUE : ARRAY_FIELD_SIZE_NOT_COMPUTED);
+            Err(field->tok, field->inlineState == 0 ? ERR_ARRAY_NESTED_BY_VALUE : ERR_INLINE_SIZE_UNKNOWN, &field->type);
         }
         ListAdd(&fieldArgs, &fieldOp);
     }
@@ -15273,7 +15278,7 @@ static void buildTypeBodiesIn(struct semaModule* mod, struct type* t) {
         dctx.destructSelfVar = selfLocal;
         t->destructFunc->codeBlock = buildBlock(&dctx, t->destructBlockSyntax);
         //C7a: a destructor that does nothing is not a destructor - reference-only is not what it is for
-        if (t->destructFunc->codeBlock.len == 0) ErrMsgSemantic(firstTokAnywhere(t->destructBlockSyntax), EMPTY_DESTRUCTOR);
+        if (t->destructFunc->codeBlock.len == 0) Err(firstTokAnywhere(t->destructBlockSyntax), ERR_EMPTY_DESTRUCTOR);
     }
 }
 
@@ -15307,7 +15312,7 @@ void semaBuildGlobalInits(struct semaModule* mod) {
         }
         struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
         if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
-            reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok);
+            reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
         } else { // ":=" - type read straight off the initializer
             v->type = inferredDeclType(ctx.func, rhs);
             //O1b: a global lives in the program's own scope - never in a callee's result scope, which is
@@ -15408,7 +15413,7 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
         //D10a: a declared result type has to be produced on every path. Falling off the end used to
         //return a silently zero value - 0, an all-zero struct, or a null reference.
         if (func->type.hasRetType && !blockAlwaysExits(&func->codeBlock)) {
-            ErrMsgSemantic(func->tok, MISSING_RETURN);
+            Err(func->tok, ERR_MISSING_RETURN, func->type.retType);
         }
     }
     func->bodyState = 2;
@@ -15577,6 +15582,11 @@ static struct var* buildConstVar(struct str name) {
 
 bool SemanticIsBuildConst(struct var* v) { return v && buildModule && v->owner == buildModule; }
 
+//where the evaluator stopped, as a note - when that is somewhere else than the error itself
+static void noteWhy(struct token at, struct token whyTok) {
+    if (whyTok.owner && (whyTok.owner != at.owner || whyTok.lineNr != at.lineNr)) Note(whyTok, NOTE_HERE);
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
     nextBodyId = 0; //S8b: every attempt rebuilds every body
@@ -15694,11 +15704,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                 else r->lit->intLiteralVal = val->i;
                 continue;
             }
-            char buf[1024];
-            snprintf(buf, sizeof(buf), LITERAL_CTOR_FAILS ": %s", why ? why : "it cannot be evaluated");
-            char* msg = MallocOrCrash(strlen(buf) + 1);
-            strcpy(msg, buf);
-            ErrMsgSemantic(r->lit->tok, msg);
+            Err(r->lit->tok, ERR_LITERAL_CTOR_FAILS, &r->call->type, why);
+            noteWhy(r->lit->tok, whyTok);
         }
         //D13c: each zero value a constructor gives - all zero bits (nothing then runs), something else (the
         //constructor runs, being pure), or none: a declaration of a type without one needs a value
@@ -15718,14 +15725,11 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             r->call->catchClauses = clauses;
             if (ok) {
                 if (CtIsZero(val)) r->call->zeroBits = true;
-                else if (r->forArray && !CtIsPlainData(val)) ErrMsgSemantic(r->tok, ZERO_VALUE_SHARED);
+                else if (r->forArray && !CtIsPlainData(val)) Err(r->tok, ERR_ZERO_VALUE_SHARED, &r->call->type);
                 continue;
             }
-            char buf[1024];
-            snprintf(buf, sizeof(buf), ZERO_VALUE_NONE ": %s", why ? why : "it cannot be evaluated");
-            char* msg = MallocOrCrash(strlen(buf) + 1);
-            strcpy(msg, buf);
-            ErrMsgSemantic(r->tok, msg);
+            Err(r->tok, ERR_NO_ZERO_VALUE, &r->call->type, why);
+            noteWhy(r->tok, whyTok);
         }
         CtReset();
         struct list order = SemanticInitOrder();
@@ -15756,13 +15760,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             struct token whyTok = (struct token){0};
             const char* why = NULL;
             if (CtEvaluate(r->op, r->type, &val, &whyTok, &why, NULL)) continue;
-            char buf[1024];
-            struct str f = TokenGetFileName(whyTok.owner);
-            if (f.len) snprintf(buf, sizeof(buf), DEFAULT_NOT_COMPUTABLE ": %s (%.*s:%d)", why, f.len, f.ptr, whyTok.lineNr);
-            else snprintf(buf, sizeof(buf), DEFAULT_NOT_COMPUTABLE ": %s", why);
-            char* msg = MallocOrCrash(strlen(buf) + 1);
-            strcpy(msg, buf);
-            ErrMsgSemantic(r->op->tok, msg);
+            Err(r->op->tok, ERR_DEFAULT_NOT_COMPUTABLE, why);
+            noteWhy(r->op->tok, whyTok);
         }
         //S18c: an assert whose condition can be evaluated here is checked here - false is a compile-time
         //error at the assert, true needs no run-time check. Its locals count when they are fixed (S8c).
@@ -15777,18 +15776,18 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, NULL, NULL, NULL,
                               fixedLocalInit, bodyStmts(r->bodyId))) continue;
             if (v->i) r->op->ctProven = true;
-            else ErrMsgSemantic(r->op->tok, ASSERT_FALSE_AT_COMPILE_TIME);
+            else Err(r->op->tok, ERR_ASSERT_FALSE);
         }
     }
 
     if (requireMain) {
         struct var* mainFunc = VarGetList(&rootModule->vars, StrFromCStr("main"));
         //a syntax error may have hidden main - one that did not parse - so it is reported missing only when none was
-        if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) { if (!ErrMsgGetNSyntaxErrors()) ErrMsgFile(rootModule->fileName, MAIN_FUNC_NOT_FOUND); }
+        if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) { if (!ErrMsgGetNSyntaxErrors()) ErrFile(rootModule->fileName, ERR_NO_MAIN); }
         //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to
         //stderr) - no other success type is meaningful as a process exit code, so none is allowed
         else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType || mainFunc->type.errors.len == 0) {
-            ErrMsgFile(rootModule->fileName, INVALID_MAIN_SIGNATURE);
+            ErrFile(rootModule->fileName, ERR_MAIN_SIGNATURE);
         }
     }
     return rootModule;
@@ -15845,25 +15844,23 @@ static bool decidePendingConditions(void) {
             drainTypeInstantiations();
         }
         again = true;
-        char* err = NULL;
+        enum diag err = DIAG_NONE;
+        char* reason = NULL; //for ERR_COND_UNDECIDABLE: what stopped the evaluation, and where
         struct ctVal* val = NULL;
         if (ErrMsgGetNErrors() != before) {
-            err = BUILD_COND_UNSEEN;
+            err = ERR_COND_UNSEEN;
         } else if (op->type.bType != BASETYPE_BOOL) {
-            err = BUILD_COND_NOT_BOOL;
+            err = ERR_COND_DECIDED_NOT_BOOL;
         } else {
             struct token whyTok = (struct token){0};
             const char* why = NULL;
             if (!CtEvaluate(op, TypeVanilla(BASETYPE_BOOL), &val, &whyTok, &why, NULL)) {
-                char buf[1024];
                 struct str f = TokenGetFileName(whyTok.owner);
-                if (f.len) snprintf(buf, sizeof(buf), "this top-level condition cannot be decided at compile time: %s (%.*s:%d) (B9c)", why, f.len, f.ptr, whyTok.lineNr);
-                else snprintf(buf, sizeof(buf), "this top-level condition cannot be decided at compile time: %s (B9c)", why);
-                err = MallocOrCrash(strlen(buf) + 1);
-                strcpy(err, buf);
+                err = ERR_COND_UNDECIDABLE;
+                reason = f.len ? StrFmt("%s (%.*s:%d)", why, f.len, f.ptr, whyTok.lineNr) : StrFmt("%s", why);
             }
         }
-        SyntaxDecideCondition(p->file, p->at, !err && val && val->i, err);
+        SyntaxDecideCondition(p->file, p->at, !err && val && val->i, err, reason);
     }
     ErrMsgMuteEnd();
     return again;
@@ -15885,7 +15882,7 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
         //since a chain this deep is conditions deciding each other rather than configuration
         if (attempt >= 8) {
             ErrMsgBufferDiscard();
-            if (pending->len) ErrMsgSemantic(((struct pendingCond*)ListGetIdx(pending, 0))->tok, BUILD_COND_TOO_DEEP);
+            if (pending->len) Err(((struct pendingCond*)ListGetIdx(pending, 0))->tok, ERR_COND_TOO_DEEP, attempt);
             return root;
         }
         //S8b: an attempt whose local conditions all turned out runtime - already parsed as ordinary ifs - is

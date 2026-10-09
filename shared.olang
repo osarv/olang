@@ -8978,6 +8978,18 @@ test "D16: lambdas take their types from where they are passed, and from their b
     assert ($fn(x I32) { return x }).Eq("fn(x I32) I32")
 }
 
+# E11a: a function renders as its signature is written - a parameter's own scope is its bare "&", another's is named
+type RdNode struct(v I32) { v }
+fn rdTouch(n mut RdNode&) { }
+fn rdPick(a RdNode&, b RdNode&a) RdNode&a { return b }
+RdSig := $rdPick
+test "a signature renders as it is written, its scopes included" {
+    assert $rdTouch == "rdTouch(n mut RdNode&)"
+    assert RdSig == "rdPick(a RdNode&, b RdNode&a) RdNode&a"
+    f fn(n mut RdNode&) = rdTouch
+    assert $f == "fn(n mut RdNode&)"
+}
+
 # D16c/D16d: a lambda captures what it uses from the body around it - a value copied and read-only, a
 # reference still naming its instance - and lives where the references it captured do
 type LamCounter struct() {

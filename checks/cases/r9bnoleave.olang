@@ -1,4 +1,4 @@
-# check: fail provably leave
+# check: fail error[R11]: a clause here leaves, or gives the value with 'default v'
 error E {
     A
     B

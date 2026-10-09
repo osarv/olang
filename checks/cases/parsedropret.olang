@@ -1,4 +1,4 @@
-# check: fail expected 'expression'
+# check: fail expected an expression, found '}'
 # "return -" with nothing after the operator was a return with no value
 fn g() {
     return -

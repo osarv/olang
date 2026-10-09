@@ -1,4 +1,4 @@
-# check: fail T7a
+# check: fail error[C2e]: this field's length cannot be computed while compiling, so it cannot be stored inline
 # an array held inside a struct shares its storage when the struct is copied, so one whose size is only
 # known at run time must be written as a reference
 type W struct(n I32) { a mut Array<I32> = Array<I32>(n) }

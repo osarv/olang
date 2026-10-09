@@ -1,4 +1,4 @@
-# check: fail nothing can be built in its place
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
 # C2d/O23: a field written '&p' lives where its argument did, unknown to a function given the container
 type N struct(v I32, nx N&) {
     v

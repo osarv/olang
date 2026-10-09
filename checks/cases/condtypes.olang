@@ -1,4 +1,4 @@
-# check: fail the two values of 'a if c else b' must have the same type
+# check: fail error[E28]: both values of 'a if c else b' have one type, found I32 and I64
 # E28: nothing but a literal adapts between the two values
 fn main() ? {
     n I32 = 1

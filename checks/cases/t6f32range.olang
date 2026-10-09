@@ -1,4 +1,4 @@
-# check: fail this literal's value can't be represented
+# check: fail error[T6]: '1e39' does not fit F32
 # T6: a float literal adapts only to a float type it does not overflow - 1e39 is beyond F32's largest (about 3.4e38)
 fn main() ? {
     f F32 = 1e39

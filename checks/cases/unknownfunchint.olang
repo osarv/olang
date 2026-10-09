@@ -1,4 +1,4 @@
-# check: fail unknown function or type 'Float64' - did you mean 'F64'?
+# check: fail error[T4]: unknown type 'Float64'
 fn main() ? {
     x := Float64(3)
 }

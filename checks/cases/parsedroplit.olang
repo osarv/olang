@@ -1,4 +1,4 @@
-# check: fail unexpected token ')', expected ']'
+# check: fail expected ']', found ')'
 # an array literal that does not close leaves what it read - "f(I32[)" was "f()"
 fn f() I32 { return 7 }
 fn main() ? {

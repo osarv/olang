@@ -1,4 +1,4 @@
-# check: fail this name belongs to a built-in type visible in every module
+# check: fail error[D3a]: 'I32' is a built-in type's name
 # T4/T7: a type may not be named after a primitive, as not after Array - one error
 # also: compilation failed with 1 error
 type I32 struct() {

@@ -1,4 +1,4 @@
-# check: fail signature
+# check: fail error[R9]: F can escape here, and this function does not declare it
 error E {
     A
     B

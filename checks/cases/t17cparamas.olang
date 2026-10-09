@@ -1,4 +1,4 @@
-# check: fail this enum value holds a reference to existing storage in its payload
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive
 # O4b/T17c: the same, read out with 'as'
 type Node struct(v I32) {
     v mut

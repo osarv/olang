@@ -3,6 +3,7 @@
 
 #include "token.h"
 #include "util.h"
+#include "errmsg.h"
 
 enum syntaxType {
     SNTX_TOP_DECL,
@@ -203,9 +204,9 @@ struct buildConst {
     bool builtin;      //defined by the compiler rather than by -D
     bool u64;          //BUILD_INT above I64's maximum: a U64, its bits in i (L10, T6a)
 };
-//NULL once defined; otherwise what is wrong - a name that is not an identifier or is already defined, or a value that is
-//a malformed or out-of-range number (B10)
-char* SyntaxDefineBuildConst(char* name, char* value, bool builtin);
+//DIAG_NONE once defined; otherwise what is wrong - a name that is not an identifier or is already defined, or a value
+//that is a malformed or out-of-range number (B10). Each such diagnostic takes the name and the value
+enum diag SyntaxDefineBuildConst(char* name, char* value, bool builtin);
 struct list* SyntaxBuildConsts(void);
 void SyntaxResetBuildConsts(void);
 //B9c: a top-level condition only compile-time evaluation can decide, met by this attempt at compiling
@@ -226,7 +227,7 @@ enum condDecisionKind { COND_VALUE, COND_RUNTIME, COND_DEAD, COND_ERROR };
 void SyntaxDecideLocalCondition(struct str file, int at, enum condDecisionKind kind, bool value);
 void SyntaxResetConditionDecisions(void);
 //records a decision (err NULL) or why none could be made (err set) for the condition at file/at
-void SyntaxDecideCondition(struct str file, int at, bool value, char* err);
+void SyntaxDecideCondition(struct str file, int at, bool value, enum diag err, char* reason);
 struct list* SyntaxPendingConditions(void); //struct pendingCond
 void SyntaxClearPendingConditions(void);
 struct pendingCond* SyntaxPendingFor(struct syntax* cond); //the one met for this parsed condition, or NULL

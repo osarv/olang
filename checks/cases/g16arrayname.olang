@@ -1,4 +1,4 @@
-# check: fail the value on the left has no method of this name
+# check: fail error[M19]: Array<Char>& has no method 'Trim'
 # G16a: Box<String> and Box<Array<Char>> are two instantiations, so an Array<Char> field has no String method
 type Box<T> struct(v <T>&) { v }
 fn main() ? {

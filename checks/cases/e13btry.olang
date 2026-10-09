@@ -1,4 +1,4 @@
-# check: fail must be handled with try
+# check: fail error[E15]: this call can fail
 # E13b: a fallible function value called in a chain is handled like any fallible call
 error E { BAD }
 fn pick() fn() I32 ? E { return fn() I32 ? E { error E.BAD } }

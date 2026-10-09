@@ -1,4 +1,4 @@
-# check: fail this type has At but neither TryAt nor Len
+# check: fail error[E31a]: 'try c[i]' checks against Len, and Bag& has neither TryAt nor Len
 # E31: a derived TryAt checks the position against Len()
 type Bag struct() {
     n I64 = 2

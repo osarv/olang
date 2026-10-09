@@ -2,355 +2,445 @@
 #define ERRMSG_H
 #include "token.h"
 
-// ---- CLI ----
+struct type;
 
-#define NO_FILE_SPECIFIED "no file specified"
-#define EXPECTED_C_OR_T_FLAG "expected a mode first: -b (build), -c (compile one module), -t (test) or -i (interpret) (B1)"
-#define EXPECTED_ONE_COMPILE_FILE "-b and -c take exactly one file, and -i one file followed by the program's own arguments"
-#define EXPECTED_AT_LEAST_ONE_TEST_FILE "-t requires at least one file"
-#define UNKNOWN_FLAG "unknown flag - every flag is one character: the modes -b -c -t -i, and the modifiers -r (race detector), -d (debug), -u (update olang.lock) and -D Name=value (B1)"
-#define NOT_A_REGULAR_FILE "not a regular file (is this a directory?)"
+//B11: every diagnostic is one row - "path:line:col: error[RULE]: message" - then the source line and a caret under
+//what it is about, and any notes as rows of their own ("path:line:col: note: ..."). RULE is the rule of the
+//specification the diagnostic applies, and "olang -e RULE" prints that rule's text (B11a): the long explanation lives
+//there, under the rule, and a message says what is wrong here, in a few words, and what to write instead where that is
+//obvious. Messages are lowercase, one line, with no period at the end.
+//
+//Each diagnostic is one entry below: its id, the rule it applies ("" for none - never an invented one) and its message.
+//A message's %-directives take the call's arguments, in order:
+//    %s  char*          inserted as it is
+//    %S  struct str     inserted as it is
+//    %n  struct token   as a reader sees it: 'text' in quotes, or end of line, or end of file
+//    %t  struct type*   the type as source writes it (I32, Array<U8>&, lib.Point)
+//    %d  int            %l  long long
+//    %c  char           escaped where it is no printable character (\t, \x80), no quotes
+//    %%  a '%'
+//checks/checks.olang holds every call to the number of arguments its message takes, and every rule to one the
+//specification states.
+#define DIAGNOSTICS(X) \
+    /* ---- the command line ---- */ \
+    X(ERR_USAGE,                        "B1",    "nothing to do - write a mode and a file, as 'olang -b main.olang'") \
+    X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are -b, -c, -t, -i and -e") \
+    X(ERR_MODE_ONE_FILE,                "B1",    "%s takes exactly one file") \
+    X(ERR_MODE_NEEDS_FILE,              "B1",    "%s needs a file") \
+    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -u -D") \
+    X(ERR_EXPLAIN_NEEDS_RULE,           "B11a",  "-e takes one rule, as 'olang -e B1'") \
+    X(ERR_NO_SPEC,                      "B11a",  "no specification at %s") \
+    X(ERR_NO_RULE,                      "B11a",  "the specification has no rule %s") \
+    X(ERR_DEFINE_MISSING,               "B10",   "-D needs Name=value after it") \
+    X(ERR_DEFINE_SHAPE,                 "B10",   "-D takes Name=value, found '%s'") \
+    X(ERR_DEFINE_NOT_NAME,              "B10",   "-D %s=%s: the name is not an identifier") \
+    X(ERR_DEFINE_TWICE,                 "B10",   "-D %s=%s: defined twice") \
+    X(ERR_DEFINE_BAD_NUMBER,            "B10",   "-D %s=%s: not a number - '0x' and '0b' take digits of their own base") \
+    X(ERR_DEFINE_INT_RANGE,             "B10",   "-D %s=%s: beyond 64 bits") \
+    X(ERR_DEFINE_NEG_RANGE,             "B10",   "-D %s=%s: below I64's minimum") \
+    X(ERR_DEFINE_FLOAT_RANGE,           "B10",   "-D %s=%s: beyond F64's range") \
+    X(ERR_DEFINE_BUILTIN,               "B10a",  "-D cannot redefine the built-in constant %s") \
+    /* ---- files and the toolchain ---- */ \
+    X(ERR_CANNOT_OPEN,                  "",      "cannot open this file") \
+    X(ERR_NOT_REGULAR,                  "",      "not a regular file") \
+    X(ERR_IS_DIRECTORY,                 "M1",    "a directory - a module is one .olang file") \
+    X(ERR_NO_MAIN,                      "B4",    "no main function - a program starts at 'fn main() ? { }'") \
+    X(ERR_NO_CLANG,                     "",      "clang not found on PATH - install clang-20 (the IR is in %s)") \
+    X(ERR_CLANG_FAILED,                 "",      "clang could not compile %s") \
+    X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
+    /* ---- characters and tokens ---- */ \
+    X(ERR_UNKNOWN_CHAR,                 "L16",   "unexpected character '%c'") \
+    X(ERR_NON_ASCII,                    "L1",    "non-ASCII byte '%c' - olang source is ASCII") \
+    X(ERR_CARRIAGE_RETURN,              "L3",    "carriage return - save the file with LF line endings") \
+    X(ERR_NUL_BYTE,                     "L1",    "NUL byte in the source - is this a text file?") \
+    X(ERR_UNCLOSED_COMMENT,             "L4a",   "unterminated block comment - '##' closes it") \
+    X(ERR_UNCLOSED_STRING,              "L14",   "unterminated string literal") \
+    X(ERR_STRING_NEWLINE,               "L14",   "string literal not closed on its line - write \\n for a newline") \
+    X(ERR_UNCLOSED_CHAR,                "L13",   "unterminated character literal") \
+    X(ERR_CHAR_NEWLINE,                 "L13",   "character literal not closed on its line") \
+    X(ERR_EMPTY_CHAR,                   "L13",   "empty character literal") \
+    X(ERR_LONG_CHAR,                    "L13",   "character literal holds more than one character - text is written in \"\"") \
+    X(ERR_BAD_ESCAPE,                   "L15",   "unknown escape '\\%c' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\"") \
+    X(ERR_HEX_NO_DIGITS,                "L10a",  "'0x' needs hexadecimal digits") \
+    X(ERR_BIN_NO_DIGITS,                "L10c",  "'0b' needs binary digits") \
+    X(ERR_HEX_DIGIT,                    "L10a",  "'%c' is not a hexadecimal digit") \
+    X(ERR_BIN_DIGIT,                    "L10c",  "'%c' is not a binary digit") \
+    X(ERR_DIGIT_SEPARATOR,              "L10b",  "'_' in a number must be followed by a digit") \
+    X(ERR_POINT_NO_DIGIT,               "L12",   "a decimal point needs a digit after it") \
+    X(ERR_TWO_POINTS,                   "L12",   "a number has at most one decimal point") \
+    /* ---- syntax ---- */ \
+    X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
+    X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
+    X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
+    X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
+    X(ERR_ERROR_AFTER_QUESTION,         "R15",   "'?' alone is the default error - write '?', or name the types: '? IoError'") \
+    X(ERR_VALUE_AFTER_EQ,               "D12",   "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \
+    /* ---- top-level conditions (each message takes the token it is about) ---- */ \
+    X(ERR_COND_NAME,                    "B9a",   "%n is not a build constant or an immutable global of this module") \
+    X(ERR_COND_MUTABLE,                 "B9a",   "%n is mutable, so a top-level condition cannot read it") \
+    X(ERR_COND_GLOBAL_INIT,             "B9a",   "%n is not computed from literals and build constants alone") \
+    X(ERR_COND_CYCLE,                   "B9a",   "%n is defined in terms of itself") \
+    X(ERR_COND_TYPES,                   "B9",    "%n cannot combine these values") \
+    X(ERR_COND_NO_MEET,                 "T6b",   "%n: these numbers' types do not meet - convert one, as I64(n)") \
+    X(ERR_COND_NOT_BOOL,                "B9",    "the condition beginning %n is not a Bool") \
+    /* ---- imports and modules ---- */ \
+    X(ERR_IMPORT_REMOTE_BAD_NAME,       "M23a",  "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-'") \
+    X(ERR_IMPORT_LOCK_NOT_A_COMMIT,     "M23b",  "olang.lock names no commit for %s - delete its line, or build with -u") \
+    X(ERR_IMPORT_FETCH_FAILED,          "M23a",  "could not fetch %s with git - check the path and the connection") \
+    X(ERR_IMPORT_LOCKED_FETCH_FAILED,   "M23b, M23c", "could not fetch the commit olang.lock names for %s - delete its line, or build with -u") \
+    X(ERR_IMPORT_PATH_TOO_LONG,         "M23",   "this import path is too long to name a file") \
+    X(ERR_IMPORT_FILE_NOT_FOUND,        "M23",   "no .olang file at %s") \
+    X(ERR_IMPORT_HAS_EXTENSION,         "M23",   "an import names its file without '.olang'") \
+    X(ERR_IMPORT_LEAVES_ROOT,           "M23",   "this relative import leaves %s - name a module outside it by its own path") \
+    X(ERR_IMPORT_REMOTE_NEEDS_FILE,     "M23",   "a remote import names a file in the repository: host/owner/repo[@ref]/path") \
+    X(ERR_IMPORT_ALIAS_INVALID,         "M4",    "'%S' is no identifier, so it cannot be this import's alias - write one: import Name \"...\"") \
+    X(ERR_IMPORT_ALIAS_CONFLICT,        "M5",    "another import of this module is already named '%S' - give one an alias of its own") \
+    X(ERR_UNKNOWN_IMPORT,               "M10",   "%n is no import here") \
+    X(ERR_IMPORT_IS_PRIVATE,            "M14",   "import %n is private to its module - only a capitalized alias is re-exported") \
+    X(ERR_REEXPORT_CYCLE,               "M17",   "re-exporting %n reaches this module again") \
+    X(ERR_IMPORT_REACHED_TWICE,         "M16",   "%n reaches a file another import of this module already reaches") \
+    X(ERR_NAME_CLASHES_WITH_IMPORT,     "M20",   "%n is an import's alias in this module - rename one of them") \
+    /* ---- names and declarations ---- */ \
+    X(ERR_UNKNOWN_TYPE,                 "",      "unknown type %n") \
+    X(ERR_UNKNOWN_TYPE_MEANT,           "",      "unknown type %n - did you mean '%S'?") \
+    X(ERR_UNKNOWN_NUMBER_TYPE,          "T4",    "unknown type %n - the numbers are named by kind and width: did you mean '%S'?") \
+    X(ERR_UNKNOWN_NAME,                 "",      "unknown name %n") \
+    X(ERR_UNKNOWN_NAME_MEANT,           "",      "unknown name %n - did you mean '%S'?") \
+    X(ERR_UNKNOWN_FUNCTION,             "",      "unknown function or type %n") \
+    X(ERR_UNKNOWN_FUNCTION_MEANT,       "",      "unknown function or type %n - did you mean '%S'?") \
+    X(ERR_UNKNOWN_ERROR_TYPE,           "R1",    "unknown error type %n") \
+    X(ERR_TYPE_IS_PRIVATE,              "M6",    "type %n is private to its module") \
+    X(ERR_TYPE_NAME_IN_USE,             "D2",    "type %n is already declared in this module") \
+    X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
+    X(ERR_NAME_IS_TYPE,                 "D2",    "%n is already a type's name in this module - choose another") \
+    X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
+    X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
+    X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
+    X(ERR_RETURN_SCOPE_NONE,            "O26",   "'&return' names the result scope, and this function has none") \
+    /* ---- types ---- */ \
+    X(ERR_CONSTRAINT_DISAGREES,         "G19",   "%n is constrained differently elsewhere in this declaration - one constraint per variable") \
+    X(ERR_CONSTRAINT_UNMET,             "G19",   "%t does not satisfy the constraint %S on %S") \
+    X(ERR_CONSTRAINT_UNMET_METHOD,      "G19",   "%t does not satisfy the constraint %S on %S: it has no method %S that fits") \
+    X(ERR_CONSTRAINT_UNMET_HASH,        "G19, E10b", "%t does not satisfy the constraint %S on %S: it has no Hash - declare 'Hash() I64', agreeing with '=='") \
+    X(ERR_UNBOUNDED_INSTANTIATION,      "G17",   "this generic's instantiations never end - each one requires a larger one") \
+    X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%S cannot hold itself by value - hold it through a reference ('&')") \
+    X(ERR_MISSING_TYPE_ARGS,            "G7",    "%n is generic - write its type arguments, as '%S<I32>'") \
+    X(ERR_TYPE_ARG_COUNT,               "G7",    "type arguments for %S: expected %d, found %d") \
+    X(ERR_TYPE_ARGS_ON_NON_GENERIC,     "G7",    "%S is not generic, so it takes no type arguments") \
+    X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
+    X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a",   "an array inside an array or a struct is held by reference - write %t&") \
+    X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
+    X(ERR_TYPE_VAR_WRITTEN_BARE,        "G8b",   "type variable %n is written in angle brackets everywhere: '<%S>'") \
+    X(ERR_TYPE_ARG_NAMED_SCOPE,         "G11",   "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") \
+    X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
+    X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
+    X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
+    X(ERR_TRAIT_NOT_A_TYPE,             "T30",   "%t is a trait - a constraint on a type variable, never the type of a value") \
+    X(ERR_ENUM_CASE_IN_USE,             "T17",   "enum case %n is already declared") \
+    X(ERR_DECLARED_TWICE,               "",      "%n is declared twice") \
+    X(ERR_TRAIT_METHOD_GENERIC,         "T35",   "trait method %n may not be generic in a type of its own") \
+    X(ERR_CTOR_FIELD_NO_VALUE,          "C4",    "field %n names no parameter of the constructor - give it a value, with '=' or ':='") \
+    X(ERR_ARRAY_PARAM_BY_VALUE,         "D9a",   "array parameter %n is passed by reference - write %t&") \
+    X(ERR_DEFAULT_NOT_TRAILING,         "D8a",   "%n has no default, but a parameter before it does - defaulted parameters come last") \
+    X(ERR_SCOPE_DECL,                   "O3",    "a scope has no name to declare - write a bare '&', or '&x' for where 'x' lives") \
+    X(ERR_TYPE_VAR_NAMES_TYPE,          "G1",    "type variable %n is named after a type - choose a name no type has, as '<T>'") \
+    X(ERR_TYPE_VAR_NOT_INFERABLE,       "G4",    "type variable <%S> appears in no parameter's type, so no call can infer it") \
+    X(ERR_EXTERN_TYPE,                  "X2",    "%t cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") \
+    X(ERR_MUT_ON_VALUE_TYPE,            "T25b",  "'mut' makes a reference writable, and %t is no reference") \
+    X(ERR_PRIM_CTOR_NOT_PRIMITIVE,      "T29d",  "only a type over a primitive has a constructor written this way - a struct writes 'struct(params) { ... }'") \
+    X(ERR_PRIM_CTOR_PARAM,              "T29d",  "this constructor takes one parameter, of type %t - the value it checks") \
+    X(ERR_TYPE_DEFINED_THROUGH_ITSELF,  "",      "%S is used while it is still being declared") \
+    X(ERR_ERROR_WORD_IN_USE,            "T19",   "error word %n is already declared") \
+    X(ERR_EXTENDS_NOT_BASE,             "T29f",  "only a type over a number or an array extends its base") \
+    X(ERR_GENERIC_NOT_STRUCT,           "G6",    "only a struct or a trait takes type parameters") \
+    X(ERR_DECLARED_OVER_AGGREGATE,      "T29",   "a type is declared over a number or an array, not over %t - hold it in a struct's field instead") \
+    /* ---- methods and operators ---- */ \
+    X(ERR_OPERATOR_ARITY,               "E31",   "%s's parameters besides its receiver: expected %d, found %d") \
+    X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
+    X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
+    X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \
+    X(ERR_TRY_FORM_MUST_FAIL,           "E31a",  "%s is a checked form, so it declares the errors it fails with") \
+    X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
+    X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
+    X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
+    X(ERR_STR_SHAPE,                    "E11c",  "Str takes no parameters and gives a String") \
+    X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s only reads - neither its receiver nor a parameter may be 'mut'") \
+    X(ERR_OPERATOR_BOTH_CASES,          "E31",   "this type declares %s twice, as %s and %s - one operator, one method") \
+    X(ERR_OVERRIDE_SIGNATURE,           "M19e",  "%S does not have the signature of the default it overrides - match it, or choose another name") \
+    X(ERR_DEFAULT_OUTSIDE_TRAIT,        "M19e",  "a default of trait %S is declared in that trait's module") \
+    X(ERR_METHOD_ON_FOREIGN_TYPE,       "M19",   "a method of %t is declared in that type's module") \
+    X(ERR_DEFAULT_SHADOWS_REQUIRED,     "M19e",  "trait %S already requires a method %S - choose another name for this default") \
+    X(ERR_METHOD_CLASHES_INHERITED,     "T29e",  "%t inherits a method %S from its base - choose another name") \
+    X(ERR_METHOD_CLASHES_SUPPLIED,      "E23, E33, P9", "the compiler supplies %S for %t - choose another name") \
+    X(ERR_METHOD_ON_BUILTIN_TYPE,       "M19d",  "only the prelude declares methods of %t - declare a type of your own over it: 'type T extends ...'") \
+    X(ERR_METHOD_IN_USE,                "M21",   "%t already has a method %S in this module") \
+    X(ERR_UNDERSCORE_DECLARED,          "D8c",   "'_' discards a value and names nothing, so it cannot be declared") \
+    X(ERR_SHADOWS_GLOBAL,               "D3a",   "%n is already declared in this module - a name means one thing in it") \
+    X(ERR_SHADOWS_BUILD_CONST,          "D3a",   "%n is a build constant - choose another name") \
+    X(ERR_SHADOWS_TYPE,                 "D3a",   "%n is a type's name - choose another") \
+    X(ERR_TYPE_HAS_NO_CONSTRUCTOR,      "",      "type %n has no constructor - an enum's values are its cases") \
+    X(ERR_METHOD_CALLED_AS_FUNCTION,    "M19",   "%n is a method - call it on its receiver: x.%S(...)") \
+    X(ERR_NOT_IN_MODULE,                "",      "%S declares no %n") \
+    X(ERR_VAR_IS_PRIVATE,               "M6",    "%n is private to its module") \
+    X(ERR_SHIFT_UNADAPTED,              "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type - convert the literal, as I64(1) << 40") \
+    /* ---- values fitting their targets ---- */ \
+    X(ERR_SCOPE_MAY_NOT_OUTLIVE,        "O10",   "this reference lives in a scope that may not outlive where it is put") \
+    X(ERR_OWN_CANNOT_OUTLIVE,           "O10d",  "this value lives in this function's own scope, which closes first") \
+    X(ERR_OWN_FROM_BARE_REF_PARAM,      "O10d",  "this value lives in this function's own scope, so it cannot satisfy anything longer-lived") \
+    X(ERR_ARRAY_SIZE_MISMATCH,          "C2e",   "this array's length differs from that of the fixed storage it is copied into") \
+    X(ERR_LITERAL_RANGE,                "T6",    "%n does not fit %t") \
+    X(ERR_ELEM_REF_SHAPE,               "T25a",  "expected %t, found %t - they differ in whether the elements are references") \
+    X(ERR_TYPE_MISMATCH,                "E12",   "expected %t, found %t") \
+    X(ERR_NUMBER_DOES_NOT_FLOW,         "T6b",   "%t does not flow into %t - convert it, as %t(x)") \
+    X(ERR_LITERAL_EXPR_RANGE,           "E4a",   "this literal expression's value does not fit %t") \
+    X(ERR_LITERAL_NEEDS_CTOR,           "T29d",  "a value of %t is made by its constructor - write %t(...)") \
+    X(ERR_READ_ONLY_TO_WRITABLE,        "T25c",  "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") \
+    X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and this one names none - write the type") \
+    X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
+    X(ERR_BUILD_INTO_UNKNOWN_SCOPE,     "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") \
+    X(ERR_BUILD_THROUGH_UNKNOWN_SCOPE,  "C2d",   "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") \
+    X(ERR_SCOPE_ARG_UNKNOWN,            "E25",   "%n is no local or parameter here - a scope argument names where the result is built") \
+    X(ERR_RETURN_TYPE_MISMATCH,         "D8",    "this function returns %t, found %t") \
+    /* ---- calls ---- */ \
+    X(ERR_ARG_COUNT,                    "E14",   "expected %d argument%s, found %d") \
+    X(ERR_ARG_COUNT_RANGE,              "E14",   "expected %d to %d arguments, found %d") \
+    X(ERR_SPREAD_COUNT,                 "D8d",   "these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'") \
+    X(ERR_SCOPE_ARG_NOT_ACCEPTED,       "E25",   "%S builds no result a scope argument could place") \
+    X(ERR_SCOPE_ARGS_DISAGREE,          "O25e",  "these arguments live in different scopes, and the signature requires one ('&p')") \
+    X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
+    X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
+    X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \
+    X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '<%S>&' - only a struct, an enum or an array can") \
+    X(ERR_TYPE_ARGS_NOT_INFERABLE,      "G9",    "the type arguments of %S cannot be inferred from these arguments") \
+    X(ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, "G10c",  "the type arguments of %S cannot be inferred from these arguments - write them: %S<...>(...)") \
+    X(ERR_DEFAULT_ARG_NO_DEFAULT,       "E14a",  "parameter %S declares no default, so 'default' cannot stand in for it") \
+    X(ERR_ATOMIC_NOT_PLACE,             "P9",    "an atomic operation acts on a place - a variable, a field or an element") \
+    X(ERR_ATOMIC_NOT_WRITABLE,          "P9",    "this atomic operation writes its place, which must be writable") \
+    X(ERR_CONVERSION_REPRESENTATION,    "T29",   "%t cannot become %t - their representations differ") \
+    X(ERR_CONVERT_NOT_NUMBER,           "E26",   "%t is no number, so %t(x) cannot convert it") \
+    /* ---- indexing and members ---- */ \
+    X(ERR_NOT_INDEXABLE,                "E16",   "%t cannot be indexed") \
+    X(ERR_INDEX_NOT_INT,                "E16",   "an index is an integer, found %t") \
+    X(ERR_INDEX_OUT_OF_RANGE,           "E16",   "index %l is outside the array's %l elements") \
+    X(ERR_NOT_SLICEABLE,                "E16a",  "%t cannot be sliced") \
+    X(ERR_SLICE_BOUND_NOT_INT,          "E16a",  "a slice's bounds are integers, found %t") \
+    X(ERR_NO_SUCH_MEMBER,               "",      "%t has no member '%S'") \
+    X(ERR_MEMBER_IS_PRIVATE,            "M6a",   "member '%S' of %t is private to its module") \
+    /* ---- operators and literals ---- */ \
+    X(ERR_NOT_ASSIGNABLE,               "S4",    "this cannot be written - a variable, an element or a member can") \
+    X(ERR_INCDEC_NOT_NUMBER,            "S3a",   "%n takes a number, found %t") \
+    X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
+    X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
+    X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
+    X(ERR_IMMUTABLE,                    "D9",    "%S is not 'mut', so it cannot be written") \
+    X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
+    X(NOTE_HERE,                        "",      "here") \
+    X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
+    X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
+    X(ERR_NEG_LITERAL_TOO_LARGE,        "L10",   "-%n is below I64's minimum") \
+    X(ERR_OPERAND_NOT_BOOL,             "E7",    "%n takes a Bool, found %t") \
+    X(ERR_OPERAND_NOT_INT,              "E8",    "%n takes an integer, found %t") \
+    X(ERR_OPERAND_NOT_NUMBER,           "E6",    "%n takes numbers, found %t") \
+    X(ERR_TUPLE_NOT_A_VALUE,            "D8c",   "several results are not one value - destructure them ('a, b := f()'), or pass them as all of a call's arguments") \
+    X(ERR_LITERAL_EXPR_NO_VALUE,        "E4a",   "this literal expression has no value - it overflows every type") \
+    X(ERR_LITERAL_DOES_NOT_MEET,        "E6d",   "this literal does not fit %t, and %t does not flow into %t - convert one") \
+    X(ERR_SHIFT_OUT_OF_RANGE,           "E8a",   "shifting %t by %l is outside its width of %l bits") \
+    X(ERR_DIVIDE_BY_ZERO,               "E6a",   "division by zero") \
+    X(ERR_NUMBERS_DO_NOT_MEET,          "T6b",   "%t and %t do not meet - neither flows into the other; convert one") \
+    X(ERR_OPERANDS_DIFFER,              "",      "%n takes operands of one type, found %t and %t") \
+    X(ERR_FLOAT_LITERAL_RANGE,          "L12b",  "%n is beyond F64's range") \
+    X(ERR_NO_SUCH_ERROR_WORD,           "T19",   "%t has no word %n") \
+    X(ERR_NO_SUCH_CASE,                 "T17",   "%t has no case %n") \
+    X(ERR_SCOPE_ARG_COUNT,              "E25",   "a call takes at most one scope argument") \
+    X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'try'") \
+    X(ERR_MATMUL_UNDECLARED,            "E31",   "'@' has no built-in meaning, and %t declares no MatMul") \
+    X(ERR_NOT_EXTENDED_OP,              "T29f",  "%t does not extend its base, so it takes no %n - declare its method %s, or declare it with 'extends'") \
+    X(ERR_COND_NOT_BOOL_TYPE,           "",      "a condition is a Bool, found %t") \
+    X(ERR_COND_BRANCH_TYPES,            "E28",   "both values of 'a if c else b' have one type, found %t and %t") \
+    X(ERR_MEMBERSHIP_NO_METHOD,         "E29",   "'x in c' calls %s, and %t has none") \
+    X(ERR_MEMBERSHIP_NOT_BOOL,          "E29",   "%s, which 'in' calls, gives a Bool") \
+    X(ERR_MEMBERSHIP_NEEDS_TRY,         "E29",   "%s can fail here - write 'try (x in c)'") \
+    X(ERR_INCDEC_IN_EXPRESSION,         "S3a",   "%n is a statement of its own, never part of an expression") \
+    X(ERR_NOT_CALLABLE,                 "E13b",  "%t is not a function, and declares no Call") \
+    X(ERR_UNHANDLED_FALLIBLE_CALL,      "E15",   "this call can fail - write 'try', and catch or pass on its errors") \
+    X(ERR_IS_NOT_REFERENCES,            "E10c",  "'a is b' asks whether two references name one instance, and %t and %t are not both references") \
+    X(ERR_IS_NOT_ONE_TYPE,              "E10c",  "%t and %t are different types, so they never name one instance") \
+    X(ERR_AS_NEEDS_CASE,                "E32",   "after 'is' or 'as' comes a case of %t, found %s") \
+    X(ERR_PATTERN_TYPE,                 "S13b",  "a pattern here names a case of %t, found %s") \
+    X(ERR_CASE_IS_PRIVATE,              "M6a",   "case %n is private to its module") \
+    X(ERR_IS_AS_MARKER,                 "E32",   "'&%S' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x %s T) & %S'") \
+    X(ERR_AS_NOTHING,                   "E32",   "case %S carries nothing for 'as' to give - ask with 'is'") \
+    X(ERR_IS_AS_NOT_ENUM,               "E32",   "'is' and 'as' ask which case an enum value is, and this is %t") \
+    X(ERR_TRY_INDEX_NEEDS_LEN,          "E31a",  "'try c[i]' checks against Len, and %t has neither TryAt nor Len") \
+    X(ERR_TRY_SLICE_NEEDS_LEN,          "E31a",  "'try c[lo:hi]' checks against Len, and %t has neither TrySlice nor Len") \
+    X(ERR_SLICE_NEEDS_LEN,              "E31",   "a slice with no end runs to Len(), and %t has none") \
+    X(ERR_AT_UNDECLARED,                "E31",   "%t declares SetAt but not At, which reading x[i] calls") \
+    X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
+    X(ERR_DEFAULT_ARG_NOT_ALLOWED,      "E14a",  "'default' stands only for a parameter's declared default, in a call") \
+    X(ERR_DEFER_ERROR_ESCAPES,          "S19b",  "an error may not leave deferred code - catch it here") \
+    X(ERR_TRY_NOWHERE_TO_GO,            "R13",   "an error tried here has nowhere to go - catch every one it can be") \
+    X(ERR_TRY_ERROR_NOT_DECLARED,       "R9",    "%t can escape here, and this function does not declare it - add it after '?', or catch it") \
+    X(ERR_UNKNOWN_METHOD,               "M19",   "%t has no method %n") \
+    X(ERR_METHOD_NOT_INHERITED,         "T29f",  "%t declares no %n, and does not extend its base, which has one - declare it with 'extends'") \
+    X(ERR_ATOMIC_NOT_INTEGER,           "P9",    "the atomic operations are methods of the integer types, and %t is none") \
+    X(ERR_FROM_BITS_RECEIVER,           "E33",   "%n is a method of the unsigned type of its float's width - convert first, as U64(x).F64FromBits()") \
+    /* ---- try and catch ---- */ \
+    X(ERR_DEFAULT_COUNT,                "R11",   "expected %d defaults, one per result, found %d") \
+    X(ERR_DEFAULT_HOLDS_REFERENCES,     "R11",   "a default for a value holding references is not supported yet") \
+    X(ERR_DEFAULT_SCOPE,                "R11, O25", "a reference default lives where the call's result does - or is null, or built there") \
+    X(ERR_CATCH_AFTER_CATCH_ALL,        "R11a",  "a catch with no error types takes every error left, so no clause can follow it") \
+    X(ERR_CATCH_UNREACHABLE,            "R11a",  "an earlier clause already takes every error this one names") \
+    X(ERR_DEFAULT_IN_STATEMENT,         "R11",   "a try written as a statement gives no value, so it takes no default") \
+    X(ERR_DEFAULT_DEAD,                 "R11",   "this clause's block always leaves, so its default is never the value - remove it") \
+    X(ERR_CATCH_MUST_LEAVE,             "R11",   "a clause here leaves, or gives the value with 'default v'") \
+    X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
+    X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
+    X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
+    /* ---- literals and constructions ---- */ \
+    X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - an array of arrays holds references: Array<I32>&[r0, r1]") \
+    X(ERR_ARRAY_OF_ERRORS,              "",      "%t has no values to put in an array") \
+    X(ERR_COMPREHENSION_REFERENCES,     "E27",   "a comprehension's elements may not be or hold references yet - build the array with a loop") \
+    X(ERR_NOT_AN_ENUM,                  "E22",   "%n is not an enum type, so it has no values 'T.Case'") \
+    X(ERR_TAKES_NO_ARGS,                "E14",   "%n takes no arguments") \
+    X(ERR_METHOD_AMBIGUOUS,             "M22",   "two imported modules declare %n for this type - import only the one meant") \
+    X(ERR_DEFAULT_AMBIGUOUS,            "M19e",  "two traits %t satisfies both declare a default %n - the call cannot choose") \
+    X(ERR_METHOD_IS_PRIVATE,            "M6",    "method %n is private to its module") \
+    X(ERR_GENERIC_NOT_A_VALUE,          "G12",   "generic function %n is not a value - call it") \
+    X(ERR_ARRAY_LENGTH_NOT_INT,         "E13a",  "an array's length is an integer, found %t") \
+    X(ERR_ASSIGN_LIST_COUNT,            "S4c",   "%d targets need as many values, found %d") \
+    X(ERR_DESTRUCT_NOT_NAME,            "D8c",   "':=' declares each target, so each is a name or '_' - use '=' to assign into places") \
+    X(ERR_DESTRUCT_ONE_VALUE,           "D8c",   "only several results can be destructured, and this is one %t") \
+    X(ERR_DESTRUCT_COUNT,               "D8c",   "%d targets for %d results - write '_' for one not wanted") \
+    /* ---- where stored references live ---- */ \
+    X(ERR_STORED_REF_OUTLIVED,          "O20",   "the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')") \
+    X(ERR_PAYLOAD_SCOPES_DISAGREE,      "T17c",  "this payload holds references into two scopes, and it lives in one - build what it holds in one scope") \
+    X(ERR_ELEM_NOT_IN_ARRAY_SCOPE,      "O25c",  "this element can be stored through, so it lives exactly where the array is put - build it there") \
+    X(ERR_ELEM_OUTLIVED,                "O25c",  "the array outlives what this element refers to - build the element where the array goes") \
+    X(ERR_PAYLOAD_OUTLIVED,             "T17c",  "this value's payload refers to storage the value would outlive - build it where that storage lives ('v E&x')") \
+    X(ERR_INSTANCE_OUTLIVES_REFERENT,   "C2d",   "this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')") \
+    X(ERR_INSTANCE_OUTLIVES_ARG,        "C2d",   "this instance holds a reference to an argument it would outlive - build it where the argument lives ('T&x(...)')") \
+    X(ERR_GLOBAL_HOLDS_SHORTER,         "O1b",   "a global holds only what lives as long as the program - store something built here, or another global's") \
+    X(ERR_VALUE_REFS_OUTLIVED,          "O25h",  "this value holds references into a scope the target outlives - build it where the target is") \
+    X(ERR_CONTAINER_SCOPE_UNBUILDABLE,  "O25a",  "this container's scope cannot be built into from here - write through the global itself") \
+    /* ---- statements ---- */ \
+    X(ERR_MUT_ON_LOCAL,                 "D11a",  "a local is always writable, so 'mut' says nothing here - remove it") \
+    X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'try c[i] = v' checks against Len, and %t has neither TrySetAt nor Len") \
+    X(ERR_NOT_A_STATEMENT,              "S3",    "this computes a value and discards it - only a call, '++' or '--' stands alone") \
+    X(ERR_CONDITION_CONSTANT,           "S8a",   "this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it") \
+    X(ERR_RANGE_NOT_INT,                "S9b",   "a range's bounds and step are integers, found %t") \
+    X(ERR_RANGE_STEP,                   "S9b",   "a range only counts upward, so its step is positive") \
+    X(ERR_COMPR_NEEDS_TRY,              "E27, S9e", "this comprehension's own calls can fail - write 'try T[e for x in c]'") \
+    X(ERR_FOR_IN_NEEDS_TRY,             "S9e",   "this loop's own calls can fail - write 'for x in try c', with catch clauses after the body") \
+    X(ERR_FOR_IN_TRY_NOTHING,           "S9e",   "nothing this loop calls by itself can fail - drop the 'try'") \
+    X(ERR_FOR_IN_CLAUSE_EXIT,           "S9e",   "a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag") \
+    X(ERR_FOR_IN_NAME_EXISTS,           "E29",   "%n is already declared, and a for-in declares its names - to loop while it is in c: 'for { if x not in c { break } }'") \
+    X(ERR_NOT_ITERABLE,                 "S9a",   "%t cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()") \
+    /* ---- match ---- */ \
+    X(ERR_ALT_BINDS_OTHER_NAMES,        "S13c",  "every alternative binds the same names - bind it in each, write '_', or split the case") \
+    X(ERR_BOUND_TWICE,                  "S13c",  "%n is bound twice in one alternative") \
+    X(ERR_ALT_BINDING_TYPE,             "S13c",  "%n is bound as %t by an earlier alternative - split the case") \
+    X(ERR_CASE_VALUE_TYPE,              "S13",   "a case value here is %t, found %t") \
+    X(ERR_PATTERN_ARITY,                "S13b",  "case %S holds %d fields, and a pattern names each - write '_' for one not wanted") \
+    X(ERR_ARROW_IN_STATEMENT,           "S12b",  "'=>' gives a value, which only a match used as a value takes - a statement's case runs a block") \
+    X(ERR_CASE_BLOCK_STAYS,             "S12b",  "this block can finish without leaving - give the value with '=> v'") \
+    X(ERR_GUARD_NOT_BOOL,               "S13e",  "a guard is a Bool, found %t") \
+    X(ERR_UNKNOWN_TYPE_VAR,             "",      "unknown type variable <%S>") \
+    X(ERR_TYPE_MATCH_GUARD,             "S13e",  "a type match chooses its case while compiling, so it takes no guard - test the value inside the case") \
+    X(ERR_TYPE_MATCH_UNCOVERED,         "G15",   "no case covers %t, which this generic is instantiated with - add one, or 'nomatch'") \
+    X(ERR_MATCH_VALUE_TYPES,            "S12b",  "every value of this match is %t, found %t") \
+    X(ERR_MATCH_NOT_EXHAUSTIVE,         "S13a",  "case %S of %t is not covered - add it, or 'nomatch { }'") \
+    X(ERR_MATCH_VALUE_NEEDS_NOMATCH,    "S12b",  "a match over %t gives a value only with 'nomatch => v'") \
+    /* ---- return and error ---- */ \
+    X(ERR_RETURN_BORROW_AS_BUILT,       "O14",   "this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'") \
+    X(ERR_RETURN_OWN_STORAGE,           "O26",   "this value refers to this function's own storage, which dies at the return - build it in '&return'") \
+    X(ERR_DEFER_RETURNS,                "S19b",  "deferred code may not return - it runs while its block is left") \
+    X(ERR_RETURN_COUNT,                 "D8c",   "this function returns %d value%s, found %d") \
+    X(ERR_RETURN_IN_CTOR,               "C2b",   "a constructor gives no value - its fields are the instance; fail with 'error'") \
+    X(ERR_RETURN_IN_TEST,               "S15",   "a test has nothing to return to - end it with 'done' or 'fail'") \
+    X(ERR_RETURN_VALUE_IN_VOID,         "D8",    "this function returns no value") \
+    X(ERR_RETURN_NEEDS_VALUE,           "D8",    "this function returns %t, so 'return' needs a value") \
+    X(ERR_ERROR_OUTSIDE_FUNCTION,       "R3",    "'error' fails a function, and this is not inside one") \
+    X(ERR_DEFAULT_ERROR_NAMED_SIG,      "R16",   "this function names its errors, so it fails with one of them: 'error T.WORD'") \
+    X(ERR_DEFAULT_ERROR_UNDECLARED,     "R16",   "this function declares no errors - add '?' to fail with the default error") \
+    X(ERR_ERROR_WORD_IS_PRIVATE,        "M6a",   "error word %n is private to its module") \
+    X(ERR_ERROR_UNDECLARED,             "R3",    "this function does not declare %n - add it after '?'") \
+    /* ---- join and spawn ---- */ \
+    X(ERR_JOIN_WITHOUT_SPAWN,           "P1a",   "this join spawns nothing, so it waits for nothing") \
+    X(ERR_SPAWN_LAMBDA_PARAMS,          "D16e",  "a spawned lambda takes no parameters - it captures what it needs") \
+    X(ERR_SPAWN_IN_DEFER,               "S19b, P1a", "a spawn in deferred code needs a join written in the deferred code") \
+    X(ERR_SPAWN_OUTSIDE_JOIN,           "P1",    "'spawn' is written inside a 'join' block, which waits for the task") \
+    X(ERR_SPAWN_NOT_CALL,               "P1",    "'spawn' takes a call") \
+    X(ERR_SPAWN_FALLIBLE,               "P4",    "a spawned function may not declare errors - they would have nowhere to go") \
+    X(ERR_SPAWN_ARG_TOO_SHORT,          "P2",    "this argument's storage closes before the join does - declare it at the join's level or wider") \
+    X(ERR_SPAWN_ARG_HOLDS_SHORT,        "P2",    "this argument refers to storage that closes before the join does - declare that at the join's level or wider") \
+    X(ERR_SPAWN_CAPTURE_TOO_SHORT,      "P2, D16e", "this lambda captures a variable declared inside the join, which closes while the task may run") \
+    X(ERR_SPAWN_FUNC_TOO_SHORT,         "P2, D16e", "this function value closes before the join does - make it outside, or spawn the lambda itself") \
+    X(ERR_SPAWN_RESULT_VOID,            "P1g",   "this call returns nothing to bind - drop the target") \
+    X(ERR_SPAWN_RESULT_TYPE,            "P1g",   "a spawn target has exactly the call's type %t, found %t - convert after the join") \
+    X(ERR_SPAWN_RESULT_TOO_SHORT,       "P1g",   "this target closes before the join does - declare it at the join's level or wider") \
+    X(ERR_SPAWN_RESULTS_DISAGREE,       "P1g",   "these targets live in different scopes, and the results are built in one") \
+    /* ---- lambdas ---- */ \
+    X(ERR_FUNC_VALUE_OBLIGATIONS,       "T22a",  "%S relates its arguments' scopes, which a call through a value cannot check - call it directly") \
+    X(ERR_CAPTURE_HOLDS_REFERENCES,     "D16c",  "a lambda copies what it captures, and a copy of this loses its references' scopes - capture a reference to it") \
+    X(ERR_LAMBDA_RESULT_UNINFERABLE,    "D16b",  "this value gives the lambda no result type - write one") \
+    X(ERR_LAMBDA_ARITY,                 "D16a",  "%t takes %d parameter%s, and this lambda %d") \
+    X(ERR_LAMBDA_SIGNATURE,             "D16a",  "this lambda's signature disagrees with %t - leave that part out, or make them agree") \
+    X(ERR_LAMBDA_PARAM_UNTYPED,         "D16a",  "lambda parameter %n has no type, and nothing gives it one - write it") \
+    X(ERR_ALREADY_DECLARED,             "",      "%n is already declared here") \
+    X(ERR_MISSING_RETURN,               "D10a",  "the end can be reached without returning %t - return on every path, or end it with 'unreachable'") \
+    X(ERR_BREAK_OUTSIDE_LOOP,           "S11",   "%n acts on the innermost loop, and there is none here") \
+    X(ERR_DEFER_LOOP_JUMP,              "S19b",  "%n may not leave deferred code - it runs while its block is left") \
+    X(ERR_CATCH_DEFAULT_NOT_PRODUCED,   "R18",   "the call does not fail with the default error") \
+    X(ERR_CATCH_NOT_PRODUCED,           "R14",   "the call does not fail with %t") \
+    X(ERR_TRY_CATCH_ON_SLICE,           "R10",   "a try statement discards its value, leaving a slice nothing - write 's := try a[lo:hi]' and catch where it is used") \
+    /* ---- decided while compiling ---- */ \
+    X(ERR_INLINE_SIZE_UNKNOWN,          "C2e",   "this field's length cannot be computed while compiling, so it cannot be stored inline - hold it as %t&") \
+    X(ERR_EMPTY_DESTRUCTOR,             "C7a",   "this destructor does nothing - remove it") \
+    X(ERR_LITERAL_CTOR_FAILS,           "T29d",  "this literal enters %t through its constructor, which does not run on it while compiling: %s") \
+    X(ERR_ZERO_VALUE_SHARED,            "D13c",  "%t's zero value holds references, which a fill would share - give a fill, or build the elements") \
+    X(ERR_NO_ZERO_VALUE,                "D13c",  "%t has no zero value, so this needs one - its constructor does not run on zeros while compiling: %s") \
+    X(ERR_DEFAULT_NOT_COMPUTABLE,       "D8a",   "a default is computed while compiling, and this one cannot be: %s") \
+    X(ERR_ASSERT_FALSE,                 "S18c",  "this assertion is false, evaluated while compiling") \
+    X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
+    /* ---- the program as a whole ---- */ \
+    X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \
+    X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
+    X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
+    X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
+    X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \
+    X(ERR_GLOBAL_READS_ITSELF,          "B5a",   "%S's initializer reads %S, which is not set until the initializer is done") \
+    X(ERR_GLOBALS_CYCLE,                "B5a",   "these globals' initializers read each other, so none can be set first: %s") \
+    X(ERR_MODULE_IDENTITY_CLASH,        "M22a",  "this module has the same identity as %S - rename one, or import it by a relative path")
 
-// ---- tokenizer ----
+enum diag {
+    DIAG_NONE, //no diagnostic - what a function that may find one returns when it found none
+#define DIAG_ENUM(id, rule, fmt) id,
+    DIAGNOSTICS(DIAG_ENUM)
+#undef DIAG_ENUM
+    DIAG_COUNT
+};
 
-#define NESTING_TOO_DEEP "this nests too deeply - more than 20000 levels of parentheses, blocks and operators applied one to another; split it, through locals or functions of its own"
-#define UNKNOWN_SYMBOL "unknown symbol - this character begins no token (L16); olang source is ASCII (L1)"
-#define CARRIAGE_RETURN "carriage return - save the file with LF line endings: only a newline ends a line (L3, L5)"
-#define NUL_BYTE "a NUL byte outside a string or character literal - is this a text file? (L1)"
-#define UNTERMINATED_STRING_LITERAL "this string literal is never closed - the file ends first (L14)"
-#define UNTERMINATED_CHAR_LITERAL "this character literal is never closed - the file ends first (L13)"
-#define INVALID_ESCAPE_CHAR "invalid escape character"
-#define NEWLINE_BEFORE_CLOSING_OF_CHAR_LITERAL "newline before closing of character literal"
-#define NEWLINE_IN_STRING_LITERAL "a string literal closes on its own line - write \\n for a newline in the text (L14)"
-#define UNTERMINATED_BLOCK_COMMENT "a block comment opened with ## is never closed - another ## ends it (L4a)"
-#define EMPTY_CHAR_LITERAL "empty character literal"
-#define EXPECTED_CLOSING_CHAR_LITERAL "expected closing of character literal"
-#define BIN_LITERAL_NO_DIGITS "a binary literal needs at least one digit after '0b'"
-#define NUMBER_SEPARATOR_PLACEMENT "a '_' in a numeric literal must be followed by another digit - so it may not end the literal, and may not sit beside the '.' or the exponent's 'e'"
-#define RADIX_LITERAL_BAD_DIGIT "this character is not a digit of the literal's own base - a '0b' literal takes only 0 and 1, and a '0x' literal only 0-9, a-f and A-F"
-#define HEX_LITERAL_NO_DIGITS "a hexadecimal literal needs at least one digit after '0x'"
-#define MULTIPLE_DECIMAL_POINTS "multiple decimal points"
-#define LAST_WAS_DECIMAL_POINT "float literals must not end in a decimal point"
-
-// ---- names, visibility, declarations ----
-
-#define TYPE_NAME_IN_USE "type name already in use"
-#define INTERFACE_METHOD_IS_GENERIC "a trait method's signature may not be generic in a type of its own - a type satisfies a trait with one method per name, and a generic signature names a family of them (T35)"
-#define UNKNOWN_METHOD "this is written as a method call, but the value on the left has no method of this name - its type declares none, and no trait it satisfies has a default of this name (M19, M19e)"
-#define DUPLICATE_METHOD_FOR_TYPE "this module already declares a method of this name for this same type. Several functions may share a name only when each is a method of a DIFFERENT type - that is what lets two types in one module satisfy the same trait - so one name per type is the limit"
-#define NAME_CLASHES_WITH_IMPORT "this name is already an import alias in this module, and an alias's name is reserved - otherwise the left of a dot could mean either the import or this, and the tiebreak would be silent. Rename this, or give the import an explicit alias"
-#define VAR_NAME_IN_USE "variable name already in use"
-#define MATCH_NOT_EXHAUSTIVE "this match over an enum type does not cover every case. An enum declares a closed set, so the compiler can tell you which places must change when you add one - add the missing case(s), or write 'nomatch { }' to say the rest are deliberately ignored. A case with a guard, or with a value or another case inside its payload, may let a value through, so it covers nothing (S13a)"
-#define RETURNED_VALUE_BOUND_TO_OWN "this value holds a reference to storage of this function's own, bound where the value was built, so returning it hands back storage that dies at the return. Build what it points at where the result lives ('&return', O26), or take it as a parameter, whose scope outlives this call"
-#define INDEX_OUT_OF_RANGE "this index is outside the array's bounds, and both the index and the length are known here - so this is a compile-time error rather than a program that aborts when it reaches this line"
-#define NESTED_SLOT_OUTLIVES_VALUE "this stores a reference to storage that does not live as long as the container it is stored into - reading the container afterwards would follow a reference into a closed scope. Build the value where the container lives ('x T&c = ...', or 'f&c(...)'), so the lifetimes match (O20)"
-#define BARE_REF_PARAM_CONTAINER_WRITE "this writes into a container reached through a local that took a scope this function cannot build into - a global's referent, say, which lives in the program's scope (O25a). Write it through the global itself, where what is stored is built in the program's scope (O1b)"
-#define OWN_FROM_BARE_REF_PARAM "this value cannot satisfy anything longer-lived than this call: it lives in this function's own scope (O10d)"
-#define CHOICE_PATTERN_ARITY "a case pattern must name every field of the case's payload, in declaration order - write '_' for a field you do not want, or leave the parentheses out to match the case whatever its payload holds (S13b)"
-#define PATTERN_TYPE_MISMATCH "a case pattern names a case of the enum the value it is matched against holds, and this is not that enum (S13b)"
-#define CASE_ALT_BINDINGS "every alternative of a case binds the same names (S13c) - the block reads them whichever alternative matched; bind the name in every alternative, write '_' where it binds nothing, or split the case in two"
-#define CASE_ALT_BINDING_TYPE "this name is bound with another type by an earlier alternative of the case (S13c) - the block reads one local whichever alternative matched; split the case in two"
-#define CASE_GUARD_NOT_BOOL "a case's guard, after 'if', is a Bool - the case is taken only when its pattern matches and the guard is true (S13e)"
-#define MATCH_ARROW_IN_STATEMENT "'=>' gives a case its value, which only a match used as a value has (S12b) - a match statement's case runs a block: 'case P { ... }'"
-#define MATCH_VALUE_BLOCK_STAYS "in a match used as a value a case gives its value with '=> v', or runs a block that leaves - return, error, break, continue, done, fail, abort or unreachable (S12b); this block can finish without giving one"
-#define MATCH_VALUE_NEEDS_NOMATCH "a match used as a value must give one whatever the matched value is (S12b) - only an enum's cases can be known to be covered, so add 'nomatch => v'"
-#define MATCH_VALUE_TYPES "every value of a match used as a value has one type (S12b) - a literal, written text or null adapts to the others', as in 'a if c else b'"
-#define TYPE_MATCH_GUARD "a type match chooses its case while compiling, so it takes no guard (S13e) - test the value inside the case with an ordinary 'if'"
-#define CHOICE_CASE_ALREADY_IN_USE "enum case already in use"
-#define ERROR_WORD_ALREADY_IN_USE "error word already in use"
-#define UNKNOWN_ERROR "unknown error"
-#define UNKNOWN_VAR "unknown variable"
-#define UNKNOWN_SCOPE "a reference marker names a variable that lives where the reference should (O4a) - an earlier parameter, any parameter from the result type, a local, parameter or global in scope, or a constructor's parameter or earlier field - and no such variable is visible here. A scope has no name of its own"
-#define SCOPE_NOT_ALLOWED_HERE "'scope' may only be used as a function parameter's type"
-#define UNKNOWN_NAMESPACE "unknown namespace"
-#define UNKNOWN_STRUCT_MEMBER "unknown struct member"
-#define TYPE_IS_PRIVATE "this type is private - only a capitalized name is visible outside its own module"
-#define MEMBER_IS_PRIVATE "this struct member is private - only a capitalized name is visible outside the module its type was declared in (M6a)"
-#define CHOICE_CASE_IS_PRIVATE "this enum case is private - only a capitalized name is visible outside the module its enum type was declared in (M6a)"
-#define ERROR_WORD_IS_PRIVATE "this error word is private - only a capitalized name is visible outside the module its error type was declared in (M6a)"
-#define METHOD_SHADOWS_FIELD "this type already has a field of this name, so 'x.f' would mean two things - a method may not share a name with a field of the type it is declared on"
-#define METHOD_IS_PRIVATE "this method is private - only a capitalized method is callable outside the module that declared it (M6)"
-#define VAR_IS_PRIVATE "this variable is private - only a capitalized name is visible outside its own module"
-#define IMPORT_IS_PRIVATE "this import is private - only a capitalized alias is visible through re-export (e.g. 'import Sh \"shared\"', not 'import sh \"shared\"')"
-#define INVALID_IMPLICIT_IMPORT_ALIAS "this file's name isn't a valid identifier, so it can't be used as an implicit import alias ('import \"path\"' derives its alias from the file name) - give this import an explicit alias instead"
-#define CYCLIC_IMPORT_REEXPORT "this import is reachable from itself through a chain of re-exports (a module publicly importing something that eventually publicly imports it back)"
-#define DUPLICATE_IMPORT_REACHABILITY "this file is already reachable through another one of this module's own imports (directly, or via re-export) - the same file may only be reachable one way"
-#define STRUCT_NOT_YET_DEFINED "this struct has not yet been defined"
-#define NOMINAL_CONVERT_MISMATCH "a conversion between a declared type and another type is only possible when they have the same underlying representation (T29)"
-#define METHOD_CALLED_AS_FUNCTION "this is a method - it is called on its receiver, as 'x.Name(...)', never as a plain function (M19)"
-#define METHOD_ON_FOREIGN_TYPE "a method on a declared type must be declared in that type's own module (M19)"
-#define METHOD_SHADOWS_INTERFACE_METHOD "the trait this default is declared for already requires a method of this name, so 'x.Name(...)' would mean the type's own method and the default at once - choose another name (M19e)"
-#define REFERENCE_NARROWED "a reference never narrows: its scope is where its referent was allocated, and this would give it a different one - a write through it would then allocate into the wrong scope. Keep the scopes the same - name where the value lives ('x T&y', 'x T&return'), or declare the local with ':=', which takes its initializer's scope (O25)"
-#define MUT_ON_LOCAL "a local variable is always mutable, so 'mut' on one says nothing - remove it. 'mut' is written on globals, parameters and fields, where it decides whether they can be written (D11a)"
-#define FOR_IN_NOT_ITERABLE "'for ... in' walks an array, a range, an Iterator<T> - a type with 'mut Next() T ? Exhausted', declared on a mutable receiver: Next gives a value, and fails with Exhausted once there are no more (S9a) - or an iterable, whose 'Iter()' returns one (S9c)"
-#define RANGE_NEEDS_INTEGERS "a range's end, start and step are integers (S9b)"
-#define RANGE_ZERO_STEP "a range's step must be positive - a range only counts upward (S9b)"
-#define BUILTIN_TYPE_REDECLARED "this name belongs to a built-in type visible in every module ('I32', 'Bool', 'Array', 'Iterator') - choose another (D3a)"
-#define IMPORT_HAS_EXTENSION "an import names a file without its '.olang' extension - write 'import \"geom/rect\"', not 'import \"geom/rect.olang\"' (M23)"
-#define IMPORT_LEAVES_ROOT "a relative import inside the standard library or a remote repository stays within it - name a module outside it by its own path ('std/...' or 'host/owner/repo/...') (M23)"
-#define IMPORT_REMOTE_NEEDS_FILE "a remote import names a file within the repository: 'host/owner/repo[@ref]/path' (M23)"
-#define IMPORT_LOCKED_FETCH_FAILED "could not fetch the commit olang.lock names for this repository - it may no longer exist on the remote. Check the connection, or delete its line in olang.lock or build with -u, to build from the ref's current commit instead (M23b, M23c)"
-#define IMPORT_REMOTE_BAD_NAME "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-', and none may begin with '.' or '-' or hold '..' - they are handed to git and name cache directories (M23a)"
-#define IMPORT_LOCK_NOT_A_COMMIT "olang.lock's line for this repository names no commit - a commit is 40 hexadecimal digits. Delete the line, or build with -u, to lock the ref's current commit (M23b)"
-#define IMPORT_FETCH_FAILED "could not fetch this remote repository with git - check the path and your connection; once fetched it is kept in the cache (OLANG_CACHE) and needs no network again (M23a)"
-#define IMPORT_FILE_NOT_FOUND "no .olang file at this path - a relative path is resolved from the importing module's own directory, 'std/...' from the standard library (M23)"
-#define IMPORT_ALIAS_CONFLICT "this alias is already used by another import in this module - give one of them an explicit alias (M5)"
-#define TUPLE_NOT_A_VALUE "this call returns several values, which are not one value - receive them by destructuring ('a, b := f()'), pass them as ALL of a call's arguments ('f(g())'), or ignore the call's results by calling it as a statement (D8c/D8d). To keep two values together as one, use Pair"
-#define SPREAD_COUNT_MISMATCH "the values this call returns are passed as the arguments, so there must be as many of them as the called function takes (D8d) - destructure them first ('a, b := g()') to pass some, or others beside them"
-#define UNDERSCORE_NOT_A_NAME "'_' discards a value and names nothing, so it cannot be declared (D8c)"
-#define RETURN_COUNT_MISMATCH "this function returns a different number of values - 'return' gives exactly one value per result in its signature (D8c)"
-#define DESTRUCT_NEEDS_RESULTS "only a call returning several values, or an enum case's several fields taken with 'as', can be destructured - one value is received by an ordinary declaration or assignment (D8c)"
-#define DESTRUCT_COUNT_MISMATCH "the number of targets must be the number of values the call returns - write '_' for a value you do not want (D8c)"
-#define DESTRUCT_DECLARES_NAMES "':=' declares each target, so each must be a plain name or '_' - use '=' to assign into existing places (D8c)"
-#define TYPE_VAR_NAMES_TYPE "a type variable may not be named after a type - it would read as parameterizing over a type that is already concrete. Name the variable something no type is called, as '<T>' (G1)"
-#define TYPE_VAR_WRITTEN_BARE "a type variable is written with its angle brackets everywhere, type arguments included: 'Cell<<T>>', not 'Cell<T>' - a bare name is always a declared type (G8b)"
-#define TRY_DEFAULT_NO_VALUE "this call returns no value, so there is nothing for a default to stand in for - handle its errors with a try ... catch statement instead (R9a)"
-#define TRY_DEFAULT_COUNT "a clause's defaults must be one per result the call returns - several are written only where the try is the whole value being destructured or returned (R9a)"
-#define TRY_DEFAULT_SCOPE "a reference default must live in exactly the scope the call's result does, as any reference put in the same variable would (O25) - or be null, or a new value built there (R9a)"
-#define TRY_DEFAULT_HOLDS_REFERENCES "a default for a by-value result that holds references is not supported yet - its scope bindings would all have to agree (R9a)"
-#define CATCH_VALUE_MUST_LEAVE "in value position a catch clause must provably leave - return, error, done, fail, abort, unreachable, break or continue - or give the value with a default of its own (R9b)"
-#define TRY_DEFAULT_DEAD "this clause's block always leaves, so its default could never be the value - remove the default (R9b)"
-#define TRY_DEFAULT_NEEDS_CATCH "a default belongs to a catch clause - write \"catch default ...\" to give a value for every error, or \"catch E default ...\" for some (R9b)"
-#define DEFAULT_IN_CATCH_STATEMENT "a default gives the try a value, and a try written as a statement has nowhere for a value to go (R9b)"
-#define CATCH_AFTER_CATCH_ALL "a catch with no error types takes every error left, so no clause can come after it (R9b)"
-#define CATCH_CLAUSE_UNREACHABLE "every error this clause names is already taken by an earlier clause, so it can never run (R9b)"
-#define BUILD_COND_NAME "a top-level condition decides which declarations exist, so it may use only literals, build constants (-D names, TargetOs, TargetArch, DebugBuild, RaceBuild, TestBuild) and immutable globals this module declares outside any conditional (B9a)"
-#define BUILD_COND_MUTABLE "a mutable global has no value a build can decide on, so a top-level condition cannot use it (B9a)"
-#define BUILD_COND_GLOBAL_INIT "a global a top-level condition uses must itself be computed from literals, build constants and such globals - a call cannot be evaluated before the module's declarations are settled (B9a)"
-#define BUILD_COND_CYCLE "these globals are defined in terms of each other, so a top-level condition cannot evaluate them (B9a)"
-#define BUILD_COND_TYPES "these values cannot be combined this way in a top-level condition (B9)"
-#define BUILD_COND_NO_MEET "these numbers' types do not meet (T6b): an integer of a type of its own never meets a float, and two integers meet only where one's type flows into the other's - convert one, as in F64(x) or I64(n)"
-#define BUILD_COND_NOT_BOOL "a top-level condition must be true or false (B9)"
-#define BUILD_COND_SHAPE "a top-level condition supports literals, build constants, parentheses, unary -, * / % + -, the comparisons, not, and, or - and whatever compile-time evaluation can decide (B9, B9c)"
-#define BUILD_CONST_REDECLARED "this name is a build constant (-D or built in), visible in every module, so it cannot be declared again (B10)"
-#define BUILD_COND_UNSEEN "this top-level condition uses something that does not exist outside the branches being decided, or does not check - a condition may use only declarations that exist whatever it decides (B9c)"
-#define BUILD_COND_TOO_DEEP "top-level conditions decide branches holding further conditions too many levels deep (B9c)"
-#define IF_CONDITION_CONSTANT "this condition is the same on every build, so one of its branches is dead code - a condition fixed before the program runs must depend on a build constant (-D, or TargetOs and the others) to decide anything (S8a)"
-#define LOCAL_SHADOWS_GLOBAL "this module already declares this name at its top level, and a name means one thing throughout a module - choose another (D3a)"
-#define LOCAL_SHADOWS_TYPE "this name is a type's, visible here, and a name means one thing - choose another, so that 'x is Name' always reads Name as the type (D3a)"
-#define VAR_NAME_IS_TYPE "this module already declares a type of this name, and a name means one thing in a module - a type and a function or global may not share one (D2)"
-#define LOCAL_SHADOWS_BUILD_CONST "this name is a build constant (-D, or one the compiler defines), visible everywhere - choose another (D3a)"
-#define ASSERT_FALSE_AT_COMPILE_TIME "this assertion can be evaluated at compile time, and it is false (S18c)"
-#define METHOD_FROM_TWO_INTERFACES "this type satisfies two traits that each declare a default of this name - the call cannot choose; drop one of the imports here, or rename one of the defaults (M19e)"
-#define METHOD_AMBIGUOUS "two imported modules each declare a method of this name on this built-in type - import only the one you mean here, or call it from a module that imports only that one (M22)"
-#define DESTRUCT_TYPE_MUST_BE_REFERENCE "this type declares a 'destruct' block, so it is reference-only - write it with a reference marker ('&' or '&x'). A destructor releases something when the scope holding the instance closes, and only a reference carries the scope tag that lets that lifetime be checked; a by-value copy carries none, so it could still name the released resource afterwards with nothing able to see it"
-#define NAMED_SCOPE_ON_ELEMENT "only the outermost level of a type may name a variable in its marker - this marker sits nested inside a larger value, and a nested reference always belongs to its container's own scope, never an independent one, so it could never be honoured; write a bare '&' here"
-#define TYPE_VAR_SHADOWS_TYPE "a type variable may not be named after a type that already exists - '<Point>' would read as parameterizing over something already concrete"
-#define TYPE_VAR_NOT_INFERABLE "this type variable appears only in the return type or the error list, so nothing at a call site could determine it - use it in at least one parameter's type"
-#define TYPE_VAR_IN_ERROR_LIST "a generic function's error set is the same for every instantiation, so it may not mention a type variable"
-#define UNKNOWN_TYPE_VAR "unknown type variable - a generic type's parameters are declared in its own '<...>' list, after the type name"
-#define TYPE_ARGS_ON_NON_GENERIC "this type is not generic, so it takes no type arguments"
-#define CTOR_TYPE_ARGS_NOT_INFERABLE "this generic type's arguments can't be inferred from the constructor's arguments - a type parameter no constructor parameter mentions, or two arguments for one parameter that disagree. Write them: 'Name<I32>(...)' (G10a/G10c)"
-#define MISSING_TYPE_ARGS "this type is generic and must be instantiated with a type argument list, e.g. 'Vec<I32>'"
-#define WRONG_TYPE_ARG_COUNT "wrong number of type arguments for this generic type"
-#define TYPE_ARG_HAS_REFERENCE_MARKER "a type argument may be a reference only with a bare marker ('List<String&>') - its references live in the container's scope; a scope name here would belong to this function, inside generic code that cannot see it (G11)"
-#define GENERIC_NOT_A_VALUE "an uninstantiated generic function is not a value - it can be called, but there is no single function to point at until its type arguments are known"
-#define UNBOUNDED_INSTANTIATION "this generic's instantiation requires an ever-growing set of further instantiations, so monomorphization would never terminate"
-#define TYPE_MATCH_NOT_EXHAUSTIVE "no 'case' of this 'match' covers the type this generic was instantiated with, and there is no 'nomatch' clause - unlike a match over a value, a match over a type must cover every instantiation, or the generic would silently do nothing for some of them"
-#define TYPE_HOLDS_ITSELF "a type cannot hold itself by value - it would be infinitely large. Hold it through a reference: a struct field 'next Node&', an enum payload 'Add(a Expr&, b Expr&)', an array 'Array<Node&>' (T16)"
-#define INVALID_REFERENCE_TARGET "only a struct, enum or array type can be marked as a reference with '&' - primitives are always by value"
-
-// ---- types and values ----
-
-#define NOT_CALLABLE "this is not a function"
-#define NOT_AN_ARRAY "operand is not an array"
-#define TRY_CATCH_ON_SLICE "a 'try ... catch' STATEMENT discards the value it guarded, which leaves a slice with nothing but its bounds check - you would have to write the slice again to use it. Bind and propagate instead ('s := try a[lo:hi]'), and catch at the call site, where the value and its handling can meet"
-#define SPAWN_OUTSIDE_JOIN "'spawn' is only valid inside a 'join' block (P1) - the join is what waits for the task, and binding is lexical, so a join in some caller does not count. Without one there would be nothing to wait for this task, and no point at which its arguments are known to still exist"
-#define JOIN_WITHOUT_SPAWN "this 'join' block spawns nothing, so it waits for nothing - a join exists to bound the tasks started inside it"
-#define SPAWN_ARG_TOO_SHORT "this argument does not outlive the enclosing 'join' block, so the task could still be running when its storage is reclaimed. It is declared inside a nested block that closes first; declare it at the join block's own level or wider"
-#define SPAWN_REQUIRES_CALL "the operand of 'spawn' must be a call - that is what a task is. There are no closures, so an argument list is the only way to state what a task may touch"
-#define ATOMIC_NOT_INTEGER "the atomic operations are methods of the integer types only ('I8' to 'I64', 'U8' to 'U64'): atomicity is a property of one machine word, so there is nothing it could mean for an aggregate, a reference or a float (P9)"
-#define OPERATOR_ARITY "a method named for an operator takes that operator's operands besides its receiver: one for Plus, Minus, Mul, Div, Rem, MatMul, Less, Eq, At and the bitwise ones, two for SetAt and Slice, none for Neg, BitNot, Inc, Dec, Len and Str - and the same for each one's Try form (E31)"
-#define AT_UNDECLARED "this type declares SetAt, so 'x[i] = v' stores, but not At, which reading 'x[i]' calls (E31)"
-#define SETAT_UNDECLARED "this type declares At, so 'x[i]' reads, but not SetAt, which 'x[i] = v' calls (E31)"
-#define IS_NOT_ONE_TYPE "'a is b' asks whether two references name one instance, and references of two different types never do - both sides must be of one type (E10c)"
-#define IS_NOT_REFERENCE "'a is b' asks whether two references (or two function values) name one instance - both sides must be one of those, of one type, and '==' compares values (E10c). After 'is', a type or a case of one ('x is Shape.Circle') asks which case an enum value holds (E32)"
-#define EQ_SHAPE "Eq, which '==' calls, takes one parameter of its receiver's own type (T or T&) and gives a Bool (E10a)"
-#define STR_SHAPE "Str, which '$' calls, takes no parameters and gives a String (E11c)"
-#define EQ_STR_WRITES "Eq and Str only read: neither the receiver nor a parameter may be 'mut' (E10a, E11c)"
-#define LEN_SHAPE "Len, which slicing and for-in call, gives an I64 (E31)"
-#define ONLY_TRY_VARIANT "this type has only the checked form of this operation (its Try method) - write it under 'try', as 'try c[i]' (E31)"
-#define TRY_INDEX_NEEDS_LEN "'try c[i]' calls TryAt, or checks the position against Len() before calling At - this type has At but neither TryAt nor Len (E31)"
-#define TRY_SLICE_NEEDS_LEN "'try c[lo:hi]' calls TrySlice, or checks the bounds against Len() before calling Slice - this type has Slice but neither TrySlice nor Len (E31)"
-#define TRY_SETAT_NEEDS_LEN "'try c[i] = v' calls TrySetAt, or checks the position against Len() before calling SetAt - this type has SetAt but neither TrySetAt nor Len (E31)"
-#define FOR_IN_NEEDS_TRY "this loop calls something that can fail by itself - its source, Iter(), Next() or TryAt() - so it is written 'for x in try c', with catch clauses after the body if the errors are handled here (S9e)"
-#define FOR_IN_TRY_NOTHING "'try' here covers what the loop calls by itself, and nothing this loop calls can fail - drop the 'try' (S9e)"
-#define FOR_IN_CLAUSE_LOOP_EXIT "a loop's catch clause runs once the loop has ended, so 'break' and 'continue' there have no loop of this one's to act on - set a flag and test it after the loop (S9e)"
-#define COMPR_NEEDS_TRY "this comprehension walks something whose own calls can fail - its source, Iter(), Next() or TryAt() - so it is written under 'try', as 'try T[e for x in c]' (E27, S9e)"
-#define MEMBERSHIP_NEEDS_TRY "'x in c' calls Has or Contains, and this one can fail - write it under 'try', as 'try (x in c)' (E29)"
-#define IS_AS_OPERAND "'is' and 'as' ask which case an enum value is - this is not an enum value (E32)"
-#define AS_NOTHING "this case carries nothing, so there is nothing for 'as' to give - ask with 'is' (E32)"
-#define AS_ENUM_CASE "after 'is' or 'as' on an enum value comes one of its cases, as 'Shape.Circle' (E32)"
-#define TRY_OPERATOR_MUST_FAIL "a Try method is the checked form of an operation - it declares the errors it can fail with (E31)"
-#define SLICE_NEEDS_LEN "a slice with its end left out is 'x[lo:x.Len()]', and this type has no Len (E31)"
-#define OPERATOR_SETAT_RESULT "SetAt, which 'x[i] = v' calls, gives no result (E31)"
-#define OPERATOR_BOTH_CASES "this type declares this operator twice, by its public and its private name - one operator, one method (E31)"
-#define OPERATOR_RESULT "a method named for an operator gives one result (E31)"
-#define OPERATOR_FALLIBLE "a method named for an operator cannot declare errors - the checked form is a method of its own, named with 'Try' (TryAt, TryDiv, ...), which 'try' calls; only Call may fail (E31)"
-#define OPERATOR_LT_BOOL "Less, which '<' calls, gives a Bool - it is the ordering '>', '<=' and '>=' are derived from (E31)"
-#define OPERATOR_AT_UNDECLARED "'@' has no built-in meaning - the left operand's type declares it as the method MatMul (E31)"
-#define CONSTRAINT_NOT_INTERFACE "a constraint on a type variable is a trait the variable's type must satisfy (G19)"
-#define CONSTRAINT_DISAGREES "this type variable is constrained differently elsewhere in the declaration - one constraint per variable (G19)"
-#define INCDEC_IN_EXPRESSION "'++' and '--' are statements of their own, never part of an expression - write 'x++' on its own and use x after it (S3a)"
-#define SEPARATOR_COMMA "these entries are separated by line ends, one per line - not by commas (T17/T19/C2)"
-#define VAR_LIST_COUNT "a declaration of several names takes one value per name, or none (D12b)"
-#define ASSIGN_LIST_COUNT "an assignment of several targets takes one value per target, or one call giving that many results (S4c)"
-#define COND_BRANCH_TYPES "the two values of 'a if c else b' must have the same type - a literal adapts to the other, nothing else is converted (E28)"
-#define MEMBERSHIP_NO_METHOD "'x in c' calls c.Has(x), or c.Contains(x) when x is the collection's own type - this collection has no such method (E29)"
-#define FOR_IN_NAME_EXISTS "a for-in loop declares its names, and this one is already declared. 'for x in c' is always a loop over c - to loop while x is in c, write 'for { if x not in c { break } ... }' (E29)"
-#define COMPREHENSION_REFERENCE_ELEMENT "a comprehension's elements may not be or hold references yet - build the array with a loop (E27)"
-#define ATOMIC_NOT_PLACE "an atomic operation acts on one storage location, so it is called on a place - a variable, a field or an array element - and not on a computed value (P9)"
-#define ATOMIC_NOT_MUTABLE "this atomic operation writes the place it is called on, so the place must be writable - only AtomicLoad reads a read-only one (P9)"
-#define SPAWN_RESULT_VOID "'spawn TARGET = CALL' binds what the call returns, but this call returns nothing. Drop the target and write the spawn as a plain statement"
-#define SPAWN_RESULT_TYPE "the target of 'spawn TARGET = CALL' must have exactly the call's return type. The store happens on the task's own thread once the call returns, so there is no point at which a conversion could be applied - declare the target with the returned type and convert after the join"
-#define SPAWN_RESULT_TOO_SHORT "this target does not outlive the enclosing 'join' block, so the task could still be writing its result when the storage is reclaimed. It is declared inside a nested block that closes first; declare it at the join block's own level or wider"
-#define SPAWN_CALLEE_FALLIBLE "a spawned function may not declare errors - an error raised on another thread has nowhere to propagate to, since the spawning statement has already moved on and the join carries no value"
-#define SLICE_REQUIRES_ARRAY "only an array can be sliced with '[lo:hi]'"
-#define NOT_AN_LVALUE "must be a variable, index, or member"
-#define VAR_IMMUTABLE "variable is immutable"
-#define WRITE_INTO_CALL_VALUE "this writes into a value a call gave back - a copy no one else holds, so the write would be lost. For x[i] on a type whose At gives a value (a List's does), store the whole element: x[i] = v; or give At a writable borrowed result, At(i I64) mut T&x (E31)"
-#define WRONG_ARG_COUNT "wrong number of arguments"
-#define ELEM_REF_SHAPE_MISMATCH "these two array types have the same length and the same element type, but disagree on whether the ELEMENTS are references ('&'). An array of references holds one pointer per element; an array of values holds the elements themselves, laid out inline - different sizes and different layouts. A value is promoted to a reference only at the outermost level, never element by element, so one can never stand in for the other"
-#define INVALID_ARRAY_LITERAL_TYPE "only an array type can be constructed with a [ ] literal"
-#define EXPR_NOT_A_STATEMENT "this expression computes a value and then discards it, which is never a \
-statement - only a call and the '++'/'--' forms are. A bare name declares nothing (a declaration is \
-'name Type = expr' or 'name := expr'), and '==' compares rather than assigns"
-#define DOUBLE_REFERENCE_MARKER "a type with no array suffix has only one reference position, so it \
-takes at most one '&' - the two marker positions (before and after the array suffixes) are the same \
-place here, and writing both would leave one of the two scope tags meaning nothing"
-#define ARRAY_PARAM_NOT_REFERENCE "an array parameter must be a reference - write '&' after the array \
-(e.g. 'Array<U8>&'). Without it the array is copied at every call, in time proportional to its \
-length, and a 'mut' one would be written where the caller can never see it"
-#define MODULE_NAME_COLLISION "another module in this program has the same identity - a module's symbols are \
-named from it (§10 B3b), so two modules sharing one would define the same symbols. Only a module named by its file \
-name alone has such an identity (a root outside the working directory, an import by absolute path): rename one of \
-the files, or reach it by a relative path"
-#define SCOPE_DECL_REMOVED "a scope cannot be declared after a name - scopes have no names. A built result lives where the caller puts it, a returned local lives there too (O26), and anything else names a variable that lives where it should ('&x', O4a)"
-#define SCOPE_DECL_ON_PLAIN_TYPE "a scope cannot be declared - write a bare '&' where something lives with the instance, and '&p' where it lives with a constructor parameter (O3)"
-#define SCOPE_ARG_NOT_ACCEPTED "this call's target builds no result a scope argument could place - it returns nothing that is or holds a reference, or its result is borrowed from a parameter (E25)"
-#define RETURN_BORROW_AS_BUILT "this returns a parameter's data, which lives where that parameter does - but \
-the result type's bare '&' builds the result where the caller puts it (O14). Return it as a borrowed result: \
-write the parameter's name on the result type ('T&p')"
-#define RETURN_SCOPE_NONE "'&return' names the result scope, and this function has none - it returns nothing that is or holds a reference, or its result is borrowed from a parameter (O26)"
-#define ARRAY_ELEM_NOT_IN_SCOPE "this element is a reference something can be stored through, and an array's elements live where the array does - so it must live in exactly the scope the array is put in, as storing it into an element there would require (O25c). Build the element there, or put the array where the element lives"
-#define ARRAY_ELEM_OUTLIVED "this element refers to storage that the array outlives - an array's elements live where the array does, and the array is put somewhere longer-lived than what this element refers to (O25c). Put the array no further out than the element's storage, or build the element where the array goes"
-#define FIELD_BINDING_UNKNOWN_WRITE "this stores into a field written '&p', which lives where its instance's constructor argument did - and that is not known through this path (an element, a field of another instance): only the container's scope is, an underestimate, so the store could put the field somewhere every reader of the instance believes it is not (O23, O11). Store through a variable holding the instance - one it was built into, or a parameter whose argument is - where that binding is known"
-#define BUILD_INTO_UNKNOWN_SCOPE "where this reference's referent lives is not known here - it was read through alternatives or branches that put it in different scopes, or from something whose scope was not traced - and the callee may build into that scope (it can write this parameter, or its borrowed result names it), which would put what it builds in the wrong place. Pass it where nothing is built through it, or give it one known scope (O11, O12)"
-#define BUILD_THROUGH_UNKNOWN_SCOPE "this builds something through a field that lives where its constructor's argument did ('&p') - and that is not known here, since the container came from a caller: the field may outlive the container, so nothing can be built in its place. Read, walk and repoint through it; build where it lives, in the function that knows (C2d)"
-#define PRIM_CTOR_NOT_PRIMITIVE "only a type declared over a primitive takes a constructor written this way - a struct declares one as 'struct(params) { ... }' (T29d)"
-#define PRIM_CTOR_PARAM "a primitive type's constructor takes exactly one parameter, of the type it is declared over - the value being constructed, which the body may check and change (T29d)"
-#define ZERO_VALUE_NONE "this type has no zero value, so a declaration of it needs a value: its zero value is its constructor run on zeros (and its parameters' defaults) while compiling (D13c), and that failed"
-#define ZERO_VALUE_SHARED "each element of this array would need storage of its own - the type's zero value holds references, and a fill copies one value into every element (D13c). Give the array a fill, or build the elements yourself"
-#define LITERAL_CTOR_FAILS "this literal enters its type through the type's constructor, which runs on it while compiling (T29d), and that failed"
-#define PRIM_CTOR_LITERAL "this type has a constructor, so a value enters it through that - write the constructor call ('Percent(150)') rather than a bare literal, which would skip its checks (T29d)"
-#define SCOPE_ARG_PROGRAM "a scope argument names where a local or parameter lives, and this one is the program's scope (a global's referent) - which a result reaches by being put there: assigning it to the global, or into something reached from one, builds it in the program's scope (O1b, E25)"
-#define SCOPE_ARG_UNKNOWN "a scope argument names a local or parameter of this function, and builds the result where it lives (E25) - no such variable is visible here. To build in this block, leave the scope argument out"
-#define ARRAY_NESTED_BY_VALUE "an array held inside a struct or another array must be a reference \
-('Array<T>&'): an array's storage lives apart from the value naming it, so copying the container would \
-share that storage while appearing to copy it (T7a)"
-#define ARRAY_FIELD_SIZE_NOT_COMPUTED "this field's size cannot be computed at compile time, so its array \
-cannot be stored in the instance - hold it as a reference ('Array<T>&'), which the instance's own scope \
-then stores (T7a, C2e)"
-#define NESTED_ARRAY_LITERAL "an array literal's items are values, never bracketed rows - there are no \
-multi-dimensional arrays. An array of arrays holds references: 'Array<I32>&[r0, r1]' (E21)"
-#define EMPTY_DESTRUCTOR "this destructor does nothing - remove it. A destructor is for releasing something \
-when an instance's scope closes (C7a)"
-#define ENUM_ARG_OUTLIVED "this enum value holds a reference to existing storage in its payload, and a payload lives where the value does - so here it would outlive what the reference points at, or, where that can itself hold references, live somewhere other than exactly where it does (T17c). Build the value where that storage lives ('v E&x = ...', 'E.Case&x(...)', a result 'E&x'), or keep it in that block"
-#define ENUM_ARGS_DISAGREE "this enum value's payload holds references to existing storage in two different scopes, and a payload lives in one place - where the value does (T17c). Build what it holds in one scope"
-#define CTOR_ARG_OUTLIVED "this value was constructed from a reference to existing storage, stored in a field that lives with the instance - so the instance holds that reference, and here it would outlive what the reference points at (C2d). Build the instance where that storage lives ('T&x(...)'), or give the field the parameter's scope ('f T&p = p')"
-#define CTOR_FIELD_ARG_OUTLIVED "this instance holds a reference to storage it was constructed from, in a field written '&p' - which keeps that storage's own scope, so the instance may live shorter than it, never longer - and here it would outlive that storage, leaving the field pointing at a scope that has closed (C2d). Keep the instance no longer than what it refers to: declare it in that storage's block, or build it where that storage lives ('T&x(...)')"
-#define SCOPE_ARGS_DISAGREE "two arguments are in different scopes where this signature requires one - one parameter is written as living where the other does ('&p'), so the values passed for them must share a scope"
-#define OBLIGATION_ORIGIN_NOTE "the called function requires it because of this statement in its body"
-#define SCOPE_OBLIGATION_UNMET "this call needs one of the target's scopes to outlive another, and \
-nothing here establishes that - pass an argument that lives at least as long as the one it is stored \
-into, or one from the same scope (O10c)"
-#define SPAWN_RESULTS_DISAGREE "these targets live in different scopes, and the task's results are built in one - give them targets that live in the same block, or spawn into locals there and copy (P1g)"
-#define VALUE_REFS_OUTLIVED "this value holds references to what was built with it, which lives in a scope the target outlives - a copy would keep pointing there after it closes. Copy it only into a place that lives no longer, or build the value where the target is (O25h)"
-#define GLOBAL_INIT_READS_ITSELF "this global's initializer reads the global itself, which is not set until the initializer is done - write its value without it (B5a)"
-#define GLOBALS_INIT_CYCLE "these globals' initializers read each other, so none of them can be set first - make one of them not depend on the others (B5a)"
-#define GLOBAL_HOLDS_SHORTER "a global lives as long as the program, and so does everything it holds - this lives in a scope that closes first. Store something built here, which is then built in the program's scope, or something another global holds (O1b)"
-#define OWN_CANNOT_OUTLIVE "a value in this function's own scope cannot satisfy a longer-lived scope: this function's scope closes first and no caller can change that, so no argument would make this work"
-#define RETURN_IN_CTOR "a constructor never returns a value of its own - the instance is assembled from its \
-declared fields when the body completes; use 'error' to fail out of one instead"
-#define MISSING_RETURN "this function declares a result type but control can reach the end of its body without returning one (D10a). Return on every path, or end the path with 'unreachable' if it cannot actually be reached - falling off the end used to hand the caller a silently zero-valued result"
-#define SHIFT_OUT_OF_RANGE_LITERAL "this shift amount is written here as a constant and is outside [0, the shifted type's bit width), so this is a compile-time error rather than a program that aborts when it reaches this line (E8a)"
-#define SHIFT_OUT_OF_RANGE_UNADAPTED "this shift amount is past the shifted literal's own bit width, and nothing adapts the expression to a type its exact value fits (E4a) - so it would be computed in the literal's own type, shifting it by more than its width (E8a). Write it where a wide enough type is wanted (x I64 = 1 << 40), or convert the shifted literal (I64(1) << 40)"
-#define DIVIDE_BY_ZERO_LITERAL "division by zero: the divisor is written here as a constant, so this is a compile-time error rather than a program that aborts when it reaches this line (E6a)"
-#define BREAK_OUTSIDE_LOOP "'break' and 'continue' are only valid inside a loop body (S11) - each applies to the innermost enclosing 'for' or 'do', and there is nothing here for one to leave"
-#define CTOR_FIELD_NOT_INITIALIZED "a constructor field must be bound to a same-named parameter (a bare pun), or given an initializer ('= expr' or ':= expr')"
-#define INVALID_CHOICE_VALUE_TYPE "only an enum type has values of the form 'Type.Case'"
-#define UNKNOWN_CHOICE_CASE "unknown enum case"
-#define VALUE_TYPE_MISMATCH "this value's type doesn't match the target's declared type"
-#define LITERAL_NOT_REPRESENTABLE "this literal's value can't be represented in the target's type - an integer literal fits any integer type whose range contains it ('U8' is unsigned: 0-255) and any float type it does not overflow (F16's largest value is 65504), and a float literal fits a float type it does not overflow (F32's largest is about 3.4e38) - a value too small for it rounds to zero, and fits; use an explicit conversion (U8(x), I32(x), F32(x), ...) if a real, possibly lossy conversion is what you meant (T6)"
-#define INT_LITERAL_TOO_LARGE "this integer literal is beyond 64 bits: the largest a decimal literal can write is U64's maximum, 18446744073709551615, and I64's is 9223372036854775807 (a hex literal writes any 64-bit pattern) (L10)"
-#define FLOAT_LITERAL_OUT_OF_RANGE "this float literal is beyond F64's range (its largest finite value is about 1.8e308), so it could only be an infinity - which no literal is (L12b)"
-#define DEFAULT_NOT_COMPUTABLE "a parameter's default value must be computable at compile time - it is \
-evaluated on behalf of callers you cannot see, so it must have a value and no other behaviour"
-#define DEFAULT_NOT_TRAILING "this parameter declares no default but a previous one does - defaulted \
-parameters must come last, so that omitting trailing arguments is unambiguous"
-#define DEFAULT_ARG_NOT_ALLOWED "'default' is only valid as an argument of a call to a function or \
-constructor, in a position whose parameter declares a default value"
-#define DEFAULT_ARG_NO_DEFAULT "this parameter declares no default value, so 'default' cannot stand in for it"
-#define TYPE_CANNOT_BE_INFERRED "a variable declared with ':=' takes its type from its initializer, so the initializer must have one: a literal, a call returning a value, a field read or a slice - not 'null', a variable read, or an expression built from them (write the type)"
-#define OPERANDS_NOT_SAME_TYPE "both operands must have the same type"
-#define METHOD_NOT_INHERITED "this type has no method of this name, and its base does - but a declared type inherits its base's methods only when it is declared with 'extends' (T29f)"
-#define REF_TYPEVAR_NOT_AGGREGATE "a '<T>&' parameter is a reference to what T is, and here T is a number or another type that cannot be one - only a struct, an enum or an array can (G11a)"
-#define TRAIT_NOT_A_TYPE "a trait is a constraint, not a type: it is written only where a type variable is constrained - 'x <T Shape>', '<I Iterator<<E>>>' (T30, G19). A value of one of several types is an enum (T17); one thing that can be called, a function value (T21)"
-#define OVERRIDE_SIGNATURE_DIFFERS "this type satisfies a trait with a default method of this name, and this method does not have the default's signature - an override must match it exactly; give the method the default's signature or another name (M19e)"
-#define TYPE_HAS_NO_CONSTRUCTOR "this type has no constructor to call - an enum's value is one of its cases ('Color.Red'), and a trait or error type is no type of a value"
-#define GENERIC_TYPE_NOT_STRUCT "only a struct type (or a trait) takes type parameters - an enum's payloads, an error type's words and a declared number or array name their types as written, so there is nothing to parameterize. Write the payload's type, or hold it in a generic struct (section 12)"
-#define DECLARED_OVER_AGGREGATE "a declared type is a new name over a number or an array - a primitive, Array<T>, or another such declared type - not over a struct, an enum, a trait or a generic type's instance, whose constructor and identity a copy could not keep. Declare a struct holding one as a field instead: 'type Names struct() { items mut List<String&>& = List<String&>() }' (T29)"
-#define EXTENDS_NOT_BASE "only a type declared over a number or an array extends it - a struct, an enum, a trait or a function type has no base to inherit from (T29f)"
-#define NOT_EXTENDED_OP "this type does not extend its base, so the base's operator does not make a value of it - declare the operator's method (Plus, Minus, Neg, ... E31), or declare the type with 'extends' (T29f)"
-#define NUMBERS_DO_NOT_MEET "these two numbers do not meet: one must flow into the other's type - a number flows losslessly into a wider one of the same signedness, an unsigned one into a wider signed one (U8 into I16), F16 and BF16 into F32 into F64, and a declared type into its base (T6b). Convert one, as T(x)"
-#define LITERAL_EXPR_NOT_REPRESENTABLE "this expression is built only from literals, so it is computed while compiling - an integer exactly, a float in F64 - and adapts as the one literal holding its value would (E4a, T6); that value can't be represented in the type it meets, or it has none (an integer beyond 128 bits, a float computation overflowing to an infinity). Write a value that fits, or convert explicitly, as U8(x) or F32(x), if a real, possibly lossy conversion is what you meant"
-#define LITERAL_DOES_NOT_MEET "the literal's value does not fit the other operand's type, so the two meet at the literal's own type (I32, I64 or U64 for an integer, F64 for a float - T6a) - but the other operand's type does not flow into it (T6b: an unsigned type flows only into a strictly wider signed one, and integers and floats never meet). Convert the other operand to a type holding both, as I64(x), or write a literal it can hold (E6d)"
-#define NUMBER_DOES_NOT_FLOW "a number flows implicitly only where nothing is lost - into a wider type of the same signedness, an unsigned one into a wider signed one (U8 into I16), F16 and BF16 into F32 into F64 - or from a declared type into its base (T6b); anything else is a conversion, written T(x) - a declared type's own constructor included"
-#define MATCH_CASE_TYPE_MISMATCH "a case value must have the type of the value it is compared with - the matched value, or the payload field it stands in (S13)"
-#define OPERATION_REQUIRES_INT "operand must be an integer"
-#define OPERATION_REQUIRES_NUMBER "operand must be a number"
-#define OPERATION_REQUIRES_BOOL "operand must be a boolean"
-#define SCOPE_MAY_NOT_OUTLIVE_TARGET "this reference's scope is not provably at least as long-lived as the target's - only the same scope, or one received from the caller flowing into one of this function's own, is provably safe"
-
-// ---- statements and control flow ----
-
-#define RETURN_IN_TEST "a test is not a function: it has no caller to return to and no result - 'done' ends a test early as passed, 'fail' as failed (S15, S16a)"
-#define RETURN_VALUE_IN_VOID_FUNC "this function has no declared return type - a return statement must not have a value here"
-#define RETURN_MISSING_VALUE "this function's declared return type requires a return value"
-#define RETURN_TYPE_MISMATCH "return value's type doesn't match the function's declared return type"
-#define MAIN_FUNC_NOT_FOUND "this program has no main function - '-b' builds an executable, which starts at 'fn main() ? { }' (B1)"
-#define DEFER_RETURNS "deferred code runs while its block is being left, and may only run to its own end - a 'return' here would leave in the middle of another way out (S19b). Compute what to return before the defer runs, or return after the block"
-#define DEFER_LOOP_JUMP "deferred code may not 'break' or 'continue' out of itself - it runs while its block is being left, and must run to its own end (S19b). A 'break' or 'continue' is fine inside a loop written in the deferred code"
-#define DEFER_ERROR_ESCAPES "an error may not leave deferred code - it runs while its block is being left, possibly by another error, and must run to its own end (S19b). Catch every error it can produce right here ('try f() catch { ... }', or 'catch default v')"
-#define SPAWN_IN_DEFER "a 'spawn' in deferred code needs a 'join' written in the deferred code too (S19b, P1a) - deferred code runs on whichever way its block is left, so only a join of its own is sure to wait for this task"
-#define INVALID_MAIN_SIGNATURE "main must take no parameters, declare no success type, and declare that it can fail ('?'), e.g. 'fn main() ? { ... }' (or '? MyError' to name how it fails)"
-
-// ---- errors, try/catch ----
-
-#define EXPECTED_ERROR_WORD "expected error word"
-#define PLAIN_ERROR_NAMED_SIG "a plain 'error' raises the default error, which only a function declared with a bare '?' fails with - this one names its errors, so raise one of them ('error T.WORD') (R16)"
-#define ERROR_NOT_DECLARED_IN_SIG "error type not declared in this function's signature"
-#define ERROR_STMNT_OUTSIDE_FUNC "error statement is only valid inside a function"
-#define UNHANDLED_FALLIBLE_CALL "call to a fallible function must be handled with try/catch"
-#define TRY_REQUIRES_FALLIBLE_CALL "try requires something that can fail: a call to a fallible function, or an operation it can check - arithmetic, a shift, a conversion, an index or slice, an array length (R20)"
-#define TRY_ERROR_NOT_IN_SIGNATURE "this function's signature must declare every error the tried call can produce that isn't fully caught here"
-#define TRY_OUTSIDE_FUNC "try/catch is only valid inside a function, unless every possible error is caught"
-#define CATCH_ERROR_NOT_PRODUCED_BY_CALL "this error is not declared by the function being called"
-
-// ---- external functions ----
-
-#define EXTERN_TYPE_NOT_ALLOWED "an 'extern fn' parameter/return type must be a numeric primitive (U8, I32, I64, F32, F64) or an array of one - no structs, references, or error unions cross the C ABI boundary"
-#define EXTERN_FUNC_NOT_FALLIBLE "an 'extern fn' call is never fallible - it has no error union, so it can't be the operand of try/try-catch"
+//an error about the token at
+void Err(struct token at, enum diag d, ...);
+//the same, counted as a syntax error too - which may have hidden a declaration, so a missing one is not reported
+void ErrSyntax(struct token at, enum diag d, ...);
+//an error about the whole of a file
+void ErrFile(struct str file, enum diag d, ...);
+//an error that ends the compilation: what is already certain is shown, then this - about the file, or with no
+//location where file is empty
+void ErrFatal(struct str file, enum diag d, ...);
+//a mistake in the command line itself: reported, and the process ends - no compilation began
+void ErrUsage(enum diag d, ...);
+//a note on the error just reported, about the token at
+void Note(struct token at, enum diag d, ...);
+//B11a: prints rule's text from the specification; the process's exit status
+int ErrMsgExplain(char* rule);
+//code, a terminal colour, where diagnostics go to a terminal, and "" where they do not (a file, a pipe, an agent)
+const char* ErrMsgColor(const char* code);
 
 int ErrMsgGetNErrors();
+int ErrMsgGetNSyntaxErrors();
 void ErrMsgFinishCompilation();
-void ErrMsgFatal(char* errMsg);
-void ErrMsgUnableToOpenFile(struct str fileName);
-void ErrMsgNotARegularFile(struct str fileName);
-void ErrMsgUnexpectedToken(struct token found, char* expected);
-void ErrMsgUnexpectedChar(TokenCtx tc, char* errMsg);
-void ErrMsgSemantic(struct token tok, char* errMsg);
-void ErrMsgSemanticNote(struct token tok, char* msg);
 //every error reported until the matching pop carries a note at tok saying msg - "instantiated here" (G16)
 void ErrMsgPushContext(struct token tok, char* msg);
 void ErrMsgPopContext(void);
@@ -361,37 +451,11 @@ void ErrMsgBufferDiscard(void);
 void ErrMsgMuteStart(void);
 void ErrMsgMuteEnd(void);
 bool ErrMsgMuted(void); //inside a muted stretch: nothing reported now would be seen
-void ErrMsgFile(struct str fileName, char* errMsg);
-void ErrMsgSyntax(struct token tok, char* errMsg);
-int ErrMsgGetNSyntaxErrors();
 void ErrMsgFlush(void);
 //a crash of the calling thread is reported rather than silent, even after a stack overflow - call once per thread the
 //compiler runs on, before it does anything else
 void ErrMsgInstallCrashHandler(void);
 //B3e: the program being run is the interpreted one - its own abort is not a crash, and a crash may be its
 void ErrMsgSetInterpreting(bool on);
-
-#define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
-#define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text extends Array<Char>') and give that methods (M19d)"
-#define TYPE_ARGS_NOT_INFERABLE "the type arguments for this generic call can't be determined from the arguments given - two positions sharing one type variable were matched against different types, or the argument count is wrong"
-#define ARRAY_SIZE_MISMATCH "this array's length is known here and differs from the length of the fixed storage it is copied into - an array is never silently truncated or padded to fit (C2e)"
-
-#define LAMBDA_PARAM_UNTYPED "this lambda parameter has no type, and nothing says what it is - write its type, or pass the lambda where a function type is expected (D16a/D16b)"
-#define LAMBDA_ARITY "this lambda takes a different number of parameters than the function type it is passed as (D16a)"
-#define LAMBDA_SIG_MISMATCH "this lambda's written signature disagrees with the function type it is passed as - leave the differing part out to take it from there, or make the two agree (D16a)"
-#define LAMBDA_RESULT_UNINFERABLE "this value has no type a lambda's result could take - write the lambda's result type (D16b)"
-#define FUNC_VALUE_HAS_OBLIGATIONS "this function requires its callers to pass arguments whose scopes are related (an inferred scope obligation), and a call through a function value checks no such thing - so it cannot be used as a value; call it directly (T22a)"
-#define CAPTURE_HOLDS_REFERENCES "a lambda copies what it captures, and this value holds references whose scopes a copy would lose - capture a reference to it instead (D16c)"
-#define CAPTURE_READ_ONLY "what a lambda captures from a value is read-only - its copy of a value, or its borrow of an array. To change state outside the lambda, capture a reference to it ('r Array<T>& = a') (D16c)"
-#define SPAWN_ARG_HOLDS_SHORT "this argument holds a reference to storage that does not outlive the enclosing 'join' block - the task is handed the value itself (a temporary is built in the join block, a value is copied), but what it refers to is declared in a nested block that closes while the task may still run. Declare that storage at the join block's own level or wider (P2)"
-#define SPAWN_LAMBDA_CAPTURE_TOO_SHORT "this spawned lambda captures a variable declared inside the 'join' block, which closes while the task may still run - a spawned lambda is built to last until the join, but what it captured lives no longer than where it was declared. Declare the captured variable outside the join block (P2, D16e)"
-#define SPAWN_FUNC_TOO_SHORT "this function value does not outlive the enclosing 'join' block - a lambda made inside it lives in the block it was made in, which closes while the task may still run. Make it outside the join block, or spawn the lambda itself ('spawn fn() { ... }'), which is built to last until the join (P2, D16e)"
-#define SPAWN_LAMBDA_PARAMS "a spawned lambda takes no parameters - what the task needs, it captures (D16e)"
-#define METHOD_CLASHES_INHERITED "a type declared with 'extends' inherits every method of its base, and this one is already among them - choose another name; an inherited method is never overridden, except Eq, Hash and Str, which a type may declare to replace its base's (T29e)"
-#define METHOD_CLASHES_SUPPLIED "the compiler supplies a method of this name for this type - Len() on every array, a declared one included (E23), Bits() on a float or the FromBits methods on an unsigned integer (E33) and the atomic operations on an integer (P9), for a type extending one - and a supplied method is never overridden: choose another name"
-#define FROM_BITS_RECEIVER "a float is made from the bits of the unsigned integer type of its width: F16FromBits() and BF16FromBits() are methods of U16, F32FromBits() of U32 and F64FromBits() of U64 - convert to that type first, as in U64(x).F64FromBits() (E33)"
-#define MUT_ON_VALUE_TYPE "'mut' before a type makes a reference writable - this type is not a reference, so there is nothing for it to permit (T25b)"
-#define READ_ONLY_REF_WRITE "this writes through a read-only reference - one without 'mut' in its type: a parameter, global or field not declared 'mut', or a local or result that took a read-only one (T25b)"
-#define READ_ONLY_TO_WRITABLE "this reference is read-only, and this place wants a writable one - a read-only reference never becomes writable by being passed, stored or returned. Pass something writable, or make the target read-only by dropping its 'mut' (T25c)"
 
 #endif //ERRMSG_H

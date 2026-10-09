@@ -1,4 +1,4 @@
-# check: fail a type cannot hold itself by value
+# check: fail error[T16]: E cannot hold itself by value
 # T17/T13: by value, a struct or enum holding itself is infinitely large - it reached codegen as an unsized type
 type E enum {
     A(e E)

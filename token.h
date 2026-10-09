@@ -136,6 +136,7 @@ int TokenGetLineStart(TokenCtx tc, int charIdx);
 int TokenGetStrLen(struct token tok);
 int TokenGetLineEnd(TokenCtx tc, int charIdx);
 char TokenGetChar(TokenCtx tc, int charIdx);
+int TokenGetCharCount(TokenCtx tc); //the file's bytes, and the '\0' after them
 int TokenGetCursor(TokenCtx tc);
 void TokenSetCursor(TokenCtx tc, int cursor);
 int TokenGetCharCursor(TokenCtx tc);

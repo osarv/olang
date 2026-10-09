@@ -1,4 +1,4 @@
-# check: fail 'x in c' calls c.Has(x)
+# check: fail error[E29]: 'x in c' calls Contains, and I32 has none
 # E29: membership needs the collection to have Has (or Contains, for a run of its own type)
 fn main() ? {
     n := 3

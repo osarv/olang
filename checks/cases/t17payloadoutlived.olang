@@ -1,4 +1,4 @@
-# check: fail a payload lives where the value does
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive
 # T17c: an enum's payload lives where the enum value does - storing one built from a reference that dies at the end of
 # each iteration into a reference that outlives the loop would leave the payload dangling
 type Expr enum {

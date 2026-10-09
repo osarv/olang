@@ -1,4 +1,4 @@
-# check: fail does not cover every case
+# check: fail error[S13a]: case A of S is not covered
 # S13a: a case with a value or another case inside its payload may let a value through, so it covers nothing
 type T enum {
     P
