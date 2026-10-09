@@ -232,6 +232,30 @@ test "E10b: a struct, an enum or an array is a key with no Hash written" {
     assert HashKeysBaked
 }
 
+# E10b: an enum one of whose cases holds a reference - each case's payload is read only where that case holds, so
+# hashing a value of another case reads nothing it does not have
+type hLabel enum {
+    Unnamed
+    Named(s String&)
+    Pos(n I64, m U8)
+}
+fn labelKeys() Bool {
+    m := Map<hLabel, I32>()
+    m.Put(hLabel.Named("ab"), 1)
+    m.Put(hLabel.Pos(5, 6), 2)
+    m.Put(hLabel.Unnamed, 3)
+    got Bool = try m.Get(hLabel.Named("ab")) catch default 0 == 1 and try m.Get(hLabel.Pos(5, 6)) catch default 0 == 2
+    rest Bool = try m.Get(hLabel.Unnamed) catch default 0 == 3 and not (hLabel.Pos(5, 7) in m)
+    u := hLabel.Unnamed
+    return got and rest and u.Hash() != hLabel.Named("ab").Hash()
+}
+LabelKeysBaked := labelKeys()
+
+test "E10b: an enum whose cases hold references hashes whichever case it holds" {
+    assert labelKeys()
+    assert LabelKeysBaked
+}
+
 # MapIter holds the slot it is at, so a walk follows one link per entry, over chains of any length, with text keys
 # as with any other; and the evaluator walks it as the run time does (K2)
 fn walkedKeys() I64 {

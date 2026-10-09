@@ -8288,12 +8288,16 @@ static struct operand* buildAutoHash(struct checkCtx* ctx, struct operand* x, st
     for (int i = v.vars.len - 1; i >= 0; i--) {
         struct var* c = ListGetIdx(&v.vars, i);
         struct operand* arm = int64Literal(i + 1, tok);
-        if (c->type.vars.len == 1) arm = hashCombine(arm, hashOf(ctx, enumIsAs(hx, i, true, tok), tok, seq), tok);
+        //the case's own statements: a payload read with "as" is held only where that case holds
+        struct operand* armSeq = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_INT64));
+        armSeq->comprBody = ListInit(sizeof(struct statement));
+        if (c->type.vars.len == 1) arm = hashCombine(arm, hashOf(ctx, enumIsAs(hx, i, true, tok), tok, armSeq), tok);
         for (int k = 0; c->type.vars.len > 1 && k < c->type.vars.len; k++) {
             char* fn = MallocOrCrash(16);
             snprintf(fn, 16, "%d", k);
-            arm = hashCombine(arm, hashOf(ctx, OperandMember(NULL, enumIsAs(hx, i, true, tok), StrFromCStr(fn), tok), tok, seq), tok);
+            arm = hashCombine(arm, hashOf(ctx, OperandMember(NULL, enumIsAs(hx, i, true, tok), StrFromCStr(fn), tok), tok, armSeq), tok);
         }
+        arm = seqResult(armSeq, arm);
         if (!r) { r = arm; continue; }
         struct operand* cond = operandNew(tok, OPERATION_COND, TypeVanilla(BASETYPE_INT64));
         struct operand* is = enumIsAs(hx, i, false, tok);
