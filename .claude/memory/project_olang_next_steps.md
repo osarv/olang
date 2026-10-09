@@ -196,6 +196,12 @@ because what it finds about structure feeds the refactor.
   agent rewriting /home/user/oann (C, ~1150 lines: dense/relu/softmax-cross-entropy/AdamW/MNIST, OpenBLAS+curl) in
   olang on std/linalg once its API lands (oann repo, branch claude/github-environment-setup-ftu9va). Environment:
   libopenblas-dev installed for the session (benchmarks) - another setup-script line for the user.
+- 10:40: perfcg merged (9159bb4): function values are {code, env} pairs (capturing-lambda Fold 1.63s -> 0.23s, C
+  0.22s), fresh arrays adopted, mmap'd fresh chunks skip zero-fill, instances allocated before arguments; also `:=` of
+  a destructor type now declares a reference (destructors never ran before). oann phase 1 started (agent working in
+  /home/user/oann on its branch, compiler from /home/user/wt/oannc - a detached olang worktree to update when linalg
+  merges): DESIGN.md (autograd choice, zero-allocation training), MNIST pipeline in olang, layout; phase 2 (layers,
+  AdamW, >97% MNIST, vs C+OpenBLAS) after std/linalg merges - then update oannc, tell the linalg API, resume it.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
