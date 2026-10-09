@@ -10357,3 +10357,78 @@ from their original form.
   channel is an `extern`, refused already, and a task spinning on an atomic another would set runs out of the budget.
   `-i` keeps refusing tasks - it performs `extern` calls, so a channel's mutex would be real and sequential tasks would
   deadlock on it; threads there are its stage 3.
+- **Small fixes: methods named like locals, constant globals, hex patterns, multi-index, located asserts, fast `$` on
+  floats (M19, K2, L10a, D9b, E31, S17/S18a/S18c, E11a, 2026-10-09).** A batch of confirmed bugs and small decided
+  changes, each with a regression test.
+  **(1) A local named like a method.** `cgNamedTarget` looked a callee's name up among the function's locals before
+  anything else, so with a local `lit` in scope `g.lit(k)` loaded the local and called it as a function value -
+  garbage, or a segfault (`lit := g.lit(k)`, the fuzzer's form). A method (one with an owner) is never a local now. The
+  fuzzer batch found the same line the same day; the merge kept one fix and both tests (`methodnamedlocal`).
+  **(2) Constant globals, and why that alone was not enough.** An immutable global baked to plain data was emitted
+  `global`, never `constant`: std/linalg's GEMM with its tile sizes in named globals ran 7.0 GFLOPS against 16.3-17.0
+  with the same numbers as literals, because the micro-kernel's loop bounds were loads LLVM had to keep. Making the
+  global `constant` (when no writable reference reaches what it holds - `CtNodeWritable`) changed nothing measurable:
+  the kernel is a generic instantiation, so it is compiled into the program's root object (B3d), where the library's
+  global is only `external global` and its value unknown until the link - and the link's LTO pass runs the
+  optimizations already run once, without the unrolling that made the literals fast. So an importer now declares such a
+  global `available_externally constant` with its value (`cgExternConstInit`): only for an immutable global with a
+  constant value, owning every node it reaches, needing no private globals of its own (an array's elements would) -
+  anything else stays a plain declaration. The definition stays in the declaring module's object; the importer's copy
+  is discarded at the link. Measured: 16.6-17.2 GFLOPS with named tiles. The checks scenario's IR expectations moved
+  from `global` to `constant`, and a two-module fixture (`k2/ctlib`) pins the `available_externally` form and that it
+  is absent for a mutable or array-holding global.
+  **(3) Hex and binary literals at the top of an unsigned range.** L10a reads a `0x`/`0b` literal as a bit pattern, but
+  as an `I64`, so `0xFFFFFFFFFFFFFFFF` was -1 and `x U64 = 0x9E3779B97F4A7C15` (a golden-ratio constant every hash
+  uses) was an error. **Decided (mine)**: adapting to an unsigned type, the bits read unsigned; to a signed one they keep
+  the I64 reading (`x I64 = 0xFFFFFFFFFFFFFFFF` is still -1, `x I32 = 0xFFFFFFFF` still does not fit). E4a's fold uses
+  the reading its target wants, so `0xFF00 | 0xFF` into a `U16` is computed unsigned. One flag on the literal operand
+  (`bitPattern`) carries it.
+  **(4) A generic's by-value parameter bound to an array.** `fn first(a <T>) ...` called with an array value (or with
+  text, a literal bound to `String`) failed O10d - the parameter's storage was taken for the caller's scope. Such a
+  parameter is the call's own storage (`RefExactScope` reads a non-reference parameter at the function's outermost
+  depth), borrowed by the call like any value. **Found on the way, pre-existing**: with `mut` on such a parameter the
+  callee wrote through to the caller's array - and to constant data, for a literal - while the evaluator copied, so a
+  baked global and the same call at run time disagreed. **Decided (mine, D9b)**: a `mut` by-value array parameter of
+  an instantiation is the callee's own copy, made in its own scope at entry; D9a still rejects the non-generic spelling.
+  **(5) `x[i, j]`.** An `At`/`SetAt`/`TryAt`/`TrySetAt` may take several index parameters (E31): `m[i, j]` calls
+  `At(i, j)`, `m[i, j] = v` calls `SetAt(i, j, v)`, `m[i, j] += v` evaluates the indices once, and `try m[i, j]` calls
+  `TryAt(i, j)`. **Decided (mine)**: indices are positional and evaluated left to right; the derived checked forms
+  (from `Len`) exist only for one index, so `try` on several needs a declared `TryAt` (an error naming it); built-in
+  arrays and `String` take one index (an error saying several go to a type's `At`); S9d's counted for-in applies only
+  to a one-index `At`. Written for std/linalg's `Matrix`, which had `m.At(i, j)` spelled out.
+  **(6) Where a check failed, and why.** A failed `assert`, `abort`, `unreachable`, or the `unreachable` a value
+  `match` reaches, printed only what failed. It now prints `FILE:LINE: assertion failed` (S18a), one string per site
+  made at compile time; the runtime's three message globals went. **`assert cond, message`** (S17, decided - the
+  user's "sure" to it in the usage study): the message is text (a literal, a join, a `String`; anything else is an
+  error saying to write it as text), evaluated **only when the assert fails**, and printed after `assertion failed: `.
+  While compiling, a false assert's error carries it (S18c), evaluated by the evaluator. **Decided (mine)**: inside a
+  test the line goes to stdout, just before the harness's `FAIL` line, so a test log reads in order; outside a test,
+  to stderr before the abort, as before. The runtime gained `__olang_check_failed_text` (the message as a
+  `{ i64, ptr }`) beside `__olang_check_failed`, sharing one stream choice and one ending (unwind and longjmp in a test,
+  abort otherwise); `-i` and the evaluator print the same text. A checks scenario (`assertloc`) runs a program and a
+  test file and reads both outputs.
+  **(7) `$` on a float, 170x faster.** `@__olang_fmt_float` tried 1 to 17 digits with `snprintf` and read each back
+  with `strtod` - about 17us a value, measured 34s for 2M renderings. The prelude's `F64.ShortestDecimal` (from the
+  std-gaps batch) already had Schubfach with a 128-bit power-of-ten table; the runtime now does the same in IR
+  (`@__olang_shortest` with the table as `@__olang_pow10m`, digits by the integer renderer), and the evaluator in C
+  (`FloatSchubfach`, util.c, the same table) - so the runtime, the evaluator and the prelude agree by construction, and
+  2M renderings take 0.2s. The table (11KB) is written only into an object that renders a float. **The definition
+  changed, measured first**: the old one was "the fewest digits whose correctly rounded decimal reads back"; Schubfach's
+  is "the shortest decimal in the rounding interval, the closest of those" (Python's repr, Ryu, Go). They differ only
+  where an interval is lopsided - a power of two at a binade's bottom - when the shortest in-interval decimal is not the
+  correctly rounded one of its length: 46 of 2.1M random doubles, e.g. `2^-1017` (the old text one digit longer).
+  **Decided (mine)**: `$` is the shortest-nearest form, so it matches `F64.ShortestDecimal`, json and Python; checked
+  C against the prelude's algorithm on 3.1M values (0 differences), the narrow types (F32, F16, BF16) against an exact
+  rational reference on 84,564 values (0), and the runtime IR against C on 6.1M values at `-O3` and `-d` (0); 14 of 6.1M
+  outputs changed from the old `$`, all shorter. std/json's `writeNumber` is now `sb.Push($v)`.
+  **(8) Diagnostic cascades.** A missing closing `}` was reported as an unexpected token at the next declaration and
+  that declaration lost: the parser now notes, at every `}` it fails to find, the block it was in and whether the next
+  token starts a top-level item, and reports `the block opened on line N has no '}'` at that brace, resuming at the
+  item found - so a second missing brace later is found too (`blockunclosed`). A checked index on a type with only
+  `TryAt` (no `At`) recovers as the unknown stand-in, one error. The E14 -> O10d cascade from the usage study was
+  already fixed; a case pins it.
+  **(9) The study's leftovers.** kvtool:89, matrix:127, calc:157 and widgets:26 compile and run as first written, with
+  the same output as their workarounds at `-O3` and `-d` - fixed by the batches merged before this one; each shape was
+  already pinned by a test, so nothing was added.
+  Measured beside: a cold hello-world build unchanged within noise (the float table is not written without a float
+  rendered).
