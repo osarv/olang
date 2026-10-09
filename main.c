@@ -344,6 +344,7 @@ int interpretProgram(char* file, int argc, char** argv) {
     }
     if (!mainFunc) ErrMsgFatal(MAIN_FUNC_NOT_FOUND);
     fflush(NULL);
+    ErrMsgSetInterpreting(true);
     return CtRunProgram(mainFunc, argc, argv);
 }
 
@@ -433,6 +434,7 @@ static int compilerMain(int argc, char** argv);
 #define COMPILER_STACK ((size_t)1 << 30)
 struct compilerJob { int argc; char** argv; int status; };
 static void* compilerThread(void* p) {
+    ErrMsgInstallCrashHandler();
     struct compilerJob* j = p;
     j->status = compilerMain(j->argc, j->argv);
     return NULL;

@@ -776,12 +776,11 @@ static char* stdRoot(void) {
 
 //the directory relative imports of `mod` resolve against: its own file's
 static char* moduleDir(struct semaModule* mod) {
-    char buf[PATH_MAX];
-    StrToCStr(mod->fileName, buf);
+    char* buf = StrDupStr(mod->fileName);
     char* slash = strrchr(buf, '/');
     if (!slash) return heapCopy(".");
     *slash = '\0';
-    return heapCopy(buf[0] ? buf : "/");
+    return buf[0] ? buf : heapCopy("/");
 }
 
 static struct str lastPathElement(const char* p, bool dropExt) {
@@ -1024,13 +1023,10 @@ static char* normalizePath(const char* p) {
 //so "map" written in std/io is std/map, the same module "std/map" names, and each version of a remote
 //repository has its own copy of what it imports relatively
 static struct str relativeIdentity(struct semaModule* from, const char* spec) {
-    char base[PATH_MAX * 2];
-    StrToCStr(from->identity, base);
+    char* base = StrDupStr(from->identity);
     char* sl = strrchr(base, '/');
     if (sl) *sl = '\0'; else base[0] = '\0';
-    char joined[PATH_MAX * 3];
-    snprintf(joined, sizeof(joined), "%s%s%s", base, base[0] ? "/" : "", spec);
-    return StrFromCStr(normalizePath(joined));
+    return StrFromCStr(normalizePath(StrFmt("%s%s%s", base, base[0] ? "/" : "", spec)));
 }
 
 static bool hasPrefixElems(const char* id, const char* prefix) {
@@ -1050,6 +1046,7 @@ static char* firstElems(const char* p, int n) {
 struct resolvedImport { char* path; struct str identity; };
 
 static bool resolveImport(struct semaModule* from, struct str raw, struct token tok, struct resolvedImport* out) {
+    if (raw.len >= PATH_MAX) { ErrMsgSemantic(tok, IMPORT_FILE_NOT_FOUND); return false; } //no file has such a path
     char spec[PATH_MAX];
     StrToCStr(raw, spec);
     size_t len = strlen(spec);
@@ -1085,8 +1082,7 @@ static bool resolveImport(struct semaModule* from, struct str raw, struct token 
         out->path = normalizePath(buf);
         out->identity = spec[0] == '/' ? lastPathElement(spec, false) : relativeIdentity(from, spec);
         //inside std or a remote repository, a relative import stays inside it
-        char fromId[PATH_MAX];
-        StrToCStr(from->identity, fromId);
+        char* fromId = StrDupStr(from->identity);
         char* root = hasPrefixElems(fromId, "std") ? heapCopy("std")
                    : strchr(firstElems(fromId, 1), '.') && strchr(fromId, '/') ? firstElems(fromId, 3) : NULL;
         if (root && !hasPrefixElems(out->identity.ptr, root)) { ErrMsgSemantic(tok, IMPORT_LEAVES_ROOT); return false; }
@@ -1123,12 +1119,8 @@ static struct list olangFilesIn(const char* dir) {
 }
 
 struct semaModule* semaLoadModule(struct str fileName) {
-    char buf[PATH_MAX];
-    StrToCStr(fileName, buf);
-    if (pathIsDir(buf)) {
-        fprintf(stderr, "%s: a module is a file, never a directory (M1) - name the .olang file\n", buf);
-        exit(EXIT_FAILURE);
-    }
+    char* buf = StrDupStr(fileName);
+    if (pathIsDir(buf)) ErrMsgFatal(StrFmt("%s: a module is a file, never a directory (M1) - name the .olang file", buf));
     //M22a: a root takes its identity from where it really is - its path from the working directory, or its
     //file name when outside it; a std module named directly ("olang -t std/list.olang") is the same module
     //its importers call "std/list", so it gets the identity - and the symbols and object names - they give it
@@ -1148,7 +1140,7 @@ struct semaModule* semaLoadModule(struct str fileName) {
         if (n > 6 && !strcmp(id + n - 6, ".olang")) id[n - 6] = '\0';
         identity = StrFromCStr(heapCopy(id));
     }
-    return semaLoadModuleAt(heapCopy(buf), identity, (struct token){0});
+    return semaLoadModuleAt(buf, identity, (struct token){0});
 }
 
 static struct semaModule* semaLoadModuleAt(char* path, struct str identity, struct token tok) {
@@ -4134,6 +4126,7 @@ void semaResolveModule(struct semaModule* mod) {
             //checked, so setting it here is early enough for both.
             v->bodySyntax = firstPartOfType(actual, SNTX_BLOCK);
             v->bodyIncomplete = firstPartOfType(actual, SNTX_BODY_INCOMPLETE) != NULL; //S8b
+            v->bodyUnparsed = firstPartOfType(actual, SNTX_BODY_UNPARSED) != NULL;
             v->type.owner = mod;
             v->type.tok = nameTok;
         } else if (actual->type == SNTX_EXTERN_FUNC_DECL) {
@@ -14024,6 +14017,7 @@ void checkInstantiationBody(struct instantiation* inst) {
 }
 
 static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spec) {
+    if (spec->bodyUnparsed) { spec->bodyHadErrors = true; return; } //as checkFuncBody
     struct scope fnScope = scopePush(NULL);
     for (int p = 0; p < spec->type.vars.len; p++) {
         struct var* param = ListGetIdx(&spec->type.vars, p);
@@ -14400,6 +14394,8 @@ void semaCheckBodies(struct semaModule* mod) {
 //function whose body is not checked yet (ensureBodyChecked), since its obligations are part of its signature
 static void checkFuncBody(struct semaModule* mod, struct var* func) {
     if (func->bodyState) return;
+    //a body that did not parse was reported as it was read; its function is declared, and nothing more is said
+    if (func->bodyUnparsed) { func->bodyHadErrors = true; func->bodyState = 2; return; }
     func->bodyState = 1;
     {
         struct scope fnScope = scopePush(NULL);

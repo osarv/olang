@@ -352,6 +352,11 @@ void ErrMsgFile(struct str fileName, char* errMsg);
 void ErrMsgSyntax(struct token tok, char* errMsg);
 int ErrMsgGetNSyntaxErrors();
 void ErrMsgFlush(void);
+//a crash of the calling thread is reported rather than silent, even after a stack overflow - call once per thread the
+//compiler runs on, before it does anything else
+void ErrMsgInstallCrashHandler(void);
+//B3e: the program being run is the interpreted one - its own abort is not a crash, and a crash may be its
+void ErrMsgSetInterpreting(bool on);
 
 #define STR_OF_UNSUPPORTED_TYPE "'$' has nothing to render - this call returns no value (E11a)"
 #define METHOD_ON_BUILTIN_TYPE "a built-in type's methods are declared by the prelude alone - declare a type of your own over it ('type Text U8[]') and give that methods (M19d)"
