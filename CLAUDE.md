@@ -3477,6 +3477,49 @@ Go through this for every change to what olang means - a rule added, revised or 
   (`e Entry = Entry(k, v)`) was checked against whatever was being built when the pending checks next ran - it lands in
   the instance now (C2d). Decided (mine): the API names (`Update`, `RunFrom`, `Fixed`, `Now`/`Since`/`Wall`), and that
   `RunFrom` is a protocol method the compiler recognises by shape, as `Len` and `At` are.
+- **`std/json`, `os.Exec` and `std/http` (X6, 2026-10-09, the coordinator's request: JSON as a recursive enum tree,
+  running a program without a shell, HTTP by running curl).** **`std/json`**: `Json` is an enum held by reference -
+  `Null`, `Bool(v)`, `Num(v F64)`, `Str(s String&)`, `Arr(items Array<Json&>&)`, `Obj(o Object&)` - and a tree **never
+  changes once built**: every payload is read-only, so nothing can be stored through one (O25g never asks exactness),
+  parts may be shared, and `List<Json&>`/for-in over items just work - a first version with `List`s and `mut` objects
+  in the payloads hit the prelude's ListIter C2d limit, as the usage study's JSON parser did. An `Object` keeps its
+  members' order (`Keys`, `Values` arrays) and, above eight members, a private open-addressed index of the names -
+  measured, a hashed lookup is ~11ns flat, a linear one 9-17ns up to eight and 62ns at 32. Building in code is
+  `Json.Obj(json.Object(names, values))`. **`json.Parse(text, at = null) Json& ? JsonError`**: RFC 8259 exactly
+  (JSONTestSuite: every y_ accepted, every n_ rejected), iterative (no recursion; nesting beyond `MaxDepth`, 1000, is
+  `DEPTH`), strings copied so the tree outlives the text, UTF-8 validated, `\u` surrogate pairs to UTF-8 and a lone
+  surrogate `BAD_ESCAPE`, a leading BOM passed over, a repeated name kept with lookups answering the last (as most
+  readers do). Errors carry no data (T20), so where a parse stopped is written into a `Position` the caller passes -
+  `try json.Parse(text, at) catch JsonError { ... $at ... }` is "LINE:COL", the column counting characters. Words:
+  `UNEXPECTED UNTERMINATED BAD_ESCAPE BAD_NUMBER BAD_UTF8 TRAILING DEPTH` for reading, `MISSING WRONG_KIND` for asking -
+  one type, so a function that parses and asks declares one. **Where it lives**: Parse's reader is itself built in the
+  result scope and builds every node, string and array through its own growable stacks, so the whole tree is where the
+  caller puts the result and the reader's garbage is one stack. **Numbers, exactly, in olang** (no strtod, so Parse is
+  K1-evaluable and asserts on it are decided while compiling): Clinger's fast path, Eisel-Lemire with Go's 128-bit
+  table, and Go's simple-decimal conversion when that cannot decide - verified identical to Python's `float()` on 2.2M
+  inputs (halfway cases, subnormals, 900-digit numbers); beyond `F64` is `BAD_NUMBER`, below is zero. **Asking**:
+  `j[key]` and `j[i]` only under `try` (`TryAt` generic over `String`, `String&`, `I32`, `I64` by `match <K>`; a try
+  over an index chain checks each link), `key in j`, `AsNum AsInt AsBool AsStr AsArr AsObj` (`? JsonError`), `IsNull`;
+  the idioms are `try (try doc["a"][0]).AsStr()` or `try (doc["a"][0] as Json.Str)`. `Eq` (objects in any order) and
+  `Hash`; `Str`, so `$doc` is its compact text. **`json.Encode(j, indent = "")`**: compact, or one item per line;
+  numbers as the **shortest text that reads back** (Schubfach, with the same table: Python's repr digits on 488k values,
+  laid out as `$` lays numbers out) - `$` on a float costs ~20us (seventeen snprintf/strtod tries, twice) and made a
+  float-heavy encode 160x slower; NaN and infinities as `null`, as JavaScript writes them. Measured on 5-7MB files:
+  parse 100-240MB/s (cJSON 73-282, jansson 33-51, json-c 49-257; 2x cJSON on numbers), encode 28-64ms against cJSON's
+  25-607ms. **`os.Exec(args, input = "") Output ? OsError`**: runs `args[0]` (PATH unless it holds a `/`) with `args`
+  as its command line through a new runtime function, `__olang_spawn` (posix_spawnp, no shell; X6, and `-i` has its
+  own); stdin, stdout and stderr are **memory files** (`memfd_create`), so it never deadlocks on a pipe and needs no
+  poll or tasks; `Output{Status, Stdout, Stderr}` with a shell's status (128 + a signal); a program that fails is no
+  error, failing to start is (`NOT_FOUND`, `DENIED`, `FAILED` for no arguments or a zero byte in one). **`std/http`**:
+  `Get(url, headers)`, `Post(url, contentType, body, headers)`, `Send(method, url, headers, body, timeoutMs)` give a
+  `Response{Status, Headers, Body}` (`r.Header(name)`, case-insensitive) - **a 4xx/5xx is a response**, `HttpError` is
+  for no response (curl's exit status: `NO_CURL BAD_URL INVALID RESOLVE CONNECT TIMEOUT TLS REDIRECTS TRANSFER FAILED`).
+  curl must be installed; it runs with `-q` (no curlrc), `--proto =http,https` (redirects too), ten redirects at most,
+  the header fields dumped to its stderr and the last block read (proxy CONNECT, 100 Continue and redirects come
+  before it), every part an argument of its own; a line break or zero byte in a header, a method that is not letters,
+  is `INVALID` before anything runs. Tested offline on canned dumps and live against a local Python server (skipped,
+  as passed, where curl or python3 is missing). **Decided (mine)**: all of the above names and shapes; memfds over
+  pipes; one error type for JSON; NaN as null rather than an error (Encode stays infallible, so `Str` can call it).
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
