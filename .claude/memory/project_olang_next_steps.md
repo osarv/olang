@@ -384,6 +384,12 @@ because what it finds about structure feeds the refactor.
   task), oann wt-oann-settle3 (settling phase 3: fixed-point board engine, sparse-code store, readout groups, CSR).
   Still running: wt-perm. When linalg2 lands, tell oann-mixed to switch attention to the batched causal Gemm. Next
   after perm: the small checker batch (above). Then the bootstrap/ move + modest refactor when no compiler agent runs.
+- 19:30 CEST: perm merged and pushed (59c109e, verified). portgaps and linalg2 told to merge master and run
+  tools/perm_mut.py before their verify. Started wt-chk4 (genericctor, D13c List<Ticket> location, Node.Many(l.ToArray())
+  O26, E31 shape-only operator names). oann repro ctorpush/ctorunstored/capturedfn no longer reproduce (edf8238).
+  OANN MIGRATION once oann-mixed and oann-settle3 finish: move oannc2 to master, run
+  `python3 /home/user/olang/tools/perm_mut.py --olang /home/user/wt/oannc2/build/out <oann dir>`, delete the fixed
+  repros (ctorpush, ctorunstored, capturedfn; operatornames/genericctor once chk4 lands), make test, push.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
