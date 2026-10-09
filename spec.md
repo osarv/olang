@@ -340,6 +340,8 @@ legal but useless, and exists only because the grammar constructing a named type
 | `BF16` | 16-bit "brain" floating point: `F32`'s exponent range with 8 bits of precision |
 | `F32`, `F64` | 32- and 64-bit IEEE 754 floating point |
 
+A primitive's name is the language's own: declaring a type of that name is a compile-time error, as for `Array` (T7).
+
 **T5.** The `I` and `U` types are the integer types, the `I` ones signed and the `U` ones unsigned; `F16`, `BF16`,
 `F32` and `F64` are the float types; together they are the numeric types. `Bool` is not numeric. An unsigned type's
 arithmetic wraps modulo 2^w (E6c), and its division, remainder, ordering, right shift and conversions treat its value

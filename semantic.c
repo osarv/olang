@@ -1443,11 +1443,15 @@ bool OperandIsWrittenText(struct operand* op) {
 
 void checkNoAliasClash(struct semaModule* mod, struct str name, struct token tok);
 
+bool numericPrimitiveBaseType(struct str name, enum baseType* out);
 void collectType(struct semaModule* mod, struct token nameTok, enum baseType bType) {
     struct str name = strFromTok(nameTok);
     if (TypeGetList(&mod->types, name)) { ErrMsgSemantic(nameTok, TYPE_NAME_IN_USE); return; } //own list only
     if (!isPreludeModule(mod) && SemanticBuiltinType(name)) ErrMsgSemantic(nameTok, BUILTIN_TYPE_REDECLARED); //still registered: later passes expect it
-    if (StrCmp(name, StrFromCStr("Array"))) ErrMsgSemantic(nameTok, BUILTIN_TYPE_REDECLARED); //T7
+    enum baseType primB;
+    if (StrCmp(name, StrFromCStr("Array")) || StrCmp(name, StrFromCStr("Bool")) || numericPrimitiveBaseType(name, &primB)) {
+        ErrMsgSemantic(nameTok, BUILTIN_TYPE_REDECLARED); //T7, T4: the language's own names
+    }
     checkNoAliasClash(mod, name, nameTok); //M20
     struct type t = (struct type){0};
     t.owner = mod;
@@ -10129,6 +10133,12 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             return OperandNumericConversion(*namedConv, convArg, nameTok);
         }
         enum baseType convTo;
+        //T4: a module declaring a type of a primitive's name was told so where it declared it - what it builds is unknown
+        if (nameIdens.len == 1 && numericPrimitiveBaseType(strFromTok(nameTok), &convTo)
+                && TypeGetList(&ctx->mod->types, strFromTok(nameTok))) {
+            buildArgs(ctx, firstPartOfType(callNode, SNTX_EXPR_ARGS));
+            return unknownPlaceholder(nameTok);
+        }
         if (nameIdens.len == 1 && numericPrimitiveBaseType(strFromTok(nameTok), &convTo)) {
             bool allowedConv = ctx->allowFallibleCall;
             ctx->allowFallibleCall = false;

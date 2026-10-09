@@ -85,7 +85,7 @@
 #define FOR_IN_NOT_ITERABLE "'for ... in' walks an array, a range, an Iterator<T> - a type with 'mut Next() T ? Exhausted', declared on a mutable receiver: Next gives a value, and fails with Exhausted once there are no more (S9a) - or an iterable, whose 'Iter()' returns one (S9c)"
 #define RANGE_NEEDS_INTEGERS "a range's end, start and step are integers (S9b)"
 #define RANGE_ZERO_STEP "a range's step must be positive - a range only counts upward (S9b)"
-#define BUILTIN_TYPE_REDECLARED "this name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)"
+#define BUILTIN_TYPE_REDECLARED "this name belongs to a built-in type visible in every module ('I32', 'Bool', 'Array', 'Iterator') - choose another (D3a)"
 #define IMPORT_HAS_EXTENSION "an import names a file without its '.olang' extension - write 'import \"geom/rect\"', not 'import \"geom/rect.olang\"' (M23)"
 #define IMPORT_LEAVES_ROOT "a relative import inside the standard library or a remote repository stays within it - name a module outside it by its own path ('std/...' or 'host/owner/repo/...') (M23)"
 #define IMPORT_REMOTE_NEEDS_FILE "a remote import names a file within the repository: 'host/owner/repo[@ref]/path' (M23)"
