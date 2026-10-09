@@ -1823,7 +1823,9 @@ signed type (`I32`, `I64`) is two's complement, so `I32` 2147483647 + 1 is -2147
 negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
 out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
-rely on it. A program wanting overflow detected checks for it itself. Division is the exception, by E6a.
+rely on it. A program wanting overflow detected checks for it itself, or writes `try` (E15a), which checks it there.
+Wrapping is deliberate, not a gap: it is the one defined result that costs nothing, where a check on every operation
+would be a cost the code does not show. Division is the exception, by E6a.
 
 **E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
 (T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value - does not adapt;

@@ -272,6 +272,16 @@ struct scopeBinding {
 //a variable or function - the two share one namespace/list everywhere they're declared (module scope,
 //function params, struct members), so one struct covers both
 struct ctVal; //comptime.h
+//D8a: a parameter's default - its syntax, kept until the default is built (after every signature and global is
+//known: a default may name a global declared anywhere), and the checked operand once it is
+struct paramDefault {
+    struct syntax* syntax;
+    struct semaModule* mod;
+    struct type type; //the parameter's declared type, which the default fits
+    struct operand* op; //NULL until built
+    bool building;
+};
+
 struct var {
     struct semaModule* owner; //the module this was declared in; NULL for locals/params (never called or
                                //read cross-module by name, so codegen never needs it for those) - used to
@@ -350,10 +360,10 @@ struct var {
     bool isInstanceScope;
     //O4b: the anonymous scope variable a parameter written with a bare reference marker is passed with
     bool isImplicitScope;
-    struct operand* defaultVal; //parameters only (D8a): the checked literal a call may omit or write
-                                 //"default" for. NULL when the parameter declares no default. Built once,
-                                 //in the DECLARING module's context - a literal has no call-site-dependent
-                                 //meaning, which is exactly why D8a admits nothing else.
+    struct paramDefault* defaultVal; //parameters only (D8a): the default a call may omit or write "default" for,
+                                      //NULL when the parameter declares none. Shared by every copy of the parameter
+                                      //and built once, on first need (paramDefaultOp), in the DECLARING module's
+                                      //context - after every global's type is known, which a default naming one needs
     struct syntax* bodySyntax; //generic functions only: the SNTX_BLOCK of the declaration, kept so each
                                 //instantiation can check the same body again against its own concrete
                                 //parameter types (G16). NULL for everything else.

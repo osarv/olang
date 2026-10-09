@@ -1621,7 +1621,8 @@ void semaCollectNames(struct semaModule* mod) {
 // ---- pass 2: resolve type shapes and function signatures ----
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
-struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
+struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
+struct operand* paramDefaultOp(struct var* param);
 void resolveTypeDecl(struct type* t);
 
 //resolves a "&name" heap-indirection tag's optional scope name against scopeParams (the function
@@ -3444,7 +3445,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
             Err(nameTok, ERR_ARRAY_PARAM_BY_VALUE, nameTok, &v.type);
         }
         struct syntax* defNode = firstPartOfType(p, SNTX_EXPR);
-        if (defNode) v.defaultVal = buildParamDefault(mod, defNode, v.type);
+        if (defNode) v.defaultVal = newParamDefault(mod, defNode, v.type);
         if (implicitParamScopes) giveImplicitScope(&v, scopeVars); //O4b, at once, so a later parameter can name it
         ListAdd(out, &v);
     }
@@ -6369,26 +6370,65 @@ struct defaultRec { struct operand* op; struct type type; };
 static struct list defaultRecs;
 
 
+//D8a: a parameter's declared default, recorded where the signature is resolved and built on first need - not
+//there: a signature is resolved before the module's globals have types, so a default naming one ("m Mode =
+//DefaultMode") saw an unfinished global, and a constructor's, resolved with its type, always did
+static struct list paramDefaults; //struct paramDefault*: every one, so those no call needed are built too
+struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType) {
+    struct paramDefault* d = MallocOrCrash(sizeof(struct paramDefault));
+    *d = (struct paramDefault){0};
+    d->syntax = defNode;
+    d->mod = mod;
+    d->type = paramType;
+    ListAdd(&paramDefaults, &d);
+    return d;
+}
+
 //D8a: builds a parameter's declared default. Deliberately checked in the DECLARING module's own context
 //- a caller's context would resolve a type name against the wrong module. It must be computable at compile
 //time (K1), so it has a value and no other behaviour - nothing it does can depend on which caller omitted
-//it - which is why one operand can serve every call site.
-struct operand* buildParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType) {
+//it - which is why one operand can serve every call site. One that does not fit its parameter is reported
+//here and stands in as the unknown type, so no call reports it again.
+static struct operand* buildParamDefault(struct paramDefault* d) {
     struct checkCtx dctx = {0};
-    dctx.mod = mod;
-    struct operand* def = buildExprFromSyntax(&dctx, defNode);
+    dctx.mod = d->mod;
+    struct operand* def = buildExprFromSyntax(&dctx, d->syntax);
     //G18: a default for a parameter whose type is a type variable ("alpha <T> = 1") has no type to fit yet - it is
     //fitted at each call, against the instantiation's, a literal adapting there as any literal argument does
-    if (TypeIsGeneric(paramType) && def->isLiteral) return def;
-    reportTypeFit(OperandFitsType(NULL, def, paramType), def->tok, def, paramType);
-    if (!def->isLiteral) ListAdd(&defaultRecs, &(struct defaultRec){def, paramType});
+    if (TypeIsGeneric(d->type) && def->isLiteral) return def;
+    int errs = ErrMsgGetNErrors();
+    reportTypeFit(OperandFitsType(NULL, def, d->type), def->tok, def, d->type);
+    if (ErrMsgGetNErrors() != errs) return unknownPlaceholder(def->tok);
+    if (!def->isLiteral) ListAdd(&defaultRecs, &(struct defaultRec){def, d->type});
     return def;
+}
+
+struct operand* paramDefaultOp(struct var* param) {
+    struct paramDefault* d = param->defaultVal;
+    if (!d) return NULL;
+    if (d->op) return d->op;
+    if (d->building) return unknownPlaceholder(firstTokAnywhere(d->syntax)); //a default reaching itself
+    d->building = true;
+    d->op = buildParamDefault(d);
+    d->building = false;
+    return d->op;
+}
+
+//D8a: every default no call has needed yet, built - so each is checked whether or not anything omits it
+static void buildParamDefaults(void) {
+    for (int i = 0; i < paramDefaults.len; i++) {
+        struct paramDefault* d = *(struct paramDefault**)ListGetIdx(&paramDefaults, i);
+        if (d->op || d->building) continue;
+        d->building = true;
+        d->op = buildParamDefault(d);
+        d->building = false;
+    }
 }
 
 //E14/G18: a parameter's default as one call's argument - a literal its own copy, which the call's fit check adapts to
 //the parameter's type there (a type-variable parameter's differs by instantiation) without touching another call's
 static struct operand* defaultArgFor(struct var* param) {
-    struct operand* d = param->defaultVal;
+    struct operand* d = paramDefaultOp(param);
     if (!d || !d->isLiteral || d->args.len) return d;
     struct operand* c = MallocOrCrash(sizeof(struct operand));
     *c = *d;
@@ -16683,6 +16723,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     bodiesPhase = false; //O10b
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
+    paramDefaults = ListInit(sizeof(struct paramDefault*));
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
     literalShifts = ListInit(sizeof(struct operand*)); //E4a
     zeroRecs = ListInit(sizeof(struct zeroRec)); //D13c
@@ -16779,6 +16820,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     }
     struct list inits = SemanticInitOrder();
     for (int i = 0; i < inits.len; i++) semaBuildGlobalInits(*(struct semaModule**)ListGetIdx(&inits, i));
+    buildParamDefaults(); //D8a: every global's type is known now
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
     //every instantiation discovered while checking those bodies, plus everything those discover in turn
     //one fixed point over both queues, not two in sequence: a function copy's body can instantiate a
