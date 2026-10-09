@@ -3777,10 +3777,10 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
         if (t.scopeParam) snprintf(mark, sizeof(mark), "&%.*s", t.scopeParam->name.len, t.scopeParam->name.ptr);
         else snprintf(mark, sizeof(mark), "&");
     }
-    if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) {
+    if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - the length is no part of it
+        cgBufAdd(b, "Array<");
         rdSpellTypeB(*t.arrElem, b);
-        if (t.arrMalloc) cgBufAdd(b, "[]%s", mark);
-        else cgBufAdd(b, "[%lld]%s", t.arrLen ? t.arrLen->intLiteralVal : 0, mark);
+        cgBufAdd(b, ">%s", mark);
         return;
     }
     if (t.bType == BASETYPE_FUNC) {

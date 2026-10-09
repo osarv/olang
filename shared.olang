@@ -7316,6 +7316,30 @@ test "G19: interfaces constrain type variables of functions and of generic types
     assert CnAreaBaked == 16
 }
 
+# G19/E23/E33: a method the compiler supplies meets a constraint as a declared one does - every array's Len(), a
+# declared array's included, and a float's Bits()
+type CnSized trait {
+    Len() I64
+}
+type CnHasBits trait {
+    Bits() U32
+}
+type CnText extends Array<Char>
+fn cnSize(x <T CnSized>&) I64 { return x.Len() }
+fn cnBits(x <T CnHasBits>) U32 { return x.Bits() }
+fn cnSupplied() I64 {
+    t CnText = CnText("abc")
+    s := "hello"
+    f F32 = 1.0
+    return cnSize(t) * 10 + cnSize(s) + I64(cnBits(f) - 1065353215)
+}
+CnSuppliedBaked := cnSupplied()
+
+test "G19: a supplied Len or Bits meets a constraint" {
+    assert cnSupplied() == 36
+    assert CnSuppliedBaked == 36
+}
+
 # E31: an operator calls a method named for it - Plus, Minus, Mul, Div, Rem, Neg, Less, MatMul, and At, SetAt and
 # Slice for indexing. A lowercase first letter is the module's private operator. "<" is the one ordering a type
 # declares; ">", "<=" and ">=" come from it, and chains of them work (E30).

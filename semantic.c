@@ -5267,6 +5267,17 @@ static bool autoHashMeets(struct type concrete, struct var* m) {
            && m->type.hasRetType && m->type.retType->bType == BASETYPE_INT64 && typeAutoHashable(concrete, 0);
 }
 
+//E23/E33: a method the compiler supplies meets a trait's as one the type declared would - "Len() I64" on every array,
+//a declared one included, and a float's "Bits()" or an unsigned integer's "F32FromBits()" and the like
+static bool suppliedBitsMethod(struct type t, struct str name, struct type* out);
+static bool suppliedMeets(struct type concrete, struct var* m) {
+    if (m->type.vars.len != 0 || m->type.errors.len != 0 || !m->type.hasRetType || m->mut) return false;
+    struct type got;
+    if (concrete.bType == BASETYPE_ARRAY && StrCmp(m->name, StrFromCStr("Len"))) got = TypeVanilla(BASETYPE_INT64);
+    else if (!suppliedBitsMethod(concrete, m->name, &got)) return false;
+    return TypeIsSame(got, *m->type.retType);
+}
+
 //T31/G19: does concrete satisfy trait iface - every method present, called directly. On failure, *failed (when
 //non-NULL) names the first method missing, which is what the diagnostic needs to say.
 bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var** failed) {
@@ -5274,7 +5285,7 @@ bool TypeSatisfiesInterface(struct type concrete, struct type iface, struct var*
     for (int i = 0; i < iface.vars.len; i++) {
         struct var* m = ListGetIdx(&iface.vars, i);
         //E10b: a Hash the compiler supplies meets a trait's Hash
-        if (!InterfaceMethodImpl(concrete, m) && !autoHashMeets(concrete, m)) {
+        if (!InterfaceMethodImpl(concrete, m) && !autoHashMeets(concrete, m) && !suppliedMeets(concrete, m)) {
             if (failed) *failed = m;
             return false;
         }

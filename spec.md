@@ -595,7 +595,9 @@ of the variable in a declaration; two occurrences constraining one variable diff
 Where the variable is bound - by inference at a call (G9), by written type arguments (G7), or by a constructor's
 inferred ones (G10c) - its type must satisfy the constraint's trait, with every variable in the constraint
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
-missing. Satisfaction is T31's.
+missing. Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
+every array's `Len() I64` (E23) and a float's or unsigned integer's bit methods (E33), as does a method a type inherits
+through `extends` (T29e).
 
 A type variable may carry a reference marker (`x <T>&`, `it mut <I Iterator<<E>>>&`): a reference to whatever the
 variable is bound to, which must then be a struct, an enum or an array - a number or another type that cannot be a
