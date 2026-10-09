@@ -1,25 +1,30 @@
 # list - a growable sequence, built for incremental construction when the final size is not known in
-# advance: parsing, accumulating, collecting results. Append-only, and deliberately NOT contiguous.
+# advance: parsing, accumulating, collecting results - and a stack or a work list besides (Push, Pop, Last).
+# Deliberately NOT contiguous.
 #
 # Storage is a run of chunks, each twice the size of the last (8, 16, 32 ...), so appending never moves anything
 # that is already stored. That is the whole design: a contiguous growable array has to reallocate and copy as it
 # grows, and every borrow taken before a growth then points at a stale copy. A List never hands out its chunks
-# at all - "l[i]" gives a copy of the element, as "for x in l" does - so nothing it stores can go stale, and there
+# for writing - "l[i]" gives a copy of the element, as "for x in l" does - so nothing it stores can go stale, and there
 # is no invalidation rule to learn. When contiguous storage is wanted, ToArray copies once, at a point the
-# program chose and can see.
+# program chose and can see. A few operations do move elements within the chunks - RemoveAt and Insert shift the
+# ones after the position, Sort and Reverse reorder them - and cost what that costs; Push, Pop, Clear and indexing
+# move nothing.
 #
 # Because the sizes double, where element i lives is arithmetic: chunk k starts at position 8 * (2^k - 1), so
 # i + 8 is 8 * 2^k plus the offset into chunk k, and k is the place of i + 8's highest set bit, less 3. The chunks
 # are kept in an array of their own (doubled as it fills, which happens only when a chunk is added), so "l[i]"
-# costs that bit position - six comparisons - and two loads, whatever the length.
+# costs that bit position - six comparisons - and two loads, whatever the length. A chunk Pop or Clear empties is
+# kept, and filled again by the next Push to reach it, so a list that shrinks and grows again allocates nothing new.
 #
 # Everything a List allocates lives where the List does (its fields are bare "&", C2d), so it is reclaimed with
 # that scope like anything else, and costs no destructor.
 
 type List<T> struct() {
-    chunks mut Array<mut Array<<T>>&>& = null        # the chunks in order: chunk k holds firstChunk << k elements
-    nChunks mut I64 = 0
-    tail mut Array<<T>>& = null                      # the last chunk, which Push fills
+    chunks mut Array<mut Array<<T>>&>& = null        # the chunks made, in order: chunk k holds firstChunk << k elements
+    nChunks mut I64 = 0                              # how many of them are in use - the last of those is the tail
+    made mut I64 = 0                                 # how many are made: those past nChunks wait to be filled again
+    tail mut Array<<T>>& = null                      # the last chunk in use, which Push fills
     used mut I64 = 0                                 # how much of the tail is filled
     room mut I64 = 0                                 # the tail's length, 0 before the first chunk
     count mut I64 = 0
@@ -58,24 +63,26 @@ fn (l mut List<<T>>&) PushAll(a Array<<T>>&) {
     l.count += a.Len()
 }
 
-# a new tail, twice the size of the last; the array of chunks doubles when it has no room for it
+# a new tail, twice the size of the last - the one made before, when Pop or Clear left it; the array of chunks doubles
+# when it has no room for another
 fn (l mut List<<T>>&) grow() {
-    size I64 = firstChunk
-    if l.chunks == null {
-        l.chunks = Array<mut Array<<T>>&>(4)
+    if l.nChunks < l.made {
+        l.tail = l.chunks[l.nChunks]
     } else {
-        size = l.room * 2
-        if l.nChunks == l.chunks.Len() {
-            more Array<mut Array<<T>>&>&l = Array<mut Array<<T>>&>(l.nChunks * 2)
-            for k in range l.nChunks { more[k] = l.chunks[k] }
+        if l.chunks == null {
+            l.chunks = Array<mut Array<<T>>&>(4)
+        } else if l.made == l.chunks.Len() {
+            more Array<mut Array<<T>>&>&l = Array<mut Array<<T>>&>(l.made * 2)
+            for k in range l.made { more[k] = l.chunks[k] }
             l.chunks = more
         }
+        l.chunks[l.made] = Array<<T>>(firstChunk << l.made)
+        l.tail = l.chunks[l.made]
+        l.made++
     }
-    l.chunks[l.nChunks] = Array<<T>>(size)
-    l.tail = l.chunks[l.nChunks]
     l.nChunks++
     l.used = 0
-    l.room = size
+    l.room = l.tail.Len()
 }
 
 fn (l List<<T>>&) Len() I64 { return l.count }
@@ -120,6 +127,136 @@ fn (l mut List<<T>>&) SetAt(i I64, x <T>) {
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     l.chunks[k][p - (firstChunk << k)] = x
+}
+
+# the first element - failing with the default error when there is none, as Map.Get fails on a missing key:
+# "try l.First() catch default 0" gives a fallback
+fn (l List<<T>>&) First() <T> ? {
+    if l.count == 0 { error }
+    return l.chunks[0][0]
+}
+
+# the last element - failing with the default error when there is none
+fn (l List<<T>>&) Last() <T> ? {
+    if l.count == 0 { error }
+    if l.used == 0 { return l.chunks[l.nChunks - 2][l.chunks[l.nChunks - 2].Len() - 1] }
+    return l.tail[l.used - 1]
+}
+
+# removes the last element and gives it - failing with the default error when there is none, so a list used as a stack
+# or a work list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
+fn (l mut List<<T>>&) Pop() <T> ? {
+    if l.count == 0 { error }
+    l.dropLast()
+    return l.tail[l.used]
+}
+
+# one element fewer at the end. The tail stays where it is when it empties - so a Push straight after fills it again -
+# and the chunk before it, which is full, becomes the tail when one more is dropped
+fn (l mut List<<T>>&) dropLast() {
+    if l.used == 0 {
+        l.nChunks--
+        l.tail = l.chunks[l.nChunks - 1]
+        l.room = l.tail.Len()
+        l.used = l.room
+    }
+    l.used--
+    l.count--
+}
+
+# removes every element. The chunks are kept and filled again by the Pushes that follow, so emptying a list and
+# filling it again allocates nothing
+fn (l mut List<<T>>&) Clear() {
+    l.count = 0
+    l.used = 0
+    if l.made > 0 {
+        l.nChunks = 1
+        l.tail = l.chunks[0]
+        l.room = l.tail.Len()
+    }
+}
+
+# removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
+# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
+# checked once per call, and stops it as a slice out of range does
+fn (l mut List<<T>>&) RemoveAt(i I64) <T> {
+    assert i >= 0 and i < l.count
+    p I64 = i + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    o I64 = p - (firstChunk << k)
+    c := l.chunks[k]
+    x := c[o]
+    for n in range l.count - 1 - i {          # each element after i into the place before it, chunk by chunk
+        if o + 1 < c.Len() {
+            c[o] = c[o + 1]
+            o++
+        } else {
+            next := l.chunks[k + 1]
+            c[o] = next[0]
+            c = next
+            k++
+            o = 0
+        }
+    }
+    l.dropLast()
+    return x
+}
+
+# puts x at position i, the elements from i on each moving up one place - so it costs the number of elements after i,
+# and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not is a mistake in the program, checked once
+# per call, and stops it as a slice out of range does
+fn (l mut List<<T>>&) Insert(i I64, x <T>) {
+    assert i >= 0 and i <= l.count
+    if i == l.count {
+        l.Push(x)
+        return
+    }
+    l.Push(x)                                 # one place more at the end, filled below
+    p I64 = l.count - 1 + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    o I64 = p - (firstChunk << k)
+    c := l.chunks[k]
+    for n in range l.count - 1 - i {          # each element from the end down to i into the place after it
+        if o > 0 {
+            c[o] = c[o - 1]
+            o--
+        } else {
+            before := l.chunks[k - 1]
+            c[0] = before[before.Len() - 1]
+            c = before
+            k--
+            o = before.Len() - 1
+        }
+    }
+    c[o] = x
+}
+
+# the elements in the opposite order, in place
+fn (l mut List<<T>>&) Reverse() {
+    i I64 = 0
+    j I64 = l.count - 1
+    for i < j {
+        t := l.At(i)
+        l.SetAt(i, l.At(j))
+        l.SetAt(j, t)
+        i++
+        j--
+    }
+}
+
+# sorts the list in place so that less(l[i], l[i - 1]) holds nowhere - stable, as an array's Sort is: the elements are
+# copied into one contiguous array, sorted there by Array.Sort, and copied back, so it costs two copies beside the sort
+fn (l mut List<<T>>&) Sort(less fn(x <T>, y <T>) Bool) {
+    a := l.ToArray()
+    a.Sort(less)
+    at I64 = 0
+    for k in range l.nChunks {
+        c := l.chunks[k]
+        n I64 = c.Len()
+        if k == l.nChunks - 1 { n = l.used }
+        for j in range n { c[j] = a[at + j] }
+        at += n
+    }
 }
 
 # a position in a List - handed out fresh by Iter(), so the list keeps none and every loop gets its own: two
@@ -295,6 +432,28 @@ fn (l List<<T>>&) ToArray() mut Array<<T>>& {
         if k == l.nChunks - 1 { n = l.used }
         for i in range n { out[at + i] = c[i] }
         at += n
+    }
+    return out
+}
+
+# the texts one after another with sep between each two, as an array of texts joins (Array<String&>.Join)
+fn (l List<String&>&) Join(sep String&) String {
+    n I64 = 0
+    for p in l { n += p.Len() }
+    if l.count > 1 { n += sep.Len() * (l.count - 1) }
+    out := String(Array<Char>(n))
+    w I64 = 0
+    for i, p in l {
+        if i > 0 {
+            for c in sep {
+                out[w] = c
+                w++
+            }
+        }
+        for c in p {
+            out[w] = c
+            w++
+        }
     }
     return out
 }
@@ -712,4 +871,5 @@ if TestBuild {
         assert (try listFind(m, "x") catch { unreachable }).n == 4
         assert (try listFindIter(m, "x") catch { unreachable }).n == 4
     }
+
 }

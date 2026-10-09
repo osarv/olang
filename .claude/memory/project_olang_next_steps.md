@@ -228,16 +228,28 @@ because what it finds about structure feeds the refactor.
 - 11:55 (the user: "remove the mention of [the inspiration] from anything in the project ever. Be thorough about
   both commits and specs. We don't license either Oann or Olang"): olang's whole local history rewritten with
   git-filter-repo (every file in every commit and every message; verified zero matches), active worktrees (constgen,
-  fuzz, linalg) scrubbed and re-synced, backup bundle /home/user/olang-pre-scrub.bundle. The FORCE-PUSH of master and
-  claude/github-environment-setup-ftu9va was refused by the auto-mode classifier - waiting for the user to allow it or
-  push themselves; until then normal pushes fail (diverged). oann: the tip commit is being replaced by
-  docs/settling.md (amend) - needs the same force-push. Neither repo gets a licence file.
+  fuzz, linalg) scrubbed and re-synced, backup bundle /home/user/olang-pre-scrub.bundle. Force-pushed 2026-10-09 ~12:20 after the user switched the session from Auto to Accept edits (the auto-mode classifier
+  refuses history rewrites; in Accept edits it asks): olang master + claude branch, oann's branch (settling.md + phase 2).
+  Afterwards: the backup bundle, the original-project clone and stale worktrees deleted, scratch copies scrubbed, reflogs
+  expired and gc'd. GitHub may still serve old commits by SHA until its own GC (support request to purge fully). Neither repo gets a licence file.
 - 12:10: std/linalg + std/rand merged LOCALLY (9b88d44; push on hold): Matrix<T>, GEMM 14-17 GFLOPS F32 single-thread
   (= C same algorithm; OpenBLAS 5-7x ahead by instruction set), Gemv beats a C loop, MLP step 2.4ms vs OpenBLAS ~0.5ms.
   Queued for small fixes: an immutable baked plain-data global is emitted `global` not `constant` (cost the GEMM
   kernel 10.8 vs 17.5 GFLOPS; bench/repro/linalg_global_constant.olang). oann: settling.md amended locally (e9b5115,
   force-push pending); phase 2 resumed with compiler /home/user/wt/oannc2 (the old oannc worktree is stale after the
   history rewrite - remove it later).
+- 12:10 (fresh five-hour window; weekly 22%, target ~7%/h): started wt-smallfix (method/local silent miscompile,
+  constant globals, hex U64, generic String O10d, multi-index At/SetAt, assert file:line + message, Schubfach `$`
+  floats, cascades, study leftovers) and wt-stdgaps (List Pop/Clear/RemoveAt/Sort/..., Map Keys/Values/Clear, Join,
+  ToUpper/ToLower/Replace/Repeat/Lines, ParseFloat into the prelude). Running: fuzz, constgen phase 2, oann phase 2.
+  Pushing still blocked (force-push decision).
+- 12:35: oann phase 2 pushed (fba0be4): MNIST 97.7-97.8% (AdamW, SGD, AdamW+projection), C removed, transformers next;
+  2.39 s/epoch vs C+OpenBLAS 0.79 (GEMM instruction set: question 19); PyTorch pip blocked by the proxy (403).
+  Found: arena chunk-pool LEAK (__olang_new_chunk tries only the pool head; Gemm leaks a B panel per call, 2.2GB per
+  10 epochs) - wt-chunkpool fixing it + a workspace Gemm. Queued for the next checker batch from oann's repro/:
+  listzero (D13c: a struct whose ctor reads through a reference parameter cannot be a List element), ctordefault (a
+  constructor default naming a global: "expected Mode, found ?", twice); kept as designed: operatornames (E31 reserves
+  Mul/MatMul for every method), joinparen (`$alpha (" x")` is a call, E13b). at2/hexu64/failloc are in wt-smallfix.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

@@ -1,0 +1,11 @@
+# check: fail error[S18c]: this assertion aborts the program
+# also: an assertion in it fails, which aborts the program
+# K1/S18c: an assert decided while compiling whose evaluation reaches a failing assert, abort or unreachable aborts the
+# program wherever it runs, and is a compile-time error at the assert, as a false one is
+fn half(x I32) I32 {
+    assert x % 2 == 0
+    return x / 2
+}
+fn main() ? {
+    assert half(7) == 3
+}

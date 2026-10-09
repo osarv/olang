@@ -315,11 +315,12 @@ double IntRoundTo(bool neg, unsigned long long mag, enum floatKind k) {
     return neg ? -r : r;
 }
 
-//E11a: the definition of a float's text - the fewest significant digits p (1 to 17) for which v rounded to p digits
-//reads back - parsed, then rounded to the value's own type - as v itself; then laid out as "%.17g" lays a number out:
-//positional where the decimal exponent x is in [-4, 17), with the digits padded by zeros or split by the point, and
-//"d.ddde+XX" otherwise. An infinity or a NaN is written as "%.17g" writes it. Up to seventeen snprintf/strtod tries, so
-//FloatShortest computes the same digits directly and comes here only where it cannot tell (FloatSchubfach)
+//E11a: a float's text by trying - the fewest significant digits p (1 to 17) for which v rounded to p digits reads back -
+//parsed, then rounded to the value's own type - as v itself; then laid out as "%.17g" lays a number out: positional
+//where the decimal exponent x is in [-4, 17), with the digits padded by zeros or split by the point, and "d.ddde+XX"
+//otherwise. An infinity or a NaN is written as "%.17g" writes it. Where the rounding interval is the same on both
+//sides of v - everywhere but a power of two - these are the shortest digits that read back, the closest of those; up to
+//seventeen snprintf/strtod tries, so FloatShortest asks FloatSchubfach first and comes here only for the tiniest values
 static int floatShortestByTries(char* out, size_t cap, double v, enum floatKind k) {
     if (!isfinite(v)) return snprintf(out, cap, "%.17g", v);
     char e[40];
@@ -706,9 +707,8 @@ static unsigned long long floatRop(unsigned long long g1, unsigned long long g0,
 }
 
 //E11a: Schubfach (Giulietti) on c * 2^q - a value of a type with p significant bits, qmin its subnormals' exponent: the
-//shortest decimal f * 10^e in its rounding interval, which is what FloatShortest's tries find whenever it is ALSO the
-//correctly rounded decimal of its length - false where that cannot be told here (the interval at the bottom of a
-//binade is lopsided, so its shortest member may not be the nearest), and where c is too small for the powers' precision
+//shortest decimal f * 10^e in its rounding interval, the closest to the value of those - false where c is too small for
+//the powers' precision, or a decimal one digit shorter is in the interval on both sides (only for such a small c)
 bool FloatSchubfach(unsigned long long c, int q, int p, int qmin, unsigned long long* fOut, int* eOut) {
     if (c < 8) return false;
     unsigned long long out = c & 1, cb = c << 2, cbr = cb + 2, cbl = cb - 2;
@@ -730,9 +730,6 @@ bool FloatSchubfach(unsigned long long c, int q, int p, int qmin, unsigned long 
         bool upin = vbl + out <= sp10 << 2, wpin = (tp10 << 2) + out <= vbr;
         if (upin && wpin) return false;
         if (upin || wpin) {
-            unsigned long long mid = (sp10 << 2) + 20;
-            bool lower = vb < mid || (vb == mid && ((sp10 / 10) & 1) == 0);
-            if (upin != lower) return false;
             *fOut = upin ? sp10 : tp10;
             *eOut = (int)k;
             return true;
@@ -740,17 +737,18 @@ bool FloatSchubfach(unsigned long long c, int q, int p, int qmin, unsigned long 
     }
     unsigned long long t = s + 1;
     bool uin = vbl + out <= s << 2, win = (t << 2) + out <= vbr;
+    if (!uin && !win) return false;
     long long cmp = (long long)vb - (long long)((s + t) << 1);
     bool lower = cmp < 0 || (cmp == 0 && (s & 1) == 0);
-    if (!(uin && win) && (uin == win || uin != lower)) return false;
-    *fOut = lower ? s : t;
+    *fOut = uin != win ? (uin ? s : t) : lower ? s : t;
     *eOut = (int)k;
     return true;
 }
 
-//E11a: v, a value of float type k, as the shortest decimal text reading back as it in that type - the digits by
-//FloatSchubfach where it can tell, else by floatShortestByTries, which defines them. The runtime's
-//"@__olang_fmt_float" is the same algorithm written in IR, so the two give identical text.
+//E11a: v, a value of float type k, as the shortest decimal text reading back as it in that type, the closest to v of
+//those - the digits of FloatSchubfach, or for the tiniest values floatShortestByTries'. The runtime's
+//"@__olang_fmt_float" is the same algorithm written in IR, and the prelude's F64.ShortestDecimal the same in olang, so
+//all three give the same digits.
 int FloatShortest(char* out, size_t cap, double v, enum floatKind k) {
     if (!isfinite(v)) return snprintf(out, cap, "%.17g", v);
     bool neg = signbit(v);

@@ -415,6 +415,8 @@ struct type;
     X(ERR_ASSERT_FALSE,                 "S18c",  "this assertion is false, evaluated while compiling") \
     X(ERR_ASSERT_FALSE_MESSAGE,         "S18c",  "this assertion is false, evaluated while compiling: %s") \
     X(ERR_ASSERT_MESSAGE_NOT_TEXT,      "S18a",  "an assertion's message is text, found %t - write it as text: \"x is \" $x") \
+    X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
+    X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
     /* ---- the program as a whole ---- */ \
     X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \

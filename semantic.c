@@ -5755,6 +5755,7 @@ static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct 
         cc.block = ListInit(sizeof(struct statement));
         struct statement u = (struct statement){0};
         u.sType = STATEMENT_UNREACHABLE;
+        u.var.tok = tok; //K1: where an evaluation that reaches it says it stopped
         ListAdd(&cc.block, &u);
         ListAdd(&call->catchClauses, &cc);
     }
@@ -9078,6 +9079,15 @@ static struct operand* buildBinaryOp(struct checkCtx* ctx, struct operand* a, st
         case TOK_LSE: capName = "Less"; swap = true; negate = true; break;
         case TOK_GRE: capName = "Less"; negate = true; break;
         default: break;
+    }
+    //T29c: written text is a String where nothing adapts it, so as an operator's operand too - "\"a\" < s" asks
+    //String's Less as "s > \"a\"" does
+    struct type* textT = capName ? SemanticBuiltinType(StrFromCStr("String")) : NULL;
+    if (textT) {
+        struct type tv = *textT;
+        tv.structMAlloc = false;
+        if (OperandIsWrittenText(a)) a = OperandNominalConversion(tv, a, a->tok);
+        if (OperandIsWrittenText(b)) b = OperandNominalConversion(tv, b, b->tok);
     }
     struct operand* recv = swap ? b : a;
     const char* name = capName ? operatorFor(ctx, recv->type, capName, opTok) : NULL;
@@ -14750,6 +14760,7 @@ static struct statement buildMatchCore(struct checkCtx* ctx, struct syntax* s, b
         stmt.hasNomatch = true;
         struct statement u = (struct statement){0};
         u.sType = STATEMENT_UNREACHABLE;
+        u.var.tok = firstTokOfType(s, TOK_MATCH); //K1: where an evaluation that reaches it says it stopped
         stmt.nomatchBlock = ListInit(sizeof(struct statement));
         ListAdd(&stmt.nomatchBlock, &u);
     }
@@ -15817,8 +15828,10 @@ struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum st
 //S16c/S16d: no operand and nothing to check - the difference between them is entirely what they claim,
 //which is why both exist: "abort" says stop now, "unreachable" says control was never supposed to be here.
 struct statement buildAbortLikeStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
-    (void)ctx; (void)s;
-    return (struct statement){.sType = kind};
+    (void)ctx;
+    struct statement st = (struct statement){.sType = kind};
+    st.var.tok = firstTokAnywhere(s); //K1: where an evaluation that reaches it says it stopped
+    return st;
 }
 
 struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
@@ -16911,15 +16924,30 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         }
         CtReset();
         struct list order = SemanticInitOrder();
+        //K1: a global whose initializer reaches what aborts the program would abort it at startup - an error at the global,
+        //reported once per place it is reached (a global reading another reaches the other's)
+        struct list abortsAt = ListInit(sizeof(struct token));
         for (int m = 0; m < order.len; m++) {
             struct semaModule* mod = *(struct semaModule**)ListGetIdx(&order, m);
             for (int i = 0; i < mod->vars.len; i++) {
                 struct var* v = ListGetIdx(&mod->vars, i);
                 if ((v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) || !v->initExpr || v->mut || v->isMethod) continue;
                 struct ctVal* val;
-                if (CtEvaluateGlobal(v, &val)) {
+                struct token whyTok = (struct token){0};
+                const char* why = NULL;
+                if (CtEvaluateGlobal(v, &val, &whyTok, &why)) {
                     if (CtIsPlainData(val)) v->constVal = val;
                     else v->bakeVal = val; //K2a
+                } else if (CtWhyAborts(why)) {
+                    bool seen = false;
+                    for (int k = 0; k < abortsAt.len && !seen; k++) {
+                        struct token* t = ListGetIdx(&abortsAt, k);
+                        seen = t->owner == whyTok.owner && t->tokId == whyTok.tokId;
+                    }
+                    if (seen) continue;
+                    ListAdd(&abortsAt, &whyTok);
+                    Err(v->tok, ERR_GLOBAL_ABORTS, why);
+                    noteWhy(v->tok, whyTok);
                 }
             }
         }
@@ -16951,8 +16979,16 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             struct assertRec* r = ListGetIdx(&assertRecs, i);
             if (!OperandIsBool(r->op) || (r->inTest && !testBuild)) continue;
             struct ctVal* v = NULL;
-            if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, NULL, NULL, NULL,
-                              fixedLocalInit, bodyStmts(r->bodyId))) continue;
+            struct token whyTok = (struct token){0};
+            const char* why = NULL;
+            if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, &whyTok, &why, NULL,
+                              fixedLocalInit, bodyStmts(r->bodyId))) {
+                if (CtWhyAborts(why)) { //K1: evaluating it aborts the program, as it would when the assert runs
+                    Err(r->op->tok, ERR_ASSERT_ABORTS, why);
+                    noteWhy(r->op->tok, whyTok);
+                }
+                continue;
+            }
             if (v->i) r->op->ctProven = true;
             else if (!assertFalseWithMessage(r)) Err(r->op->tok, ERR_ASSERT_FALSE);
         }

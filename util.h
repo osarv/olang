@@ -92,8 +92,8 @@ double IntRoundTo(bool neg, unsigned long long mag, enum floatKind k);
 //contract (writes what fits in cap, returns the length the text needs). The runtime's "@__olang_fmt_float" is the
 //same algorithm written in IR, so the two give identical text.
 int FloatShortest(char* out, size_t cap, double v, enum floatKind k);
-//E11a: Schubfach's digits for c * 2^q (p significant bits, qmin the subnormals' exponent), when they are the shortest
-//correctly rounded decimal - and the powers of ten it is computed with, which codegen writes into the runtime
+//E11a: Schubfach's digits for c * 2^q (p significant bits, qmin the subnormals' exponent): the shortest decimal reading
+//back, the closest of those - and the powers of ten it is computed with, which codegen writes into the runtime
 bool FloatSchubfach(unsigned long long c, int q, int p, int qmin, unsigned long long* fOut, int* eOut);
 extern const unsigned long long FloatPow10[1392];
 

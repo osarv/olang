@@ -11046,6 +11046,225 @@ test "E31: a Call adapter, evaluated while compiling as at run time" {
     assert evAdapters(I32(evRun) + 1) == EvAdaptersBaked
 }
 
+# ---- found by the differential fuzzer (fuzz/, K1) ----
+# Each value three ways: a global baked while compiling (K2), an assert decided while compiling (S18c), and the same
+# call at run time on a mutable global, so nothing folds it. Reproducers in fuzz/repro.
+fzRun mut I64 = 1
+
+# a local named like a method, initialized by calling that method: the call went through the local, as though it held
+# a function value (fuzz/repro/localnamedmethod.olang - a segfault)
+type fzG struct(n I32) {
+    n
+}
+fn (g fzG&) lit(t I32) I32 { return t + g.n }
+fn fzLocalLikeMethod(k I32) I32 {
+    g := fzG(1)
+    lit := g.lit(k)
+    return lit
+}
+FzLocalLikeMethodBaked I32 = fzLocalLikeMethod(3)
+test "a local named like a method calls the method" {
+    assert FzLocalLikeMethodBaked == 4 and fzLocalLikeMethod(3) == 4
+    assert fzLocalLikeMethod(I32(fzRun) + 2) == 4
+}
+
+# E28/T29c: a conditional of two text literals, returned as a built text: each literal was copied into the function's
+# own scope and returned dangling - the next allocation wrote over it (fuzz/repro/condtextreturn.olang)
+fn fzBoolText(k I64) String& { return "true" if k == 0 else "false" }
+fn fzChurn(n I64) I64 {
+    b := StringBuilder()
+    for i in range n { b.Push("x" $i) }
+    return b.Len()
+}
+fn fzTextCond(k I64) String& {
+    c String&return = fzBoolText(k)
+    j := fzChurn(50)
+    return "(" $c " " $j ")"
+}
+FzTextCondBaked String& = fzTextCond(1)
+test "E28: text chosen by a conditional and returned is built where the result lives" {
+    assert FzTextCondBaked == "(false 140)" and fzTextCond(1) == "(false 140)"
+    assert fzTextCond(fzRun) == "(false 140)" and fzTextCond(fzRun - 1) == "(true 140)"
+}
+
+# T6b/E28: a conditional whose values widen into the target - each value was widened and the conditional kept its own
+# type, so its slot was stored with the wider value: invalid IR (fuzz/repro/condwiden.olang)
+fn fzCondWiden(a U16, c Bool) I64 { return (U16(a) if c else U16(a + 1)) }
+fn fzCondWidenFloat(a F16, c Bool) F64 { return a if c else a * 2 }
+FzCondWidenBaked I64 = fzCondWiden(7, false)
+test "T6b: a conditional widening into its target is of the target's type" {
+    assert FzCondWidenBaked == 8 and fzCondWiden(7, true) == 7 and fzCondWidenFloat(1.5, false) == 3.0
+    assert fzCondWiden(U16(fzRun) + 6, fzRun > 5) == 8 and fzCondWidenFloat(F16(fzRun) / 2, fzRun > 5) == 1.0
+}
+
+# E10a: "==" on a call giving a String value and a String reference - the call's value is held in a hidden local, which took
+# the callee's result scope as its own and crashed codegen (fuzz/repro/eqcallheld.olang)
+fn fzRender(n I64) String { return $n }
+test "E10a: a call's String value compared with a String reference" {
+    want String& = "3"
+    assert fzRender(3) == want and fzRender(fzRun + 2) == want
+}
+
+# T8/E13a: "Array<T>(n, v)" - every element is v: a literal reaching a text element was stored as its own fixed-length
+# address (invalid IR), and the evaluator copied v into every element where a reference element names one instance -
+# the very one an lvalue is, or one temporary built for them all (fuzz/repro/fillliteral.olang, fillref.olang)
+fn fzFill(n I64) String {
+    a := Array<String&>(n, "ab")
+    b := Array<mut String&>(n, "cd")
+    b[0][0] = 'x'
+    c := Array<I32>(n, 7)
+    d := Array<mut Array<I32>&>(n, c)
+    d[0][1] = 9
+    return $a " " $b " " $(b[1] is b[2]) " " $d " " $(d[0] is d[1]) " " $c
+}
+FzFillBaked String = fzFill(3)
+test "T8: an array filled with a reference names one instance in every element" {
+    want String& = "String&[\"ab\", \"ab\", \"ab\"] String&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[I32[7, 9, 7], I32[7, 9, 7], I32[7, 9, 7]] true I32[7, 9, 7]"
+    assert FzFillBaked == want and fzFill(3) == want
+    assert fzFill(fzRun + 2) == want
+}
+
+# T4/E26: an integer converted to F16 rounds once, overflowing to infinity past 65504 - at -O3 LLVM 18 folded the F16
+# away whenever the integer had few significant bits ("x << 24"), and the program printed 1644167168 where the evaluator
+# said inf (fuzz/repro/f16fold.olang, f16fold.ll)
+fn fzF16Of(x I32) String { return $F16(x << 24) " " $F16(U64(x) << 40) " " $(F16(x << 24) * 0.5) " " $F16(x << 15) }
+FzF16OfBaked String = fzF16Of(98)
+test "T4: an integer converted to F16 overflows to infinity, at -O3 too" {
+    assert FzF16OfBaked == "inf inf inf inf" and fzF16Of(98) == FzF16OfBaked
+    assert fzF16Of(I32(fzRun) + 97) == FzF16OfBaked and F16(I32(fzRun) << 15) == 32768.0
+}
+
+# E33: F16 bits made into a BF16, or BF16 bits into an F16, are converted as the type they were made into - at -O3
+# LLVM 18 merged the two bitcasts into one between half and bfloat, then read it as the type the bits came from in the
+# conversion after it: 5 for every value here (fuzz/repro/bf16bitcastfold.olang, .ll)
+fn fzReinterp(x I32) String {
+    hb := F16(x).Bits().BF16FromBits()
+    bh := BF16(x).Bits().F16FromBits()
+    return $hb " " $F64(hb) " " $I32(hb) " " $bh " " $F64(bh) " " $I32(bh) " " $(hb + hb) " " $(bh < F16(3))
+}
+FzReinterpBaked String = fzReinterp(5)
+test "E33: the bits of one 16-bit float made into the other are read as the other" {
+    assert FzReinterpBaked == "2050 2048 2048 2.312 2.3125 2 4100 true" and fzReinterp(5) == FzReinterpBaked
+    assert fzReinterp(I32(fzRun) + 4) == FzReinterpBaked
+}
+
+# T4/T6b: a BF16 widened, computed on and narrowed to F16 is computed as written - at -O3 LLVM 18 narrowed the BF16
+# straight to F16 for the computation, as though only its precision mattered: 2^-126, a BF16 below F16's range, became 0
+# and 2^-126 / 2^-126 a NaN (fuzz/repro/bf16shrink.olang, .ll)
+fn fzShrink(b BF16) String {
+    w F32 = b
+    return $F16(w / w) " " $F16(F32(b) * 2.0) " " $F16(F64(b) + 1.0) " " $F16(b) " " $(b < BF16(1.0))
+}
+FzShrinkBaked String = fzShrink(1.1754943508222875e-38)
+test "T4: a BF16 below F16's range, widened and computed on, narrows to F16 as computed" {
+    assert FzShrinkBaked == "1 0 1 0 true" and fzShrink(1.1754943508222875e-38) == FzShrinkBaked
+    assert fzShrink(BF16(F64(fzRun) * 1.1754943508222875e-38)) == FzShrinkBaked
+}
+
+# K1/K1a: "unreachable" and "abort" stop an evaluation only where reached - a function holding one ("catch {
+# unreachable }", a guard for what cannot happen) is evaluated like any other, so its global is baked and its assert
+# decided; it used to be refused outright for holding one
+error fzErr {
+    BIG
+}
+fn fzChecked(x I32) I32 ? fzErr {
+    if x > 100 { error fzErr.BIG }
+    return x * 3
+}
+fn fzGuarded(x I32) I32 {
+    if x < 0 { unreachable }
+    if x > 1000 { abort }
+    return try fzChecked(x) catch { unreachable }
+}
+FzGuardedBaked I32 = fzGuarded(5)
+test "K1: a function holding unreachable or abort is evaluated until it reaches one" {
+    assert FzGuardedBaked == 15 and fzGuarded(5) == 15
+    assert fzGuarded(I32(fzRun) + 4) == 15
+}
+
+# K1/S13a/E11c: a statement match covering every case of an enum reference holds an unreachable for a null one - which
+# made every function with such a match unevaluable, and a Str written that way an error, until unreachable stopped an
+# evaluation only where reached
+type fzShape enum {
+    Dot
+    Bar(n I64)
+}
+fn (s fzShape&) Str() String {
+    match s {
+        case fzShape.Dot { return "dot" }
+        case fzShape.Bar(n) { return "bar" $n }
+    }
+}
+fn fzShapeName(s fzShape&) String {
+    match s {
+        case fzShape.Dot { return "Dot" }
+        case fzShape.Bar(n) { return "Bar" $n }
+        case null { return "none" }
+    }
+}
+FzShapeBar fzShape& = fzShape.Bar(3)
+FzShapeBaked String = $FzShapeBar " " $fzShapeName(FzShapeBar) " " $fzShapeName(null)
+test "K1/S13a: a function with an exhaustive match over an enum reference is evaluated while compiling" {
+    assert FzShapeBaked == "bar3 Bar3 none" and $FzShapeBar == "bar3"
+    b fzShape& = fzShape.Bar(I64(fzRun) + 2)
+    assert $b " " $fzShapeName(b) == "bar3 Bar3"
+}
+
+# K1/P9: an atomic operation is evaluated while compiling as the plain operation on its place - nothing runs beside an
+# evaluation - and refused only where a write of that place would be (a global); it used to be refused outright
+type fzCtr struct(n I32) {
+    v mut I32 = n
+}
+fn fzAtomics(start I32) String {
+    x I32 = start
+    x.AtomicStore(x + 7)
+    a := x.AtomicAdd(3)
+    b := x.AtomicSwap(99)
+    c := x.AtomicCompareSwap(99, 5)
+    d := x.AtomicCompareSwap(99, 8)
+    k fzCtr& = fzCtr(start)
+    k.v.AtomicAdd(250)
+    xs := Array<U8>(2, U8(start))
+    xs[1].AtomicAdd(U8(250))
+    return $a " " $b " " $c " " $d " " $x.AtomicLoad() " " $k.v " " $xs
+}
+FzAtomicsBaked String = fzAtomics(1)
+FzAtomicsGlobal mut I32 = 4
+FzAtomicsRead I32 = FzAtomicsGlobal.AtomicLoad()           # a mutable global: read at startup, not while compiling
+test "K1/P9: atomic operations are evaluated while compiling, and agree with the run time" {
+    assert FzAtomicsBaked == "8 11 99 5 5 251 U8[1, 251]" and fzAtomics(1) == FzAtomicsBaked
+    assert fzAtomics(I32(fzRun)) == FzAtomicsBaked and FzAtomicsRead == 4
+}
+
+# K1/P1: a join's tasks are evaluated while compiling - each spawn's arguments and targets taken where it is written, and
+# every task run to completion at the join, in the order spawned, after the block's deferred code - so a parallel
+# computation bakes into a global and decides an assert, as the run time computes it in parallel; it was refused outright
+fn fzSquare(n I64) I64 { return n * n }
+fn fzDivMod(a I64, b I64) (I64, I64) { return a / b, a % b }
+type fzTally struct() {
+    v mut I64 = 0
+}
+fn fzAddTo(t mut fzTally&, n I64) { t.v.AtomicAdd(n) }
+fn fzTasks(n I64) String {
+    out := Array<I64>(n)
+    q I64 = 0
+    r I64 = 0
+    t fzTally& = fzTally()
+    join {
+        for i in range n { spawn out[i] = fzSquare(i + 1) }
+        spawn q, r = fzDivMod(n * 7, 5)
+        spawn fn() { t.v.AtomicAdd(100) }
+        for i in range n { spawn fzAddTo(t, i) }
+        defer { t.v.AtomicAdd(1000) }
+    }
+    return $out " " $q " " $r " " $t.v
+}
+FzTasksBaked String = fzTasks(4)
+test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time" {
+    assert FzTasksBaked == "I64[1, 4, 9, 16] 5 3 1106" and fzTasks(4) == FzTasksBaked
+    assert fzTasks(fzRun + 3) == FzTasksBaked
+}
+
 # ---- checker batch 2 (2026-10-09): what the usage study found, and the syntax it asked for ----
 
 # G8a: a field declared after one whose type is an instantiation naming this very type ("List<mut Widget&>") is seen
@@ -11805,24 +12024,27 @@ test "S18a: an assert's message is evaluated only when it fails" {
     assert(AsMsgCalls == 0), "the message ran " $AsMsgCalls " times"
 }
 
-# E11a: a float's text is computed directly (Schubfach) rather than by up to seventeen snprintf/strtod tries, giving the
-# same text - here the values where the direct digits are not trusted and the tries decide (the smallest subnormals, the
-# lopsided interval at the bottom of a binade), the largest, and the narrow types' edges; baked while compiling (K2,
-# FloatShortest) and rendered at run time (@__olang_fmt_float), identically
+# E11a: a float's text is computed directly (Schubfach) rather than by up to seventeen snprintf/strtod tries - the
+# shortest that reads back, the closest of those, as the prelude's F64.ShortestDecimal gives - here the smallest
+# subnormals (still by the tries), powers of two (whose interval is lopsided: 2^-1017 and the BF16 2^-119 are a digit
+# shorter than the nearest decimal of their length would be), the largest, and the narrow types' edges; baked while
+# compiling (K2, FloatShortest) and rendered at run time (@__olang_fmt_float), identically
 RsWant String = ("5e-324 1e-323 1.5e-323 8.98846567431158e+307 2.2250738585072014e-308 9.223372036854776e+18 "
-                  "9.332636185032189e-302 1e+23 0.3 1.2345678901234568e+17 5e-05 0.0001 1e+17 99999999999999980 "
+                  "9.332636185032189e-302 7.120236347223045e-307 1e+23 0.3 1.2345678901234568e+17 5e-05 0.0001 1e+17 "
+                  "99999999999999980 "
                   "1e-45 4e-45 1.1754944e-38 1.7014118e+38 3.4028235e+38 7.888609e-31 16777216 0.1 "
-                  "6e-08 2e-07 6.104e-05 65500 1 0.3333 3.05e-05 9e-41 1.18e-38 3.39e+38 1 0.2 ")
+                  "6e-08 2e-07 6.104e-05 65500 1 0.3333 3.05e-05 9e-41 1.18e-38 3.39e+38 1 0.2 1.51e-36 ")
 fn rsText(z U64) String {
     s := StringBuilder()
-    for b in U64[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000] {
+    for b in U64[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000,
+                 0x0060000000000000] {
         s.Push($((b + z).F64FromBits()) " ")
     }
     for x in F64[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
     for b in U32[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($((b + U32(z)).F32FromBits()) " ") }
     for x in F32[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
     for b in U16[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($((b + U16(z)).F16FromBits()) " ") }
-    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D] { s.Push($((b + U16(z)).BF16FromBits()) " ") }
+    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($((b + U16(z)).BF16FromBits()) " ") }
     return s.ToString()
 }
 RsBaked String = rsText(0)
@@ -11831,4 +12053,6 @@ test "E11a: a float's text, computed directly, is the shortest that reads back -
     assert RsBaked == RsWant, RsBaked
     assert rsText(RsZero) == RsWant, rsText(RsZero)
     assert $F64(5e-324) == "5e-324" and $F32(1e-45) == "1e-45" and $(0.1 + 0.2) == "0.30000000000000004"
+    f, e := try (0x0060000000000000 + RsZero).F64FromBits().ShortestDecimal() catch { unreachable }
+    assert $f "e" $e == "7120236347223045e-322"         # the prelude's digits are $'s
 }
