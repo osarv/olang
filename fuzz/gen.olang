@@ -84,6 +84,7 @@ type Gen struct(seed U64) {
     vlen mut Array<I64> = Array<I64>(4096)          # an array's length, -1 when it is not known
     vmut mut Array<Bool> = Array<Bool>(4096)        # whether it may be assigned
     vdep mut Array<Bool> = Array<Bool>(4096)        # whether it depends on a parameter (S8a)
+    vwalk mut Array<Bool> = Array<Bool>(4096)       # a List a loop is walking: pushing to it would never end (S9f)
     base mut I64 = 0
     nv mut I64 = 0
     np mut I64 = 0                                  # the current function's parameters, from base
@@ -984,7 +985,10 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             et I32 = g.vt[a] - 300
             if et >= 200 { et = et - 200 }
             x := g.push(et, -1, false, true)
+            walked := g.vwalk[a]
+            g.vwalk[a] = true
             body := g.block(1 + g.r(3), d - 1, in2)
+            g.vwalk[a] = walked
             g.nv = save
             return $ind "for x" $x " in " $arr " {\n" $body $ind "}\n"
         }
@@ -1062,7 +1066,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
     }
     if k == 23 {
         l := g.pick(0, 16)
-        if l >= 0 {
+        if l >= 0 and not g.vwalk[l] {
             et I32 = g.vt[l] - 500
             a := g.pick(et, 9)
             if a >= 0 and g.chance(30) { return $ind $g.use(l) ".PushAll(" $g.use(a) ")\n" }
