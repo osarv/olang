@@ -1,0 +1,17 @@
+# check: fail error[O25]: a reference never narrows
+# P1g: with several targets, each is judged as the assignment of its own result, as a single target is - here a
+# reference borrowed from a local of the join block, stored into one declared before it, which outlives that block
+type Node struct() {
+    v I64 = 0
+}
+fn pick(n Node&) (Node&n, I64) { return n, 1 }
+fn main() ? {
+    x Node& = Node()
+    k I64 = 0
+    join {
+        m := Node()
+        m.v = 42
+        spawn x, k = pick(m)
+    }
+    println($x.v " " $k)
+}

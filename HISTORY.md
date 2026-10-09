@@ -12372,6 +12372,105 @@ the same use-after-free from the copy side. O25h now covers it: such a copy's re
 a copied field, a by-value parameter's `List` and value elements holding references, and a copy out of a reference, read
 back after a churn at run time; cases for the local, the read-only borrow, the constructor and the copy-out assignment.
 
+### A soundness review of the evening's merges, fixed (O17, P1g, P2, S4/S5/E31, T22, G4, S4c, S4d, 2026-10-09)
+
+A read-only review of the three merges of the evening (chk4, cgfix3, s3scope) reproduced eight problems, each with a
+program whose built binary (`-b`, `-d`) disagreed with `-i` after an arena churn. All are fixed here, with must-fail cases
+for the ones that are now errors and corpus tests read back after a churn for the ones that now run.
+
+**O17 - what is "read out of the region" (repro 01, 01b, use-after-free).** O17 refuses lending a value whose references
+live elsewhere than its storage (a copy of `src.b`: storage in this block, references where `src`'s are) to a callee
+whose body stores into the lent value's region. `readFromRegion` decided "this store brings in nothing new" whenever the
+stored value was rooted at the parameter, so `tie(b mut Box&) { b.head.owner = b }` counted as no store, and so did
+`b.head.view = b.data` (a view of the value's own inline array). Both store the *lent value's own storage* - which is
+exactly what may live elsewhere. The region is where the parameter's references lead; the parameter itself and what lies
+in its own storage are the value. `placeInRegion` now walks the path: the parameter is the lent storage (LENT); a
+reference read out of a slot of LENT or region storage leads into the region (IN); a field or element is in its base's
+storage; a slice names its base's. A reference stored must be IN; storage borrowed into a reference slot must be IN
+(`b.head.data`, never `b.data`); a value copied may be rooted either way (it brings only references, which lead into the
+region). The O17 marking moved into `noteRegionStore`, shared with spawn targets (below).
+
+**O17 - the fixed point read answers too early (repro 02, use-after-free).** A call to a callee whose body was already
+checked read its `regionStored` there and then, recorded no edge, and decided the lend there and then too. But a checked
+body's answer can still turn true later: its body may have called into a cycle whose body was in progress, an edge
+settled only at the end. Three mutually recursive functions (ys checking xs checking ys..., then zs calling xs while xs
+was still false) got the lend accepted. Now every call binding one of the caller's own scope variables to a declared
+function or a constructor records its edge, known body or not (keeping the immediate mark as a shortcut), and every lend
+check to such a callee is decided after `settleRegions` - so the fixed point covers everything. A function value's body
+is not known and stores everything, as before; a lambda's captures as before. Under a muted probe the decision stays
+immediate (nothing is recorded then).
+
+**P1g - several spawn targets (repro 03, and a hole beside it).** A single target is checked as the assignment it is
+(`buildAssignCore`); several went only through `landAtTargets`, so `join { spawn b.head.next, k = two() }` stored into
+the lent region uncounted (O17), and - found while fixing it - `spawn x, k = pick(m)` with `m` a local of the join block
+and `x` declared before it stored a reference that outlives its referent (O25: the single-target form was refused).
+Each target is now checked as the assignment of its result, as a destructuring's are (S4b): the call held by a hidden
+local carrying its bindings, each target assigned a member of it, the statements discarded (the task stores the
+results).
+
+**P2 - a closure read out of a field (repro 04, wrong answers, a segfault).** P2 held a task's function value to the
+join only when it was a variable with a block depth (`spawn fs[0]()`) or a temporary (`spawn id(f)()`); `spawn h.f()`,
+with `h` built in the loop body around a closure capturing the loop body's array, was neither. Any callee that is not a
+declared function is now held: a temporary by what it was made from, as before; one read out of storage by that
+storage's exact scope (its closure lives no shorter than the storage it was put in, D16d).
+
+**S5/E31 - an increment evaluated its place again (repro 05, and an older twin).** `x[i]++` through At/SetAt was lowered
+to the SetAt statement wrapped in an `OPERATION_SEQ` whose value was the original At call - evaluated again as the
+statement's value, so `v[next()]++` called `next` and `At` twice. And `a[next()]++` on a built-in array of a type with
+`Plus` or `Inc` was `a[next()] = a[next()].Plus(1)` plus that same value: three evaluations, reading one element and
+writing another. An increment is a statement only (S3a), so the SEQ has no value now (codegen and the evaluator return
+nothing for one), and the derived forms read the place through `placeRead` - the `placeOf` copy a compound assignment's
+read already used (S4) - so the place is computed once by the assignment and read through. `try a[next()]++` on numbers
+takes the same path.
+
+**T22 - a written `mut` on the expected parameter (repro 06, over-rejection).** `funcFitsByPermission` raised the
+have-side's permission and then still compared the parameters' binding flags, which a written `n mut P&` sets and `n P&`
+does not - so a read-only parameter did not fit `fn(n mut P&)` unless the parameter was a type variable. Between two
+references the permission is the type's (T25b), so the flag is compared only for non-references. **Decided (mine)**: a
+value whose type declares `Call` fits a function type on the same terms (E31 said "exactly"): a `Call` reading a
+parameter may stand for a type passing a writable one, and a writable result for a read-only one - it is the same
+question, the adapter's code is the same either way (permissions do not change a reference's representation), and one
+rule for both is what T22 asks. The unsafe direction stays an error for both (`checks/cases/t22callunsafe`).
+
+**G4 - a generic's body checked anyway (repro 08, diagnostics).** A function whose constant variable no parameter can
+give is marked `sigUninferable`, its body unchecked - but a generic one (a type variable too) was instantiated at its
+call and the instantiation's body checked, adding G21 ("a constant argument must be computable") at the body with an
+"instantiated here" note. An instantiation of such a generic is now never checked, as one with unmet constraints is not.
+
+**S4d - `x = E.Neg(x)` built a value holding itself (the README's older note).** `E.Neg(x)` borrows `x` (E12c) for its
+payload, and then T11b writes the new value over `x` in place: the payload refers to `x` itself, and `eval` recursed
+forever (every mode, every compiler since recursive enums). Assigning through a temporary does not help on its own -
+the payload would still name `x`'s storage - so the rule is about the borrow. **Decided (mine): the borrow takes the
+place's old value.** A borrow, in the value an assignment writes over a **value** place, of storage within that place
+(the place itself, a field, or an element - any element of an array standing for any other, indexes not compared -
+reached with no reference followed) is a copy of what the place held, built where a temporary in that position would
+be. That is what a Python or Rust reader expects (`x = Neg(Box::new(x))` moves the old `x`), it is the only reading in
+which the program means something, and no assignment can now make a value hold its own storage. It applies only where
+what the value builds can keep the borrow - an enum payload, a constructor argument C2d says the instance holds, an
+array literal's element, a call whose body can hand the argument back in its result (`calleeMayKeepArg`) - so a call
+merely reading the place (`acc = acc.Plus(v)`, `l = l.Map(f)`) still borrows and copies nothing. A borrow of storage
+*containing* the place is left alone - `x.inner = Inner(x)` is the parent-pointer idiom and means `x` - and a reference
+written in the value is the program's own (`x = E.Neg(r)` with `r` a reference to `x` makes the cycle it says).
+Implementation: while the value of an assignment (and of a parallel assignment, and a spawn) is built, the checker knows
+the places written over (`assignPlaces`); a call, an enum case and an array literal mark such a borrowed argument
+`copiesOld` before anything binds it, and `OperandIsLvalue` then reads it as a temporary - so the checker lands it as
+one (built where the value lands, O18a), codegen promotes a copy (`cgPromote`) and the evaluator copies (`ctFit`) with
+no code of their own. A block inside the value (a lambda's, a clause's) starts with no places.
+
+**S4c - two pre-existing bugs the parallel form showed.** Every value of a parallel assignment is read before any target
+is written, "each held in a hidden local unless a literal" - and an enum case built from values, or an array literal,
+counted as a literal, so `n, e = 5, E.Lit(n)` made `Lit(5)` and `k, a = 7, I64[k, k]` made `[7, 7]`. Only a literal
+reading nothing (a number, text, a payload-less case, `null`) is used where it stands now. Holding those exposed the
+second: a held value holding references kept them in the statement's block, so `x, y = W(Node(i, null)), y` in a loop
+body with `x` declared outside it was O25h's error (it was, for constructor calls, before this change). Each value is now
+landed at its target before it is held (`landAtTarget`, the assignment's own landing, factored out), and a held
+temporary records where it landed as its references' home (`valueHomeOf`, as `:=` does) - so a parallel assignment
+builds where its targets are, as single assignments do.
+
+Checked: the eight reproducers (`-b`/`-d`/`-i` agreeing, or the error), `make verify`; the S4d program crashes the
+previous compiler's test binary. Not done here: borrowing a split value into a reference local or a for-in (the review's
+#4) is wt-rvfix's O17a, merged beside it.
+
 ### A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision QC)
 
 **The hole.** The review of tonight's merges (#4) found that shallow permission (T25b, the user's call of 2026-10-07)

@@ -4251,6 +4251,26 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   its block - O25h now gives them the referent's scope, as a declaration and as an assignment's source. **Not changed**:
   `bad == I64[0, 0]` with `bad` an `Array<I64>&` is "one type" error - a literal does not adapt to an array reference
   in `==`; a split iterator walked by value is still refused at its `Next` by O17, as before.
+- **A soundness review of the evening's merges, fixed (O17, P1g, P2, S4/S5/E31, T22, G4, S4c, S4d, 2026-10-09).** Eight
+  reproduced findings. **O17**: what a callee stores "out of the region" is only what it reaches by following a reference
+  from the parameter (`b.head.next`, `b.head.data`) - the parameter itself and its own inline storage (`b`, `b.data`) are
+  the lent value, which may live elsewhere, so storing them is a store (`tie(b) { b.head.owner = b }` was accepted: a
+  use-after-free); every call to a declared function or constructor takes part in the fixed point, its body checked
+  before it or not, and every lend is decided once it settles (a caller that read a cycle's answer early kept a stale
+  one); a spawn's several targets are each the assignment of their result - an O17 store and an O25 check each (both
+  were skipped). **P2**: a task's function value read out of storage (`spawn h.f()`) is held to the join by that storage.
+  **S5/E31**: an increment's place is evaluated once through At/SetAt and through Plus/Inc (the index ran two or three
+  times). **T22**: a written `mut` on a reference parameter is its type's permission, so a read-only parameter fits it;
+  **decided (mine)**: a `Call` fits a function type on T22's terms too (E31 said exactly). **G4**: a generic whose
+  constant no call can give has no instantiation's body checked. **S4d, decided (mine)**: a borrow, in the value an
+  assignment writes over a value place, of storage within that place takes the place's old value - a copy built where a
+  temporary there would be - where what the value builds can keep it (an enum payload, a constructor field, an array
+  literal's element, a call handing it back); `x = E.Neg(x)` built a value holding itself, written over in place. Storage
+  containing the place (`x.inner = Inner(x)`, a parent link) and references are left as written. Built as `copiesOld`,
+  read by `OperandIsLvalue`, so the checker, codegen and the evaluator treat it as a temporary with nothing of their own.
+  **S4c (pre-existing)**: a parallel assignment's enum case or array literal reading a target was evaluated after it was
+  written (`n, e = 5, E.Lit(n)` gave `Lit(5)`), and a held value holding references kept them in the statement's block
+  (O25h's error from a loop body) - each value now lands at its target before it is held.
 - **A copy of a place reached read-only is read-only (T25b, T25c, D9, B11, std/linalg, 2026-10-09; the user's decision
   QC, recommended by the coordinator).** Shallow permission let a read-only `List`/`Map` - any value holding a `mut`
   reference - be changed through a copy: `x := G; x.Push(1)` changed an immutable global's list (the review of tonight's

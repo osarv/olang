@@ -14021,6 +14021,185 @@ test "O17a: a for-in over a split value, and a copy out of a reference, build wh
     assert rvSplitWalk(ctRuntimeZero, sbChurn) == RvSplitWalkBaked
 }
 
+# S4d: a borrow written in the value an assignment writes over a value place, of that place's own storage, takes the
+# place's old value - "x = E.Neg(x)" negates the old x, where it used to build a value holding x itself, written over in
+# place (an endless Neg). Read back after an arena churn, in loop bodies writing places declared outside them
+type s4dE enum {
+    Lit(v I64)
+    Neg(a s4dE&)
+    Add(a s4dE&, b s4dE&)
+}
+fn s4dEval(e s4dE&) I64 {
+    return match e {
+        case s4dE.Lit(v) => v
+        case s4dE.Neg(a) => 0 - s4dEval(a)
+        case s4dE.Add(a, b) => s4dEval(a) + s4dEval(b)
+    }
+}
+fn s4dWrap(e s4dE&) s4dE { return s4dE.Neg(e) }
+type s4dNode struct(v I64, next s4dNode&) {
+    v
+    next
+}
+type s4dHold struct() {
+    e s4dE = s4dE.Lit(0)
+}
+fn s4dDepth(n s4dNode&) I64 {
+    d I64 = 0
+    for c := n, c != null and d < 100, c = c.next { d++ }
+    return d
+}
+fn s4dNegs(k I64) I64 {
+    x := s4dE.Lit(5)
+    for i in range k { x = s4dE.Neg(x) }
+    return s4dEval(x)
+}
+S4dBaked := s4dNegs(3)
+test "S4d: an assignment's value borrowing the place it writes over takes the place's old value" {
+    k I64 = I64(ctRuntimeZero)
+    x := s4dE.Lit(5)
+    for i in range 3 + k {
+        x = s4dE.Neg(x)
+        sbChurn()
+    }
+    y := s4dE.Lit(2)
+    for i in range 2 + k {
+        y = s4dE.Add(y, s4dE.Lit(3))
+        y = s4dWrap(y)
+    }
+    n := s4dNode(1, null)
+    for i in range 4 + k { n = s4dNode(i + 2, n) }
+    a := Array<s4dE>(3, s4dE.Lit(7))
+    for i in range 3 + k { a[i] = s4dE.Neg(a[i]) }
+    h := s4dHold()
+    h.e = s4dE.Lit(4)
+    for i in range 2 + k { h.e = s4dE.Neg(h.e) }
+    hr mut s4dHold& = s4dHold()
+    hr.e = s4dE.Lit(6)
+    for i in range 3 + k { hr.e = s4dE.Neg(hr.e) }
+    p := s4dE.Lit(5)
+    q := s4dE.Lit(6)
+    for i in range 3 + k { p, q = s4dE.Neg(q), s4dE.Neg(p) }
+    sbChurn()
+    assert s4dEval(x) == -5 and s4dEval(y) == 2
+    assert s4dDepth(n) == 5 and n.v == 5 and n.next.v == 4
+    assert s4dEval(a[0]) == -7 and s4dEval(a[2]) == -7 and s4dEval(h.e) == 4 and s4dEval(hr.e) == -6
+    assert s4dEval(p) == -6 and s4dEval(q) == -5
+    assert S4dBaked == -5 and s4dNegs(3 + k) == S4dBaked and s4dNegs(3) == -5
+}
+
+# S4c: every value of a parallel assignment is read before any target is written - an enum case built from a value, or an
+# array literal, too (they were used where they stand, as a number is, and read the target already written)
+test "S4c: a parallel assignment's enum case and array literal read their values before any target is written" {
+    n I64 = 1
+    e := s4dE.Lit(0)
+    n, e = 5, s4dE.Lit(n)
+    w := I64[0, 0]
+    k I64 = 2
+    k, w = 7, I64[k, k]
+    assert n == 5 and s4dEval(e) == 1 and k == 7 and w[0] == 2 and w[1] == 2
+}
+
+# S5/E31: an increment evaluates its place once - through At and SetAt (At was called, and the index evaluated, twice),
+# through Plus or Inc on a built-in array's element (the index three times), and under try
+type incV struct(n I64) {
+    d mut Array<I64>& = Array<I64>(n, 0)
+    ats I64 = 0
+    sets I64 = 0
+}
+fn (v mut incV&) At(i I64) I64 {
+    v.ats++
+    return v.d[i]
+}
+fn (v mut incV&) SetAt(i I64, x I64) {
+    v.sets++
+    v.d[i] = x
+}
+IncCalls mut I64 = 0
+fn incNext() I64 {
+    IncCalls++
+    return IncCalls
+}
+type incPlus struct(v I64) { v }
+fn (a incPlus&) Plus(b I64) incPlus { return incPlus(a.v + b) }
+type incOwn struct(v I64) { v }
+fn (a incOwn&) Inc() incOwn { return incOwn(a.v + 1) }
+fn (a incOwn&) Dec() incOwn { return incOwn(a.v - 1) }
+test "S5/E31: an increment evaluates its place once" {
+    IncCalls = 0
+    v := incV(8)
+    v[incNext()]++
+    assert IncCalls == 1 and v.ats == 1 and v.sets == 1 and v[1] == 1
+    IncCalls = 0
+    a := Array<incPlus>(3, incPlus(0))
+    a[incNext()]++
+    assert IncCalls == 1 and a[1].v == 1 and a[0].v == 0 and a[2].v == 0
+    IncCalls = 0
+    c := Array<incOwn>(3, incOwn(0))
+    c[incNext()]++
+    c[incNext()]--
+    assert IncCalls == 2 and c[1].v == 1 and c[2].v == -1
+    IncCalls = 0
+    b := Array<I64>(4, 0)
+    try b[incNext()]++ catch BuiltinError { b[0] = 99 }
+    assert IncCalls == 1 and b[1] == 1 and b[0] == 0
+}
+
+# T22: a function value - or a value whose type declares Call - whose reference parameter is read-only fits a function
+# type passing a writable one, "mut" written on it or not (the parameter's binding flag was compared beside its type)
+type t22P struct(v I64) { v }
+fn t22Read(n t22P&) I64 { return n.v * 2 }
+fn t22Apply(f fn(n mut t22P&) I64, p mut t22P&) I64 { return f(p) }
+type t22Scale struct(k I64) { k }
+fn (s t22Scale&) Call(n t22P&) I64 { return n.v * s.k }
+test "T22: a read-only reference parameter fits a function type whose parameter is writable" {
+    p mut t22P& = t22P(4)
+    assert t22Apply(t22Read, p) == 8
+    assert t22Apply(fn(n t22P&) I64 { return n.v + 2 }, p) == 6
+    s := t22Scale(3)
+    assert t22Apply(s, p) == 12
+}
+
+# O17: what is read out of a lent value's region by following a reference brings in nothing new, so a callee storing
+# it there keeps nothing of its own - the split lend stays legal (storing the value's own storage is the error, see
+# checks/cases/o17selfstore)
+type o17rNode struct() {
+    next mut o17rNode& = null
+    view Array<I64>& = null
+    data Array<I64, 4>
+    v I64 = 0
+}
+type o17rBox struct() {
+    head mut o17rNode& = o17rNode()
+}
+type o17rW struct(b o17rBox) { b }
+fn o17rRelink(b mut o17rBox&) {
+    b.head.data[2] = 42
+    b.head.view = b.head.data
+    b.head.next = b.head
+}
+fn o17rBump(src mut o17rW&) {
+    b := src.b
+    o17rRelink(b)
+}
+test "O17: a callee storing what it reads through the lent value's references may be lent a split value" {
+    w := o17rW(o17rBox())
+    o17rBump(w)
+    sbChurn()
+    assert w.b.head.view[2] == 42 and w.b.head.next is w.b.head
+}
+
+# P2/E13b: a task may call a function value read out of a field when that storage lasts until the join
+type p2Hold struct(f fn()) { f }
+test "P2: a task calls a function value read out of storage that lasts until the join" {
+    c mut Array<I64>& = Array<I64>(4, 0)
+    join {
+        h := p2Hold(fn() { c[1] = 7 })
+        spawn h.f()
+    }
+    assert c[1] == 7
+}
+
 # QC/T25c: a value holding 'mut' references copied out of a place reached read-only is read-only itself
 type qcBox struct(P mut Array<I64>&) {
     P
