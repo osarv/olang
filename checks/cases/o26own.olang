@@ -1,11 +1,10 @@
 # check: fail error[O10d]: this value lives in this function's own scope, which closes first
-# O14: a built result cannot be storage of this function's own, which closes at the return
-type N struct(v I32, nx N&) {
+# O14: a built result cannot be storage of this function's own, which closes at the return - a by-value parameter is
+# the function's own copy. (A local built here and returned lives in the result scope instead, O26a.)
+type N struct(v I32) {
     v
-    next mut N& = nx
 }
-fn f() N& {
-    x mut N& = N(1, null)
-    return x
+fn f(n N) N& {
+    return n
 }
 fn main() ? { }

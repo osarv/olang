@@ -85,6 +85,8 @@ struct ctState {
     bool errBypass;              //CF_ERROR raised while evaluating a tried operation's OWN operands (an
                                  //argument's "try g()"): it leaves the enclosing function, and the
                                  //operation's clauses must not see it - until it crosses a function boundary
+    struct operand* stmtTried;   //R10: the call a "try ... catch" STATEMENT tries - tried as an expression's is, so
+                                 //an error from its arguments' own "try" leaves the function too (errBypass)
     struct list* locals;         //struct ctLocal, the current call's, innermost last
     const char* why;             //CF_FAIL: what could not be done at compile time
     struct token whyTok;
@@ -1601,7 +1603,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         }
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
-            if (st->flow == CF_ERROR && op->isTried && st->errCheckRoot != op) st->errBypass = true;
+            if (st->flow == CF_ERROR && (op->isTried || op == st->stmtTried) && st->errCheckRoot != op) st->errBypass = true;
             return false;
         }
         //a parameter is a node of its own: a value one holds a copy, a reference one points where the
@@ -2566,7 +2568,10 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->errWord = s->op->intLiteralVal;
             return;
         case STATEMENT_TRY_CATCH: {
+            struct operand* outerTried = st->stmtTried;
+            st->stmtTried = s->op;
             ctCall(st, s->op);
+            st->stmtTried = outerTried;
             if (st->flow != CF_ERROR || st->errBypass) return;
             for (int c = 0; c < s->catchClauses.len; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);

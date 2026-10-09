@@ -2,13 +2,13 @@
 # never: error[O10c]
 # a function may return something built from a bare "&" parameter into its result scope: the parameter's
 # scope is passed with it (O4b), and the relation becomes an obligation its callers discharge (O10b).
-# This caller cannot - its argument lives in its own scope, and the result would outlive it: one error for the one cause
-# (B11), the returned instance's binding (O13a) found before the obligation
+# This caller cannot - its argument is its own by-value parameter, and the result would outlive it: one error for the one
+# cause (B11), the returned instance's binding (O13a) found before the obligation. (A local built here and passed on
+# lives in the result scope instead, O26a.)
 type P struct(x I32) { x }
 type NB struct(inner P&) { inner }
 fn wrap(p P&) NB& { return NB(p) }
-fn bad() NB& {
-    q P& = P(1)
+fn bad(q P) NB& {
     return wrap(q)
 }
 test "never runs" { }

@@ -1,0 +1,65 @@
+# A lambda capturing values, handed to linalg's Map from a function that is itself called from a larger one (a dispatch
+# over operations): Map was not inlined there, so the lambda was called indirectly per element - 25 ns an element
+# against 2 for the same lambda declaring its values in its body. The cause was the argument's form: a function value
+# went to a call as its { code, environment } pair, and LLVM's inliner credits a call that makes an indirect call
+# direct only when it can see the code - a capture-free lambda's pair is a constant, a capturing one's is built around
+# its environment. FIXED 2026-10-09: a function value crosses a call as two words, code then environment
+# (cgParamSplit), so the code is a constant argument either way - both 1.4-2.3 ns. From oann (repro/capturedvalue).
+import "std/linalg"
+import "std/rand"
+import "std/time"
+
+fn gelu(x <A>) A { return 0.5 * x * (1.0 + linalg.FastTanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) }
+
+fn captured(y linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) {
+    like T
+    y.Map(x, fn(s) { return linalg.Cast(gelu(linalg.Cast(s, z)), like) })
+}
+
+fn declared(y linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) {
+    y.Map(x, fn(s) {
+        w A
+        like T
+        return linalg.Cast(gelu(linalg.Cast(s, w)), like)
+    })
+}
+
+type Op enum {
+    Captured
+    Declared
+    Add
+    Mul
+    Scale(k F64)
+    Neg
+}
+
+fn run(c linalg.Matrix<F32>&, a linalg.Matrix<F32>&, b linalg.Matrix<F32>&, op Op) {
+    match op {
+        case Op.Captured { captured(c, a, F32(0)) }
+        case Op.Declared { declared(c, a, F32(0)) }
+        case Op.Add { c.Map2(a, b, fn(p, q) { return p + q }) }
+        case Op.Mul { c.Map2(a, b, fn(p, q) { return p * q }) }
+        case Op.Scale(k) {
+            kk F32 = F32(k)
+            c.Map(a, fn(p) { return kk * p })
+        }
+        case Op.Neg { c.Map(a, fn(p) { return -p }) }
+    }
+}
+
+fn main() ? {
+    a := linalg.Matrix<F32>(1024, 512)
+    b := linalg.Matrix<F32>(1024, 512)
+    c := linalg.Matrix<F32>(1024, 512)
+    a.FillNormal(rand.Rand(1), 0.0, 1.0)
+    ops := Op[Op.Captured, Op.Declared, Op.Add, Op.Mul, Op.Scale(2.0), Op.Neg]
+    for round in range 3 {
+        t0 := time.Now()
+        for i in range 10 { run(c, a, b, ops[0]) }
+        t1 := time.Now()
+        for i in range 10 { run(c, a, b, ops[1]) }
+        t2 := time.Now()
+        for k in range 2, 6 { run(c, a, b, ops[k]) }
+        println("captured " $(F64(t1 - t0) / 5242880.0).Fixed(2) " ns an element, declared " $(F64(t2 - t1) / 5242880.0).Fixed(2))
+    }
+}

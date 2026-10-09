@@ -4104,6 +4104,31 @@ Go through this for every change to what olang means - a rule added, revised or 
   inferred"; a variable only null reaches still cannot be. **Recorded, not fixed**: the non-causal batched backward at
   T 256 is slower than a Gemm per head (a head's P stays in L2 across its three products only when they run back to
   back).
+- **oann's four: a spawned lambda called where it is made, BF16 narrowing, a lambda through a larger caller, small
+  products (D16b, D16e, P2, T4, E33, D16, std/linalg, 2026-10-09; details mine).** **D16e/P2, wrong answers**: `spawn
+  fn() { ... }()` in a loop built its closure in the loop body (two parameters captured put it in the block it is made
+  in, D16d), which the next iteration reused while the task ran - and P2 never saw it, the callee being no variable.
+  **Decided**: made correct rather than refused - the called form takes the uncalled form's path (a hidden local at the
+  join, the call made through it with its arguments); a spawned lambda is built in the join block whenever every scope
+  it captured from lasts until the join (the uncalled form was refused for the same program); and a function value a
+  call computes for a task (`spawn id(f)()`) is held to P2 as a temporary argument is. **Found on the way**: a lambda
+  called where it is written (`fn(a I64) I64 { ... }(4)`) never worked - its call was built against the placeholder; it
+  is checked first now (D16b). **T4/E33**: F32 -> BF16 was a call of `__truncsfbf2` per element (no inline lowering in
+  LLVM 18 once B12c takes AVX512-BF16 away): it is integer arithmetic on the F32's bits now, inline and vectorized, the
+  same bits (all 2^32 F32 patterns compared with the previous compiler), and BF16 `+ - * /`, `++`, negation, compares and
+  F16 -> BF16 go through it or the exact widening; F64 -> BF16 still calls `__truncdfbf2` (one rounding needs round-to-odd, not built). E33's empty asm
+  sits on every F16 bitcast and no BF16 one (the InstCombine fold needs a half beside the i16), so `BF16FromBits`
+  vectorizes. `BF16(x)` 10-20 -> 0.7-1.0 ns, a BF16 multiply-add 23-30 -> 0.5-1.4, linalg's BF16 product 1024 x 512 x 128
+  4.9-7.5 -> 1.6-1.7 ms (F32 1.9-2.4). **D16**: a capturing lambda handed to `Map` from a large caller ran 25 ns an
+  element against 2 - LLVM's inliner follows a constant code pointer into an indirect call only when the argument is
+  one, and a pair built around an environment is not; **a function value now crosses a call as two words, code then
+  environment** (`cgParamSplit`; the same two registers below the IR): 19-32 -> 1.4-2.7 ns. **std/linalg**: the direct
+  (unpacked) product was 2-3x slower than packing on AVX-512 for most shapes under 64^3 (attention's 64 x 32 x 64 10.5
+  against 5.0 us); measured on AVX-512, AVX2 and SSE, **decided**: direct only at most 1024 multiply-adds, or under 12
+  rows each four vectors wide against a B of at most 65536 elements (`computedDirectly`) - 64 x 32 x 64 -> 4.8 us, 32^3
+  5.45 -> 1.66. bench/README.md has the measurements, bench/repro the two reproducers. **Found by the fuzzer (K1/R10,
+pre-existing)**: the evaluator let a try *statement's* clauses take an error its call's argument's own `try` propagates
+(`try h(try g()) catch { }`), where the program leaves the function - fixed, as the expression form was.
 - **A method is an operator only in the operator's shape; a constructor may introduce type variables; a value built
   from a local the return reads lives with the result (E31, M6b, E10a/E10b/E11c, G10d, O26a, D13c/B11, 2026-10-09).**
   From oann and the usage studies. **E31 revisited (mine, under the revisit rule; oann's `repro/operatornames`)**: a
@@ -4133,6 +4158,45 @@ Go through this for every change to what olang means - a rule added, revised or 
   a type variable `<T>` where G8b writes `T`; a type's name met as a value said "unknown name 'Res' - did you mean
   'Res'?" (now "'Res' is a type, not a value"). Confirmed gone on this compiler: oann's `ctorpush`, `ctorunstored` and
   `capturedfn` (captured 0.52 ns an element against 0.55 direct).
+- **What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11,
+  2026-10-09; study 3, details mine under the coordinator's calls).** **O26a reaches reference locals** (#4, the
+  coordinator's call): a reference local declared by `:=` or with a bare `&`, initialized by a temporary (a built result,
+  an instance, an enum case) or `null`, lives in the result scope when the function returns it - or returns a local it
+  flows into by assignment (`lhs := p.primary()` ... `lhs = Bin(op, lhs, rhs)` in a loop, `return lhs`), read off the
+  rest of its block; one initialized from existing storage keeps its scope (O25a), and a plain copy of a value local
+  (`f := e`) is no flow of its source (O25h's guard). It composes with chk4's O26a (a value a returned value reads
+  through a call that can keep it) and its `resultHome` (a borrowed result's `p`). The recursive-descent and Pratt
+  idioms compile as written. **O17 decides by the callee's body** (#5-8): lending a value whose references live
+  elsewhere than its storage is refused only when the callee can keep what it builds in the value's slots - its body
+  stores references (or values holding them) into the lent region, returns a writable reference into it, or passes the
+  region to a callee that does - a fixed point over calls settled once every body is checked (`settleRegions`); an
+  extern keeps nothing, an unknown body everything, writing numbers is no keeping. **Decided (mine)**: C2d's arguments
+  asked different things need not share a scope - the instance lands where the exact ones live and the others need
+  only outlive that (#11, a context struct over a local `List` and the caller's sink); T22 lets a function value fit a
+  type differing only where reading for writing is safe (a read-only parameter for a writable one, a writable result
+  for a read-only one - #15); G9a matches a lambda's written types before any literal (`Fold(0, fn(acc I64, ...))`,
+  #14); `x[i]++` on a type with At/SetAt is `x[i] += 1`, `try` included (#13); G4's error for a constant is at the
+  declaration naming the fix, the body unchecked and calls silent (#36, #20); **R11 admits a by-value default holding
+  references when it builds all it holds** (#31: a constructor call of numbers, `null` and written text -
+  `catch default List<String&>()`; existing storage still refused); `Map.Keys()`/`Values()` iterators hold the map and
+  walk its buckets themselves (#9). **G16b**: a scope error in a generic body is one error for every instantiation, its
+  notes spelled with the generic's variables (`n mut Node<K, V>&c`) - a record that had to spell bindings two
+  variables share yields to a later instantiation's. **Diagnostics** (#17-#27): a read-only reference returned as a
+  built result names the borrowed form (`'Item&l'`, T25c/O14); O10c's note follows a result's references to the
+  argument they come from (`line mut String&s`), never through a value copy to its source, and never suggests a scope
+  argument on an operator or method call; a
+  for-in reusing a name says D3a first; T22a names the parameter a lambda keeps; type variables are spelled bare in
+  messages (`Array<I16, N>&`); an unknown case gets the nearest case, an unknown import the std module of that name
+  (`import "std/math"`), an unknown name never a method's; `nomatch => unreachable` and a line starting with `+` say
+  what to write. **Found and fixed on the way, pre-existing**: `h.v[i] += 3` through a value field's `SetAt` lost the
+  write (it went to a hidden copy); `try l[1]++` was S4's error. **Recorded limits**: (r10) a value `List<String&>`
+  has one scope for its chunks and its elements' referents (G11), so a local list of slices of a parameter cannot hand
+  its elements to something outliving the list - per-instance element scopes would be a second, flow-tracked scope through
+  every store path (Push/SetAt/Insert, writable lends, RunFrom reads, copies); the prelude's `Split` returns
+  `Array<String&>&t` for this, or build the list where it is kept. (r06) a for-in copy of an element lent to a callee
+  binds the callee's scope variable to the copy's storage (the loop body), and an obligation cannot tell the referent's
+  storage from its contents, so `for p in parts { merge(sum, p) }` fails O10c where `merge(sum, parts[i])` compiles -
+  which the error's note now says.
 - **A review of tonight's merges, fixed (O1b/P2, O4b/D9, E10/K1, D9b, S9c, B3, D11a, T29, X6, 2026-10-09).** A
   read-only review (`/home/user/review/tonight`) reproduced eight bugs and traced three more; all fixed, each with a test.
   (1) **os.RunOnStack's thread reaches the program's scope as its caller does** - a task's private stand-in (P2) - where

@@ -766,7 +766,10 @@ whole program and so lives in the program's scope (O1b).
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
 parameter's type, permission included (T25b), in order, presence and identity of a return type, and their error lists - the
 same error types **in the same order**, since a fallible call reports an error by its position in the
-callee's own list (§7).
+callee's own list (§7). A function value **fits** a function type that differs only in permission where reading for
+writing is safe: a parameter may be read-only where the type passes a writable reference (it reads what it may write), and
+the result writable where the type gives a read-only one - so `fn(acc I32, b Box&) I32` is accepted for
+`fn(acc I32, b mut Box&) I32`. Every other part must be the same.
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
@@ -1305,7 +1308,8 @@ the result type and the error list. Whatever the lambda writes must agree with i
 function (§12) supplies what its type arguments already fix; a type variable reached only through the
 lambda's result is then inferred from it, as from any argument (G9).
 
-**D16b.** Without an expected type, every parameter's type must be written, and the result and errors not
+**D16b.** Without an expected type - a lambda called where it is written (`fn(x I64) I64 { return x * 2 }(3)`, E13b) has
+none - every parameter's type must be written, and the result and errors not
 written are taken from the body: the result is the type of the first `return`'s value - text is a `String`
 (T29c) and a numeric literal its own type - or none when the body returns no value; the errors are those its
 `error` statements and uncaught `try`s produce, in the order they first appear, and a plain `error` makes it
@@ -1341,7 +1345,10 @@ where its captures are seen through: a function value it captured is then known 
 
 **D16e (spawning a lambda).** `spawn fn() { ... }` starts a task running the lambda's body (§6.8 P1). The lambda
 takes no parameters; its captures are made when the `spawn` runs, so a loop spawning one per iteration hands
-each task its own copy of the loop's variables.
+each task its own copy of the loop's variables. A lambda called where it is spawned, `spawn fn(k I64) { ... }(10)`, is
+the same task with arguments: its captures are made when the `spawn` runs and it lives as the uncalled form does.
+Either way the lambda lives until the join (P2): where D16d would put it in the block it is made in because what it
+captured lives in several scopes, it is built in the join block when each of those lasts until the join.
 
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
@@ -2714,7 +2721,9 @@ an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then 
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
 `Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`. A type with neither is an
-error, as for any other non-numeric type.
+error, as for any other non-numeric type. An element of a type indexed through `At` and `SetAt` is incremented as it
+is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` evaluated once), and `try x[i]++` checks
+the store and the element's addition as `try x[i] += 1` does (R21).
 
 `==` and `!=` are a type's `Eq` (E10a) and `$` its `Str` (E11c); `and`, `or`, `not` (they short-circuit, E7), `=`,
 `.`, `try` and `match` are never declared.
@@ -3352,8 +3361,9 @@ leave the `join` block until every task started in it has finished, so it provab
 free — an argument must live at least as long as the `join` block itself, which an argument declared in a
 block *inside* the join does not. Such a spawn is rejected. The same holds for a function value a task is a
 call through: a lambda made inside the join block lives in the block it was made in, and spawning a call
-through it is rejected. A spawned lambda (D16e) is instead built to last until the join, and the references it
-captured must outlive the join block on the same terms as an argument. The same holds for everything an argument
+through it is rejected. A spawned lambda (D16e), called where it is written or not, is instead built to last until the join, and the
+references it captured must outlive the join block on the same terms as an argument. A function value computed for the
+call (`spawn id(f)()`, E13b) holds what it was made from, which must last until the join likewise. The same holds for everything an argument
 **holds**: a value's fields, an enum's payload, a lambda's captures, and what a temporary built in the join block was
 built from (a constructor's or an enum case's arguments) - a task is handed the value, but what it refers to must still
 last until the join. Each task gets its own scope, as any
@@ -3663,7 +3673,12 @@ always what the clause to its left names.
   outcomes have one scope, and whatever receives the value treats it exactly as it would the call alone.
   `null` has no scope and always fits; a temporary has none of its own and is built in the result's scope
   (E12c). A by-value result that holds
-  references (a struct or payload carrying scope variables) takes no default.
+  references (a struct or payload carrying scope variables) takes a default that **builds all it holds**: a
+  constructor call whose every argument is a number, a `Bool`, `null`, text written in the program (static, T25d) or
+  such a call again - `try validate(t) catch default List<String&>()`. It is built where the call's result is, so its
+  references are where the result's are, and what is later put into it lands there too. A default naming existing
+  storage, or built from it, is a compile-time error: its references would have to agree with every scope the
+  result's live in.
 - A checked index `try a[i]` and a slice `try a[lo:hi]` can fail only with `BuiltinError.OUT_OF_BOUNDS` (§7.7),
   which a clause names or takes with an item-less `catch`: `try a[i] catch default -1`. The
   expression is then a value, never an lvalue.
@@ -4232,7 +4247,38 @@ handed back - as an argument or a receiver (`return Node.Many(l.ToArray())`, `re
 method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new:
 what is built from it holds what it holds, which must live where the result does. Where the result is put is the
 result scope for a built result, and for a borrowed one (`T&p`, `p` a reference parameter, O14) the scope `p`'s
-referent lives in, which the function builds into (O4b). So
+referent lives in, which the function builds into (O4b).
+
+A **reference** local the function returns follows it too, where what it names is **built here**: one declared by `:=`
+or with a bare `&` (no scope written), whose initializer is a temporary - a call's built result, a constructor's
+instance, a case of an enum (T17d) - or `null`, lives in the result scope, as if written `&return`; so does what a later
+assignment to it builds there. One initialized from existing storage (a parameter, a field read out of one, a borrowed
+result) keeps that storage's scope (O25a).
+
+For either kind, a local is returned also when, in the rest of its block, a value mentioning it **flows** into what is
+returned: it is assigned to a local (or a field or an element of one) that is returned or already in the result scope,
+or is a local declared from it that is, or is handed to a method called on such a local (`l.Push(x)` with `l`
+returned). A plain copy of a value local into a value (`f := e`, `b = a`) is no flow of it: the copy keeps its
+references where its source's are (O25h), and the source stays where it is; a reference declared from it borrows it,
+which is. The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that
+such a local lives in the caller's scope rather than in its block; a value passed to a plain function together with a
+returned local is not followed. So the recursive-descent and Pratt idioms are correct as written:
+
+```
+fn (p mut Parser&) expr(minPrec I64) Expr& {
+    lhs := p.primary()                     # built in the result scope - returned below
+    for {
+        op := p.peek()
+        if prec(op.kind) < minPrec { break }
+        p.at++
+        rhs := p.expr(prec(op.kind) + 1)   # rhs flows into lhs, so it is built there too
+        lhs = Expr.Bin(op.kind, lhs, rhs)
+    }
+    return lhs
+}
+```
+
+So
 
 ```
 fn mk(n I64) List<I64> {
@@ -4304,6 +4350,13 @@ to, or one referring to something that can be stored through (O25g) - what it bu
 a value claiming the other: a compile-time error naming the fix, to declare it a reference where its references live
 (`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
 a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
+What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
+value's slots when its body assigns into the value's region a reference or a value holding references (a field, an
+element, through any depth), when it returns a reference into that region that can be stored through (the caller could
+then build through it), or when it passes the region on to a call that does either - a fixed point over the program's
+calls, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is not known keeps
+everything. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
+count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
@@ -4458,7 +4511,10 @@ An argument the instance stores in an instance-scoped field must outlive it: whe
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
 be exactly it when something can be stored through the argument (O25g, O25c) - which, where the two are scope variables
 of the function the result lands in, is an equality its callers show (O10c), whether the instance holds one such
-argument or several from different scopes. An argument for a parameter a field names
+argument or several from different scopes. Arguments asked different things need not share a scope: the instance lands
+exactly where those asked to be exact live, and each that need only outlive it must outlive that - so a context
+holding a writable reference to its caller's sink and a read-only one to a local `List` (`Ctx(nums, d)`, the list
+holding numbers) is built where the sink is and read in the list's block. An argument for a parameter a field names
 (`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
 be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
 had closed while the instance could still be read.
@@ -5127,7 +5183,9 @@ parameters), and `less` is called inside the body as an ordinary function value.
 **G4.** Every type variable of a generic function must appear in at least one *parameter's* type. A
 variable appearing only in the return type or only in the error list is a compile-time error, since
 nothing at a call could determine it. A constant variable must appear as the **whole** argument of a constant
-parameter in at least one parameter's type (G24).
+parameter in at least one parameter's type (G24). Either is reported once, at the declaration, saying to introduce the
+variable in a parameter's type; the function's body is then not checked and its calls report nothing more, since no
+call could give it the variable's value.
 
 **G5.** A generic function's error set (D8) may not mention a type variable: the declared error set
 is the same for every instantiation.
@@ -5187,6 +5245,11 @@ Written text (a string literal, a `$` rendering or a join, E11a/E11b) is treated
 while another argument binds the variable, and is then built as a temporary of the bound type - so
 `m.Put("apple", 1)` on a `Map<String&, I32>` passes the text where a `String&` is wanted. Reached only by text,
 the variable is the text's own type (`String`).
+
+A lambda argument whose parameters or result are **written** counts as an argument that binds: its written types are
+matched against its parameter's function type before any literal is, so `a.Fold(0, fn(acc I64, x I32) I64 { ... })`
+binds the accumulator's variable to `I64` and the `0` adapts to it, where the literal alone would have bound `I32`.
+Parts of a lambda left unwritten are taken from the function type once its variables are bound (D16a).
 
 `null` (T2a) takes no part in the matching at all, whatever its parameter's type: it is checked against that type
 once the other arguments have bound its variables, as at any call - so `GemmAct(c, a, false, b, false, null, act)`,
@@ -5309,6 +5372,9 @@ how a constant argument that keeps changing shows (`f` at `N` calling `f` at `N 
 body, its fields, a constraint (G19) or a value check (G27) - is reported where it is written, followed by a note
 for the type or call that asked for that instantiation, with its arguments, and one for each instantiation that led
 there in turn: of a long chain the innermost few, and always the outermost - the program's own use that began it.
+An error about where something lives (§8) found at one place of a generic's body is the same error for every
+instantiation, and is reported once; what its notes suggest writing is spelled with the generic's own variables
+(`n mut Node<K, V>&c`), as the declaration writes them.
 
 ### 12.7 Constant parameters
 

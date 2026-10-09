@@ -1,6 +1,7 @@
 # check: fail error[O10d]: this value lives in this function's own scope, which closes first
-# E31/O14: an instance whose type declares Call, given as a function value, is the instance itself - returning a local
-# one hands out storage the function's own scope reclaims
+# E31/O14: an instance whose type declares Call, given as a function value, is the instance itself - returning one in
+# the function's own storage (a by-value parameter, its own copy) hands out storage its scope reclaims. (A local built
+# here and returned lives in the result scope instead, O26a.)
 type Counter struct(start I64) {
     n I64 = start
 }
@@ -8,10 +9,9 @@ fn (c mut Counter&) Call() I64 {
     c.n++
     return c.n
 }
-fn mkF() fn() I64 {
-    c mut Counter& = Counter(41)
+fn mkF(c Counter) fn() I64 {
     return c
 }
 fn main() ? {
-    g := mkF()
+    g := mkF(Counter(41))
 }

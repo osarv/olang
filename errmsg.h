@@ -108,6 +108,7 @@ struct type;
     X(ERR_IMPORT_ALIAS_INVALID,         "M4",    "'%S' is no identifier, so it cannot be this import's alias - write one: import Name \"...\"") \
     X(ERR_IMPORT_ALIAS_CONFLICT,        "M5",    "another import of this module is already named '%S' - give one an alias of its own") \
     X(ERR_UNKNOWN_IMPORT,               "M10",   "%n is no import here") \
+    X(ERR_UNKNOWN_IMPORT_STD,           "M10",   "%n is no import here - std has it: 'import \"std/%S\"'") \
     X(ERR_IMPORT_IS_PRIVATE,            "M14",   "import %n is private to its module - only a capitalized alias is re-exported") \
     X(ERR_REEXPORT_CYCLE,               "M17",   "re-exporting %n reaches this module again") \
     X(ERR_IMPORT_REACHED_TWICE,         "M16",   "%n reaches a file another import of this module already reaches") \
@@ -155,7 +156,7 @@ struct type;
     X(ERR_CONST_VAR_CONSTRAINED,        "G22",   "a constant variable takes no constraint - %S's type is its parameter's, or one written '<N I64>' where it is introduced") \
     X(ERR_CONST_VAR_AS_TYPE,            "G22",   "%S is a constant, not a type") \
     X(ERR_TYPE_VAR_AS_VALUE,            "G23",   "%S is a type variable, not a value") \
-    X(ERR_CONST_VAR_ONLY_IN_EXPR,       "G4, G24", "constant variable %S appears in no parameter's type as a whole argument, so no call can infer it") \
+    X(ERR_CONST_VAR_ONLY_IN_EXPR,       "G4, G24", "constant variable %S appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length") \
     X(ERR_CONST_VAR_MISMATCH,           "G24",   "%S is %l by one argument and %l by another") \
     X(ERR_CONST_VAR_NOT_IN_TYPE,        "G24, E32b", "%t's length is known only at run time - view it with 'x as Array<T, N>&'") \
     X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
@@ -187,7 +188,7 @@ struct type;
     X(ERR_DEFAULT_NOT_TRAILING,         "D8a",   "%n has no default, but a parameter before it does - defaulted parameters come last") \
     X(ERR_SCOPE_DECL,                   "O3",    "a scope has no name to declare - write a bare '&', or '&x' for where 'x' lives") \
     X(ERR_TYPE_VAR_NAMES_TYPE,          "G1",    "type variable %n is named after a type - choose a name no type has, as '<T>'") \
-    X(ERR_TYPE_VAR_NOT_INFERABLE,       "G4",    "type variable %S appears in no parameter's type, so no call can infer it") \
+    X(ERR_TYPE_VAR_NOT_INFERABLE,       "G4",    "type variable %S appears in no parameter's type, so no call can infer it - introduce it in a parameter's type") \
     X(ERR_EXTERN_TYPE,                  "X2",    "%t cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") \
     X(ERR_MUT_ON_VALUE_TYPE,            "T25b",  "'mut' makes a reference writable, and %t is no reference") \
     X(ERR_MUT_ON_VALUE_PARAM,           "D9",    "a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and %t is none") \
@@ -245,6 +246,8 @@ struct type;
     X(ERR_LITERAL_EXPR_RANGE,           "E4a",   "this literal expression's value does not fit %t") \
     X(ERR_LITERAL_NEEDS_CTOR,           "T29d",  "a value of %t is made by its constructor - write %t(...)") \
     X(ERR_READ_ONLY_TO_WRITABLE,        "T25c",  "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") \
+    X(ERR_READ_ONLY_TO_BUILT_RESULT,    "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '%S'") \
+    X(ERR_READ_ONLY_TO_BUILT_RESULT_NO, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through") \
     X(ERR_TYPE_NOT_INFERABLE,           "D15",   "':=' takes its type from the initializer, and a call returning nothing has none") \
     X(ERR_DECL_FROM_NULL,               "D15",   "':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'") \
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
@@ -316,6 +319,7 @@ struct type;
     X(ERR_FLOAT_LITERAL_RANGE,          "L12b",  "%n is beyond F64's range") \
     X(ERR_NO_SUCH_ERROR_WORD,           "T19",   "%t has no word %n") \
     X(ERR_NO_SUCH_CASE,                 "T17",   "%t has no case %n") \
+    X(ERR_NO_SUCH_CASE_MEANT,           "T17",   "%t has no case %n - did you mean '%S'?") \
     X(ERR_SCOPE_ARG_COUNT,              "E25",   "a call takes at most one scope argument") \
     X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'try'") \
     X(ERR_MATMUL_UNDECLARED,            "E31",   "'@' has no built-in meaning, and %t declares no MatMul") \
@@ -352,7 +356,7 @@ struct type;
     X(ERR_FROM_BITS_RECEIVER,           "E33",   "%n is a method of the unsigned type of its float's width - convert first, as U64(x).F64FromBits()") \
     /* ---- try and catch ---- */ \
     X(ERR_DEFAULT_COUNT,                "R11",   "expected %d defaults, one per result, found %d") \
-    X(ERR_DEFAULT_HOLDS_REFERENCES,     "R11",   "a default for a value holding references is not supported yet") \
+    X(ERR_DEFAULT_HOLDS_REFERENCES,     "R11",   "a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'") \
     X(ERR_DEFAULT_SCOPE,                "R11, O25", "a reference default lives where the call's result does - or is null, or built there") \
     X(ERR_CATCH_AFTER_CATCH_ALL,        "R11a",  "a catch with no error types takes every error left, so no clause can follow it") \
     X(ERR_CATCH_UNREACHABLE,            "R11a",  "an earlier clause already takes every error this one names") \
@@ -401,7 +405,7 @@ struct type;
     X(ERR_FOR_IN_NEEDS_TRY,             "S9e",   "this loop's own calls can fail - write 'for x in try c', with catch clauses after the body") \
     X(ERR_FOR_IN_TRY_NOTHING,           "S9e",   "nothing this loop calls by itself can fail - drop the 'try'") \
     X(ERR_FOR_IN_CLAUSE_EXIT,           "S9e",   "a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag") \
-    X(ERR_FOR_IN_NAME_EXISTS,           "E29",   "%n is already declared, and a for-in declares its names - to loop while it is in c: 'for { if x not in c { break } }'") \
+    X(ERR_FOR_IN_NAME_EXISTS,           "D3a, E29", "%n is already declared, and a for-in declares new names - choose another, or to loop while it is in c write 'for { if %S not in c { break } }'") \
     X(ERR_NOT_ITERABLE,                 "S9a",   "%t cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()") \
     /* ---- match ---- */ \
     X(ERR_ALT_BINDS_OTHER_NAMES,        "S13c",  "every alternative binds the same names - bind it in each, write '_', or split the case") \
@@ -410,6 +414,8 @@ struct type;
     X(ERR_CASE_VALUE_TYPE,              "S13",   "a case value here is %t, found %t") \
     X(ERR_PATTERN_ARITY,                "S13b",  "case %S holds %d fields, and a pattern names each - write '_' for one not wanted") \
     X(ERR_ARROW_IN_STATEMENT,           "S12b",  "'=>' gives a value, which only a match used as a value takes - a statement's case runs a block") \
+    X(ERR_ARROW_LEAVES,                 "S12b",  "'=>' gives a value, and %n gives none - a clause that leaves is a block: '{ %S }'") \
+    X(ERR_LINE_STARTS_WITH_OPERATOR,    "L18",   "a line cannot begin with %n - the line before ended its statement; end that line with %n, or put the expression in parentheses") \
     X(ERR_CASE_BLOCK_STAYS,             "S12b",  "this block can finish without leaving - give the value with '=> v'") \
     X(ERR_GUARD_NOT_BOOL,               "S13e",  "a guard is a Bool, found %t") \
     X(ERR_UNKNOWN_TYPE_VAR,             "",      "unknown type variable %S") \
@@ -453,7 +459,9 @@ struct type;
     X(ERR_SPAWN_RESULT_TOO_SHORT,       "P1g",   "this target closes before the join does - declare it at the join's level or wider") \
     X(ERR_SPAWN_RESULTS_DISAGREE,       "P1g",   "these targets live in different scopes, and the results are built in one") \
     /* ---- lambdas ---- */ \
-    X(ERR_FUNC_VALUE_OBLIGATIONS,       "T22a",  "%S relates its arguments' scopes, which a call through a value cannot check - call it directly") \
+    X(ERR_FUNC_VALUE_OBLIGATIONS,       "T22a",  "'%S' relates its arguments' scopes, which a call through a function value cannot check - call it directly") \
+    X(ERR_LAMBDA_VALUE_OBLIGATIONS,     "T22a",  "this lambda keeps '%S' beyond the call, which a call through a function value cannot check - keep a copy instead") \
+    X(ERR_LAMBDA_VALUE_RELATES,         "T22a",  "this lambda relates its arguments' scopes, which a call through a function value cannot check") \
     X(ERR_CAPTURE_HOLDS_REFERENCES,     "D16c",  "a lambda copies what it captures, and a copy of this loses its references' scopes - capture a reference to it") \
     X(ERR_LAMBDA_RESULT_UNINFERABLE,    "D16b",  "this value gives the lambda no result type - write one") \
     X(ERR_LAMBDA_ARITY,                 "D16a",  "%t takes %d parameter%s, and this lambda %d") \
@@ -483,6 +491,7 @@ struct type;
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
     X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
+    X(NOTE_LOOP_COPY,                   "",      "'%S' is the loop's copy of an element, made in the loop's block - lend the element itself: '%S[i]', with 'for i in range %S.Len()'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \
     X(ERR_COND_DECIDED_NOT_BOOL,        "B9",    "a top-level condition is true or false") \
@@ -515,6 +524,9 @@ void Note(struct token at, enum diag d, ...);
 //what Start returned, so groups nest
 int ErrMsgScopeGroupStart(void);
 void ErrMsgScopeGroupEnd(int saved);
+//G16b: the error just reported had to spell an instantiation's types where the generic's own were wanted - the same
+//error from another instantiation that can spell them is written in its place (one error for every instantiation)
+void ErrMsgWeakSpelling(void);
 //B11a: prints rule's text from the specification; the process's exit status
 int ErrMsgExplain(char* rule);
 //code, a terminal colour, where diagnostics go to a terminal, and "" where they do not (a file, a pipe, an agent)
