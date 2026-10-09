@@ -1,0 +1,6 @@
+# check: fail only the outermost level of a type may name a variable in its marker
+# T7: an element's marker naming a variable is that one error - not also that the variable is not visible
+# also: compilation failed with 1 error
+type P struct() { }
+fn f(p P&) { a Array<P&p>& = null }
+fn main() ? { }

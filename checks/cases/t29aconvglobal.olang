@@ -1,0 +1,8 @@
+# check: fail this reference is read-only, and this place wants a writable one
+# T29a/T25c: a conversion of an immutable global reference is no more writable than the global
+type Bytes Array<U8>
+fn w(s mut Bytes&) { s[0] = 1 }
+G Array<U8>& = U8[7, 8]
+fn main() ? {
+  w(Bytes(G))
+}

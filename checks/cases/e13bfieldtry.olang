@@ -1,0 +1,12 @@
+# check: fail call to a fallible function must be handled with try/catch
+# E13b: a field holding a fallible function is called as any fallible call is - with "try"
+error E { BAD }
+type Risky struct(g fn(n I32) I32 ? E) { g }
+fn chk(n I32) I32 ? E {
+  if n < 0 { error E.BAD }
+  return n
+}
+fn main() ? {
+  r := Risky(chk)
+  x := r.g(1)
+}

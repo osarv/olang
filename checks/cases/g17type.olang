@@ -1,0 +1,8 @@
+# check: fail this generic's instantiation requires an ever-growing set of further instantiations
+# G17: a generic type whose field instantiates it with a bigger argument
+type Grow<T> struct() {
+  next mut Grow<Array<<T>>&>& = null
+}
+fn main() ? {
+  g := Grow<I32>()
+}

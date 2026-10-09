@@ -142,8 +142,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   graph. A comment had claimed the list was already that order, which is how it survived. **A generic's instantiations
   are defined by the ROOT object only (B3d)** - they used to be emitted into every object too, which made
   an ordinary module's object depend on the program it was built in (see M22). Globals initialize per module, imports before
-  importers; within an import cycle the order is unspecified, so an initializer must not read another
-  module's global from inside one.
+  importers - within a module each after the globals it reads (B5a, 2026-10-09); within an import cycle the order is
+  unspecified, so an initializer must not read another module's global from inside one.
 - **`test "description" { }` blocks.** Zig-style, top-level declaration, only usable/run under `-t`.
 - **`assert EXPR` is a statement, not a function call** - usable in any function, test, or
   destructor body, not just inside `test { }`. `assert cond` and `assert(cond)` are identical (the
@@ -530,8 +530,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   array's borrowed, and that copy hid exactly the same lifetime bug for structs that it hid for arrays. Assignment to a runtime-length **value** reuses the buffer it already holds when
   the incoming length matches, allocating only to change length; that needs to know the destination is live
   rather than freshly declared, so `cgStoreInto` carries a `dstHoldsLiveValue` flag set at assignments and
-  nowhere else. Reuse removes an allocation and never changes a meaning, so it is unobservable from the
-  language by construction. The
+  nowhere else. Reuse removes an allocation; it was said here to be unobservable, which it never was - a slice taken
+  before the assignment sees the new elements - so it is specified now (T11b, 2026-10-09), and applied on every path,
+  a literal's included. The
   blast radius was one line of source in each of two files: an unmarked runtime-length local passed to a
   `T[]&` parameter became a value being promoted, which E12a rejected at the time. Both lines went back to
   unmarked when E12a was removed - the borrow is what they always wanted.
@@ -2434,7 +2435,8 @@ Go through this for every change to what olang means - a rule added, revised or 
 - **Static literals (T25d, 2026-10-07, the user's request).** A literal known while compiling - text, or an array
   of constants - reaching a read-only reference (a parameter without `mut`, a read-only field or element) is the
   constant data itself, `{ n, ptr @.str.N }`, with no arena allocation per evaluation; a writable target (a local,
-  a `mut` parameter) still gets a copy. Plain data owned by an immutable global is `internal constant`. This was
+  a `mut` parameter) still gets a copy. What an immutable global holds is `internal constant` unless a writable
+  reference reaches it (K2b, 2026-10-09; "plain data" was the old test, and wrong). This was
   the user's original goal ("bss when immutable, arena when not"); it needed T25b first, because without
   read-only references something could have written the shared constant. The read-only data lives in `.rodata`,
   not BSS (BSS is zero-initialised only).
@@ -3239,6 +3241,73 @@ Go through this for every change to what olang means - a rule added, revised or 
   `checks/checks.olang` (156s, one file), so two at a time would save ~45s (estimated from per-file times) for ~5.7GiB;
   it would also need buffered output and atomic object writes (two files importing one module build one object path).
   `-b`/`-c`/`-i` build one program; what they accumulate is within it (B9c's attempts are never freed).
+- **A review of the type checker, and what it fixed (T4, T7, T16, T25c, T27, T29, T29a, T29e, T31, G1, G4, G7, G10c,
+  G12, G16a, G17, G19, C2e, E10a, E10b, E13b, E14, E28, M6a, M12, M20, R17, 2026-10-09).** A read-only review of the
+  types/modules/generics half of semantic.c reproduced each finding; all are fixed, each with a corpus test or a check.
+  **Decisions (the coordinator's)**: a type may be declared over a primitive, an array or another declared one of those
+  and takes none of its constructor, destructor, `extends` or generic identity; over a struct, enum, trait or generic
+  instance it is an error (T29). Inherited methods meet traits as they answer calls, and an extending type may declare
+  its own `Eq`, `Hash` and `Str` (T29e). Two anonymous enums are one type exactly when their cases and payload types
+  agree (T27). **Decisions (mine)**: **a conversion names its argument's storage** (T29a) - `String(b)` is `b`'s bytes,
+  written where `b` may be and lent for as long as it lives, so `h.s = String(local)` now aliases where it copied, and a
+  view of an inline field is a slice of it; **instantiation names are injective** (G16a) - every type spelled by structure
+  with bracketed compound forms, a reference's permission and a declared array's identity included, no length limit, and
+  a symbol longer than 120 characters spelled as its beginning and a 128-bit hash; **G17** fires at a type nesting 48 deep,
+  once; an inline field's length is decided **per instantiation** (C2e); a **generic constructor binds an array value as a
+  reference** (`Pair(1, "x")` is a `Pair<I32, String&>`, G10c); **only a capitalized `Eq`** takes over `==`, as only `Str`
+  renders (E10a - a private `eq` made `==` and a `Map` of another module disagree); `x.f(args)` on a field calls the
+  function value it holds (E13b); a type variable may not be named after a type (G1); a type-parameter list is only for a
+  struct or a trait (section 12); a method meeting a trait agrees in each parameter's `mut` and permission (T31); a
+  generic call may leave off defaulted parameters (E14); a constraint reached by substitution is checked where the
+  instantiation was asked for, and its body is then not checked (G19); errors inside an instantiation carry a note saying
+  where it was asked for and with what (G16). **Bugs fixed**: the supplied enum `Hash` read every case's payload (abort);
+  a `Call` adapter and a conversion each let a read-only reference be written through; a type holding itself through an
+  inline array hung the compiler; G4 was never enforced; the R17 statement form demanded a signature; `x as T&` and an
+  element marker crashed; a compound assignment skipped T29f; several one-error cascades (private names, unknown methods,
+  wrong type-argument counts, `G12`). Full list in HISTORY.md.
+
+- **The evaluator and the run time agree, from a review (K1/K2b, B5a, E10, T11b, T25d, T21/O1b, T4/E26, E11a, S12b, C2e,
+  E30, B3e, 2026-10-09).** A read-only review of `comptime.c` compared each baked global and each assert it decided with
+  the same computation at run time (and under `-i`); twelve disagreements, all fixed. **Decided, within the
+  coordinator's calls: (1) a global's storage is never written while compiling, and a global reaching what a writable
+  reference can change is not a compile-time value (K1).** Every aggregate a global's value reaches is that global's
+  storage (a node set by address, `ctOwned`): writing into one is refused, reading such a global is refused, and what
+  a `mut` reference reaches from one is written out writable. It was `internal constant` whenever it held no reference,
+  so `G.a[0] = 7` through an immutable `G`'s `mut` field faulted at `-d` and was folded away at `-O3`, and an assert
+  reading it was decided from its initial value while `main` had changed it. The global itself is still baked - its own
+  initializer built what it holds. **(2) Baked globals share instances and slices (K2b)**: one set of private globals
+  per module, the bake loop reads each global through the evaluator's cache (`CtEvaluateGlobal`) so `B = A` is `A`'s
+  node, and a slice is a `getelementptr` into its base's data; a global reaching an instance another module's global
+  holds, or one a startup-set global of its own module holds, is set at startup itself. **(3) A module's globals
+  initialize in dependency order (B5a)** - after the globals each reads, directly or through calls, a call through a
+  function value counting as a call of every function named as a value; declaration order breaks ties, and a cycle is
+  an error naming it (`CtOrderGlobals`, read by codegen and `-i`). Baking had made the order observable:
+  `Early mut I64 = Late + 1` read 11 when `Late` was baked and 1 when it was not. **(4) Assignment to a value array
+  writes into its storage when the length is unchanged (T11b)**, a struct or enum value field by field; only a new
+  length gets new storage. The literal path did not, and the evaluator never did. **(5) One instance per static
+  literal site (T25d)**: no `unnamed_addr`, one constant per site per object, one evaluator node per site and module.
+  **(6) Array identity is the same storage, start and length (E10)**; an allocation of nothing gets storage of its
+  own (the allocator's minimum is now 8 bytes - two `Array<T>(0)` shared an address only when nothing was allocated
+  between them), and an array value's zero value, with no storage, is the same as a null array reference, bit for bit.
+  **(7) A function-typed global is a variable (T21/O1b)** - it compiled to an empty function returning 0, and `-i` could
+  not call it; a named function's value lives in the program's scope, so one may be assigned. **(8) An integer rounds
+  once to a float (T4/E26)** - the evaluator and the checker's literal adaptation went through a double; and LLVM's own
+  `sitofp` to `bfloat` rounds twice at `-O0`, so codegen converts to `BF16` by a runtime function of its own
+  (`__olang_int_bf16`). **Fixed, no decision needed**: `$` rendered an `F64` `-0.0` as `0` (`fadd 0.0`); a function
+  returning a value read out of a reference returned the reference in the evaluator - compared by identity where the
+  run time compared values, and a top-level `if` took the wrong branch; a `match` used as a value built text literals in
+  its block's scope and returned them dangling; the evaluator skipped C2e's length check; E30's cached chain operand
+  lived on the AST node, so a chain re-evaluated inside its own `Less` read the outer chain's values (now per call, in
+  the evaluator's state); comprehensions nested at most 64 deep in the evaluator; `-i` crashed past about 70,000 calls
+  (15KB of C stack each) and now stops where its stack ends, with a message; a comprehension's up-front reservation was
+  not checked under `-i`; signed overflow in the compiler's own `++` and atomic add; `-i` refused an `extern` taking an
+  array of `F16`/`BF16`; and, left by the type checker's review, `-i` reported an error leaving a bare-`?` function by
+  its original name (R17 now re-encodes at the evaluator's call boundary too) and could not call through a `Call`
+  adapter (E31 - now a function value holding its instance, the very one where it has storage, so such calls bake).
+  The evaluator's stack guard keeps a quarter of a small stack free rather than 8MB, or a compiler that could not make
+  its own 1GB thread evaluated nothing. Corpus: a section comparing each
+  baked global with the run time, a checks scenario comparing a program built, built `-d` and interpreted, and the
+  cycle errors as cases.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

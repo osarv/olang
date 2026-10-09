@@ -1,0 +1,7 @@
+# check: fail this type variable appears only in the return type or the error list
+# G4: a type variable written only in the result cannot be inferred at a call - every "<T>" in a signature is in
+# scope for all of it, which must not count as the variable appearing in a parameter
+fn mk(n I64) Array<<T>> { return Array<<T>>(n) }
+fn main() ? {
+  a Array<I32> = mk(3)
+}

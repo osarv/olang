@@ -340,6 +340,8 @@ legal but useless, and exists only because the grammar constructing a named type
 | `BF16` | 16-bit "brain" floating point: `F32`'s exponent range with 8 bits of precision |
 | `F32`, `F64` | 32- and 64-bit IEEE 754 floating point |
 
+A primitive's name is the language's own: declaring a type of that name is a compile-time error, as for `Array` (T7).
+
 **T5.** The `I` and `U` types are the integer types, the `I` ones signed and the `U` ones unsigned; `F16`, `BF16`,
 `F32` and `F64` are the float types; together they are the numeric types. `Bool` is not numeric. An unsigned type's
 arithmetic wraps modulo 2^w (E6c), and its division, remainder, ordering, right shift and conversions treat its value
@@ -442,6 +444,13 @@ of the elements. `Array<T>&` is a reference: `==` is identity and assignment rep
 — a length paired with storage elsewhere, or, for a literal or an inline field, the elements in place with
 their length known while compiling — is a difference in *representation* only and never in behaviour.
 
+**T11b (assigning a value in place).** Assigning to an array **value** that already holds one writes the new
+elements into the storage it has when the length is the same - whatever the new value is: another array, a literal,
+a call's result - so a borrow taken earlier (a slice, a reference, E12c) sees them. When the length differs the
+target is given new storage, and an earlier borrow goes on naming the old storage, unchanged; it stays valid until
+its scope closes. A struct or enum value is assigned in place the same way, field by field, so a reference to one of
+its fields sees the new value.
+
 **T11a.** A reference to an array takes its length from the array it points to, every time it is assigned
 (D15a): the length is held beside the pointer.
 
@@ -460,9 +469,10 @@ take their zero values (D13) — `type P struct() { x mut I32 }`, built as `P()`
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
 (§2.9).
 
-**T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-array,
-non-reference) member or payload types, if that chain passes through a reference marker (§2.9) at least once;
-an unmarked, unbroken self-embedding cycle is a compile-time error, reported at the member that closes it.
+**T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-reference)
+member or payload types - an inline array field (C2e) included, since it holds its elements in the value - if that
+chain passes through a reference marker (§2.9) at least once; an unmarked, unbroken self-embedding cycle is a
+compile-time error, reported at the member that closes it.
 
 ### 2.5 Enum types
 
@@ -569,7 +579,10 @@ arguments always name distinct instantiations. A declared type argument is disti
 and name** (T29), matching the identity rule the type itself has, so two modules each declaring a `Point`
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
 type, its length, and whether it is reference-shaped — every part of what makes an array type distinct
-(T25a).
+(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors
+(T22); a reference argument by its permission (T25b), so `List<Node&>` and `List<mut Node&>` are two; and a declared
+array type from the array it is declared over (T29a). No argument is too long to tell apart: there is no limit on how
+deeply type arguments nest short of G17's.
 
 Instantiations are emitted by every object that uses one and deduplicated at link time, so several modules
 instantiating one generic over one type is ordinary and costs nothing beyond the duplicate compilation.
@@ -586,10 +599,13 @@ parameter likewise (`type Map<K Hashable<<K>>, V>`). The `type-expr` must name a
 value, so it carries no reference marker. A constraint may be written on any occurrence
 of the variable in a declaration; two occurrences constraining one variable differently are an error.
 
-Where the variable is bound - by inference at a call (G9), by written type arguments (G7), or by a constructor's
-inferred ones (G10c) - its type must satisfy the constraint's trait, with every variable in the constraint
+Where the variable is bound - by inference at a call (G9), by written type arguments (G7), by a constructor's
+inferred ones (G10c), or by substitution into another generic's signature or fields, reported at the call or type that
+asked for it - its type must satisfy the constraint's trait, with every variable in the constraint
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
-missing. Satisfaction is T31's.
+missing, and the instantiation's body is not checked. Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
+every array's `Len() I64` (E23) and a float's or unsigned integer's bit methods (E33), as does a method a type inherits
+through `extends` (T29e).
 
 A type variable may carry a reference marker (`x <T>&`, `it mut <I Iterator<<E>>>&`): a reference to whatever the
 variable is bound to, which must then be a struct, an enum or an array - a number or another type that cannot be a
@@ -629,7 +645,10 @@ function type is usable as a variable's, field's, or parameter's declared type, 
 first-class value that can be passed and called through it. A value of function type is **reference-shaped**:
 it refers to the function together with whatever a lambda captured (D16c), so it is nullable (T2a) and §8's
 rules for references apply to it (D16d). `==` compares by identity: a named function is one value however
-often it is named, and each evaluation of a capturing lambda makes a new one.
+often it is named, and each evaluation of a capturing lambda makes a new one. A **global** of function type is a
+variable like any other, holding a function value: `F(x)` calls the function `F` holds, `F` read is that value, and
+a `mut` one may be assigned another - a named function's value, or a lambda's capturing nothing, is made once for the
+whole program and so lives in the program's scope (O1b).
 
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
 parameter's type and `mut` in order, presence and identity of a return type, and their error lists - the
@@ -729,9 +748,11 @@ writable, and an array literal's elements take the target's permission when ever
 compiling - text, or an array of constants - that reaches one (a parameter without `mut`, a read-only field or
 element) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
 plain data an immutable global holds is read-only data the same way. A writable target - a local, a `mut`
-parameter or field - gets a copy of its own. Which happens is not observable except as speed. An element of a static
-literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives in the program's scope
-(§8 O1b) and may be stored anywhere.
+parameter or field - gets a copy of its own. Which happens is not observable except as speed, and as identity:
+each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
+site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data. An
+element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives
+in the program's scope (§8 O1b) and may be stored anywhere.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
@@ -747,12 +768,15 @@ pointer identity rather than structural content (see
 - both are struct, enum, error types or traits declared with the same name in the same module,
   *and* agree on reference-shapedness (T25a) and, inside another type, on permission (T25b) — `Point` and `Point&` are different types, one an
   aggregate and the other a pointer to one, and converting between them is an assignability rule
-  (§5.3 E12), not an identity one.
+  (§5.3 E12), not an identity one, or
+- both are **anonymous** enums (`x enum { A  B }`, written where a type is) with the same cases in the same order,
+  each case's payload of the same types, position by position (a payload's field names do not matter), or both are
+  several results of the same types (D8c).
 
 Any other pairing (different primitives, an array against a non-array, two structs with the same
-field shape but different declared names, etc.) is not the same type. olang has no structural
-typing for struct, enum, or error types: identity is always by declared name and declaring module,
-never by shape.
+field shape but different declared names, a declared enum against an anonymous one, etc.) is not the same type.
+olang has no structural typing for declared struct, enum, or error types: identity is always by declared name and
+declaring module, never by shape; only what has no name is identified by its structure.
 
 **T29.** A **declared** type is nominal, including one whose underlying shape is a primitive (T4).
 `type Meters I32` and `type Feet I32` are different types, and both differ from `I32`: a value of one
@@ -762,6 +786,12 @@ the conversion moves nothing. An undeclared primitive has no owning module and n
 of `I32` remain the same type.
 
 Nominality is what gives a named type an identity to attach methods to (§4.4 M19).
+
+A type may be declared over a primitive, an array, or another declared type over one of those (`type Pct2 Pct`):
+it is then a new name over the same representation and takes **none** of the other type's constructor (T29d),
+destructor, `extends` (T29f) or methods. Declaring one over a struct, an enum, a trait or a generic type's instance
+(`type Names List<String&>`) is a compile-time error - such a type has no representation apart from its identity; a
+struct holding it as a field is the way to name one.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
 constructor, written after the type on the same line: `type Percent I32(v mut I32) [? errors] { ... }`.
@@ -801,7 +831,12 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
   `s String& = "hello"`. A literal is written at the point of use and has no type worth preserving.
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
-  merely identical shapes. It moves nothing.
+  merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
+  variable, a field, an element or a slice, `Name(v)` is that storage read as `Name` - it may be written exactly
+  where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
+  lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
+  assignment may name. An inline field (C2e) is lent as a slice of it. Only a temporary `v` makes the conversion a
+  value of its own.
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
   usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
   always safe — and it is the same latitude `I32(m)` already gives a named numeric, without needing a
@@ -811,7 +846,11 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 is declared over (M19, M19d) beside its own: `s.Count(...)` on a `String` is `Array<U8>`'s `Count`, and a
 `type Nums extends Array<I32>` sorts with `Sort`. An inherited method whose result is its receiver's own array
 type gives the declared type instead: a `String`'s `Filter` is a `String`. An inherited method is never overridden:
-declaring a method whose name an inherited one already has is a compile-time error.
+declaring a method whose name an inherited one already has is a compile-time error - except the protocol methods the
+compiler consults, `Eq`, `Hash` and `Str` (E10a, E10b, E11c), which a type extending its base may declare to replace
+its base's. An inherited method meets a trait (G19) exactly as it answers a direct call - except an inherited `Hash`
+beside an `Eq` the type declares itself, which could not agree with it: such a type declares its own `Hash` (E10b).
+The same holds for a number extending its base (T29f).
 
 **T29f (`extends`).** `type Name extends Base`, for a `Base` that is a numeric type or an array type, declares a type
 that **inherits** its base: the base's methods (T29e; for a number, the prelude's methods on it - an `ExId extends
@@ -883,8 +922,9 @@ of that name whose
   argument),
 - receiver is `mut` if and only if the signature is declared `mut`,
 - remaining parameters agree in count, order and type (T27), a parameter differing only in reference-shape
-  included, since the call is a direct one and E12 borrows,
-- return type agrees — both absent, or both present and the same type,
+  included, since the call is a direct one and E12 borrows - and in each parameter's `mut` and a reference's
+  permission (T25b), so a method never writes through what its trait only lets it read,
+- return type agrees — both absent, or both present and the same type, a reference's permission included,
 - declared error list (§7.1) agrees exactly, in the same order.
 
 A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
@@ -1493,8 +1533,12 @@ array literal construction (§5.6, §5.7).
 **M12.** An enum value (`Type.Case`, §5.8) is alias-qualified like any other cross-module name: the
 identifiers before the trailing case name are an alias chain (M8) followed by the enum type's own name, so
 `Lib.Dir.North` names a word of an imported type to any chain depth. Both the type and the word are subject
-to M6/M6a — a private type is unreachable, and a private word is unnameable even where its type is public.
-A private word's *value* still crosses the boundary normally; only its name does not.
+to M6/M6a — a private type is unreachable, and a private word is unnameable even where its type is public. A case
+with no payload written as a chain is a value like any other, so it may be a method call's receiver
+(`Color.Red.Hash()`, `lib.Dir.North.Hash()`, M19).
+A private word's *value* still crosses the boundary normally; only its name does not. The same holds wherever a case
+is named - after `is` or `as` (E32) and in a pattern (S13b): the chain is resolved, and the type it reaches must be
+the very enum of the value (its module and name), so another module's same-named enum is a different one.
 
 **M13.** Within one module, resolving *any* multi-hop alias chain (M8) requires that every
 intermediate module's own set of imports already be fully known. For two modules in a raw import
@@ -1734,15 +1778,20 @@ the type, and a type may say it itself:
   on length first;
 - for a **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly when
   they name the same storage. For a reference to an array, whose value is a length paired with a pointer, identity
-  is both: the same storage and the same length.
+  is both: the same storage, from the same element, and the same length - so `a[1:3]` is not `a[1:2]`. Storage is
+  made afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of
+  no elements, no fields) included, so two of them are never the same; a slice is part of its base's storage
+  (E16a); a static literal site is one instance (T25d). An array with **no storage** - an array value's zero
+  value, whose bits a null array reference has too - is the same as any other with none.
 - a function value: identity (T21).
 
 Identity is always available, whatever `Eq` says: `same(a, b)` is true exactly when two references (or two
 function values) of one type name the same instance. It is a built-in function in the way `atomicLoad`
 is (P9), and a compile-time error on anything else.
 
-**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` (or `eq`, private to its module as every
-operator method is, E31): one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
+**E10a (`Eq`).** A type takes over `==` by declaring the method `Eq` - always capitalized, as `Str` is (E11c): equality
+belongs to the type, not to one module's view of it, so `==` in the declaring module and in a `Map` of another agree;
+an `eq` is an ordinary method. It takes one parameter, of the receiver's own type in either shape (`T` or `T&`), result `Bool`,
 no errors, and neither the receiver nor the parameter `mut`. Any other method named `Eq` is a compile-time error.
 `Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
 values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A
@@ -1910,7 +1959,9 @@ argument (E25) between the target name and the `(`; a call whose target has none
 `id(dbl)(3)`, `fs[i](x)`, `(pick(c))(x)`. The expression is evaluated first, then the arguments, and the call
 is checked as a call through a variable of that type would be (E14, E12). A fallible one needs `try` as any
 call does; a `try` written before the chain covers its last call only. A `(` beginning a new line begins a new
-statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error.
+statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error. `x.f(args)` where
+`f` is a field of `x` is such a call too - the function value the field holds is called, as `(x.f)(args)` - since a
+method may not share a field's name (M19), so the spelling has that one meaning.
 
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,
@@ -1921,7 +1972,9 @@ storage for an array of a length decided at run time. Nothing else may be called
 (D8a) and at most its total parameter count; there are no variadic parameters. Arguments bind
 positionally, in order, and each must fit (E12) the corresponding parameter's declared type. Any
 parameter left without an argument takes its declared default, which is evaluated as the literal it is —
-one value per call, with no evaluation order to observe.
+one value per call, with no evaluation order to observe. The same holds for a generic function or constructor: its
+type arguments are inferred from the arguments written (G9), a `default` slot binding nothing, and each default then
+fits the instantiation's parameter.
 
 **E14a.** An argument may be the keyword `default`, which supplies that one parameter's declared default
 in place of a written value, letting a call reach a later parameter without restating the values before
@@ -2113,6 +2166,9 @@ unchanged. Exactly one argument is required; anything else (zero, two or more, o
 argument) is a compile-time error. `TypeName` in this position is never shadowable by another
 declaration of the same name - a primitive type name is never otherwise a valid
 call target, so this introduces no ambiguity with an ordinary function or constructor call.
+An integer converted to a float type is **rounded once**, from its exact value, to the nearest value of that type
+(ties to even) - an infinity where it is beyond the type's range - never through a wider float first, which would
+round twice; an integer literal adapting to a float type (T6) is rounded the same way.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
 conversion cannot itself produce an error (a narrowing conversion outside its target type's
 representable range - e.g. `U8(300)` - silently wraps, the same well-defined, unchecked behavior
@@ -2161,8 +2217,10 @@ is `a if c else (b if d else e)`. An `if` with no `else` after its condition doe
 
 The two values have one type: the same type, or one of them a literal (numeric, `null`, or text written in place -
 E11a/E11b) that fits the other's type and adapts to it as a literal does (T6, T29c); two numeric literals take the
-wider of their types. A reference and a **new value** of its referent type (a temporary, E12c: a call's
-value, a constructor call, an enum case, an array built here - not existing storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
+wider of their types, two pieces of written text are two `String`s, and two array literals of one element type are
+two arrays of it, whatever their lengths (T7: the length is no part of the type). A reference and a **new value** of its
+referent type (a temporary, E12c: a call's value, a constructor call, an enum case, an array built here - not existing
+storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
 `:=` takes one when it would take each value on its own (D15).
@@ -3260,9 +3318,11 @@ lives as long as the program; and what a call builds into a scope variable a glo
 result borrowed from it, O13) is built there too. So is a temporary a function assigns to a global, or into a field
 or element reached from one - a global's referent and everything it holds live in the program's scope - and anything
 already living somewhere that is stored there must live there too: a global's, or something built there. Storing
-anything shorter-lived is a compile-time error. A global passed as an argument determines the callee's
-scope variable to be the program's scope (O25e): an element pushed into a global list is built there. Each task
-reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do not run at exit. `&g`, for a global `g`, names
+anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
+or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
+determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
+there. Each task reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do
+not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
@@ -3836,7 +3896,8 @@ instance itself**: its `n` elements are part of the struct's layout, as a primit
 then remains plain data — copying it copies the elements, returning it by value needs no scope — and its
 layout matches a C struct with an array member. `Len()` of such a field is the constant `n`, and an index known
 while compiling is checked against it. Where `n` cannot be computed at compile time the field cannot be
-stored inline, and must be written as a reference (T7a).
+stored inline, and must be written as a reference (T7a). In a generic type `n` is computed for each instantiation
+(G16), so it may depend on the type's arguments.
 
 An inline field is **fixed storage**: an array copied into it must have exactly its length. Where both
 lengths are known while compiling a mismatch is a compile-time error; otherwise the length is checked once
@@ -4021,10 +4082,12 @@ out of range, reading through a null reference, dividing by zero, a shift or con
 interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
 tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
 initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
-same way. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
+same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
+X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
 `-D` apply as to any build. The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
-implementation memory is not reclaimed while the program runs, so `-i` suits short runs.
+implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
+interpreter's stack holds stops it, naming the call, with status 1 - never a crash.
 
 **B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
@@ -4075,11 +4138,18 @@ process with `code` as its status — of which the platform passes on the low 8 
 innermost thing that can end (S16a); a test that calls it ends the whole test run. It is an ordinary call, not a
 statement D10a counts as leaving: where a result is owed, `unreachable` follows it.
 
-**B5a.** Every module's global variables (§3 D12) are initialized before `main` runs, each module's own
-in declaration order. Across modules the order is **imports first**: a module is initialized after every
+**B5a.** Every module's global variables (§3 D12) are initialized before `main` runs. Within a module, a global's
+initializer runs **after the initializers of the globals it reads** - directly, or through a function it calls,
+at any depth; declaration order decides among globals with no such dependency between them. A call through a
+function value counts as a call of any function named as a value in what runs (or in the initializer of a global
+it reads that holds one), since that is what it may reach. Globals whose initializers read each other - a cycle,
+including one reading itself - are a compile-time error naming them, since none of them can be set first.
+Across modules the order is **imports first**: a module is initialized after every
 module it imports has been. Where imports form a cycle (§4.6 allows one), the relative order of the
 modules in that cycle is unspecified, so a global initializer that reads a global from another module in
-the same cycle has no defined value to read and must not be written.
+the same cycle has no defined value to read and must not be written. Compile-time evaluation (K2) reads a
+global's value as this order sets it, so whether a global is computed while compiling never changes what another
+reads.
 
 **B6.** `done` and `fail` (§6.6) exit the process immediately, from anywhere, with status `0` or `1`
 respectively, printing nothing, independent of §10.3's own `main`-return handling — except while a test
@@ -4285,14 +4355,16 @@ an error.
 A function or a struct type may be **generic**: parameterized over one or more types, with a separate
 copy compiled for each distinct set of type arguments it is used with. Enum and error types can
 never be generic — an error type references no other type (T19), and an enum's payloads name their types as written (T17a), so there is nothing to
-parameterize.
+parameterize - and neither can a declared number or array type (T29); a type-parameter list on any of them is a
+compile-time error at its declaration. A trait may be (T35a).
 
 ### 12.1 Type variables
 
 **G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19), written where an entire `type-expr` (T2) would otherwise
 appear. It names a **type variable**: a type that is not known at the declaration and is supplied
-per instantiation. `IDEN` must not name a type declared in the referencing module (D2); writing a
-declared type's name inside a `type-var` is a compile-time error, since `<Point>` would otherwise
+per instantiation. `IDEN` must not name a type the referencing module can name - one it declares or imports by
+bare name (D2), a prelude type, `Array` or a primitive; writing such a name inside a `type-var` (or as a generic
+type's parameter) is a compile-time error, reported once where it is first written, since `<Point>` would otherwise
 read as parameterizing over something already concrete.
 
 **G2.** A `type-var` may carry a reference marker exactly as a `type-ref` does (T24), and is written as an
@@ -4407,9 +4479,12 @@ match the declared `type-params` (G6). Omitting it is G10c.
 
 **G10c.** A generic struct type's constructor called with no type-argument list infers its type arguments from
 the constructor's arguments, exactly as a generic function's are inferred (G9, G9a, G9b): `Pair(1, s)` is
-`Pair<I32, String&>(1, s)`. A type parameter no constructor parameter mentions, or arguments that bind one
-inconsistently, cannot be inferred, and the call is then a compile-time error naming the written form. A type
-named anywhere other than a constructor call always writes its arguments (G6).
+`Pair<I32, String&>(1, s)`. A type parameter an array value reaches - written text, an array literal, an array
+variable - is bound to a reference to it, since a struct holds an array by reference (T7a, T7b): `Pair(1, "x")` is a
+`Pair<I32, String&>`, the text built where the pair lands and a variable's array borrowed. A type parameter no
+constructor parameter mentions, or arguments that bind one inconsistently, cannot be inferred, and the call is then a
+compile-time error naming the written form. A type named anywhere other than a constructor call always writes its
+arguments (G6).
 
 **G10b.** A generic struct type's constructor and destructor are monomorphized with it (G16): each
 instantiation gets its own, built from the generic's own field list and `destruct` block against that
@@ -4464,8 +4539,9 @@ been written out by hand — including destructor registration (§9.3), scope co
 structural comparison (E10).
 
 **G17.** Instantiation may not be unbounded: a generic whose own instantiation requires an
-ever-growing set of further instantiations is a compile-time error. The depth at which this is
-reported is implementation-defined.
+ever-growing set of further instantiations is a compile-time error, reported once. The depth at which this is
+reported is implementation-defined: an instantiation whose type arguments nest more than 48 types deep (an array its
+element, an instance its arguments, a function its parameters and result) is taken to be one.
 
 ## 13. Compile-time evaluation
 
@@ -4477,7 +4553,11 @@ value it was taken from, a function value names the function, a slice shares its
 writes it, a checked operation (E15a) fails with the same `BuiltinError` word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
-- read a mutable global, whose value is the running program's, or write any global;
+- read a mutable global, whose value is the running program's, or write any global or what one holds (its
+  fields, the elements of its arrays, what its references name) - skipping the computation at run time would skip
+  the write;
+- read an immutable global whose value reaches storage a writable reference can change (T25b) - a `mut` field's
+  referent, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
 - call an `extern` function - a call through a function value is evaluated when the function it reaches is, which
@@ -4492,7 +4572,8 @@ error as they would at run time. It is **not** possible when evaluation would:
 - take a slice out of range without `try`, which aborts at run time (E16b);
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
-- run longer, or recurse deeper, than an implementation-defined budget.
+- run longer, or recurse deeper, than an implementation-defined budget - which is never a crash: evaluation that
+  would run out of the stack it runs on stops there, refused (under `-i`, with that message).
 
 Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused.
@@ -4518,8 +4599,12 @@ refused, since that function's scopes close.
 **K2b.** K2 reaches a global holding an **array** or a **reference** too: what it points at is written out
 as data beside it, so a table computed by a loop, a linked structure built by constructors, or a tree of enums
 holding each other by reference (T17d), costs nothing at startup - a reference in an enum's payload is written as the
-address of its referent's data. Two references to one instance remain one instance, and a structure referring to
-itself is written as such. The data lives as long as the program (O1b).
+address of its referent's data. Two references to one instance remain one instance - within one global, and across
+all of a module's globals (`B Node& = A` is `A`'s instance, a slice of a global's array is that very storage) - and a
+structure referring to itself is written as such. Data a writable reference reaches is written out writable; only
+what nothing can write is read-only. A global whose value reaches an instance another module's global holds, or one
+held by a global of its own module that is set at startup, is set at startup too, reading that instance as it is
+there. The data lives as long as the program (O1b).
 
 **K2a.** A **parameter's default value** (D8a) that is not a literal must be evaluable at compile time;
 one that is not is a compile-time error naming the operation that prevents it.

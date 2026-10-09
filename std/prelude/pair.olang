@@ -32,3 +32,19 @@ test "a pair of things with no Hash is still a pair" {
     x := Pair(I32[1, 2], 3)
     assert x.First[1] == 2
 }
+
+# G10c/T7b: a struct holds an array by reference, so written text or an array given to Pair makes it a Pair of a
+# reference - the text built where the pair lands, a variable's array borrowed
+fn pairOfText(k I32) Bool {
+    p := Pair(1 + k, "x")
+    s String = "ab"
+    q := Pair(k, s)
+    s[0] = 'z'
+    return p.Second == "x" and q.Second == "zb"
+}
+PairOfTextBaked := pairOfText(0)
+
+test "a pair of written text holds a reference to it" {
+    assert pairOfText(0)
+    assert PairOfTextBaked
+}

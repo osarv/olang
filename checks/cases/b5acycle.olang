@@ -1,0 +1,10 @@
+# check: fail these globals' initializers read each other
+# also: A -> B -> A
+# B5a: a global is set after the globals its initializer reads - directly or through a call - so two reading each
+# other can neither be set first
+fn readA() I32 { return A }
+A mut I32 = B + 1
+B mut I32 = readA() + 1
+fn main() ? {
+    assert A > 0
+}

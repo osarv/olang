@@ -1260,6 +1260,27 @@ test "defaults on a constructor's parameter list" {
     assert c.port == 80
 }
 
+# E14/G9: a generic function or constructor leaves off a defaulted parameter too - inference reads the arguments
+# written, and the default then fits the instantiation like any argument
+fn padG(x <T>, n I32 = 3) <T> { return x }
+type ServerG<T> struct(host <T>, port I32 = 80) {
+    host
+    port
+}
+fn padGAll() I64 {
+    a := padG(I64(5))
+    b := padG(6, default)
+    c := ServerG<I32>(9)
+    d := ServerG(I64(9))
+    return a * 1000 + I64(b) * 100 + I64(c.port) + I64(d.port)
+}
+PadGBaked := padGAll()
+
+test "defaults on a generic function's and a generic constructor's parameter lists" {
+    assert padGAll() == 5760
+    assert PadGBaked == 5760
+}
+
 # a struct literal is a valid default - it is a literal expression (E4), with a value and nothing else
 fn offsetOf(p Point = Point(3, 4)) I32 {
     return p.x + p.y
@@ -2343,6 +2364,57 @@ test "G16a: and a generic function over both" {
     assert rb[3] == 9
 }
 
+# G16a: and every other difference between two types - two function types (they were all one name), a reference's
+# permission, a declared array type and the array it is declared over, a reference and a value holding one - and a
+# name of any length, written into symbols as its beginning and a hash of the whole
+fn G16Id(x <T>) <T> { return x }
+fn g16Dbl(n I32) I32 { return n * 2 }
+fn g16Half(n F64) F64 { return n / 2.0 }
+type G16Node struct(v I32) { v mut }
+type G16Nums Array<I32>
+type G16Box<T> struct(v <T>) { v }
+type G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<T> struct(v <T>) { v }
+G16Ro G16Node& = G16Node(1)
+fn g16Funcs(k I32) F64 {
+    f := G16Id(g16Dbl)
+    g := G16Id(g16Half)
+    return F64(f(21 + k)) + g(5.0)
+}
+G16FuncsBaked := g16Funcs(0)
+fn g16Kinds(k I32) I64 {
+    a := G16Id(G16Ro)
+    m G16Node& = G16Node(2 + k)
+    b := G16Id(m)
+    b.v = 7
+    n G16Nums = G16Nums(I32[1, 2])
+    arr Array<I32> = I32[3, 4, 5]
+    ro := List<G16Node&>()
+    ro.Push(G16Ro)
+    rw := List<mut G16Node&>()
+    rw.Push(m)
+    x := rw[0]
+    x.v = x.v + 1
+    return I64(a.v) * 1000 + I64(m.v) * 100 + G16Id(n).Len() * 10 + G16Id(arr).Len() + ro.Len() * 10000
+}
+G16KindsBaked := g16Kinds(0)
+fn g16Long(k I32) F64 {
+    a := G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>(7 + k)))
+    b := G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>>(G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>(2.5)))
+    return F64(a.v.v.v) + b.v.v.v
+}
+G16LongBaked := g16Long(0)
+
+test "G16a: function types, permissions, declared array types and long names each make their own instantiation" {
+    k I32 = ctRuntimeZero
+    assert g16Funcs(k) == 44.5 and G16FuncsBaked == 44.5
+    assert g16Kinds(k) == 11823 and G16KindsBaked == 11823
+    assert g16Long(k) == 9.5 and G16LongBaked == 9.5
+    c := G16Box<G16Node&>(G16Ro)
+    d := G16Box<mut G16Node&>(G16Node(3))
+    d.v.v = 4
+    assert c.v.v == 1 and d.v.v == 4
+}
+
 # G8a: generics COMPOSE - a type variable may be written as a type argument, so one generic can be
 # expressed in terms of another. Before this, generics worked for leaf types (Chan<I32>) and for
 # functions over a bare <T>, but "Vec<T>" could not be written at all: the type-args resolver only looked
@@ -3290,6 +3362,28 @@ test "the default error: an untyped catch catches it" {
         result = -99
     }
     assert result == -99
+}
+
+# R17: and so does a try statement whose clauses take only part of what its call can fail with - the rest leaves a bare
+# "?" function as its own failure, as an uncaught "try" expression's does
+error R17Err {
+    Loud
+    Quiet
+}
+fn r17Fail(n I32) ? R17Err {
+    if n == 1 { error R17Err.Quiet }
+    error R17Err.Loud
+}
+fn r17Partial(n I32) I32 ? {
+    try r17Fail(n) catch R17Err.Quiet { return 1 }
+    return 2
+}
+fn r17Both() I32 { return (try r17Partial(1) catch default 7) * 10 + (try r17Partial(2) catch default 9) }
+R17Baked := r17Both()
+
+test "R17: a try statement catching part of what its call can fail with, in a bare '?' function" {
+    assert r17Both() == 19
+    assert R17Baked == 19
 }
 
 test "an undetermined scope variable binds to the caller's own scope" {
@@ -6140,6 +6234,26 @@ test "E13b: a call's result, an element or a parenthesized value is called direc
     assert ChainBakedE == 7
 }
 
+# E13b/M19: "x.f(args)" where f is a field holding a function calls the value the field holds, as "(x.f)(args)" does -
+# a method may not share a field's name, so the spelling has one meaning
+type FieldFnE struct(f fn(a I32) I32) { f }
+type FieldFnHolderE struct(b FieldFnE) { b }
+type FieldFnRiskyE struct(g fn(a I32) I32 ? DivError) { g }
+fn fieldFnsE(n I32) I32 {
+    b := FieldFnE(doubleO)
+    h := FieldFnHolderE(b)
+    r := FieldFnRiskyE(limiterE(5))
+    return b.f(n) + h.b.f(1) * 100 + (try r.g(9) catch default 7) * 1000
+}
+FieldFnsBakedE := fieldFnsE(21)
+FieldFnGlobalE FieldFnE = FieldFnE(doubleO)
+
+test "E13b: a field holding a function is called as x.f(args)" {
+    assert fieldFnsE(21) == 7242
+    assert FieldFnsBakedE == 7242
+    assert FieldFnGlobalE.f(5) == 10        # through a global, as through a local
+}
+
 test "E13b: a parenthesized expression on the next line is a statement of its own" {
     y fn(a I32) I32 = doubleO
     (y)(2)
@@ -7123,6 +7237,28 @@ test "E28/E29/E30: evaluated while compiling, as at run time" {
     assert condMax(3, n - 1) == CondMaxBaked
 }
 
+# E28/T29c: two pieces of written text are two Strings and two array literals two arrays, whatever their lengths; and
+# M19: a case of an enum written as a chain is a receiver like any value ("Color.Red.Hash()")
+type CondColor enum {
+    Red
+    Blue(n I32)
+}
+fn (c CondColor) Name() String { return "red" if c == CondColor.Red else "blue" }
+fn condLits(k Bool) I64 {
+    a := I32[1] if k else I32[1, 2]
+    return a.Len()
+}
+fn condTexts(k I32) Bool {
+    names Bool = CondColor.Red.Name() == "red" and CondColor.Blue(k).Name() == "blue"
+    return names and condLits(true) + condLits(false) == 3 and CondColor.Red.Hash() != CondColor.Blue(k).Hash()
+}
+CondTextsBaked := condTexts(2)
+
+test "E28: written texts and array literals of different lengths, and an enum case as a receiver" {
+    assert condTexts(2)
+    assert CondTextsBaked
+}
+
 # S4c/D12b: parallel assignment - every value evaluated before any target is written - and several names
 # declared with one type, as locals, globals and constructor fields
 ParX, ParY mut I32 = 3, 4
@@ -7220,6 +7356,30 @@ test "G19: interfaces constrain type variables of functions and of generic types
     assert h2.v.Area() == 25
     assert I32[1, 2].Has(2)
     assert CnAreaBaked == 16
+}
+
+# G19/E23/E33: a method the compiler supplies meets a constraint as a declared one does - every array's Len(), a
+# declared array's included, and a float's Bits()
+type CnSized trait {
+    Len() I64
+}
+type CnHasBits trait {
+    Bits() U32
+}
+type CnText extends Array<Char>
+fn cnSize(x <T CnSized>&) I64 { return x.Len() }
+fn cnBits(x <T CnHasBits>) U32 { return x.Bits() }
+fn cnSupplied() I64 {
+    t CnText = CnText("abc")
+    s := "hello"
+    f F32 = 1.0
+    return cnSize(t) * 10 + cnSize(s) + I64(cnBits(f) - 1065353215)
+}
+CnSuppliedBaked := cnSupplied()
+
+test "G19: a supplied Len or Bits meets a constraint" {
+    assert cnSupplied() == 36
+    assert CnSuppliedBaked == 36
 }
 
 # E31: an operator calls a method named for it - Plus, Minus, Mul, Div, Rem, Neg, Less, MatMul, and At, SetAt and
@@ -7424,6 +7584,34 @@ test "E31: Call makes a value callable and passable as a function; try calls Try
     assert t.Len() == 1
     u := try opMaybeArray(5) catch default I32[4, 4, 4]
     assert u.Len() == 3
+}
+
+# T22/T25c: a Call is a function value when its parameters agree with the function type's, "mut" included; and one
+# writing its receiver is made from storage this place may write
+type OpMark struct() {
+    hits mut I32 = 0
+}
+type OpCell struct(v I32) { v mut }
+fn (m mut OpMark&) Call(c mut OpCell&) {
+    m.hits++
+    c.v = 99
+}
+fn opMarkAll(f fn(c mut OpCell&), a mut OpCell&, b mut OpCell&) {
+    f(a)
+    f(b)
+}
+fn opMarked() I32 {
+    m := OpMark()
+    a := OpCell(1)
+    b := OpCell(2)
+    opMarkAll(m, a, b)
+    return m.hits * 1000 + a.v + b.v
+}
+OpMarkedBaked := opMarked()
+
+test "E31: a Call writing its parameter and its receiver, passed where a matching function type is wanted" {
+    assert opMarked() == 2198
+    assert OpMarkedBaked == 2198
 }
 
 test "E31: indexing calls At, assigning through it SetAt, slicing Slice" {
@@ -7895,6 +8083,28 @@ test "C2e: an inline field is borrowed as an ordinary array" {
     assert c2eTotal(x.m) == 1.5
 }
 
+# C2e: each instantiation of a generic type decides its own inline length - it may depend on the type's arguments
+fn c2eCap(a Array<<T>>&) I64 {
+    match <T> {
+        case I32 { return 2 }
+        nomatch { return 5 }
+    }
+}
+type C2eBuf<T> struct() {
+    data Array<<T>> = Array<<T>>(c2eCap(Array<<T>>(0)))
+}
+fn c2eGenLens() I64 {
+    b := C2eBuf<F64>()
+    a := C2eBuf<I32>()
+    return a.data.Len() * 10 + b.data.Len()
+}
+C2eGenBaked := c2eGenLens()
+
+test "C2e: each instantiation of a generic type has its own inline length" {
+    assert c2eGenLens() == 25
+    assert C2eGenBaked == 25
+}
+
 # T7/D15: an array a declaration holds has no length in its type - one initialized from a literal, either
 # way it is declared, may later be given an array of any length
 test "an array declared from a literal can later hold one of another length" {
@@ -8277,6 +8487,18 @@ test "T29d: a primitive type's constructor checks the way in, and arithmetic kee
     assert (try pctCheck(-5) catch default -1) == -1
 }
 
+# T29: a type declared over a declared number is a new name over the same representation - it takes none of the
+# other's constructor, "extends" or methods, so "Pct2(150)" is 150 and a literal enters it unchecked
+type Pct2 Pct
+Pct2Lit Pct2 = 170
+fn pct2Of(n I32) I32 { return I32(Pct2(n)) }
+
+test "T29: a type over a declared number does not take its constructor" {
+    k I32 = ctRuntimeZero
+    assert pct2Of(150 + k) == 150 and I32(Pct2Lit) == 170
+    assert pct2Of(150) == 150
+}
+
 # D15: ":=" takes a field read - the field's declared type, and where its referent lives (O25a) - which is how
 # a cursor starts
 fn oSumFrom(l OxN&) I32 {
@@ -8569,6 +8791,35 @@ test "Split's pieces live with the text, and the evaluator splits as the run tim
 
 # T29c: written text beside a String value in "==" is a String too - compared by content, since a String
 # value is a value (E10); decided at compile time (the global above) and at run time alike
+# T29a: "String(b)" names b's storage - a borrow of it is that storage, written where b may be and living as long as
+# b's does; a value declaration from it is a copy, and an inline field is lent as a slice of it
+type CtConvBox struct() {
+    buf mut Array<Char> = Array<Char>(3, 'q')
+}
+type CtConvHolder struct() {
+    s mut String& = null
+}
+fn ctConvWrite(s mut String&) { s[0] = 'Z' }
+fn ctConv(n I32) String& {
+    raw := Array<U8>(2, U8(104 + n))
+    copied := String(raw)
+    h := CtConvHolder()
+    h.s = String(raw)
+    ctConvWrite(String(raw))
+    raw[1] = 65
+    b := CtConvBox()
+    v := String(b.buf)
+    b.buf[1] = 'z'
+    return $copied " " $h.s " " $String(raw) " " $v
+}
+CtConvBaked := ctConv(1)
+
+test "T29a: a conversion names its argument's storage, at run time and while compiling" {
+    k I32 = ctRuntimeZero
+    assert ctConv(k + 1) == "ii ZA ZA qzq"
+    assert CtConvBaked == "ii ZA ZA qzq"
+}
+
 test "written text compares with a String value" {
     u String = "cm"
     k I32 = ctRuntimeZero
@@ -10167,4 +10418,296 @@ SfBaked := sfBakeSum(5)
 test "O18a/T25d: the same results computed while compiling and at run time" {
     assert SfBaked == 46 + 8 + 5 + 6 + 46 + 2
     assert sfBakeSum(sfRun) == SfBaked
+}
+
+# ---- the review of the evaluator (2026-10-09): each finding's computation baked into a global (or decided in an assert)
+# while compiling, beside the same computation at run time from a mutable global's value ----
+evRun mut I64 = 1
+
+# E11a: "$" of a negative zero is "-0" (the run time added +0.0, giving 0); T4: an integer rounds once to a float (the
+# evaluator and a literal's adaptation went through a double, rounding twice)
+fn evNeg(x F64) F64 { return -x }
+fn evNegText(z F64) String { return $evNeg(z) " " $F32(evNeg(z)) " " $F16(evNeg(z)) " " $BF16(evNeg(z)) }
+EvNegBaked String = evNegText(0.0)
+test "E11a: a negative zero renders as -0 in every float type, while compiling and at run time" {
+    assert EvNegBaked == "-0 -0 -0 -0"
+    assert evNegText(F64(evRun - 1)) == "-0 -0 -0 -0"
+}
+
+fn evF32Bits(n I64) U32 { return F32(n).Bits() }
+fn evBF16Bits(n I64) U16 { return BF16(n).Bits() }
+EvF32Baked U32 = evF32Bits(1152921573326323713)
+EvBF16Baked U16 = evBF16Bits(1157425104234217473)
+EvLitF32 F32 = 1152921573326323713
+test "T4: an integer rounds once to a float, while compiling and at run time" {
+    assert EvF32Baked == 1568669697 and EvLitF32.Bits() == 1568669697 and EvBF16Baked == 23937
+    assert evF32Bits(1152921573326323712 + evRun) == 1568669697
+    assert evBF16Bits(1157425104234217472 + evRun) == 23937
+}
+
+# E10: an array reference is the same as another only with the same storage, start and length (the run time compared the
+# pointer alone, the evaluator called any two empty arrays the same)
+fn evIdentity(n I64) String {
+    arr := I32[1, 2, 3, 4, 5]
+    a Array<I32>& = arr[1:3]
+    b Array<I32>& = arr[1:n]
+    c Array<I32>& = arr[0:0]
+    d Array<I32>& = arr[2:2]
+    e Array<I32>& = Array<I32>(n - 2)
+    f Array<I32>& = Array<I32>(n - 2)
+    g Array<I32>& = arr[n - 1:3]
+    x Array<I32>
+    y Array<I32>
+    none Array<I32>& = null
+    return $same(a, b) " " $(a == b) " " $same(c, d) " " $same(e, f) " " $same(a, g) " " $same(x[:], y[:]) " " $same(x[:], none)
+}
+EvIdentityBaked String = evIdentity(2)
+test "E10: an array reference is the same as another with the same storage and the same length" {
+    assert EvIdentityBaked == "false false false false true true true"
+    assert evIdentity(evRun + 1) == EvIdentityBaked
+}
+
+# E12: a value result read out of a reference is a copy (the evaluator returned the reference, so "==" compared
+# identities, and a top-level if took the other branch)
+type EvP struct(v I64) {
+    v
+}
+fn evCopyOut(p EvP&) EvP { return p }
+fn evCopyArr(a Array<I64>&) Array<I64> { return a }
+fn evCopies(n I64) String {
+    a EvP& = EvP(n)
+    b := EvP(n)
+    x Array<I64>& = I64[n, 2]
+    y := I64[n, 2]
+    return $(evCopyOut(a) == b) " " $(b == evCopyOut(a)) " " $(evCopyArr(x) == y) " " $(evCopyOut(a) != b)
+}
+EvCopiesBaked String = evCopies(3)
+if evCopyOut(EvP(4)) == EvP(4) {
+    EvCopyChosen I64 = 1
+} else {
+    EvCopyChosen I64 = 2
+}
+test "E12: a value result read out of a reference is a copy, compared by value while compiling and at run time" {
+    assert EvCopiesBaked == "true true true false" and EvCopyChosen == 1
+    assert evCopies(evRun + 2) == EvCopiesBaked
+}
+
+# S12b: a match giving text as its value builds it where the value lands (it was built in the match's own block and
+# returned after that closed)
+fn evClassify(n I64) String {
+    return match n {
+        case 1, 2, 3 => "small"
+        case 7 => "seven"
+        nomatch => "other"
+    }
+}
+fn evChurn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, i)
+        t += a[3]
+    }
+    return t
+}
+fn evClasses(n I64) String {
+    a := evClassify(n)
+    b := evClassify(n + 1)
+    evChurn()
+    return $a " " $b " " $evClassify(n) " " $evClassify(n - 5)
+}
+EvClassesBaked String = evClasses(7)
+test "S12b: text a match gives as its value is built where the value lands" {
+    assert EvClassesBaked == "seven other seven small"
+    assert evClasses(evRun + 6) == EvClassesBaked
+}
+
+# C2e: a copy into fixed storage is length-checked by the evaluator too
+type EvBlk struct() {
+    m mut Array<I32> = Array<I32>(4)
+}
+fn evFill(n I64) I64 {
+    b := EvBlk()
+    src := Array<I32>(n, 7)
+    b.m = src
+    return b.m.Len() + I64(b.m[3])
+}
+EvFillBaked I64 = evFill(4)
+test "C2e: a copy into fixed storage of its length, while compiling and at run time" {
+    assert EvFillBaked == 11
+    assert evFill(evRun + 3) == 11
+}
+
+# T25d: a static literal site is one instance (the linker merged two sites holding the same data; the evaluator made a
+# new instance each time one site was reached)
+fn evTwo(a String&, b String&) Bool { return same(a, b) }
+fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }
+fn evSites(n I64) String {
+    l := List<String&>()
+    for i in range n { l.Push("hello") }
+    return $evTwo(l[0], l[1]) " " $evTwo("hey", "hey") " " $evTwoArr(I32[1, 2], I32[1, 2])
+}
+EvSitesBaked String = evSites(2)
+test "T25d/E10: a static literal site is one instance however often it is reached, and two sites are two" {
+    assert EvSitesBaked == "true false false"
+    assert evSites(evRun + 1) == EvSitesBaked
+}
+
+# T21/O1b: a global of function type holds a function value (it compiled to an empty function returning 0)
+fn evDbl(x I32) I32 { return x * 2 }
+fn evTri(x I32) I32 { return x * 3 }
+fn evApply(f fn(x I32) I32, v I32) I32 { return f(v) }
+EvF mut fn(x I32) I32 = evDbl
+EvG fn(x I32) I32 = evTri
+EvSix I32 = EvG(2)
+EvVia I32 = evApply(EvG, 5)
+test "a function-typed global holds a function value, read, called and assigned as one" {
+    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and same(EvG, evTri)
+    assert EvF(4) == 8 and evApply(EvF, 4) == 8
+    k I32 = I32(evRun) + 6
+    EvF = evTri
+    assert EvF(4) == 12 and same(EvF, evTri)
+    EvF = fn(x I32) I32 { return x + k }
+    assert EvF(4) == 11
+    EvF = evDbl
+}
+
+# B5a: a global is set after the globals it reads (baking made the declaration order observable)
+EvEarly mut I64 = EvLate + 1
+EvViaFn I64 = evLateVia() * 2
+EvLate I64 = evSeed + 10
+fn evLateVia() I64 { return EvLate }
+evSeed mut I64 = 5
+test "B5a: a global is set after the globals its initializer reads, directly or through a call" {
+    assert EvEarly == 16 and EvLate == 15 and EvViaFn == 30
+}
+
+# T11b: a value array is assigned into the storage it has unless its length changes, a struct in place (a literal was
+# given new storage where another array was not, and the evaluator always gave new storage)
+type EvIn struct(v I64) {
+    v mut
+}
+type EvOut struct(a I64, b I64) {
+    inner mut EvIn = EvIn(a)
+    b mut
+}
+fn evInPlace(k I64) String {
+    a := I64[1, 2, 3]
+    s := a[0:2]
+    a = I64[k, 8, 9]                 # the same length: written into a's storage, which s borrows
+    b := Array<I64>(3, 5)
+    c := b[1:]
+    b = Array<I64>(3, k)
+    d := Array<I64>(2, 1)
+    e := d[:]
+    d = I64[4, 5, 6]                 # another length: new storage, and e keeps naming the old
+    p := EvOut(1, 2)
+    r EvIn& = p.inner
+    p = EvOut(k, 3)                  # a struct is written in place, a reference to its field sees it
+    x := "abc"
+    y := x[1:]
+    x = "xyz"
+    return $s " " $c " " $e " " $r.v " " $y
+}
+EvInPlaceBaked String = evInPlace(7)
+test "T7: an array or struct value is assigned into the storage it has, unless an array's length changes" {
+    assert EvInPlaceBaked == "I64[7, 8] I64[7, 7] I64[1, 1] 7 yz"
+    assert evInPlace(evRun + 6) == EvInPlaceBaked
+}
+
+# K1/K2b: a global reaching what a writable reference can change is not a compile-time value, is never written while
+# compiling, and what the reference reaches is not read-only data (an assert on it was decided from its initial value,
+# a write while compiling stood for one at run time, and a write at run time faulted on read-only data)
+type EvHolder struct(a mut Array<I64>&, b mut Array<I64>&) {
+    a
+    b
+}
+fn evMkHolder() EvHolder {
+    arr Array<I64>&return = Array<I64>(4)
+    return EvHolder(arr, arr[1:3])
+}
+EvHold EvHolder = evMkHolder()
+fn evHeld(i I64) I64 { return EvHold.a[i] }
+fn evPoke() I64 {
+    x := EvHold.a
+    x[2] = 5
+    return 1
+}
+EvPoke I64 = evPoke()
+EvAfterPoke I64 = EvHold.a[2]
+test "K1: a global reaching what a writable reference can change is not a compile-time value, and is written at run time" {
+    assert EvPoke == 1 and EvAfterPoke == 5 and evHeld(2) == 5
+    EvHold.a[0] = 9
+    assert evHeld(0) == 9 and EvHold.a[0] == 9
+    EvHold.a[1] = 6
+    assert EvHold.b[0] == 6 and same(EvHold.b, EvHold.a[1:3])
+}
+
+# K2b: globals sharing an instance, or a slice of one, share it in the program's data (each global's data was its own copy)
+type EvNode struct(v I64) {
+    v mut
+}
+fn evMk(v I64) EvNode& {
+    n EvNode&return = EvNode(v)
+    return n
+}
+fn evIdr(n EvNode&) EvNode&n { return n }
+EvA EvNode& = evMk(4)
+EvB EvNode& = EvA
+EvC EvNode& = evIdr(EvA)
+EvSameAB Bool = same(EvA, EvB)
+EvArr Array<I64>& = I64[1, 2, 3, 4]
+EvSl Array<I64>& = EvArr[1:3]
+EvSameSl Bool = same(EvSl, EvArr[1:3])
+test "K2b: globals sharing an instance or a slice of one share it in the program's data too" {
+    assert EvSameAB and EvSameSl
+    assert same(EvA, EvB) and same(EvC, EvA) and same(EvSl, EvArr[1:3]) and EvSl[0] == 2
+}
+
+# E30/E27: a comparison chain re-evaluated inside its own Less (its cached operands were the outer chain's), and
+# comprehensions nested by recursion past 64
+type EvChainN struct(v I32) {
+    v
+}
+fn (a EvChainN) Less(b EvChainN) Bool {
+    if a.v < 50 { return a.v < b.v and evChain(a.v + 100) }
+    return a.v < b.v
+}
+fn evChain(base I32) Bool { return EvChainN(base) < EvChainN(base + 10) < EvChainN(base + 20) }
+fn evComprDeep(n I64) I64 {
+    if n == 0 { return 0 }
+    a := I64[evComprDeep(n - 1) + x for x in range 1]
+    return a[0] + 1
+}
+EvChainBaked Bool = evChain(0)
+EvComprDeepBaked I64 = evComprDeep(100)
+test "E30/E27: a chain re-evaluated inside its own Less, and comprehensions nested by recursion" {
+    assert EvChainBaked and EvComprDeepBaked == 100
+    assert evChain(I32(evRun) - 1) and evComprDeep(evRun + 99) == 100
+}
+
+# E31/K1: a value whose type declares Call, given where a function value is wanted, is called through by compile-time
+# evaluation as at run time - the very instance where it has storage, a copy of a temporary
+type evTally struct(start I32) {
+    n mut I32 = start
+}
+fn (c mut evTally&) Call(x I32) I32 {
+    c.n += x
+    return c.n
+}
+type evTimes struct(k I32) {
+    k
+}
+fn (s evTimes) Call(x I32) I32 { return s.k * x }
+fn evApply2(f fn(x I32) I32, v I32) I32 { return f(f(v)) }
+fn evAdapters(k I32) I64 {
+    c := evTally(10)
+    a := evApply2(c, k)
+    f fn(x I32) I32 = c
+    b I32 = f(k)
+    return I64(a) * 10000 + I64(b) * 100 + I64(c.n) + I64(evApply2(evTimes(k + 1), 5)) * 1000000
+}
+EvAdaptersBaked I64 = evAdapters(2)
+test "E31: a Call adapter, evaluated while compiling as at run time" {
+    assert EvAdaptersBaked == 45000000 + 240000 + 2600 + 26
+    assert evAdapters(I32(evRun) + 1) == EvAdaptersBaked
 }

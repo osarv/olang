@@ -290,6 +290,8 @@ struct var {
     struct var* refsHome;
     bool isMethod; //M19: declared with a receiver clause. Methods live in their own namespace, keyed by
                    //receiver type: invisible to every by-name lookup, reachable only as "x.f(...)"
+    bool isGlobalVar; //module-level only: declared as a global variable - storage, whatever its type, a function type
+                      //included (a function-typed global holds a function value; it is not a function)
     bool isFuncDecl; //module-level only: this name was declared by "func"/"extern func" rather than as a
                       //global variable. M21 lets several function declarations share a name (one method
                       //per receiver type) and nothing else share one, and pass 1 has no types resolved
@@ -582,6 +584,10 @@ struct operand {
     bool litCtorPending; //T29d: a literal entering a type with a constructor - recorded to be run while compiling
     bool litFoldedAway;  //E4a: part of a literal-only expression folded into the one literal holding its value - no
                           //longer in the program, so nothing deferred about it (a shift's amount, E8a) applies
+    bool suppliedCall;  //E10b: the value a compiler-supplied method gives ("k.Hash()" lowered to the parts' hashes) - its
+                        //type is that method's result, as a call's is (D15)
+    bool viaConversion; //T29a: a variable, field, element or slice read under a declared array type's name ("String(b)")
+                        //- the argument's own storage, lent as it is, but no place an assignment may name
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
@@ -605,7 +611,6 @@ struct operand {
     struct list chainOperands;  //E30: OPERATION_CMP_CHAIN only - its operands in order (struct operand*), each read by
                                 //the comparisons on either side of it
     char* cgCached;             //codegen: this operand's value is already computed - E30's shared operand
-    void* ctCached;             //the evaluator's same (a struct ctVal*)
     struct operand* placeOf;    //S4: a compound assignment's read of its own target - the place the statement computed
                                 //once, before the value, and stores to after it
     char* cgPlace;              //S4: on an assignment's target, while its value is being computed: the place's address
@@ -703,6 +708,8 @@ struct semaModule {
     bool publicClosureComputed;
     bool computingPublicClosure;
     struct list publicClosure; //list of struct semaModule*, only valid once publicClosureComputed
+    struct list globalOrder; //B5a: struct var*, the globals with an initializer in the order they are set (CtOrderGlobals)
+    bool globalOrderSet;
 };
 
 long long TypeGetSize(struct type t);
@@ -764,7 +771,8 @@ struct list* SemanticAllInstantiations(void);
 //list of struct type* - every monomorphized copy of a generic struct type (G10). Stored as pointers for
 //the same stability reason as the function instantiations above.
 struct list* SemanticAllTypeInstantiations(void);
-struct instantiation { struct var* generic; struct list bindings; struct var* specialized; }; //list of struct semaModule*, in load order; index is used for codegen symbol mangling
+struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
+                       struct token site; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
 int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this
