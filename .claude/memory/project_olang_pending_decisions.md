@@ -125,6 +125,10 @@ rule and where it is recorded; the morning report lists them all, then they move
    it (C stdio, Go bufio); `print`/`println` stay unbuffered; paths in `std/filepath` (not `path`, which M20 would
    reserve in every importer); `ParseInt(0)` reads olang literal syntax.
 
+10. (wt-cgfix2, T7c) storage over 64KB (Go's bound) never goes on the stack: locals, zero values, literals and
+   by-value copies that large come from the current block's arena. And (T29a/E32b) converting a run-time array to a
+   declared `Array<T, N>` type is a view checked once, never a copy.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
