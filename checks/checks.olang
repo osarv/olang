@@ -551,9 +551,13 @@ fn interp(r mut report&) ? Failed {
                  "-i prog.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 1, "-i tasks.olang did not stop", dir)
-    try r.expect(outOf(dir).Contains("tasks.olang:5: it starts tasks, which -i does not run yet"),
-                 "-i tasks.olang output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b tasks.olang > out.txt 2>&1 && ./build/tasks > want.txt 2>&1") == 0, "tasks build", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 0, "-i tasks.olang failed", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran tasks.olang unlike the built program", dir)
+    try r.expect(outOf(dir) == "squares I64[1, 4, 9, 16]\nsum 10\ncleanup ran\n", "-i tasks.olang output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
+    try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang -i: ") and outOf(dir).Contains(": it waits for another task")
+                 and outOf(dir).Contains("in the task spawned at tasks.olang:38"), "-i tasks.olang x output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134,
                  "ends did not abort", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i ends.olang > out.txt 2>&1") == 134, "-i ends.olang did not abort", dir)
@@ -562,7 +566,8 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b exec.olang > out.txt 2>&1 && ./build/exec > want.txt 2>&1") == 0, "exec build", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i exec.olang > out.txt 2>&1") == 0, "-i exec.olang failed", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran exec.olang unlike the built program", dir)
-    try r.expect(outOf(dir).Contains("4 [fed in] [err") and outOf(dir).Contains("missing yes"), "-i exec.olang output", dir)
+    try r.expect(outOf(dir).Contains("4 [fed in] [err") and outOf(dir).Contains("missing yes")
+                 and outOf(dir).Contains("in /\nlate yes [started] 137\n"), "-i exec.olang output", dir)
 }
 
 # B4a/B3f/X6: a program reads its command line and environment through the runtime, and std/os's file calls work -

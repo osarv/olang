@@ -4736,11 +4736,21 @@ says, an atomic operation is performed, and a check the language guarantees - a 
 `unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
 aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
 out of range, dividing by zero, a shift or conversion out of range - or where it traps reading through a null
-reference (T2b), the interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
-tasks (`spawn`, `join`) and values whose type declares a destructor - except directly in a global's own
-initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
-same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
-X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
+reference (T2b), the interpreter stops, naming the operation and where it is, with status 1. A `join` block's tasks
+(§6.8) run as K1 runs them: one after another, at the join - after its body and its deferred code - each to
+completion, in the order they were spawned. That is one of the orders the built program may run them in, so a program
+whose tasks only compute, or hand values on through a channel with room for them, runs as built; one whose tasks need
+each other at once cannot: a wait for another thread - a condition variable waited on, as a channel's `Send` to a full
+channel or `Recv` from an empty one does - made by a task, or while tasks wait to run, or without a time limit at all,
+stops the interpreter, saying so and naming the task, since nothing else runs to end it. (A wait with a time limit
+and no task in sight waits that time out, as the built program would with nothing to wake it.) Values whose type
+declares a destructor are **not yet interpreted** - except directly in a global's own initializer, whose instance
+lands in the program's scope and is never destructed (K2c); reaching one stops the same way, as does an `extern`
+function with an `F16` or `BF16` parameter or result (an array of either is passed, X3). Whenever the interpreter
+stops a program on something it does not run, the blocks it is in are still left as the built program, which would
+go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
+program itself ends - `done`, `fail`, `os.Exit`, a check failing - deferred code runs only where the built program's
+does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
 `-D` apply as to any build, and `-a` sets the build constants it decides (B10a) - naming this machine's architecture
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this

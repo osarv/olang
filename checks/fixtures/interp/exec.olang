@@ -3,6 +3,7 @@
 import "std/os"
 import "std/io"
 import "std/json"
+import "std/cancel"
 
 fn main() ? os.OsError + io.IoError + json.JsonError {
     r := try os.Exec(String&["printf", "{\"a\": [1, 2.5e-3, true], \"b\": \"%s\"}", "it's ok \\u00e9"])
@@ -14,4 +15,19 @@ fn main() ? os.OsError + io.IoError + json.JsonError {
     missing := "no"
     try os.Exec(String&["olang-no-such-program"]) catch os.OsError.NOT_FOUND { missing = "yes" }
     try io.Print("missing " $missing "\n")
+    try processes()
+}
+
+# X6: a directory to run in, a deadline that kills, and programs started and waited for - the same either way
+fn processes() ? os.OsError {
+    w := try os.Exec(String&["pwd"], default, default, "/")
+    try io.Print("in " $w.Stdout) catch { }
+    late := "no"
+    try os.ExecUntil(String&["sleep", "5"], cancel.After(50)) catch cancel.Stopped { late = "yes" }
+    p := try os.Start(String&["cat"], "started")
+    q := try os.Start(String&["sleep", "9"])
+    q.Kill()
+    a := try p.Wait()
+    b := try q.Wait()
+    try io.Print("late " $late " [" $a.Stdout "] " $b.Status "\n") catch { }
 }

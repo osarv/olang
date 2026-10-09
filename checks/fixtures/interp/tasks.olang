@@ -1,7 +1,43 @@
-# B3e: tasks are not interpreted yet - reaching one stops, saying so
-fn work(n I32) { }
+# B3e: a join's tasks run one after another at the join, as K1 runs them - tasks that compute, and ones handing values
+# on through a channel with room for them, run as built. With an argument, a producer fills a channel a consumer task
+# would have to empty at the same time: -i stops there, naming the task - after the deferred code of the blocks it is
+# in has run, as the built program would run it
+import "std/chan"
+import "std/os"
+
+fn produce(c mut chan.Chan<I32>&, n I32) {
+    for i in range n { chan.Send(c, i) }
+    chan.Close(c)
+}
+
+fn consume(c mut chan.Chan<I32>&, total mut Array<I64>&) {
+    for v in c { total[0] += v }
+}
+
+fn square(n I64) I64 { return n * n }
+
 fn main() ? {
+    defer println("cleanup ran")
+    out := Array<I64>(4)
     join {
-        spawn work(1)
+        for i in range 4 { spawn out[i] = square(i + 1) }
+    }
+    println("squares " $out)
+    small mut chan.Chan<I32>& = chan.Chan<I32>(8)
+    chan.Init(small)
+    t mut Array<I64>& = Array<I64>(1)
+    join {
+        spawn produce(small, 5)
+        spawn consume(small, t)
+    }
+    println("sum " $t[0])
+    if os.Args().Len() > 1 {
+        big mut chan.Chan<I32>& = chan.Chan<I32>(4)
+        chan.Init(big)
+        join {
+            spawn produce(big, 100)
+            spawn consume(big, t)
+        }
+        println("sum " $t[0])
     }
 }
