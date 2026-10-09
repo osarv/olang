@@ -465,10 +465,10 @@ fn listIndexed() I64 {
     return s + (try l[42] catch default 7)
 }
 
-ListIndexedBaked := listIndexed()
+listIndexedBaked := listIndexed()
 
 test "indexing a List, evaluated while compiling as at run time" {
-    assert ListIndexedBaked == 2 * (780 - 8 + 1000 + 100 + 201) + 7
-    assert listIndexed() == ListIndexedBaked
+    assert listIndexedBaked == 2 * (780 - 8 + 1000 + 100 + 201) + 7
+    assert listIndexed() == listIndexedBaked
     assert listIndexed() == 4153
 }

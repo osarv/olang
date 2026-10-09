@@ -94,6 +94,37 @@ because what it finds about structure feeds the refactor.
   ctor/extends/generic identity); Eq/Hash/Str may be declared on an extending type, replacing the inherited ones;
   anonymous enums are the same type iff same cases, order and payloads. Full verifies serialize on
   `flock /home/user/verify.lock`.
+- 06:15: review (3) statements/scopes reported 10 confirmed holes (F01-F10: try defaults checked before landing, match
+  alternatives taking the first binding's scope/permission, &of bindings falsified through unknown-binding writes,
+  by-value params holding refs returned unchecked, members/elements/slices of built call results never landing,
+  Array(n, fill) temps, spawn temporaries, enum-param payloads read as program scope, read-only refs written through
+  cond/match/as, Call adapters returned) plus over-rejections R01-R07 and a K2b baking bug (writable referents in
+  .rodata, shared instances split); being fixed in /home/user/wt/sfix (wt-sfix). Decided for it: a by-value parameter
+  holding references gets an implicit scope variable (O4b extended); a global argument binds a callee's scope variable
+  to the program scope (O25e relaxed, O1b); a conditional/match of a reference and temporaries of its referent type is
+  the reference type.
+- 06:15: review (5) evaluator/driver/std reported 21 confirmed (globals with mut refs treated as constant and baked
+  into .rodata, baked aliasing lost, value-returning-from-ref compared by identity in the evaluator, function-typed
+  globals compiled to `ret 0`, match-value String UAF, inline-length check missing in comptime, static-literal and
+  array identity, double rounding I64->F32/BF16, -0 rendering, value-array reassignment visible through slices, global
+  init order, -i limits, SHELL INJECTION in remote fetch, stale objects reused across programs, -t stopping on one bad
+  file, truncated link command, FormatInt(min), complex division, F8 -0, exported std test globals, generic Chan).
+  Fixing in /home/user/wt/efix (evaluator/codegen) and /home/user/wt/dfix (driver/security/std/diagnostics). Decided:
+  a global reaching mut-writable storage is not constant (not read/written at compile time, baked referents writable);
+  each static literal site is one instance (no unnamed_addr merging); array identity = same pointer and length;
+  value-array assignment reuses storage when the length is unchanged (an earlier borrow sees the new elements) and
+  takes new storage otherwise - specified, evaluator matches; globals initialize in dependency order within a module,
+  a cycle is an error; object names injective in the module's real identity (incl. a remote's commit); git run via
+  exec with validated parts; Chan capacity >= 1 unless a rendezvous is clean.
+- Error messages remade (the user 2026-10-09: "shorten down the error messages and keep them concise ... preferably
+  on one row ... keep the rule number probably, it's better for agents ... you can remake the error message system
+  completely, it's very crude still"). After the four fix batches merge and the `a is b`/atomics change, before the
+  refactor (it touches every diagnostic call site). Plan (my design): `file:line:col: error[RULE]: message` on one
+  row, then the source line and a caret under the token; messages short and naming the actual names/types involved
+  (`expected I32, found F64`) instead of generic prose - a table of ids with rule and format string, ErrMsg calls take
+  arguments; long explanations go to the spec, reachable by rule id (maybe `olang -e RULE` printing the spec rule);
+  notes as `note:` rows (declared here, instantiated from). Today: ~300 #define strings in errmsg.h, 97 over 200
+  characters, ~470 call sites, no arguments. The user approved this plan ("Yes do that", 2026-10-09).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

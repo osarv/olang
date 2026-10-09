@@ -298,6 +298,7 @@ struct var {
     struct var* origin; //where the variable declaration is stored throughout the compilation process
     struct list codeBlock; //for functions
     struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
+    bool bodyUnparsed;        //its body did not parse (the error reported): declared by its signature, never checked
     bool bodyIncomplete;      //S8b: a branch in this body is still being decided (it was skipped unparsed),
                               //so its body is not yet the program's and must not be evaluated
     bool isLambda;            //D16: a lambda's hidden function - emitted with the function it is written in

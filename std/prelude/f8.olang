@@ -53,10 +53,13 @@ type F8E4M3 struct(value F64) {
     Bits mut U8 = f8E4M3Bits(value)
 }
 
+# the sign bit of x - set for -0.0 too, which "x < 0" is not, so a negative zero keeps its sign
+fn f8Sign(x F64) I32 { return 128 if x.Bits() >> 63 == 1 else 0 }
+
 fn f8E4M3Bits(x F64) U8 {
     if x != x { return 127 }                             # NaN: S.1111.111
-    sign I32 = 128 if x < 0 else 0
-    a F64 = -x if x < 0 else x
+    sign I32 = f8Sign(x)
+    a F64 = -x if sign != 0 else x
     if a > 448 { return U8(sign | 126) }                 # saturates, infinity included
     b I32 = f8Encode(a, 3, 7, 15)
     if b < 0 or b == 127 { return U8(sign | 126) }       # S.1111.111 is NaN, so the top of the range is 1111.110
@@ -81,8 +84,8 @@ type F8E5M2 struct(value F64) {
 
 fn f8E5M2Bits(x F64) U8 {
     if x != x { return 127 }                             # NaN: exponent all ones, a nonzero mantissa
-    sign I32 = 128 if x < 0 else 0
-    a F64 = -x if x < 0 else x
+    sign I32 = f8Sign(x)
+    a F64 = -x if sign != 0 else x
     if a > 57344 { return U8(sign | 123) }               # saturates, infinity included
     b I32 = f8Encode(a, 2, 15, 30)
     if b < 0 { return U8(sign | 123) }
@@ -107,4 +110,8 @@ test "8-bit floats encode to their bit patterns and decode back" {
     assert nan != nan and F8E5M2(-0.0) == F8E5M2(0) and F8E4M3(1) == F8E4M3(1.01)
     n := F8E4M3(0.0 / 0.0).F64()
     assert n != n
+    # a negative zero keeps its sign, in the bits and back out
+    assert F8E4M3(-0.0).Bits == 128 and F8E5M2(-0.0).Bits == 128 and F8E4M3(0.0).Bits == 0 and F8E5M2(0.0).Bits == 0
+    assert F8E4M3(-0.0).F64().Bits() == (-0.0).Bits() and F8E5M2(-0.0).F64().Bits() == (-0.0).Bits()
+    assert F8E4M3(-1.0e-30).Bits == 128 and F8E5M2(-1.0e-30).Bits == 128     # rounds to zero, from below
 }

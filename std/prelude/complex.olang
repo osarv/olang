@@ -1,6 +1,10 @@
 # complex numbers, part of the prelude (the user's call): named by the width of each part, as the F types are - C16 is two F16s,
 # C32 two F32s, C64 two F64s. Ordinary structs with operator methods (E31): "a + b", "a * b", "-a"; "=="
-# compares both parts and "$" renders "C32(1, 2)". Every operation is done in the part's own type.
+# compares both parts and "$" renders "C32(1, 2)". Every operation is done in the part's own type, except division:
+# the textbook (a * conj(b)) / |b|^2 squares b's parts, which overflows to infinity or underflows to zero long before
+# the quotient does - C16(600) / C16(300) was NaN. C16 and C32 divide in F64, where every product of two of their
+# parts is exact and nothing overflows or underflows, rounding once at the end; C64, with nothing wider, divides by
+# Smith's method, which never squares.
 
 type C16 struct(Re F16, Im F16 = 0) {
     Re
@@ -11,8 +15,9 @@ fn (a C16) Plus(b C16) C16 { return C16(a.Re + b.Re, a.Im + b.Im) }
 fn (a C16) Minus(b C16) C16 { return C16(a.Re - b.Re, a.Im - b.Im) }
 fn (a C16) Mul(b C16) C16 { return C16(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
 fn (a C16) Div(b C16) C16 {
-    d := b.Norm()
-    return C16((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d)
+    ar, ai, br, bi F64 = a.Re, a.Im, b.Re, b.Im
+    d F64 = br * br + bi * bi
+    return C16(F16((ar * br + ai * bi) / d), F16((ai * br - ar * bi) / d))
 }
 fn (a C16) Neg() C16 { return C16(-a.Re, -a.Im) }
 # the conjugate: the same real part, the imaginary part negated
@@ -31,8 +36,9 @@ fn (a C32) Plus(b C32) C32 { return C32(a.Re + b.Re, a.Im + b.Im) }
 fn (a C32) Minus(b C32) C32 { return C32(a.Re - b.Re, a.Im - b.Im) }
 fn (a C32) Mul(b C32) C32 { return C32(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
 fn (a C32) Div(b C32) C32 {
-    d := b.Norm()
-    return C32((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d)
+    ar, ai, br, bi F64 = a.Re, a.Im, b.Re, b.Im
+    d F64 = br * br + bi * bi
+    return C32(F32((ar * br + ai * bi) / d), F32((ai * br - ar * bi) / d))
 }
 fn (a C32) Neg() C32 { return C32(-a.Re, -a.Im) }
 # the conjugate: the same real part, the imaginary part negated
@@ -50,9 +56,22 @@ type C64 struct(Re F64, Im F64 = 0) {
 fn (a C64) Plus(b C64) C64 { return C64(a.Re + b.Re, a.Im + b.Im) }
 fn (a C64) Minus(b C64) C64 { return C64(a.Re - b.Re, a.Im - b.Im) }
 fn (a C64) Mul(b C64) C64 { return C64(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
+# Smith's method: b is divided by its larger part, so the ratio r is at most 1 and nothing is squared. Where r underflows
+# to zero the products with it would lose the smaller part of b entirely, so those are formed from a quotient first
+# (Stewart's refinement)
 fn (a C64) Div(b C64) C64 {
-    d := b.Norm()
-    return C64((a.Re * b.Re + a.Im * b.Im) / d, (a.Im * b.Re - a.Re * b.Im) / d)
+    absRe F64 = b.Re if b.Re >= 0.0 else -b.Re
+    absIm F64 = b.Im if b.Im >= 0.0 else -b.Im
+    if absRe >= absIm {
+        r F64 = b.Im / b.Re
+        t F64 = b.Re + b.Im * r
+        if r != 0.0 { return C64((a.Re + a.Im * r) / t, (a.Im - a.Re * r) / t) }
+        return C64((a.Re + b.Im * (a.Im / b.Re)) / t, (a.Im - b.Im * (a.Re / b.Re)) / t)
+    }
+    r F64 = b.Re / b.Im
+    t F64 = b.Re * r + b.Im
+    if r != 0.0 { return C64((a.Re * r + a.Im) / t, (a.Im * r - a.Re) / t) }
+    return C64((b.Re * (a.Re / b.Im) + a.Im) / t, (b.Re * (a.Im / b.Im) - a.Re) / t)
 }
 fn (a C64) Neg() C64 { return C64(-a.Re, -a.Im) }
 # the conjugate: the same real part, the imaginary part negated
@@ -72,4 +91,17 @@ test "complex arithmetic, in each width" {
     assert h * h == C16(F16(-0.75), F16(1)) and h.Scale(F16(2)) == C16(F16(1), F16(2))
     d := C64(1, 1)
     assert d * d.Conj() == C64(2, 0)
+}
+
+# division never squares a part that would overflow or underflow on its own: the quotients here are all ordinary numbers
+test "complex division near the ends of each width's range" {
+    assert C16(F16(600.0)) / C16(F16(300.0)) == C16(F16(2.0))
+    assert C16(F16(0.0), F16(60000.0)) / C16(F16(0.0), F16(30000.0)) == C16(F16(2.0))
+    assert C32(F32(3.0e20)) / C32(F32(3.0e20)) == C32(1)
+    assert C32(F32(1.0e-30), F32(1.0e-30)) / C32(F32(1.0e-30)) == C32(1, 1)
+    assert C64(1) / C64(1.0e200) == C64(1.0e-200)
+    assert C64(1.0e300, 1.0e300) / C64(1.0e300, 1.0e300) == C64(1)
+    assert C64(1.0e-300) / C64(0.0, 1.0e-300) == C64(0.0, -1.0)
+    assert C64(3, 4) / C64(1, 2) == C64(2.2, -0.4)
+    assert C64(5, 5) / C64(1, 1.0e-320) == C64(5, 5)
 }

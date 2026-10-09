@@ -776,12 +776,11 @@ static char* stdRoot(void) {
 
 //the directory relative imports of `mod` resolve against: its own file's
 static char* moduleDir(struct semaModule* mod) {
-    char buf[PATH_MAX];
-    StrToCStr(mod->fileName, buf);
+    char* buf = StrDupStr(mod->fileName);
     char* slash = strrchr(buf, '/');
     if (!slash) return heapCopy(".");
     *slash = '\0';
-    return heapCopy(buf[0] ? buf : "/");
+    return buf[0] ? buf : heapCopy("/");
 }
 
 static struct str lastPathElement(const char* p, bool dropExt) {
@@ -885,90 +884,119 @@ static void lockSet(const char* key, const char* commit) {
     fclose(f);
 }
 
+//M23b: a commit as git names one - 40 hexadecimal digits (64 in a repository using SHA-256). Anything else in a lock
+//line is no commit, and is never handed to git.
+static bool isCommitName(const char* c) {
+    size_t n = strlen(c);
+    if (n != 40 && n != 64) return false;
+    for (size_t i = 0; i < n; i++) if (!((c[i] >= '0' && c[i] <= '9') || (c[i] >= 'a' && c[i] <= 'f'))) return false;
+    return true;
+}
+
+//M23a: the host, owner, repository and ref of a remote import are handed to git and become cache directories, so
+//each holds only what such names hold - letters, digits, '.', '_' and '-' - and none begins with '.' or '-' (no
+//option, no hidden or parent directory) or holds "..". The rest is refused before anything runs.
+static bool isRemoteNamePart(const char* s) {
+    if (!*s || *s == '.' || *s == '-' || strstr(s, "..")) return false;
+    for (const char* c = s; *c; c++) {
+        if (!((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9') || *c == '.' || *c == '_'
+              || *c == '-')) return false;
+    }
+    return true;
+}
+
 //the commit a checked-out repository is at, or "" when it cannot be read
 static void gitHead(const char* dir, char* out, size_t n) {
-    out[0] = '\0';
-    char cmd[PATH_MAX * 2 + 64];
-    snprintf(cmd, sizeof(cmd), "git -C '%s' rev-parse HEAD 2>/dev/null", dir);
-    FILE* p = popen(cmd, "r");
-    if (!p) return;
-    if (!fgets(out, (int)n, p)) out[0] = '\0';
-    pclose(p);
+    char* argv[] = { "git", "-C", (char*)dir, "rev-parse", "HEAD", NULL };
+    if (RunProgramCapture(argv, out, n) != 0) out[0] = '\0';
     out[strcspn(out, "\n")] = '\0';
+    if (!isCommitName(out)) out[0] = '\0';
+}
+
+//git, run quietly - never through a shell (M23a): an argument is only ever an argument
+static bool git(char** argv) {
+    return RunProgram(argv, true) == 0;
 }
 
 //M23a/M23b: host/owner/repo[@ref] at the commit the lock file names - or, with no line for it, at its ref's current
 //commit, which is then locked. Kept in the cache by commit (OLANG_CACHE/host/owner/repo/<commit>), fetched once and
 //read from there from then on, so a locked build needs no network. Returns the local repository directory.
+//Every fetch is made into a temporary directory and renamed into place only once it holds the commit it should, so a
+//fetch that is interrupted or fails leaves nothing a later build would take for a fetched repository.
 static char* fetchRemote(const char* host, const char* owner, const char* repoAt, struct token tok) {
-    char repo[256], ref[256] = "";
-    snprintf(repo, sizeof(repo), "%s", repoAt);
+    char* repo = heapCopy(repoAt);
+    char* ref = NULL;
     char* at = strchr(repo, '@');
-    if (at) { snprintf(ref, sizeof(ref), "%s", at + 1); *at = '\0'; }
-    char cache[PATH_MAX];
+    if (at) { *at = '\0'; ref = at + 1; }
+    if (!isRemoteNamePart(host) || !isRemoteNamePart(owner) || !isRemoteNamePart(repo) || (ref && !isRemoteNamePart(ref))) {
+        ErrMsgSemantic(tok, IMPORT_REMOTE_BAD_NAME);
+        return NULL;
+    }
     char* env = getenv("OLANG_CACHE");
-    if (env && *env) snprintf(cache, sizeof(cache), "%s", env);
-    else snprintf(cache, sizeof(cache), "%s/.cache/olang", getenv("HOME") ? getenv("HOME") : ".");
+    char* cache = env && *env ? heapCopy(env) : StrFmt("%s/.cache/olang", getenv("HOME") ? getenv("HOME") : ".");
     //OLANG_GIT_BASE replaces "https://" - for a mirror, or a local repository in tests
     char* base = getenv("OLANG_GIT_BASE");
     if (!base || !*base) base = "https://";
-    char key[PATH_MAX], url[PATH_MAX], parent[PATH_MAX], dir[PATH_MAX], cmd[PATH_MAX * 16];
-    bool fits = true; //a path too long to build is a fetch that cannot be made
-    fits = fits && (size_t)snprintf(key, sizeof(key), "%s/%s/%s", host, owner, repoAt) < sizeof(key);
-    fits = fits && (size_t)snprintf(url, sizeof(url), "%s%s/%s/%s", base, host, owner, repo) < sizeof(url);
-    fits = fits && (size_t)snprintf(parent, sizeof(parent), "%s/%s/%s/%s", cache, host, owner, repo) < sizeof(parent);
-    if (!fits) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
+    char* key = StrFmt("%s/%s/%s", host, owner, repoAt);
+    char* url = StrFmt("%s%s/%s/%s", base, host, owner, repo);
+    char* parent = StrFmt("%s/%s/%s/%s", cache, host, owner, repo);
+    char* tmp = StrFmt("%s/.fetch-%d", parent, (int)getpid());
     const char* locked = lockFind(key);
     //M23c: under -u a locked line is set aside the first time its repository is reached
-    char was[128] = "";
+    char* was = NULL;
     if (locked && updateLocks && !lockUpdatedNow(key, false)) {
-        snprintf(was, sizeof(was), "%s", locked);
+        was = heapCopy(isCommitName(locked) ? locked : "");
         locked = NULL;
     }
+    if (locked && !isCommitName(locked)) { ErrMsgSemantic(tok, IMPORT_LOCK_NOT_A_COMMIT); return NULL; }
+    char head[128] = "";
+    char* dir = locked ? StrFmt("%s/%s", parent, locked) : NULL;
+    if (dir && pathIsDir(dir)) return dir;
+    if (MakeDirs(parent) != 0 || RemoveTree(tmp) != 0) { ErrMsgSemantic(tok, IMPORT_FETCH_FAILED); return NULL; }
     if (locked) {
-        fits = fits && (size_t)snprintf(dir, sizeof(dir), "%s/%s", parent, locked) < sizeof(dir);
-        if (pathIsDir(dir)) return heapCopy(dir);
         fprintf(stderr, "olang: fetching %s into %s at %.12s, as olang.lock says\n", key, cache, locked);
         //a shallow fetch of the one commit where the server allows it, else the whole history and a checkout
-        fits = fits && (size_t)snprintf(cmd, sizeof(cmd), "mkdir -p '%s' && (git init -q '%s' && git -C '%s' fetch -q --depth 1 '%s' '%s' "
-                 "&& git -C '%s' checkout -q FETCH_HEAD || (rm -rf '%s' && git clone -q '%s' '%s' && git -C '%s' "
-                 "checkout -q '%s')) >/dev/null 2>&1", parent, dir, dir, url, locked, dir, dir, url, dir, dir, locked) < sizeof(cmd);
-        char head[128];
-        if (fits && system(cmd) == 0) gitHead(dir, head, sizeof(head));
-        else head[0] = '\0';
-        if (strcmp(head, locked) != 0) {
-            fits = fits && (size_t)snprintf(cmd, sizeof(cmd), "rm -rf '%s'", dir) < sizeof(cmd);
-            if (system(cmd) != 0) { /* nothing more to undo */ }
+        char* init[] = { "git", "init", "-q", tmp, NULL };
+        char* fetch[] = { "git", "-C", tmp, "fetch", "-q", "--depth", "1", "--", url, (char*)locked, NULL };
+        char* checkoutFetched[] = { "git", "-C", tmp, "checkout", "-q", "FETCH_HEAD", NULL };
+        char* clone[] = { "git", "clone", "-q", "--", url, tmp, NULL };
+        char* checkout[] = { "git", "-C", tmp, "checkout", "-q", (char*)locked, NULL };
+        if (!(git(init) && git(fetch) && git(checkoutFetched))) {
+            if (RemoveTree(tmp) == 0 && git(clone)) (void)git(checkout);
+        }
+        gitHead(tmp, head, sizeof(head));
+        if (strcmp(head, locked) != 0 || (!pathIsDir(dir) && rename(tmp, dir) != 0)) {
+            (void)RemoveTree(tmp);
             ErrMsgSemantic(tok, IMPORT_LOCKED_FETCH_FAILED);
             return NULL;
         }
-        return heapCopy(dir);
+        (void)RemoveTree(tmp); //another build placed it first
+        return dir;
     }
-    char tmp[PATH_MAX];
-    fits = fits && (size_t)snprintf(tmp, sizeof(tmp), "%s/.fetch-%d", parent, (int)getpid()) < sizeof(tmp);
-    fits = fits && (size_t)snprintf(cmd, sizeof(cmd), "mkdir -p '%s' && rm -rf '%s' && git clone --quiet --depth 1 %s%s%s '%s' '%s' 2>/dev/null",
-             parent, tmp, ref[0] ? "--branch '" : "", ref, ref[0] ? "'" : "", url, tmp) < sizeof(cmd);
     fprintf(stderr, "olang: fetching %s into %s\n", key, cache);
-    char head[128] = "";
-    if (fits && system(cmd) == 0) gitHead(tmp, head, sizeof(head));
+    char* branch = ref ? StrFmt("--branch=%s", ref) : NULL;
+    char* clone[] = { "git", "clone", "--quiet", "--depth", "1", branch ? branch : "--quiet", "--", url, tmp, NULL };
+    if (git(clone)) gitHead(tmp, head, sizeof(head));
     if (!head[0]) {
+        (void)RemoveTree(tmp);
         ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
         return NULL;
     }
-    fits = fits && (size_t)snprintf(dir, sizeof(dir), "%s/%s", parent, head) < sizeof(dir);
-    if (pathIsDir(dir)) snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tmp);
-    else snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", tmp, dir);
-    if (!fits || system(cmd) != 0 || !pathIsDir(dir)) {
+    dir = StrFmt("%s/%s", parent, head);
+    if (pathIsDir(dir)) (void)RemoveTree(tmp); //fetched before, under another ref
+    else if (rename(tmp, dir) != 0) {
+        (void)RemoveTree(tmp);
         ErrMsgSemantic(tok, IMPORT_FETCH_FAILED);
         return NULL;
     }
     lockSet(key, head);
     if (updateLocks) {
         lockUpdatedNow(key, true);
-        if (was[0] && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
-        else if (was[0]) fprintf(stderr, "olang: %s is already at %.12s\n", key, head);
+        if (was && !was[0]) fprintf(stderr, "olang: updated %s to %.12s\n", key, head); //its line named no commit
+        else if (was && strcmp(was, head)) fprintf(stderr, "olang: updated %s to %.12s (was %.12s)\n", key, head, was);
+        else if (was) fprintf(stderr, "olang: %s is already at %.12s\n", key, head);
     }
-    return heapCopy(dir);
+    return dir;
 }
 
 //collapses "." and ".." elements lexically, so one directory reached by two spellings prints one way
@@ -996,13 +1024,10 @@ static char* normalizePath(const char* p) {
 //so "map" written in std/io is std/map, the same module "std/map" names, and each version of a remote
 //repository has its own copy of what it imports relatively
 static struct str relativeIdentity(struct semaModule* from, const char* spec) {
-    char base[PATH_MAX * 2];
-    StrToCStr(from->identity, base);
+    char* base = StrDupStr(from->identity);
     char* sl = strrchr(base, '/');
     if (sl) *sl = '\0'; else base[0] = '\0';
-    char joined[PATH_MAX * 3];
-    snprintf(joined, sizeof(joined), "%s%s%s", base, base[0] ? "/" : "", spec);
-    return StrFromCStr(normalizePath(joined));
+    return StrFromCStr(normalizePath(StrFmt("%s%s%s", base, base[0] ? "/" : "", spec)));
 }
 
 static bool hasPrefixElems(const char* id, const char* prefix) {
@@ -1022,6 +1047,7 @@ static char* firstElems(const char* p, int n) {
 struct resolvedImport { char* path; struct str identity; };
 
 static bool resolveImport(struct semaModule* from, struct str raw, struct token tok, struct resolvedImport* out) {
+    if (raw.len >= PATH_MAX) { ErrMsgSemantic(tok, IMPORT_FILE_NOT_FOUND); return false; } //no file has such a path
     char spec[PATH_MAX];
     StrToCStr(raw, spec);
     size_t len = strlen(spec);
@@ -1057,8 +1083,7 @@ static bool resolveImport(struct semaModule* from, struct str raw, struct token 
         out->path = normalizePath(buf);
         out->identity = spec[0] == '/' ? lastPathElement(spec, false) : relativeIdentity(from, spec);
         //inside std or a remote repository, a relative import stays inside it
-        char fromId[PATH_MAX];
-        StrToCStr(from->identity, fromId);
+        char* fromId = StrDupStr(from->identity);
         char* root = hasPrefixElems(fromId, "std") ? heapCopy("std")
                    : strchr(firstElems(fromId, 1), '.') && strchr(fromId, '/') ? firstElems(fromId, 3) : NULL;
         if (root && !hasPrefixElems(out->identity.ptr, root)) { ErrMsgSemantic(tok, IMPORT_LEAVES_ROOT); return false; }
@@ -1095,12 +1120,8 @@ static struct list olangFilesIn(const char* dir) {
 }
 
 struct semaModule* semaLoadModule(struct str fileName) {
-    char buf[PATH_MAX];
-    StrToCStr(fileName, buf);
-    if (pathIsDir(buf)) {
-        fprintf(stderr, "%s: a module is a file, never a directory (M1) - name the .olang file\n", buf);
-        exit(EXIT_FAILURE);
-    }
+    char* buf = StrDupStr(fileName);
+    if (pathIsDir(buf)) ErrMsgFatal(StrFmt("%s: a module is a file, never a directory (M1) - name the .olang file", buf));
     //M22a: a root takes its identity from where it really is - its path from the working directory, or its
     //file name when outside it; a std module named directly ("olang -t std/list.olang") is the same module
     //its importers call "std/list", so it gets the identity - and the symbols and object names - they give it
@@ -1120,7 +1141,7 @@ struct semaModule* semaLoadModule(struct str fileName) {
         if (n > 6 && !strcmp(id + n - 6, ".olang")) id[n - 6] = '\0';
         identity = StrFromCStr(heapCopy(id));
     }
-    return semaLoadModuleAt(heapCopy(buf), identity, (struct token){0});
+    return semaLoadModuleAt(buf, identity, (struct token){0});
 }
 
 static struct semaModule* semaLoadModuleAt(char* path, struct str identity, struct token tok) {
@@ -4117,6 +4138,7 @@ void semaResolveModule(struct semaModule* mod) {
             //checked, so setting it here is early enough for both.
             v->bodySyntax = firstPartOfType(actual, SNTX_BLOCK);
             v->bodyIncomplete = firstPartOfType(actual, SNTX_BODY_INCOMPLETE) != NULL; //S8b
+            v->bodyUnparsed = firstPartOfType(actual, SNTX_BODY_UNPARSED) != NULL;
             v->type.owner = mod;
             v->type.tok = nameTok;
         } else if (actual->type == SNTX_EXTERN_FUNC_DECL) {
@@ -6039,6 +6061,9 @@ static struct operand* projectionBase(struct operand* op) {
 bool callIsLanding(struct operand* op) {
     if (heldResult(op)) return callIsLanding(heldResult(op));
     if (projectionBase(op)) return callIsLanding(projectionBase(op));
+    //T29a: a conversion between a declared type and its representation is its argument, so it lands where that does -
+    //"return String(b.chars.ToArray())" built the array in the function's own scope, closed by the return
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1) return callIsLanding(*(struct operand**)ListGetIdx(&op->args, 0));
     //an array built here lands with its elements - and, holding existing storage, is checked where it lands (T7, O25c)
     if (opIsArrayLiteral(op) || op->opType == OPERATION_SIZED_ARRAY_ALLOC) {
         if (op->ctorLanded) return false;
@@ -6072,6 +6097,10 @@ static void landCallIn(struct operand* op, struct var* dst, int depth, bool prog
         if (dst) depth = 0;
     }
     if (op && heldResult(op)) { landCallIn(heldResult(op), dst, depth, program); return; }
+    if (op && op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1) { //T29a: as callIsLanding says
+        landCallIn(*(struct operand**)ListGetIdx(&op->args, 0), dst, depth, program);
+        return;
+    }
     if (op && (opIsArrayLiteral(op) || op->opType == OPERATION_SIZED_ARRAY_ALLOC)) {
         if (op->ctorLanded) return;
         op->ctorLanded = true; //where it was put, which what it holds is checked against (checkCtorHereFits)
@@ -7443,6 +7472,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
 enum operandReq { REQ_NONE, REQ_BOOL, REQ_INT, REQ_NUMERIC };
 
 bool operandMeetsReq(struct operand* op, enum operandReq req) {
+    if (op->type.unknown) return true; //an unknown name, already reported, is whatever it is asked to be
     switch (req) {
         case REQ_BOOL: return OperandIsBool(op);
         case REQ_INT: return OperandIsInt(op);
@@ -7838,7 +7868,7 @@ struct operand* OperandBinary(struct operand* a, struct operand* b, enum operati
     bool bOk = operandMeetsReq(b, rule.require);
     if (!aOk) ErrMsgSemantic(a->tok, operandReqErrMsg(rule.require));
     if (!bOk) ErrMsgSemantic(b->tok, operandReqErrMsg(rule.require));
-    if (rule.sameType && aOk && bOk && !unfit && !TypeIsSame(a->type, b->type))
+    if (rule.sameType && aOk && bOk && !unfit && !a->type.unknown && !b->type.unknown && !TypeIsSame(a->type, b->type))
         ErrMsgSemantic(tok, TypeIsNumeric(a->type) && TypeIsNumeric(b->type) ? NUMBERS_DO_NOT_MEET : OPERANDS_NOT_SAME_TYPE);
     return op;
 }
@@ -14466,6 +14496,7 @@ void checkInstantiationBody(struct instantiation* inst) {
 }
 
 static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spec) {
+    if (spec->bodyUnparsed) { spec->bodyHadErrors = true; return; } //as checkFuncBody
     struct scope fnScope = scopePush(NULL);
     for (int p = 0; p < spec->type.vars.len; p++) {
         struct var* param = ListGetIdx(&spec->type.vars, p);
@@ -14842,6 +14873,8 @@ void semaCheckBodies(struct semaModule* mod) {
 //function whose body is not checked yet (ensureBodyChecked), since its obligations are part of its signature
 static void checkFuncBody(struct semaModule* mod, struct var* func) {
     if (func->bodyState) return;
+    //a body that did not parse was reported as it was read; its function is declared, and nothing more is said
+    if (func->bodyUnparsed) { func->bodyHadErrors = true; func->bodyState = 2; return; }
     func->bodyState = 1;
     {
         struct scope fnScope = scopePush(NULL);

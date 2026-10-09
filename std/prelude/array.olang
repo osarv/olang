@@ -217,8 +217,8 @@ fn arraySorted() Array<I32> {
     a.Sort(fn(x, y) { return x < y })
     return a.Filter(fn(x) { return x > 10 })
 }
-ArraySorted := arraySorted()                     # computed while compiling (K2): calls through lambdas
-ArraySum I32 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
+arraySortedBaked := arraySorted()                     # computed while compiling (K2): calls through lambdas
+arraySumBaked I32 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
 
 test "the array methods take what to do as a lambda" {
     a := I32[5, 3, 8, 1, 9, 2]
@@ -235,7 +235,7 @@ test "the array methods take what to do as a lambda" {
     assert a[0] == 1 and a[5] == 9 and a[2] == 3
     a.Sort(fn(x, y) { return x > y })
     assert a[0] == 9 and a[5] == 1
-    assert ArraySorted.Len() == 4 and ArraySorted[0] == 20 and ArraySorted[3] == 50 and ArraySum == 140
+    assert arraySortedBaked.Len() == 4 and arraySortedBaked[0] == 20 and arraySortedBaked[3] == 50 and arraySumBaked == 140
 }
 
 test "Sort is stable, and sorts long arrays and arrays of references" {

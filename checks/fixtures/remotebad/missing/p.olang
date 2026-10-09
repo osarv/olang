@@ -1,0 +1,2 @@
+import "example.com/me/tools/mathx/add"
+fn main() ? { }
