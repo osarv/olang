@@ -51,12 +51,9 @@ because what it finds about structure feeds the refactor.
   the iterator's scope, not the list's: a result read through a `&p` field (C2d: keeps the argument's own scope) needs
   to carry the scope that field was bound to at construction - the per-instance binding the checker already records
   for constructor arguments (hereVar) - through `:=` locals and the for-in lowering, without new syntax.
-- More review leads: the program scope (globals, O1b) has an allocator with no lock, so two tasks building into a
-  global's scope at once corrupt it (the enums work made `H = f(G)` build there).
-- Review leads (give to the agents): the defer work found that a function returning a local ARRAY VALUE hands back
-  a pointer into its own just-closed scope and the caller copies from freed memory - safe only because nothing runs
-  between the close and the copy (does a destructor allocating at that close break it?); a fix wants a callee/caller
-  protocol change (the callee copies into the caller's storage).
+- (closed 8a38b36) the program scope's unlocked allocator - tasks now get a private stand-in, folded at the join.
+- (closed 8a38b36) a returned local array value pointed into the closed scope - the callee now copies it into the
+  result scope and the caller adopts it.
 - Progress 2026-10-09 00:40 UTC: master = 2baddf3 (all features through recursive enums). Running: the scope
   use-after-free fix (/home/user/wt/scope) and review areas (1) lexer/parser and (4) codegen, read-only against
   /home/user/wt/review (detached at 2baddf3, its own build). Still to start, paced by usage: review (2) semantic.c types/
@@ -80,6 +77,8 @@ because what it finds about structure feeds the refactor.
   semantic.c types/modules/generics, (5) comptime/driver/std, (3) semantic.c operands/statements/scopes (after scope).
 - 02:00: codegen fixes merged (d11c538 via c2f16e6, on master). Usage 65% of the window, so reviews (2), (5), (3)
   wait for the 05:30 window; running until then: scope fix, parser fixes.
+- 03:00: scope follow-up merged (8a38b36, on master; codegen findings 1-4, 6, 19 and parser A fixed). Parser fixes
+  (fadf5ce on wt-parsefix) are being merged with master by their agent (L10 U64 rule reconciled), then verified.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
