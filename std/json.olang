@@ -418,12 +418,29 @@ fn (r mut reader&) close() {
     r.pos++
 }
 
-fn (r mut reader&) skipSpace() {
-    for r.pos < r.src.Len() {
-        c := r.src[r.pos]
-        if c != ' ' and c != '\n' and c != '\r' and c != '\t' { return }
-        r.pos++
+fn (r mut reader&) skipSpace() { r.pos = spaceEnd(r.src, r.pos) }
+
+# where the whitespace from i in s ends. The scans are plain functions over a text and a position, which the optimizer
+# keeps in registers, where a loop over the reader's fields would load and store them at every byte
+fn spaceEnd(s String&, from I64) I64 {
+    i I64 = from
+    for i < s.Len() {
+        c := s[i]
+        if c != ' ' and c != '\n' and c != '\r' and c != '\t' { return i }
+        i++
     }
+    return i
+}
+
+# where the run of characters from i in s that a string holds as they are - printable ASCII, no quote, no backslash - ends
+fn plainEnd(s String&, from I64) I64 {
+    i I64 = from
+    for i < s.Len() {
+        c := s[i]
+        if c == '"' or c == '\\' or c < 0x20 or c >= 0x80 { return i }
+        i++
+    }
+    return i
 }
 
 fn (r reader&) inObject() Bool { return r.nameStarts[r.depth - 1] >= 0 }
@@ -525,16 +542,11 @@ fn (r mut reader&) word(w String&) ? JsonError {
 
 # the string whose opening quote is at pos, decoded - new text, built where its caller puts it
 fn (r mut reader&) str() String& ? JsonError {
-    r.pos++
-    start I64 = r.pos
-    for r.pos < r.src.Len() {                       # the usual string: printable ASCII, no escapes - copied as it is
-        c := r.src[r.pos]
-        if c == '"' {
-            r.pos++
-            return $r.src[start:r.pos - 1]
-        }
-        if c == '\\' or c < 0x20 or c >= 0x80 { break }
+    start I64 = r.pos + 1
+    r.pos = plainEnd(r.src, start)
+    if r.pos < r.src.Len() and r.src[r.pos] == '"' {   # the usual string: printable ASCII, no escapes - copied as it is
         r.pos++
+        return $r.src[start:r.pos - 1]
     }
     # the rest: checked, and measured, then decoded into text of exactly that length
     size I64 = r.pos - start
@@ -576,7 +588,10 @@ fn (r mut reader&) str() String& ? JsonError {
 # the escape at pos: moves past it and gives how many bytes it stands for - writing them into out at w, when out is
 # given. \u escapes are UTF-8 there, a surrogate pair (😀) one character of four bytes
 fn (r mut reader&) escape(w I64, out mut String&) I64 ? JsonError {
-    if r.pos + 1 == r.src.Len() { error JsonError.UNTERMINATED }
+    if r.pos + 1 == r.src.Len() {
+        r.pos++
+        error JsonError.UNTERMINATED
+    }
     e := r.src[r.pos + 1]
     b Char = 0
     if e == '"' or e == '\\' or e == '/' {
@@ -621,11 +636,14 @@ fn (r mut reader&) escape(w I64, out mut String&) I64 ? JsonError {
     return 1
 }
 
-# the four hex digits at i, as a number
-fn (r reader&) hex4(i I64) I64 ? JsonError {
+# the four hex digits at i, as a number - failing where the text ends or a digit is not one
+fn (r mut reader&) hex4(i I64) I64 ? JsonError {
     v I64 = 0
     for k in range i, i + 4 {
-        if k >= r.src.Len() { error JsonError.UNTERMINATED }
+        if k >= r.src.Len() {
+            r.pos = r.src.Len()
+            error JsonError.UNTERMINATED
+        }
         c := r.src[k]
         d I64 = 0
         if c >= '0' and c <= '9' {
@@ -635,6 +653,7 @@ fn (r reader&) hex4(i I64) I64 ? JsonError {
         } else if c >= 'A' and c <= 'F' {
             d = I64(c - 'A') + 10
         } else {
+            r.pos = k
             error JsonError.BAD_ESCAPE
         }
         v = v * 16 + d
@@ -1100,6 +1119,134 @@ fn (a mut decimal&) bits() U64 ? {
     return (mant & 0xFFFFFFFFFFFFF) | (U64(biased) << 52)
 }
 
+# ---- writing a number: the shortest text that reads back ----
+
+mask63 U64 = 0x7FFFFFFFFFFFFFFF
+
+# the F64 v (finite, not 0) as the fewest decimal digits that read back as it, the closest to v of those: f * 10^e. By
+# Schubfach (Giulietti), as Java's Double.toString has it, with its 126-bit powers of ten made from pow10Mant (a power's
+# top 126 bits rounded down, plus one); and where Java keeps two digits for the smallest numbers, one here when one
+# reads back, as for every other number - so the digits are those of Python's repr and JavaScript's toString
+fn shortest(v F64) (U64, I64) {
+    b := v.Bits()
+    t U64 = b & 0xFFFFFFFFFFFFF
+    bq I64 = I64((b >> 52) & 0x7FF)
+    if bq != 0 {
+        mq I64 = 1075 - bq
+        c U64 = (U64(1) << 52) | t
+        if mq > 0 and mq < 53 {
+            f U64 = c >> U64(mq)
+            if f << U64(mq) == c { return f, 0 }
+        }
+        return schubfach(-mq, c, 0)
+    }
+    if t == 1 { return 5, -324 }                    # the two smallest: 5e-324 and 1e-323
+    if t == 2 { return 1, -323 }
+    return schubfach(-1074, t, 0)
+}
+
+# the rounded-to-odd top bits of g * cp, g = g1 * 2^63 + g0
+fn rop(g1 U64, g0 U64, cp U64) U64 {
+    x1, x0 := mul128(g0, cp)
+    y1, y0 := mul128(g1, cp)
+    z U64 = (y0 >> 1) + x1
+    vbp U64 = y1 + (z >> 63)
+    return vbp | (((z & mask63) + mask63) >> 63)
+}
+
+# the shortest decimal in the rounding interval of c * 2^q, c a whole number: its digits and power of ten
+fn schubfach(q I64, c U64, dk I64) (U64, I64) {
+    out U64 = c & 1
+    cb U64 = c << 2
+    cbr U64 = cb + 2
+    cbl U64 = cb - 2
+    k I64 = (q * 661971961083) >> 41
+    if c == U64(1) << 52 and q != -1074 {
+        cbl = cb - 1
+        k = (q * 661971961083 - 274743187321) >> 41
+    }
+    h I64 = q + ((-k * 913124641741) >> 38) + 2
+    row I64 = (348 - k) * 2
+    hi U64 = U64(pow10Mant[row])
+    lo U64 = U64(pow10Mant[row + 1])
+    gh U64 = hi >> 2
+    gl U64 = ((lo >> 2) | (hi << 62)) + 1
+    if gl == 0 { gh++ }
+    g1 U64 = (gh << 1) | (gl >> 63)
+    g0 U64 = gl & mask63
+    vb U64 = rop(g1, g0, cb << U64(h))
+    vbl U64 = rop(g1, g0, cbl << U64(h))
+    vbr U64 = rop(g1, g0, cbr << U64(h))
+    s U64 = vb >> 2
+    if s >= 10 {
+        sp10 U64 = 10 * (s / 10)
+        tp10 U64 = sp10 + 10
+        upin Bool = vbl + out <= sp10 << 2
+        wpin Bool = (tp10 << 2) + out <= vbr
+        if upin != wpin {
+            if upin { return sp10, k }
+            return tp10, k
+        }
+    }
+    t U64 = s + 1
+    uin Bool = vbl + out <= s << 2
+    win Bool = (t << 2) + out <= vbr
+    if uin != win {
+        if uin { return s, k + dk }
+        return t, k + dk
+    }
+    cmp I64 = I64(vb) - I64((s + t) << 1)
+    if cmp < 0 or (cmp == 0 and (s & 1) == 0) { return s, k + dk }
+    return t, k + dk
+}
+
+# v, finite, as the shortest text that reads back as it - the closest such, when several are as short - laid out as "$v"
+# lays a number out: positional when its decimal exponent is from -4 to 16, "d.ddde+XX" otherwise
+fn writeNumber(sb mut StringBuilder&, v F64) {
+    if v.Bits() >> 63 == 1 { sb.PushChar('-') }
+    if v == 0.0 {
+        sb.PushChar('0')
+        return
+    }
+    f, e := shortest(v)
+    for f % 10 == 0 {
+        f = f / 10
+        e++
+    }
+    digits := String(Array<Char>(20))
+    n I64 = 0
+    for f > 0 {
+        digits[19 - n] = Char(f % 10) + '0'
+        f = f / 10
+        n++
+    }
+    d := digits[20 - n:]
+    x I64 = e + n - 1
+    if x < -4 or x >= 17 {
+        sb.PushChar(d[0])
+        if n > 1 {
+            sb.PushChar('.')
+            sb.Push(d[1:])
+        }
+        sb.PushChar('e')
+        sb.PushChar('-' if x < 0 else '+')
+        ax I64 = -x if x < 0 else x
+        if ax < 10 { sb.PushChar('0') }
+        sb.Push($ax)
+    } else if x >= n - 1 {
+        sb.Push(d)
+        for i in range x + 1 - n { sb.PushChar('0') }
+    } else if x >= 0 {
+        sb.Push(d[:x + 1])
+        sb.PushChar('.')
+        sb.Push(d[x + 1:])
+    } else {
+        sb.Push("0.")
+        for i in range -x - 1 { sb.PushChar('0') }
+        sb.Push(d)
+    }
+}
+
 # ---- writing ----
 
 # j as JSON text: compact - no space anywhere - with no indent, or with each array item and object member on a line of
@@ -1134,7 +1281,7 @@ fn (w mut writer&) value(j Json&, depth I64) {
             if v != v or v - v != 0.0 {             # NaN, or infinite (inf - inf is NaN)
                 w.out.Push("null")
             } else {
-                w.out.Push($v)
+                writeNumber(w.out, v)
             }
         }
         case Json.Str(s) { w.text(s) }
@@ -1200,6 +1347,277 @@ fn (w mut writer&) text(s String&) {
     }
     w.out.Push(s[from:])
     w.out.PushChar('"')
+}
+
+# ---- tests ----
+
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it
+
+if TestBuild {
+    import "os"
+
+    # why text is not JSON, as "WORD LINE:COL", or "ok"
+    fn problem(text String&) String& {
+        at := Position()
+        try Parse(text, at) catch JsonError.UNEXPECTED { return "UNEXPECTED " $at }
+            catch JsonError.UNTERMINATED { return "UNTERMINATED " $at }
+            catch JsonError.BAD_ESCAPE { return "BAD_ESCAPE " $at }
+            catch JsonError.BAD_NUMBER { return "BAD_NUMBER " $at }
+            catch JsonError.BAD_UTF8 { return "BAD_UTF8 " $at }
+            catch JsonError.TRAILING { return "TRAILING " $at }
+            catch JsonError.DEPTH { return "DEPTH " $at }
+            catch JsonError { return "OTHER" }
+        return "ok"
+    }
+
+    # the number text is, or NaN when it is not one
+    fn num(text String&) F64 {
+        doc := try Parse(text) catch { return 0.0 / 0.0 }
+        return try doc.AsNum() catch { return 0.0 / 0.0 }
+    }
+
+    # the word a question about j fails with, or "ok"
+    fn asking(j Json&, key <K>) String& {
+        try j[key] catch JsonError.MISSING { return "MISSING" } catch JsonError.WRONG_KIND { return "WRONG_KIND" }
+            catch JsonError { return "OTHER" }
+        return "ok"
+    }
+
+    # the As questions, through a signature that lets their errors go - the way a program asks them
+    fn kinds(doc Json&) ? JsonError {
+        assert (try (try doc["s"]).AsStr()) == "text"
+        assert (try (try doc["n"]).AsNum()) == -125.0 and (try (try doc["n"]).AsInt()) == -125
+        assert (try (try doc["t"]).AsBool()) and not (try (try doc["f"]).AsBool())
+        assert (try doc["z"]).IsNull() and not (try doc["s"]).IsNull()
+        assert (try (try doc["a"][1][0]).AsNum()) == 2.0
+        i I64 = 1
+        assert (try (try doc["a"][i][1]).AsNum()) == 3.0
+        assert (try (try doc["a"]).AsArr()).Len() == 3
+        o := try doc.AsObj()
+        assert o.Len() == 6 and o.Keys[0] == "s" and o.Keys[5] == "a"
+        assert (try (try o["t"]).AsBool()) and "z" in o and "y" not in o
+    }
+
+    test "every kind of value, and asking for its parts" {
+        doc := try Parse("{\"s\": \"text\", \"n\": -12.5e1, \"t\": true, \"f\": false, \"z\": null, \"a\": [1, [2, 3], {}]}")
+            catch { fail }
+        try kinds(doc) catch { fail }
+        assert (try (doc["s"] as Json.Str) catch default "") == "text"
+        assert (try (doc["a"][1][1] as Json.Num) catch default 0.0) == 3.0
+        assert (try (doc["a"][9] as Json.Num) catch default -1.0) == -1.0
+        assert "s" in doc and "a" in doc and "missing" not in doc
+        assert asking(doc, "missing") == "MISSING" and asking(doc, 0) == "WRONG_KIND"
+        a := try doc["a"] catch { fail }
+        assert asking(a, 3) == "MISSING" and asking(a, -1) == "MISSING" and asking(a, 2) == "ok"
+        assert asking(a, "s") == "WRONG_KIND" and asking(try doc["s"] catch { fail }, 0) == "WRONG_KIND"
+        wrong := false
+        try (try doc["s"] catch { fail }).AsNum() catch JsonError.WRONG_KIND { wrong = true } catch { fail }
+        assert wrong
+        half := try Parse("2.5") catch { fail }
+        notWhole := false
+        try half.AsInt() catch JsonError.WRONG_KIND { notWhole = true } catch { fail }
+        assert notWhole
+        tooBig := false
+        try (try Parse("1e19") catch { fail }).AsInt() catch JsonError.WRONG_KIND { tooBig = true } catch { fail }
+        assert tooBig and (try (try Parse("-9223372036854775808") catch { fail }).AsInt() catch default 0) == -9223372036854775807 - 1
+    }
+
+    test "numbers are read to the nearest F64" {
+        assert num("0") == 0.0 and num("-0").Bits() == U64(0x8000000000000000) and num("0").Bits() == 0
+        assert num("1") == 1.0 and num("-1") == -1.0 and num("0.1") == 0.1 and num("0.30000000000000004") == 0.30000000000000004
+        assert num("1e23") == 1e23 and num("8.98846567431158e307") == 8.98846567431158e307
+        assert num("1.7976931348623157e308") == 1.7976931348623157e308
+        assert num("2.2250738585072011e-308").Bits() == 0xFFFFFFFFFFFFF          # just below the smallest normal
+        assert num("2.2250738585072014e-308").Bits() == 0x10000000000000
+        assert num("4.9e-324").Bits() == 1 and num("2.4703282292062328e-324").Bits() == 1
+        assert num("2.4703282292062327e-324") == 0.0                             # exactly half the smallest: to even
+        assert num("1e-400") == 0.0 and num("-1e-400").Bits() == U64(0x8000000000000000)
+        assert num("9007199254740993") == 9007199254740992.0                     # halfway: to even
+        assert num("9007199254740993.00000000000000000001") == 9007199254740994.0 # past 19 digits, just above halfway
+        assert num("0.1000000000000000055511151231257827021181583404541015625") == 0.1
+        assert num("123456789012345678901234567890") == 1.2345678901234568e29
+        assert num("1E2") == 100.0 and num("1e+2") == 100.0 and num("100e-2") == 1.0 and num("0e99") == 0.0
+        assert num("-9223372036854775808") == -9223372036854775808.0
+        assert problem("1e309") == "BAD_NUMBER 1:1" and problem("-1e400") == "BAD_NUMBER 1:1"
+    }
+
+    test "strings: escapes, \\u and surrogate pairs to UTF-8" {
+        s := try (try Parse("\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\"") catch { fail }).AsStr() catch { fail }
+        assert s == "a\"b\\c/d" $Char(8) $Char(12) "\n\r\t"
+        e := try (try Parse("\"\\u00e9\\u4e2d\\ud83d\\ude00\\u0000!\"") catch { fail }).AsStr() catch { fail }
+        assert e.Len() == 2 + 3 + 4 + 1 + 1
+        assert e[0] == 0xC3 and e[1] == 0xA9 and e[2] == 0xE4 and e[3] == 0xB8 and e[4] == 0xAD
+        assert e[5] == 0xF0 and e[6] == 0x9F and e[7] == 0x98 and e[8] == 0x80 and e[9] == 0 and e[10] == '!'
+        raw := try (try Parse("[\"é中😀\"]") catch { fail })[0] catch { fail }
+        assert (try raw.AsStr() catch { fail }) == "é中😀"
+        assert problem("\"\\ud83d\"") == "BAD_ESCAPE 1:2" and problem("\"\\ude00\"") == "BAD_ESCAPE 1:2"
+        assert problem("\"\\ud83dx\"") == "BAD_ESCAPE 1:2" and problem("\"\\x\"") == "BAD_ESCAPE 1:2"
+        assert problem("\"\\u12g4\"") == "BAD_ESCAPE 1:6" and problem("\"\\u12") == "UNTERMINATED 1:6"
+        assert problem("\"tab\there\"") == "UNEXPECTED 1:5" and problem("\"open") == "UNTERMINATED 1:6"
+        bad := String(U8['"', 0xC3, '"'])
+        assert problem(bad) == "BAD_UTF8 1:2"
+        assert problem(String(U8['"', 0xED, 0xA0, 0x80, '"'])) == "BAD_UTF8 1:2"       # a surrogate written in UTF-8
+        assert problem(String(U8['"', 0xC0, 0xAF, '"'])) == "BAD_UTF8 1:2"             # overlong
+    }
+
+    test "what is wrong, and where" {
+        assert problem("") == "UNTERMINATED 1:1" and problem("   ") == "UNTERMINATED 1:4"
+        assert problem("[1, 2") == "UNTERMINATED 1:6" and problem("{\"a\": 1") == "UNTERMINATED 1:8"
+        assert problem("[1 2]") == "UNEXPECTED 1:4" and problem("[1,]") == "UNEXPECTED 1:4"
+        assert problem("{\"a\" 1}") == "UNEXPECTED 1:6" and problem("{\"a\": 1,}") == "UNEXPECTED 1:9"
+        assert problem("{a: 1}") == "UNEXPECTED 1:2" and problem("[tru]") == "UNEXPECTED 1:5"
+        assert problem("[01]") == "BAD_NUMBER 1:3" and problem("[1.]") == "BAD_NUMBER 1:4"
+        assert problem("-") == "BAD_NUMBER 1:2" and problem("1e") == "BAD_NUMBER 1:3" and problem(".5") == "UNEXPECTED 1:1"
+        assert problem("+1") == "UNEXPECTED 1:1" and problem("NaN") == "UNEXPECTED 1:1"
+        assert problem("[1] x") == "TRAILING 1:5" and problem("1 2") == "TRAILING 1:3"
+        assert problem("{\n  \"a\": [1,\n        oops]\n}") == "UNEXPECTED 3:9"
+        assert problem("[\"é\", x]") == "UNEXPECTED 1:7"                          # a column counts characters
+        assert problem(" {\"a\":[{}, [], \"\", 0, -1.5e-3, true, false, null]} \n") == "ok"
+        assert problem(String(U8[0xEF, 0xBB, 0xBF, '1'])) == "ok"                   # a byte order mark is passed over
+    }
+
+    test "nesting is bounded by MaxDepth" {
+        deep := StringBuilder()
+        for i in range MaxDepth { deep.PushChar('[') }
+        for i in range MaxDepth { deep.PushChar(']') }
+        assert problem(deep.ToString()) == "ok"
+        deeper := StringBuilder()
+        for i in range MaxDepth + 1 { deeper.Push("{\"a\":") }
+        assert problem(deeper.ToString()) == "DEPTH 1:" $(5 * MaxDepth + 1)
+        flood := StringBuilder()
+        for i in range 100000 { flood.PushChar('[') }
+        assert problem(flood.ToString()) == "DEPTH 1:" $(MaxDepth + 1)
+    }
+
+    test "Encode writes compact and indented text" {
+        doc := try Parse("{\"a\": [1, 2.5, \"x\\ny\"], \"b\": {}, \"c\": [], \"d\": null, \"e\": true}") catch { fail }
+        assert Encode(doc) == "{\"a\":[1,2.5,\"x\\ny\"],\"b\":{},\"c\":[],\"d\":null,\"e\":true}"
+        assert Encode(doc, "  ") == "{\n  \"a\": [\n    1,\n    2.5,\n    \"x\\ny\"\n  ],\n  \"b\": {},\n  \"c\": [],\n  \"d\": null,\n  \"e\": true\n}"
+        assert Encode(doc, "\t").StartsWith("{\n\t\"a\": [\n\t\t1,")
+        assert $doc == Encode(doc)
+        control := Json.Str(String(U8['"', '\\', 1, 0x1F, 0x7F, 'q']))
+        assert Encode(control) == "\"\\\"\\\\\\u0001\\u001f" $Char(0x7F) "q\""
+        nums := Json&[Json.Num(0.1), Json.Num(100.0), Json.Num(-0.0), Json.Num(1e21), Json.Num(1.5e-7), Json.Num(5e-324),
+            Json.Num(123456789.125), Json.Num(1e16), Json.Num(1e17), Json.Num(0.0 / 0.0), Json.Num(1.0 / 0.0)]
+        assert Encode(Json.Arr(nums)) == "[0.1,100,-0,1e+21,1.5e-07,5e-324,123456789.125,10000000000000000,1e+17,null,null]"
+    }
+
+    test "a number is written as the shortest text that reads back as it" {
+        for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 4.9406564584124654e-324,
+            1.7976931348623157e308, 7.120236347223045e-307, 123.456, -98765.4321e-12, 3.141592653589793] {
+            text := Encode(Json.Num(x))
+            assert num(text) == x and text.Len() <= ($x).Len()
+        }
+        assert Encode(Json.Num(7.120236347223045e-307)) == "7.120236347223045e-307"     # a power of two: 16 digits
+    }
+
+    test "what Encode writes, Parse reads back as an equal value" {
+        text := "[{\"x\": 1, \"y\": [true, false, null, \"\\u00e9\\ud83d\\ude00\"]}, -0.0, 1e-300, \"\", {\"\": {}}]"
+        doc := try Parse(text) catch { fail }
+        again := try Parse(Encode(doc)) catch { fail }
+        pretty := try Parse(Encode(doc, "    ")) catch { fail }
+        assert doc == again and doc == pretty and Encode(again) == Encode(doc)
+        assert Encode(doc) == "[{\"x\":1,\"y\":[true,false,null,\"é😀\"]},-0,1e-300,\"\",{\"\":{}}]"
+    }
+
+    test "objects keep their order, answer with the last of a repeated name, and index big ones" {
+        doc := try Parse("{\"b\": 1, \"a\": 2, \"b\": 3}") catch { fail }
+        assert (try (doc["b"] as Json.Num) catch default 0.0) == 3.0
+        assert Encode(doc) == "{\"b\":1,\"a\":2,\"b\":3}"
+        big := StringBuilder()
+        big.PushChar('{')
+        for i in range 500 {
+            if i > 0 { big.PushChar(',') }
+            big.Push("\"key" $i "\": " $(i * i))
+        }
+        big.Push(", \"key7\": -1}")
+        o := try Parse(big.ToString()) catch { fail }
+        for i in range 500 {
+            want F64 = F64(i * i) if i != 7 else -1.0
+            assert (try (o["key" $i] as Json.Num) catch default -2.0) == want
+        }
+        assert "key499" in o and "key500" not in o and "" not in o
+        assert (try o.AsObj() catch { fail }).Len() == 501
+    }
+
+    test "two values are equal when they hold equal parts, objects in any order" {
+        a := try Parse("{\"x\": [1, 2, {\"p\": null}], \"y\": \"s\"}") catch { fail }
+        b := try Parse("{\"y\": \"s\", \"x\": [1.0, 2e0, {\"p\": null}]}") catch { fail }
+        c := try Parse("{\"y\": \"s\", \"x\": [1, 2, {\"p\": false}]}") catch { fail }
+        assert a == b and a != c and a.Hash() == b.Hash()
+        assert (try Parse("0") catch { fail }) == (try Parse("-0") catch { fail })
+        assert (try Parse("[1, 2]") catch { fail }) != (try Parse("[2, 1]") catch { fail })
+        assert (try Parse("{\"a\": 1}") catch { fail }) != (try Parse("{\"a\": 1, \"b\": 2}") catch { fail })
+    }
+
+    test "values built in code" {
+        o := Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null]),
+            Json.Bool(true)])
+        doc Json& = Json.Obj(o)
+        assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
+        assert doc == (try Parse("{\"ok\": true, \"tags\": [1, null], \"name\": \"olang\"}") catch { fail })
+        items := List<Json&>()
+        for i in range 3 { items.Push(Json.Num(F64(i))) }
+        assert Encode(Json.Arr(items.ToArray())) == "[0,1,2]"
+    }
+
+    # allocates and lets go of a few hundred texts, so storage a closed scope gave back is handed out again - anything
+    # still pointing into such storage would read these bytes instead of its own
+    fn churn() I64 {
+        t I64 = 0
+        for i in range 300 {
+            s := $i "-------------------------------------------------------------"
+            t += s.Len()
+        }
+        return t
+    }
+
+    fn parsed(n I64) Json& {
+        return try Parse("{\"n\": " $n ", \"s\": \"value " $n "\", \"a\": [" $n ", {\"deep\": \"x\\ty\"}]}") catch { fail }
+    }
+
+    test "a tree lives where its caller puts it, and no longer needs the text" {
+        doc := parsed(7)
+        kept := List<Json&>()
+        for i in range 5 { kept.Push(parsed(i)) }
+        assert churn() > 0
+        assert Encode(doc) == "{\"n\":7,\"s\":\"value 7\",\"a\":[7,{\"deep\":\"x\\ty\"}]}"
+        for i, k in kept {
+            assert (try (k["s"] as Json.Str) catch default "") == "value " $i
+            assert (try (k["a"][1]["deep"] as Json.Str) catch default "") == "x\ty"
+        }
+    }
+
+    # what the fixture holds, asked as a program would ask it
+    fn fixture(doc Json&) ? JsonError {
+        assert (try (try doc["authors"][0]["commits"]).AsInt()) == 1205
+        assert (try doc["authors"][1]["email"]).IsNull()
+        assert (try (try doc["limits"]["tiny"]).AsNum()).Bits() == 1
+        assert (try (try doc["limits"]["neg"]).AsNum()).Bits() == U64(0x8000000000000000)
+        assert (try (try doc["text"]).AsStr()) == "line one\nline \"two\"\ttabbed é 中 😀 \\ /"
+        n I64 = 0
+        for tag in try (try doc["tags"]).AsArr() { n += (try tag.AsStr()).Len() }
+        assert n == 13
+        assert (try (try doc["empty"]).AsObj()).Len() == 3
+    }
+
+    test "the fixture file" {
+        text := try os.ReadFile("checks/fixtures/json/sample.json") catch { fail }
+        at := Position()
+        doc := try Parse(text, at) catch { fail }
+        assert at.Offset == text.Len() and at.Line == 15 and at.Col == 1
+        try fixture(doc) catch { fail }
+        assert (try Parse(Encode(doc, "  ")) catch { fail }) == doc
+    }
+
+    # K1: Parse and Encode run while compiling - this global is baked, and agrees with the same work done at run time
+    bakedText String& = Encode(try Parse("{\"a\": [1, 2.5e-3, \"\\u00e9\"], \"b\": {\"c\": null}}") catch default Json.Null)
+    sourceText mut String& = "{\"a\": [1, 2.5e-3, \"\\u00e9\"], \"b\": {\"c\": null}}"
+
+    test "Parse and Encode give the same while compiling as at run time" {
+        assert bakedText == "{\"a\":[1,0.0025,\"é\"],\"b\":{\"c\":null}}"
+        assert Encode(try Parse(sourceText) catch { fail }) == bakedText
+    }
 }
 
 # the Eisel-Lemire powers of ten: for 10^e, e from -348 to 347, the top 128 bits of its binary mantissa, rounded down
