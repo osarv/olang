@@ -2909,18 +2909,38 @@ static unsigned long long ctRtDyncall(const char* name, const unsigned char* kin
     }
 }
 extern char** environ;
-static int ctRtSpawn(const char* args, long long count, int in, int out, int err) {
+//X6: the runtime's __olang_spawn - in its directory (empty: this process's own) by posix_spawn_file_actions_addchdir_np,
+//or, where the C library lacks it, through /bin/sh as the generated runtime does
+static int ctRtSpawn(const char* args, long long count, int in, int out, int err, const char* dir) {
     if (count < 1) { errno = EINVAL; return -1; }
-    char** argv = MallocOrCrash(sizeof(char*) * (size_t)(count + 1));
-    for (long long i = 0; i < count; i++) { argv[i] = (char*)args; args += strlen(args) + 1; }
-    argv[count] = NULL;
+    char** argv = MallocOrCrash(sizeof(char*) * (size_t)(count + 5));
+    char** prog = argv + 4;
+    for (long long i = 0; i < count; i++) { prog[i] = (char*)args; args += strlen(args) + 1; }
+    prog[count] = NULL;
     posix_spawn_file_actions_t fa;
     posix_spawn_file_actions_init(&fa);
     if (in >= 0) posix_spawn_file_actions_adddup2(&fa, in, 0);
     if (out >= 0) posix_spawn_file_actions_adddup2(&fa, out, 1);
     if (err >= 0) posix_spawn_file_actions_adddup2(&fa, err, 2);
     pid_t pid;
-    int rc = posix_spawnp(&pid, argv[0], &fa, NULL, argv, environ);
+    int rc;
+    bool shell = false;
+    if (dir && dir[0]) {
+#if defined(__GLIBC__) && __GLIBC_PREREQ(2, 29)
+        posix_spawn_file_actions_addchdir_np(&fa, dir);
+#else
+        shell = true;
+#endif
+    }
+    if (shell) {
+        argv[0] = "/bin/sh";
+        argv[1] = "-c";
+        argv[2] = "cd -- \"$0\" && exec \"$@\"";
+        argv[3] = (char*)dir;
+        rc = posix_spawn(&pid, "/bin/sh", &fa, NULL, argv, environ);
+    } else {
+        rc = posix_spawnp(&pid, prog[0], &fa, NULL, prog, environ);
+    }
     posix_spawn_file_actions_destroy(&fa);
     free(argv);
     if (rc != 0) { errno = rc; return -1; }

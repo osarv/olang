@@ -9005,14 +9005,24 @@ void emitOsRuntime(FILE* out) {
 
     //the program named by the count NUL-terminated entries of args, started with them as its command line - the first
     //looked up through PATH as posix_spawnp does - and with in, out and err (each -1 for this process's own) as its
-    //standard input, output and error, without a shell; its process id, or -1 when it could not be started (errno says
-    //why - posix_spawnp gives its error as its result, which is put where __olang_err looks)
+    //standard input, output and error, in the directory dir (NUL-terminated; empty for this process's own), without a
+    //shell; its process id, or -1 when it could not be started (errno says why - posix_spawnp gives its error as its
+    //result, which is put where __olang_err looks). The directory is changed to in the child, after the descriptors are
+    //set, by glibc's posix_spawn_file_actions_addchdir_np (2.29 and later; declared weak, so a C library without it
+    //still links) - and without it, by running the program through /bin/sh as 'cd -- "$0" && exec "$@"', the one place
+    //a shell stands between: the directory and the arguments are its arguments, never its script, so they reach the
+    //program as they are
     fprintf(out, "declare i32 @posix_spawn_file_actions_init(ptr)\n"
                  "declare i32 @posix_spawn_file_actions_destroy(ptr)\n"
                  "declare i32 @posix_spawn_file_actions_adddup2(ptr, i32, i32)\n"
+                 "declare extern_weak i32 @posix_spawn_file_actions_addchdir_np(ptr, ptr)\n"
                  "declare i32 @posix_spawnp(ptr, ptr, ptr, ptr, ptr, ptr)\n"
-                 "@environ = external global ptr\n\n"
-                 "define linkonce_odr i32 @__olang_spawn(ptr %%args, i64 %%count, i32 %%in, i32 %%out, i32 %%err) {\n"
+                 "declare i32 @posix_spawn(ptr, ptr, ptr, ptr, ptr, ptr)\n"
+                 "@environ = external global ptr\n"
+                 "@__olang_sh = linkonce_odr constant [8 x i8] c\"/bin/sh\\00\"\n"
+                 "@__olang_sh_c = linkonce_odr constant [3 x i8] c\"-c\\00\"\n"
+                 "@__olang_sh_cd = linkonce_odr constant [24 x i8] c\"cd -- \\22$0\\22 && exec \\22$@\\22\\00\"\n\n"
+                 "define linkonce_odr i32 @__olang_spawn(ptr %%args, i64 %%count, i32 %%in, i32 %%out, i32 %%err, ptr %%dir) {\n"
                  "entry:\n"
                  "  %%fa = alloca [%zu x i8], align 16\n"
                  "  %%pid = alloca i32\n"
@@ -9064,7 +9074,36 @@ void emitOsRuntime(FILE* out) {
                  "doneErr:\n"
                  "  %%env = load ptr, ptr @environ\n"
                  "  %%prog = load ptr, ptr %%argv\n"
-                 "  %%rc = call i32 @posix_spawnp(ptr %%pid, ptr %%prog, ptr %%fa, ptr null, ptr %%argv, ptr %%env)\n"
+                 "  %%dir0 = load i8, ptr %%dir\n"
+                 "  %%here = icmp eq i8 %%dir0, 0\n"
+                 "  br i1 %%here, label %%direct, label %%moved\n"
+                 "moved:\n"
+                 "  %%canChdir = icmp ne ptr @posix_spawn_file_actions_addchdir_np, null\n"
+                 "  br i1 %%canChdir, label %%chdir, label %%viaShell\n"
+                 "chdir:\n"
+                 "  %%dc = call i32 @posix_spawn_file_actions_addchdir_np(ptr %%fa, ptr %%dir)\n"
+                 "  br label %%direct\n"
+                 "direct:\n"
+                 "  %%rc1 = call i32 @posix_spawnp(ptr %%pid, ptr %%prog, ptr %%fa, ptr null, ptr %%argv, ptr %%env)\n"
+                 "  br label %%spawned\n"
+                 "viaShell:\n"
+                 "  %%n5 = add i64 %%count, 5\n"
+                 "  %%bytes5 = mul i64 %%n5, 8\n"
+                 "  %%argv5 = call ptr @malloc(i64 %%bytes5)\n"
+                 "  store ptr @__olang_sh, ptr %%argv5\n"
+                 "  %%s1 = getelementptr ptr, ptr %%argv5, i64 1\n"
+                 "  store ptr @__olang_sh_c, ptr %%s1\n"
+                 "  %%s2 = getelementptr ptr, ptr %%argv5, i64 2\n"
+                 "  store ptr @__olang_sh_cd, ptr %%s2\n"
+                 "  %%s3 = getelementptr ptr, ptr %%argv5, i64 3\n"
+                 "  store ptr %%dir, ptr %%s3\n"
+                 "  %%s4 = getelementptr ptr, ptr %%argv5, i64 4\n"
+                 "  call void @llvm.memcpy.p0.p0.i64(ptr %%s4, ptr %%argv, i64 %%bytes, i1 false)\n"
+                 "  %%rc2 = call i32 @posix_spawn(ptr %%pid, ptr @__olang_sh, ptr %%fa, ptr null, ptr %%argv5, ptr %%env)\n"
+                 "  call void @free(ptr %%argv5)\n"
+                 "  br label %%spawned\n"
+                 "spawned:\n"
+                 "  %%rc = phi i32 [ %%rc1, %%direct ], [ %%rc2, %%viaShell ]\n"
                  "  %%fd = call i32 @posix_spawn_file_actions_destroy(ptr %%fa)\n"
                  "  call void @free(ptr %%argv)\n"
                  "  %%ok = icmp eq i32 %%rc, 0\n"

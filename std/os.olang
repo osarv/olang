@@ -4,6 +4,7 @@
 # text; the C library wants it NUL-terminated, so each call here passes "$path "\0"".
 
 import "io"
+import "cancel"
 
 extern fn system(cmd Array<U8>) I32
 extern fn exit(status I32)
@@ -23,11 +24,13 @@ extern fn __olang_err() I32
 extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
 extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32
+extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
 extern fn __olang_mkdtemp(template Array<U8>) I32
 extern fn __olang_run_on_stack(bytes I64, f fn())
 extern fn __olang_on_crash(message Array<U8>, len I64)
 extern fn waitpid(pid I32, status Array<I32>, options I32) I32
+extern fn kill(pid I32, sig I32) I32
+extern fn nanosleep(req Array<I64>, rem Array<I64>) I32
 extern fn memfd_create(name Array<U8>, flags U32) I32
 extern fn isatty(fd I32) I32
 extern fn pipe(fds Array<I32>) I32
@@ -156,13 +159,44 @@ type Output struct(Status I32, Stdout String&, Stderr String&) {
 # whatever it holds - and waits for it to end. Its standard input is "input" and then the end of the file; what it
 # writes to its standard output and error is gathered, in full, into what Exec gives back, built where the caller puts
 # it - or, with "capture" false, goes where this program's own do (a compiler or a test binary run for its output to
-# be seen), Stdout and Stderr then being empty. args[0] is looked up through PATH unless it holds a '/'. A program
-# that runs and fails is no error here: its status says so. Exec fails, with the OsError naming why, only when the
-# program cannot be started - NOT_FOUND (no such program), DENIED (not executable) - or with FAILED when there is
-# nothing to run, an argument holds a zero byte (which no command line can carry), or the system refuses what Exec
-# needs. Output is gathered in memory files the program writes into as fast as it likes, so it never waits on a
-# pipe, and Exec never deadlocks on a large output.
-fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true) Output ? OsError {
+# be seen), Stdout and Stderr then being empty. It runs in the directory "dir", or in this program's own when dir is
+# empty; a relative path in args[0] is found from there. args[0] is looked up through PATH unless it holds a '/'. A
+# program that runs and fails is no error here: its status says so. Exec fails, with the OsError naming why, only when
+# the program cannot be started - NOT_FOUND (no such program, or no such dir), DENIED (not executable), NOT_DIR (dir is
+# not a directory) - or with FAILED when there is nothing to run, an argument holds a zero byte (which no command line
+# can carry), or the system refuses what Exec needs. Output is gathered in memory files the program writes into as fast
+# as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output. Start and Wait are the same, in
+# two halves; ExecUntil the same with a deadline.
+fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? OsError {
+    p := try Start(args, input, capture, dir)
+    return try p.Wait()
+}
+
+# Exec, with the program killed once tok fires - its deadline passes (cancel.After) or it is cancelled - when it has not
+# ended by then: ExecUntil then fails with the token's reason, once the program has ended
+fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? OsError + cancel.Stopped {
+    p := try Start(args, input, capture, dir)
+    return try p.WaitUntil(tok)
+}
+
+# a program Start started: Wait for it, once, to have what it did; Kill it to end it sooner. Its descriptors are closed
+# by Wait, so a Process never waited for keeps them, and leaves the system a record of the child, until this program
+# ends - Wait for every program you Start
+type Process struct(pid I32, out I32, errs I32, capture Bool) {
+    pid
+    out
+    errs
+    capture
+    waited Bool = false
+}
+
+# the program's process id, as the system knows it
+fn (p Process&) Pid() I32 { return p.pid }
+
+# starts the program args[0] as Exec does - its command line, input, capture and directory alike - and gives it back
+# running, without waiting for it: a program to run beside this one (a server a test talks to, several commands at
+# once), or one to give up on. Fails as Exec does when it cannot be started
+fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? OsError {
     if args.Len() == 0 { error OsError.FAILED }
     size I64 = 0
     for a in args {
@@ -170,6 +204,13 @@ fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true) Output
         try a.FindByte(0) catch { zero = false }
         if zero { error OsError.FAILED }
         size += a.Len() + 1
+    }
+    zero := true
+    try dir.FindByte(0) catch { zero = false }
+    if zero { error OsError.FAILED }
+    if dir.Len() > 0 {                                  # said here, where a missing program could not be mistaken for it
+        info := try Stat(dir)
+        if info.Kind != FileKind.DIR { error OsError.NOT_DIR }
     }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
@@ -190,20 +231,71 @@ fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true) Output
         out = try memFile()
         errs = try memFile()
     }
-    defer {
+    pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir "\0")
+    if pid < 0 {
+        code := __olang_err()
         if capture {
             close(out)
             close(errs)
         }
+        try raise(code)
     }
-    pid := __olang_spawn(line, args.Len(), feed, out, errs)
-    if pid < 0 { try raise(__olang_err()) }
+    return Process(pid, out, errs, capture)
+}
+
+# waits for the program to end and gives what it did - its status, and what it wrote when Start captured it, built where
+# the caller puts it. Fails with FAILED when it was waited for already
+fn (p mut Process&) Wait() Output ? OsError {
+    if p.waited { error OsError.FAILED }
     waited Array<I32, 1>
-    if waitpid(pid, waited, 0) < 0 { try raise(__olang_err()) }
-    status I32 = (waited[0] >> 8) & 0xFF
-    if (waited[0] & 0x7F) != 0 { status = 128 + (waited[0] & 0x7F) }      # ended by a signal
-    if not capture { return Output(status, "", "") }
-    return Output(status, try readBack(out), try readBack(errs))
+    if waitpid(p.pid, waited, 0) < 0 { try raise(__olang_err()) }
+    return try p.ended(waited[0])
+}
+
+# Wait, killing the program once tok fires and it has not ended: then it fails with the token's reason, once the
+# program has ended. Asks every few milliseconds at most - sooner while the program is young, so a short one is not
+# kept waiting - as nothing can wait for a child and a token at once
+fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? OsError + cancel.Stopped {
+    if p.waited { error OsError.FAILED }
+    waited Array<I32, 1>
+    nap Array<I64, 2>
+    left Array<I64, 2>
+    step I64 = 50000                                    # nanoseconds, doubling up to cancel.PollNs
+    for {
+        got := waitpid(p.pid, waited, 1)                # WNOHANG
+        if got < 0 { try raise(__olang_err()) }
+        if got == p.pid { return try p.ended(waited[0]) }
+        if tok.Cancelled() {
+            p.Kill()
+            if waitpid(p.pid, waited, 0) < 0 { try raise(__olang_err()) }
+            try p.ended(waited[0]) catch OsError { }
+            try tok.Reason()
+        }
+        nap[0] = 0
+        nap[1] = step
+        nanosleep(nap, left)
+        if step < cancel.PollNs { step = step * 2 }
+    }
+    unreachable
+}
+
+# ends the program now (SIGKILL), unless it has ended and been waited for - then nothing, since its process id may
+# already be another program's. Wait still has to be called, and gives a status of 137 (128 + 9) when this ended it
+fn (p mut Process&) Kill() {
+    if not p.waited { kill(p.pid, 9) }
+}
+
+# what the program did, from its wait status, its descriptors closed after what it wrote is read back
+fn (p mut Process&) ended(waitStatus I32) Output ? OsError {
+    p.waited = true
+    status I32 = (waitStatus >> 8) & 0xFF
+    if (waitStatus & 0x7F) != 0 { status = 128 + (waitStatus & 0x7F) }      # ended by a signal
+    if not p.capture { return Output(status, "", "") }
+    defer {
+        close(p.out)
+        close(p.errs)
+    }
+    return Output(status, try readBack(p.out), try readBack(p.errs))
 }
 
 # a file in memory, with no name in the file system: written and read through its descriptor as any file, gone once
@@ -733,6 +825,61 @@ test "Exec fails only when the program cannot be started" {
     assert Run("chmod +x build/os_files/noexec.sh") == 0
     ok := try Exec(String&["build/os_files/noexec.sh"]) catch { fail }
     assert ok.Status == 0 and ok.Stdout == "hi\n"
+}
+
+# Exec runs the program in a directory of its own when asked: a relative program and relative paths are found from it
+test "Exec runs a program in the directory it is given" {
+    assert Run("mkdir -p build/os_files/indir && printf '#!/bin/sh\\necho here\\n' > build/os_files/indir/here.sh && chmod +x build/os_files/indir/here.sh") == 0
+    where := try Exec(String&["pwd"], default, default, "build/os_files/indir") catch { fail }
+    assert where.Status == 0 and where.Stdout.EndsWith("/build/os_files/indir\n")
+    own := try Exec(String&["./here.sh"], default, default, "build/os_files/indir") catch { fail }
+    assert own.Stdout == "here\n"
+    cat := try Exec(String&["cat", "here.sh"], default, default, "build/os_files/indir") catch { fail }
+    assert cat.Stdout.EndsWith("echo here\n")
+    nowhere := false
+    try Exec(String&["pwd"], default, default, "build/os_files/no-such-dir") catch OsError.NOT_FOUND { nowhere = true } catch { }
+    assert nowhere
+    notDir := false
+    try Exec(String&["pwd"], default, default, "build/os_files/indir/here.sh") catch OsError.NOT_DIR { notDir = true } catch { }
+    assert notDir
+}
+
+# ExecUntil kills a program still running when its token fires, and fails with the token's reason; one that ends in
+# time is Exec's answer
+test "ExecUntil kills a program that outlives its token" {
+    start := cancel.NowNs()
+    timedOut := false
+    try ExecUntil(String&["sleep", "5"], cancel.After(100)) catch cancel.Stopped.TIMED_OUT { timedOut = true } catch { }
+    assert timedOut and cancel.NowNs() - start < 4000000000
+    quick := try ExecUntil(String&["echo", "in time"], cancel.After(60000)) catch { fail }
+    assert quick.Status == 0 and quick.Stdout == "in time\n"
+    tok mut cancel.Token& = cancel.Token()
+    tok.Cancel()
+    stopped := false
+    try ExecUntil(String&["sleep", "5"], tok) catch cancel.Stopped.CANCELLED { stopped = true } catch { }
+    assert stopped
+}
+
+# Start runs programs beside this one; Wait gives what each did, once; Kill ends one sooner
+test "Start, Wait, Kill and Pid" {
+    slow := try Start(String&["sleep", "5"]) catch { fail }
+    fed := try Start(String&["cat"], "fed in") catch { fail }
+    assert slow.Pid() > 0 and fed.Pid() > 0 and slow.Pid() != fed.Pid()
+    slow.Kill()
+    killed := try slow.Wait() catch { fail }
+    assert killed.Status == 137
+    slow.Kill()                                     # waited for: nothing to end
+    again := false
+    try slow.Wait() catch OsError.FAILED { again = true } catch { }
+    assert again
+    got := try fed.Wait() catch { fail }
+    assert got.Status == 0 and got.Stdout == "fed in" and got.Stderr == ""
+    failing := try Start(String&["sh", "-c", "echo oops >&2; exit 3"]) catch { fail }
+    f := try failing.WaitUntil(cancel.After(60000)) catch { fail }
+    assert f.Status == 3 and f.Stderr == "oops\n"
+    missing := false
+    try Start(String&["olang-no-such-program"]) catch OsError.NOT_FOUND { missing = true } catch { }
+    assert missing
 }
 
 # what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
