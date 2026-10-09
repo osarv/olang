@@ -177,20 +177,39 @@ fn (m Map<<K>, <V>>&) Keys() MapKeyIter<K, V> { return MapKeyIter<K, V>(m) }
 # the values, one at a time, in the order Iter() gives the entries
 fn (m Map<<K>, <V>>&) Values() MapValueIter<K, V> { return MapValueIter<K, V>(m) }
 
+# Each holds the walk itself, as MapIter does, rather than a MapIter: what it gives is then read through a field of its
+# own, which is where the map's entries live (O23a), and "for k in m.Keys() { l.Push(k) }" keeps a key as "for e in m"
+# keeps an entry's
 type MapKeyIter<K, V> struct(of Map<K, V>&) {
-    entries MapIter<K, V> = MapIter<K, V>(of)
+    m Map<K, V>&of = of
+    bucket I64 = 0                              # the next bucket to start a chain from
+    slot mut mapSlot<K, V>&of = null            # the next slot along the current chain; null once it is walked
 }
 
 fn (it mut MapKeyIter<<K>, <V>>&) Next() K ? Exhausted {
-    try it.entries.advance()
-    return it.entries.given.entry.Key
+    for it.slot == null {
+        if it.bucket == it.m.buckets.Len() { error Exhausted.END }
+        it.slot = it.m.buckets[it.bucket]
+        it.bucket++
+    }
+    s := it.slot
+    it.slot = s.next
+    return s.entry.Key
 }
 
 type MapValueIter<K, V> struct(of Map<K, V>&) {
-    entries MapIter<K, V> = MapIter<K, V>(of)
+    m Map<K, V>&of = of
+    bucket I64 = 0
+    slot mut mapSlot<K, V>&of = null
 }
 
 fn (it mut MapValueIter<<K>, <V>>&) Next() V ? Exhausted {
-    try it.entries.advance()
-    return it.entries.given.entry.Value
+    for it.slot == null {
+        if it.bucket == it.m.buckets.Len() { error Exhausted.END }
+        it.slot = it.m.buckets[it.bucket]
+        it.bucket++
+    }
+    s := it.slot
+    it.slot = s.next
+    return s.entry.Value
 }

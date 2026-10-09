@@ -11612,3 +11612,102 @@ code (`'A'.Format(16)` is `41`), unlike PadStart, where a Char should pad its ch
 ParseInt's does, 0 included - ParseInt's base 0 reads any of a literal's three forms, and writing one would need a
 choice nobody asked for. I64's most negative is written whole (its magnitude computed in U64). Pure olang, so it bakes:
 `formatBaked`, every base over four values, is a constant in the IR and equals the run time's.
+
+### What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11, 2026-10-09)
+
+Study 3 wrote realistic programs against the newest rules (permissions, constant generics, bare type variables) and
+marked every workaround (/home/user/review/study3, repro/r01-r35). This batch took its scope and checker findings and
+its diagnostics; std, codegen and the parser went to another batch.
+
+**O26a reaches reference locals (#4, r04 - the coordinator's decision).** The Pratt loop
+`lhs := p.primary(); for { ... rhs := p.expr(...); lhs = Expr.Bin(op, lhs, rhs) }; return lhs` was refused: `lhs` is a
+reference local, which O26a (value locals only) did not move, so the node built by `Expr.Bin(...)` at the assignment
+went to `lhs`'s block and returning it was O14's error; `rhs` likewise. The rule now covers a reference local declared by
+`:=` or with a bare `&` and no scope written, whose initializer is a temporary or `null`, when the function returns it -
+"returns" read off the rest of its declaring block, and extended through assignments: a local whose value is assigned
+to a returned local (`lhs = Bin(op, lhs, rhs)` makes `rhs` flow into `lhs`) is returned as far as where it is built goes.
+That is a small flow walk over the block's syntax (`localFlowsToResult`: a name used whole - not as the base of a member
+or an index - as a returned value, or as an assignment's value to a local that flows), the same walk the value-local
+rule now uses. A local initialized from existing storage keeps O25a's exact scope: moving it would claim a scope the
+storage is not in. Such a local is declared with `scopeParam` the function's result scope and its initializing call
+landed there, so codegen needed nothing - every temporary assigned to it is built where its type says.
+
+**O17 decided by the body (#5-#8).** O17 refused to lend a "split" value - one whose references live elsewhere than its
+storage (a copy of an element, O25h; a value built where a scope argument said; a for-in's hidden iterator) - to any
+callee whose parameter type could hold references, on the grounds that the callee might build into the value's slots.
+That was a test of the type. Nearly every lend in the study was a callee that only read (`count(toks)`, `for v in c`
+over a local iterator) or wrote numbers (`w.age.values[i] += 1` through a parameter). The check is now of what the
+callee's body does with the region its scope variable names: it **stores** into it a reference or a value holding
+references (`buildAssignCore`, any depth of field or element), it **hands out** a writable reference into it
+(`noteRegionHandOut` at a return: a caller could then build through the result), or it **passes** the region to a
+callee that does either (an edge recorded at the call). Unknown bodies (not yet checked - a later function, a cycle)
+are recorded as edges and lend checks and settled after `dischargeLateObligations` by a fixed point (`settleRegions`);
+an unknown callee with no body keeps everything, an `extern` nothing (X3 hands it a pointer for the call). A lambda's
+capture binding is a synthetic var on the stack, so it is decided at once and marks only writable captures - the first
+version queued it and settleRegions read freed stack (a segfault, caught by the corpus). An attempt to build
+instantiated constructors' bodies eagerly, to have their answers in time, raised new C2d/O10c errors inside
+`MapIter.Next` and was reverted in favour of the deferred settlement. The must-fail case `o17borrowsplitwrap` had shown
+the old rule with `b := Box&return(n)`; with O26a moving a returned `b` into the result scope it now builds, correctly,
+and the case was rewritten to the shape O17 still refuses (a copy `b := src.b` lent to `regrow`, which assigns a new
+array into it). `o17handout` pins the hand-out branch: `headOf()` returns `b.head` borrowed and writable, and the caller
+builds through it.
+
+**r06 stays a limit.** With O17 settled, `for p in parts { merge(sum, p) }` fails O10c instead: `p` is the for-in's copy,
+its storage the loop body and its references `parts`'s; lent to `merge(from Map&)`, the callee's scope variable binds
+to the storage (the body), and `merge`'s obligation (`from`'s scope outlives `into`'s) is about what it reads out of
+`from` - its contents - which the obligation cannot tell from the referent's own storage. Binding it to the references'
+home instead would be unsound whenever the callee keeps `from` itself (stores the reference, or a borrow of an inline
+part): a pointer into the loop body's slot would be accepted into `sum`. Doing it properly means splitting every
+obligation on a reference parameter into "its storage" and "its contents" at each place an obligation is made
+(`scopeCanFlowInto` has no operand to ask), a larger change than this batch; `merge(sum, parts[i])` lends the array's
+own storage and compiles.
+
+**r10 is a limit of G11, recorded.** A local `List<String&>` of slices of a parameter cannot hand its elements to
+something outliving the list (`m.Put(toks[0], 1)` into the caller's map): the type has one scope for the list's chunks
+and its elements' referents, and a read element is known only to live where the list does. The study's suggestion -
+O13c-style provenance, "the elements are `line`'s" - would be sound only if every store into the list were tracked
+(Push, SetAt, Insert, PushAll, any writable lend), and every read path carried it (At, RunFrom's runs, ListIter, copies):
+a second, flow-tracked scope per value, not an extension of the one there is. Landing the result scope at `line`'s
+instead would be sound and leaks the scratch list into the caller's arena, which is what the study's workaround did by
+hand. The prelude's `Split` returns `Array<String&>&t` for exactly this; a list built where it is kept works too.
+
+**Decided (mine), the smaller ones.** C2d (#11): `Ctx(nums, d)` with `d` a writable reference to the caller's sink
+(exact: something can be stored through it) and `nums` a local `List<I64>` (no stores possible through a list of
+numbers: need only outlive) was refused because all arguments had to agree on one scope; now the instance lands exactly
+where the exact ones live and each other one must outlive that (`bindHereFrom` in both orders; `checkCtorHereFits` lets
+an untraced binding stand where only outliving is asked). r12's static names kept by rooms in a returned game followed.
+T22 (#15): a function value fits a type differing only in permission where reading for writing is safe - a read-only
+parameter for a writable one, a writable result for a read-only one (`funcFitsByPermission`); identity (T22's "same
+type") is unchanged. G9a (#14): a lambda's written parameter and result types are unified before literals are bound
+(`unifyLambdaWritten`, resolved muted through a trial copy of the bindings), so `a.Fold(0, fn(acc I64, x I32) I64 {...})`
+binds `U` to `I64` and the `0` adapts. E31 (#13): `x[i]++` on an At/SetAt type is lowered to `x[i] += 1` (an
+`OPERATION_SEQ` whose body is the compound assignment), `try x[i]++` to its checked form, the index built as a place so
+the try covers the store and not a separate checked read. Found doing it, pre-existing: `h.v[i] += 3` through a value
+field's `SetAt` held the place in a hidden **value** local, so `SetAt` wrote the copy and the field never changed - a
+place is now held through a hidden reference (`holdPlaceInHidden`). G4 (#36, #20): a constant variable appearing in no
+parameter as a whole argument is reported once at the declaration, saying to introduce it in a parameter's type; the
+signature is marked uninferable, the body not checked and the result an unknown stand-in, so neither calls nor the body
+add errors (r20's six errors for two causes were cascades of this). R11 (#31): a by-value default holding references
+was refused outright; one that builds everything it holds - a constructor call whose arguments are numbers, `Bool`s,
+`null`, text written in the program, or such calls - is built where the call's result is (R9a's codegen already put a
+default there), so its references are where the result's are and later pushes land there too; existing storage is still
+refused, since its references would have to agree with every scope the result's live in. Checked at run time after an
+arena churn, under `-d` and `-i`, and baked by the evaluator. `Map.Keys()`/`Values()` (#9) went through `MapIter` and
+a two-number position; their iterators now hold the map and walk its buckets as `MapIter` does, so what they hand out
+carries the map's per-instance binding (O23a) and `for k in m.Keys() { l.Push(k) }` compiles.
+
+**Diagnostics (#17-#27).** T25c's "drop the 'mut'" for a read-only reference returned from a built `T&` result, where no
+`mut` was written: now T25c/O14 naming the borrowed form, built from the parameter the value is read through
+(`'Item&l'`). O10c's note proposed `parse&s(...)` for an entry whose references are the line's - following it moved the
+error into `parse`; the note now follows a result to the argument its callee obliges to outlive the result scope and
+points there (`line mut String&s = ...`), and never offers `callee&x(...)` for an operator's or a method's call (`At&g`,
+`Recv&total`); a declaration's suggested type is written `mut` where the value local was writable, and inside an
+instantiation with the generic's own variables (reverse substitution through the instantiation's bindings,
+`typeAsGeneric`). G16b's dedupe lives in errmsg.c: a scope-rule error at one place inside an instantiation context is
+written once; when the first record had to spell an instantiation's types because two variables were bound to one type
+(`K = V = I64`), it is marked weak and the next instantiation's record replaces it. Also: E29's for-in message leads with
+D3a; T22a names the parameter a lambda keeps and drops the compiler's `lambda$1`; type variables are spelled bare in
+every message (`Array<I16, N>&`, the D9a suggestion G22 then rejected); a case did-you-mean (`'Other'` -> `'OTHER'`); an
+unknown import that std has (`import "std/math"`); no method names among an unknown name's suggestions; `nomatch =>
+unreachable` says a leaving clause is a block; a line beginning with a binary operator says the line before ended its
+statement (L18).

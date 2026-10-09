@@ -4195,7 +4195,11 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
         rdSpellSigB(t, b);
         return;
     }
-    if (t.bType == BASETYPE_TYPEVAR) { cgBufAdd(b, "<%.*s>", t.name.len, t.name.ptr); return; }
+    //G8b/G22: a diagnostic names a variable as the program writes it after its introduction, bare
+    if (t.bType == BASETYPE_TYPEVAR) {
+        cgBufAdd(b, rdForDiag ? "%.*s" : "<%.*s>", t.name.len, t.name.ptr);
+        return;
+    }
     if (t.isTuple) {
         cgBufAdd(b, "(");
         for (int i = 0; i < t.vars.len; i++) {

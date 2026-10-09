@@ -4545,6 +4545,33 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_KEYWORD_AS_NAME, found);
         return true;
     }
+    //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
+    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_ABORT || found.type == TOK_RET
+            || found.type == TOK_FAIL || found.type == TOK_DONE || found.type == TOK_BREAK || found.type == TOK_CONTINUE
+            || found.type == TOK_ERROR)) {
+        TokenCtx tc = found.owner;
+        int from = TokenGetStrStart(found);
+        int lineEnd = TokenGetLineEnd(tc, from);
+        char what[128];
+        int n = 0;
+        for (int i = from; i < lineEnd && n < (int)sizeof(what) - 1; i++) what[n++] = TokenGetChar(tc, i);
+        while (n > 0 && (what[n - 1] == ' ' || what[n - 1] == '\t')) n--;
+        what[n] = '\0';
+        ErrSyntax(found, ERR_ARROW_LEAVES, found, StrFromCStr(strdup(what)));
+        return true;
+    }
+    //L18: "s := a + b" then "    + c" - a line beginning with an operator that only joins two values; the end of the
+    //line before ended the statement there
+    if ((prev.type == TOK_STMNT_END || prev.lineNr < found.lineNr) && found.lineNr > 0
+        && (found.type == TOK_ADD || found.type == TOK_SUB || found.type == TOK_MUL || found.type == TOK_DIV
+            || found.type == TOK_MOD || found.type == TOK_AT || found.type == TOK_AND || found.type == TOK_OR
+            || found.type == TOK_XOR || found.type == TOK_EQ || found.type == TOK_NEQ || found.type == TOK_LST
+            || found.type == TOK_LSE || found.type == TOK_GRT || found.type == TOK_GRE || found.type == TOK_BTWSE_AND
+            || found.type == TOK_BTWSE_OR || found.type == TOK_BTWSE_XOR || found.type == TOK_BTSFT_L
+            || found.type == TOK_BTSFT_R)) {
+        ErrSyntax(found, ERR_LINE_STARTS_WITH_OPERATOR, found, found);
+        return true;
+    }
     //"type T struct() { ... destruct { } }" - a destructor follows the constructor's body (C7)
     if (found.type == TOK_DESTRUCT) {
         ErrSyntax(found, ERR_DESTRUCT_IN_BODY);

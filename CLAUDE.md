@@ -4039,6 +4039,41 @@ Go through this for every change to what olang means - a rule added, revised or 
   -> 0.62s/190MB, binary-trees unchanged. **`n.Format(base = 10)`** on every integer type, U8 included (a Char gives its
   code), lowercase, `-` before a negative's digits, a base outside 2-36 aborts. ThreadSanitizer faults past ~260,000
   nested calls (its own call record), so std/os's deep test recurses less under `RaceBuild`.
+- **What a front end and a word count wrote first, accepted (O26a, O17, C2d, T22, G9a, G4, E31, R11, G16b, B11,
+  2026-10-09; study 3, details mine under the coordinator's calls).** **O26a reaches reference locals** (#4, the
+  coordinator's call): a reference local declared by `:=` or with a bare `&`, initialized by a temporary (a built result,
+  an instance, an enum case) or `null`, lives in the result scope when the function returns it - or returns a local it
+  flows into by assignment (`lhs := p.primary()` ... `lhs = Bin(op, lhs, rhs)` in a loop, `return lhs`), read off the
+  rest of its block; one initialized from existing storage keeps its scope (O25a). The recursive-descent and Pratt
+  idioms compile as written. **O17 decides by the callee's body** (#5-8): lending a value whose references live
+  elsewhere than its storage is refused only when the callee can keep what it builds in the value's slots - its body
+  stores references (or values holding them) into the lent region, returns a writable reference into it, or passes the
+  region to a callee that does - a fixed point over calls settled once every body is checked (`settleRegions`); an
+  extern keeps nothing, an unknown body everything, writing numbers is no keeping. **Decided (mine)**: C2d's arguments
+  asked different things need not share a scope - the instance lands where the exact ones live and the others need
+  only outlive that (#11, a context struct over a local `List` and the caller's sink); T22 lets a function value fit a
+  type differing only where reading for writing is safe (a read-only parameter for a writable one, a writable result
+  for a read-only one - #15); G9a matches a lambda's written types before any literal (`Fold(0, fn(acc I64, ...))`,
+  #14); `x[i]++` on a type with At/SetAt is `x[i] += 1`, `try` included (#13); G4's error for a constant is at the
+  declaration naming the fix, the body unchecked and calls silent (#36, #20); **R11 admits a by-value default holding
+  references when it builds all it holds** (#31: a constructor call of numbers, `null` and written text -
+  `catch default List<String&>()`; existing storage still refused); `Map.Keys()`/`Values()` iterators hold the map and
+  walk its buckets themselves (#9). **G16b**: a scope error in a generic body is one error for every instantiation, its
+  notes spelled with the generic's variables (`n mut Node<K, V>&c`) - a record that had to spell bindings two
+  variables share yields to a later instantiation's. **Diagnostics** (#17-#27): a read-only reference returned as a
+  built result names the borrowed form (`'Item&l'`, T25c/O14); O10c's note follows a result's references to the
+  argument they come from (`line mut String&s`) and never suggests a scope argument on an operator or method call; a
+  for-in reusing a name says D3a first; T22a names the parameter a lambda keeps; type variables are spelled bare in
+  messages (`Array<I16, N>&`); an unknown case gets the nearest case, an unknown import the std module of that name
+  (`import "std/math"`), an unknown name never a method's; `nomatch => unreachable` and a line starting with `+` say
+  what to write. **Found and fixed on the way, pre-existing**: `h.v[i] += 3` through a value field's `SetAt` lost the
+  write (it went to a hidden copy); `try l[1]++` was S4's error. **Recorded limits**: (r10) a value `List<String&>`
+  has one scope for its chunks and its elements' referents (G11), so a local list of slices of a parameter cannot hand
+  its elements to something outliving the list - per-instance element scopes would be a second, flow-tracked scope through
+  every store path (Push/SetAt/Insert, writable lends, RunFrom reads, copies); the prelude's `Split` returns
+  `Array<String&>&t` for this, or build the list where it is kept. (r06) a for-in copy of an element lent to a callee
+  binds the callee's scope variable to the copy's storage (the loop body), and an obligation cannot tell the referent's
+  storage from its contents, so `for p in parts { merge(sum, p) }` fails O10c where `merge(sum, parts[i])` compiles.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

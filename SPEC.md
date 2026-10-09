@@ -756,7 +756,10 @@ whole program and so lives in the program's scope (O1b).
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
 parameter's type, permission included (T25b), in order, presence and identity of a return type, and their error lists - the
 same error types **in the same order**, since a fallible call reports an error by its position in the
-callee's own list (§7).
+callee's own list (§7). A function value **fits** a function type that differs only in permission where reading for
+writing is safe: a parameter may be read-only where the type passes a writable reference (it reads what it may write), and
+the result writable where the type gives a read-only one - so `fn(acc I32, b Box&) I32` is accepted for
+`fn(acc I32, b mut Box&) I32`. Every other part must be the same.
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
@@ -2657,7 +2660,9 @@ an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then 
 
 `x++` is `x = x.Inc()` when the type declares `Inc`, and otherwise `x = x + 1` through its `Plus` - so a type whose
 `Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`. A type with neither is an
-error, as for any other non-numeric type.
+error, as for any other non-numeric type. An element of a type indexed through `At` and `SetAt` is incremented as it
+is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` evaluated once), and `try x[i]++` checks
+the store and the element's addition as `try x[i] += 1` does (R21).
 
 `==` and `!=` are a type's `Eq` (E10a) and `$` its `Str` (E11c); `and`, `or`, `not` (they short-circuit, E7), `=`,
 `.`, `try` and `match` are never declared.
@@ -3582,7 +3587,12 @@ always what the clause to its left names.
   outcomes have one scope, and whatever receives the value treats it exactly as it would the call alone.
   `null` has no scope and always fits; a temporary has none of its own and is built in the result's scope
   (E12c). A by-value result that holds
-  references (a struct or payload carrying scope variables) takes no default.
+  references (a struct or payload carrying scope variables) takes a default that **builds all it holds**: a
+  constructor call whose every argument is a number, a `Bool`, `null`, text written in the program (static, T25d) or
+  such a call again - `try validate(t) catch default List<String&>()`. It is built where the call's result is, so its
+  references are where the result's are, and what is later put into it lands there too. A default naming existing
+  storage, or built from it, is a compile-time error: its references would have to agree with every scope the
+  result's live in.
 - A checked index `try a[i]` and a slice `try a[lo:hi]` can fail only with `BuiltinError.OUT_OF_BOUNDS` (§7.7),
   which a clause names or takes with an item-less `catch`: `try a[i] catch default -1`. The
   expression is then a value, never an lvalue.
@@ -4141,7 +4151,31 @@ returned when, in the rest of the block declaring it, a `return` gives it (or a 
 as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
 here, its zero value (D13c), a result destructured into it (S4b) - when it holds references (T17c, O4b), or when the
-function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`). So
+function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`).
+
+A **reference** local the function returns follows it too, where what it names is **built here**: one declared by `:=`
+or with a bare `&` (no scope written), whose initializer is a temporary - a call's built result, a constructor's
+instance, a case of an enum (T17d) - or `null`, lives in the result scope, as if written `&return`; so does what a later
+assignment to it builds there. "Returned" is read as for a value local, and also when the local is the value of an
+assignment to a returned local (`lhs = Bin(op, lhs, rhs)` in a loop, then `return lhs`). One initialized from existing
+storage (a parameter, a field read out of one, a borrowed result) keeps that storage's scope (O25a). So the
+recursive-descent and Pratt idioms are correct as written:
+
+```
+fn (p mut Parser&) expr(minPrec I64) Expr& {
+    lhs := p.primary()                     # built in the result scope - returned below
+    for {
+        op := p.peek()
+        if prec(op.kind) < minPrec { break }
+        p.at++
+        rhs := p.expr(prec(op.kind) + 1)   # rhs flows into lhs, so it is built there too
+        lhs = Expr.Bin(op.kind, lhs, rhs)
+    }
+    return lhs
+}
+```
+
+So
 
 ```
 fn mk(n I64) List<I64> {
@@ -4213,6 +4247,13 @@ to, or one referring to something that can be stored through (O25g) - what it bu
 a value claiming the other: a compile-time error naming the fix, to declare it a reference where its references live
 (`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
 a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
+What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
+value's slots when its body assigns into the value's region a reference or a value holding references (a field, an
+element, through any depth), when it returns a reference into that region that can be stored through (the caller could
+then build through it), or when it passes the region on to a call that does either - a fixed point over the program's
+calls, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is not known keeps
+everything. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
+count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
@@ -4367,7 +4408,10 @@ An argument the instance stores in an instance-scoped field must outlive it: whe
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
 be exactly it when something can be stored through the argument (O25g, O25c) - which, where the two are scope variables
 of the function the result lands in, is an equality its callers show (O10c), whether the instance holds one such
-argument or several from different scopes. An argument for a parameter a field names
+argument or several from different scopes. Arguments asked different things need not share a scope: the instance lands
+exactly where those asked to be exact live, and each that need only outlive it must outlive that - so a context
+holding a writable reference to its caller's sink and a read-only one to a local `List` (`Ctx(nums, d)`, the list
+holding numbers) is built where the sink is and read in the list's block. An argument for a parameter a field names
 (`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
 be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
 had closed while the instance could still be read.
@@ -5033,7 +5077,9 @@ parameters), and `less` is called inside the body as an ordinary function value.
 **G4.** Every type variable of a generic function must appear in at least one *parameter's* type. A
 variable appearing only in the return type or only in the error list is a compile-time error, since
 nothing at a call could determine it. A constant variable must appear as the **whole** argument of a constant
-parameter in at least one parameter's type (G24).
+parameter in at least one parameter's type (G24). Either is reported once, at the declaration, saying to introduce the
+variable in a parameter's type; the function's body is then not checked and its calls report nothing more, since no
+call could give it the variable's value.
 
 **G5.** A generic function's error set (D8) may not mention a type variable: the declared error set
 is the same for every instantiation.
@@ -5093,6 +5139,11 @@ Written text (a string literal, a `$` rendering or a join, E11a/E11b) is treated
 while another argument binds the variable, and is then built as a temporary of the bound type - so
 `m.Put("apple", 1)` on a `Map<String&, I32>` passes the text where a `String&` is wanted. Reached only by text,
 the variable is the text's own type (`String`).
+
+A lambda argument whose parameters or result are **written** counts as an argument that binds: its written types are
+matched against its parameter's function type before any literal is, so `a.Fold(0, fn(acc I64, x I32) I64 { ... })`
+binds the accumulator's variable to `I64` and the `0` adapts to it, where the literal alone would have bound `I32`.
+Parts of a lambda left unwritten are taken from the function type once its variables are bound (D16a).
 
 **G9b.** Matching runs left to right, the receiver of a method first. An argument whose parameter is a bare type
 variable already bound by an earlier argument takes no part in it: the argument is then checked against the
@@ -5198,6 +5249,9 @@ how a constant argument that keeps changing shows (`f` at `N` calling `f` at `N 
 body, its fields, a constraint (G19) or a value check (G27) - is reported where it is written, followed by a note
 for the type or call that asked for that instantiation, with its arguments, and one for each instantiation that led
 there in turn: of a long chain the innermost few, and always the outermost - the program's own use that began it.
+An error about where something lives (§8) found at one place of a generic's body is the same error for every
+instantiation, and is reported once; what its notes suggest writing is spelled with the generic's own variables
+(`n mut Node<K, V>&c`), as the declaration writes them.
 
 ### 12.7 Constant parameters
 

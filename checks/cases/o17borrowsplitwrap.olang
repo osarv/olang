@@ -1,7 +1,10 @@
 # check: fail error[O17]: this value's references live where its own storage does not
-# O17/O25h: a value built in the result scope keeps its storage in this block - lending it to a callee that can store
-# through it would put what that builds in the block, under a value claiming the result scope. A read-only lend is fine.
-# A local returned itself lives in the result scope, storage and all (O26a, o17borrowsplit.olang)
+# O17/O25h: a copy of a value holding references keeps them where its source's are, while its own storage is this
+# block - lending it to a callee that stores into what it is lent (regrow builds a new array and puts it in a field)
+# would put what that builds in the block, under a value claiming the source's scope, and "src.b = b" would then hand
+# the source a reference into the closed block. A callee that only reads it may be lent it (O17 decides by the body).
+# (A local the function returns lives in the result scope, storage and all - O26a, o17borrowsplit.olang - so the
+# returned-local shape of this case is accepted now.)
 type Box struct(n I64) {
     Data mut Array<I64>& = Array<I64>(n)
 }
@@ -12,13 +15,14 @@ fn (b Box&) size() I64 { return b.Data.Len() }
 fn (b mut Box&) regrow(v I64) {
     b.Data = Array<I64>(8, v)
 }
-fn make(n I64) W {
-    b := Box&return(n)
-    assert b.size() == n
+fn bump(src mut W&) {
+    b := src.b
+    assert b.size() == 3
     b.regrow(7)
-    return W(b)
+    src.b = b
 }
 fn main() ? {
-    w := make(3)
+    w := W(Box(3))
+    bump(w)
     assert w.b.Data[0] == 7
 }

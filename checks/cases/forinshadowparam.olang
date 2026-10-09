@@ -1,0 +1,8 @@
+# check: fail error[D3a, E29]: 's' is already declared, and a for-in declares new names - choose another
+# D3a/E29: a for-in variable reusing a parameter's name is a reused name - choosing another is the first fix offered
+fn count(s I64, options Array<I64>&) I64 {
+    n I64 = 0
+    for s in options { n += s }
+    return n
+}
+fn main() ? { println($count(1, I64[1, 2])) }
