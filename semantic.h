@@ -134,6 +134,23 @@ struct type {
                             //named by some parameter's type is UNIFIED at a call from that argument's own
                             //tag (O17); one named only by the ret-type is SUPPLIED by the caller's scope
                             //argument, defaulting to the caller's own scope (O18).
+    //BASETYPE_FUNC, O23a: the per-instance scopes this body read through its parameters - "where the argument for
+    //parameter p bound the scope variable V of its type" (a field written "&V" of a constructor-bearing value) - each
+    //a scope variable of this function no caller passes, resolved at every call from that argument's own bindings
+    //(struct derivedScope). Read, related and obligated like any other; never allocated into.
+    struct list derivedScopes;
+    //BASETYPE_FUNC, O13c: what the returned value's per-instance scope variables were bound to, in this function's
+    //own scope variables, where every return agrees - struct scopeBinding, typeParam the result type's variable.
+    //A call adds them to its result's bindings, so a value built in a callee keeps what it was built with.
+    struct list resultBindings;
+    bool resultBindingsSeen; //a return has been checked: an entry missing from resultBindings is then unknown
+    //BASETYPE_FUNC, O13c: for a result borrowed from a parameter ("T&p"), the derived scope (O23a) every return gave
+    //a value in - the referent of a field of an argument - or NULL when the returns disagree or give anything else
+    struct var* resultVia;
+    bool resultViaSeen;
+    //BASETYPE_FUNC, O14b: an instantiation whose result was written as a type variable bound to a reference (or to a
+    //value holding references) - a built result whose returns may hand back existing storage, by obligation
+    bool resultViaTypeVar;
     struct list scopeObligations; //BASETYPE_FUNC: list of struct scopeObligation - relations between two
                                    //of THIS signature's own scopeVars that its body turned out to require
                                    //and O10a could not establish (O10b). Part of the signature: every
@@ -197,6 +214,13 @@ struct scopeObligation {
     struct token origin;
 };
 
+//O23a: one of a function's derived scopes - see struct type.derivedScopes
+struct derivedScope {
+    struct var* param;    //the parameter (canonical) whose argument's binding this is
+    struct var* typeVar;  //the scope variable of that parameter's type (canonical)
+    struct var* sv;       //the scope variable standing for it in this function
+};
+
 struct scopeBinding {
     struct var* typeParam;
     struct var* boundTo;
@@ -222,6 +246,9 @@ struct scopeBinding {
     //C2d (a constructor's instance-scope binding only): what was stored can itself hold references, so the
     //instance must land in exactly the bound scope rather than merely one it outlives (O25)
     bool needExact;
+    //C2d (an instance-scope binding only): every argument it was made from was passed for a parameter a field names
+    //("&p"), which the instance must outlive no longer than - said so when it would
+    bool viaFieldOnly;
     //C2d: with several candidates from several arguments, which of them need exactness (a bool each);
     //empty when needExact speaks for all of them
     struct list candidateExact;
@@ -248,6 +275,11 @@ struct var {
     bool valueHomeSet;
     struct var* valueHome;
     int valueHomeDepth;
+    //O18c: a value local whose ":=" call landed by its obligations in one of this function's scope variables - where
+    //its references were put, which a reference field read through it finds its referent at; unlike valueHome, never
+    //where the local's own storage is (that is its block, which borrowing it hands over)
+    bool refsHomeSet;
+    struct var* refsHome;
     bool isMethod; //M19: declared with a receiver clause. Methods live in their own namespace, keyed by
                    //receiver type: invisible to every by-name lookup, reachable only as "x.f(...)"
     bool isFuncDecl; //module-level only: this name was declared by "func"/"extern func" rather than as a
@@ -262,6 +294,8 @@ struct var {
                               //so its body is not yet the program's and must not be evaluated
     bool isLambda;            //D16: a lambda's hidden function - emitted with the function it is written in
     struct list lambdaCaptures; //D16: struct lambdaCapture - what the lambda reads from the body around it
+    struct var* paramOf;      //O23a: a parameter's copy in its function's body - that function (NULL for every other var)
+    struct var* derivedFrom;  //O23a: a derived scope variable - the struct derivedScope's param, so it can be told apart
     bool isCapture;           //D16: a lambda's own copy of a variable it captured
     bool isBorrowedCapture;   //D16c: ...a read-only borrow of a captured value array
     bool isCaptureScope;      //D16: the scope variable of a captured reference, bound when the lambda is made
@@ -269,6 +303,9 @@ struct var {
     bool lambdaInTest;        //D16: written in a test block, so emitted with the test harness
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
     bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through
+    int bodyState;            //O10b: 0 while this function's body is unchecked, 1 while it is being checked, 2 once
+                              //it has been - its obligations are part of its signature, so a call checks the
+                              //callee's body first (ensureBodyChecked) and only a cycle sees a partial set
     bool bodyHadErrors;       //K3: checking this function's body reported errors, so its body is not the
                               //program's and must never be evaluated
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
@@ -509,6 +546,12 @@ struct operand {
     bool ctorLanded;
     struct var* landedTo;
     int landedDepth;
+    //O13c: a call whose borrowed result the callee always returns from one of its derived scopes (O23a) - what that
+    //resolves to here, which is where the result's referent lives: the referent of a field the argument bound
+    bool resultRefined;
+    struct var* refinedTo;
+    int refinedDepth;
+    bool refinedUnnamed;
     bool hereChecked; //C2d/T17c: checkCtorHereFits has judged this value where it landed - once is enough
     struct list args; //list of struct operand*: operator operands, call args, or [base, index]/[base] for index/member
     enum operation opType;
@@ -551,6 +594,10 @@ struct operand {
                                 //the comparisons on either side of it
     char* cgCached;             //codegen: this operand's value is already computed - E30's shared operand
     void* ctCached;             //the evaluator's same (a struct ctVal*)
+    struct operand* placeOf;    //S4: a compound assignment's read of its own target - the place the statement computed
+                                //once, before the value, and stores to after it
+    char* cgPlace;              //S4: on an assignment's target, while its value is being computed: the place's address
+    void* ctPlace;              //the evaluator's same (a struct ctVal*, the node)
     struct list comprBody;      //E27: OPERATION_COMPREHENSION only - struct statement, the loop that fills it
     struct list catchClauses;   //R9b: a try in value position with catch clauses - struct catchClause, in
                                 //order. Empty for a plain propagating try.
@@ -647,6 +694,8 @@ struct semaModule {
 };
 
 long long TypeGetSize(struct type t);
+//D14b: the largest length an array of elements this size may have - its byte count must fit an I64
+long long ArrayLengthLimit(long long elemSize);
 long long TypeGetAlign(struct type t);
 struct type TypeVanilla(enum baseType bType);
 struct type TypeFromType(struct str name, struct token tok, struct type tFrom);
@@ -692,6 +741,7 @@ bool SemanticCtorLanding(struct operand* callOp, struct var** to, int* depth);
 bool SemanticReferentScope(struct var* func, struct operand* op, struct var** to, int* depth);
 bool varIsOwnParam(struct var* scopeVar, struct var* func);
 int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDepth);
+struct var* SemanticRuntimeScope(struct var* sv, int* depth); //O23a: a derived scope's run-time stand-in
 //list of struct instantiation - every monomorphized copy of a generic (G16). Held separately from any
 //module's own vars because that list stores struct var BY VALUE, and growing it during body checking
 //would invalidate every struct var* already handed out.

@@ -253,3 +253,58 @@ test "walking a Map of text keys, evaluated while compiling as at run time" {
     for i in range 200 { n += i * ($i).Len() }
     assert WalkedBaked == 1 * 3 + 2 * 3 + 3 * 5 + n
 }
+
+# O18b: a key rendered in a loop body is built where the map lives, so it survives the loop's arena being reused - read
+# back after churning the arena hard; and one map's entries go into another through its iterator, which reads where
+# the first map lives (O23a)
+mapRuntime mut I64 = 50 #mutable, so the test runs (a call given a constant would be decided while compiling, S18c)
+
+fn mapChurn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    return t
+}
+
+test "O18b/O23a: text keys put in a loop survive it, and one map's entries go into another" {
+    m := Map<String&, I64>()
+    for i in range mapRuntime {
+        m.Put($i, i)
+        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch[0] = 5
+    }
+    mapChurn()
+    total I64 = 0
+    for i in range mapRuntime { total += try m.Get($i) catch default 1000 }
+    assert total == 1225
+    m2 := Map<String&, I64>()
+    for e in m { m2.Put(e.Key, e.Value) }
+    mapChurn()
+    assert m2.Len() == 50 and (try m2.Get("49") catch default -1) == 49
+}
+
+# O18c: an entry walked out of a Map that arrived as a parameter keeps its key where that map keeps it, so the key may
+# go into another map or be returned as the map's own - keys rendered in a loop, read back after churning the arena
+fn mapCopyInto(from Map<String&, I64>&, into mut Map<String&, I64>&) {
+    for e in from { into.Put(e.Key, e.Value) }
+}
+fn mapAnyKey(from Map<String&, I64>&) String&from {
+    for e in from { return e.Key }
+    return ""
+}
+
+test "O18c: a Map's entries, walked through a parameter, go into another map and out as its own keys" {
+    m := Map<String&, I64>()
+    for i in range mapRuntime { m.Put($i, i) }
+    m2 := Map<String&, I64>()
+    mapCopyInto(m, m2)
+    k := mapAnyKey(m)
+    mapChurn()
+    total I64 = 0
+    for i in range mapRuntime { total += try m2.Get($i) catch default 1000 }
+    assert total == 1225 and m2.Len() == 50
+    assert (try m.Get(k) catch default -1) == (try k.ParseInt() catch default -2)
+}

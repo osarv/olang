@@ -1,0 +1,7 @@
+# check: fail this integer literal is beyond 64 bits
+# L10: a decimal literal beyond U64's maximum is an error, not I64's maximum
+error E { X }
+fn main() ? E {
+    z U64 = 99999999999999999999999
+    assert z > 0
+}

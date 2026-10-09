@@ -1,0 +1,23 @@
+# check: fail this call needs one of the target's scopes to outlive another
+# O10c: in a cycle of calls a body is checked before what it calls has been wholly checked, so a call there is held to
+# what that callee's body required only once every body is - here g's call to f first saw none of f's obligation, and
+# main's call to g, checked after, would have stored a node from the loop into the outer box
+type Item struct(v I64) {
+    v
+}
+type Holder struct() {
+    item mut Item& = null
+}
+fn f(a mut Holder&, b mut Item&, n I64) {
+    if n > 0 { g(a, b, n - 1) }
+    a.item = b
+}
+fn g(x mut Holder&, y mut Item&, n I64) { f(x, y, n) }
+fn main() ? {
+    h Holder& = Holder()
+    f(h, Item(1), 0)
+    for i in range 3 {
+        it Item& = Item(i)
+        g(h, it, 2)
+    }
+}

@@ -1,0 +1,23 @@
+# check: fail this call needs one of the target's scopes to outlive another
+# O23a: a method writing a field written "&of" of its receiver is held to where the receiver's argument bound that field,
+# not to where the receiver lives - so a node from the iterator's own block cannot be put where the outer box's
+# storage is expected, which a later read of bi.cur from that outer scope would take it for
+type Node struct(v I64) {
+    v
+}
+type Box struct() {
+    n mut I64 = 0
+}
+type Cursor struct(of Box&) {
+    box Box&of = of
+    cur mut Node&of = null
+}
+fn (c mut Cursor&) Set(n mut Node&c) { c.cur = n }
+fn main() ? {
+    ws Box& = Box()
+    for i in range 3 {
+        bi Cursor& = Cursor(ws)
+        n Node& = Node(i)
+        bi.Set(n)
+    }
+}

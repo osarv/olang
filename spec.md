@@ -121,7 +121,9 @@ keyword either, for the same reason: it is `NULL_LIT` (L11a).
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
 `decimal-int ::= digit { digit-sep digit }`. No unary minus is
 part of the literal itself (negation is the unary `-` operator, §5). An `INT_LIT`'s own type follows its
-written value: `I32` where it fits one, `I64` otherwise (T6a).
+written value: `I32` where it fits one, `I64` where it fits that, and `U64` for a decimal value above `I64`'s maximum
+(T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
+saturated or wrapped - and so is a hexadecimal or binary one needing more than 64 bits.
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
 `a`-`f` or `A`-`F`. At least one digit is required, so `0x` alone is an error. A hexadecimal literal
@@ -387,8 +389,9 @@ base, an integer and a float - do not meet, and that is a compile-time error. A 
 to meet with: beside a number it adapts (T6), or, where that number's type cannot hold it, meets it at the literal's
 own type (E6d).
 
-**T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal whose value is
-not representable in `I32` and `I32` for every other integer literal, `F64` for a float literal,
+**T6a.** Where nothing adapts it, a literal's own type is: `I32` for an integer literal whose value is representable in
+`I32`, `I64` for one representable in `I64` but not `I32`, `U64` for a decimal one above `I64`'s maximum (L10; a
+hexadecimal or binary literal is a bit pattern, read as an `I64`, L10a), `F64` for a float literal,
 `Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
 the type such a literal carries into a context that requires no particular type of it - a type variable only
 literals reach (G9a), a `-D` build constant (B10). It follows that an
@@ -1202,13 +1205,19 @@ whatever it lands in (§8 E12c): a local's block, a reference's tagged scope, th
 field belongs to (C2d). Every element is `T`'s zero value, or `v`. A global's initializer builds into the
 program's own scope, which is never closed (§8 O1b).
 
-**D14b.** `n` must evaluate to a **non-negative** length. A negative one aborts the program, the same hard
-abort an out-of-range slice bound produces (§5.9 E16b); a length of `0` is valid and produces a genuinely
-empty array.
+**D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
+count (`n` times the element's size) fits an `I64`. One out of range aborts the program, the same hard abort an
+out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`; under `try` (R20) it
+fails with `BuiltinError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
 
 The check is cheap for the same reason E16b's is and E16's was not: it is paid **once per allocation**,
 never per element access. A negative length multiplies out to a negative byte count, which the allocator's
-unsigned comparison would read as an enormous free capacity.
+unsigned comparison would read as an enormous free capacity, and a too-large one wraps to a small byte count
+the array would then run past.
+
+**D14c.** Storage the system declines to provide - the allocator returning nothing - aborts the program with the
+message `out of memory`, as a task the system declines to start does (P1c). It is never an error a program
+handles: no `try` reaches it.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is read from `expr`, which
 must be a literal (an array literal or primitive literal — see §5), a **call** that
@@ -1573,7 +1582,8 @@ type, where it names the instantiation whose constructor is being called (G10a).
 **literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
 when it is one of these token literals, an array literal (§5.7), or a
 numeric (`INT_LIT`/`FLOAT_LIT`) token literal negated by a single leading unary `-` (§5.2 E11) — the
-sign folds into the literal's own value at that point, the same way T8's compile-time-constant array
+sign folds into the literal's own value at that point (a negated `U64` literal is the `I64` it then is, so
+`-9223372036854775808` is `I64`'s minimum, and one below that minimum is an error), the same way T8's compile-time-constant array
 size already treats this one shape as effectively still a literal - recursively including one whose
 own sub-expressions (array elements) are themselves literal expressions where
 required. A parenthesized literal, a variable read, and a function call are never literal
@@ -1931,7 +1941,7 @@ calling its checked form (E31a), whose own errors the tried expression then can 
 | float to integer `T(f)` | `INVALID` for a NaN or infinity, `OVERFLOW` out of range (E26a) |
 | `F32(f)` from `F64` | `OVERFLOW` when a finite value becomes infinite |
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
-| `Array<T>(n)` | `OUT_OF_BOUNDS` for a negative `n` (D14b) |
+| `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
 
 `try` binds as tightly as a unary operator, so a checked computation is parenthesized: `try a + b` is
 `(try a) + b`. A `try` whose operand holds nothing that can fail is a compile-time error. The words a tried
@@ -2331,10 +2341,17 @@ Copying a reference's contents is written explicitly, field by field.
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —
 anything else on the left of an assignment operator is a compile-time error.
 
+An assignment is evaluated **left to right**: first the target's **place** - the subexpressions of `lvalue` as
+written, its base before its index, outermost base first - then `expr`, then the store. So in `a[next()] = next() * 10`
+the index is the first call and the value the second, and a value whose evaluation changes what the target's base
+refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1).
+
 **S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
-corresponding binary operator (§5.2) and its own operand-type requirements; `X`'s left operand and
-the assignment's own target must be the same type both ways.
+corresponding binary operator (§5.2) - or the operator method the target's type declares for it (E31) - and its own
+operand-type requirements, except that the place is evaluated **once**: `a[next()] += 5` calls `next` once, reads that
+element, and stores to it. The result of `lvalue X expr` must fit `lvalue` as any assigned value does (E12): with `b`
+a `U8` and `x` an `I32`, `b += x` is an error, since `b + x` is an `I32` (T6b) - `b = U8(b + x)` says what is meant.
 
 **S6.** The target `lvalue` must be mutable: a local variable (always mutable,
 §3 D11), a mutable global, a mutable parameter, or a mutable
@@ -2354,7 +2371,9 @@ target written `_` discards its result. The call is evaluated once, before any t
 
 **S4c.** The value side may instead be a list of one value per target, `target "," target ... ( ":=" | "=" ) expr
 "," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
-`a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4. With `:=` each name is
+`a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4, in order - its place
+evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
+the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. With `:=` each name is
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
@@ -2596,7 +2615,9 @@ rule).
 must fit (E12) it; if it declares several results (D8c), there is one `expr` per result, each fitting its
 own result type, or a single call returning exactly those results. If the enclosing function declares no `ret-type`, `expr` must be absent — a bare
 `return` (or falling off the end of the function's block) is the only valid way to end it. A
-`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b).
+`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b), and so is a `return` in a
+`test` body (outside a function written inside it): a test is not a function, with no caller to return to - `done`
+ends it early as passed and `fail` as failed (S16a).
 
 ### 6.6 `done` and `fail`
 
@@ -2648,7 +2669,7 @@ only inside `test { }` blocks.
   aborts in C — leaving a core dump and skipping the normal exit path, which is what distinguishes a
   broken guarantee from the orderly `fail` (S16b).
 
-**S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and a negative array length (§3.5
+**S18a.** A failed assert, an out-of-range slice bound (§5.9 E16b) and an array length out of range (§3.5
 D14b) each print a message naming what failed, to standard error.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
@@ -2762,7 +2783,8 @@ save; an ordinary parallel workload never reaches it.
 **P1g.** `spawn TARGET = CALL` binds what the call returns; for a call returning several values (D8c),
 `spawn T1, T2 = CALL` binds one target per result, `_` discarding one, each on the terms below. `TARGET` is an lvalue, written with plain `=`
 and no compound form — a compound assignment reads the target on the task's own thread, which is a data
-race written by accident. The plain `spawn CALL` form is unchanged and discards the result (P4).
+race written by accident. The plain `spawn CALL` form is unchanged and discards the result (P4). The target's place
+is evaluated at the `spawn`, in the spawner, before the call's arguments - left to right, as an assignment's is (S4).
 
 The store happens **on the task's thread, the instant its call returns** — somewhere between the `spawn`
 and the `join`. Two things follow. The target's type must be **exactly** the call's return type, since
@@ -3364,6 +3386,11 @@ or mutually recursive function's obligation set is the least fixed point of O10b
 exists and is reached in finitely many steps: obligations are pairs drawn from that one signature's own
 finite set of scope variables.
 
+Every call is held to its callee's **whole** obligation set, wherever the callee's body is written - later in the same
+module, in a module checked later, or as a generic's instantiation (G16) - and, within a cycle of calls, to the set
+the fixed point above reaches: the obligations are part of the signature, so the order the program is checked in
+decides nothing.
+
 **O10d.** *Unsatisfiable relations.* A required `X outlives Y` where `Y` is a scope variable and `X` is one of
 the function's own block scopes is not an obligation and is never deferred to a caller: no binding a caller
 could choose changes it. It is a compile-time error in the body itself, reported there, and is worth telling
@@ -3443,11 +3470,26 @@ value where it dangles. Accordingly:
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it, since no function's code allocates into the program's scope.
 
-**O23.** Where a field's scope tag cannot be resolved through its container's bindings — the container arrived
-as a parameter, so the binding stayed with whoever constructed it — the field reads at the **container's**
-scope, which for a parameter is its scope variable (O4b). This is an underestimate and never a claim: every
-value that can reach the field was required to outlive the container's construction scope (O13a, O20, O22),
-which in turn outlives wherever the container now sits.
+**O23.** Where a field's scope tag cannot be resolved through its container's bindings and the container is not a
+parameter of the function (O23a), the field reads at the **container's** scope. This is an underestimate and never a
+claim: every value that can reach the field was required to outlive the container (C2d, O20, O22), which in turn
+outlives wherever the container now sits.
+
+**O23a (derived scopes).** A **per-instance** binding - the scope a constructor-bearing value's field written `&p`, or
+a bare one, was bound to where the value was built (C2d) - is carried with the value: through a local initialized
+from it (O25a), through a call's result (O13c), and through the hidden locals of a `for ... in` (S9a). Where the
+container is a **parameter** `p` of the function, the binding was made by whoever built the argument, so a field of
+it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
+for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
+of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that
+nothing is built into it (C2d's restriction on such a field): a result that would land in one, or a callee that may
+build into a parameter given one (it can write the parameter, or its borrowed result names it), reaches instead the
+scope the field was read through, which the derived scope outlives; and a temporary put where a derived scope's
+referent lives, or a scope argument naming one, is a compile-time error. At each call it
+is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
+parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
+Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
+from.
 
 **O22.** An assignment whose target's scope tag resolves to a scope variable of the **type** of a parameter —
 the container arrived as a parameter, so the binding was made wherever it was constructed — records a
@@ -3491,7 +3533,8 @@ returning a temporary, or by naming it: `&return` (O26).
 
 - for a **built** result: a temporary, built in the result scope, or a value whose exact scope is the
   result scope (`&return`, O26). A reference into a parameter's data is a compile-time error that names the
-  borrowed form (`T&p`), and so is one into the function's own storage, which closes at the return;
+  borrowed form (`T&p`) - but for a function value (O14a) and a result written as a type variable (O14b) - and so is
+  one into the function's own storage, which closes at the return;
 - for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
   (O10b). A temporary is built in `p`'s scope.
@@ -3502,6 +3545,14 @@ is ever written through a function value (D16d), so such a return needs only tha
 result scope; it is an obligation of the function (O10b), and every call checks it once the result has landed
 (O18a). `fn id(f fn() I32) fn() I32 { return f }` is then legal, and `keep = id(y)` is a compile-time error
 where `y`'s closure lives in a block `keep` outlives.
+
+**O14b.** A built result whose type was written as a **type variable** (G1) - and became a reference, or a value
+holding references, by instantiation - is the other exception: there is no borrowed form to write for it (`<T>&p`
+would be a reference to what `T` is). Such a result may hand back existing storage of one of the function's scopes;
+that storage must outlive the result scope - be exactly it where something can be stored through it (O25g) - as an
+obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id(x <T>) <T> {
+return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies before
+`y`.
 
 **O26 (`&return`).** The word `return` after a reference marker names the **result scope** of the enclosing
 function (O13): `n Node&return = Node(1, null)` declares a local living where the result will be put, and
@@ -3529,6 +3580,19 @@ of the returning function's own block scopes, the return is a compile-time error
 reference to storage that dies at the return, arriving through a binding the signature never mentions. Only a
 binding actually recorded on the returned value is judged; a value returned with no binding of its own — a
 parameter handed straight back out — is not, since its scopes were bound by whoever built it.
+
+**O13c (what a result carries).** A function's body decides, for the value it returns, two things a call adds to its
+result where every `return` agrees:
+
+- the **per-instance bindings** of the returned value's type (O23a) that are scopes of the function: a call's result
+  carries each, resolved through the call, so `it := l.Iter()` knows its iterator's `&of` field reads where `l`
+  lives, as `it := ListIter(l)` would;
+- for a result **borrowed** from a parameter (`T&p`), the derived scope (O23a) every `return` gave a value in: the
+  call's result then lives where that resolves to - the referent of the argument's own field - rather than where
+  the argument does, which it outlives.
+
+A function whose body is not wholly checked (in a cycle of calls, O10c) adds nothing, and a call falls back to its
+signature.
 
 ### 8.6 Binding scope variables at a call
 
@@ -3562,11 +3626,26 @@ as a temporary is built where it lands (E12c):
 | several targets of a destructuring (S4b) | their one scope, where they all agree; otherwise the caller's own block, where the call stands |
 | anywhere else (an operand, an expression statement) | the caller's own block, where the call stands |
 
-A temporary argument for a reference parameter is placed by the same table, as the result of a call would be.
-The callee's obligations that involve the result scope (O10b) are discharged once the statement holding the
-call has been checked, against the scope the result landed in. Where several destructured targets disagree,
+A temporary argument for a reference parameter is placed by the same table, as the result of a call would be - except
+where O18b places it. The callee's obligations that involve the result scope (O10b) are discharged once the statement
+holding the call has been checked, against the scope the result landed in. Where several destructured targets disagree,
 the fallback to the caller's block makes any target outliving that block fail the ordinary check, so the
 disagreement is reported rather than resolved by guessing.
+
+**O18b (a temporary goes where it must live).** A scope variable no argument determines - what is passed for it is a
+temporary (O17) - which the callee's obligations (O10b) require to outlive a scope this call does determine, is bound to
+that scope, and the temporary is built there: `l.Push(Node(i))` in a loop builds the node where `l` lives, since `Push`
+requires its element to outlive the list, and the loop body's own scope would close under it. A variable the result
+names follows the result (O18a) instead, and nothing is built this way into the program's scope (O1b) or into a derived
+scope (O23a).
+
+**O18c (`:=` from a call).** `x := f(...)` takes its initializer's scope (O25a), so a result scope still free to follow
+the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
+where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
+value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
+not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
+out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
+stays its block.
 
 **O19.** Binding is per call. In `fn take(v Vec<I32>&) Point&`, `v`'s scope is determined by the argument
 and the result scope lands or is supplied: `take&x(v)` builds the result where `x` lives, `take(v)` where it
@@ -3650,16 +3729,19 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 - a field written `&p`, naming a reference parameter, lives where that parameter's argument lives, and one
   written `&f` where an earlier field `f` does (O4a). The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
-  receiving such a value as a parameter does not know that binding, so it may read, walk and repoint through
-  the field but not **build** through it: a temporary stored into the field or anything reached through it, or
-  the field passed for a parameter the callee may build into, is a compile-time error there (O23);
+  receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
+  each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
+  temporary stored into the field or anything reached through it, or the field passed for a parameter the callee
+  may build into, is a compile-time error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a).
 
 An argument the instance stores in an instance-scoped field must outlive it: wherever the result lands — a
 declaration, an assignment's target, a returned value's scope — must be outlived by that argument's scope, and
 be exactly it when something can be stored through the argument (O25g, O25c). An argument for a parameter a field names
-(`&p`) is not held against the instance: that field keeps the argument's own scope.
+(`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
+be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
+had closed while the instance could still be read.
 A violation is a compile-time error at that point.
 
 ```
@@ -3850,7 +3932,7 @@ nothing is generated, nothing is linked and no file is written. It behaves as th
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `done` and `fail` end it with status 0 and 1, an error escaping `main` is reported as B5
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`, `abort`,
-`unreachable`, a slice out of range (E16b), a negative array length (D14b), an `as` that does not hold (E32) -
+`unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
 aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
 out of range, reading through a null reference, dividing by zero, a shift or conversion out of range - the
 interpreter stops, naming the operation and where it is, with status 1. Two things are **not yet interpreted**:
@@ -3957,7 +4039,9 @@ type of its own never meets a float, and is a compile-time error beside one; an 
 an operation's result must fit the type it is computed in. One that would not - it **wraps** in the program (E6c), or
 has no value (a zero divisor, the most negative value divided by `-1`, E6a) - is decided by B9c instead, as is a global
 whose type the value depends on: a float narrower than `F64`, or a number of a declared type. Floats are computed as
-`F64`s. `and` and `or` evaluate their right side only when their left does not decide them (E7): a right side that is
+`F64`s. A `U64` value - a decimal literal above `I64`'s maximum, or a build constant holding one - is beyond what this
+evaluation computes in, so a condition reading one is decided by B9c too. `and` and `or` evaluate their right side
+only when their left does not decide them (E7): a right side that is
 never evaluated is read for whether its values combine and for nothing else - nothing it names is a value the condition
 depends on.
 
@@ -3978,9 +4062,11 @@ build, whose type and value are those of a literal written as `value`. `true` or
 that is - after an optional `-` - one whole integer literal (L10) is an integer, and one whole float literal (L12) an
 `F64` (each typed by T6a); anything else — or anything in double quotes — is text, a `String` (T29c), so it
 compares, renders and passes as any other text does: `-D Version=1.2.3` is text. A value beginning `0x` or `0b` is
-always a number and must be a valid one (`-D X=0x` is an error), and a number must be one a literal can be: an integer
-of at most 64 bits - a decimal one at most `I64`'s largest, or negated its most negative value - and a float that is not
-an infinity. A malformed or out-of-range value is an error naming the `-D` flag that gave it.
+always a number and must be a valid one (`-D X=0x` is an error), and a number must be one a literal can be (L10): a
+decimal integer at most `U64`'s largest - above `I64`'s maximum it is a `U64`, as its literal would be, so
+`-D X=18446744073709551615` is a `U64` - or, negated, at least `I64`'s most negative value; a `0x`/`0b` one a bit pattern of
+at most 64 bits; and a float that is not an infinity. A malformed or out-of-range value is an error naming the `-D`
+flag that gave it.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, as is defining one name twice.

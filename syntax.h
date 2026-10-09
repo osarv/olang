@@ -199,6 +199,7 @@ struct buildConst {
     double f;          //BUILD_FLOAT
     struct str text;   //BUILD_INT: its value in decimal; BUILD_FLOAT: the literal as written; BUILD_STR: the text itself
     bool builtin;      //defined by the compiler rather than by -D
+    bool u64;          //BUILD_INT above I64's maximum: a U64, its bits in i (L10, T6a)
 };
 //NULL once defined; otherwise what is wrong - a name that is not an identifier or is already defined, or a value that is
 //a malformed or out-of-range number (B10)

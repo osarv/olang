@@ -57,6 +57,29 @@ because what it finds about structure feeds the refactor.
   a pointer into its own just-closed scope and the caller copies from freed memory - safe only because nothing runs
   between the close and the copy (does a destructor allocating at that close break it?); a fix wants a callee/caller
   protocol change (the callee copies into the caller's storage).
+- Progress 2026-10-09 00:40 UTC: master = 2baddf3 (all features through recursive enums). Running: the scope
+  use-after-free fix (/home/user/wt/scope) and review areas (1) lexer/parser and (4) codegen, read-only against
+  /home/user/wt/review (detached at 2baddf3, its own build). Still to start, paced by usage: review (2) semantic.c types/
+  modules/generics, (5) comptime/driver/std, and (3) semantic.c operands/statements/scopes after the scope fix lands.
+- Codegen review (2026-10-09 01:00): 19 confirmed findings, reproducers in /home/user/review/codegen/. Being fixed in
+  /home/user/wt/cgfix: 5, 7-18 (spawn lowering, unsigned index zext, Array(n) byte overflow, struct fill IR, return in a
+  test, >4096-byte literals, assignment order = left to right (decided: target's subexpressions, then value; compound
+  place once), checked index evaluating its base twice, double allocation on `:=`, match blocks without arenas, BF16
+  -O0, big by-value structs, decimal literal overflow, nondeterministic helper names). LEFT for after the scope fix
+  (same area - where values land): 1 returned array/String value points into the closed scope (UAF), 2 assigning a new
+  value to a global inside a function builds it in the function's scope (UAF), 3 program-scope allocator raced by tasks,
+  4 spawn's arena merged into the join block not the bound scope (UAF), 6 try-default value built in the innermost
+  block (UAF), 19 nested constructor in a loop leaks into the function scope. The review's structure notes: call lowering
+  exists 5 times; "where does a value land" is answered in ~8 places with different fallbacks; hidden ambient context;
+  cgMaxBlockDepth is a hand-kept walker; two conversion matrices; ~900 lines of runtime IR would move out cleanly.
+- Parser review (2026-10-09 01:05): 17 confirmed findings plus checker crashes B-E, reproducers in
+  /home/user/review/parser/; all being fixed in /home/user/wt/parsefix (decided: conditions whose value depends on a
+  width defer to B9c; -D values validated by the lexer's rules). Finding A - a stack-use-after-return in
+  pendingDischarges (buildMatchCore's stack copy of ctx read by flushPendingDischarges; ASan shows it on the corpus) -
+  goes to the scope agent after its current task, with codegen findings 1, 2, 3, 4, 6, 19. Still to run: reviews (2)
+  semantic.c types/modules/generics, (5) comptime/driver/std, (3) semantic.c operands/statements/scopes (after scope).
+- 02:00: codegen fixes merged (d11c538 via c2f16e6, on master). Usage 65% of the window, so reviews (2), (5), (3)
+  wait for the 05:30 window; running until then: scope fix, parser fixes.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

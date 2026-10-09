@@ -34,6 +34,7 @@
 #include <math.h>
 #include <errno.h>
 #include <dirent.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include "comptime.h"
 #include "util.h"
@@ -376,6 +377,7 @@ static struct ctVal* ctReadGlobal(struct ctState* st, struct operand* op, struct
 // ---- lvalues: the node an operand names ----
 
 static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWrite) {
+    if (op->placeOf && op->placeOf->ctPlace) return op->placeOf->ctPlace; //S4: the place its statement computed
     switch (op->opType) {
         case OPERATION_READ_VAR: {
             struct ctVal* node = ctFindLocal(st, op->readVar->name);
@@ -1392,9 +1394,12 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_SIZED_ARRAY_ALLOC: {
             struct ctVal* n = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!n) return NULL;
-            if (n->i < 0 && op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS"); //R20
-            if (n->i < 0 && ctRun) ctRunAbort("negative array length\n");
-            if (n->i < 0) return ctFail(st, op->tok, "it makes an array of negative length");
+            //D14b: a negative length, or one whose byte count would not fit an I64, as the run time checks it
+            bool bad = n->i < 0 || n->i > ArrayLengthLimit(TypeGetSize(*op->type.arrElem));
+            if (bad && op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS"); //R20
+            if (bad && ctRun) ctRunAbort("array length out of range\n");
+            if (bad) return ctFail(st, op->tok, "it makes an array of a length out of range");
+            if (n->i > INT_MAX) return ctFail(st, op->tok, "it makes an array longer than the evaluator holds");
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = (int)n->i;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
@@ -1644,9 +1649,13 @@ static void ctExec(struct ctState* st, struct statement* s) {
     switch (s->sType) {
         case STATEMENT_VAR_DECL: ctVarDecl(st, s); return;
         case STATEMENT_ASSIGN: {
+            //S4: left to right - the place, then the value (a compound one reading that same place), then the store
             struct ctVal* node = ctLvalue(st, s->target, true);
             if (!node) return;
+            void* outerPlace = s->target->ctPlace;
+            s->target->ctPlace = node;
             struct ctVal* v = ctFit(st, s->op, s->target->type);
+            s->target->ctPlace = outerPlace;
             if (!v) return;
             ctAssign(node, v);
             return;

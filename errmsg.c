@@ -119,6 +119,7 @@ static void ensureFlushHooks(void) {
 //matters
 void ErrMsgMuteStart(void) { if (muteDepth++ == 0) { errsAtMute = nErrors; syntaxAtMute = nSyntaxErrors; } }
 void ErrMsgMuteEnd(void) { if (--muteDepth == 0) { nErrors = errsAtMute; nSyntaxErrors = syntaxAtMute; } }
+bool ErrMsgMuted(void) { return muteDepth > 0; }
 
 void ErrMsgBufferStart(void) {
     if (buffering) return;

@@ -1,0 +1,16 @@
+# check: fail a value in this function's own scope cannot satisfy a longer-lived scope
+# O18c: an entry a loop takes from a Map parameter keeps its references where the map's are, so its key may be returned
+# or stored as the map's - but the entry itself is a local of the loop body, and handing out a reference to it is
+# handing out that body's storage, which the map's scope outlives
+import "std/map"
+
+fn keep(m map.Map<String&, I64>&) map.MapEntry<String&, I64>&m {
+    for e in m { return e }
+    return null
+}
+
+fn main() ? {
+    m := map.Map<String&, I64>()
+    m.Put("a", 1)
+    k := keep(m)
+}

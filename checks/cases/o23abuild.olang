@@ -1,0 +1,19 @@
+# check: fail this builds something through a field that lives where its constructor's argument did
+# O23a: a field written "&p" of a parameter reads at a derived scope - where the caller's argument bound it - which no
+# code here has to build into, so a local naming where it lives may hold what lives there but not anything new
+type Node struct(v I64) {
+    v
+}
+type View struct(of Node&) {
+    n Node&of = of
+}
+fn peek(w View&) I64 {
+    r := w.n
+    x Node&r = Node(5)
+    return x.v + r.v
+}
+fn main() ? {
+    base Node& = Node(1)
+    v View& = View(base)
+    assert peek(v) == 6
+}

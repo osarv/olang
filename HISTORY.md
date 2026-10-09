@@ -8539,6 +8539,216 @@ from their original form.
   `t17payloadscopes`, `t24primref`, and `t17enumref` turned from "must fail" into "runs"; the `-i` fixture prints a
   folded tree identically interpreted and built. `-r` could not be checked: the container has no ThreadSanitizer
   runtime to link.
+- **A review of the code generator, and its fixes (2026-10-09).** Part of the overnight plan: five read-only review
+  agents, one per area, each reporting only what it reproduced with a small program. This batch is codegen.c's,
+  minus the findings about where a value lands (which scope a temporary is built in), which belong to the scope work
+  running beside it. Every fix has a regression test that fails on the previous compiler; the corpus ones are at the
+  end of shared.olang ("codegen review fixes"), the whole-build ones in checks.olang's "the code generator's review
+  fixes" scenario and three checks/cases.
+  **Assignment order (S4), decided here.** `a[next()] = next() * 10` stored 10 into `a[2]` at run time - the value was
+  computed first, then the target's index - while the compile-time evaluator took the target first, so a global baked
+  from such a function disagreed with the same function run (the review's c3 baked 20 and ran 10). Left to right was
+  the coordinator's call: the target's place - its base, then its index, as written - then the value, then the store,
+  which is what Java and C# do and what reading the line suggests. Codegen moved its `cgAddr` before the value; the
+  evaluator already had that order. Parallel assignment (S4c) keeps "every value before any target is written" and now
+  says how the two compose: the values first, then each target's place and store in order, each by S4.
+  **A compound assignment read its place twice, and could crash the compiler.** `a[next()] += 5` built `a[next()] + 5`
+  out of the very target operand, so the index was evaluated for the read and again for the store (next called twice,
+  the sum landing in the wrong element). And T6b's meeting rule rewrites a narrower operand *in place* into a widening
+  conversion - so `b += x` with `b` a `U8` and `x` an `I32` turned the statement's own target into a conversion node and
+  codegen crashed on it (`ErrorBugFound` in `cgAddr`); nothing ever checked that a compound's result fits its target.
+  The read is now a copy of the target marked `placeOf`; the statement records the place it computed on the target
+  (`cgPlace` in codegen, `ctPlace` in the evaluator, saved and restored so a recursive run of the same statement keeps
+  its own), and a `placeOf` read answers from it - so the base and index run once, in both, and the rewrite touches only
+  the copy. The sum is fitted to the target like any assigned value, which makes `b += x` the T6b error it is. `++`
+  and `--` already computed their place once.
+  **Spawn had its own copy of the call lowering, and it had drifted.** `cgSpawnTask` marshalled a task's arguments
+  with code duplicated from `cgCallTargetAndArgs` years ago. It never learned about a constructor's hidden `%here`, so
+  `spawn r = Node(5)` passed the arguments one register early and the field read 0; and it ignored E13b's computed
+  callee, so `spawn r = pick()(5)` crashed the compiler. The two now share one routine, which builds a list of
+  `(type, value)` arguments instead of a fixed text buffer: an ordinary call joins them into the call instruction, a
+  task stores them into its environment. The task-specific part is a hook - each scope argument, and a constructor's
+  `%here`, becomes a private sub-arena folded back at the join (P2) - and the parent each sub-arena stands in for is
+  picked exactly as before (`cgSpawnScopeParent`), since that choice is the scope work's. A destination's place is
+  now evaluated before the arguments, left to right as S4 says.
+  **An unsigned narrow index was sign-extended.** A GEP sign-extends a narrow index, so `t[b]` with `b U8 = 200` read
+  `t[-56]`. Zero-extended to `I64` first now (signed indices are emitted as before). The checked index's own compare
+  already zero-extended, which is why `try t[b]` was right and `t[b]` was not.
+  **A checked index evaluated its base twice** - once for the length, once for the data pointer - so `try mk()[1]`
+  called `mk` twice. Evaluated once, before the index.
+  **D14b now covers overflow, and the allocator's NULL is checked (D14c).** `Array<I64>(2^61 + 1)` multiplied to a byte
+  count of 8 and the array then ran past its 8 bytes. A length is out of range when negative or when its byte count
+  exceeds `I64`'s maximum; both are one unsigned compare (`icmp ugt count, INT64_MAX / elemSize`), since a negative
+  length reads as a huge one. The word under `try` stays `OUT_OF_BOUNDS` (my call: the length is outside what a length
+  can be, and the checker's error set needed no change); the abort message became `array length out of range`, and
+  `-i` and the evaluator check the same bound (`ArrayLengthLimit`, shared). A comprehension's growth checks it too,
+  since a range's count is reserved up front. `aligned_alloc` and the worker's `malloc` returning NULL used to be
+  written through; they now abort with `out of memory` through the same path as P1c's `could not start task` - a
+  guarantee the system declined, never an error a program handles.
+  **A struct fill stored an address as an aggregate.** `Array<P>(3, P(1, 2))`, and `Array<Q>(3)` where Q's zero value
+  (D13c) is not zero bits, emitted `store %P %addr` - invalid IR. A by-ref element is now copied with `memcpy`; a
+  scalar fill's stores carry the element TBAA tag, as indexed accesses do.
+  **`return` in a test body is an error (S15)**, naming `done`. It compiled to `ret void` inside the harness's
+  `i32 @main` - invalid IR. Making it end the test as passed was the alternative; a test is not a function and `done`
+  already says that, so the error is the one rule rather than a second spelling of `done`.
+  **A decimal literal above `I64`'s maximum is a `U64`, and one beyond 64 bits an error (L10/T6a).** `strtoll`
+  saturated silently, so `99999999999999999999999` was `I64`'s maximum and `9223372036854775808` was too. E4a's fold
+  already typed a literal-only expression above `I64`'s maximum as `U64` and the spec mentioned `U64` in one place and
+  not in L10, so a single decimal literal now follows it: `y U64 = 18446744073709551615` is writable directly, and
+  negating a `U64` literal gives the `I64` it then is (`-9223372036854775808` is `I64`'s minimum). Hex and binary stay
+  bit patterns read as `I64`, and more than 64 bits of them is an error too. The token evaluator (B9a) defers a
+  condition holding such a literal, or a `-D` constant with such a value, to compile-time evaluation (B9c), whose
+  arithmetic knows the type; `-D N=99999999999999999999999` is refused at the command line.
+  **A fresh array is adopted by its declaration.** `a := Array<I32>(n)` built the array in the declaration's scope and
+  then copied it element by element into a second allocation of the same size. An `Array<T>(n)` or a comprehension
+  initializing a run-time-length declaration is now its storage. Only directly: through a conditional or a match one
+  branch may be an existing array, which a value declaration must copy.
+  **Blocks inside a match value had no arena.** Each block depth's scope header was alloca'd up front from a count
+  made by `cgMaxBlockDepth`/`cgMaxOperandDepth`, a walker kept in step by hand with every construct that opens a block,
+  and it did not descend into a match used as a value - its case values, guards and pattern tests. A block there got
+  no slot, so `cgScopeSlotAt` fell back to the function's own scope: the review's loop building text in a comprehension
+  in a case value grew to 966MB. The walker is gone: `cgEnsureBlockSlot` makes a depth's scope header, join head and
+  unwind node (its static fields stored in the entry block) the first time a block at that depth is emitted, so a slot
+  exists for every block emitted, whatever holds it. The same program runs in 2MB. The corpus test for it is a build
+  run under `ulimit -v`, since a destructor's timing did not tell the two apart (a constructor's temporary lands at
+  its binding's depth, which had a slot).
+  **Big structs go through memory, and that was the compile-time explosion.** A struct holding an inline
+  `Array<F32>(16384)` passed by value took the build 83 seconds; `clang -O3 -c` alone took 116. The IR moved the
+  struct as one first-class value - `load %M`, passed as an argument, returned with `ret %M` - and LLVM splits such a
+  value into its 16384 elements in every one of those places. Hand-editing the IR to pass a pointer and `memcpy` took
+  the same compile to 1.5s, so that is what was built: a struct (`typeIsByRef`) over 128 bytes is passed as a pointer
+  to the callee's own copy - made by the caller at the call, so a later argument cannot change it, skipped for a
+  call's own result, and made in the join block's arena for a task - and returned through a hidden first parameter
+  `ptr %out`, the function returning `void` or its bare error code. Copies of such values (`cgStoreInto`, captures)
+  are `memcpy`. Every call path takes the convention: direct calls, methods and their receivers, function values and
+  the adapters behind them (`.fvt`, `Call`'s `.callfv`), lambdas, `try`/`catch` statements, defaults, tasks and their
+  destinations, `Str` called by `$`. The build is 3s, the program prints the same, and a struct of 128 bytes or less
+  is passed and returned exactly as before. 128 is my call: well above anything the corpus moves by value, and where C has long
+  since gone to memory (16 bytes). Not done: an enum with a payload is not by-ref and a huge payload would still be one
+  value; nothing moves one.
+  **A BF16 result read 0 under `-d`.** Bisected to plain LLVM IR: at `-O0`, an aggregate returned by a call and read in
+  another basic block (the success branch of a `try`) had its `bfloat` element carried across the branch as the raw
+  16 bits in a register the reading block treats as an `f32` it then truncates - LLVM 18's x86 back end, not olang.
+  `half` and every wider type are unaffected, and the same IR with the aggregate consumed in its own block is right.
+  So a fallible call's result is stored in the call's block and its payload loaded (or, by-ref, addressed) from that
+  slot in the success block; `-O3` removes the slot again. The by-memory work above was suspected to be the fix and was
+  not needed for it.
+  **Fixed buffers.** A text literal's decoder held 4096 bytes and cut longer literals short (a 5001-character literal
+  had `Len()` 5001 and garbage after 4096). The call argument lists, closure and task environment types, the `.fvt`
+  and `Call` adapters' argument lists, the rendering helpers' keys and a payload's spelling were fixed buffers that
+  `strncat` truncated; all are growable now (`cgBuf`). Type spellings (`llvmType`, `structAggSpelling`) are built
+  growably and copied into the caller's buffer, and one that does not fit is reported and stops the compiler instead of
+  becoming a shorter, different type.
+  **`linkonce_odr` helper names follow from structure.** A rendering helper for an anonymous struct (a tuple) was named
+  by the struct's heap address (`anon%p`) and an anonymous enum's equality by a per-object counter. Two objects of one
+  program each name their helpers, and the linker keeps one body per name, so two different types could share a name
+  across objects - unlikely under ASLR, and likely without it (a debugger, a deterministic allocator). `rdKey` is now a
+  pure function of the type - an anonymous struct by its fields' keys, length-prefixed so no two structures spell one
+  key - and serves both; a function type's key is its full spelling, which a 1200-byte buffer could also cut. The check
+  builds a program twice from clean and compares the helper names.
+
+- **A call is held to its callee's whole body; a temporary is built where its obligation says; per-instance scopes
+  follow a value (O10c, O18b/O18c, O23/O23a, O13c, O14b, C2d, 2026-10-09).** The use-after-free the recursive-enums
+  work left as "found, not fixed": a callee's scope obligations (O10b) were consulted at a call only if the callee's
+  body had been checked before it. Bodies are checked in declaration order, module by module, and generic
+  instantiations after every module - so an instantiation, or a function declared after its caller or in a module
+  checked later, owed nothing at its calls. Reproduced on the compiler before the change, each read back after the
+  arena was churned: `for i in range 10 { l.Push(Node(i)) }` then summing the list gave 7770 for 45; `m.Put($i, i)` in
+  a loop then looking every key up gave 6024 for 45; a method and a plain function declared after `main`, each
+  storing its argument into a `Bag`, gave 1554 for 44. std/map's own test (`for i in range 200 { m.Put($i, i) }`,
+  commented "renderings, built where the map lives") had the shape and never noticed: its asserts are decided while
+  compiling (S18c), where the evaluator reclaims nothing.
+  **Completeness.** A function's obligations are part of its signature (O10b says so), so the fix is that a call sees
+  them: `ensureBodyChecked` checks a callee's body - an ordinary function, method or instantiation - at its first
+  call, in the middle of the caller's statement. A body check reads and leaves state in globals (the substitution
+  context, the method scope, the statement's pending discharges, the comprehension and prebuilt-argument context, the
+  scope-tag context ...), so each is set aside around it; nesting is capped (48) so an unbounded instantiation chain
+  still reaches G17's drain. Global initializers are built before bodies and keep that order (a body checked then
+  could read a global whose type is not finished, a bug fixed once already). What remains partial - a call inside a
+  cycle of calls, a call in a global initializer, a call to a constructor whose body is built later - is recorded,
+  with how many of the callee's obligations it was held to, and `dischargeLateObligations` holds it to the rest once
+  every body is checked; discharging can oblige the caller further, so it runs to a fixed point (finite: pairs of one
+  signature's scopes). Calls made while errors are muted (typing probes) are not recorded and defer nothing - the
+  for-in's probe of a generic `Next` used to leave its obligations owed, to be reported, unmuted, at the statement's
+  end. A `checks/cases` program shows a cycle the late pass alone catches.
+  **Placement (O18b, O18c).** Completeness alone turned the silent bug into compile errors - `l.Push(Node(i))` is
+  reasonable code, and the error was right only about where the node was built. O18a put a temporary argument where
+  the call stands; now a scope variable no argument determines, which the callee's obligations require to outlive one
+  the call does determine, is bound to that one, and the temporary is built there. Codegen needed nothing: it already
+  builds a temporary argument, and passes the hidden scope, by the parameter's binding. A text rendering, a join,
+  `Array<T>(n)`, a comprehension, a capturing lambda and `null` no longer "determine" a scope at the call's block as if
+  they were existing storage (they made their scope variables look settled where nothing was). Never a variable the
+  result names - that follows the result - and never the program's scope or a derived one. And `x := f()`, which takes
+  its initializer's scope anyway, lands a still-free result scope at the shortest scope the callee's obligations say
+  must outlive it (O18c), so `w := it.Next()` lives where the collection lives rather than in the loop body.
+  **Precision (O23a, O13c, O14b), the part the reverted prototype lacked.** With obligations complete, `for w in ws {
+  mine.Push(w) }` over two lists in one block was rejected: the element came out of `ListIter.Next` at the iterator's
+  scope (O23's fallback through its `&of` field), and the hidden iterator lives in the for-in's own block. What is
+  true is that the element lives where the list does, and three pieces carry that. *O23a*: a field `&V` read through a
+  parameter `p` reads at a **derived scope** of the function - a scope variable no caller passes, standing for "where
+  the argument for p bound V". It outlives every block of the body and relates to other scopes by obligation (it is
+  `varIsOwnParam` for the checker), nothing is built into it (codegen, which has no such scope, passes the parameter's
+  own wherever one reaches a hidden argument), and a call resolves it from the argument's own bindings - or, for an
+  argument that is the caller's parameter, the caller's derived scope; else the argument's own scope, which is O23's
+  old underestimate. So `ListIter.Next`'s obligation reads "the list's scope outlives the result", not "the
+  iterator's". *O13c*: a call's result carries the per-instance bindings its callee's returned value had, translated to
+  the call - `Iter()` returns `ListIter(l)`, so `it := ws.Iter()` knows `of` is bound to `ws`'s scope, exactly as
+  `it := ListIter(ws)` would - and a result borrowed from a parameter (`Node&it`) that every return gives from one
+  derived scope lives where that resolves, so a hand-written, non-generic iterator works as `List`'s does. *O14b*:
+  `Next() <T>` instantiated at `String&` had no result scope at all - its result was untagged, taken for a fresh
+  temporary wherever it was put. It now has one, like any built result, and returning existing storage into it
+  records an obligation (equality where something can be stored through it) instead of O14's error, since a generic
+  has no borrowed form to write. That last change also closed a bug of its own (below). A `List` of references to a
+  struct with `mut` reference fields still cannot hand its elements out: `Next` holds the element in a local first,
+  and a local cannot hold a storable referent read through a field whose scope is the caller's (C2d) - unchanged.
+  **Nothing is built into a derived scope**, and that had to be enforced at every place a build could reach one, since
+  a local may now take one (`v := it.chunk[i]`): a result landing there lands where it was read through instead (the
+  run-time scope codegen passes for it), a callee that may build into a parameter (it can write it, or its borrowed
+  result names it) is handed that scope too, and a temporary initializing or assigned to a place living in a derived
+  scope, or a scope argument naming one, is the C2d error. Before, such a local took the container's scope, which is
+  where a build lands at run time, so nothing could be misplaced - the new precision is what made the rule necessary.
+  The bodies checked on demand had one trap of their own: a call made while errors are muted (a probe) must not check
+  its callee's body there, or that body's own errors are swallowed for good - the first version did exactly that,
+  and a rejected program compiled.
+  **How far the tracking goes (decided):** a value's per-instance bindings are known where it is built - a
+  constructor call, or a call whose result bindings are known - and follow it through `:=` locals and the for-in's
+  hidden locals; through a parameter they are a derived scope; anywhere else (a field of a field not initialized from
+  the value, an element read out of an array of structs) O23's container scope stands. No new syntax: a derived scope
+  cannot be written, `r := w.inner` takes one.
+  **One collision on the way, and why the answer is a block or nothing.** O18c first landed every `:=` value result by
+  its obligations and set the local's value home there. Borrowing such a local for a reference parameter then binds
+  the parameter's scope to the home (O17) while the borrow check compares the local's own storage - a block - against
+  it, and a block never outlives a scope variable: `for y in l` inside a method on `l` failed. A value local landed in
+  a scope variable keeps no home; one landed in a block keeps it, as `:=` always did. **That first answer was too
+  coarse and a realistic program found it**: reading a reference out of such a local at its block meant
+  `for e in m { into.Put(e.Key, e.Value) }` and `for e in m { return e.Key }` with `m` a parameter were rejected -
+  the very shape the work was for, moved into a function. The two questions valueHome answered as one are now
+  apart: a local so landed keeps where its *references* were put (`refsHome`), which a reference field read
+  through it - and O20's fit walk - uses, while its own *storage*, which borrowing it hands over, stays its block.
+  `checks/cases/o18cstorage` pins the second half (returning a reference to the entry itself is still an error).
+  **Found and fixed on the way, all pre-existing, all reproduced with an arena churn on the previous compiler:**
+  (1) a generic result written `<T>` and instantiated at a reference was untagged - `fn id(x <T>) <T>` and `y = id(n)`
+  with `n` dying each iteration compiled and read 777 for 42 (O14b); (2) a field written `&p` read through a local
+  lost which block its binding named - `v := View(inner)` inside a loop, `keep = v.n` outside it, read as the
+  function's outermost block, compiled and read 777 (bindings now carry their depth through member reads and
+  `RefExactScope`); (3) a method writing a `&p` field of its receiver was checked against the receiver's own scope
+  (O23's fallback) while callers read the field at its construction binding, so `bi.Set(n)` could put a node from the
+  iterator's block where an outer box's storage was claimed (777 for 42) - the write is now checked against the
+  derived scope, which callers resolve; (4) an instance could outlive what its `&p` field referred to - `bi = View(inner)`
+  out of a loop, then read (777 for 42); C2d excused such an argument from the instance entirely ("not held against
+  the instance"), and it is now held to outlive it, never exactly, with a diagnostic of its own. That last cost two
+  corpus tests their shape: `holderFieldChecked` built `d` in the result scope while its right field referred into a
+  block (both of its arguments are in the result scope now), and `narrows` named its container's scope for a `&p`
+  field's referent (`r := w.inner` now).
+  **What was checked:** the List and Map shapes, a doubly nested block, text pushed in a loop, a method, a function
+  and a generic each declared after their caller, `StringBuilder` in a loop, elements of one list pushed into another
+  through the iterator (from an inner block too), a hand-written iterator, and a global baked through the same pushes
+  (K2, agreeing with the run time) - in shared.olang and std/map.olang, each read back after churning the arena, the
+  five in shared.olang failing on the previous compiler (calls given mutable globals, since a call given constants is
+  decided while compiling); `checks/cases` `o14btypevar`, `o23adepth`, `o23awrite`, `o23abuild`, `c2dfieldoutlives`,
+  `o18cstorage` and `o10ccycle` (the last caught only by the late pass); and a graph builder, a pairwise loop and two
+  maps copied through parameters, written as a user would and run under `-b` and `-i`; the whole corpus and std
+  otherwise unchanged.
 
 - **The lexer and parser hardened from a review (L1/L3/L4/L12/L18/L21, B9a/B9c/B10, T17/T30, E32, 2026-10-09).** A
   review of token.c and syntax.c by a read-only agent reported findings it reproduced with small programs; this is the
@@ -8641,3 +8851,10 @@ from their original form.
   operand, which decides it a runtime if, so the next attempt reports the error where it is written.
   **Considered and not done**: freeing abandoned parse trees - remembered nodes are shared between readings, so freeing
   one is unsafe, and the memo already makes what is abandoned linear.
+  **Merged with the code generator's review (2026-10-09)**, which had decided in the meantime that a decimal literal above
+  `I64`'s maximum is a `U64` (L10/T6a) and had its own deferral for one in a condition. Reconciled as: the token
+  evaluator reads such a literal - or a `-D` constant holding one, which now carries a `u64` flag beside its bits - as
+  something to leave to compile-time evaluation (B9c), since its arithmetic is 64-bit signed and a `U64` would be a
+  value it cannot hold; `-D X=18446744073709551615` is a `U64` build constant, built by `OperandIntLiteralValue` with that
+  flag, and `-D X=-9223372036854775809` an error naming the flag. `OperandIntLiteral` keeps the review's reading
+  (`parseIntLiteralChecked`, an error past 64 bits) and builds through the same function.

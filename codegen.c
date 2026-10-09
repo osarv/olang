@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <stdint.h>
+#include <stdarg.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -32,6 +33,55 @@ struct cgScope {
     struct list locals; //list of struct cgLocal
     struct cgScope* parent;
 };
+
+//a growable text buffer, for text with no bound worth trusting - a call's argument list, a closure's or a task's
+//environment type. Fixed buffers here used to truncate silently: a long enough argument list lost its tail.
+struct cgBuf { char* p; size_t len, cap; };
+
+__attribute__((format(printf, 2, 3))) static void cgBufAdd(struct cgBuf* b, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int need = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (need < 0) ErrorBugFound();
+    if (b->len + (size_t)need + 1 > b->cap) {
+        b->cap = (b->len + (size_t)need + 1) * 2 + 64;
+        b->p = ReallocOrCrash(b->p, b->cap);
+    }
+    va_start(ap, fmt);
+    vsnprintf(b->p + b->len, b->cap - b->len, fmt, ap);
+    va_end(ap);
+    b->len += (size_t)need;
+}
+
+static char* cgBufStr(struct cgBuf* b) {
+    if (!b->p) cgBufAdd(b, "%s", "");
+    return b->p;
+}
+
+//one argument of a call as it is passed: its LLVM type and value, both owned
+struct cgArg { char* ty; char* val; };
+
+static char* cgStrDup(const char* s) {
+    char* r = MallocOrCrash(strlen(s) + 1);
+    strcpy(r, s);
+    return r;
+}
+
+static void cgArgAdd(struct list* args, const char* ty, const char* val) {
+    struct cgArg a = { cgStrDup(ty), cgStrDup(val) };
+    ListAdd(args, &a);
+}
+
+//"ty val, ty val, ..." - an argument list as a call instruction writes it
+static char* cgArgsText(struct list* args) {
+    struct cgBuf b = {0};
+    for (int i = 0; i < args->len; i++) {
+        struct cgArg* a = ListGetIdx(args, i);
+        cgBufAdd(&b, "%s%s %s", i ? ", " : "", a->ty, a->val);
+    }
+    return cgBufStr(&b);
+}
 
 struct cgLoop {
     char breakLbl[32];
@@ -232,27 +282,50 @@ void mangleTypeName(struct semaModule* mod, struct str name, char* buf, size_t n
     snprintf(buf, n, "%s.%.*s", prefix, name.len, name.ptr);
 }
 
-void llvmType(struct type t, char* buf, size_t n);
+static void llvmTypeB(struct type t, struct cgBuf* b);
 
 //the pointee type to use when GEP-ing off a pointer to this struct, regardless of structMAlloc - both a
 //malloc-indirect struct pointer and a plain by-ref struct pointer address memory laid out this way
-void structAggSpelling(struct type t, char* buf, size_t n) {
+static void structAggSpellingB(struct type t, struct cgBuf* b) {
     if (t.owner && t.name.len > 0) {
         char nameBuf[200];
         mangleTypeName(t.owner, t.name, nameBuf, sizeof(nameBuf));
-        snprintf(buf, n, "%%%s", nameBuf);
+        cgBufAdd(b, "%%%s", nameBuf);
         return;
     }
     //anonymous struct type expression: no top-level definition exists, so spell it out inline
-    char membersBuf[2048] = "";
+    cgBufAdd(b, "{ ");
     for (int i = 0; i < t.vars.len; i++) {
         struct var* m = ListGetIdx(&t.vars, i);
-        char mbuf[256];
-        llvmType(m->type, mbuf, sizeof(mbuf));
-        strncat(membersBuf, mbuf, sizeof(membersBuf) - strlen(membersBuf) -1);
-        if (i < t.vars.len -1) strncat(membersBuf, ", ", sizeof(membersBuf) - strlen(membersBuf) -1);
+        if (i) cgBufAdd(b, ", ");
+        llvmTypeB(m->type, b);
     }
-    snprintf(buf, n, "{ %s }", membersBuf);
+    cgBufAdd(b, " }");
+}
+
+//a spelling into a caller's fixed buffer - which must hold it: a tuple spelled inline can be long, and cut short it
+//would be a different type, so running out of room is reported rather than truncated
+static void cgSpellInto(struct cgBuf* b, char* buf, size_t n) {
+    char* text = cgBufStr(b);
+    if (strlen(text) >= n) {
+        fprintf(stderr, "olang: internal limit: an LLVM type spelling of %zu characters does not fit %zu\n", strlen(text), n);
+        ErrorBugFound();
+    }
+    snprintf(buf, n, "%s", text);
+    free(b->p);
+}
+
+void structAggSpelling(struct type t, char* buf, size_t n) {
+    struct cgBuf b = {0};
+    structAggSpellingB(t, &b);
+    cgSpellInto(&b, buf, n);
+}
+
+//the same, in storage of its own that fits whatever the spelling is
+static char* structAggSpelled(struct type t) {
+    struct cgBuf b = {0};
+    structAggSpellingB(t, &b);
+    return cgBufStr(&b);
 }
 
 /* the LLVM type of a value of type t, used everywhere: alloca operands, function signatures, GEP pointee
@@ -265,7 +338,7 @@ void structAggSpelling(struct type t, char* buf, size_t n) {
  * length somewhere, so "arrMalloc" wins the shape question over "structMAlloc" for that one case (whether
  * scope-tracking a runtime-length array's own backing store is a separate, not-yet-implemented step - see the
  * report). */
-void llvmType(struct type t, char* buf, size_t n) {
+static void llvmTypeB(struct type t, struct cgBuf* b) {
     switch (t.bType) {
         //a type variable never reaches codegen: monomorphization (G16) substitutes every one away before
         //a copy is emitted, so being asked to lower one means an instantiation was missed - a bug here
@@ -273,41 +346,44 @@ void llvmType(struct type t, char* buf, size_t n) {
         //T2a: same reasoning - "null" is retagged to the type it adapts to before anything lowers it, so
         //reaching here means one escaped an assignability context it should never have left
         case BASETYPE_NULL: ErrorBugFound(); return;
-        case BASETYPE_VOID: snprintf(buf, n, "void"); return;
-        case BASETYPE_BOOL: snprintf(buf, n, "i1"); return;
+        case BASETYPE_VOID: cgBufAdd(b, "void"); return;
+        case BASETYPE_BOOL: cgBufAdd(b, "i1"); return;
         case BASETYPE_BYTE: case BASETYPE_INT32: case BASETYPE_INT64: case BASETYPE_FLOAT32: case BASETYPE_FLOAT64:
         case BASETYPE_I8: case BASETYPE_I16: case BASETYPE_U16: case BASETYPE_U32: case BASETYPE_U64:
         case BASETYPE_F16: case BASETYPE_BF16:
-            snprintf(buf, n, "%s", PrimInfo(t.bType)->llvm); //T4
+            cgBufAdd(b, "%s", PrimInfo(t.bType)->llvm); //T4
             return;
         //T17: a payload-free choice is the bare i32 ordinal it always was; one carrying a payload is a
         //tag plus a buffer big enough for the largest case, since exactly one case is live at a time
         case BASETYPE_CHOICE:
-            if (t.structMAlloc) snprintf(buf, n, "ptr");
-            else if (ChoiceHasPayload(t)) snprintf(buf, n, "{ i64, [%lld x i64] }", ChoicePayloadSize(t) / 8);
-            else snprintf(buf, n, "i32");
+            if (t.structMAlloc) cgBufAdd(b, "ptr");
+            else if (ChoiceHasPayload(t)) cgBufAdd(b, "{ i64, [%lld x i64] }", ChoicePayloadSize(t) / 8);
+            else cgBufAdd(b, "i32");
             return;
         case BASETYPE_INTERFACE: ErrorBugFound(); return; //T30: a trait is a constraint, never a value
-        case BASETYPE_ERROR: snprintf(buf, n, "i32"); return;
-        case BASETYPE_FUNC: snprintf(buf, n, "ptr"); return;
+        case BASETYPE_ERROR: cgBufAdd(b, "i32"); return;
+        case BASETYPE_FUNC: cgBufAdd(b, "ptr"); return;
         //no real arena/runtime backing exists yet (see the report) - opaque pointer for now, same as any
         //other reference-shaped value; codegen never actually reads through it yet
-        case BASETYPE_SCOPE: snprintf(buf, n, "ptr"); return;
+        case BASETYPE_SCOPE: cgBufAdd(b, "ptr"); return;
         case BASETYPE_STRUCT:
-            if (t.structMAlloc) snprintf(buf, n, "ptr");
-            else structAggSpelling(t, buf, n);
+            if (t.structMAlloc) cgBufAdd(b, "ptr");
+            else structAggSpellingB(t, b);
             return;
         case BASETYPE_ARRAY:
-            if (t.arrMalloc) { snprintf(buf, n, "{ i64, ptr }"); return; }
-            if (t.structMAlloc) { snprintf(buf, n, "ptr"); return; }
-            {
-                char elemBuf[256];
-                llvmType(*t.arrElem, elemBuf, sizeof(elemBuf));
-                long long count = t.arrLen ? t.arrLen->intLiteralVal : 0;
-                snprintf(buf, n, "[%lld x %s]", count, elemBuf);
-            }
+            if (t.arrMalloc) { cgBufAdd(b, "{ i64, ptr }"); return; }
+            if (t.structMAlloc) { cgBufAdd(b, "ptr"); return; }
+            cgBufAdd(b, "[%lld x ", t.arrLen ? t.arrLen->intLiteralVal : 0);
+            llvmTypeB(*t.arrElem, b);
+            cgBufAdd(b, "]");
             return;
     }
+}
+
+void llvmType(struct type t, char* buf, size_t n) {
+    struct cgBuf b = {0};
+    llvmTypeB(t, &b);
+    cgSpellInto(&b, buf, n);
 }
 
 //true for the categories whose cgValue() "value" is a ptr to storage rather than a loaded scalar/aggregate
@@ -317,19 +393,38 @@ bool typeIsByRef(struct type t) {
     return false;
 }
 
+//a value too big to pass or return as an LLVM first-class aggregate: it goes through memory, as a C compiler passes
+//a large struct. Moved as one value, a struct holding an inline Array<F32>(16384) took LLVM minutes per call and per
+//copy, split into an element at a time. Smaller aggregates are unchanged.
+#define CG_BIG_AGGREGATE 128
+static bool cgViaMemory(struct type t) { return typeIsByRef(t) && TypeGetSize(t) > CG_BIG_AGGREGATE; }
+
+//a function whose result goes through memory: its caller passes "ptr %out" first, before everything else, and it
+//returns nothing (or only its error code)
+static bool cgRetViaMemory(struct type f) { return f.hasRetType && f.retType && cgViaMemory(*f.retType); }
+
+//a parameter's LLVM type as it is passed: a big aggregate is a pointer to the callee's own copy (cgViaMemory)
+static void cgParamTy(struct type t, char* buf, size_t n) {
+    if (cgViaMemory(t)) snprintf(buf, n, "ptr");
+    else llvmType(t, buf, n);
+}
+
 /* the actual LLVM return type of a function, accounting for its declared error set (see the report for
  * the design). A fallible function (errors.len > 0) wraps its success type in { i32 code, T payload }
  * (code 0 == success, payload only meaningful then), or is a bare i32 code when it has no success type
  * at all. An infallible function is unchanged: hasRetType ? T : void. */
 void llvmFuncRetType(struct type funcType, char* buf, size_t n) {
+    if (cgRetViaMemory(funcType)) { snprintf(buf, n, "%s", funcType.errors.len ? "i32" : "void"); return; }
     if (funcType.errors.len == 0) {
         llvmType(funcType.hasRetType ? *funcType.retType : TypeVanilla(BASETYPE_VOID), buf, n);
         return;
     }
     if (!funcType.hasRetType) { snprintf(buf, n, "i32"); return; }
-    char payloadTy[200];
-    llvmType(*funcType.retType, payloadTy, sizeof(payloadTy));
-    snprintf(buf, n, "{ i32, %s }", payloadTy);
+    struct cgBuf b = {0};
+    cgBufAdd(&b, "{ i32, ");
+    llvmTypeB(*funcType.retType, &b);
+    cgBufAdd(&b, " }");
+    cgSpellInto(&b, buf, n);
 }
 
 //1-based ordinal of errType within funcType's own declared error list ("ErrA + ErrB + ..."). This ordinal
@@ -732,10 +827,9 @@ static char* cgUnwindBelow(struct cgCtx* ctx, int i) {
     return *(char**)ListGetIdx(&ctx->unwindPool, i -1);
 }
 
-//allocates this frame's unwind nodes beside the scope headers they describe and fills in the half that
-//never varies within a frame - each node's predecessor and the scope it closes. Then pushes the body's
-//own node, which is the only link that is dynamic, since it reaches into the caller's frame.
-//Call after ownScopeSlot and scopePool are set up.
+//allocates this frame's own unwind node and fills in the half that never varies within a frame. Each block depth's
+//node is made beside its scope header as that depth is first opened (cgEnsureBlockSlot). Call after ownScopeSlot is
+//set up.
 static void cgSetupUnwind(struct cgCtx* ctx) {
     ctx->unwindPool.len = 0;
     ctx->ownUnwindNode = NULL;
@@ -745,26 +839,12 @@ static void cgSetupUnwind(struct cgCtx* ctx) {
     char* own = cgNewTmp(ctx);
     fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.unwind\n", own);
     ctx->ownUnwindNode = own;
-    for (int i = 0; i < ctx->scopePool.len; i++) {
-        char* n = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.unwind\n", n);
-        ListAdd(&ctx->unwindPool, &n);
-    }
     char* sslot = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 1\n", sslot, own);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", ctx->ownScopeSlot, sslot);
     char* jslot = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 2\n", jslot, own);
     fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", jslot);
-    for (int i = 0; i < ctx->unwindPool.len; i++) {
-        char* n = *(char**)ListGetIdx(&ctx->unwindPool, i);
-        char* ps = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", ps, n);
-        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", cgUnwindBelow(ctx, i), ps);
-        char* ss = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 1\n", ss, n);
-        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", *(char**)ListGetIdx(&ctx->scopePool, i), ss);
-    }
 }
 
 //links this frame onto the chain the caller left, and makes it the top. Separate from cgSetupUnwind
@@ -781,20 +861,25 @@ static void cgPushOwnUnwind(struct cgCtx* ctx) {
 
 
 
+//returns error code `code` (an i32 value or constant) from the function being emitted, as its error union says: a bare
+//code with no success type or a result through memory, else { code, undef }
+static void cgRetErrorCode(struct cgCtx* ctx, const char* code) {
+    if (!ctx->curFunc->type.hasRetType || cgRetViaMemory(ctx->curFunc->type)) {
+        fprintf(ctx->fnOut, "  ret i32 %s\n", code);
+        return;
+    }
+    char wrapTy[256];
+    llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
+    char* v = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %s, 0\n", v, wrapTy, code);
+    cgEmitRet(ctx, wrapTy, v);
+}
+
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     //R17: through a bare "?" function, any error leaves as that function's own default error
     if (cgFuncIsBareFallible(ctx->curFunc->type)) {
         cgCloseOwnScope(ctx);
-        char* erased = "65536"; //(1 << 16) | 0: the default error, its one word
-        if (!ctx->curFunc->type.hasRetType) {
-            fprintf(ctx->fnOut, "  ret i32 %s\n", erased);
-        } else {
-            char wrapTy[256];
-            llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
-            char* v = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %s, 0\n", v, wrapTy, erased);
-            cgEmitRet(ctx, wrapTy, v);
-        }
+        cgRetErrorCode(ctx, "65536"); //(1 << 16) | 0: the default error, its one word
         ctx->terminated = true;
         return;
     }
@@ -827,15 +912,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     fprintf(ctx->fnOut, "  %s = or i32 %s, %s\n", newCode, shifted, wordPart);
 
     cgCloseOwnScope(ctx);
-    if (!ctx->curFunc->type.hasRetType) {
-        fprintf(ctx->fnOut, "  ret i32 %s\n", newCode);
-    } else {
-        char wrapTy[256];
-        llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
-        char* v = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %s, 0\n", v, wrapTy, newCode);
-        cgEmitRet(ctx, wrapTy, v);
-    }
+    cgRetErrorCode(ctx, newCode);
     ctx->terminated = true;
 }
 
@@ -902,6 +979,7 @@ char* cgScopeSlotAt(struct cgCtx* ctx, int depth) {
 }
 
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
+    scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
     char* addr = cgLookupVarAddr(ctx, scopeParam);
     char* loaded = cgNewTmp(ctx);
@@ -1356,11 +1434,16 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(srcT));
         char* loaded = src; //an enum is already the value (T17d); anything else is the address of one
-        if (typeIsByRef(srcT)) {
-            loaded = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
+        if (cgViaMemory(srcT)) {
+            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, src,
+                    TypeGetSize(srcT));
+        } else {
+            if (typeIsByRef(srcT)) {
+                loaded = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, src);
+            }
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         }
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", heap, dstAddr);
         cgRegisterDtorIfNeeded(ctx, srcT, scopeVal, heap);
         return;
@@ -1395,7 +1478,10 @@ void cgStoreInto(struct cgCtx* ctx, struct type dstT, struct type srcT, char* sr
     llvmType(dstT, ty, sizeof(ty));
     //T17d: a reference to an enum copied out into a value - read through it
     bool enumCopyOut = dstT.bType == BASETYPE_CHOICE && !dstT.structMAlloc && srcT.structMAlloc;
-    if (typeIsByRef(dstT) || enumCopyOut) {
+    if (cgViaMemory(dstT)) { //moved as one value, LLVM would split a big aggregate an element at a time
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", dstAddr, src,
+                TypeGetSize(dstT));
+    } else if (typeIsByRef(dstT) || enumCopyOut) {
         char* tmp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", tmp, ty, src);
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, tmp, dstAddr);
@@ -1456,42 +1542,42 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
     if (!cgSymAlreadyEmitted(ctx, adapter)) {
         char retTy[256];
         llvmFuncRetType(call->type, retTy, sizeof(retTy));
-        fprintf(ctx->out, "define linkonce_odr %s %s(ptr %%closure", retTy, adapter);
+        bool outFirst = cgRetViaMemory(call->type);
+        fprintf(ctx->out, "define linkonce_odr %s %s(%sptr %%closure", retTy, adapter, outFirst ? "ptr %out, " : "");
         for (int k = 0; k < dstT.scopeVars.len; k++) fprintf(ctx->out, ", ptr %%sarg%d", k);
         for (int k = 0; k < dstT.vars.len; k++) {
             char pty[256];
-            llvmType(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
+            cgParamTy(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
             fprintf(ctx->out, ", %s %%arg%d", pty, k);
         }
         fputs(") {\nentry:\n", ctx->out);
         fputs("  %ip = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 1\n  %inst = load ptr, ptr %ip\n"
               "  %sp = getelementptr { ptr, ptr, ptr }, ptr %closure, i32 0, i32 2\n  %iscope = load ptr, ptr %sp\n", ctx->out);
-        char args[4096] = "";
+        struct cgBuf args = {0};
+        if (outFirst) cgBufAdd(&args, "ptr %%out");
         //the receiver's own scope comes first among Call's, where it has one (a reference receiver, O4b)
         int callScopes = call->type.scopeVars.len;
         int k0 = 0;
-        if (recv->type.scopeParam) { strncat(args, "ptr %iscope", sizeof(args) - strlen(args) - 1); k0 = 1; }
-        for (int k = k0; k < callScopes; k++) {
-            char piece[64];
-            snprintf(piece, sizeof(piece), "%sptr %%sarg%d", strlen(args) ? ", " : "", k - k0);
-            strncat(args, piece, sizeof(args) - strlen(args) - 1);
-        }
+        if (recv->type.scopeParam) { cgBufAdd(&args, "%sptr %%iscope", args.len ? ", " : ""); k0 = 1; }
+        for (int k = k0; k < callScopes; k++) cgBufAdd(&args, "%sptr %%sarg%d", args.len ? ", " : "", k - k0);
         if (recvRef) {
-            strncat(args, strlen(args) ? ", ptr %inst" : "ptr %inst", sizeof(args) - strlen(args) - 1);
+            cgBufAdd(&args, "%sptr %%inst", args.len ? ", " : "");
+        } else if (cgViaMemory(recv->type)) { //a big receiver by value: Call's own copy
+            fprintf(ctx->out, "  %%rv = alloca %s, align %lld\n  call void @llvm.memcpy.p0.p0.i64(ptr %%rv, ptr %%inst, i64 %lld, i1 false)\n",
+                    recvTy, cgStackAlign(recv->type), TypeGetSize(recv->type));
+            cgBufAdd(&args, "%sptr %%rv", args.len ? ", " : "");
         } else {
             fprintf(ctx->out, "  %%rv = load %s, ptr %%inst\n", recvTy);
-            char piece[320];
-            snprintf(piece, sizeof(piece), "%s%s %%rv", strlen(args) ? ", " : "", recvTy);
-            strncat(args, piece, sizeof(args) - strlen(args) - 1);
+            cgBufAdd(&args, "%s%s %%rv", args.len ? ", " : "", recvTy);
         }
         for (int k = 0; k < dstT.vars.len; k++) {
-            char pty[256], piece[320];
-            llvmType(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
-            snprintf(piece, sizeof(piece), ", %s %%arg%d", pty, k);
-            strncat(args, piece, sizeof(args) - strlen(args) - 1);
+            char pty[256];
+            cgParamTy(((struct var*)ListGetIdx(&dstT.vars, k))->type, pty, sizeof(pty));
+            cgBufAdd(&args, ", %s %%arg%d", pty, k);
         }
-        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", callSym, args);
-        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, callSym, args, retTy);
+        char* argsText = cgBufStr(&args);
+        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", callSym, argsText);
+        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, callSym, argsText, retTy);
     }
     //where the function value lives, and the instance it calls: the very one when it has storage (a reference, or
     //an lvalue borrowed), else a temporary built there
@@ -1604,11 +1690,16 @@ char* cgBoundaryValue(struct cgCtx* ctx, struct operand* op, struct type dstT, c
         char* heap = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", heap, scopeVal, TypeGetSize(op->type));
         char* loaded = v; //an enum is already the value (T17d); anything else is the address of one
-        if (typeIsByRef(op->type)) {
-            loaded = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+        if (cgViaMemory(op->type)) {
+            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
+                    TypeGetSize(op->type));
+        } else {
+            if (typeIsByRef(op->type)) {
+                loaded = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", loaded, storTy, v);
+            }
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         }
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
         cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
         return heap;
     }
@@ -1673,7 +1764,17 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
     struct operand* idx = *(struct operand**)ListGetIdx(&op->args, 1);
     char idxTy[64];
     llvmType(idx->type, idxTy, sizeof(idxTy));
+    //the base is evaluated once, before the index (left to right, S4): a checked index reads its length and its
+    //data pointer from the same value, so a base with an effect ("try mk()[1]") runs it once
+    char* baseVal = cgValue(ctx, base);
     char* idxVal = cgValue(ctx, idx);
+    //a GEP sign-extends a narrow index, so an unsigned one (T4: U8 200 is 200, not -56) is zero-extended first
+    if (TypeIsUnsigned(idx->type) && TypeGetSize(idx->type) != 8) {
+        char* z = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = zext %s %s to i64\n", z, idxTy, idxVal);
+        idxVal = z;
+        strcpy(idxTy, "i64");
+    }
 
     //E16: an ordinary index is NOT checked at run time - the same reading C gives it. E16d's "try a[i]" is
     //the opt-in: it asks for the check and takes the failure as the bare error, so a checked access is
@@ -1683,16 +1784,14 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
     if (op->isTried || op->checkRoot) {
         //widened for the compare: an Int64 already is, a Byte is unsigned (T4) and zero-extends
         char* idx64 = idxVal;
-        if (TypeGetSize(idx->type) != 8) {
+        if (strcmp(idxTy, "i64") != 0) {
             idx64 = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", idx64, TypeIsUnsigned(idx->type) ? "zext" : "sext",
-                    idxTy, idxVal);
+            fprintf(ctx->fnOut, "  %s = sext %s %s to i64\n", idx64, idxTy, idxVal);
         }
         char* lenVal;
         if (base->type.arrMalloc) {
-            char* lenBase = cgValue(ctx, base);
             lenVal = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", lenVal, lenBase);
+            fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", lenVal, baseVal);
         } else {
             lenVal = MallocOrCrash(32);
             snprintf(lenVal, 32, "%lld", base->type.arrLen ? base->type.arrLen->intLiteralVal : 0);
@@ -1716,8 +1815,7 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
     llvmType(elemType, elemTy, sizeof(elemTy));
     char* result = cgNewTmp(ctx);
 
-    if (base->type.arrMalloc) {
-        char* baseVal = cgValue(ctx, base); //{ i64, ptr } aggregate
+    if (base->type.arrMalloc) { //baseVal: a { i64, ptr } aggregate
         char* dataPtr = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", dataPtr, baseVal);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, %s %s\n", result, elemTy, dataPtr, idxTy, idxVal);
@@ -1726,7 +1824,6 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
         //embedded array's own storage address when it's embedded, and typeIsByRef is false for a
         //structMAlloc array, so cgValue there instead LOADS and hands back the already-heap-allocated
         //pointer directly - same GEP shape needed in both cases, just where the pointer came from differs
-        char* baseVal = cgValue(ctx, base);
         struct type embeddedShape = base->type;
         embeddedShape.structMAlloc = false; //force the raw [N x ElemT] spelling regardless of ref-ness -
                                              //mirrors structAggSpelling's own "regardless of structMAlloc" rule
@@ -1757,6 +1854,7 @@ char* cgMemberAddr(struct cgCtx* ctx, struct operand* op) {
 }
 
 char* cgAddr(struct cgCtx* ctx, struct operand* op) {
+    if (op->placeOf && op->placeOf->cgPlace) return op->placeOf->cgPlace; //S4: the place its statement computed
     switch (op->opType) {
         case OPERATION_READ_VAR: return cgLookupVarAddr(ctx, op->readVar);
         case OPERATION_INDEX: return cgIndexAddr(ctx, op);
@@ -1785,9 +1883,11 @@ char* cgGlobalStringConst(struct cgCtx* ctx, char* cStr) {
 char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) {
     char* raw = op->tok.str.ptr +1;
     int rawLen = op->tok.str.len -2;
-    unsigned char decoded[4096];
+    //decoding only ever shortens the text, so its own length bounds it - a fixed buffer here cut every literal over
+    //4096 bytes short, silently
+    unsigned char* decoded = MallocOrCrash((size_t)rawLen + 1);
     int n = 0;
-    for (int i = 0; i < rawLen && n < (int)sizeof(decoded); i++) {
+    for (int i = 0; i < rawLen; i++) {
         if (raw[i] == '\\' && i +1 < rawLen) {
             i++;
             switch (raw[i]) {
@@ -1804,6 +1904,7 @@ char* cgStringLiteralGlobal(struct cgCtx* ctx, struct operand* op) {
     fprintf(ctx->out, "%s = private unnamed_addr constant [%d x i8] c\"", name, n);
     for (int i = 0; i < n; i++) emitLLVMCharEscape(ctx->out, decoded[i]);
     fputs("\"\n", ctx->out);
+    free(decoded);
     char* result = MallocOrCrash(32);
     strcpy(result, name);
     return result;
@@ -1887,8 +1988,7 @@ static char* cgChoiceValue(struct cgCtx* ctx, struct operand* op) {
     fprintf(ctx->fnOut, "  store i64 %lld, ptr %s\n", op->intLiteralVal, tagAddr);
     if (op->args.len > 0) {
         struct var* c = ListGetIdx(&t.vars, (int)op->intLiteralVal);
-        char payTy[2048];
-        structAggSpelling(c->type, payTy, sizeof(payTy));
+        char* payTy = structAggSpelled(c->type); //sized to the spelling, however many fields the case has
         char* payAddr = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 1\n", payAddr, ty, slot);
         for (int i = 0; i < op->args.len; i++) {
@@ -2224,12 +2324,17 @@ char* cgDeepEqSlice(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
 //recursion stays straight-line - the reason this is a function at all. Reading a payload as case N is
 //sound here precisely because the tag test above the switch already established that is the live case,
 //which is the same argument that makes a match arm's bindings sound.
+static void rdKey(struct type t, struct cgBuf* b);
 static char* cgChoiceEqFn(struct cgCtx* ctx, struct type t) {
-    char nameBuf[256];
-    if (t.owner && t.name.len > 0) mangleTypeName(t.owner, t.name, nameBuf, sizeof(nameBuf));
-    else snprintf(nameBuf, sizeof(nameBuf), "anon.%d", ctx->lblCtr++); //T3: an unnamed inline choice shape
-    char* sym = MallocOrCrash(320);
-    snprintf(sym, 320, "@olang.choiceeq.%.280s", nameBuf);
+    //named by the type's structure (rdKey), never a per-object counter, which two objects could give two shapes
+    struct type keyT = t;
+    keyT.structMAlloc = false;
+    struct cgBuf key = {0};
+    rdKey(keyT, &key);
+    struct cgBuf symB = {0};
+    cgBufAdd(&symB, "@olang.choiceeq.%s", cgBufStr(&key));
+    free(key.p);
+    char* sym = cgBufStr(&symB);
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
 
     //emitted into its own stream: this can be reached while another function body is mid-emission, and a
@@ -2496,9 +2601,6 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
 
 char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op);
 
-//resolves a call operand's target symbol (or loaded function pointer) and builds its full argument list.
-//Shared by cgFuncCall and cgTryCatch, which have to agree exactly about both.
-
 //the target of a call written by name: the function's own symbol, or - for a local of function type - the code
 //its value's closure object starts with (D16), with *closureOut set to that object, passed as the hidden first
 //argument every function reached through a value takes
@@ -2523,25 +2625,24 @@ static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOu
 //named, in any module: "@f.fv", reaching "@f" through an adapter that drops the object. A lambda's code
 //already takes it, so its object is just its code.
 //D16c: a capturing lambda's closure - its code, then each capture's value and, for a reference, its scope
-void cgClosureType(struct var* L, char* buf, size_t n) {
-    snprintf(buf, n, "{ ptr");
+static char* cgClosureType(struct var* L) {
+    struct cgBuf b = {0};
+    cgBufAdd(&b, "{ ptr");
     for (int i = 0; i < L->lambdaCaptures.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
         char cty[256];
         llvmType(in->type, cty, sizeof(cty));
-        strncat(buf, ", ", n - strlen(buf) - 1);
-        strncat(buf, cty, n - strlen(buf) - 1);
-        if (in->type.scopeParam) strncat(buf, ", ptr", n - strlen(buf) - 1);
+        cgBufAdd(&b, ", %s%s", cty, in->type.scopeParam ? ", ptr" : "");
     }
-    strncat(buf, " }", n - strlen(buf) - 1);
+    cgBufAdd(&b, " }");
+    return cgBufStr(&b);
 }
 
 //D16c: a capturing lambda's value, made here: its closure, built where the lambda lives - with the references it
 //captured, or where it lands - holding a copy of every capture
 static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
     struct var* L = op->readVar;
-    char envTy[4096];
-    cgClosureType(L, envTy, sizeof(envTy));
+    char* envTy = cgClosureType(L);
     char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth)
                 : ctx->targetScopeOverride ? ctx->targetScopeOverride : cgScopeSlotAt(ctx, ctx->blockDepth);
     char* obj = cgNewTmp(ctx);
@@ -2554,10 +2655,18 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
         struct operand* capOp = *(struct operand**)ListGetIdx(&op->args, i);
         char cty[256];
         llvmType(in->type, cty, sizeof(cty));
-        char* v = cgBoundaryValue(ctx, capOp, in->type, NULL);
-        char* fp = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, v, fp);
+        if (cgViaMemory(in->type)) { //copied as memory, not as one first-class value (cgViaMemory)
+            char* src = cgValue(ctx, capOp);
+            char* fp = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
+            fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", fp, src,
+                    TypeGetSize(in->type));
+        } else {
+            char* v = cgBoundaryValue(ctx, capOp, in->type, NULL);
+            char* fp = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, v, fp);
+        }
         if (!in->type.scopeParam) continue;
         struct var* sv = in->type.scopeParam;
         char* sval = cgBoundScopeArg(ctx, op, sv);
@@ -2591,49 +2700,73 @@ void cgEmitFuncValues(struct cgCtx* ctx) {
         }
         char retTy[256];
         llvmFuncRetType(f->type, retTy, sizeof(retTy));
+        bool outFirst = cgRetViaMemory(f->type); //its result's storage comes before the closure, as at every call
         fprintf(ctx->out, "%s.fv = linkonce_odr constant { ptr } { ptr %s.fvt }\n", sym, sym);
-        fprintf(ctx->out, "define linkonce_odr %s %s.fvt(ptr %%closure", retTy, sym);
-        bool any = f->type.scopeVars.len + f->type.vars.len > 0;
-        if (any) fputs(", ", ctx->out);
-        cgEmitParamList(ctx->out, f, true);
-        fputs(") {\nentry:\n", ctx->out);
-        char args[4096] = "";
-        for (int k = 0; k < f->type.scopeVars.len; k++) {
-            char piece[64];
-            snprintf(piece, sizeof(piece), "%sptr %%sarg%d", strlen(args) ? ", " : "", k);
-            strncat(args, piece, sizeof(args) - strlen(args) - 1);
-        }
+        fprintf(ctx->out, "define linkonce_odr %s %s.fvt(%sptr %%closure", retTy, sym, outFirst ? "ptr %out, " : "");
+        struct cgBuf params = {0};
+        for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&params, ", ptr %%sarg%d", k);
+        struct cgBuf args = {0};
+        if (outFirst) cgBufAdd(&args, "ptr %%out");
+        for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&args, "%sptr %%sarg%d", args.len ? ", " : "", k);
         for (int k = 0; k < f->type.vars.len; k++) {
-            char pty[256], piece[320];
-            llvmType(((struct var*)ListGetIdx(&f->type.vars, k))->type, pty, sizeof(pty));
-            snprintf(piece, sizeof(piece), "%s%s %%arg%d", strlen(args) ? ", " : "", pty, k);
-            strncat(args, piece, sizeof(args) - strlen(args) - 1);
+            char pty[256];
+            cgParamTy(((struct var*)ListGetIdx(&f->type.vars, k))->type, pty, sizeof(pty));
+            cgBufAdd(&params, ", %s %%arg%d", pty, k);
+            cgBufAdd(&args, "%s%s %%arg%d", args.len ? ", " : "", pty, k);
         }
-        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", sym, args);
-        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, sym, args, retTy);
+        fprintf(ctx->out, "%s) {\nentry:\n", cgBufStr(&params));
+        char* argsText = cgBufStr(&args);
+        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", sym, argsText);
+        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, sym, argsText, retTy);
     }
 }
 
-static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* argsBuf, size_t argsBufN) {
+//P2: a task's private arena standing in for `parent` - allocated from the join block's own arena, since a join in a
+//loop starts any number of tasks and the header has to outlive the task rather than the iteration - and recorded
+//to be spliced back into `parent` at the join, the one point at which the task is provably done with it
+struct cgScopeMerge {
+    char* sub;
+    char* parent;
+};
+
+static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* parent) {
+    struct cgScopeMerge m;
+    m.parent = parent;
+    m.sub = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", m.sub, cgScopeSlotAt(ctx, ctx->joinDepth));
+    fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", m.sub);
+    ListAdd(merges, &m);
+    return m.sub;
+}
+
+//P2: the scope a spawned call's scope variable sv stands in for - kept exactly as the task lowering always chose it
+static char* cgSpawnScopeParent(struct cgCtx* ctx, struct operand* op, struct var* sv) {
+    return cgResolveScope(ctx, SemanticBoundScope(op, sv), ctx->blockDepth);
+}
+
+//a call's target and its arguments in order - the closure of a call through a function value, a constructor's
+//instance scope, the callee's scope variables, then the parameters - shared by an ordinary call and a task (P1),
+//so the two cannot drift apart: a spawned constructor once lost its instance-scope argument and read its fields
+//from the wrong registers, and a spawned call through a computed function value crashed the compiler.
+//`spawnMerges`, for a task, receives one sub-arena per scope the task allocates into (P2): the arguments are still
+//evaluated here, in the spawner, where they are built into the real scopes.
+static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct list* args, struct list* spawnMerges,
+                                 char* outSlot) {
     struct var* func = op->readVar;
     char* closure = NULL;
     char* target;
+    if (outSlot) cgArgAdd(args, "ptr", outSlot); //a result through memory (cgRetViaMemory) - its storage comes first
     if (op->callee) { //E13b: the function value is computed, then called as a variable holding it is
         closure = cgValue(ctx, op->callee);
         target = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", target, closure);
     } else target = cgNamedTarget(ctx, func, &closure);
-    if (closure) {
-        strncat(argsBuf, "ptr ", argsBufN - strlen(argsBuf) -1);
-        strncat(argsBuf, closure, argsBufN - strlen(argsBuf) -1);
-    }
+    if (closure) cgArgAdd(args, "ptr", closure);
 
     bool ctor = cgIsCtor(func);
     char* here = ctor ? cgCtorHereArg(ctx, op) : NULL;
-    if (ctor) {
-        strncat(argsBuf, "ptr ", argsBufN - strlen(argsBuf) -1);
-        strncat(argsBuf, here, argsBufN - strlen(argsBuf) -1);
-    }
+    char* hereArg = ctor && spawnMerges ? cgSpawnSubScope(ctx, spawnMerges, here) : here;
+    if (ctor) cgArgAdd(args, "ptr", hereArg);
     //O17/O18: semantic analysis already bound every one of the callee's scope variables to a scope of
     //ours, recorded on this very call operand - codegen reads it back and resolves it in our own frame
     for (int i = 0; i < func->type.scopeVars.len; i++) {
@@ -2645,35 +2778,48 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* ar
         //O18a: a scope that still follows the result where it was never landed explicitly is the scope the
         //code around the call is building into, if any - a constructor field's instance, a promotion's target
         //C2d: a constructor's bare parameter that nothing determined is built where the instance lands
-        char* sval = ctor && sv->isImplicitScope && SemanticBindingIsLanding(op, sv) ? here
+        bool atHere = ctor && sv->isImplicitScope && SemanticBindingIsLanding(op, sv);
+        char* sval = atHere ? hereArg
+                     : spawnMerges ? cgSpawnSubScope(ctx, spawnMerges, cgSpawnScopeParent(ctx, op, sv))
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
-        char piece[512];
-        snprintf(piece, sizeof(piece), "%sptr %s", i > 0 || ctor || closure ? ", " : "", sval);
-        strncat(argsBuf, piece, argsBufN - strlen(argsBuf) -1);
+        cgArgAdd(args, "ptr", sval);
     }
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         //the parameter's own declared type (not argOp->type) decides malloc-promotion and the LLVM type
         //word at the call site - a "&" parameter is exactly where a plain struct argument needs one
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        char aty[256];
-        char* av;
-        {
-            char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
-            //C2d: a constructor parameter whose reference names no scope fills a field of the instance, so
-            //an argument with no storage of its own is built where the instance lands
-            if (ctor && ((!scopeOverride && !paramT.scopeParam)
-                         || (paramT.scopeParam && paramT.scopeParam->isImplicitScope
-                             && SemanticBindingIsLanding(op, paramT.scopeParam))))
-                scopeOverride = here;
-            av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
-            llvmType(paramT, aty, sizeof(aty));
+        if (cgViaMemory(paramT)) {
+            //passed as a pointer to the callee's own copy, made here so a later argument cannot change it - a call's
+            //result is already a copy no one else holds; a task's copy lives in its join block's arena, which outlives it
+            char* src = cgValue(ctx, argOp);
+            char* copy = src;
+            if (spawnMerges || argOp->opType != OPERATION_FUNCCALL) {
+                char ty[256];
+                llvmType(paramT, ty, sizeof(ty));
+                copy = cgNewTmp(ctx);
+                if (spawnMerges)
+                    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", copy,
+                            cgScopeSlotAt(ctx, ctx->joinDepth), TypeGetSize(paramT));
+                else fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", copy, ty, cgStackAlign(paramT));
+                fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", copy, src,
+                        TypeGetSize(paramT));
+            }
+            cgArgAdd(args, "ptr", copy);
+            continue;
         }
-        char piece[512];
-        bool firstArg = (i == 0 && func->type.scopeVars.len == 0 && !ctor && !closure);
-        snprintf(piece, sizeof(piece), "%s%s %s", firstArg ? "" : ", ", aty, av);
-        strncat(argsBuf, piece, argsBufN - strlen(argsBuf) -1);
+        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
+        //C2d: a constructor parameter whose reference names no scope fills a field of the instance, so
+        //an argument with no storage of its own is built where the instance lands
+        if (ctor && ((!scopeOverride && !paramT.scopeParam)
+                     || (paramT.scopeParam && paramT.scopeParam->isImplicitScope
+                         && SemanticBindingIsLanding(op, paramT.scopeParam))))
+            scopeOverride = here;
+        char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
+        char aty[256];
+        llvmType(paramT, aty, sizeof(aty));
+        cgArgAdd(args, aty, av);
     }
     return target;
 }
@@ -2681,9 +2827,22 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, char* ar
 char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     struct var* func = op->readVar;
     if (func->type.isExtern) return cgExternFuncCall(ctx, op);
-    char argsBuf[4096] = "";
-    char* target = cgCallTargetAndArgs(ctx, op, argsBuf, sizeof(argsBuf));
+    //a big result (cgRetViaMemory) is written straight into storage of this call's own, which is then its value
+    char* outSlot = NULL;
+    if (cgRetViaMemory(func->type)) {
+        char ty[256];
+        llvmType(*func->type.retType, ty, sizeof(ty));
+        outSlot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", outSlot, ty, cgStackAlign(*func->type.retType));
+    }
+    struct list args = ListInit(sizeof(struct cgArg));
+    char* target = cgCallTargetAndArgs(ctx, op, &args, NULL, outSlot);
+    char* argsBuf = cgArgsText(&args);
 
+    if (func->type.errors.len == 0 && outSlot) {
+        fprintf(ctx->fnOut, "  call void %s(%s)\n", target, argsBuf);
+        return outSlot;
+    }
     if (func->type.errors.len == 0) {
         if (!func->type.hasRetType) {
             fprintf(ctx->fnOut, "  call void %s(%s)\n", target, argsBuf);
@@ -2715,9 +2874,17 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     char* raw = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call %s %s(%s)\n", raw, wrapTy, target, argsBuf);
     char* code = raw;
-    if (func->type.hasRetType) {
+    char* resSlot = NULL;
+    if (func->type.hasRetType && !outSlot) {
         code = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", code, wrapTy, raw);
+        //the result is stored where the call is and its payload read back in the success block, so no aggregate
+        //value is live across blocks: LLVM 18's x86 back end at -O0 carried a bfloat inside one across a branch
+        //without widening it as the reading block expects, so "try f()" read a BF16 result as 0 (an F16 or a
+        //wider type was unaffected). One store and a load, which -O3 removes again.
+        resSlot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", resSlot, wrapTy);
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", wrapTy, raw, resSlot);
     }
     char* isErr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp ne i32 %s, 0\n", isErr, code);
@@ -2743,17 +2910,15 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     cgLabel(ctx, okLbl);
 
     if (!func->type.hasRetType) return "";
+    if (outSlot) return outSlot;
     struct type rt = *func->type.retType;
     char retTy[256];
     llvmType(rt, retTy, sizeof(retTy));
+    char* payAddr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 1\n", payAddr, wrapTy, resSlot);
+    if (typeIsByRef(rt)) return payAddr; //a by-ref value is the address of its storage - this call's own slot
     char* payload = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 1\n", payload, wrapTy, raw);
-    if (typeIsByRef(rt)) {
-        char* slot = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, retTy);
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", retTy, payload, slot);
-        return slot;
-    }
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", payload, retTy, payAddr);
     return payload;
 }
 
@@ -2768,12 +2933,11 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
     char target[256];
     snprintf(target, sizeof(target), "@%.*s", func->name.len, func->name.ptr);
 
-    char argsBuf[4096] = "";
+    struct list args = ListInit(sizeof(struct cgArg));
     for (int i = 0; i < op->args.len; i++) {
         struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
         struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
         char* boundary = cgBoundaryValue(ctx, argOp, paramT, ctx->ownScopeSlot);
-        char piece[512];
         if (paramT.bType == BASETYPE_ARRAY) {
             char* ptr;
             if (paramT.arrMalloc) {
@@ -2791,14 +2955,14 @@ char* cgExternFuncCall(struct cgCtx* ctx, struct operand* op) {
                 fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", aty, boundary, slot);
                 ptr = slot;
             }
-            snprintf(piece, sizeof(piece), "%sptr %s", i > 0 ? ", " : "", ptr);
+            cgArgAdd(&args, "ptr", ptr);
         } else {
             char aty[64];
             llvmType(paramT, aty, sizeof(aty));
-            snprintf(piece, sizeof(piece), "%s%s %s", i > 0 ? ", " : "", aty, boundary);
+            cgArgAdd(&args, aty, boundary);
         }
-        strncat(argsBuf, piece, sizeof(argsBuf) - strlen(argsBuf) -1);
     }
+    char* argsBuf = cgArgsText(&args);
 
     if (!func->type.hasRetType) {
         fprintf(ctx->fnOut, "  call void %s(%s)\n", target, argsBuf);
@@ -2996,14 +3160,18 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     //D14b: a negative length is rejected here rather than allowed to multiply out to a negative byte
     //count - which __olang_new_chunk's unsigned comparison reads as an enormous capacity, so it mallocs a
     //few bytes, records a huge cap, and every later allocation from this scope bumps straight past the end
-    //of it. Verified as "malloc(): corrupted top size". One compare per ALLOCATION, never per access,
-    //which is the same reason a slice's bounds are checked (E16b) and an index's are not (E16).
+    //of it. Verified as "malloc(): corrupted top size". So is a length whose byte count would not fit an I64,
+    //which wrapped to a small allocation the array then ran past (2^61 + 1 I64s made 8 bytes). One unsigned
+    //compare covers both, since a negative length reads as a huge one. One compare per ALLOCATION, never per
+    //access, which is the same reason a slice's bounds are checked (E16b) and an index's are not (E16).
+    struct type elemT = *op->type.arrElem;
+    long long elemSize = TypeGetSize(elemT);
     int nid = ctx->lblCtr++;
     char negLbl[32], okLbl[32];
     snprintf(negLbl, sizeof(negLbl), "len.neg.%d", nid);
     snprintf(okLbl, sizeof(okLbl), "len.ok.%d", nid);
     char* isNeg = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = icmp slt i64 %s, 0\n", isNeg, count);
+    fprintf(ctx->fnOut, "  %s = icmp ugt i64 %s, %lld\n", isNeg, count, ArrayLengthLimit(elemSize));
     fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", isNeg, negLbl, okLbl);
     ctx->terminated = true;
     if (op->checkRoot) cgCheckFailed(ctx, op->checkRoot, okLbl, negLbl, "OUT_OF_BOUNDS", NULL); //R20
@@ -3014,8 +3182,6 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         cgLabel(ctx, okLbl);
     }
 
-    struct type elemT = *op->type.arrElem;
-    long long elemSize = TypeGetSize(elemT);
     char* byteSize = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", byteSize, count, elemSize);
 
@@ -3152,6 +3318,20 @@ char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
 //a new buffer of room elements in the comprehension's scope, the first len copied over from the old one
 static void cgComprRealloc(struct cgCtx* ctx, int d, char* room) {
     long long size = TypeGetSize(ctx->compr[d].elem);
+    //D14b: room for more elements than an array of them can have would wrap the byte count - a range's count
+    //reserved up front can be anything
+    int id = ctx->lblCtr++;
+    char* tooBig = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ugt i64 %s, %lld\n", tooBig, room, ArrayLengthLimit(size));
+    fprintf(ctx->fnOut, "  br i1 %s, label %%compr.big.%d, label %%compr.room.%d\n", tooBig, id, id);
+    ctx->terminated = true;
+    char lbl[40];
+    snprintf(lbl, sizeof(lbl), "compr.big.%d", id);
+    cgLabel(ctx, lbl);
+    fputs("  call void @__olang_check_failed(ptr @__olang_msg_arraylen)\n", ctx->fnOut);
+    snprintf(lbl, sizeof(lbl), "compr.room.%d", id);
+    cgBr(ctx, lbl);
+    cgLabel(ctx, lbl);
     char* bytes = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", bytes, room, size);
     char* nb = cgNewTmp(ctx);
@@ -3259,15 +3439,9 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
     } else if (op->isTried) {
         long long code = errorCode(ctx->curFunc->type, *builtin, wordOrd);
         cgCloseOwnScope(ctx);
-        if (ctx->curFunc->type.hasRetType) {
-            char wrapTy[256];
-            llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
-            char* v = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %lld, 0\n", v, wrapTy, code);
-            cgEmitRet(ctx, wrapTy, v);
-        } else {
-            fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
-        }
+        char codeText[32];
+        snprintf(codeText, sizeof(codeText), "%lld", code);
+        cgRetErrorCode(ctx, codeText);
         ctx->terminated = true;
     } else {
         if (abortMsg) {
@@ -3376,8 +3550,7 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
     //(a tuple of the same layout)
     {
         struct var* c = ListGetIdx(&vt.vars, (int)op->castTag);
-        char payTy[2048];
-        structAggSpelling(c->type, payTy, sizeof(payTy));
+        char* payTy = structAggSpelled(c->type); //sized to the spelling, however many fields the case has
         char* slot = v;
         if (!viaRef) {
             slot = cgNewTmp(ctx);
@@ -3470,134 +3643,142 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
 #define RD_MAX_DEPTH 8 //E11a: references followed along one path before the rest is written as "..."
 
 static char* cgRenderFn(struct cgCtx* ctx, struct type t, bool row);
-static void rdSpellType(struct type t, char* buf, size_t n);
 
-//a stable name for a type, for the helper's symbol
-static void rdKey(struct type t, char* buf, size_t n) {
+static void rdSpellTypeB(struct type t, struct cgBuf* b);
+
+//a stable name for a type, for a linkonce_odr helper's symbol (a rendering, an enum's equality). It must be a pure
+//function of the type's structure: each object names its helpers itself, and the linker keeps one body per name, so
+//two different types sharing a name in two objects would share one body. An anonymous struct (a tuple, a payload)
+//used to be named by its heap address and an anonymous enum by a per-object counter, either of which two objects
+//could give two different types. Each part's key is length-prefixed, so no two structures spell one key.
+static void rdKey(struct type t, struct cgBuf* b) {
     char inner[512] = "";
     if (t.owner && t.name.len > 0) mangleTypeName(t.owner, t.name, inner, sizeof(inner));
     switch (t.bType) {
         case BASETYPE_ARRAY: {
-            char e[400];
-            rdKey(*t.arrElem, e, sizeof(e));
-            if (t.arrMalloc) snprintf(buf, n, "%s%sa.r.%s", inner, t.structMAlloc ? "m" : "", e);
-            else snprintf(buf, n, "%s%sa.%lld.%s", inner, t.structMAlloc ? "m" : "",
-                          t.arrLen ? t.arrLen->intLiteralVal : 0, e);
+            struct cgBuf e = {0};
+            rdKey(*t.arrElem, &e);
+            if (t.arrMalloc) cgBufAdd(b, "%s%sa.r.%s", inner, t.structMAlloc ? "m" : "", cgBufStr(&e));
+            else cgBufAdd(b, "%s%sa.%lld.%s", inner, t.structMAlloc ? "m" : "", t.arrLen ? t.arrLen->intLiteralVal : 0,
+                          cgBufStr(&e));
+            free(e.p);
             return;
         }
         case BASETYPE_STRUCT: case BASETYPE_CHOICE:
-            if (!inner[0]) snprintf(inner, sizeof(inner), "anon%p", t.vars.ptr);
-            snprintf(buf, n, "%s%s", t.structMAlloc ? "m" : "", inner);
+            cgBufAdd(b, "%s", t.structMAlloc ? "m" : "");
+            if (inner[0]) { cgBufAdd(b, "%s", inner); return; }
+            cgBufAdd(b, "anon.%c%d", t.bType == BASETYPE_CHOICE ? 'e' : t.isTuple ? 't' : 's', t.vars.len);
+            for (int i = 0; i < t.vars.len; i++) {
+                struct var* m = ListGetIdx(&t.vars, i);
+                struct cgBuf mk = {0};
+                rdKey(m->type, &mk);
+                if (t.isTuple) cgBufAdd(b, ".%zu.%s", mk.len, cgBufStr(&mk));
+                else cgBufAdd(b, ".%d.%.*s.%zu.%s", m->name.len, m->name.len, m->name.ptr, mk.len, cgBufStr(&mk));
+                free(mk.p);
+            }
             return;
         case BASETYPE_FUNC: { //structural, so its spelling is its identity - made symbol-safe
-            char sp[1200];
-            rdSpellType(t, sp, sizeof(sp));
-            size_t k = 0;
-            for (size_t i = 0; sp[i] && k + 3 < n; i++) {
-                char c = sp[i];
+            struct cgBuf sp = {0};
+            rdSpellTypeB(t, &sp);
+            char* text = cgBufStr(&sp);
+            for (size_t i = 0; text[i]; i++) {
+                char c = text[i];
                 bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-                if (ok) buf[k++] = c;
-                else k += (size_t)snprintf(buf + k, n - k, "_%02x", (unsigned char)c);
-                if (k >= n) { k = n - 1; break; }
+                if (ok) cgBufAdd(b, "%c", c);
+                else cgBufAdd(b, "_%02x", (unsigned char)c);
             }
-            buf[k] = '\0';
+            free(sp.p);
             return;
         }
         default: {
             char ty[64];
             llvmType(t, ty, sizeof(ty));
-            snprintf(buf, n, "%s%s%s", inner, inner[0] ? "." : "", PrimInfo(t.bType) ? PrimInfo(t.bType)->name : ty); //T4
+            cgBufAdd(b, "%s%s%s", inner, inner[0] ? "." : "", PrimInfo(t.bType) ? PrimInfo(t.bType)->name : ty); //T4
             return;
         }
     }
 }
 
 //a type spelled as it is written in source - the element type an array rendering starts with, and the
-//parameter and result types of a function or interface rendering
-
-static void rdSpellAppend(char* buf, size_t n, const char* more) {
-    size_t used = strlen(buf);
-    if (used + 1 < n) snprintf(buf + used, n - used, "%s", more);
-}
+//parameter and result types of a function rendering. Spelled into a growable buffer: a fixed one per level cut a
+//long type short, and two long function types then shared a rendering helper's name
 
 //"(a int32, b mut Point&) int32 ? E + F", the part of a signature after its name
-static void rdSpellSig(struct type f, char* buf, size_t n) {
-    buf[0] = '\0';
-    rdSpellAppend(buf, n, "(");
+static void rdSpellSigB(struct type f, struct cgBuf* b) {
+    cgBufAdd(b, "(");
     for (int i = 0; i < f.vars.len; i++) {
         struct var* p = ListGetIdx(&f.vars, i);
-        char one[512], ty[400];
-        rdSpellType(p->type, ty, sizeof(ty));
-        snprintf(one, sizeof(one), "%s%.*s %s%s", i ? ", " : "", p->name.len, p->name.ptr, p->mut ? "mut " : "", ty);
-        rdSpellAppend(buf, n, one);
+        cgBufAdd(b, "%s%.*s %s", i ? ", " : "", p->name.len, p->name.ptr, p->mut ? "mut " : "");
+        rdSpellTypeB(p->type, b);
     }
-    rdSpellAppend(buf, n, ")");
+    cgBufAdd(b, ")");
     if (f.hasRetType && f.retType) {
-        char ty[600];
-        rdSpellType(*f.retType, ty, sizeof(ty));
-        rdSpellAppend(buf, n, " ");
-        rdSpellAppend(buf, n, ty);
+        cgBufAdd(b, " ");
+        rdSpellTypeB(*f.retType, b);
     }
     //R16: the default error is spelled by the "?" itself, and never by name
     int written = 0;
-    if (f.errors.len) rdSpellAppend(buf, n, " ?");
+    if (f.errors.len) cgBufAdd(b, " ?");
     for (int i = 0; i < f.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&f.errors, i);
         if (TypeIsSame(*e, *SemanticGenericErrorType())) continue;
-        char one[300];
-        snprintf(one, sizeof(one), "%s%.*s", written++ ? " + " : " ", e->name.len, e->name.ptr);
-        rdSpellAppend(buf, n, one);
+        cgBufAdd(b, "%s%.*s", written++ ? " + " : " ", e->name.len, e->name.ptr);
     }
 }
 
-static void rdSpellType(struct type t, char* buf, size_t n) {
-    buf[0] = '\0';
+static void rdSpellTypeB(struct type t, struct cgBuf* b) {
     char mark[80] = "";
     if (t.structMAlloc) {
         if (t.scopeParam) snprintf(mark, sizeof(mark), "&%.*s", t.scopeParam->name.len, t.scopeParam->name.ptr);
         else snprintf(mark, sizeof(mark), "&");
     }
     if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) {
-        char e[400], suffix[40];
-        rdSpellType(*t.arrElem, e, sizeof(e));
-        if (t.arrMalloc) snprintf(suffix, sizeof(suffix), "[]");
-        else snprintf(suffix, sizeof(suffix), "[%lld]", t.arrLen ? t.arrLen->intLiteralVal : 0);
-        snprintf(buf, n, "%s%s%s", e, suffix, mark);
+        rdSpellTypeB(*t.arrElem, b);
+        if (t.arrMalloc) cgBufAdd(b, "[]%s", mark);
+        else cgBufAdd(b, "[%lld]%s", t.arrLen ? t.arrLen->intLiteralVal : 0, mark);
         return;
     }
     if (t.bType == BASETYPE_FUNC) {
-        char sig[1200];
-        rdSpellSig(t, sig, sizeof(sig));
-        snprintf(buf, n, "fn%s", sig);
+        cgBufAdd(b, "fn");
+        rdSpellSigB(t, b);
         return;
     }
-    if (t.bType == BASETYPE_TYPEVAR) { snprintf(buf, n, "<%.*s>", t.name.len, t.name.ptr); return; }
+    if (t.bType == BASETYPE_TYPEVAR) { cgBufAdd(b, "<%.*s>", t.name.len, t.name.ptr); return; }
     if (t.isTuple) {
-        rdSpellAppend(buf, n, "(");
+        cgBufAdd(b, "(");
         for (int i = 0; i < t.vars.len; i++) {
-            char ty[300];
-            rdSpellType(((struct var*)ListGetIdx(&t.vars, i))->type, ty, sizeof(ty));
-            if (i) rdSpellAppend(buf, n, ", ");
-            rdSpellAppend(buf, n, ty);
+            if (i) cgBufAdd(b, ", ");
+            rdSpellTypeB(((struct var*)ListGetIdx(&t.vars, i))->type, b);
         }
-        rdSpellAppend(buf, n, ")");
+        cgBufAdd(b, ")");
         return;
     }
     if (t.genericOrigin && t.typeArgs.len) {
-        snprintf(buf, n, "%.*s<", t.genericOrigin->name.len, t.genericOrigin->name.ptr);
+        cgBufAdd(b, "%.*s<", t.genericOrigin->name.len, t.genericOrigin->name.ptr);
         for (int i = 0; i < t.typeArgs.len; i++) {
-            char ty[300];
-            rdSpellType(*(struct type*)ListGetIdx(&t.typeArgs, i), ty, sizeof(ty));
-            if (i) rdSpellAppend(buf, n, ", ");
-            rdSpellAppend(buf, n, ty);
+            if (i) cgBufAdd(b, ", ");
+            rdSpellTypeB(*(struct type*)ListGetIdx(&t.typeArgs, i), b);
         }
-        rdSpellAppend(buf, n, ">");
-        rdSpellAppend(buf, n, mark);
+        cgBufAdd(b, ">%s", mark);
         return;
     }
-    if (t.name.len) { snprintf(buf, n, "%.*s%s", t.name.len, t.name.ptr, mark); return; }
+    if (t.name.len) { cgBufAdd(b, "%.*s%s", t.name.len, t.name.ptr, mark); return; }
     const char* prim = t.bType == BASETYPE_BOOL ? "Bool" : PrimInfo(t.bType) ? PrimInfo(t.bType)->name : "?"; //T4
-    snprintf(buf, n, "%s%s", prim, mark);
+    cgBufAdd(b, "%s%s", prim, mark);
+}
+
+static void rdSpellType(struct type t, char* buf, size_t n) {
+    struct cgBuf b = {0};
+    rdSpellTypeB(t, &b);
+    snprintf(buf, n, "%s", cgBufStr(&b));
+    free(b.p);
+}
+
+static void rdSpellSig(struct type f, char* buf, size_t n) {
+    struct cgBuf b = {0};
+    rdSpellSigB(f, &b);
+    snprintf(buf, n, "%s", cgBufStr(&b));
+    free(b.p);
 }
 
 //the compile-time evaluator renders "$x" exactly as the generated code does, so it spells types with these
@@ -3701,6 +3882,12 @@ static void rdPutStr(struct cgCtx* ctx, struct var* m, char* addr) {
     char piece[320];
     if (!strcmp(recvTy, "ptr")) {
         snprintf(piece, sizeof(piece), "%sptr %s", strlen(args) ? ", " : "", addr);
+    } else if (cgViaMemory(recv->type)) { //a big receiver by value: Str's own copy (cgViaMemory)
+        char* rc = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", rc, recvTy, cgStackAlign(recv->type));
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", rc, addr,
+                TypeGetSize(recv->type));
+        snprintf(piece, sizeof(piece), "%sptr %s", strlen(args) ? ", " : "", rc);
     } else {
         char* rv = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", rv, recvTy, addr);
@@ -3941,10 +4128,12 @@ static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
 //emits (once per object) the rendering helper for t and returns its symbol
 static char* cgRenderFn(struct cgCtx* ctx, struct type t, bool row) {
     row = row && t.bType == BASETYPE_ARRAY && !t.structMAlloc;
-    char key[600];
-    rdKey(t, key, sizeof(key));
-    char* sym = MallocOrCrash(640);
-    snprintf(sym, 640, "@olang.rd.%s%.620s", row ? "row." : "", key);
+    struct cgBuf key = {0};
+    rdKey(t, &key);
+    struct cgBuf symB = {0};
+    cgBufAdd(&symB, "@olang.rd.%s%s", row ? "row." : "", cgBufStr(&key));
+    free(key.p);
+    char* sym = cgBufStr(&symB);
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
 
     FILE* savedOut = ctx->fnOut;
@@ -4367,18 +4556,12 @@ void cgStatement(struct cgCtx* ctx, struct statement* s);
 //the scope it was tagged with. Without this, two tasks handed the same "&s" bumped one cursor with no
 //synchronisation at all: they were handed the same chunk, wrote over each other, and prepended two chunks
 //onto one list head - reliably glibc-level heap corruption, not a lost update.
-struct cgScopeMerge {
-    char* sub;
-    char* parent;
-};
-
-//P1: one task. Its arguments are evaluated here, in the spawner's frame, exactly as an ordinary call
-//would evaluate them, then boxed into an env struct that a per-task trampoline unpacks on the new thread.
-//The env is an alloca in this frame and the thread is joined before the frame is left, so it stays valid
-//for the task's whole life. Field 0 is the target itself, which makes a call through a function-valued
-//local work the same way a direct one does. Returns the pthread_t slot to join, and appends one entry to
-//"merges" per scope this task was handed.
-//P1g: `dstOp`, when non-NULL, is the lvalue the call's result is stored into. Its ADDRESS is taken here,
+//P1: one task. Its arguments are evaluated here, in the spawner's frame, by the very lowering an ordinary call
+//uses (cgCallTargetAndArgs), then boxed into an env struct that a per-task trampoline unpacks on the new thread.
+//The env lives in the join block's arena, which outlives the task (P1b). Field 0 is the target itself, which makes a
+//call through a function value work the same way a direct one does. Appends one entry to "merges" per scope this
+//task was handed.
+//P1g: `dstOps` are the lvalues the call's results are stored into. Their ADDRESSES are taken here,
 //in the spawner, and captured in the env - the task stores through it when its call returns. Taking it
 //here rather than on the task is what makes "spawn results[i] = f(i)" in a loop mean slot i: the index is
 //evaluated at the spawn, not whenever the task happens to run.
@@ -4387,64 +4570,29 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     int id = ctx->lblCtr++;
     char* joinScope = cgScopeSlotAt(ctx, ctx->joinDepth);
 
-    char* closure = NULL;
-    char* target = cgNamedTarget(ctx, func, &closure);
-
-    //the same marshalling cgFuncCall performs, captured rather than passed
-    char envTy[4096] = "{ ptr";
-    char vals[64][512];
-    char tys[64][256];
-    int n = 0;
-    if (closure) { //D16: a call through a function value passes its closure first
-        snprintf(tys[n], sizeof(tys[n]), "ptr");
-        snprintf(vals[n], sizeof(vals[n]), "%s", closure);
-        n++;
-    }
-    for (int i = 0; i < func->type.scopeVars.len && n < 63; i++) {
-        struct var* sv = *(struct var**)ListGetIdx(&func->type.scopeVars, i);
-        //the task allocates into a private arena of its own rather than into the caller's directly; the
-        //two are spliced together at the join, which is the only point at which one thread is provably
-        //done with it and the other has not resumed
-        struct cgScopeMerge m;
-        m.parent = cgResolveScope(ctx, SemanticBoundScope(op, sv), ctx->blockDepth);
-        //from the JOIN block's arena, not an alloca: a join inside a loop would otherwise grow the stack
-        //by a scope header per task, and the header has to outlive the task rather than the iteration
-        m.sub = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 24)\n", m.sub, joinScope);
-        fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", m.sub);
-        ListAdd(merges, &m);
-        snprintf(tys[n], sizeof(tys[n]), "ptr");
-        snprintf(vals[n], sizeof(vals[n]), "%s", m.sub);
-        n++;
-    }
-    for (int i = 0; i < op->args.len && n < 63; i++) {
-        struct operand* argOp = *(struct operand**)ListGetIdx(&op->args, i);
-        struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
-        char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
-        llvmType(paramT, tys[n], sizeof(tys[n]));
-        snprintf(vals[n], sizeof(vals[n]), "%s", av);
-        n++;
-    }
-    //each destination is one more captured value, after the real arguments (D8c: one per result bound;
-    //a "_" captures nothing and its result is simply not stored)
-    int dstIdx[64];
-    int nArgs = n; //everything from here on is a destination, captured and never passed
+    //S4: left to right - each destination's place (its base and index, as written) before the call's operands
     int nDst = dstOps ? dstOps->len : 0;
-    for (int d = 0; d < nDst && d < 64; d++) {
+    char** dstAddr = MallocOrCrash(sizeof(char*) * (size_t)(nDst + 1));
+    for (int d = 0; d < nDst; d++) {
         struct operand* dstOp = *(struct operand**)ListGetIdx(dstOps, d);
+        dstAddr[d] = dstOp ? cgAddr(ctx, dstOp) : NULL; //D8c: a "_" captures nothing and its result is not stored
+    }
+    //the very marshalling an ordinary call performs (cgCallTargetAndArgs), captured rather than passed
+    struct list args = ListInit(sizeof(struct cgArg));
+    char* target = cgCallTargetAndArgs(ctx, op, &args, merges, NULL);
+    int nArgs = args.len; //everything after this is a destination, captured and never passed
+    int* dstIdx = MallocOrCrash(sizeof(int) * (size_t)(nDst + 1));
+    for (int d = 0; d < nDst; d++) {
         dstIdx[d] = -1;
-        if (!dstOp || n >= 63) continue;
-        snprintf(tys[n], sizeof(tys[n]), "ptr");
-        snprintf(vals[n], sizeof(vals[n]), "%s", cgAddr(ctx, dstOp));
-        dstIdx[d] = n++;
+        if (!dstAddr[d]) continue;
+        dstIdx[d] = args.len;
+        cgArgAdd(&args, "ptr", dstAddr[d]);
     }
-    for (int i = 0; i < n; i++) {
-        char piece[300];
-        snprintf(piece, sizeof(piece), ", %.256s", tys[i]);
-        strncat(envTy, piece, sizeof(envTy) - strlen(envTy) -1);
-    }
-    strncat(envTy, " }", sizeof(envTy) - strlen(envTy) -1);
+    struct cgBuf envB = {0};
+    cgBufAdd(&envB, "{ ptr");
+    for (int i = 0; i < args.len; i++) cgBufAdd(&envB, ", %s", ((struct cgArg*)ListGetIdx(&args, i))->ty);
+    cgBufAdd(&envB, " }");
+    char* envTy = cgBufStr(&envB);
 
     char* env = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
@@ -4452,10 +4600,11 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     char* fnSlot = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 0\n", fnSlot, envTy, env);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", target, fnSlot);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < args.len; i++) {
+        struct cgArg* a = ListGetIdx(&args, i);
         char* slot = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", slot, envTy, env, i +1);
-        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", tys[i], vals[i], slot);
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", a->ty, a->val, slot);
     }
 
     //P1: the task node lives in the join block's arena and carries the thread handle plus whatever
@@ -4504,24 +4653,47 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     fprintf(ctx->out, "define internal ptr @olang.task.%d(ptr %%env) {\nentry:\n", id);
     fprintf(ctx->out, "  %%fnslot = getelementptr %s, ptr %%env, i32 0, i32 0\n", envTy);
     fprintf(ctx->out, "  %%fn = load ptr, ptr %%fnslot\n");
-    char callArgs[4096] = "";
-    for (int i = 0; i < n; i++) {
-        fprintf(ctx->out, "  %%s%d = getelementptr %s, ptr %%env, i32 0, i32 %d\n", i, envTy, i +1);
-        fprintf(ctx->out, "  %%a%d = load %s, ptr %%s%d\n", i, tys[i], i);
-        if (i >= nArgs) continue; //a destination is captured, never passed to the call
-        char piece[400];
-        snprintf(piece, sizeof(piece), "%s%.256s %%a%d", strlen(callArgs) ? ", " : "", tys[i], i);
-        strncat(callArgs, piece, sizeof(callArgs) - strlen(callArgs) -1);
+    struct cgBuf callArgs = {0};
+    bool viaMem = cgRetViaMemory(func->type);
+    if (viaMem) { //a big result lands in the task's own frame, then goes where the destinations say
+        char rty[256];
+        llvmType(*func->type.retType, rty, sizeof(rty));
+        fprintf(ctx->out, "  %%rslot = alloca %s, align %lld\n", rty, cgStackAlign(*func->type.retType));
+        cgBufAdd(&callArgs, "ptr %%rslot");
     }
-    if (func->type.hasRetType) {
+    for (int i = 0; i < args.len; i++) {
+        char* ty = ((struct cgArg*)ListGetIdx(&args, i))->ty;
+        fprintf(ctx->out, "  %%s%d = getelementptr %s, ptr %%env, i32 0, i32 %d\n", i, envTy, i +1);
+        fprintf(ctx->out, "  %%a%d = load %s, ptr %%s%d\n", i, ty, i);
+        if (i >= nArgs) continue; //a destination is captured, never passed to the call
+        cgBufAdd(&callArgs, "%s%s %%a%d", callArgs.len ? ", " : "", ty, i);
+    }
+    if (viaMem) {
+        fprintf(ctx->out, "  call void %%fn(%s)\n", cgBufStr(&callArgs));
+        struct type rt = *func->type.retType;
+        char rty[256];
+        llvmType(rt, rty, sizeof(rty));
+        for (int d = 0; d < nDst; d++) {
+            if (dstIdx[d] < 0) continue;
+            if (!rt.isTuple) {
+                fprintf(ctx->out, "  call void @llvm.memcpy.p0.p0.i64(ptr %%a%d, ptr %%rslot, i64 %lld, i1 false)\n",
+                        dstIdx[d], TypeGetSize(rt));
+                continue;
+            }
+            struct type et = (*(struct var*)ListGetIdx(&rt.vars, d)).type;
+            fprintf(ctx->out, "  %%rp.%d = getelementptr %s, ptr %%rslot, i32 0, i32 %d\n", d, rty, d);
+            fprintf(ctx->out, "  call void @llvm.memcpy.p0.p0.i64(ptr %%a%d, ptr %%rp.%d, i64 %lld, i1 false)\n",
+                    dstIdx[d], d, TypeGetSize(et));
+        }
+    } else if (func->type.hasRetType) {
         char retTy[256];
         llvmType(*func->type.retType, retTy, sizeof(retTy));
-        fprintf(ctx->out, "  %%r = call %s %%fn(%s)\n", retTy, callArgs);
+        fprintf(ctx->out, "  %%r = call %s %%fn(%s)\n", retTy, cgBufStr(&callArgs));
         //P1g: the result lands in the spawner's storage the instant the call returns. A plain store is
         //all this can be - the types were required to agree exactly (SPAWN_RESULT_TYPE) precisely
         //because there is no caller frame here to run a conversion or a promotion in.
         if (func->type.retType->isTuple) {
-            for (int d = 0; d < nDst && d < 64; d++) {
+            for (int d = 0; d < nDst; d++) {
                 if (dstIdx[d] < 0) continue;
                 char elTy[256];
                 llvmType((*(struct var*)ListGetIdx(&func->type.retType->vars, d)).type, elTy, sizeof(elTy));
@@ -4532,7 +4704,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
             fprintf(ctx->out, "  store %s %%r, ptr %%a%d\n", retTy, dstIdx[0]);
         }
     } else {
-        fprintf(ctx->out, "  call void %%fn(%s)\n", callArgs);
+        fprintf(ctx->out, "  call void %%fn(%s)\n", cgBufStr(&callArgs));
     }
     //P2a used to drain this thread's chunk pool here, because the thread was about to exit and take the
     //pool with it. A worker does not exit (P1e), so the pool stays and the next task to run on this
@@ -4553,10 +4725,12 @@ void cgSpawn(struct cgCtx* ctx, struct statement* s) {
 //P1: "join { ... }" - an ordinary block whose end waits for every task spawned directly inside it. The
 //head lives in an entry-block alloca per depth, so a join nested in a loop re-arms rather than growing
 //the stack; cgBlockJoining emits the wait before the block's own arena is reclaimed.
+static void cgEnsureBlockSlot(struct cgCtx* ctx, int idx);
 void cgJoin(struct cgCtx* ctx, struct statement* s) {
     char* prevHead = ctx->joinTaskHead;
     int prevDepth = ctx->joinDepth;
     int idx = ctx->blockDepth - 1;
+    if (idx >= 0 && ctx->ownScopeSlot) cgEnsureBlockSlot(ctx, idx);
     char* head = (idx >= 0 && idx < ctx->joinPool.len) ? *(char**)ListGetIdx(&ctx->joinPool, idx) : NULL;
     if (head) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", head);
     ctx->joinTaskHead = head;
@@ -4566,81 +4740,36 @@ void cgJoin(struct cgCtx* ctx, struct statement* s) {
     ctx->joinDepth = prevDepth;
 }
 
-//O2: how deep this body's blocks nest, so cgFunc can alloca one scope header per depth in the ENTRY
-//block. Emitting them where the block starts would put an alloca inside a loop, growing the stack by a
-//header per iteration - a stack overflow at a few million iterations, which is exactly the workload block
-//scopes exist to make cheap. One slot per depth is enough because only one block at a given depth is ever
-//open at a time within a frame, and closing resets the header to empty.
-static int cgMaxBlockDepth(struct list* block);
-
-//the blocks an expression holds - a catch clause's in value position, a comprehension's loop, a match used as a
-//value - nest like a statement's own, so they count too; a sequence's statements, which run in the enclosing
-//block, are counted as a block of their own, which only over-reserves
-static int cgMaxOperandDepth(struct operand* op) {
-    if (!op) return 0;
-    int deepest = cgMaxOperandDepth(op->callee);
-    for (int i = 0; i < op->args.len; i++) {
-        int d = cgMaxOperandDepth(*(struct operand**)ListGetIdx(&op->args, i));
-        if (d > deepest) deepest = d;
+//O2: one scope header, task-list head and unwind node per block nesting depth, alloca'd in the ENTRY block as the
+//first block at that depth is opened. Emitting them where a block starts would put an alloca inside a loop, growing
+//the stack by a header per iteration - a stack overflow at a few million iterations, which is exactly the workload
+//block scopes exist to make cheap. One slot per depth is enough because only one block at a given depth is ever open
+//at a time within a frame, and closing resets the header to empty. They used to be counted before the body was
+//emitted, by a walker kept in step with every construct that opens a block - and it missed the blocks inside a match
+//used as a value, its case values, guards and pattern tests, which then got no arena at all and allocated into the
+//function's scope until it returned (a loop leaked). Made by the emission itself, a slot exists for every block
+//that is emitted, whatever construct holds it.
+//The unwind node's predecessor and scope never vary within a frame, so they are filled in once, in the entry block.
+static void cgEnsureBlockSlot(struct cgCtx* ctx, int idx) {
+    while (ctx->scopePool.len <= idx) {
+        char* sl = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", sl);
+        ListAdd(&ctx->scopePool, &sl);
+        char* jh = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", jh);
+        ListAdd(&ctx->joinPool, &jh);
+        if (!ctx->ownUnwindNode) continue; //S18b/P1d: no unwind chain in this build
+        int i = ctx->unwindPool.len;
+        char* n = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.unwind\n", n);
+        ListAdd(&ctx->unwindPool, &n);
+        char* ps = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", ps, n);
+        fprintf(cgAllocaOut(ctx), "  store ptr %s, ptr %s\n", cgUnwindBelow(ctx, i), ps);
+        char* ss = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 1\n", ss, n);
+        fprintf(cgAllocaOut(ctx), "  store ptr %s, ptr %s\n", sl, ss);
     }
-    if (op->comprBody.len) {
-        int d = cgMaxBlockDepth(&op->comprBody);
-        if (d > deepest) deepest = d;
-    }
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        int d = cc->hasBlock ? cgMaxBlockDepth(&cc->block) : 0;
-        int v = cgMaxOperandDepth(cc->dflt);
-        if (d > deepest) deepest = d;
-        if (v > deepest) deepest = v;
-    }
-    return deepest;
-}
-
-static int cgMaxBlockDepth(struct list* block) {
-    int deepest = 0;
-    for (int i = 0; i < block->len; i++) {
-        struct statement* s = ListGetIdx(block, i);
-        int here = 0;
-        if (s->block.len) here = cgMaxBlockDepth(&s->block);
-        struct operand* ops[] = { s->op, s->target, s->forInit, s->fillValue };
-        for (int k = 0; k < 4; k++) {
-            int d = cgMaxOperandDepth(ops[k]);
-            if (d > here) here = d;
-        }
-        if (s->forPost) {
-            struct list one = ListInit(sizeof(struct statement));
-            ListAdd(&one, s->forPost);
-            int d = cgMaxBlockDepth(&one) - 1;
-            if (d > here) here = d;
-        }
-        if (s->elseStmnt) {
-            int e = s->elseStmnt->block.len ? cgMaxBlockDepth(&s->elseStmnt->block) : 0;
-            struct list one = ListInit(sizeof(struct statement));
-            ListAdd(&one, s->elseStmnt);
-            int chained = cgMaxBlockDepth(&one);
-            if (e > here) here = e;
-            if (chained - 1 > here) here = chained - 1;
-        }
-        for (int c = 0; c < s->matchCases.len; c++) {
-            struct statement* cs = ListGetIdx(&s->matchCases, c);
-            int d = cs->block.len ? cgMaxBlockDepth(&cs->block) : 0;
-            if (d > here) here = d;
-        }
-        if (s->nomatchBlock.len) {
-            int d = cgMaxBlockDepth(&s->nomatchBlock);
-            if (d > here) here = d;
-        }
-        //a catch statement's clause blocks nest as deep as any other block - left out, the blocks inside one got
-        //no arena of their own and allocated into the function's scope, destructors running at its return
-        for (int c = 0; c < s->catchClauses.len; c++) {
-            struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
-            int d = cc->hasBlock ? cgMaxBlockDepth(&cc->block) : 0;
-            if (d > here) here = d;
-        }
-        if (here + 1 > deepest) deepest = here + 1;
-    }
-    return deepest;
 }
 
 void cgBlock(struct cgCtx* ctx, struct list* block) { cgBlockJoining(ctx, block, NULL); }
@@ -4654,6 +4783,7 @@ void cgBlockJoining(struct cgCtx* ctx, struct list* block, char* joinHead) {
     //allocated (O2b), so a block that allocates nothing costs almost exactly nothing.
     char* slot = NULL;
     int idx = ctx->blockDepth - 2;
+    if (idx >= 0 && ctx->ownScopeSlot) cgEnsureBlockSlot(ctx, idx);
     if (idx >= 0 && idx < ctx->scopePool.len && ctx->ownScopeSlot) {
         slot = *(char**)ListGetIdx(&ctx->scopePool, idx);
         //re-entering this depth: the previous occupant was closed, which reset the header, but zero it
@@ -4729,7 +4859,13 @@ static void cgFillLoop(struct cgCtx* ctx, struct type elemT, char* basePtr, char
     cgLabel(ctx, bodyLbl);
     char* slotPtr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %s\n", slotPtr, elemTy, basePtr, i);
-    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", elemTy, fillVal, slotPtr);
+    //a by-ref value (a struct, an inline array) is its storage's address, not the aggregate: copied from there. It was
+    //stored as though it were the aggregate - invalid IR for "Array<P>(3, P(1, 2))", and for "Array<Q>(3)" where Q's
+    //zero value is not zero bits (D13c)
+    if (typeIsByRef(elemT))
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", slotPtr, fillVal,
+                TypeGetSize(elemT));
+    else fprintf(ctx->fnOut, "  store %s %s, ptr %s%s\n", elemTy, fillVal, slotPtr, cgTbaa(elemT, true));
     char* next = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", next, i);
     fprintf(ctx->fnOut, "  store i64 %s, ptr %s\n", next, idxSlot);
@@ -4799,7 +4935,14 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     if (here) ctx->targetScopeOverride = here;
     char* scope = here && !s->var.type.scopeParam ? here : NULL;
     char* rhs = cgValueForTarget(ctx, s->op, s->var.type, scope);
-    cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, scope, false, OperandIsLvalue(s->op), false);
+    //T7/E12c: an array the initializer makes itself - "Array<T>(n)", a comprehension - was just built in this
+    //declaration's own scope (cgValueForTarget lands it where the copy would go) and nothing else holds it, so the
+    //declaration adopts it rather than copying it into a second allocation of the same size
+    bool adopt = s->var.type.bType == BASETYPE_ARRAY && s->var.type.arrMalloc && s->op->type.bType == BASETYPE_ARRAY
+                 && s->op->type.arrMalloc && !s->op->type.scopeParam
+                 && (s->op->opType == OPERATION_SIZED_ARRAY_ALLOC || s->op->opType == OPERATION_COMPREHENSION);
+    if (adopt) fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", rhs, slot);
+    else cgStoreInto(ctx, s->var.type, s->op->type, rhs, slot, scope, false, OperandIsLvalue(s->op), false);
     ctx->targetScopeOverride = prev;
 }
 
@@ -4820,8 +4963,13 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
             scopeOverride = cgResolveEffectiveScope(ctx, base);
         }
     }
-    char* val = cgValueForTarget(ctx, s->op, s->target->type, scopeOverride);
+    //S4: left to right - the target's place (its base and index, as written), then the value, then the store. A
+    //compound assignment's value reads that same place (placeOf), so its base and index run once
     char* addr = cgAddr(ctx, s->target);
+    char* outerPlace = s->target->cgPlace;
+    s->target->cgPlace = addr;
+    char* val = cgValueForTarget(ctx, s->op, s->target->type, scopeOverride);
+    s->target->cgPlace = outerPlace;
     cgStoreInto(ctx, s->target->type, s->op->type, val, addr, scopeOverride, true, OperandIsLvalue(s->op),
                 s->target->opType == OPERATION_INDEX);
 }
@@ -5061,6 +5209,18 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     //array value held by a field - belongs with the instance, not in the constructor's closing scope
     char* prevTarget = ctx->targetScopeOverride;
     if (ctx->ctorHere) ctx->targetScopeOverride = ctx->ctorHere;
+    if (cgRetViaMemory(ctx->curFunc->type)) {
+        //a big result is copied into the caller's storage (cgViaMemory) before this function's scopes close - the
+        //value's own storage, or the reference it was read through
+        char* src = cgValue(ctx, s->op);
+        ctx->targetScopeOverride = prevTarget;
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", src,
+                TypeGetSize(retT));
+        cgCloseOwnScope(ctx);
+        fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
+        ctx->terminated = true;
+        return;
+    }
     char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
     ctx->targetScopeOverride = prevTarget;
     //S19: the result is computed before deferred code runs - and a returned array value still shares its
@@ -5141,16 +5301,9 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
     cgCloseOwnScope(ctx);
-    if (!ctx->curFunc->type.hasRetType) {
-        fprintf(ctx->fnOut, "  ret i32 %lld\n", code);
-        ctx->terminated = true;
-        return;
-    }
-    char wrapTy[256];
-    llvmFuncRetType(ctx->curFunc->type, wrapTy, sizeof(wrapTy));
-    char* v = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = insertvalue %s undef, i32 %lld, 0\n", v, wrapTy, code);
-    cgEmitRet(ctx, wrapTy, v);
+    char codeText[32];
+    snprintf(codeText, sizeof(codeText), "%lld", code);
+    cgRetErrorCode(ctx, codeText);
     ctx->terminated = true;
 }
 
@@ -5159,15 +5312,23 @@ void cgError(struct cgCtx* ctx, struct statement* s) {
 void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
     struct operand* callOp = s->op;
     struct var* func = callOp->readVar;
-    char argsBuf[4096] = "";
-    char* target = cgCallTargetAndArgs(ctx, callOp, argsBuf, sizeof(argsBuf));
+    char* outSlot = NULL; //a big result (cgRetViaMemory) still needs storage to land in, though it is discarded
+    if (cgRetViaMemory(func->type)) {
+        char ty[256];
+        llvmType(*func->type.retType, ty, sizeof(ty));
+        outSlot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", outSlot, ty, cgStackAlign(*func->type.retType));
+    }
+    struct list args = ListInit(sizeof(struct cgArg));
+    char* target = cgCallTargetAndArgs(ctx, callOp, &args, NULL, outSlot);
+    char* argsBuf = cgArgsText(&args);
 
     char wrapTy[256];
     llvmFuncRetType(func->type, wrapTy, sizeof(wrapTy));
     char* raw = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = call %s %s(%s)\n", raw, wrapTy, target, argsBuf);
     char* code = raw;
-    if (func->type.hasRetType) {
+    if (func->type.hasRetType && !outSlot) {
         code = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = extractvalue %s %s, 0\n", code, wrapTy, raw);
     }
@@ -5660,7 +5821,8 @@ void emitRuntimeDecls(FILE* out) {
         "@__olang_msg_assert = linkonce_odr unnamed_addr constant [18 x i8] c\"assertion failed\\0A\\00\"\n"
         "@__olang_msg_slice = linkonce_odr unnamed_addr constant [27 x i8] c\"slice bounds out of range\\0A\\00\"\n"
         "@__olang_msg_as = linkonce_odr unnamed_addr constant [34 x i8] c\"'as' named what the value is not\\0A\\00\"\n"
-        "@__olang_msg_arraylen = linkonce_odr unnamed_addr constant [23 x i8] c\"negative array length\\0A\\00\"\n"
+        "@__olang_msg_arraylen = linkonce_odr unnamed_addr constant [27 x i8] c\"array length out of range\\0A\\00\"\n"
+        "@__olang_msg_oom = linkonce_odr unnamed_addr constant [15 x i8] c\"out of memory\\0A\\00\"\n"
         "@__olang_msg_arrayfit = linkonce_odr unnamed_addr constant [47 x i8] c\"array length does not match its fixed storage\\0A\\00\"\n"
         "@__olang_msg_abort = linkonce_odr unnamed_addr constant [9 x i8] c\"aborted\\0A\\00\"\n"
         "@__olang_msg_unreach = linkonce_odr unnamed_addr constant [26 x i8] c\"reached unreachable code\\0A\\00\"\n"
@@ -5687,7 +5849,7 @@ void emitRuntimeDecls(FILE* out) {
         "  unreachable\n"
         "}\n\n"
         //a runtime check the language guarantees has failed: a failed assert, an out-of-range slice bound,
-        //a negative array length. Distinct from "fail", which is the program's own orderly decision -
+        //an array length out of range. Distinct from "fail", which is the program's own orderly decision -
         //this one aborts, so it leaves a core dump and skips atexit, which is what you want for a broken
         //invariant. Under a test it is recoverable, exactly as S18 says.
         "define linkonce_odr void @__olang_check_failed(ptr %msg) {\n"
@@ -5721,6 +5883,16 @@ void emitRuntimeDecls(FILE* out) {
         //the call inline instead would look like graceful degradation and is not: two tasks that talk to
         //each other through a channel deadlock the moment one of them runs to completion before the other
         //starts. The cost is one compare per spawn, against ~51us to create the thread.
+        "define linkonce_odr void @__olang_alloc_check(ptr %p) {\n"
+        "entry:\n"
+        "  %ok = icmp ne ptr %p, null\n"
+        "  br i1 %ok, label %done, label %bad\n"
+        "bad:\n"
+        "  call void @__olang_check_failed(ptr @__olang_msg_oom)\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n"
         "define linkonce_odr void @__olang_task_started(i32 %rc) {\n"
         "entry:\n"
         "  %ok = icmp eq i32 %rc, 0\n"
@@ -5809,6 +5981,9 @@ void emitScopeRuntime(FILE* out) {
         "  %total1 = add i64 %total0, 63\n"
         "  %total = and i64 %total1, -64\n"
         "  %new = call ptr @aligned_alloc(i64 64, i64 %total)\n"
+        //the allocator declining is a broken guarantee, as a thread that will not start is (P1c): reported, never
+        //written through - a null chunk used to be filled in as though it were one
+        "  call void @__olang_alloc_check(ptr %new)\n"
         "  %usedptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 1\n"
         "  store i64 0, ptr %usedptr.n\n"
         "  %capptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 2\n"
@@ -6219,6 +6394,7 @@ void emitScopeRuntime(FILE* out) {
         "fresh:\n"
         "  call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)\n"
         "  %w = call ptr @malloc(i64 128)\n"
+        "  call void @__olang_alloc_check(ptr %w)\n"
         "  call void @llvm.memset.p0.i64(ptr %w, i8 0, i64 128, i1 false)\n"
         "  %rc = call i32 @pthread_create(ptr %tid, ptr null, ptr @__olang_worker_loop, ptr %w)\n"
         "  call void @__olang_task_started(i32 %rc)\n"
@@ -6707,10 +6883,13 @@ void cgEmitForeignInitDecls(FILE* out, struct semaModule* emitMod) {
 //bound it to - exactly what the old "s scope" parameter carried, minus any presence in the language.
 void cgEmitParamList(FILE* out, struct var* func, bool named) {
     bool ctor = cgIsCtor(func);
-    if (ctor) fprintf(out, named ? "ptr %%here" : "ptr"); //C2d
+    bool outFirst = cgRetViaMemory(func->type);
+    if (outFirst) fprintf(out, named ? "ptr %%out" : "ptr"); //a result through memory, first of all
+    if (ctor) fprintf(out, named ? "%sptr %%here" : "%sptr", outFirst ? ", " : ""); //C2d
     //D16: a lambda is reached only through a function value, so it takes the value's closure first - and its
     //captures' scopes come from that closure, not from its caller
-    if (func->isLambda) { fprintf(out, named ? "ptr %%closure" : "ptr"); ctor = true; }
+    if (func->isLambda) { fprintf(out, named ? "%sptr %%closure" : "%sptr", outFirst ? ", " : ""); ctor = true; }
+    ctor = ctor || outFirst;
     bool anyScope = false;
     for (int i = 0; i < func->type.scopeVars.len; i++) {
         if ((*(struct var**)ListGetIdx(&func->type.scopeVars, i))->isCaptureScope) continue;
@@ -6723,7 +6902,7 @@ void cgEmitParamList(FILE* out, struct var* func, bool named) {
         struct var* p = ListGetIdx(&func->type.vars, i);
         char pty[256];
         if (dtor) snprintf(pty, sizeof(pty), "ptr");
-        else llvmType(p->type, pty, sizeof(pty));
+        else cgParamTy(p->type, pty, sizeof(pty));
         bool first = (i == 0 && !anyScope && !ctor);
         fprintf(out, "%s%s", first ? "" : ", ", pty);
         if (named) fprintf(out, " %%arg%d", i);
@@ -6829,8 +7008,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     }
     //D16c: a lambda's captures, and their scopes, as the closure carries them
     if (func->isLambda && func->lambdaCaptures.len) {
-        char envTy[4096];
-        cgClosureType(func, envTy, sizeof(envTy));
+        char* envTy = cgClosureType(func);
         int field = 1;
         for (int i = 0; i < func->lambdaCaptures.len; i++) {
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&func->lambdaCaptures, i))->inner;
@@ -6838,11 +7016,16 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             llvmType(in->type, cty, sizeof(cty));
             char* fp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", fp, envTy, field++);
-            char* fv = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", fv, cty, fp);
             char* slot = cgDeclareLocal(ctx, in->name, in->type);
             fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, cty);
-            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, fv, slot);
+            if (cgViaMemory(in->type)) {
+                fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", slot, fp,
+                        TypeGetSize(in->type));
+            } else {
+                char* fv = cgNewTmp(ctx);
+                fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", fv, cty, fp);
+                fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cty, fv, slot);
+            }
             if (!in->type.scopeParam) continue;
             char* sp = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", sp, envTy, field++);
@@ -6861,6 +7044,15 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             self.type = p->type;
             self.llvmVal = "%arg0";
             ListAdd(&ctx->scope->locals, &self);
+            continue;
+        }
+        if (cgViaMemory(p->type)) { //its storage is the copy the caller made for this call
+            struct cgLocal mine = {0};
+            mine.name = p->name;
+            mine.type = p->type;
+            mine.llvmVal = MallocOrCrash(24);
+            snprintf(mine.llvmVal, 24, "%%arg%d", i);
+            ListAdd(&ctx->scope->locals, &mine);
             continue;
         }
         char pty[256];
@@ -6886,16 +7078,8 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->blockDepth = 1;
     ctx->blockSlots.len = 0;
     ctx->blockJoins.len = 0;
-    ctx->scopePool.len = 0;
+    ctx->scopePool.len = 0; //O2: each depth's slots are made as its first block is opened (cgEnsureBlockSlot)
     ctx->joinPool.len = 0;
-    for (int d = 2; d <= cgMaxBlockDepth(&func->codeBlock) + 1; d++) {
-        char* sl = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", sl);
-        ListAdd(&ctx->scopePool, &sl);
-        char* jh = cgNewTmp(ctx);
-        fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", jh);
-        ListAdd(&ctx->joinPool, &jh);
-    }
     cgSetupUnwind(ctx);
     cgPushOwnUnwind(ctx);
 
@@ -6906,7 +7090,12 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         cgStatement(ctx, s);
     }
 
-    if (!ctx->terminated) {
+    if (!ctx->terminated && cgRetViaMemory(func->type)) { //unreachable past D10a, but well-formed: a zero result
+        cgCloseOwnScope(ctx);
+        fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %%out, i8 0, i64 %lld, i1 false)\n",
+                TypeGetSize(*func->type.retType));
+        fputs(func->type.errors.len ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
+    } else if (!ctx->terminated) {
         cgCloseOwnScope(ctx);
         if (func->type.errors.len > 0) {
             //fell off the end without an explicit return/error: implicit success, same as an infallible
@@ -7147,17 +7336,8 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         ctx->blockDepth = 0;
         ctx->blockSlots.len = 0;
         ctx->blockJoins.len = 0;
-        ctx->scopePool.len = 0;
-        ctx->joinPool.len = 0;
-        for (int d = 2; d <= cgMaxBlockDepth(&t->codeBlock) + 1; d++) {
-            char* sl = cgNewTmp(ctx);
-            fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", sl);
-            fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", sl);
-            ListAdd(&ctx->scopePool, &sl);
-            char* jh = cgNewTmp(ctx);
-            fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", jh);
-            ListAdd(&ctx->joinPool, &jh);
-        }
+        ctx->scopePool.len = 0; //O2: each depth's slots are made as its first block is opened (cgEnsureBlockSlot),
+        ctx->joinPool.len = 0;  //and a block zeroes its header as it opens it, so the unwinder reads only entered ones
 
         //S18b/P1d: the chain is built and pushed BEFORE the setjmp, and the mark records where it stood
         //first - so a longjmp out of this test unwinds exactly this test's scopes and no further, and the

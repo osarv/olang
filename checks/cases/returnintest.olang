@@ -1,0 +1,7 @@
+# check: fail a test is not a function
+# S15: a test has no caller to return to - done ends it early as passed
+error E { X }
+fn main() ? E { }
+test "early" {
+    return
+}

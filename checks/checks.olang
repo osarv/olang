@@ -386,3 +386,28 @@ test "a function of many local ifs compiles in time linear in their number" {
     try os.WriteFile($dir "/many.olang", many) catch { }
     assert sh(dir, "timeout 60 \"$OLANG\" -i many.olang > out.txt 2>&1") == 0 or failed("20000 local ifs", dir)
 }
+
+# a review of the code generator (2026-10-09): what only a whole build shows. A block inside a match value has an
+# arena (a loop leaking into the function's scope would fail under the memory cap); an array length out of range
+# aborts with its message; a declaration adopts the array made for it; a big struct compiles in seconds (it took
+# minutes); a BF16 survives -d; and the helpers rendering tuples are named the same in every build
+test "the code generator's review fixes, as whole builds" {
+    dir := fresh("cgreview")
+    os.Run("cp checks/fixtures/cgreview/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b matcharena.olang > out.txt 2>&1") == 0 or failed("matcharena build", dir)
+    assert sh(dir, "(ulimit -v 400000 && ./build/matcharena a b c d e) > out.txt 2>&1") == 0 or failed("matcharena", dir)
+    assert outOf(dir) == "30600000\n" or failed("matcharena output", dir)
+    assert sh(dir, "\"$OLANG\" -b arraylen.olang > out.txt 2>&1") == 0 or failed("arraylen build", dir)
+    assert sh(dir, "./build/arraylen > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("array length out of range") or failed("arraylen output", dir)
+    assert sh(dir, "\"$OLANG\" -b adopt.olang > out.txt 2>&1 && ./build/adopt > out.txt") == 0 or failed("adopt", dir)
+    assert sh(dir, "awk '/^define.*@adopt_main/,/^}/' build/adopt.main.ll | grep -q arrcopy") != 0
+    assert sh(dir, "timeout 60 \"$OLANG\" -b big.olang > out.txt 2>&1 && ./build/big > out.txt") == 0 or failed("big", dir)
+    assert outOf(dir) == "4\n" or failed("big output", dir)
+    assert sh(dir, "\"$OLANG\" -b -d bf16.olang > out.txt 2>&1 && ./build/bf16.debug > out.txt") == 0 or failed("bf16", dir)
+    assert outOf(dir) == "0.5 4 5\n" or failed("bf16 output", dir)
+    names String& = "grep -o '@olang.rd.[A-Za-z0-9._$]*' build/tuples.main.ll | sort -u"
+    assert sh(dir, "\"$OLANG\" -b tuples.olang > out.txt 2>&1 && " $names " > first.txt") == 0 or failed("tuples", dir)
+    assert sh(dir, "rm -rf build && \"$OLANG\" -b tuples.olang > out.txt 2>&1 && " $names " | cmp -s first.txt -") == 0
+    assert sh(dir, "./build/tuples > out.txt") == 0 and outOf(dir) == "(1, \"x\") (2, 3, 0.5)\n" or failed("tuples output", dir)
+}

@@ -515,14 +515,16 @@ fn dualWrappedFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& 
     return d.left.inner
 }
 
-# three levels of forwarding (Holder's "box", DualWrapped's "left", WrappedPoint's "inner")
+# three levels of forwarding (Holder's "box", DualWrapped's "left", WrappedPoint's "inner"). Both of d's arguments are
+# in the result scope: an instance may not outlive what a field written "&p" refers into (C2d), so d could be there
+# only with r there too - and through h.box, d's own field bindings are read at d's scope (O23)
 type Holder struct(b DualWrapped&) {
     box DualWrapped&b = b
 }
 
 fn holderFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
     l WrappedPoint&return = WrappedPoint(Point(leftX, leftY))
-    r WrappedPoint& = WrappedPoint(Point(rightX, rightY))
+    r WrappedPoint&return = WrappedPoint(Point(rightX, rightY))
     d DualWrapped&return = DualWrapped(l, r)
     h Holder& = Holder(d)
     return h.box.left.inner
@@ -4140,7 +4142,7 @@ test "a test after one that ended early still runs" {
 # and outside a test run both keep their process meaning: "done" exits 0, "fail" exits 1.
 
 # S18a: each runtime check now names what failed instead of all three printing "assertion failed":
-#   assertion failed / slice bounds out of range / negative array length
+#   assertion failed / slice bounds out of range / array length out of range
 # S18b: a test abandoned partway - by a failed assert, a failed check, or done/fail - does NOT run the
 # destructors of values still live in it. The recovery path is a longjmp, and unwinding after one cannot
 # be expressed in a way an optimizer keeps: LLVM does not model the jump, so from the landing block the
@@ -5774,9 +5776,10 @@ type Wrap2 struct(i mut Crate2&) {
     inner mut Crate2&i = i
 }
 
-# a local naming where it lives - here where w does, which is where its field's referent is read at (O23)
+# a local taking where the field's referent lives - where w's argument for "i" was, a scope of this function's own
+# standing for that binding, resolved at each call (O23a); "r Crate2&w" would narrow it to w's
 fn narrows(w Wrap2&) I32 {
-    r Crate2&w = w.inner
+    r := w.inner
     return r.v
 }
 
@@ -9352,4 +9355,386 @@ fn dfAfterReturn(n I64) I64 {
 }
 test "a statement after a return compiles" {
     assert dfAfterReturn(WdMutable / 1000000000) == 2
+}
+
+# ---- codegen review fixes (2026-10-09) ----
+
+# T4/E16: an unsigned index is its unsigned value - a U8 holding 200 reads element 200, not element -56; a GEP
+# sign-extends a narrow index, so it is zero-extended first. Read while compiling (the global) and at run time.
+fn cgU8Index(b U8) I32 {
+    t := Array<I32>(256)
+    for i in range 256 { t[i] = I32(i) }
+    t[b] = t[b] + 1000
+    w U16 = U16(b) + 50
+    return t[b] + t[w]
+}
+CgU8Baked I32 = cgU8Index(200)
+test "an unsigned narrow index reads the element its value names" {
+    assert CgU8Baked == 1450
+    assert cgU8Index(U8(WdMutable / 10000000)) == 1450
+}
+
+# a checked index evaluates its base once - it used to read the length from one evaluation and the element from
+# another, so "try mk()[1]" called mk twice
+cgMkCalls mut I64 = 0
+fn cgMk() Array<I64>& {
+    cgMkCalls = cgMkCalls + 1
+    return Array<I64>(3, cgMkCalls)
+}
+test "a checked index evaluates its base once" {
+    cgMkCalls = 0
+    x I64 = try cgMk()[1] catch default 0
+    y I64 = try (cgMk()[2] + 1) catch default 0
+    assert x == 1 and y == 3 and cgMkCalls == 2
+}
+
+# S4: an assignment is left to right - the target's place (its index), then the value, then the store - and a compound
+# assignment evaluates its place once. The run time evaluated the value first, the evaluator the place first, so a
+# baked global disagreed with the same function run; and "a[next()] += 5" called next twice
+type CgCtr struct(start I64) {
+    n mut I64 = start
+}
+fn (c mut CgCtr&) Next() I64 {
+    c.n = c.n + 1
+    return c.n
+}
+fn cgOrder(start I64) I64 {
+    c CgCtr& = CgCtr(start)
+    a := Array<I64>(8, 0)
+    a[c.Next()] = c.Next() * 10       # a[1] = 20
+    a[c.Next()] += 5                  # a[3] = 5, one Next
+    a[c.Next()]++                     # a[4] = 1
+    return a[1] * 10000 + a[2] * 1000 + a[3] * 100 + a[4] * 10 + c.n
+}
+CgOrderBaked I64 = cgOrder(0)
+test "S4: assignment is left to right, and a compound one reads its place once" {
+    assert CgOrderBaked == 200514
+    assert cgOrder(WdMutable / 2000000000 - 1) == 200514
+}
+
+# D13c/T7: a fill whose value is a struct, given or its type's zero value, stores the struct in every element - it
+# used to store the struct's address as though it were the struct (invalid IR)
+type CgFillP struct(a I64, b I64) {
+    a
+    b
+}
+type CgFillQ struct(a I64 = 5) {
+    a
+}
+fn cgFill(n I64) I64 {
+    ps := Array<CgFillP>(n, CgFillP(1, 2))
+    qs := Array<CgFillQ>(n)
+    return ps[n - 1].b * 100 + qs[n - 1].a * 10 + ps.Len()
+}
+CgFillBaked I64 = cgFill(3)
+test "an array filled with a struct holds the struct in every element" {
+    assert CgFillBaked == 253
+    assert cgFill(I64(WdMutable / 1000000000) + 1) == 253
+}
+
+# D14b: a length whose byte count would not fit an I64 is out of range, as a negative one is - it wrapped to a small
+# allocation the array then ran past
+fn cgLenOut(n I64) I64 {
+    a := try Array<I64>(n) catch BuiltinError.OUT_OF_BOUNDS default Array<I64>(1, 7)
+    return a.Len() * 10 + a[0]
+}
+CgLenBaked I64 = cgLenOut(2305843009213693953)
+test "D14b: an array length whose byte count overflows is out of range" {
+    assert CgLenBaked == 17
+    assert cgLenOut(I64(WdMutable) - 2000000000 + 2305843009213693953) == 17
+    assert cgLenOut(I64(WdMutable / 1000000000)) == 20
+}
+
+# L10/T6a: a decimal literal above I64's maximum is a U64, and I64's minimum is writable as a negated literal
+test "a decimal literal above I64's maximum is a U64" {
+    big U64 = 18446744073709551615
+    low I64 = -9223372036854775808
+    assert big == U64(0) - 1 and low == -9223372036854775807 - 1
+    mid := 9223372036854775808
+    assert mid == U64(9223372036854775807) + 1
+}
+
+# a text literal longer than 4096 bytes is all there - the decoder's fixed buffer cut it short
+test "a long text literal is not truncated" {
+    s := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaZ"
+    assert s.Len() == 5001 and s[5000] == 'Z' and s[4096] == 'a'
+}
+
+# a block inside a match used as a value - in a case's value, as a comprehension's loop - has an arena of its own:
+# a destructor registered in one runs at its closing brace, where it used to run at the function's return
+fn cgResId(r CgRes&) I64 { return r.id }
+cgResLog mut I64 = 0
+type CgRes struct(id I64) {
+    id
+} destruct {
+    cgResLog = cgResLog * 10 + id
+}
+fn cgMatchBlocks(k I64) I64 {
+    v I64 = match k {
+        case 0 => I64[cgResId(CgRes(x + 1)) for x in range 3].Len()
+        nomatch => 0
+    }
+    return cgResLog * 10 + v           # every element's resource was released before the match finished
+}
+test "a block inside a match value closes at its own brace" {
+    cgResLog = 0
+    assert cgMatchBlocks(I64(WdMutable / 2000000000) - 1) == 1233
+}
+
+# a struct too big to move as one LLVM value - here 328 bytes - is passed and returned through memory: a parameter is
+# a pointer to the callee's own copy, made before any later argument runs, and a result is written into the caller's
+# storage. Through every kind of call: direct, a method, a function value, a lambda, a fallible one, a task
+type CgBig struct(seed I64) {
+    data mut Array<I64> = Array<I64>(40)
+    tag mut I64 = seed
+}
+fn cgBigMk(n I64) CgBig {
+    b := CgBig(n)
+    for i in range 40 { b.data[i] = n * 100 + i }
+    return b
+}
+fn cgBigSum(b CgBig) I64 {
+    t I64 = 0
+    for x in b.data { t = t + x }
+    return t + b.tag
+}
+fn cgBigBump(b mut CgBig) I64 {
+    b.data[0] = 999
+    return b.data[0]
+}
+fn cgBigTouch(b mut CgBig&) I64 {
+    b.tag = 77
+    return 1
+}
+fn cgBigBoth(x CgBig, y I64) I64 { return x.tag * 1000 + y }
+fn (b CgBig) Doubled() CgBig {
+    c CgBig = b
+    c.tag = b.tag * 2
+    return c
+}
+fn cgBigTry(n I64) CgBig ? DfErr {
+    if n < 0 { error DfErr.BAD }
+    return cgBigMk(n)
+}
+fn cgBigWork(b CgBig) CgBig {
+    c CgBig = b
+    c.tag = b.tag + 1
+    return c
+}
+fn cgBigAll(n I64) I64 {
+    a := cgBigMk(n)
+    s1 := cgBigSum(a)
+    q := cgBigBump(a)
+    f fn(b CgBig) I64 = cgBigSum
+    m := fn(b CgBig) I64 { return b.tag + a.tag }
+    b := try cgBigTry(3) catch default cgBigMk(0)
+    c := try cgBigTry(-1) catch default cgBigMk(9)
+    d := a.Doubled()
+    h := cgBigMk(8)
+    s2 := cgBigBoth(h, cgBigTouch(h))
+    e CgBig = cgBigMk(1) if n > 0 else cgBigMk(2)
+    g CgBig = match n {
+        case 2 => cgBigMk(4)
+        nomatch => cgBigMk(5)
+    }
+    return s1 + q + f(a) + m(cgBigMk(5)) + b.tag + c.tag + d.tag + s2 + a.data[0] + e.tag + g.tag
+}
+CgBigBaked I64 = cgBigAll(2)
+test "a big struct is passed and returned through memory, with value semantics" {
+    assert CgBigBaked == 26792
+    assert cgBigAll(I64(WdMutable / 1000000000)) == 26792
+    r CgBig = cgBigMk(0)
+    join {
+        spawn r = cgBigWork(cgBigMk(20))
+    }
+    assert r.tag == 21 and r.data[39] == 2039
+}
+
+# P1g: a task's call is lowered as any call is - a spawned constructor gets its instance's scope, and a spawned call
+# through a computed function value calls what the expression gives. The task had its own copy of the call lowering,
+# which had drifted: the constructor's fields came out wrong, and the computed callee crashed the compiler
+type CgNode struct(v I64) {
+    v
+}
+fn cgDbl(x I64) I64 { return x * 2 }
+fn cgPick() fn(x I64) I64 { return cgDbl }
+test "a spawned constructor and a spawned computed call run as their calls do" {
+    r CgNode = CgNode(0)
+    k I64 = 0
+    join {
+        spawn r = CgNode(5)
+        spawn k = cgPick()(21)
+    }
+    assert r.v == 5 and k == 42
+}
+
+# ---- O10b/O18b: a callee's obligations, known before its call, build a temporary where it must live ----
+# a callee's body is checked before its first call (a generic's instantiation, a function declared later), so every
+# call is held to what the body requires - and a temporary passed for a scope the callee requires to outlive the
+# container's is built where the container lives. Each value is read back after churning the arena, which a node
+# built in the loop body's arena (reclaimed every iteration) would not survive.
+type ObNode struct(v I64) {
+    v
+}
+
+fn obChurn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)        # built where keep lives, so all of them stay: many chunks are taken
+        t += keep[3]
+    }
+    return t
+}
+
+test "O18b: List.Push of a temporary in a loop builds it where the list lives" {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range 10 {
+        l.Push(ObNode(i))
+        scratch Array<I64>& = Array<I64>(8, 999)    # the loop body's arena is used, then reclaimed
+        scratch[0] = 5
+    }
+    obChurn()
+    s I64 = 0
+    for n in l { s += n.v }
+    assert s == 45
+}
+
+test "O18b: a temporary pushed from a doubly nested block, and text pushed in a loop" {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range 4 {
+        for j in range 3 {
+            if j != i { l.Push(ObNode(i * 10 + j)) }
+        }
+    }
+    words List<String&>& = List<String&>()
+    for i in range 5 { words.Push($i "-" $(i * i)) }
+    obChurn()
+    s I64 = 0
+    for n in l { s += n.v }
+    assert s == 159 and l.Len() == 9
+    assert words[3] == "3-9" and words[4] == "4-16"
+}
+
+# a method and a plain function declared after their caller, each storing its argument into its first parameter
+type ObBag struct() {
+    first mut ObNode& = null
+    second mut ObNode& = null
+}
+
+fn obFill(n I64) I64 {
+    b ObBag& = ObBag()
+    for i in range n {
+        b.obPut(ObNode(i + 40))
+        if i == 0 { obPut2(b, ObNode(2)) }
+        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch[0] = 5
+    }
+    obChurn()
+    return b.first.v + b.second.v
+}
+
+fn (b mut ObBag&) obPut(n mut ObNode&) { b.first = n }
+fn obPut2(b mut ObBag&, n mut ObNode&) { b.second = n }
+
+# a generic declared after its caller, storing a temporary it is handed
+fn obKeepAll(n I64) I64 {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range n {
+        obKeep(l, ObNode(i))
+        scratch Array<I64>& = Array<I64>(8, 999)
+        scratch[0] = 5
+    }
+    obChurn()
+    s I64 = 0
+    for x in l { s += x.v }
+    return s
+}
+
+fn obKeep(l mut List<<T>>&, x <T>) { l.Push(x) }
+
+# mutable, so a call given them is run - one given constants would be decided while compiling (S18c), where nothing
+# is reclaimed
+obThree mut I64 = 3
+obSix mut I64 = 6
+
+test "O10b: a method, a function and a generic declared after their caller" {
+    assert obFill(obThree) == 44
+    assert obKeepAll(obSix) == 15
+}
+
+test "StringBuilder in a loop: the text is copied in, so nothing it is given needs to outlive it" {
+    sb StringBuilder& = StringBuilder()
+    for i in range 4 { sb.Push($i) }
+    obChurn()
+    assert sb.ToString() == "0123"
+}
+
+# ---- O23a/O13c: an iterator reads where its collection lives ----
+# "for w in ws" holds ws.Iter() in a hidden local: the iterator records where ws lives (O13c), its Next returns an
+# element at that scope (O23a, O14b), so each element can be pushed into another list as long-lived as ws
+test "O23a: elements of one list pushed into another, through the iterator" {
+    ws List<ObNode&>& = List<ObNode&>()
+    for i in range 5 { ws.Push(ObNode(i * 2)) }
+    mine List<ObNode&>& = List<ObNode&>()
+    for w in ws { mine.Push(w) }
+    n := ObNode(100)
+    if mine.Len() == 5 {
+        for w in ws { mine.Push(w) }              # from an inner block too: the elements are ws's, not the loop's
+        mine.Push(n)
+    }
+    obChurn()
+    s I64 = 0
+    for m in mine { s += m.v }
+    assert s == 140 and mine.Len() == 11
+}
+
+# a hand-written collection and iterator, not generic: Next borrows from the iterator ("ObNode&it"), and every return
+# reads the bag's own storage through the iterator's "&of" field - so a call's result is where the bag lives (O13c)
+type ObItems struct() {
+    items mut Array<ObNode&>& = Array<ObNode&>(8)
+    n mut I64 = 0
+}
+fn (b mut ObItems&) Add(x ObNode&) {
+    b.items[b.n] = x
+    b.n++
+}
+type ObItemsIter struct(of ObItems&) {
+    bag ObItems&of = of
+    i mut I64 = 0
+}
+fn (it mut ObItemsIter&) Next() ObNode&it ? Exhausted {
+    if it.i == it.bag.n { error Exhausted.END }
+    v := it.bag.items[it.i]
+    it.i++
+    return v
+}
+fn (b ObItems&) Iter() ObItemsIter { return ObItemsIter(b) }
+
+test "O13c: a hand-written iterator's elements live where its collection does" {
+    src ObItems& = ObItems()
+    for i in range 3 { src.Add(ObNode(i + 1)) }
+    dst ObItems& = ObItems()
+    for x in src { dst.Add(x) }
+    obChurn()
+    assert dst.n == 3 and dst.items[0].v + dst.items[1].v + dst.items[2].v == 6
+}
+
+# K2: a global computed while compiling through the same pushes - the evaluator and the run time agree
+fn obListSum(n I64) I64 {
+    l List<ObNode&>& = List<ObNode&>()
+    for i in range n { l.Push(ObNode(i * 3)) }
+    mine List<ObNode&>& = List<ObNode&>()
+    for w in l { mine.Push(w) }
+    s I64 = 0
+    for m in mine { s += m.v }
+    return s
+}
+
+ObListSumBaked := obListSum(6)
+
+test "O18b/O23a: the same pushes computed while compiling and at run time" {
+    assert ObListSumBaked == 45
+    assert obListSum(6) == ObListSumBaked
+    assert obListSum(obSix) == ObListSumBaked
 }

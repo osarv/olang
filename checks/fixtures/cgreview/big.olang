@@ -1,0 +1,25 @@
+# a struct far too big to move as one LLVM value is passed and returned through memory - moved as one, it took LLVM
+# minutes to compile
+import "std/io"
+
+type M struct() {
+    data mut Array<F32> = Array<F32>(16384)
+}
+
+fn sum(m M) F64 {
+    t F64 = 0.0
+    for x in m.data { t = t + F64(x) }
+    return t
+}
+
+fn grown(m M) M {
+    c M = m
+    c.data[4] = 1.5
+    return c
+}
+
+fn main() ? io.IoError {
+    m := M()
+    m.data[3] = 2.5
+    try io.Print($sum(grown(m)) "\n")
+}
