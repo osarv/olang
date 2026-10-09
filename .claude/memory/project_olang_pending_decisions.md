@@ -84,6 +84,22 @@ projection as (I - alpha x x^T)".
 14. (asked 2026-10-09) a constant variable is written `<N>` in expressions too (`for i in range <N>`, `i < <N>`),
    one spelling as G8b - or bare `N` in bodies (reads better, two spellings)? Default: `<N>`. Rec: `<N>` (the
    agent's call; flagged because it is the most visible syntax choice).
+15. (asked 2026-10-09, settling-network study - oann/docs/settling.md, pushed 3e99e45) the inspiration's code has a copyleft licence (its earlier code
+   MIT). oann reimplements from the documented equations (clean room); what licence should oann have? Default: none
+   yet (no licence file). Rec: a permissive one (MIT/Apache-2.0) with the clean-room note, or GPL-3.0 if the user
+   wants to stay close to the inspiration's code.
+16. (asked 2026-10-09) order after the MNIST MLP: transformers were chosen first - settling networks
+   second? (their batch-1 matvec / Ger / row max-abs needs go into the matrix library's first round already).
+   Default: transformers, then settling networks.
+17. (asked 2026-10-09) the FPGA target board and toolchain (Settling networks map well: local updates, weights in on-chip
+   memory; ~20 us for 32 sweeps of a 64x64 block at 200 MHz). Default: none chosen.
+18. (asked 2026-10-09) spiking: is LIF neurons with spike-count contrasts the intended direction (a pluggable neuron
+   enum from the start)? Default: pluggable neuron enum, LIF later.
+Decided by me from the study (details): Settling-network support lives as modules inside oann (`Circuit<T>` beside
+`Graph<T>`, sharing Matrix, planner, optimizers); oann's own vocabulary with a mapping table to the inspiration's; a single
+stream first; fidelity held by a test running an external package as an external reference on its fixed points (not exact
+replication); vectorizable fast tanh/exp/sigmoid approximations in the matrix library now, and whether LLVM's
+libmvec mapping could vectorize std/math is a language question to raise when measured.
 **Also in progress (2026-10-09):** "settling networks" (the user -
 (source omitted), Python/NumPy: reciprocal regions settling to equilibrium until a residual tolerance,
 local free/nudged-phase learning with no backprop, online and continual, working trace, associative memories,
