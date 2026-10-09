@@ -4737,7 +4737,8 @@ error as they would at run time. It is **not** possible when evaluation would:
   from bits that is quiet is read exactly;
 - run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
   a hang: evaluation that would run out of the stack it runs on stops there, refused (under `-i`, with that message),
-  and every turn of a loop counts toward the first.
+  every turn of a loop counts toward the first, and an array too long for the memory budget is refused before it is
+  made.
 
 An atomic operation (P9) is evaluated as the plain operation on its place, since no task runs beside an evaluation:
 it reads or writes that place under the rules above, so one on a local or on what a local's references reach is

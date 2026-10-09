@@ -103,7 +103,8 @@ struct ctState {
     struct ctChainVal* chain; //E30, innermost last
     int chainLen, chainAlloc;
     struct list* tasks;       //P1/K1: the innermost join block's tasks, spawned and not yet run (struct ctTask)
-    size_t memAt;             //what had been allocated (ctAllocated) when this evaluation took its first step
+    size_t memAt;             //what had been allocated (ctAllocated) when this evaluation first measured it
+    bool memSet;
 };
 
 //a call made ready to run: the function it reaches, and its parameters (and a lambda's captures) bound
@@ -387,15 +388,20 @@ static bool ctStackNearEnd(void) {
     return ctStackLow > 1 && at > ctStackLow && at - ctStackLow < ctStackSpare;
 }
 
+//K1: whether this evaluation, having made `more` bytes of values besides, would be past its memory budget - which is
+//refused with a reason, as running too long is. Measured from the first time it is asked
+static bool ctOverMemory(struct ctState* st, struct token tok, size_t more) {
+    if (ctRun) return false; //B3e: a program takes what it takes
+    if (!st->memSet) { st->memSet = true; st->memAt = ctAllocated; }
+    if (ctAllocated - st->memAt + more <= CT_MEM_BUDGET) return false;
+    ctFail(st, tok, "the computation takes more memory than compile-time evaluation allows");
+    return true;
+}
+
 static bool ctStep(struct ctState* st, struct token tok) {
     if (ctRun) return true; //B3e: a program runs as long as it runs
     if (++st->steps > CT_STEP_BUDGET) { ctFail(st, tok, "the computation runs longer than compile-time evaluation allows"); return false; }
-    if (st->steps == 1) st->memAt = ctAllocated;
-    else if (ctAllocated - st->memAt > CT_MEM_BUDGET) {
-        ctFail(st, tok, "the computation takes more memory than compile-time evaluation allows");
-        return false;
-    }
-    return true;
+    return !ctOverMemory(st, tok, 0);
 }
 
 // ---- locals ----
@@ -1963,6 +1969,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (bad && ctRun) ctRunAbort("array length out of range\n");
             if (bad) return ctFail(st, op->tok, CT_WHY_LENGTH);
             if (n->i > INT_MAX) return ctFail(st, op->tok, "it makes an array longer than the evaluator holds");
+            //every element is at least one value: measured before any is made, so a long array is refused, not made
+            if (ctOverMemory(st, op->tok, (size_t)n->i * sizeof(struct ctVal))) return NULL;
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = (int)n->i;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
