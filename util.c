@@ -132,16 +132,33 @@ int RunProgram(char* const argv[], bool quiet) {
 }
 
 int RunProgramCapture(char* const argv[], char* out, size_t n) {
+    return RunProgramFeed(argv, NULL, out, n);
+}
+
+int RunProgramFeed(char* const argv[], const char* input, char* out, size_t n) {
     int p[2];
     if (n) out[0] = '\0';
-    if (pipe(p) != 0) return -1;
+    //the input is written whole into a pipe before the child starts - it is small, so the pipe holds it - and the
+    //child reads it as its standard input, ending where the input does
+    int in[2] = { -1, -1 };
+    if (input) {
+        size_t len = strlen(input);
+        if (len > 4096 || pipe(in) != 0) return -1;
+        if (write(in[1], input, len) != (ssize_t)len) { close(in[0]); close(in[1]); return -1; }
+        close(in[1]);
+        fcntl(in[0], F_SETFD, FD_CLOEXEC);
+    }
+    if (pipe(p) != 0) { if (input) close(in[0]); return -1; }
     fcntl(p[0], F_SETFD, FD_CLOEXEC);
     posix_spawn_file_actions_t fa;
     posix_spawn_file_actions_init(&fa);
     posix_spawn_file_actions_adddup2(&fa, p[1], 1);
     posix_spawn_file_actions_addclose(&fa, p[1]);
     posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
-    return spawnAndWait(argv, &fa, p, out, n);
+    if (input) posix_spawn_file_actions_adddup2(&fa, in[0], 0);
+    int rc = spawnAndWait(argv, &fa, p, out, n);
+    if (input) close(in[0]);
+    return rc;
 }
 
 static int removeOne(const char* path, const struct stat* st, int flag, struct FTW* ftw) {

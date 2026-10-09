@@ -20,6 +20,8 @@ void CodegenCheckModuleNames(void);
 //check aborts the process, so there is nothing to unwind to - and maintaining the chain costs ~2.4x on an
 //allocation-heavy loop, so it is confined to builds that can actually use it.
 void CodegenSetRoot(struct semaModule* root);
+//B12: the target - its LLVM triple, its architecture (TargetArch), and the attributes every generated function carries
+void CodegenSetTarget(const char* triple, const char* arch, const char* attrs);
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug);
 
 #endif //CODEGEN_H

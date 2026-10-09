@@ -18,7 +18,7 @@ only depends on concepts already introduced by earlier ones:
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
 | 8 Ownership and Scopes | Scopes, scope tags, reference markers, results, the static scope checker |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
-| 10 Compilation Model | Compilation units, the `-c`/`-b`/`-t`/`-i` modes, `main`, the command line, test blocks, process exit |
+| 10 Compilation Model | Compilation units, the `-c`/`-b`/`-t`/`-i` modes, `main`, the command line, test blocks, process exit, targets |
 | 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
 | 12 Generics | Type parameters on functions and struct types, inference, `match` over a type, monomorphization |
 
@@ -4182,7 +4182,7 @@ type happens to declare a destructor.
 **B1.** Each module — one `.olang` file (§4 M1) — is a **separate compilation unit**, compiled to its own
 object file and linked with the others. The compiler operates in exactly one of four modes, selected
 by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
-(B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c) and `-D` (B10). Any other argument
+(B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c), `-a` (B12) and `-D` (B10). Any other argument
 beginning with `-` is an error — except one after the file `-i` interprets, which is that program's own (B3f). Apart from
 the modes, `-e RULE` prints a rule of this specification (B11a).
 
@@ -4201,7 +4201,8 @@ the same time.
 statement declaring it. A declaration inside a loop therefore costs nothing per iteration, and a loop of
 any length runs in constant stack.
 
-**B2c.** Generated code is **fully optimized by default**, in every mode. `-d` is the single exception:
+**B2c.** Generated code is **fully optimized by default**, in every mode, for the machine it is built for - this
+machine's own CPU unless `-a` names another (B12). `-d` is the single exception:
 it disables optimization so that the emitted code corresponds to the program as written — nothing is
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
 functions actually called and the state is inspectable. It is a modifier, valid alongside any mode and in
@@ -4282,7 +4283,8 @@ tasks (`spawn`, `join`) and values whose type declares a destructor - except dir
 initializer, whose instance lands in the program's scope and is never destructed (K2c); reaching either stops the
 same way, as does an `extern` function with an `F16` or `BF16` parameter or result (an array of either is passed,
 X3). `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
-`-D` apply as to any build. The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
+`-D` apply as to any build, and `-a` sets the build constants it decides (B10a) - naming this machine's architecture
+and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
 implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
 interpreter's stack holds stops it, naming the call, with status 1 - never a crash.
@@ -4424,10 +4426,14 @@ A build constant is an ordinary immutable global in every other respect: it may 
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, as is defining one name twice.
 
-**B10a.** Every build defines five build constants of its own, and `-D` may not redefine them:
-`TargetOs` and `TargetArch`, text naming the target's operating system (lowercase, e.g. `"linux"`) and
-architecture (e.g. `"x86_64"`) — the host's, since compilation is not yet cross-target; and `DebugBuild`,
-`RaceBuild` and `TestBuild`, `Bool`s saying whether the build is `-d`, `-r` and `-t` respectively.
+**B10a.** Every build defines eight build constants of its own, and `-D` may not redefine them. Five describe its
+target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
+architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
+`TargetVectorBits`, an integer, the width in bits of the vectors the generated code computes with - `512` where the
+target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
+`Bool`, whether the target has fused multiply-add instructions - whether `math.Fma` (X8) is one instruction or a call.
+Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-d`, `-r` and
+`-t` respectively.
 
 **B10b.** The build constants' values are part of what a module compiles to — a top-level condition may
 take a different branch under different ones, and compile-time evaluation (K2) may make one part of a
@@ -4436,7 +4442,57 @@ import closure mentions (B4). Changing a value rebuilds exactly the modules that
 through an import, and never reuses an object compiled under the old value; a module that mentions no
 changed name is not rebuilt, and changing a value back finds the earlier objects current.
 
-### 10.6 Diagnostics
+### 10.6 Targets
+
+**B12.** Every build is for a **target**: an architecture, an operating system, and a CPU of that architecture, whose
+instructions the generated code may use and whose costs it is tuned for. `-a TARGET`, a modifier valid alongside any
+mode and in any position (B1), names it; without it the target is `native` - **the machine the compiler runs on**, its
+own CPU with every instruction set extension it has, as clang's `-march=native` finds them. `TARGET` is one of:
+
+- `native`;
+- a CPU of this machine's architecture, by the name clang gives it: an x86-64 level - `x86-64`, `x86-64-v2`,
+  `x86-64-v3`, `x86-64-v4` - or a processor, `skylake`, `znver4`; what is built runs on every machine with that CPU's
+  instructions;
+- a triple, `ARCH-linux-gnu` (with any vendor between, `x86_64-pc-linux-gnu`), and after it `:CPU` for a CPU of that
+  architecture - without one, the architecture's own baseline (`x86-64`, or `generic` for `aarch64`).
+
+The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library. A CPU and its
+extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. Any other target, a CPU its
+architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
+which `-i` otherwise does not need - `-i` takes `native`, on x86-64, to be the x86-64 level this processor has.
+
+The target decides the build constants `TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits` and `TargetHasFma`
+(B10a), so a program chooses code for its target with an ordinary `if` on them (B9, S8b) - and the compile-time
+evaluator, reading the same constants, takes the same branch (K1). Generated code computes with vectors of
+`TargetVectorBits`, whatever width a CPU's own tuning would prefer, so the width a program reads is the one its loops
+use.
+
+**B12a (another machine).** A target whose architecture or operating system is not this machine's is **another
+machine**. It is built for with `-c` only, which gives each module's object, for that machine, to be linked there; `-b`
+and `-t`, which link and run what they build, and `-i`, which runs it here, are command-line errors for it. An object
+holds the target's intermediate form (B2d), compiled to the machine's code at the link, so another machine is built for
+only where the clang found can compile all the code the runtime holds for it: LLVM 18's AArch64 back end cannot
+compile `BF16` code, so with it `aarch64` is refused. While compiling for another machine, a call of a function of the C
+math library that is not exact (X8) is not evaluated (K1): the target's own library may give another result. An exact
+one gives the same result everywhere, and is evaluated. The runtime's own functions (X6) read the C library's
+structures as the target's lays them out.
+
+**B12b.** What a module compiles to depends on its target - the instructions used, and the build constants' values
+(B10b) - so the target as resolved, its triple, CPU and extensions, is part of every object's name (B3). A build for one
+target never reuses an object built for another, and changing the target back finds the earlier objects current.
+`native` is resolved before the name is made, so a build directory taken to a machine with another CPU is rebuilt.
+
+**B12c (one result on every target).** The target changes how fast a program runs, never what it computes - except
+where the program itself asks, through the build constants. The generated code never fuses a multiplication and an
+addition into one rounding: `a * b + c` rounds twice on every target, and `math.Fma(a, b, c)` (X8) once on every target -
+the target's instruction where it has one, the C library's function where it has not. It never reorders a
+floating-point computation, and never uses an instruction whose result is not IEEE 754's: on x86-64 the `BF16`
+conversions of AVX512-BF16 and AVX-NE-CONVERT treat subnormals as zero, so a target's extensions are taken without
+those two. `F16` and `BF16` arithmetic gives T5's result on every target: carried out in `F32` and rounded once to the
+type, a sum, difference, product, quotient or square root of `F16`s or `BF16`s is the correctly rounded one (`F32`
+holds at least twice their precision and two bits more), which is what a target's own instructions for them give.
+
+### 10.7 Diagnostics
 
 **B11.** Every compile-time error is reported as one line, `path:line:column: error[RULE]: message`, followed by the
 source line it is about and a caret line marking the token it is about (`^`, then `~` under the rest of the token).
@@ -4592,7 +4648,8 @@ and with its prototype - every parameter and the result `F64`, or every one `F32
   platform's C math library, the one the program calls, so a value computed while compiling is the value the program
   computes.
 - An **exact** one's result is the correctly rounded value IEEE 754 requires of it, so every implementation agrees -
-  where the machine has an instruction for it, the call may be that instruction.
+  where the target has an instruction for it, the call is that instruction (`fma` is one where it has fused
+  multiply-add, B12c), and otherwise the library's function.
 - **Any other** is always a call of the library's function, never replaced by another function or by an expression
   that may round differently (`pow(x, 2.0)` by `x * x`), so its result is the library's wherever it is computed: while
   compiling, by the built program, or under `-i`. Which value that is, beyond what IEEE 754 requires, is the library's
@@ -4816,8 +4873,9 @@ error as they would at run time. It is **not** possible when evaluation would:
   referent, say - since the running program may have changed it by then;
 - build a value whose type declares a destructor, which runs when its scope closes — except directly in a
   global's own initializer (K2c);
-- call an `extern` function other than the C math library's (X8) - a call through a function value is evaluated when
-  the function it reaches is, which is known only when the call is reached;
+- call an `extern` function other than the C math library's (X8) - or, building for another machine (B12a), one of
+  the library's that is not exact - a call through a function value is evaluated when the function it reaches is,
+  which is known only when the call is reached;
 - end the test or the process (`done`, `fail`);
 - let an error escape that no clause handles;
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by
