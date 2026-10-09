@@ -13,9 +13,11 @@
 # Matrix<F32>(rows, cols) is a new zero-filled matrix, built where it lands like any other value (O18a).
 #
 # Two kinds of operation, and the difference is what a loop pays:
-# - forms with a DESTINATION write into a matrix the caller already has and allocate nothing: Gemm, Map/Map2/Map3,
-#   Add, Sub, Scale, AddScaled, AddRow, Fill, Copy, ColumnSums, RowSums, RowMax, ArgMaxRows, the random fills.
-#   A training step written with them allocates nothing at all.
+# - forms with a DESTINATION write into a matrix (or array) the caller already has and allocate nothing but Gemm's
+#   packing panels, in its own scope: Gemm, Gemv, Ger, Ger2, Map/Map2/Map3, Add, Sub, Scale, AddScaled, AddRow,
+#   AddOuterDifference, AddScaledMasked, Clamp, Fill, Copy, Convert, NormalizeRows, RowSoftmax, the row and column
+#   reductions (RowSums, RowMax, RowMaxAbs, RowAbsSums, RowNorms, ArgMaxRows, ColumnSums, ColumnAbsSums) and the
+#   random fills. A training step is written with these.
 # - operators and the rest (a + b, a @ b, a.T() @ b, -a, m.Exp(), Clone) build a new matrix each time - for scripts,
 #   and anywhere a result is wanted once. Note that "a += b" is "a = a + b" (E31): a new matrix, not an in-place add;
 #   a.Add(b) is the in-place one.
@@ -1339,6 +1341,17 @@ fn (m Matrix<<T>>&) FillBernoulli(r mut rand.Rand&, p F64) {
     for i in range m.Rows {
         d I64 = i * m.Stride
         for c in range m.Cols { m.Data[d + c] = one if r.Float() < p else like }
+    }
+}
+
+# every element +scale or -scale with equal probability: random signs, for a random projection or a feedback matrix
+fn (m Matrix<<T>>&) FillSigns(r mut rand.Rand&, scale F64 = 1) {
+    like <T>
+    up := Cast(scale, like)
+    down := Cast(-scale, like)
+    for i in range m.Rows {
+        d I64 = i * m.Stride
+        for c in range m.Cols { m.Data[d + c] = up if r.Next() >> 63 == 1 else down }
     }
 }
 

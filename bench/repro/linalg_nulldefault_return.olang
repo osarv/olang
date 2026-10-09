@@ -1,0 +1,13 @@
+# a constructor reference parameter defaulting to null, built with a scope argument (&return): error[O10d] at the
+# default, though null lives nowhere - "return Box(n)" compiles
+type Box struct(n I64, from Array<I64>& = null) {
+    Data Array<I64>& = from if from != null else Array<I64>(n)
+}
+fn make(n I64) Box {
+    b := Box&return(n)
+    return b
+}
+fn main() ? {
+    b := make(3)
+    assert b.Data.Len() == 3
+}

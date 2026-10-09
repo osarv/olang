@@ -1,7 +1,9 @@
 # gemm: C = A B for square matrices through std/linalg's Gemm, timed inside the program (the best of several runs, since
 # the sizes go down to 64 x 64), printing GFLOPS - the olang side of bench/gemm.sh, against bench/c/gemm.c (naive,
-# blocked and OpenBLAS). Arguments: f32|f64, n, threads, repetitions, and "mv" for the matrix-vector product
-# instead: y = x W^T, a 1 x n row times an n x n matrix's transpose (a dense layer at batch 1), 1000 times a run
+# blocked and OpenBLAS). Arguments: f32|f64, n, threads, repetitions, and then "mv" or "mvt" and m for a
+# matrix-vector product through Gemv instead, 1000 times a run: with W an n x m matrix, "mv" is y = W x (each output
+# a row of W dotted with x - a dense layer at batch 1) and "mvt" is y = W^T u (W's rows added in, scaled - the same
+# layer's input gradient)
 import "std/io"
 import "std/os"
 import "std/time"
@@ -14,31 +16,34 @@ fn conv(x F64, like <T>) <T> {
     }
 }
 
-fn run(n I64, threads I64, reps I64, mv Bool, like <T>) ? io.IoError {
-    a := linalg.Matrix<<T>>(n, n)
-    b := linalg.Matrix<<T>>(n, n)
-    c := linalg.Matrix<<T>>(n, n)
+fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError {
+    a := linalg.Matrix<<T>>(n, m)
+    b := linalg.Matrix<<T>>(n, m)
+    c := linalg.Matrix<<T>>(n, m)
     s I64 = 1
-    for i in range n * n {
+    for i in range n * m {
         s = (s * 1103515245 + 12345) % 2147483648
         a.Data[i] = conv(F64(s % 1000) / 1000.0, like)
         s = (s * 1103515245 + 12345) % 2147483648
         b.Data[i] = conv(F64(s % 1000) / 1000.0, like)
     }
-    if mv {
-        x := a.RowRange(0, 1)
-        y := c.RowRange(0, 1)
+    if mode == "mv" or mode == "mvt" {
+        trans Bool = mode == "mvt"
+        x := a.Data[:(n if trans else m)]
+        y := c.Data[:(m if trans else n)]
         fastest I64 = 0
         for r in range reps {
             t0 := time.Now()
-            for i in range 1000 { linalg.Gemm(y, x, false, b, true) }
+            for i in range 1000 { linalg.Gemv(y, b, trans, x) }
             t := time.Since(t0)
             if r == 0 or t < fastest { fastest = t }
         }
         per F64 = F64(fastest) / 1000.0
-        rate := (2.0 * F64(n) * F64(n) / per).Fixed(2)
+        rate := (2.0 * F64(n) * F64(m) / per).Fixed(2)
         perText := per.Fixed(1)
-        try io.Print($n " mv " $perText "ns " $rate " GFLOPS check " $y.Sum() "\n")
+        total <T> = like
+        for v in y { total = total + v }
+        try io.Print($n "x" $m " " $mode " " $perText "ns " $rate " GFLOPS check " $total "\n")
         return
     }
     best I64 = 0
@@ -60,10 +65,11 @@ fn main() ? {
     n := try args[2].ParseInt()
     threads := try args[3].ParseInt()
     reps := try args[4].ParseInt()
-    mv Bool = args.Len() > 5 and args[5] == "mv"
+    mode String& = args[5] if args.Len() > 5 else "mm"
+    m I64 = (try args[6].ParseInt()) if args.Len() > 6 else n
     if args[1] == "f64" {
-        try run(n, threads, reps, mv, F64(0))
+        try run(n, m, threads, reps, mode, F64(0))
     } else {
-        try run(n, threads, reps, mv, F32(0))
+        try run(n, m, threads, reps, mode, F32(0))
     }
 }

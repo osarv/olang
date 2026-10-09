@@ -1,0 +1,16 @@
+# a value local built in the result scope (b := Box&return(n)) cannot be borrowed for a method call, even a read-only
+# one: error[O10d] at b.size(). Reading its field (b.Data.Len()) or passing the field on (fillArr(b.Data, 7)) compiles,
+# and so does the same with a reference result (b Box&return = Box(n), fn make(n I64) Box&).
+type Box struct(n I64) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+fn (b Box&) size() I64 { return b.Data.Len() }
+fn make(n I64) Box {
+    b := Box&return(n)
+    assert b.size() == n
+    return b
+}
+fn main() ? {
+    b := make(3)
+    assert b.Data.Len() == 3
+}

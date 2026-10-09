@@ -5,8 +5,8 @@
               MR rows, a micro-kernel holding an MR x NR tile of C in registers - the same blocking, tiles, packing and
               write-back as the olang version, so the difference between the two is the language's
      blas     OpenBLAS's cblas_sgemm / cblas_dgemm (its own threads: OPENBLAS_NUM_THREADS)
-   Arguments: f32|f64, n, naive|blocked|blas, repetitions, and "mv" for the matrix-vector product y = x W^T instead
-   (1000 a run: the plain loop - "naive" - or OpenBLAS's gemv - "blas") */
+   Arguments: f32|f64, n, naive|blocked|blas, repetitions, and then "mv" or "mvt" and m for a matrix-vector product
+   with an n x m W instead (1000 a run: the plain loop - "naive" - or OpenBLAS's gemv - "blas") */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,29 +82,39 @@ static void naive_##SUFFIX(long n, const R* a, const R* b, R* c) {              
         }                                                                                                           \
     }                                                                                                               \
 }                                                                                                                   \
-/* y = x W^T, a dense layer at batch 1: each output a dot product of x with a row of W, as plain C writes it (clang  \
-   keeps the sum in order, so the loop is scalar) - or OpenBLAS's gemv */                                           \
-static void mv_##SUFFIX(long n, const char* mode, int reps) {                                                       \
-    R* w = aligned_alloc(64, sizeof(R) * n * n);                                                                    \
-    R* x = aligned_alloc(64, sizeof(R) * n);                                                                        \
-    R* y = aligned_alloc(64, sizeof(R) * n);                                                                        \
+/* with W an n x m matrix: y = W x ("mv", each output a row of W dotted with x - a dense layer at batch 1) or     \
+   y = W^T u ("mvt", W's rows added in, scaled), as plain C writes them (clang keeps a dot product's sum in order,    \
+   so "mv"'s inner loop is scalar; "mvt"'s vectorizes) - or OpenBLAS's gemv */                                     \
+static void mv_##SUFFIX(long n, long m, int trans, const char* mode, int reps) {                                     \
+    R* w = aligned_alloc(64, sizeof(R) * n * m);                                                                    \
+    R* x = aligned_alloc(64, sizeof(R) * (n + m));                                                                  \
+    R* y = aligned_alloc(64, sizeof(R) * (n + m));                                                                  \
     long s = 1;                                                                                                     \
-    for (long i = 0; i < n * n; i++) {                                                                              \
+    for (long i = 0; i < n * m; i++) {                                                                              \
         s = (s * 1103515245 + 12345) % 2147483648L;                                                                 \
         R av = (R)((double)(s % 1000) / 1000.0);                                                                    \
-        if (i < n) x[i] = av;                                                                                       \
+        if (i < n + m) x[i] = av;                                                                                   \
         s = (s * 1103515245 + 12345) % 2147483648L;                                                                 \
         w[i] = (R)((double)(s % 1000) / 1000.0);                                                                    \
     }                                                                                                               \
+    long outs = trans ? m : n;                                                                                      \
     double best = 0;                                                                                                \
     for (int r = 0; r < reps; r++) {                                                                                \
         double t0 = now();                                                                                          \
         for (int it = 0; it < 1000; it++) {                                                                         \
-            if (!strcmp(mode, "blas")) GEMV_##SUFFIX(CblasRowMajor, CblasNoTrans, n, n, 1, w, n, x, 1, 0, y, 1);    \
-            else for (long j = 0; j < n; j++) {                                                                     \
+            if (!strcmp(mode, "blas"))                                                                              \
+                GEMV_##SUFFIX(CblasRowMajor, trans ? CblasTrans : CblasNoTrans, n, m, 1, w, m, x, 1, 0, y, 1);      \
+            else if (!trans) for (long i = 0; i < n; i++) {                                                         \
                 R acc = 0;                                                                                          \
-                for (long p = 0; p < n; p++) acc += x[p] * w[j * n + p];                                            \
-                y[j] = acc;                                                                                         \
+                for (long p = 0; p < m; p++) acc += w[i * m + p] * x[p];                                            \
+                y[i] = acc;                                                                                         \
+            }                                                                                                       \
+            else {                                                                                                  \
+                for (long j = 0; j < m; j++) y[j] = 0;                                                              \
+                for (long i = 0; i < n; i++) {                                                                      \
+                    R u = x[i];                                                                                     \
+                    for (long j = 0; j < m; j++) y[j] += u * w[i * m + j];                                          \
+                }                                                                                                   \
             }                                                                                                       \
             __asm__ volatile("" : : "r"(y) : "memory");                                                             \
         }                                                                                                           \
@@ -112,9 +122,10 @@ static void mv_##SUFFIX(long n, const char* mode, int reps) {                   
         if (r == 0 || t < best) best = t;                                                                           \
     }                                                                                                               \
     double sum = 0;                                                                                                 \
-    for (long i = 0; i < n; i++) sum += y[i];                                                                       \
+    for (long i = 0; i < outs; i++) sum += y[i];                                                                    \
     double per = best / 1000;                                                                                       \
-    printf("%ld mv-%s %.1fns %.2f GFLOPS check %.7g\n", n, mode, per * 1e9, 2.0 * n * n / per * 1e-9, sum);          \
+    printf("%ldx%ld %s-%s %.1fns %.2f GFLOPS check %.7g\n", n, m, trans ? "mvt" : "mv", mode, per * 1e9,             \
+           2.0 * n * m / per * 1e-9, sum);                                                                          \
     free(w); free(x); free(y);                                                                                      \
 }                                                                                                                   \
 static void run_##SUFFIX(long n, const char* mode, int reps) {                                                      \
@@ -151,11 +162,13 @@ DEFINE_GEMM(float, 4, 12, f32)
 DEFINE_GEMM(double, 4, 6, f64)
 
 int main(int argc, char** argv) {
-    if (argc < 5) { fprintf(stderr, "usage: gemm f32|f64 n naive|blocked|blas reps [mv]\n"); return 2; }
+    if (argc < 5) { fprintf(stderr, "usage: gemm f32|f64 n naive|blocked|blas reps [mv|mvt m]\n"); return 2; }
     long n = atol(argv[2]);
     int reps = atoi(argv[4]);
-    int mv = argc > 5 && !strcmp(argv[5], "mv");
-    if (!strcmp(argv[1], "f64")) { if (mv) mv_f64(n, argv[3], reps); else run_f64(n, argv[3], reps); }
-    else { if (mv) mv_f32(n, argv[3], reps); else run_f32(n, argv[3], reps); }
+    int mv = argc > 5 && (!strcmp(argv[5], "mv") || !strcmp(argv[5], "mvt"));
+    int trans = mv && !strcmp(argv[5], "mvt");
+    long m = argc > 6 ? atol(argv[6]) : n;
+    if (!strcmp(argv[1], "f64")) { if (mv) mv_f64(n, m, trans, argv[3], reps); else run_f64(n, argv[3], reps); }
+    else { if (mv) mv_f32(n, m, trans, argv[3], reps); else run_f32(n, argv[3], reps); }
     return 0;
 }

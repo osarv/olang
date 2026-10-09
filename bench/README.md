@@ -245,6 +245,89 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
 10. (Fixed: `Find`, `FindByte` and `FindIndex` fail with the default error on a miss.) `String.Find` answered "not
    found" with `-1` - a sentinel value, against "errors are errors".
 
+## std/linalg against C and OpenBLAS (`bench/gemm.sh`)
+
+`bench/gemm.sh` times `std/linalg`'s products against the same algorithm written in C (`c/gemm.c`: the blocking,
+tiles, packing and write-back of `Gemm`, so the difference is the language's), a naive C loop and OpenBLAS 0.3
+(`-lopenblas`, AVX-512 with FMA, its own threads), plus a training step of a 784-128-10 perceptron at batch 64
+(`mlp.olang` against `c/mlp.c`, the same data and the same losses). Each time is the best of several runs inside
+the program; "native" is olang's own IR linked again with `-march=native`. Load average 1.8-4.5 (run 2; run 1, at
+6-7, agreed single-threaded within ~10% and showed no thread scaling at all).
+
+Square C = A B, GFLOPS:
+
+| type | n | olang 1T | olang 4T | olang native 1T | C naive | C blocked | OpenBLAS 1T | OpenBLAS 4T |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| f32 | 64 | 11.72 | 11.72 | 23.58 | 13.02 | 11.97 | 109.14 | 82.79 |
+| f32 | 128 | 7.73 | 15.16 | 11.23 | 7.78 | 13.83 | 94.32 | 120.10 |
+| f32 | 256 | 15.70 | 25.09 | 19.16 | 14.54 | 14.10 | 107.55 | 281.83 |
+| f32 | 512 | 16.59 | 31.79 | 19.58 | 12.17 | 14.54 | 67.92 | 235.89 |
+| f32 | 1024 | 13.99 | 53.06 | 18.71 | 10.30 | 13.99 | 105.55 | 215.36 |
+| f32 | 2048 | 15.41 | 39.95 | 17.70 | 3.76 | 14.29 | 99.26 | 196.48 |
+| f64 | 64 | 5.56 | 5.56 | 12.34 | 6.73 | 7.00 | 65.60 | 62.92 |
+| f64 | 128 | 7.42 | 7.85 | 5.97 | 4.79 | 6.74 | 46.16 | 65.47 |
+| f64 | 256 | 7.64 | 13.65 | 11.70 | 6.73 | 6.95 | 52.00 | 146.94 |
+| f64 | 512 | 7.89 | 16.95 | 11.48 | 5.01 | 5.54 | 31.20 | 127.38 |
+| f64 | 1024 | 7.58 | 27.94 | 10.51 | 4.55 | 6.67 | 46.76 | 132.54 |
+| f64 | 2048 | 7.49 | 17.13 | 10.59 | 1.65 | 6.80 | 54.33 | 157.48 |
+
+Matrix-vector products at batch 1 through `Gemv`, W n x m - `mv` is y = W x (rows of W dotted with x: a dense layer),
+`mvt` is y = W^T u (rows of W added in, scaled: the same layer's input gradient) - ns a product:
+
+| type | form | n x m | olang | olang native | C loop | OpenBLAS |
+|---|---|---:|---:|---:|---:|---:|
+| f32 | mv | 64 x 64 | 1020.2 | 1168.9 | 3050.9 | 373.9 |
+| f32 | mv | 256 x 128 | 7161.5 | 7960.7 | 30820.0 | 2467.7 |
+| f32 | mv | 1024 x 1024 | 237266.9 | 245247.4 | 1308877.8 | 105329.6 |
+| f32 | mvt | 64 x 64 | 547.1 | 378.7 | 566.6 | 266.4 |
+| f32 | mvt | 256 x 128 | 4776.6 | 3031.0 | 5335.6 | 2202.7 |
+| f32 | mvt | 1024 x 1024 | 177583.3 | 122218.4 | 210464.3 | 110223.9 |
+| f64 | mv | 64 x 64 | 1140.6 | 1131.4 | 3025.8 | 532.4 |
+| f64 | mv | 256 x 128 | 8526.0 | 8607.3 | 31164.5 | 4138.6 |
+| f64 | mv | 1024 x 1024 | 382639.1 | 398845.1 | 1441366.6 | 285589.5 |
+| f64 | mvt | 64 x 64 | 1130.9 | 786.9 | 1193.3 | 487.4 |
+| f64 | mvt | 256 x 128 | 9523.3 | 5928.1 | 11020.9 | 4017.3 |
+| f64 | mvt | 1024 x 1024 | 438094.7 | 350830.6 | 517999.2 | 281905.9 |
+
+Training step, 784-128-10, batch 64, F32, us a step (forward, softmax cross-entropy, backward, SGD):
+
+| olang 1T | olang 4T | olang native 1T | C naive | OpenBLAS 1T | OpenBLAS 4T |
+|---:|---:|---:|---:|---:|---:|
+| 2374 | 3681 | 2231 | 13356 | 757 | 5640 |
+
+(run 1, under load: olang 2333, C naive 9645, OpenBLAS 1T 374.)
+
+**What the numbers say.**
+1. **The language costs nothing here**: single-threaded, olang's `Gemm` is level with or ahead of the same algorithm in
+   C (F32 14-17 GFLOPS against 14-15, F64 7.5-8 against 5.5-7), 1.1-4x the naive loop (the naive loop falls off once
+   B leaves the cache, 3.8 GFLOPS at 2048), and 70-75% of the default target's peak (SSE2: 4 F32 lanes x (mul + add) x
+   2.8 GHz = 22.4 GFLOPS) - the micro-kernel's 48 accumulators stay in registers and its loads are the packed panels'.
+2. **The gap to OpenBLAS (5-7x single-threaded) is the instruction set, not the code**: olang builds for baseline
+   x86-64 - SSE2, 4 F32 lanes, no FMA - and never contracts `a*b + c` into an FMA (`math.Fma` is a correctly rounded
+   call, and at the baseline target a library call); OpenBLAS runs AVX-512 FMA, 16 lanes and two operations per
+   instruction. The native relink buys little (F32 18-19) because the tile, 4 x 12, is sized for 4-wide vectors and
+   still has no FMA; a native build would want its own tile sizes (8-wide or 16-wide vectors, 6 x 16 or 12 x 32) and
+   contraction, which is a compiler direction rather than a library one.
+3. **Threads scale when cores are free**: F32 1024 goes 14 -> 53 GFLOPS on four tasks (3.8x), F64 1024 7.6 -> 27.9.
+   Under the first run's load average of 6-7 the same products did not scale at all (a pure-compute four-task probe
+   took 1.6x one task's time). The perceptron's products (64 x 784 x 128) are just past the threading threshold and
+   lose with four tasks on this shared machine - as OpenBLAS's do.
+4. **Batch-1 matrix-vector products**: olang's dot form (rows of W against x, eight partial sums in lanes) is 3-5x the
+   plain C loop, which clang keeps scalar since it may not reorder the sum; the axpy form (`mvt`) vectorizes in both
+   and is level with C. OpenBLAS is 1.5-3x ahead, again by its instruction set.
+5. **The training step**: olang 2.4 ms against OpenBLAS's 0.4-0.8 ms and the naive C step's 9.6-13 ms; about 26M of its
+   flops are in the two large products, which at olang's 15 GFLOPS account for ~1.7 ms - so the step follows the
+   GEMM, and the gap to OpenBLAS is point 2's.
+6. **Element-wise math**: `std/math`'s Exp and Tanh call the C library per element, so a Map over them does not
+   vectorize. `linalg.FastExp`/`FastTanh`/`FastSigmoid` are olang arithmetic and bit operations that do: counted
+   with callgrind on a Map over 4096 elements, F32 FastExp 14 instructions an element (C library expf 39), FastTanh
+   17 (tanhf 129), FastSigmoid 16; F64 34, 40 and 37 (exp 67, tanh 129). The same FastExp written in C runs at the
+   same speed as olang's. glibc's vector math library (libmvec) would vectorize `expf` too (`_ZGVbN4v_expf`, about 15
+   instructions an element; `_ZGVdN8v_expf` with AVX2), but only for calls that may not set errno - which X8
+   deliberately does not declare, so that the program calls exactly the function the compile-time evaluator called -
+   and libmvec's results are within 4 ulp, not the scalar function's, so it would break X8's agreement between the
+   evaluator and the run time; clang 18 maps no `tanhf` at all.
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;

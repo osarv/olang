@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bench/gemm.sh - std/linalg's matrix products against C: the square product C = A B at 64 .. 2048 in F32 and F64
 # (olang's Gemm on 1 and 4 threads, its IR again with -march=native, a naive C loop, the same blocked algorithm in C,
-# and OpenBLAS on 1 and 4 threads), the matrix-vector product at batch 1, and a training step of a small perceptron
+# and OpenBLAS on 1 and 4 threads), the matrix-vector products at batch 1 both ways round, and a training step of a small perceptron
 # (bench/mlp.olang against bench/c/mlp.c). Every time is the best of several runs inside the program. Not part of
 # "make verify".
 #
@@ -50,13 +50,16 @@ for t in f32 f64; do
     done
 done
 echo
-echo "matrix-vector y = x W^T (n x n W), ns a product:"
-echo "| type | n | olang | olang native | C loop | OpenBLAS |"
-echo "|---|---:|---:|---:|---:|---:|"
+echo "matrix-vector products at batch 1 through Gemv, W n x m: mv is y = W x, mvt is y = W^T u - ns a product:"
+echo "| type | form | n x m | olang | olang native | C loop | OpenBLAS |"
+echo "|---|---|---:|---:|---:|---:|---:|"
 ns() { awk '{for (i = 1; i <= NF; i++) if ($i ~ /ns$/) { sub("ns", "", $i); print $i }}'; }
 for t in f32 f64; do
-    for n in 64 256 1024; do
-        echo "| $t | $n | $($O $t $n 1 20 mv | ns) | $($ON $t $n 1 20 mv | ns) | $($C $t $n naive 20 mv | ns) | $(OPENBLAS_NUM_THREADS=1 $C $t $n blas 20 mv | ns) |"
+    for form in mv mvt; do
+        for shape in "64 64" "256 128" "1024 1024"; do
+            set -- $shape
+            echo "| $t | $form | $1 x $2 | $($O $t $1 1 20 $form $2 | ns) | $($ON $t $1 1 20 $form $2 | ns) | $($C $t $1 naive 20 $form $2 | ns) | $(OPENBLAS_NUM_THREADS=1 $C $t $1 blas 20 $form $2 | ns) |"
+        done
     done
 done
 echo

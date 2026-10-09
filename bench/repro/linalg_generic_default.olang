@@ -1,0 +1,11 @@
+# a defaulted parameter whose type is a type variable: the default literal does not adapt to the variable once a call
+# binds it - "alpha <T> = 1" is error[E12] "expected <T>, found I32" at the declaration, though every call binding T
+# to a number could take 1 as a literal of T (G9a adapts a literal argument the same way). std/linalg's Gemm takes
+# alpha and beta as F64 for this reason, converted to the element type once per call.
+fn scaled(x Array<<T>>&, alpha <T> = 1) <T> { return x[0] * alpha }
+
+fn main() ? {
+    a := F32[2.0, 3.0]
+    assert scaled(a) == 2.0
+    assert scaled(a, 0.5) == 1.0
+}
