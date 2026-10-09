@@ -4225,8 +4225,9 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   and hand out writable views, shallowly: with no permission polymorphism a read-only view of a read-only matrix would
   otherwise be inexpressible, so `x := G; x.Block(...).Fill(0)` still writes G's elements (recorded limit). **B11**: the
   "declare it 'p mut T&'" note now reaches parameters and receivers and the arms of a conditional or match, so
-  `tools/perm_mut.py` migrates code using linalg's destinations (oann: 54 `mut`s, below). Compile-time only: the evaluator
-  needed nothing, shown by a global it bakes through read-only copies beside the same computation at run time.
+  `tools/perm_mut.py` migrates code using linalg's destinations (oann: 54 `mut`s in eight files, after which it all
+  compiles). Compile-time only: the evaluator needed nothing, shown by a global it bakes through read-only copies
+  beside the same computation at run time.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

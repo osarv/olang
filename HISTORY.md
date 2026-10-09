@@ -12286,8 +12286,12 @@ choice. (A first version gave `Row` a `mut` receiver; it went back, for consiste
 **oann** (read only; its sources copied and migrated in a scratch directory): every module compiled with no error on the
 previous compiler and 1-337 errors on this one, nearly all the same few in `ops.olang` and `conv.olang` repeated through
 their importers - oann's functions take `y linalg.Matrix<T>&` read-only and call linalg's destination forms on it.
-`tools/perm_mut.py` with this compiler migrates it in three rounds, adding 54 `mut`s (46, then 8), after which every
-module compiles. (Measured below.)
+`tools/perm_mut.py` with this compiler migrates it in three rounds, adding 54 `mut`s (46, then 8) in eight files -
+`ops.olang` most, then `conv`, `layers`, `nn`, `agent`, `sparse`, `bench/attention` and a repro - after which every module
+and example compiles with `-c`. The tool needed one fix on the way, found on `bench/fused.olang`: a note at one of
+several names sharing a type (`q, k, v linalg.Matrix<F32>& = ...`, D12b) put `mut` after that name (`q mut, k`), which
+does not parse; it now goes once, after the last name, before the type. The repository's own bench programs using
+linalg (`fused`, `mlp`, `repro/captured_value`) were migrated with it (18 `mut`s).
 
 **The evaluator** needed nothing: this is permission in the type checker, changing no value. A corpus global
 (`QcBaked`) is baked through read-only copies - a `:=` copy, a for-in over a read-only parameter, a by-value reader,
