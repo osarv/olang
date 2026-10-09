@@ -171,3 +171,26 @@ test "reshaping a List, evaluated while compiling as at run time" {
     l.Sort(fn(a, b) { return a % 10 < b % 10 })
     assert listShow(l) == "[20 10 21 11 1 22 12 2 23 13 3 24 14 4 25 15 5 26 16 6 27 17 7 28 18 8 19 9 29]"
 }
+
+# elements that are references to what can be stored through - each a node with a mutable link - reordered and taken
+# out by every new operation, and still the same instances afterwards
+type listNode struct(v mut I64) {
+    v mut
+    next mut listNode& = null
+}
+
+test "a List of mutable references, reordered and emptied" {
+    l := List<mut listNode&>()
+    for i in range 30 { l.Push(listNode(30 - i)) }
+    l.Sort(fn(a, b) { return a.v < b.v })
+    l.Reverse()
+    x := l.RemoveAt(3)
+    l.Insert(0, x)
+    p := try l.Pop() catch { unreachable }
+    f := try l.First() catch { unreachable }
+    k := try l.Last() catch { unreachable }
+    f.next = k                                              # still writable, and still the list's own instances
+    assert x.v == 27 and p.v == 1 and f is x and l[0].next is k and k.v == 2
+    l.Clear()
+    assert l.Len() == 0 and x.next.v == 2
+}

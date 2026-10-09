@@ -10182,3 +10182,80 @@ from their original form.
   type, reductions, the activations' error bounds, Solve and Inverse, ParallelRows), three globals baked while compiling
   and compared with the run time, all under `if TestBuild` so a program importing the module compiles none of them; a
   checks scenario (`linalg`) for the shape-mismatch abort, built and interpreted, and the `try` form.
+- **std gaps: a List that shrinks, text operations, `ParseFloat` in the prelude (M19d, T29c, E31, T35b, 2026-10-09).**
+  The coordinator's list from the usage study and the benchmarks: List `Pop/Clear/RemoveAt/Insert/Sort/List(n, fill)`,
+  Map `Keys/Values/Clear`, `Join`, `ToUpper/ToLower/Replace/Repeat`, a line reader over text, and `ParseFloat` moved out
+  of std/json into the prelude. Every detail below was decided here, under the delegation of details.
+  **List as a stack.** `Pop()`, `First()` and `Last()` fail with the default error on an empty list - the answer
+  `Map.Get` and `Find` already give for "missing"; `Exhausted` was considered and kept for the iterator protocol, where
+  loops take it themselves, so `for { x := try l.Pop() catch { break } }` is the work-list idiom. The chunked layout made
+  Pop cheap and raised one question: what to do with a chunk Pop empties. Dropping it would make a list that shrinks
+  and regrows across a chunk boundary allocate a fresh chunk each time (arena garbage, as nothing is freed), so the
+  List keeps a `made` count beside `nChunks`: chunks past `nChunks` wait, and `grow()` reuses the next one before making
+  another. The tail is left in place when it empties - stepping back to the full chunk before it only when one more is
+  popped - which keeps the invariant every reader relies on (every chunk before the tail is full) without touching
+  `ToArray`, `RunFrom` or `ListIter`. `Clear()` resets to the first chunk and keeps them all.
+  **RemoveAt and Insert** walk the elements after the position chunk by chunk (no per-element `highBit`), so they cost
+  the number of elements moved. A position out of range was the one real choice: unchecked like `l[i]` would corrupt
+  the count silently (and read past the chunks array), an error would put `try` on every call, so it is an `assert` -
+  checked once per call, as a slice's bounds are (E16b), stopping the program as Python's IndexError, Rust's panic and
+  Go's panic do. A failed assert prints only "assertion failed" today; a message on asserts is the user's open question.
+  `Sort(less)` copies the elements into one array, sorts it with `Array.Sort` and copies them back - checked to
+  compile for a `List<mut Node&>` whose elements hold `mut` references (the case `Array.Sort`'s comment once said a
+  scratch array could not serve; O25h's copy homes now carry it). `Reverse()` swaps through `At`/`SetAt`.
+  **`List<T>(n, fill)` could not be written, and why.** A type has exactly one constructor, and `List<T>()` must stay
+  valid, so `n` and `fill` would need defaults - and nothing can be the default of a type-variable parameter for every
+  `T`: G18 fits a literal default per call (`fill <T> = 0` fails `List<String&>()`), and an expression like
+  `Array<<T>>(1)[0]` is checked in the generic's own context, where it is a `<T>`, not the instantiation's type. The
+  second attempt, a constructor taking an array (`List(I32[1, 2, 3])`) and filling the chunks in its body, compiled for
+  numbers and failed for `List<listBag&>` (an existing test): copying the parameter's elements into the instance's
+  chunks is an O25 exactness error inside a constructor body, where the same store in a method (`PushAll`) is an
+  equality obligation checked at the call. So the constructor stayed `struct()`, and the shape went to arrays:
+  `a.ToList()` (the reverse of `ToArray()`), with `Array<T>(n, v).ToList()` for n copies, and an iterator default
+  `ToList()` beside `Map` and `Filter`. A `SortBy(key)` was not added: `Sort(fn(a, b) { return key(a) < key(b) })` is
+  one line, and arrays have only `Sort`.
+  **Map.** `Keys()`/`Values()` are iterators rather than arrays - nothing is allocated unless the caller asks, and every
+  iterator helper reaches them (`m.Keys().Count(f)`, `m.Keys().ToList()`). The first version wrapped a `MapIter` and
+  returned `(try it.entries.Next()).Key`; for `Map<String&, I64>` that was error[O10d] - the key, read out of the entry
+  `Next` returned by value, looked like it lived in the function's own scope. Walking the slots (a private
+  `MapIter.advance()`, which `Next` now uses too) and reading `it.entries.given.entry.Key` through the `&of` field gives
+  the key its true scope. `Clear()` moves every slot to the free list and keeps the bucket array, so a cleared map
+  fills again without allocating. `GetOr` was not added: `try m.Get(k) catch default v` is the idiom.
+  **Arrays and text.** `Count(sub)` for substrings was asked for, but every array already has `Count(keep)` - the
+  predicate count - and T29e forbids a declared array type redeclaring an inherited name, so `String.Count` could not
+  exist; it is `CountOf(sub)`, on every array, as `Contains` is. `Replace` and `Repeat` are array methods too, since a
+  `String` inherits them and gets `String`s back (T29f). `Replace` with an empty `old` was the edge case named: an error
+  would make `Replace` fallible and put `try` on every call for one degenerate input, so it follows Python and Go - the
+  empty run occurs at every position (`Find("")` is 0, `CountOf("")` is `Len() + 1`), and `"abc".Replace("", "-")` is
+  `"-a-b-c-"`. `Repeat(n)` gives nothing for n at most 0, as `Fixed` reads a negative n. `Lines()` is an iterator of
+  borrowed slices (no copying) with `io.Lines`' rules; keeping one is pushing it into a List living where the text does.
+  `Join` is on `Array<String&>` and `List<String&>` - the shape `Split` returns and the shape a builder of words has.
+  **`<` on text.** `String` gained `Less` (Compare < 0), so text orders with `<`. Writing the tests found that
+  `"b" >= s` failed with "'>=' takes numbers, found Array<Char>": an operator's method is looked up on its left operand,
+  and written text there stayed a raw array, where T29c already made it a `String` beside `==`. One minimal change in
+  `buildBinaryOp`: written text as an operator's operand is a `String` - consistent with T29c's "a `String` wherever
+  nothing adapts it".
+  **`ParseFloat` and `ShortestDecimal`.** The move was asked for as `String.ParseFloat() F64 ? ParseError`, which
+  fixed where it lives - a declared type's methods are declared in its own module, so `text.olang`. But json's
+  Schubfach (its number writer) reads the same 128-bit table of powers of ten as Eisel-Lemire, and a prelude file's
+  private names are invisible to json: either the 700-line table is written twice, or the writer moves too. It moved, as
+  a public primitive rather than a second copy of `$`: `F64.ShortestDecimal() (U64, I64) ?` gives the digits and the
+  exponent (trailing zeros stripped; a NaN or infinity fails), which any encoder lays out its own way - json lays them
+  out as `$` does. The reader's grammar is wider than JSON's (`+`, `.5`, `5.`, `inf`, `infinity`, `nan` in any case),
+  so `$x` reads back for every `x`; the slow path's `decimal.set` lost its `'-'` handling (the sign is passed apart).
+  Verified bit-identical with Python's `float()` on 360,000 inputs (random bit patterns printed four ways, random digit
+  strings with exponents -350..330, exact halfway points to 17 and 40 digits) and 50,000 more with signs, leading zeros
+  and invalid forms, and `-i` agreeing with the built program on 2,500. json now checks JSON's grammar and hands the
+  number's text to `ParseFloat`: scanning each decimal twice cost 44 -> 49ms on 400,000 mixed numbers, so a whole number
+  of at most 15 digits is computed in the checking pass (exactly an F64), which puts integer-only input at 47 -> 44ms.
+  **The tokenizer.** Measured with callgrind, the bigger prelude took a hello world's compile from 498M to 784M
+  instructions - and 70% of all of it was the tokenizer matching every identifier and operator against the rule
+  table's patterns (`nextTokPatternPart`, `strlen`, `tokRuleMatchesWord`) at every token, every file tokenized twice.
+  Reading the keywords and operators out of the table once, into two arrays compared by length and first byte, makes
+  it 450M - below where it started - with the emitted IR of `runner.olang`'s build identical byte for byte. The port
+  redesigns the tokenizer anyway; this was the smallest change that made the prelude's growth free. The new tests sit in
+  `std/prelude/tests/` (as Map's and Fixed's do), since a prelude file's `if TestBuild` block is still tokenized by
+  every program.
+  **Found on the way**: S18c caught two of my own wrong expectations in tests at compile time (an assert decided false
+  while compiling), which is the evaluator check working; and a `for line in it` over an iterator variable walks a copy,
+  leaving `it` where it was - as S9a specifies, so the test was rewritten to call `Next` directly.

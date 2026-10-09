@@ -3622,6 +3622,38 @@ Go through this for every change to what olang means - a rule added, revised or 
   Batch-1 `Gemv` 3-5x a plain C dot loop; a 784-128-10 training step 2.4 ms against OpenBLAS's 0.4-0.8 and naive C's
   10-13. libmvec would vectorize `expf` but needs errno-free calls and gives up to 4 ulp, against X8's agreement
   between the evaluator and the run time; the olang approximations are the route taken.
+- **std gaps: a List that shrinks, text operations, `ParseFloat` in the prelude (M19d, T29c, E31, T35b, 2026-10-09, the
+  coordinator's list, details mine).** **List**: `Pop()`, `First()`, `Last()` fail with the default error when empty,
+  as `Map.Get` and `Find` do (`Exhausted` stays the iterator protocol's word); `Clear()`; `RemoveAt(i)` and `Insert(i,
+  x)` shift the elements after `i` chunk by chunk, costing their number; `Reverse()`; `Sort(less)` (stable: one
+  contiguous copy through `Array.Sort`); `Join(sep)` on a `List<String&>`. Storage still never moves: Pop and Clear keep
+  the chunks they empty (`made` past `nChunks`) for the Pushes that follow, so shrinking and regrowing allocates nothing.
+  **Decided (mine)**: an out-of-range `RemoveAt`/`Insert` position is a program mistake - an `assert`, checked once per
+  call like a slice's bounds - not an error every caller must `try` (Python, Rust and Go stop too); **no `List<T>(n,
+  fill)`** - a type has one constructor and `List<T>()` must stay, no default can be "the zero of `T`" (G18 fits a
+  default per call: `fill <T> = 0` breaks `List<String&>()`), and a constructor copying its argument's elements into the
+  instance's chunks is a C2d exactness error for elements that can be stored through - so every array has `ToList()`
+  (`Array<I32>(n, v).ToList()`, `I32[1, 2].ToList()`, the reverse of `ToArray()`) and every iterator a `ToList()`
+  default; no `SortBy` (`Sort(fn(a, b) { return key(a) < key(b) })` says it). **Map**: `Keys()`/`Values()` are
+  iterators (`MapKeyIter`/`MapValueIter`), so nothing is allocated unless asked (`m.Keys().ToList()`); `Clear()` moves
+  every slot to the free list and keeps the buckets; no `GetOr` (errors are errors). **Arrays, so `String` too**:
+  `CountOf(sub)` (non-overlapping; `Count` is the predicate count and an inherited name may not be redeclared, T29e),
+  `Replace(old, new)` (built once at its length; **an empty `old` inserts `new` at every position** - Python's and
+  Go's answer, consistent with `Find("")` at 0 and `Split("")` - rather than an error putting `try` on every Replace),
+  `Repeat(n)` (none for n at most 0, as `Fixed` reads n), `Reverse()`. **Text**: `TrimStart`/`TrimEnd` (borrows),
+  `ToUpper`/`ToLower` (ASCII, new text), `FindLast` (fails on a miss), `Lines()` (a `LineIter` of borrowed slices, by
+  `io.Lines`' rules), `Join(sep)` on `Array<String&>`, and `Less`, so `<` orders text bytewise and `words.Sort(fn(a, b) {
+  return a < b })` works. **Compiler change (minimal)**: written text as an operator's operand is a `String` (T29c/E31;
+  `"b" >= s` was "'>=' takes numbers, found Array<Char>"). **`String.ParseFloat() F64 ? ParseError`** moved from
+  std/json into `text.olang` (String's methods live in its module), with **`F64.ShortestDecimal() (U64, I64) ?`** -
+  json's Schubfach shares the 128-bit table, so it moved too rather than the table being written twice; json checks
+  JSON's grammar, then calls ParseFloat (whole numbers of 15 digits or fewer computed in that pass), and writes numbers
+  from ShortestDecimal. ParseFloat accepts `.5`, `5.`, a `+`, and `inf`/`infinity`/`nan` in any case (so `$x` reads
+  back); `EMPTY`/`INVALID`/`OVERFLOW`, an underflow being a zero of its sign. Bit-identical to Python's `float()` on
+  410,000 inputs, `-i` agreeing. Measured: JSON parse of 400,000 mixed numbers 44 -> 49ms (each decimal scanned twice),
+  whole numbers only 47 -> 44ms. **The tokenizer reads its keywords and operators out of the rule table once** (emitted
+  IR identical): the larger prelude took a hello world's compile from 498M to 784M instructions, most of it matching
+  each token against the patterns; 450M now. The new tests live in `std/prelude/tests/`, so no program tokenizes them.
 - **The formal specification (`spec.md`) and the spec-first process.** `spec.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

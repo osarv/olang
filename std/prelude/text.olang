@@ -2,7 +2,9 @@
 # and goes to C as the array does, and text written in the program - a literal, a "$x" rendering, a join - is a
 # String wherever one is wanted (T29c). Bytes become text with "String(bytes)", which copies nothing, and text goes
 # wherever an Array<U8> is wanted as it is (T29h). "==" compares what two texts say (String's Eq, E10a); "a is b"
-# asks whether they are one. There is no encoding check: a Char is one byte of text, a UTF-8 code unit.
+# asks whether they are one. There is no encoding check: a Char is one byte of text, a UTF-8 code unit. Numbers are read
+# from text here too (ParseInt, ParseFloat), and a float's fewest digits worked out (ShortestDecimal) - exactly, in
+# olang, so all of it runs while compiling as at run time.
 
 # one byte of text (T29h): a U8 that renders as a character, the type of a character literal ('a'), and with U8's
 # arithmetic ('a' + 1 is 'b')
