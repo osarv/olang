@@ -64,11 +64,16 @@ parameters ... Expand it across arrays too ... Array<T, size>. Then re-evaluate 
 Being designed (wt-constgen, phase 1 spec only until the checker agents merge); my re-evaluation: Matrix<T, R, C> with
 each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choice gets stronger, not weaker. Note:
 `Array<T, N>` partly revisits the user's earlier T11a ("make the size in the type irrelevant") - their call now.
-9. (asked 2026-10-09, oann) static graph only (record once, replay with no allocation), or also an eager mode
-   later for models whose structure depends on their data? Default: static only. Rec: static only for now.
-10. (asked 2026-10-09, oann) after the MNIST MLP, which first: convolutions, transformers (attention, layer norm,
-   BF16), or spiking networks (the FPGA direction)? Default: none chosen. Rec: transformers (the widest use), unless
-   SNNs are the near-term goal.
+**Decided 2026-10-09 (the user, oann):** static graph only for now, eager mode possible later (keep the op set and
+kernels shared so an eager tape can be added - olang's arenas make a per-step tape cheap: one scope per step);
+transformers first after the MNIST MLP; optimizers: plain AdamW AND "AdamW with the regularisation of orthonormal
+projection as (I - alpha x x^T)".
+11. (asked 2026-10-09) what exactly is the orthonormal-projection AdamW? Readings: (a) a decoupled regularizer per
+   weight matrix applied after the AdamW step, W <- (I - a W W^T) W (penalizing large singular values; Newton-Schulz
+   with a = 0.5 and an extra 0.5 W pushes toward orthonormal); (b) projecting each parameter vector's Adam update,
+   u <- (I - a x x^T) u with x the (normalized) weight row - AdamP-like, removing the radial component. Also: does it
+   replace weight decay or add to it, and which parameters (weight matrices only, not biases/norms)? Default: build
+   plain AdamW first; the variant waits for the answer. Rec: (a) if the goal is near-orthonormal weights.
 **Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
 `AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
 Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an

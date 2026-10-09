@@ -455,6 +455,7 @@ struct statement {
     struct list matchHold;       //MATCH only: statements run first - the matched value held in a hidden local, whose
                                  //read is `op`; empty when `op` is the matched expression itself (a local, read again)
     bool hasNomatch;             //MATCH only
+    bool leavesOnlyByJump;       //FOR only (D10a): "for { }" with no break of its own - it never falls through
     struct list nomatchBlock;    //MATCH only
     struct operand* nomatchValue; //MATCH used as a value only (S12b): "nomatch => v", NULL for a block
     struct list catchClauses;    //TRY_CATCH only: struct catchClause, in order (R9b)

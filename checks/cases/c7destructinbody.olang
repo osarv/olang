@@ -1,0 +1,7 @@
+# check: fail error[C7]: 'destruct' follows the constructor's body
+# C7: a destructor is written after the constructor's body, never inside it
+type Res struct(n I32) {
+    n
+    destruct { assert n >= 0 }
+}
+fn main() ? { }
