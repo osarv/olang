@@ -632,7 +632,8 @@ on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-ti
 
 **P0, before the port, in the C repository.** Part of this is already queued.
 
-- The C compiler moves to `bootstrap/` as part of the modest refactor.
+- The C compiler moves to `bootstrap/` as part of the modest refactor. (Done: `make bootstrap` builds `build/stage0`;
+  the runtime's IR is `bootstrap/runtime.c` until it moves to `std/runtime/runtime.ll`.)
 - `OLANG` is parametrized in the makefile, checks, fuzz and bench.
 - The runtime is extracted to `std/runtime/runtime.ll` and linked as one object by the C compiler (section 1.10).
 - The std and runtime gaps S1-S6 (section 7) are closed.

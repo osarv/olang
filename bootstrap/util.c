@@ -56,12 +56,6 @@ void* MallocOrCrash(size_t size) {
     return ptr;
 }
 
-void* CallocOrCrash(size_t size) {
-    void* ptr = calloc(size, 1);
-    CheckAllocPtr(ptr);
-    return ptr;
-}
-
 void* ReallocOrCrash(void* oldPtr, size_t size) {
     void* ptr = realloc(oldPtr, size);
     CheckAllocPtr(ptr);
@@ -238,11 +232,6 @@ void ListAddList(struct list* head, struct list tail) {
     for (int i = 0; i < tail.len; i++) {
         ListAdd(head, (char*)tail.ptr + i * tail.elemSize);
     }
-}
-
-void ListRetract(struct list* l, int newLen) {
-    if (newLen > l->len) ErrorBugFound();
-    l->len = newLen;
 }
 
 void* ListGetIdx(struct list* l, int idx) {

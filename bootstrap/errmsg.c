@@ -408,8 +408,6 @@ static void putExcerpt(FILE* f, struct where w) {
 
 // ---- reporting ----
 
-enum severity { SEV_ERROR, SEV_NOTE };
-
 static void noteText(struct where w, const char* text);
 
 //what an error is reported inside - a generic's body checked for one instantiation (G16): every error reported while a
@@ -699,7 +697,7 @@ int ErrMsgExplain(char* rule) {
     bool in = false, found = false;
     int blanks = 0;
     while (getline(&line, &cap, f) > 0) {
-        const char* id;
+        const char* id = ""; //set by ruleIdAt only where it finds a rule
         int idLen = ruleIdAt(line, &id);
         bool head = line[0] == '#';
         if (in && (idLen || head)) break;

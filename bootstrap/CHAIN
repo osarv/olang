@@ -1,0 +1,6 @@
+# olang bootstrap chain, oldest first. Each entry is built by the one above it (the first by bootstrap/'s C
+# compiler); HEAD is built by the last.  tag  commit  root  why
+#
+# No entries yet: compiler/ holds no olang compiler, so HEAD is built by bootstrap/ directly. A line is added in the
+# commit that first makes compiler/ or std/ use something its predecessor cannot compile; it names that commit's
+# parent, the last commit the predecessor builds, with a tag bootstrap/N pushed on it (compiler/DESIGN.md, section 5).

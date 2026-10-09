@@ -15,22 +15,18 @@ enum syntaxType {
     SNTX_TYPE_CONSTRAINT, //G19: the constraint after a declared type parameter, applying to the item before it
     SNTX_TYPE_PARAMS,     //"<A, B>" after a type declaration's name - declares its parameters and, by
                            //their order, what a type-args list supplies positionally (§12.3 G6)
-    SNTX_TYPE_ARGS,       //"<int32, T>" after a type name in a type-ref - instantiates a generic (G8)
+    SNTX_TYPE_ARGS,       //"<I32, T>" after a type name in a type-ref - instantiates a generic (G8)
     SNTX_CONST_ARG,       //G21: a constant argument in a type-argument list that is no type - "3", "<N> + 1" - its
                           //one part the SNTX_EXPR. A bare name or "<N>" alone parses as a type and is read by the
                           //checker as a value when the parameter is a constant
     SNTX_CONST_VAR,       //G23: "<N>" in an expression - a generic's constant variable used as a value
-    SNTX_ELEM_REF_MARKER, //"&" / "&name" written BEFORE any array suffixes - marks the ELEMENT type as a
-                           //reference ("Point&[3]" is an array of 3 references to Point)
-    SNTX_REF_MARKER,      //"&" / "&name" written AFTER any array suffixes - marks the type as a whole
-                           //("Point[3]&" is one reference to an array of 3 Point values). With no array
-                           //suffix at all the two positions coincide and the marker is parsed as the
-                           //element one, which is the same type either way
+    SNTX_ELEM_REF_MARKER, //"&", "&x" or "&return" after a type - marks it a reference (T24)
+    SNTX_REF_MARKER,      //a second marker after the first ("Point&a&b") - parsed only so that it is reported
+                           //(T24: a type carries one marker)
     SNTX_TYPE_REF,
     SNTX_CHOICE_BODY,
-    SNTX_CHOICE_CASE,  //"IDEN [ \"(\" param-list \")\" ]" - one case of a choice type. The optional
-                        //parameter list is the case's PAYLOAD; a case without one is a bare tag, which is
-                        //every case a choice had before payloads existed
+    SNTX_CHOICE_CASE,  //"IDEN [ \"(\" param-list \")\" ]" - one case of an enum type. The optional
+                        //parameter list is the case's PAYLOAD; a case without one is a bare tag
     SNTX_CASE_PATTERN, //S13b/S13d: "[alias-chain] Type . Case [ ( sub-pattern {, sub-pattern} ) ]" - a case of
                         //an enum, its payload's positions each a SNTX_PAT_BIND, a nested SNTX_CASE_PATTERN or
                         //a SNTX_PAT_VALUE
@@ -38,8 +34,8 @@ enum syntaxType {
     SNTX_PAT_VALUE,    //S13d: a literal in a payload pattern (an SNTX_EXPR) - that field compared with it by "=="
     SNTX_CASE_GUARD,   //S13e: "if expr" after a case's patterns - parts: "if", the SNTX_EXPR
     SNTX_CASE_VALUE,   //S12b: "=> expr" in place of a case's (or nomatch's) block - parts: "=>", the SNTX_EXPR
-    SNTX_INTERFACE_BODY, //"interface { method-sig STMNT_END ... }" - parts are SNTX_METHOD_SIG (T30)
-    SNTX_METHOD_SIG,      //"[mut] IDEN func-sig" - one entry of an interface body. The optional leading
+    SNTX_INTERFACE_BODY, //"trait { method-sig STMNT_END ... }" - parts are SNTX_METHOD_SIG (T30)
+    SNTX_METHOD_SIG,      //"[mut] IDEN func-sig" - one entry of a trait body. The optional leading
                            //TOK_MUT says the method needs a MUTABLE receiver; the name is the sole IDEN
     SNTX_CTOR_FIELD,      //one field inside a constructor-bearing struct's body - "name = expr" (bound to a
                            //param or any expr), "name Type [= expr]", "name := expr", or a bare "name" pun
@@ -62,7 +58,7 @@ enum syntaxType {
                           //(where it's the whole SNTX_STMNT_ERROR node, not a child of it), and a catch-item
     SNTX_RET_TYPE,
     SNTX_PARAM,
-    SNTX_RECEIVER,          //M19: "( param )" between "func" and the name - marks a METHOD, and is the only
+    SNTX_RECEIVER,          //M19: "( param )" between "fn" and the name - marks a METHOD, and is the only
                             //thing that does. Its param is also spliced in as the signature's parameter 0.
     SNTX_PARAM_LIST,
     SNTX_FUNC_SIG,
@@ -74,7 +70,7 @@ enum syntaxType {
                              //the restriction to a numeric-primitive-or-array-of-them type is checked
                              //semantically, not by a separate type-expr grammar
     SNTX_EXTERN_PARAM_LIST,
-    SNTX_EXTERN_FUNC_DECL,  //"extern func IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level
+    SNTX_EXTERN_FUNC_DECL,  //"extern fn IDEN ( EXTERN_PARAM_LIST ) RET_TYPE? STMNT_END" - a top-level
                              //declaration only, no body, no error-list - see the report on §11
     SNTX_VAR_DECL,
     SNTX_VAR_DECLS,   //D12b: "a, b [mut] T [= x, y]" - one SNTX_VAR_DECL (or SNTX_CTOR_FIELD) per name, in order
@@ -119,27 +115,25 @@ enum syntaxType {
     SNTX_STMNT_TRY_STORE, //E31: "try x[i] = v", "try x[i] += v", "try x++" - [try, ASSIGN | EXPR, clauses...]
     SNTX_STMNT,
     SNTX_BLOCK,
-    SNTX_SCOPE_DECL,     //"&name" right after a func/type declaration's own name (§8 O3) - declares a
-                          //scope variable the signature's own types never mention, the only case that
-                          //needs one; a name the types already declare is rejected here as redundant
-    SNTX_SCOPE_ARG,      //"&name" between a call target's name and its "(" (§5.11 E25) - the scope the
+    SNTX_SCOPE_DECL,     //"&name" right after a fn/type declaration's own name - a scope is never named (O3), so this
+                          //is parsed only so that it is reported
+    SNTX_SCOPE_ARG,      //"&x" between a call target's name and its "(" (§5.11 E25) - the scope the
                           //caller supplies for the callee's one supplied scope variable (§8 O18).
                           //Adjacency-constrained, which is what tells it from the binary "&" operator.
     SNTX_EXPR_ARGS,
     SNTX_EXPR_CALL,
     SNTX_EXPR_SLICE, //"[" [expr] ":" [expr] "]" - a slice postfix (E16a). Either bound may be absent,
-                      //defaulting to 0 and len(base) respectively.
+                      //defaulting to 0 and base.Len() respectively.
     SNTX_EXPR_INDEX,
     SNTX_EXPR_MEMBR,
     SNTX_EXPR_VALUE_CALL, //E13b: "(args)" after any postfix expression - a call through the function value it gives
     SNTX_EXPR_TRY,
-    SNTX_ARR_LIT_ARGS,   //array literal's own argument list - each item is either a plain EXPR or a nested
-                          //SNTX_ARR_LIT_NESTED bracket group (for a 2D+ literal) - see parseArrLiteralArgs
-    SNTX_ARR_LIT_NESTED, //"[" ARR_LIT_ARGS "]" - a nested row with no restated type, only ever valid as one
-                          //item inside an enclosing array literal's own arg list - see parseArrayLiteral
-    SNTX_EXPR_LITERAL,        //array literal only now - "T[v1, ...]" (dimensionality/size come entirely
-                               //from the argument list's own nesting/counts) - see ParseSyntax
-    SNTX_EXPR_CHOICE_VALUE,   //"Type.Case" - a choice value - type-name-aware, see ParseSyntax
+    SNTX_ARR_LIT_ARGS,   //array literal's own argument list - each item a plain EXPR, or a nested SNTX_ARR_LIT_NESTED
+                          //bracket group - see parseArrLiteralArgs
+    SNTX_ARR_LIT_NESTED, //"[" ARR_LIT_ARGS "]" - a nested row with no restated type: there are no multi-dimensional
+                          //arrays (E21), so it is parsed only so that it is reported
+    SNTX_EXPR_LITERAL,        //an array literal - "T[v1, ...]", its length the item count - see ParseSyntax
+    SNTX_EXPR_CHOICE_VALUE,   //"Type.Case" - an enum value - type-name-aware, see ParseSyntax
     SNTX_EXPR_DEFAULT,        //the "default" keyword in a call's argument position (E14a) - produced
                               //only by parseExprArgs, so it can never appear inside a larger expression
     SNTX_EXPR_PRIMARY,
@@ -155,7 +149,6 @@ enum syntaxType {
     SNTX_EXPR_BINARY, //generic "left op right" - precedence resolved by the parser itself (precedence
                        //climbing), not by grammar nesting - see the report
     SNTX_EXPR,
-    SNTX_NOT_FOUND
 };
 
 //a parse-tree node: pattern-matched shape identified by `type`, with the tokens/nested nodes it matched
@@ -177,8 +170,8 @@ struct syntaxModule {
 };
 
 //true if `name` (aliasChain empty) or an alias chain of any length followed by `name` (e.g. "a.b.name" -
-//aliasChain = ["a", "b"]) names a known struct/choice/error type - consulted only to disambiguate
-//"Type{values}" (a struct literal) from "condition { block }" while parsing; an alias hop the lookup
+//aliasChain = ["a", "b"]) names a known struct/enum/error type - consulted only to disambiguate a type from a value
+//while parsing ("T<...>(", "T[...]", "Type.Case", "x is T"); an alias hop the lookup
 //doesn't recognize simply isn't treated as a type at the parser level (a real error, including privacy,
 //is reported later, in semantic analysis, which has the authoritative name tables) - see the report for
 //why the parser needs this at all instead of just trying alternatives blindly.
@@ -213,7 +206,6 @@ struct buildConst {
 //that is a malformed or out-of-range number (B10). Each such diagnostic takes the name and the value
 enum diag SyntaxDefineBuildConst(char* name, char* value, bool builtin);
 struct list* SyntaxBuildConsts(void);
-void SyntaxResetBuildConsts(void);
 //B9c: a top-level condition only compile-time evaluation can decide, met by this attempt at compiling
 struct pendingCond {
     struct str file;
