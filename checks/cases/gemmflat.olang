@@ -1,8 +1,8 @@
 # check: run
-# O8b: a loop of matrix products keeps its memory flat. A plain Gemm packs B into a panel of its own, made after the
-# product's larger allocations and given back with them, and the pool hands the same panel to the next product (it
-# used to map a new one each time - 400KB a product here, 120MB over the loop); a GemmWorkspace keeps its panels from
-# one product to the next itself, so its loop allocates nothing at all
+# O8b: a loop of matrix products keeps its memory flat. A plain Gemm packs B into a panel of its own and then A into a
+# smaller one, gives both back at its return, and the pool hands the same panels to the next product (it used to map a
+# new B panel each time, the A panel lying on top of the old one - 400KB a product here, 120MB over the first loop); a
+# GemmWorkspace keeps its panels from one product to the next itself, so the second loop allocates nothing at all
 import "std/linalg"
 import "std/os"
 

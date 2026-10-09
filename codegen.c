@@ -6660,8 +6660,7 @@ void emitScopeRuntime(FILE* out) {
         "", out);
     fputs(
         //O8b: chunk c into the pool, as the newest of its class - once there is room for it under the pool's bound,
-        //which __olang_pool_make_room makes, or c itself goes back to the system when it alone is larger. Kept apart, so
-        //this, the common case, stays small enough to inline into every scope's close
+        //which __olang_pool_make_room makes out of line, or c itself goes back to the system when it alone is larger
         "define linkonce_odr void @__olang_pool_give(ptr %given) {\n"
         "entry:\n"
         "  %classptr0 = getelementptr %olang.chunk, ptr %given, i32 0, i32 5\n"
