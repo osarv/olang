@@ -433,6 +433,14 @@ struct syntax* parseChoiceCase(SyntaxCtx sc) {
     return s;
 }
 
+//L18a: after a list's comma, whether the list ends there - "a, b," with its closing bracket beginning a line of its
+//own, as a list running over several lines may end. On the same line the comma is left for the caller to fail at
+//(reported as a trailing comma by syntaxHint)
+static bool trailingComma(SyntaxCtx sc, struct token comma, enum tokenType closer) {
+    struct token next = peekTok(sc);
+    return next.type == closer && next.lineNr > comma.lineNr;
+}
+
 //T17/T19/C2: a comma where line ends separate entries (an enum's cases, an error type's words, a constructor's
 //fields) is reported and then read past as though it were the line end it stands for, so one stray comma is one error
 static bool rejectSeparatorComma(SyntaxCtx sc) {
@@ -773,6 +781,7 @@ struct syntax* parseParamList(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token comma = TokenFeed(sc->tc);
         if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        if (trailingComma(sc, comma, TOK_PAREN_C)) break; //L18a
         struct syntax* p = parseParam(sc);
         if (!p) { TokenSetCursor(sc->tc, before); break; }
         addTok(s, comma);
@@ -1033,6 +1042,7 @@ struct syntax* parseExternParamList(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token comma = TokenFeed(sc->tc);
         if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        if (trailingComma(sc, comma, TOK_PAREN_C)) break; //L18a
         struct syntax* p = parseExternParam(sc);
         if (!p) { TokenSetCursor(sc->tc, before); break; }
         addTok(s, comma);
@@ -1803,6 +1813,17 @@ struct syntax* parseStmntRet(SyntaxCtx sc) {
     return s;
 }
 
+//S20: "{ ... }" as a statement - a block of its own, whose scope (and memory) ends at its "}". No expression begins with
+//"{", so a statement that does is one
+struct syntax* parseStmntBlock(SyntaxCtx sc) {
+    if (peekTok(sc).type != TOK_CURLY_O) return NULL;
+    struct syntax* block = parseBlock(sc);
+    if (!block) return NULL;
+    struct syntax* s = newNode(SNTX_STMNT_BLOCK);
+    addSntx(s, block);
+    return s;
+}
+
 //P1: "join { ... }" - an ordinary block, which happens to wait at its end for every task spawned in it
 struct syntax* parseStmntJoin(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
@@ -2181,7 +2202,7 @@ static struct syntax* parseMultiDeclStmnt(SyntaxCtx sc) {
 //nothing but the time; the expression several of them begin with is read only once (parseExprPostfix's memo)
 static struct syntax* (*const stmntForms[])(SyntaxCtx) = {
     parseStmntDestruct, parseMultiDeclStmnt, parseVarDecl, parseStmntTryStore, parseStmntAssign, parseStmntIf,
-    parseStmntFor, parseStmntDo, parseStmntMatch, parseStmntRet, parseStmntJoin, parseStmntSpawn, parseStmntDefer,
+    parseStmntFor, parseStmntDo, parseStmntMatch, parseStmntRet, parseStmntJoin, parseStmntBlock, parseStmntSpawn, parseStmntDefer,
     parseStmntBreak, parseStmntContinue, parseStmntAbort, parseStmntUnreachable, parseStmntDone, parseStmntFail,
     parseStmntAssert, parseStmntError, parseStmntTryCatch, parseStmntExpr,
 };
@@ -2254,6 +2275,7 @@ struct syntax* parseExprArgs(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token comma = TokenFeed(sc->tc);
         if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        if (trailingComma(sc, comma, TOK_PAREN_C)) break; //L18a
         struct syntax* e = parseExprArg(sc);
         if (!e) { TokenSetCursor(sc->tc, before); break; }
         addTok(s, comma);
@@ -2386,6 +2408,7 @@ struct syntax* parseArrLiteralArgs(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token comma = TokenFeed(sc->tc);
         if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
+        if (trailingComma(sc, comma, TOK_SQUARE_C)) break; //L18a
         struct syntax* e = parseArrLiteralNestedGroup(sc);
         if (!e) e = parseExpr(sc);
         if (!e) { TokenSetCursor(sc->tc, before); break; }
@@ -4216,6 +4239,11 @@ static void skipTopItem(SyntaxCtx sc, int start) {
 //meant - reported here, or false where the plain report says it best
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
+    //"f(a, b,)" - a trailing comma ends a list only where its closing bracket begins a line (L18a)
+    if ((found.type == TOK_PAREN_C || found.type == TOK_SQUARE_C) && prev.type == TOK_COMMA && prev.lineNr == found.lineNr) {
+        ErrSyntax(prev, ERR_TRAILING_COMMA, found, found);
+        return true;
+    }
     //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
     if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
         ErrSyntax(found, ERR_ERROR_AFTER_QUESTION);

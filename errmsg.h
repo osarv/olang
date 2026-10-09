@@ -72,6 +72,7 @@ struct type;
     X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
     X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
+    X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
     X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
     X(ERR_ERROR_AFTER_QUESTION,         "R15",   "'?' alone is the default error - write '?', or name the types: '? IoError'") \
     X(ERR_VALUE_AFTER_EQ,               "D12",   "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \

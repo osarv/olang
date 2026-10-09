@@ -142,6 +142,7 @@ struct tokenContext {
     int tokStart;               //where the token being read began - what a malformed literal's error points at
     struct list edits;          //the splits made by TokenSplitShiftRight/Left, undone by TokenEditRewind
     int version;                //changes whenever the token list does - see TokenListVersion
+    struct list brackets;       //L18a: the brackets open here, innermost last - '(' '[' '{' - see insideBrackets
 };
 
 //the byte at idx, or '\0' past the end - the cursor may step past the terminating '\0' and back
@@ -586,17 +587,57 @@ struct token synthesizeStmntEnd(TokenCtx tc) {
     return tok;
 }
 
+//L18a: a newline inside parentheses or square brackets ends no statement - an argument list, an array literal or a
+//parenthesized expression may run over several lines, its closing bracket on a line of its own - while a block opened
+//inside them ("f(fn(x) {", a match used as a value) holds statements again
+static bool insideBrackets(TokenCtx tc) {
+    if (!tc->brackets.len) return false;
+    char top = *(char*)ListGetIdx(&tc->brackets, tc->brackets.len - 1);
+    return top == '(' || top == '[';
+}
+
+static void trackBracket(TokenCtx tc, enum tokenType t) {
+    char open = t == TOK_PAREN_O ? '(' : t == TOK_SQUARE_O ? '[' : t == TOK_CURLY_O ? '{' : 0;
+    if (open) { ListAdd(&tc->brackets, &open); return; }
+    char want = t == TOK_PAREN_C ? '(' : t == TOK_SQUARE_C ? '[' : t == TOK_CURLY_C ? '{' : 0;
+    if (!want || !tc->brackets.len) return;
+    char* top = ListGetIdx(&tc->brackets, tc->brackets.len - 1);
+    if (want != '{') { if (*top == want) tc->brackets.len--; return; } //a stray closer is the parser's to report
+    //"}" closes its block, and with it any bracket left open inside it - one missing ")" is one error
+    while (tc->brackets.len) {
+        char c = *(char*)ListGetIdx(&tc->brackets, tc->brackets.len - 1);
+        tc->brackets.len--;
+        if (c == '{') break;
+    }
+}
+
+//L18a: a declaration starting a line, with no block open, ends a bracket left open before it - a missing ")" in a
+//global's initializer is one error, not one for every declaration after it. "fn" counts when a name follows it (a
+//lambda or a method's receiver is "fn (")
+static void closeBracketsBeforeDecl(TokenCtx tc, struct token tok) {
+    if (!tc->brackets.len || tok.str.ptr == (char*)tc->chars.ptr || tok.str.ptr[-1] != '\n') return;
+    for (int i = 0; i < tc->brackets.len; i++) if (*(char*)ListGetIdx(&tc->brackets, i) == '{') return;
+    bool decl = tok.type == TOK_TYPE || tok.type == TOK_TEST || tok.type == TOK_IMPORT || tok.type == TOK_EXTERN;
+    if (tok.type == TOK_FUNC) {
+        int i = tc->charIdx;
+        while (charAt(tc, i) == ' ' || charAt(tc, i) == '\t') i++;
+        decl = isLetter(charAt(tc, i)) || charAt(tc, i) == '_';
+    }
+    if (decl) tc->brackets.len = 0;
+}
+
 void tokenizeTokensFromChars(TokenCtx tc) {
     while (!atEnd(tc)) {
         tc->sawNewline = false;
         if (!findNextTokStart(tc)) break;
-        if (tc->sawNewline && stmntEndTriggerType(tc->lastTokType)) {
-            struct token stmntEnd = synthesizeStmntEnd(tc);
-            ListAdd(&tc->tokens, &stmntEnd);
-        }
+        bool endHere = tc->sawNewline && stmntEndTriggerType(tc->lastTokType);
+        struct token stmntEnd = endHere ? synthesizeStmntEnd(tc) : (struct token){0};
 
         struct token tok = tokenizeToken(tc);
+        if (tok.type != TOK_NONE) closeBracketsBeforeDecl(tc, tok);
+        if (endHere && !insideBrackets(tc)) ListAdd(&tc->tokens, &stmntEnd);
         if (tok.type == TOK_NONE) continue; //reported and dropped - see tokenizeOperator
+        trackBracket(tc, tok.type);
         tc->lastTokType = tok.type;
         tc->lastTokEnd = tok.str.ptr + tok.str.len;
         tc->lastTokLine = tok.lineNr;
@@ -619,6 +660,7 @@ TokenCtx TokenizeFile(char* fileName) {
     tc->charLineNr = 1;
     tc->tokens = ListInit(sizeof(struct token));
     tc->edits = ListInit(sizeof(struct tokenEdit));
+    tc->brackets = ListInit(sizeof(char));
     tc->tokIdx = 0;
     tc->fileName = StrFromCStr(fileName);
 

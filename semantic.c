@@ -4546,6 +4546,7 @@ struct checkCtx {
                   //reset at the defer) no break or continue but those of a loop written inside it
     struct syntax* expectNode; //G10c: an expression being built where a type is already expected - a declaration's
     struct type expectType;    //written type, a parameter's, an assignment's target, a return's - see buildExpecting
+    bool* loopBreak; //D10a: set by a "break" of the innermost loop being checked - every loop points it at its own flag
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -12666,11 +12667,16 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     struct syntax* condNode = firstPartOfType(s, SNTX_EXPR);
     struct list baseline = snapshotScopeBindings(innerCtx->scope);
     innerCtx->inLoop = true;
+    bool broken = false;
+    innerCtx->loopBreak = &broken;
     if (condNode) {
         stmt.op = buildExprFromSyntax(innerCtx, condNode);
         if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     }
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    innerCtx->loopBreak = NULL;
+    //D10a: "for { }" with no break of its own leaves only by a return, an error or an ending - never by falling through
+    stmt.leavesOnlyByJump = !condNode && !broken;
     struct list after = snapshotScopeBindings(innerCtx->scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
@@ -12882,6 +12888,8 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
 
     struct list baseline = snapshotScopeBindings(l.scope);
     l.inLoop = true;
+    bool rangeBroken = false;
+    l.loopBreak = &rangeBroken; //D10a: its own breaks, not an outer loop's
     struct list body = ListInit(sizeof(struct statement));
     if (idxTok) { struct statement d = buildVarDeclFromOperand(&l, *idxTok, rangeRead(vC, kw)); ListAdd(&body, &d); }
     struct operand* stepped = OperandBinary(rangeRead(vStep, kw), rangeRead(vC, kw), OPERATION_MUL, kw);
@@ -12978,7 +12986,10 @@ static void forInTryFinish(struct forInTry* ft) {
         //built once per call, each in its own place - a clause's block is code, emitted where the call is; reported once
         if (c > 0) ErrMsgMuteStart();
         cctx->inLoop = true;
+        bool clauseBroken = false;
+        cctx->loopBreak = &clauseBroken; //D10a: the loop it ends is the for-in's
         buildCatchClauses(cctx, ft->s, call, &ft->errors, false, NULL, ft->kw, &call->catchClauses);
+        cctx->loopBreak = NULL;
         if (c > 0) ErrMsgMuteEnd();
         for (int k = 0; k < call->catchClauses.len; k++) {
             struct catchClause* cc = ListGetIdx(&call->catchClauses, k);
@@ -13191,6 +13202,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     struct list baseline = snapshotScopeBindings(lctx.scope);
     lctx.inLoop = true;
+    bool inBroken = false;
+    lctx.loopBreak = &inBroken; //D10a: its own breaks, not an outer loop's
     //the body starts with what the loop hands it; the program's own statements follow
     struct list body = ListInit(sizeof(struct statement));
     if (isArray || indexable) {
@@ -13310,6 +13323,8 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     //see the flow-sensitive scope-binding tracking block above). Safe and conservative, never unsound.
     struct list baseline = snapshotScopeBindings(innerCtx.scope);
     innerCtx.inLoop = true; //S11
+    bool forBroken = false;
+    innerCtx.loopBreak = &forBroken; //D10a: its own breaks, not an outer loop's
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
     //the post clause runs after the body, so it is checked after it - which also puts a reassignment it
     //makes ("c = c.next") inside the window the binding snapshot below treats as the loop's own
@@ -13329,6 +13344,8 @@ struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list baseline = snapshotScopeBindings(ctx->scope);
     struct checkCtx loopCtx = *ctx;
     loopCtx.inLoop = true; //S11
+    bool doBroken = false;
+    loopCtx.loopBreak = &doBroken; //D10a: its own breaks, not an outer loop's
     stmt.block = buildBlock(&loopCtx, firstPartOfType(s, SNTX_BLOCK));
     struct list after = snapshotScopeBindings(ctx->scope);
     foldScopeBindingsBranch(&baseline, &after);
@@ -14313,6 +14330,7 @@ struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct checkCtx dctx = *ctx;
     dctx.inDefer = true;
     dctx.inLoop = false;
+    dctx.loopBreak = NULL;
     dctx.joinHasSpawn = NULL;
     stmt.block = buildBlock(&dctx, firstPartOfType(s, SNTX_BLOCK));
     return stmt;
@@ -14577,9 +14595,11 @@ static bool stmntAlwaysExits(struct statement* s) {
             //every case - which is the fact this rule needs and which nothing used before
             return s->op && s->op->type.bType == BASETYPE_CHOICE;
         }
-        //a loop is never counted, even a "do" whose body always returns: with break (S11) the body
+        //D10a: "for { }" with no break of its own never falls through - it leaves only by what leaves its function
+        case STATEMENT_FOR: return s->leavesOnlyByJump;
+        //any other loop is never counted, even a "do" whose body always returns: with break (S11) the body
         //exiting is not the same as the loop exiting, and proving otherwise needs a reachability pass
-        //this rule deliberately does not have. Write "unreachable" after an infinite loop.
+        //this rule deliberately does not have
         default: return false;
     }
 }
@@ -14960,6 +14980,7 @@ static bool blockLeavesValue(struct list* block) {
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
     if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b
+    if (kind == STATEMENT_BREAK && ctx->loopBreak) *ctx->loopBreak = true; //D10a
     return (struct statement){.sType = kind};
 }
 
@@ -15233,6 +15254,11 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_MATCH: return buildMatchStmnt(ctx, actual);
         case SNTX_STMNT_RET: return buildRetStmnt(ctx, actual);
         case SNTX_STMNT_JOIN: return buildJoinStmnt(ctx, actual);
+        case SNTX_STMNT_BLOCK: { //S20: a block of its own - built as the "if true" a chosen branch already is (S8b)
+            struct statement stmt = buildEmptyIfStmnt(ctx, firstTokAnywhere(actual));
+            stmt.block = buildBlock(ctx, firstPartOfType(actual, SNTX_BLOCK));
+            return stmt;
+        }
         case SNTX_STMNT_SPAWN: return buildSpawnStmnt(ctx, actual);
         case SNTX_STMNT_DEFER: return buildDeferStmnt(ctx, actual);
         case SNTX_STMNT_BREAK: return buildBreakStmnt(ctx, actual, STATEMENT_BREAK);
