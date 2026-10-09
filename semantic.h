@@ -465,8 +465,8 @@ enum operation {
     OPERATION_FUNCCALL,
     OPERATION_INDEX,
     OPERATION_MEMBER,
-    //P9: the atomic builtins. Each takes a mutable integer lvalue as its first argument and lowers to one
-    //LLVM atomic instruction, sequentially consistent. args[0] is the target; the rest are values.
+    //P9: the atomic methods. Each takes an integer place (its receiver) as its first argument and lowers to one
+    //LLVM atomic instruction, sequentially consistent. args[0] is the place; the rest are values.
     OPERATION_ATOMIC_LOAD,
     OPERATION_ATOMIC_STORE,
     OPERATION_ATOMIC_ADD,

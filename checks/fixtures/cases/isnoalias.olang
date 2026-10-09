@@ -1,4 +1,4 @@
-# M12: an alias chain that names no module
+# M12/E10c: an alias chain that names no module - so no type either, and what follows "is" is read as a value
 import "lib"
 fn main() ? {
   d := lib.Dir.North

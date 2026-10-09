@@ -9411,3 +9411,126 @@ from their original form.
   what adapting literals teach; `Map` lives in `std/map` while `List` is in the prelude; std has no clock, so the
   runner is a shell script; and there is no fixed-precision float formatting, so the Benchmarks Game's `%.9f`
   outputs cannot be produced. No compiler change was made - the fixes are for the agents working on the compiler.
+- **`is` replaces `same`, and the atomic builtins became methods (E10c, E32, P9, D2, D3a, 2026-10-09).** The user, on
+  the language's remaining built-in functions: "I don't like built-ins very much", and on the two proposals, "Yes, do
+  both". There were six such functions that looked like calls but were not - `same(a, b)` (E10a's identity, added a day
+  earlier) and the five atomic builtins of P9 - each intercepted by name before the ordinary call lookup, so no
+  declaration could use their names and nothing about them read like the rest of the language.
+  **`a is b`.** `is` already asked a question about what a value is (E32: `x is Shape.Circle`); identity is the same
+  kind of question, and the one Python spells the same way. The rule the coordinator wrote down: when what follows `is`
+  names a case or a type, it is E32's test, reading through a reference; otherwise both sides must be references (or
+  function values) of one type, `null` allowed on either side, and the answer is identity. A case with no payload
+  (`e is Expr.Nil`) stays the case test. **How the two forms are told apart.** Three ways were possible: parse both
+  readings and let the checker choose, decide in the checker from a type-ref, or decide in the parser. The parser
+  already has exactly the predicate needed - the one that commits `Shape.Circle` to a choice value and `Pair<...>(` to
+  a generic constructor, asking whether a name (or everything before its last word) is a known type through any alias
+  chain - so the right side is first read as a `type-ref`, and kept as one when it names a type, a case of one, a
+  primitive, `Bool` or `Array`, or is no plain name at all (`<T>`, a function type, `mut T`); otherwise the parser
+  rewinds (cursor and any `>>` split) and reads an expression at precedence 9, as every comparison's right side is read.
+  So `a is b + c` is `a is (b + c)`, `a is b == c` is `(a is b) == c`, and `x is f()`, `x is a.next`, `x is null` are
+  all values. **What makes it sound** is that a name is never both: D3a forbade a local named like a global, not like a
+  type, and `Circle := 3` beside `type Circle` compiled. The coordinator extended D3a to types (the module's, the
+  prelude's, the built-in names), and I extended **D2** the same way one level up - its text said it "does not define
+  behavior for reusing a name across two different sets", and a global or function named like a type of its module
+  compiled too (checked: both did). Nothing in the corpus, std or the checks used either.
+  **`is not`.** `a is not b` and `x is not Shape.Circle`, mirroring `not in` (E29) and Python. The parser takes a `not`
+  right after `is` as part of the operator and builds `not (a is b)` - the very node `not a is b` already gives (E7a:
+  `not` binds looser than comparisons) - so the checker, the evaluator and codegen see nothing new. No ambiguity arises:
+  `a is (not b)` would need a `Bool` reference, which does not exist.
+  **The atomics.** `x.AtomicLoad()`, `AtomicStore(v)`, `AtomicAdd(v)`, `AtomicSwap(v)` and `AtomicCompareSwap(e, v)`,
+  supplied by the compiler on every integer type as `Len()` is on every array (E23) and `Bits()` on every float (E33):
+  methods in every respect but that no declaration exists, inherited by a type `extends`-ing an integer (T29f), never
+  redeclared (the supplied-method clash, extended), and on a declared type without `extends` an "inherited only with
+  extends" error as for its other base methods. The `Atomic` prefix is kept so the cost stays visible where it is
+  written, which was P9's reason for named operations rather than an `atomic` qualifier. **Decided while building:**
+  `AtomicCompareSwap` over `AtomicCas` - two words a reader can say against an abbreviation, the language's
+  natural-language principle; the receiver must be a **place** (a variable, a field, an element - atomicity is a
+  property of the memory word the place occupies), read-only allowed only for `AtomicLoad` as P9 already relaxed; and a
+  **value argument fits the receiver's type as any argument fits its parameter** (T6, T6b), where P9 required exactly
+  the target's type "since there is no point at which a conversion could run". That reason was about the target, which
+  is never converted; an argument is computed before the instruction, as every argument is, and a method whose
+  arguments did not widen where every other call's do would have been the one exception to T6b. All eight integer
+  types work (LLVM's atomics take `i8`/`i16`); P9's text still named only `U8`, `I32` and `I64`, from before the T4
+  rename. The operations themselves are unchanged - the same operand kinds, so S3 (the four that write may stand as a
+  statement), D15 (`v := n.AtomicLoad()`), S8c's write scan, codegen, K1 (refused while compiling) and `-i` (performed
+  as plain operations, since nothing runs beside it) all needed no change.
+  **Evaluator.** `is` lowers to the `==` of two references - what `same` lowered to - which compiles to a pointer
+  comparison and which the evaluator already answered as identity, so nothing changed there either; it is proven by a
+  corpus global (`IdBaked`, K2) counting seven groups of identity and case questions - equal-by-`Eq` nodes that are two instances,
+  a self-loop, nulls on either side, function values, an enum reference - asserted equal to the same call at run time,
+  and by the K2 fixture baking a self-loop's and a chain's identities to `i1 true` (built inside the initializer's call:
+  read through the globals `Ring` and `Chain`, whose fields are writable, it is set at startup instead, as the
+  evaluator's review decided for anything reaching writable storage). The `-i` fixture now prints
+  an atomic counter and two identities, compared byte for byte with the built program.
+  **Merging beside the type checker's review**: its check that an unknown alias in `d is nosuchalias.Dir.North` is one
+  "unknown namespace" now gets one "unknown name 'nosuchalias'" - a chain naming no type is read as a value (E10c),
+  and that is what an unknown name in an expression says; the check expects that now.
+  **Found on the way.** Making `same` and `atomicAdd` unknown names showed two cascades, both pre-existing: an unknown
+  method (`a.Foo()`) left an `int` literal behind, which as a statement added S3's "computes a value and then discards
+  it" (fixed the same way, in parallel, by the type checker's review - the two fixes merged as one); and an unknown
+  function in an `assert`, `if`, `for` or `do ... for` condition added "operand must be a boolean" (the stand-in type
+  had been taught to meet operator requirements, not conditions). A condition no longer judges the stand-in.
+  **`std/cancel`'s tests were timing-dependent** (the coordinator saw "a busy task stops when the token is cancelled"
+  fail once under concurrent verifies). The spawner spun 5ms and cancelled, asserting the task had counted - but a task
+  need not have run by any particular time, and on a loaded machine it had not, so it saw the token already fired and
+  counted nothing. It now counts with `AtomicAdd` and the spawner cancels once `AtomicLoad` shows it has counted - the
+  test still shows a running task stopping, with no clock in it, and no race either (the count is read while the task
+  writes it, which is why it must be atomic). "a token with a deadline fires by itself" had the same flaw the other
+  way: it asserted a 20ms token had not fired right after making it, false if the test thread lost its core for 20ms;
+  it times from before the token now, asserting only what holds however long a preemption lasts. And P8b still said "olang has no atomic operations, so no access is
+  atomic", written before P9; it now says only P9's methods are atomic.
+- **`checks/checks.olang` runs its checks side by side (2026-10-09).** Once `-t` built each file in a process of its own
+  (B3a), `checks/checks.olang` was most of `make verify`'s time - 156s of ~240s when that was measured, 233s of 366s by
+  the time this was built, with the evaluator's and the type checker's review checks added - because it is a
+  sequential driver of a few hundred small, independent compiler runs: every file in `checks/cases`, then each
+  multi-step scenario in turn. Measured per test at 78508eb: the cases 81s, the 28 scenarios 102s, the longest
+  `cgreview` (15s) and `objnames` (12s).
+  **What kept them from running at once was the build directory.** The cases all ran in one directory, so they shared
+  `build/`: each build rewrites `build/olang_build.ll` and its object (the module of build constants, always rebuilt,
+  under one name whatever the `-D` values), so two builds at once would compile each other's half-written IR - with
+  different `-D` values, different content. Each case now gets a directory of its own, `build/checks/cases/<case>`, as
+  each scenario already had (`build/checks/<scenario>`); no two checks write one file, which the scenarios were checked
+  for one by one (each remote one uses its own cache and its own repository under its own directory; `preludestale`
+  edits a copy of std). Two more shared things turned up: `root()` ran `pwd > build/checks.root` and read it back on
+  every call - every `sh()` - so two at once could read the file while the other had just truncated it and run the
+  compiler as `/build/out`; it is `os.Cwd()` now. And the type checker's review check, merged while this was built, ran
+  in `fresh("cases")` - the directory every case's own lives under, which it would have deleted mid-run; it runs in
+  `typereview`.
+  **The prelude's objects are built once and copied into each case's `build/`** (`Seed`, `build/checks/prelude`): in
+  one shared directory the cases built them once between them, and building them again in each of the 34 cases (39
+  since) that get as far as code is ~1.6s each - two thirds of the cases' time again, measured as 77s against 53s for
+  the whole file. Copied rather than hard-linked so that no build could ever write into another's object (clang replaces its
+  output, but nothing here should rest on that); they are ~90KB of bitcode. Each copy is current - newer than the
+  prelude and the compiler, and named by the same identity hash - so no case rebuilds it, verified by no
+  `std_prelude_*.ll` appearing in any case directory. If the seed build fails, a case simply builds its own.
+  **How they run.** A global initializer (`Outcomes := runAll()`) runs every check before the first test, so the tests
+  keep their order and their names and report exactly as before: the cases' failures are printed in case order by the
+  one cases test, a scenario's by its own test, and `N passed, M failed` counts the same tests. Being an `extern`-reaching
+  initializer it is never evaluated while compiling (K1a). The work is a queue of check numbers in a `std/chan` channel,
+  ordinary olang, and four `spawn`ed workers in one `join` each take the next number until a -1; the scenarios are
+  queued first, longest first, and the cases only once the seed is built, which the spawning thread does while the
+  workers are busy with the scenarios. Each check's outcome is text - "" for a pass, the failure and the compiler's
+  output otherwise - stored by its worker into its own slot of one array (P1g's parallel-map shape; distinct slots, so
+  no lock, and P2's stand-in arenas fold the text back at the join).
+  **Why a scenario is no longer a test body.** An `assert` failing on a task thread aborts the process (P6) with only
+  "assertion failed", so a scenario failing in a task would end the whole run and not say which. Each scenario is a
+  function `fn name(r mut report&) ? Failed` whose checks are `try r.expect(ok, what, dir)` - the original assertion's
+  condition unchanged, `assert c or failed(w, d)` becoming `try r.expect(c, w, d)` - and the first that fails records
+  its message and ends the scenario through the error, as the assert ended the test. A bare `assert c` gained a message
+  of its own. Every assertion was carried over (209 before, 209 after), and the reporting was checked by breaking one
+  case of each kind (fail, build, run) and one scenario: each was reported with its message, in order, and the rest
+  passed. A scenario must be named in `Scenarios` and dispatched in `scenario()`; a test naming one that is not, or an
+  entry with no function, fails rather than being skipped.
+  **Decided (mine): four at a time.** The machine has four cores and a check is mostly one single-threaded compiler or
+  clang run. At 78508eb, with other agents loading the machine (load 3-9, so these are indicative): 2 workers 117s, 3
+  64s, 4 53s and 70s, 6 67s, 8 66s; peak tree memory 1.7, 1.8, 2.0, 2.3 and 2.55GB. More than four only takes a larger
+  share of a machine other verifies use too. On the current tip the sequential file peaks at 3.68GB and the parallel
+  one at ~4.0GB: the largest single process is `agree`'s `olang -i bfrand.olang` at 3.5GB (`-i` frees nothing, B3e) -
+  larger now than any compile in the suite, runner.olang's included.
+  **Measured** (wall times on the shared machine; total CPU is the comparable number and did not change - 163s against
+  168s at 78508eb, 221s against 212-221s on the tip): `checks.olang` 183-186s -> 53-58s at 78508eb, 233s -> 106-129s on
+  the tip under heavier load; `make verify` 366s -> 186s (and 220s), one run each, interleaved.
+  **Friction found, not fixed here**: text pieces still cannot continue onto the next line (recorded), so one long shell
+  command went into a variable; and an element of a static text literal (`for i, s in String&["a", "b"] { all[i] = s }`,
+  into an array in the result scope, directly or through a local holding the literal) is rejected by O20 as storage
+  that does not live long enough, though T25d makes it static data that lives as long as the program.
