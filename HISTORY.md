@@ -14393,3 +14393,42 @@ parallel assignments in one function (baked while compiling as well); `try` on a
 value-capturing lambda (baked through K1's sequential join). All pass under `-t -d -s` and `-t -r`. Must-fail cases:
 `checks/cases/b6elem*` (seven shapes of finding 1), `b6condfield`, `b6matchfield` (with the note), `b6condarg`,
 `b6condelem`, `b6condtyped`; and `b6dtortask` runs finding 2's two programs under `-d -s`, failing on the old compiler.
+
+### Owned references designed: `own`, `take`, loans, and `Vec` (§8.8 O30-O42, T25e, E34, 2026-10-10; not yet implemented)
+
+The user's answer to QF (long-lived structures only grow, O8c): an own reference - `Map<I64, own Conn&>`, `List<own
+Msg&>` - owns an object living in a region of its own, released the moment its owner lets go (removed, nulled,
+overwritten, its owning local ending, at the latest its container's scope closing), with no `free` keyword; `take`
+moves an owner out of a place; a reference read out of an owned object is a borrow, and nothing that may free it runs
+while a borrow is used - checked at compile time, non-lexically, and only for owned objects and only for freeing. The
+user then asked for `Vec<T>` on top (an owned buffer, growth releasing the old one) as the default growable array, and
+for all of it in the C compiler before the port. This entry records the design phase: the rules are in SPEC.md, marked
+not yet implemented; the plan, the predicates, the tests and the risks are in `docs/own.md`.
+
+**Decided in the design (details mine, each with its reason in docs/own.md section 3).** `own` before `mut`, on
+references only, never on a receiver, in a function type, in an enum payload or an `extern`, and with no scope marker.
+Reading an own slot gives a borrow (the type without `own`, in the object's region); reading a value holding owners
+(`Vec`, a struct with an own field) gives a *borrowed copy* that owns nothing - which is why such types need not be
+reference-only as C11 makes destructor-bearing ones: the copy is a loan the check sees. Ownership is deep (a borrow
+through a read-only path is read-only). An owner local not read again moves without `take`; fields, elements and
+globals always need it; `x := slot` borrows. A region outlives only itself and is outlived by its slot's *reach*, so a
+borrow stays in locals, calls and its own region, owned objects refer to each other only by owning, and owners form
+trees (moving an object into itself is a release under a loan). Parameters own or borrow, and results are owned or
+borrowed, as their bodies say - which is how one generic `List<T>` serves `own` elements: `Push` owns because it
+stores, `At` borrows because it reads. Conflicts are judged by type and by *root*: owner locals, owning parameters and
+local values holding owners are precise roots, everything else (parameters, globals, handles) one shared root - so two
+local `Vec`s never conflict, while two `List`s of one owned type do. Function values release only through their
+parameters and destructors only within their instance, so effects stay readable at a call. The prelude's names pair as
+the user put it: `TakeAt`/`SwapTake`/`Map.Take` give, `RemoveAt`/`SwapRemove`/`Remove` let go - which changes
+`RemoveAt` and `SwapRemove`, which gave the element. `Vec` is a value holding its buffer's owner, not a handle, so the
+check can tell two of them apart. Representation: one pointer, the region's header in the word before the object, new
+small size classes for regions (about 128 bytes of headers per owned object - measured later, compacted if it
+matters), drop nodes on the scope's destructor list for owner locals and owner-holding instances.
+
+**Lessons applied.** Every question the check asks has one predicate decided in one place (docs/own.md section 4) -
+the C checker's "where does this live" answered in several drifting places was the source of most of 2026-10-09/10's
+use-after-frees - and the borrow pass reads checked operands, never tokens (O17b's token scan let one through). The
+pass is a separate pass over the checked tree, the shape compiler/DESIGN.md wants for §8 in the port.
+
+**Direction questions for the user** (docs/own.md section 10): `Vec` copies borrow while `List` copies alias; and a
+callback cannot release through what it captures.
