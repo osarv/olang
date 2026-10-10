@@ -4422,6 +4422,13 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   first n (none removed when it holds fewer, Rust's); a Map in key order is `m.Iter().ToList()` then `Sort` (documented,
   not added). No prelude conversion helper for `T(x)` through a type variable (r10): the fix is `T(x)` itself, a
   checker change, and a helper would be one more spelling to retire then.
+- **Rendering: a declared type over `Char`, arrays of arrays, inner `mut` (E11a, T29h, T25b, E21, 2026-10-10).** A type
+  declared over `Char` (`extends` or not) renders as a character, as E11a already said (it printed `97`: a declared type
+  forgot its base, so it now records `overChar`); an array of one is not text but `Letter['a', 'b']` (mine). An array of
+  arrays writes its element type whole, `Array<I64, 3>[I64[1, 2, 3]]` - the 2-D "row" rendering (`I64[[1, 2, 3]]`) is
+  gone with 2-D arrays. A rendered type writes every inner level's `mut` (`List<mut Node&>`, `fn(...) mut Node&`) but
+  not an array rendering's own element permission, which a literal cannot write (`Node&[...]`); rendering helpers are
+  keyed by permission. Found, not fixed: `extends Char` inherits `U8`'s methods, not `Char`'s.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

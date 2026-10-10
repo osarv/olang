@@ -59,6 +59,7 @@ struct type {
                       //misspelt name is one error
     bool extendsBase; //T29f: a declared type over a number or an array, written "extends" - it inherits the base's
                       //methods and operators
+    bool overChar;    //T29h/E11a: a declared type over Char (or over another such type) - it renders as Char does
     bool resolving;   //cycle guard while resolving this type's body
 
     //BASETYPE_ARRAY
@@ -827,6 +828,7 @@ unsigned long long FloatBits(double v, enum baseType b);
 double FloatFromBits(unsigned long long bits, enum baseType b);
 bool TypeIsUnsigned(struct type t);
 bool TypeIsChar(struct type t); //T29h: the prelude's Char
+bool TypeRendersAsChar(struct type t); //E11a: Char, or a declared type over it - "$" writes the character
 struct type SemanticCharType(void);
 bool TypeIsNumeric(struct type t);
 bool TypeIsInt(struct type t);

@@ -47,6 +47,7 @@ bool OperandIsLvalue(struct operand* op);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
 bool ChoiceHasPayload(struct type t);
 void RdSpellType(struct type t, char* buf, size_t n);
+char* RdSpelled(struct type t);
 void RdSpellSig(struct type f, char* buf, size_t n);
 
 #define CT_STEP_BUDGET 20000000
@@ -1771,7 +1772,7 @@ static void ctTextQuoted(struct ctText* b, struct ctVal** bytes, int n, char q) 
     ctTextPut(b, &q, 1);
 }
 
-static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth, bool row,
+static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth,
                           struct token tok);
 
 //a type's name as written, without an instantiation's argument suffix
@@ -1785,13 +1786,13 @@ static bool ctRenderFields(struct ctState* st, struct ctText* b, struct ctVal* v
                            struct token tok) {
     for (int i = 0; i < shape.vars.len && i < v->n; i++) {
         if (i) ctTextStr(b, ", ");
-        if (!ctRenderValue(st, b, v->elems[i], ((struct var*)ListGetIdx(&shape.vars, i))->type, depth, false, tok)) return false;
+        if (!ctRenderValue(st, b, v->elems[i], ((struct var*)ListGetIdx(&shape.vars, i))->type, depth, tok)) return false;
     }
     return true;
 }
 
 //rdBody's rules, for a value the evaluator holds
-static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth, bool row,
+static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth,
                          struct token tok) {
     bool marked = t.structMAlloc && (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_CHOICE);
     if (marked) {
@@ -1801,7 +1802,7 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
         if (depth >= 8) { ctTextStr(b, "..."); return true; }
         struct type referent = t;
         referent.structMAlloc = false;
-        return ctRenderValue(st, b, ctDeref(v), referent, depth + 1, false, tok);
+        return ctRenderValue(st, b, ctDeref(v), referent, depth + 1, tok);
     }
     v = ctDeref(v);
     char name[256];
@@ -1810,18 +1811,15 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
         case BASETYPE_ARRAY: {
             struct type elem = *t.arrElem;
             if (TypeIsChar(elem)) { ctTextQuoted(b, v->elems, v->n, '"'); return true; } //T29h
-            if (!row) {
-                struct type base0 = elem;
-                while (base0.bType == BASETYPE_ARRAY && !base0.structMAlloc && !(base0.owner && base0.name.len)
-                       && !TypeIsChar(*base0.arrElem)) base0 = *base0.arrElem;
-                char spelled[600];
-                RdSpellType(base0, spelled, sizeof(spelled));
-                ctTextStr(b, spelled);
-            }
+            struct type spelledElem = elem; //E19: as a literal writes it, without the permission it takes from its target
+            spelledElem.refMut = false;
+            char* spelled = RdSpelled(spelledElem);
+            ctTextStr(b, spelled);
+            free(spelled);
             ctTextStr(b, "[");
             for (int i = 0; i < v->n; i++) {
                 if (i) ctTextStr(b, ", ");
-                if (!ctRenderValue(st, b, v->elems[i], elem, depth, true, tok)) return false;
+                if (!ctRenderValue(st, b, v->elems[i], elem, depth, tok)) return false;
             }
             ctTextStr(b, "]");
             return true;
@@ -1853,7 +1851,7 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
             return true;
         }
         default:
-            return ctRenderValue(st, b, v, t, depth, false, tok);
+            return ctRenderValue(st, b, v, t, depth, tok);
     }
 }
 
@@ -1896,11 +1894,11 @@ static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, str
     return true;
 }
 
-static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth, bool row,
+static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v, struct type t, int depth,
                           struct token tok) {
     if (!t.structMAlloc && SemanticStrOf(t)) return ctRenderStr(st, b, SemanticStrOf(t), v, tok);
     if (t.bType == BASETYPE_BOOL) { ctTextStr(b, ctDeref(v)->i ? "true" : "false"); return true; }
-    if (TypeIsChar(t)) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
+    if (TypeRendersAsChar(t)) { struct ctVal* one[1] = { ctDeref(v) }; ctTextQuoted(b, one, 1, '\''); return true; }
     if (ctIsFloat(t) || ctIsInt(t)) {
         char num[64];
         //E11a: as the runtime does - the shortest text in the value's own type, and every NaN as "nan" (its sign is
@@ -1911,7 +1909,7 @@ static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v,
         ctTextStr(b, num);
         return true;
     }
-    return ctRenderBody(st, b, v, t, depth, row, tok);
+    return ctRenderBody(st, b, v, t, depth, tok);
 }
 
 static void ctTextParts(struct operand* op, struct list* out) {
@@ -1947,10 +1945,10 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
             struct ctVal* a = ctDeref(v);
             if (a->kind == CT_NULL) continue;
             for (int k = 0; k < a->n; k++) { char c = (char)ctDeref(a->elems[k])->i; ctTextPut(&b, &c, 1); }
-        } else if (TypeIsChar(t) && !viaStr) {
+        } else if (TypeRendersAsChar(t) && !viaStr) {
             char c = (char)ctDeref(v)->i;
             ctTextPut(&b, &c, 1);
-        } else if (!ctRenderValue(st, &b, v, t, 0, false, p->tok)) {
+        } else if (!ctRenderValue(st, &b, v, t, 0, p->tok)) {
             return NULL;
         }
     }
