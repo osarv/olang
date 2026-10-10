@@ -1,0 +1,23 @@
+# check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
+# a loop reads a borrow again on its next turn, after the release later in the turn
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(3)
+    c := s.cur
+    for i in range 3 {
+        println(c.name)
+        if i == 1 { s.cur = Conn(i) }
+    }
+}

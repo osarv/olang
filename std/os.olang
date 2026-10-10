@@ -844,8 +844,8 @@ test "Exec runs a program in the directory it is given" {
     assert Run("mkdir -p build/os_files/indir && printf '#!/bin/sh\\necho here\\n' > build/os_files/indir/here.sh && chmod +x build/os_files/indir/here.sh") == 0
     where := try Exec(String&["pwd"], default, default, "build/os_files/indir") catch { fail }
     assert where.Status == 0 and where.Stdout.EndsWith("/build/os_files/indir\n")
-    own := try Exec(String&["./here.sh"], default, default, "build/os_files/indir") catch { fail }
-    assert own.Stdout == "here\n"
+    ran := try Exec(String&["./here.sh"], default, default, "build/os_files/indir") catch { fail }
+    assert ran.Stdout == "here\n"
     cat := try Exec(String&["cat", "here.sh"], default, default, "build/os_files/indir") catch { fail }
     assert cat.Stdout.EndsWith("echo here\n")
     nowhere := false
@@ -952,13 +952,13 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
 
 # where a program's standard output goes: a memory file Exec reads back, or - not captured - this program's own
 test "Exec without capture leaves the program this one's output and error" {
-    own := try ReadLink("/proc/self/fd/1") catch default "none"
+    mine := try ReadLink("/proc/self/fd/1") catch default "none"
     seen := try Exec(String&["sh", "-c", "readlink /proc/$$/fd/1"]) catch { fail }
-    assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $own "\n"
+    assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $mine "\n"
     assert Run("mkdir -p build/os_files") == 0
     free := try Exec(String&["sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4"], "", false) catch { fail }
     assert free.Status == 4 and free.Stdout == "" and free.Stderr == ""
-    assert (try ReadFile("build/os_files/fd1") catch default "") == $own "\n"
+    assert (try ReadFile("build/os_files/fd1") catch default "") == $mine "\n"
     fed := try Exec(String&["sh", "-c", "cat > build/os_files/fed"], "fed in", false) catch { fail }
     assert fed.Status == 0 and (try ReadFile("build/os_files/fed") catch default "") == "fed in"
 }

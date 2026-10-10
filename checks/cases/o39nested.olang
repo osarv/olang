@@ -1,0 +1,22 @@
+# check: fail error[O39]: assigning 's.cur' may release the Sock borrowed on line
+# releasing an owned object releases what its own fields own
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    s.cur.sock = Sock(5)
+    k := s.cur.sock
+    s.cur = null
+    println($k.n)
+}

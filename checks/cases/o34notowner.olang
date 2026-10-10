@@ -1,0 +1,19 @@
+# check: fail error[O34]: an own slot takes an owner
+# an own slot takes a constructor call made there, 'take' from another own slot, or null
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn mk(n I64) Conn& { return Conn(n) }
+fn main() ? {
+    s := Server()
+    s.cur = mk(1)
+}

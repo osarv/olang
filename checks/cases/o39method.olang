@@ -1,0 +1,23 @@
+# check: fail error[O39]: calling 'close' may release the Sock borrowed on line
+# a method releasing below its receiver, while a borrow of what it releases is used after
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn (c mut Conn&) close() { c.sock = null }
+fn main() ? {
+    s := Server()
+    s.cur = Conn(3)
+    s.cur.sock = Sock(1)
+    k := s.cur.sock
+    s.cur.close()
+    println($k.n)
+}

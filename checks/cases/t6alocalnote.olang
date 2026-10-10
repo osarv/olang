@@ -2,8 +2,8 @@
 # also: note: 'n' is I64, its literal's own type - declare the type it should have, 'n I32 = ...'
 # T6a/B11: "n := 0" declares an I64, its literal's own type, which does not flow into an I32 parameter - the note names
 # the declaration to change, where the error is at the use
-fn take(a I32) I32 { return a }
+fn give(a I32) I32 { return a }
 fn main() ? {
     n := 0
-    take(n * 2 + 1)
+    give(n * 2 + 1)
 }

@@ -1,0 +1,18 @@
+# check: fail error[T25e]: 'own' marks a reference, and Sock is none - write 'own Sock&'
+# own is written on a reference
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+type H struct() {
+    c own Sock
+}
+fn main() ? { }

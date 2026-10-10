@@ -1,0 +1,22 @@
+# check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
+# a borrowed result holds the borrow its argument was
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn first(c Conn&) String&c { return c.name }
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    n := first(s.cur)
+    s.cur = null
+    println(n)
+}

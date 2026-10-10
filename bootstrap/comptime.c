@@ -2070,6 +2070,16 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             return ctInt(op->type, a->n);
         }
         case OPERATION_NUMERIC_CONVERT: return ctConvert(st, op);
+        case OPERATION_TAKE: { //E34: the owner the slot held, the slot left null - a move, releasing nothing (O34)
+            struct ctVal* node = ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), true);
+            if (!node) return NULL;
+            struct ctVal* v = ctNew(CT_NULL, op->type);
+            *v = *node;
+            v->type = op->type;
+            node->kind = CT_NULL;
+            node->target = NULL;
+            return v;
+        }
         case OPERATION_BITCAST: { //E33: the same bits, read as the other type - exactly the generated code's bitcast
             struct operand* src = *(struct operand**)ListGetIdx(&op->args, 0);
             struct ctVal* v = ctDeref(ctEval(st, src));

@@ -1,0 +1,20 @@
+# check: fail error[O40]: the lambda releases owned objects, so it cannot be a function value
+# a function value releases nothing yet - a call through one shows nothing it may release
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(3)
+    f := fn() { s.cur = null }
+    f()
+}

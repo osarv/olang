@@ -1,0 +1,22 @@
+# check: fail error[O39]: calling 'dropG' may release the Conn borrowed on line
+# a release through a global reaches every borrow of its type
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+G mut Server& = Server()
+fn dropG() { G.cur = null }
+fn main() ? {
+    G.cur = Conn(1)
+    c := G.cur
+    dropG()
+    println(c.name)
+}

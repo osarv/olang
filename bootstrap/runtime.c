@@ -1703,6 +1703,61 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  store ptr %node, ptr %dheadptr\n"
         "  ret void\n"
         "}\n\n"
+        "", out);
+    fputs(
+        //O30: an own reference's object, in a region of its own - a scope whose 48-byte header is made here (malloc'd, so
+        //it outlives every chunk the region takes), the word before the object holding it. The object is the region's
+        //first allocation, at its own alignment (at least 8: the word before it); what it builds into itself lands in the
+        //same scope - the constructor's %here is the region
+        "define linkonce_odr ptr @__olang_own_new(i64 %size, i64 %aln0) noinline {\n"
+        "entry:\n"
+        "  %hdr = call ptr @malloc(i64 48)\n"
+        "  %hnull = icmp eq ptr %hdr, null\n"
+        "  br i1 %hnull, label %oom, label %ok\n"
+        "oom:\n"
+        "  call void @__olang_check_failed(ptr @__olang_msg_oom)\n"
+        "  unreachable\n"
+        "ok:\n"
+        "  call void @llvm.memset.p0.i64(ptr %hdr, i8 0, i64 48, i1 false)\n"
+        "  %small = icmp ult i64 %aln0, 8\n"
+        "  %aln = select i1 %small, i64 8, i64 %aln0\n"
+        "  %total = add i64 %size, %aln\n"
+        "  %raw = call ptr @__olang_scope_alloc_a(ptr %hdr, i64 %total, i64 %aln)\n"
+        "  %obj = getelementptr i8, ptr %raw, i64 %aln\n"
+        "  %word = getelementptr i8, ptr %obj, i64 -8\n"
+        "  store ptr %hdr, ptr %word\n"
+        "  ret ptr %obj\n"
+        "}\n\n"
+        //O35: releases what an own reference owns - nothing for null: the region's destructors run (its owners' own
+        //releases among them), its chunks go back to the pool (or, under -s, are poisoned and held back), and its header
+        //is freed
+        "define linkonce_odr void @__olang_own_free(ptr %obj) noinline {\n"
+        "entry:\n"
+        "  %none = icmp eq ptr %obj, null\n"
+        "  br i1 %none, label %ret, label %go\n"
+        "go:\n"
+        "  %word = getelementptr i8, ptr %obj, i64 -8\n"
+        "  %hdr = load ptr, ptr %word\n"
+        "  call void @__olang_scope_close(ptr %hdr)\n"
+        "  call void @free(ptr %hdr)\n"
+        "  br label %ret\n"
+        "ret:\n"
+        "  ret void\n"
+        "}\n\n"
+        //O35: an owner local's slot, released as its block's scope closes (a destructor node's function: the slot is
+        //its "instance") - what it holds then, null when it was moved on
+        "define linkonce_odr void @__olang_own_drop_slot(ptr %slot, ptr %scope) {\n"
+        "entry:\n"
+        "  %obj = load ptr, ptr %slot\n"
+        "  store ptr null, ptr %slot\n"
+        "  call void @__olang_own_free(ptr %obj)\n"
+        "  ret void\n"
+        "}\n\n"
+        //O32: the region a borrow's referent is in, for building there - the word before the object; a null borrow's is
+        //read from here instead (null: a build into it traps, as reading through the null itself does, T2b)
+        "@__olang_own_nullhdr = linkonce_odr global ptr null\n"
+        "", out);
+    fputs(
         //P2: folds a task's sub-scope back into the scope it stands for, on the spawner's thread, after
         //the join - so the only thread that ever bumps a given arena is the one that owns it. Nothing is
         //copied or moved: the two chunk lists are relinked, and the sub-scope's dtor nodes (which live in

@@ -185,6 +185,28 @@ struct type;
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
+    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so it is held only by reference: write %t&") \
+    X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
+    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - an own reference is to a struct, as 'own Conn&'") \
+    X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
+    X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type - here it is not supported yet") \
+    X(ERR_OWN_BUILT_BEFORE_BORROW,      "O33",   "this value would be built where the object of '%s' lives, which a later argument reads - read it first, 'o := %s'") \
+    X(ERR_OWN_TAKE_NEEDED,              "O34",   "moving out of '%s' would leave it empty - write 'take %s'") \
+    X(ERR_OWN_NOT_AN_OWNER,             "O34",   "an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this %s") \
+    X(ERR_OWN_REACH,                    "O34",   "the owner refers to what lives shorter than the slot it is moved into - move it where that lives") \
+    X(ERR_OWN_COMPOUND,                 "O34",   "an own slot is given an owner with '=', not '%s'") \
+    X(ERR_OWN_OWNER_USE,                "O34",   "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field or an own global") \
+    X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
+    X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
+    X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
+    X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
+    X(ERR_OWN_MOVE_UNDER_LOAN,          "O39",   "%s moves the %t borrowed on line %d, which is used after it - a borrowed object is not moved until its borrow is done") \
+    X(ERR_OWN_RELEASE_UNDER_TASK,       "O41",   "%s may release the %t the task spawned on line %d may be using until the join - release it after the join") \
+    X(ERR_OWN_RELEASE_UNDER_TASK_ANY,   "O41",   "%s may release what the task spawned on line %d may be using until the join - it calls a function value, which may reach any owned object; release it after the join") \
+    X(ERR_OWN_CAPTURED,                 "O32",   "a lambda does not capture the owner local '%S' - capture a borrow of it, 'b := %S' outside the lambda") \
+    X(ERR_OWN_TASK_RELEASE,             "O41",   "a task may not release owned objects yet, and '%S' may - release them before the spawn or after the join") \
+    X(ERR_OWN_FUNC_VALUE_RELEASE,       "O40",   "%S releases owned objects, so it cannot be a function value - a function value releases nothing yet") \
+    X(ERR_OWN_DESTRUCTOR_RELEASE,       "O40",   "a destructor may not release owned objects - its instance's own fields are released after it runs") \
     X(ERR_TRAIT_NOT_A_TYPE,             "T30",   "%t is a trait - a constraint on a type variable, never the type of a value") \
     X(ERR_ENUM_CASE_IN_USE,             "T17",   "enum case %n is already declared") \
     X(ERR_DECLARED_TWICE,               "",      "%n is declared twice") \
@@ -320,6 +342,14 @@ struct type;
     X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
+    X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
+    X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
+    X(NOTE_OWN_MOVES_HERE,              "",      "%S moves it here") \
+    X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
+    X(NOTE_OWN_TASK_BORROWS,            "",      "the task borrows it here") \
+    X(NOTE_OWN_TASK_CALLS_VALUE,        "",      "it calls a function value here") \
+    X(NOTE_OWN_BORROW_LOCAL,            "",      "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") \
     X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
     X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \

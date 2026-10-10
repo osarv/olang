@@ -1,0 +1,26 @@
+# check: fail error[O34]: an own slot is given an owner with '=', not '+='
+# a compound assignment would read the slot it releases
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+type N struct(v I64) {
+    v
+}
+fn (a N&) Plus(b N&) N& { return N(a.v + b.v) }
+type H struct() {
+    n own mut N&
+}
+fn main() ? {
+    h := H()
+    h.n = N(1)
+    h.n += N(2)
+}

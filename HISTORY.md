@@ -14935,3 +14935,192 @@ parallel assignments in one function (baked while compiling as well); `try` on a
 value-capturing lambda (baked through K1's sequential join). All pass under `-t -d -s` and `-t -r`. Must-fail cases:
 `checks/cases/b6elem*` (seven shapes of finding 1), `b6condfield`, `b6matchfield` (with the note), `b6condarg`,
 `b6condelem`, `b6condtyped`; and `b6dtortask` runs finding 2's two programs under `-d -s`, failing on the old compiler.
+
+### Owned references designed: `own`, `take`, loans, and `Vec` (§8.8 O30-O42, T25e, E34, 2026-10-10; not yet implemented)
+
+The user's answer to QF (long-lived structures only grow, O8c): an own reference - `Map<I64, own Conn&>`, `List<own
+Msg&>` - owns an object living in a region of its own, released the moment its owner lets go (removed, nulled,
+overwritten, its owning local ending, at the latest its container's scope closing), with no `free` keyword; `take`
+moves an owner out of a place; a reference read out of an owned object is a borrow, and nothing that may free it runs
+while a borrow is used - checked at compile time, non-lexically, and only for owned objects and only for freeing. The
+user then asked for `Vec<T>` on top (an owned buffer, growth releasing the old one) as the default growable array, and
+for all of it in the C compiler before the port. This entry records the design phase: the rules are in SPEC.md, marked
+not yet implemented; the plan, the predicates, the tests and the risks are in `docs/own.md`.
+
+**Decided in the design (details mine, each with its reason in docs/own.md section 3).** `own` before `mut`, on
+references only, never on a receiver, in a function type, in an enum payload or an `extern`, and with no scope marker.
+Reading an own slot gives a borrow (the type without `own`, in the object's region); reading a value holding owners
+(`Vec`, a struct with an own field) gives a *borrowed copy* that owns nothing - which is why such types need not be
+reference-only as C11 makes destructor-bearing ones: the copy is a loan the check sees. Ownership is deep (a borrow
+through a read-only path is read-only). An owner local not read again moves without `take`; fields, elements and
+globals always need it; `x := slot` borrows. A region outlives only itself and is outlived by its slot's *reach*, so a
+borrow stays in locals, calls and its own region, owned objects refer to each other only by owning, and owners form
+trees (moving an object into itself is a release under a loan). Parameters own or borrow, and results are owned or
+borrowed, as their bodies say - which is how one generic `List<T>` serves `own` elements: `Push` owns because it
+stores, `At` borrows because it reads. Conflicts are judged by type and by *root*: owner locals, owning parameters and
+local values holding owners are precise roots, everything else (parameters, globals, handles) one shared root - so two
+local `Vec`s never conflict, while two `List`s of one owned type do. Function values release only through their
+parameters and destructors only within their instance, so effects stay readable at a call. The prelude's names pair as
+the user put it: `TakeAt`/`SwapTake`/`Map.Take` give, `RemoveAt`/`SwapRemove`/`Remove` let go - which changes
+`RemoveAt` and `SwapRemove`, which gave the element. `Vec` is a value holding its buffer's owner, not a handle, so the
+check can tell two of them apart. Representation: one pointer, the region's header in the word before the object, new
+small size classes for regions (about 128 bytes of headers per owned object - measured later, compacted if it
+matters), drop nodes on the scope's destructor list for owner locals and owner-holding instances.
+
+**Lessons applied.** Every question the check asks has one predicate decided in one place (docs/own.md section 4) -
+the C checker's "where does this live" answered in several drifting places was the source of most of 2026-10-09/10's
+use-after-frees - and the borrow pass reads checked operands, never tokens (O17b's token scan let one through). The
+pass is a separate pass over the checked tree, the shape compiler/DESIGN.md wants for §8 in the port.
+
+**Direction questions for the user** (docs/own.md section 10): `Vec` copies borrow while `List` copies alias; and a
+callback cannot release through what it captures.
+
+### Owned references, the first cut built (§8.8 O30-O42, T25e, E34, K1, K2, PRINCIPLES.md, 2026-10-10)
+
+The plan in `docs/own.md` has twelve steps; this is the subset everything else stands on, built with nothing half-wired
+and recorded in docs/own.md section 11: `own` on a reference to a struct type as a field's, a local's or a global's
+type, `take` of such a slot, regions at run time, the borrow check with its effects, O40/O41 in a strict form, and K2.
+SPEC.md's §8.8 note now says "partly implemented" and each rule says where it stops; the rules elsewhere marked
+*(§8.8, not yet implemented)* are narrowed to what is left (owning parameters and results, own elements, `TakeAt`,
+`SwapTake`, `Map.Take`, `Vec`, borrowed copies).
+
+**How it is built.** A slot read anywhere but a move position (`ownBorrowRead`) becomes a borrow: the type without
+`own`, its scope a fresh region variable (`isRegion`) recording the read (`regionSlot`), the struct it is of
+(`regionType`), what it was reached from (`regionRoot`: an owner local, a parameter, or anything else) and the reach
+of the slot. A move position (`ownMoveInto`) takes `null`, a constructor call made there - a new region, its scope the
+constructor's `%here` - or `take p`, checking the reach (O34). The borrow pass (`settleOwnBorrows`, a pass of its own
+over the checked tree, as compiler/DESIGN.md wants §8 in the port) first settles each function's **effects** - the own
+types it may release, through which parameter or through anything else, closed under what those types hold - as a
+least fixed point over every body (module functions, constructors, destructors, global initializers, tests,
+instantiations, twins, lambdas), then walks each body with **holders** (locals holding loans, live while read later in
+their block, in an enclosing loop or in deferred code), the statement's own loans, and an enclosing expression block's,
+and refuses a release - an own slot assigned, `take`, a call whose effects reach - that meets a live loan by type and
+root. Codegen: `__olang_own_new` makes a region per object (one chunk, the scope header in it, the region's header in
+the word before the object), `__olang_own_free` releases it, a borrow's region is read from that word as the borrow is
+read, and an owning struct's own fields are released through a drop node registered at construction - so a scope's
+close and a test's unwinding (P1d) release them. The evaluator keeps a released object (releases are no-ops), which
+nothing a program the compiler accepts can observe (O39); `take` copies the node and leaves the place null.
+
+**Decided while building (mine, the details in docs/own.md section 11).** An owning struct is held only by reference
+(`ERR_OWNING_TYPE_BY_VALUE`): with no borrowed copies yet, a value copy would be a second owner. An owner local's reach
+comes from its initializer - the program's scope for `null`, nothing, or a constructor call given only numbers,
+literals, written text, `null` and such calls; its block's for another value made there; the source's for `take p` -
+so `head = take n2` in a loop building a list works where the block's reach refused it. Roots are three: an owner local
+(its releases reach only loans rooted at it and unrooted ones), a fresh value (its release reaches nothing), anything
+else (reaches every loan of its types) - more conservative than the spec's "a variable's root and the shared root never
+meet", which holds where it matters (two owner locals never conflict). A release reaches no loan inside its own chain
+below it, nor one on the slot path it assigns (`head.next = take head.next.next`); an assignment's release is checked
+against the loans live past its statement and its target's place, since the value is computed before the store (S4).
+`take` into a field or a global of the same reach is a move, not a release (`ownKeptReach`), unless it moves an object
+into its own region; a `take` standing as a statement releases at the statement's end (S3 admits it). `take` anywhere
+else, and a conditional or a match giving an owner, are O34 errors for now. O40/O41 strict: function values, `Call`
+adapters, destructors, `Str`/`Eq`/`Hash` and spawned calls release nothing at all. A global reaching an own reference
+is never baked (K2).
+
+**Found by the scope fuzzer's own scenarios - a use-after-free in the cut itself.** A call's hidden scope arguments are
+resolved before its arguments, and a region's scope is known only once the borrow naming it is read - by an argument of
+that very call. So `ogrow(h.cur, 4)`, `ogrow` building into its parameter's scope, was handed a null scope (a segfault)
+or, in a loop, the previous iteration's region, freed since (a use after free the sanitizer reports). The shared.olang
+tests had passed because each read the borrow in an earlier statement. Fixed in codegen: a scope argument that resolved
+to a region is read again after the arguments (`regionArgs`), a task's stand-in made from that. The order the other
+way round - `setN(Node(9), s.cur)`, a value for an earlier argument built in the region a later one reads - cannot be
+fixed by codegen: hoisting the read past the arguments between is unsound, since one of them may release the slot. It
+is O33's error, naming the local to read the borrow into (`o := s.cur`). Measured: the own scenarios, run alone, give
+24 findings in 60 programs on the compiler without the codegen fix, none with it; then 300 all-own programs (2,561
+scenarios run, 1,039 refused) and 200 of the usual mix (981 run, 1,419 refused) found nothing.
+
+**Smaller things.** `take` passed for a plain reference parameter said "expected Conn&, found own Conn&" (E12) - it is
+O34's message now. `own` and `take` became keywords: a checks case declared `fn take` and std/os two locals named
+`own`, renamed; oann has none. Measured (shared machine, noisy): two million `s.cur = Conn(i)` replacements of an owned
+`Conn` holding text peak at 11 MB, against 82 MB holding them in the scope through a plain reference field, in the same
+time (0.10 s).
+
+**Left** (each additive, docs/own.md section 11): owning parameters and owned results, own elements and `List`/`Map`
+holding owners (`TakeAt`, `SwapTake`, `Map.Take`), `Vec`, owning value types and borrowed copies, implicit last-use
+moves, the other move positions, O40/O41 through parameters, the evaluator marking released objects dead, small region
+classes, flow-sensitive liveness.
+
+### The own first cut's soundness review, fixed (§8.8 O32, O33, O38, O39, O41, §6.8 P2, O16/O30, 2026-10-10)
+
+A read-only review of the first cut (42efc87, /home/user/review/own1) found two use-after-frees the borrow check
+accepted and one pre-existing leak. Fixing them turned up four more holes in the cut itself. The detail is in
+docs/own.md section 12; this is the story.
+
+**C1: a move dropped a loan's root.** The first cut made a `take` into a field or a global of the same reach a move
+that released nothing (decision 6). A move frees nothing, but it takes the object into another owner's tree. A loan on
+the object kept the root it was read through (decision 3: a release through an owner local meets only loans rooted
+there), so a release through the new owner missed it:
+
+    c := o1.cur; o2.cur = take o1.cur; o2.cur = null; println(c.name)
+
+This aborted under `-s` and printed garbage at `-O3`, as did the param-to-local and local-to-param variants. The
+coordinator decided on Rust's rule: no move while borrowed. Every `take` is checked as a release would be, wherever the
+owner goes. So an object never leaves the tree its loans were read through while they are live, and the root model is
+sound again with nothing re-rooted. The checker's `ownKeptReach` is gone. A callee's `take` from below a parameter is
+an effect to its callers, like a release.
+
+Done naively, the rule refused 22 scenarios of the old fuzz programs that 42efc87 ran, all of the shape
+`h.cur.sub = take h.other`: the target's place borrows `h.cur` while a sibling slot is moved. Types alone cannot tell
+the two apart, but the paths can. Two own slots of one object hold two objects, and what each owns is apart, because an
+object has one owner and none owns itself. So a release or move through one own slot never reaches a loan read through
+another (`ownLoanBesidePlace`, comparing the two paths slot by slot up through the borrows they were read through).
+With it, the refusals on those programs are identical to 42efc87's. The first cut's own over-rejection
+`c := s.cur; s.other = null; use c` goes with it.
+
+**C2: a task borrowing through what it was handed.** `spawn work(s, a, b)`, `work` reading `h.cur` internally, and the
+spawner's `s.cur = null` ordered before the task's use by channels. TSan was silent because it is race-free, and the
+task read freed memory. Only borrows handed to a task as arguments were held until the join. The coordinator decided
+on a borrow effect, dual to the release effect: per function, what it may borrow, by type and by root (below which
+parameter, or through anything else). It is computed in the same fixed point:
+- the own slots the body reads;
+- its calls' borrows, mapped through their arguments' roots;
+- `$`, `==` on values: the own types they reach, and whatever every `Str`/`Eq`/`Hash` may borrow;
+- what the destructor of a value it builds may borrow through a global;
+- a call through a function value, or a body not known: anything.
+
+At a spawn, the call's borrows and its clause lambdas' (P4a) become loans held until the join, rooted at the
+arguments' roots, or the shared root for globals and captures. Doing this exposed three places where even argument
+loans had never been checked:
+- deferred code in the join block runs before the join waits, but was walked before the spawn;
+- a loop in the join block releases on its next turn before re-spawning, and the walk saw the release before the spawn;
+- a spawn's targets are stored into when the task's call returns.
+
+The first two are walked again with only the task loans checked; the third counts the target places as loans.
+
+**Holes in the cut, found while fixing (decided by me).**
+- A lambda captured an owner local as a copy - a second owner. `fn() { o.cur = null }` released with no effect, and
+  `fn() { p := take o }` freed `o` twice. This is now an error naming the fix, `b := o`, until the capture is made a
+  borrow implicitly.
+- P2 took every region to outlast the join. A borrow of an owner local declared in a block inside the join, lent to a
+  task, died at that block's end. A region now records where its slot lives, and P2 judges it by that.
+- An assignment's value may use a borrow of what the assignment releases. Decision 5 said so, but locals holding loans
+  counted the read.
+- A statement gets one error, not one for its `take` and another for its store.
+
+**P1, pre-existing in codegen.** A temporary stored into a reference field was built in the function's own scope,
+however short-lived the field's container. `a.kid = Node(5)` in a loop body kept every turn's node, its destructor run
+only at the function's end. Through a borrow (`s.cur.kid = Node(5)`) the node was outside the owned object's region, so
+releasing `s.cur` ran only one destructor of two, undercutting O30. `cgResolveEffectiveScope` now builds through a
+borrow into its region and through a reference local where the checker says it lives, resolved after the place is
+evaluated.
+
+**Over-rejections left.**
+- A typed borrow local (`best Node& = s.cur`) lives in its block by O25a. O33 now says only `:=` holds a borrow, and the
+  O10 error gains a note saying so.
+- Reassigning a borrow local to another read stays O10's error, at the reassignment.
+- Task loans are matched by type: a task borrowing `s.cur` forbids replacing `s.other` in its join block.
+
+**Fuzzer.** The own scenarios gained the review's shapes:
+- a move across owner locals while borrowed, then released;
+- a helper moving from below its parameter;
+- a task borrowing through its holder, synchronised by an atomic flag with a bounded wait so `-i` (which runs tasks only
+  at the join) goes on;
+- a loop releasing what the last turn's task builds into;
+- deferred code in a join block releasing.
+
+All-own, seeds 1-60:
+
+| compiler | findings | scenarios run | refused |
+|---|---|---|---|
+| 42efc87 | 56 | 567 | 153 |
+| fixed | 0 | 294 | 426 |

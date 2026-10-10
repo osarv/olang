@@ -14,7 +14,7 @@ type Wrap struct(a Node&) {
 type Box struct(w Wrap&) {
     w
 }
-fn take(w Wrap&) I64 { return w.a.v }
+fn peek(w Wrap&) I64 { return w.a.v }
 fn id(x <T>) T { return x }
 fn kept(x <T>) T {
     y := x
@@ -29,7 +29,7 @@ fn main() ? {
         w Wrap& = Wrap(local)
         x := Wrap(local)
         b := Box(Wrap(local))
-        n := take(Wrap(local))
+        n := peek(Wrap(local))
         c := k == 42
         y Wrap& = Wrap(local) if c else Wrap(local)
         z := (Wrap(local) if c else Wrap(local)).a.v
@@ -42,7 +42,7 @@ fn main() ? {
             case 42 => Wrap(local)
             nomatch => Wrap(local)
         }
-        t := take(Wrap(local) if c else Wrap(local))
+        t := peek(Wrap(local) if c else Wrap(local))
         assert Count == 0
         assert k + n + z == 126 and s == "Wrap(Node(42))"
     }
