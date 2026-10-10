@@ -12868,3 +12868,7 @@ as carrying it). That also accepts `h.name = a; return h` and the same through a
 cases (`o26afieldafter`, `o26ainlinearray`) had pinned as O20 errors: the text now lives in the result scope with `h`,
 so they became run cases read back after a churn (`-b`, `-b -d`, `-i`); text stored into a parameter's field still stays
 in its block and is O20's error (`o26aborrowparam`).
+Reading the checked body also lifted the recorded limit `o10cloopcopy` pinned for a handle: `for p in parts { merge(sum,
+p) }` over an array of `Map`s compiles, since `merge`'s `for e in from` is `from.Iter()`, whose iterator holds only
+`of.s` (the token scan had refused every `for`) - `o17bloopcopy` runs it after a churn, and `o10cloopcopy` keeps the
+limit and its note for a struct holding a count beside its map, which is no handle.
