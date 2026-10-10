@@ -96,6 +96,14 @@ length Vec<T> again right?"):**
     aliasing-XOR-mutation.
   - Spelled as a reference modifier like `mut` (`Map<I64, box Conn&>`, `box mut Conn&`), not a `Box<T>` type. That way
     method calls and every other reference rule apply unchanged, with no deref rules.
+  - Freeing (the user asked "is it take only or a free keyword as well?"): no `free` keyword. A box is freed when its
+    owner lets go of it:
+    - removed from its container (`Remove`, `RemoveAt`, `Clear`, `Truncate`);
+    - its slot set to `null` - the explicit "free now";
+    - its slot overwritten - the old one is freed;
+    - the local owning it (after `take`) reaching the end of its block, unless moved on again;
+    - at the latest, its container's scope closing.
+    `take` only moves. This keeps "no manual free": nothing frees memory, an owner lets go.
 
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
