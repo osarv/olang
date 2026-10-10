@@ -14622,38 +14622,38 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
 
 # ---- E11a (2026-10-10): a declared type over Char renders as a character; an array's element type is written whole,
 # with its inner permissions - each checked at run time and through a global baked while compiling ----
-type RdLetter extends Char
-type RdPlain Char
-type RdOver RdPlain
-type RdNode struct(v I64) {
+type RenLetter extends Char
+type RenPlain Char
+type RenOver RenPlain
+type RenNode struct(v I64) {
     v
 }
-type RdBox<T> struct(x T) {
+type RenBox<T> struct(x T) {
     x
 }
-type RdHolder struct(l RdLetter, rows Array<Array<I64, 3>>&) {
+type RenHolder struct(l RenLetter, rows Array<Array<I64, 3>>&) {
     l
     rows
 }
-RdRunChar mut Char = 'a'
-RdRunN mut I64 = 1
+RenRunChar mut Char = 'a'
+RenRunN mut I64 = 1
 
-fn rdChars(c Char) String {
-    a := RdLetter(c)
-    b := RdPlain(c)
-    o := RdOver(b)
-    ls := RdLetter[a, RdLetter(c)]
-    return $a " " $b " " $o " " $ls " " $RdHolder(a, Array<I64, 3>[I64[1, 2, 3]])
+fn renChars(c Char) String {
+    a := RenLetter(c)
+    b := RenPlain(c)
+    o := RenOver(b)
+    ls := RenLetter[a, RenLetter(c)]
+    return $a " " $b " " $o " " $ls " " $RenHolder(a, Array<I64, 3>[I64[1, 2, 3]])
 }
-RdCharsBaked String = rdChars('a')
+RenCharsBaked String = renChars('a')
 test "E11a: a declared type over Char renders as a character, extends or not, alone and inside another value" {
-    assert RdCharsBaked == "a a a RdLetter['a', 'a'] RdHolder('a', Array<I64, 3>[I64[1, 2, 3]])"
-    assert rdChars(RdRunChar) == RdCharsBaked
+    assert RenCharsBaked == "a a a RenLetter['a', 'a'] RenHolder('a', Array<I64, 3>[I64[1, 2, 3]])"
+    assert renChars(RenRunChar) == RenCharsBaked
     u U8 = 97
-    assert $u == "97" and $U8[u] == "U8[97]" and $RdRunChar == "a"
+    assert $u == "97" and $U8[u] == "U8[97]" and $RenRunChar == "a"
 }
 
-fn rdRows(n I64) String {
+fn renRows(n I64) String {
     aa Array<Array<I64, 3>> = Array<I64, 3>[I64[n, 2, 3], I64[4, 5, 6]]
     l := List<Array<I64, 3>>()
     l.Push(aa[0])
@@ -14661,24 +14661,24 @@ fn rdRows(n I64) String {
     cs Array<Array<Char, 2>> = Array<Char, 2>["ab", "cd"]
     return $aa " " $l.ToArray() " " $r " " $cs " " $Array<Array<I64, 2>>(0)
 }
-RdRowsBaked String = rdRows(1)
+RenRowsBaked String = renRows(1)
 test "E11a/E21: an array of arrays writes each element as an array of its own, its element type whole" {
-    assert RdRowsBaked == ("Array<I64, 3>[I64[1, 2, 3], I64[4, 5, 6]] Array<I64, 3>[I64[1, 2, 3]] "
+    assert RenRowsBaked == ("Array<I64, 3>[I64[1, 2, 3], I64[4, 5, 6]] Array<I64, 3>[I64[1, 2, 3]] "
         "Array<I32>&[I32[1], I32[]] Array<Char, 2>[\"ab\", \"cd\"] Array<I64, 2>[]")
-    assert rdRows(RdRunN) == RdRowsBaked
+    assert renRows(RenRunN) == RenRowsBaked
 }
 
-fn rdPerms(n I64) String {
-    node mut RdNode& = RdNode(n)
-    boxes Array<RdBox<mut RdNode&>> = RdBox<mut RdNode&>[RdBox<mut RdNode&>(node)]
-    refs Array<mut RdNode&> = RdNode&[node]
-    nested Array<Array<mut RdNode&>&> = Array<mut RdNode&>&[refs]
-    f := fn(b RdBox<mut RdNode&>&) mut RdNode& { return RdNode(2) }
+fn renPerms(n I64) String {
+    node mut RenNode& = RenNode(n)
+    boxes Array<RenBox<mut RenNode&>> = RenBox<mut RenNode&>[RenBox<mut RenNode&>(node)]
+    refs Array<mut RenNode&> = RenNode&[node]
+    nested Array<Array<mut RenNode&>&> = Array<mut RenNode&>&[refs]
+    f := fn(b RenBox<mut RenNode&>&) mut RenNode& { return RenNode(2) }
     return $boxes " " $refs " " $nested " " $f
 }
-RdPermsBaked String = rdPerms(1)
+RenPermsBaked String = renPerms(1)
 test "E11a/T25b: a rendered type writes each inner level's mut, as source writes it" {
-    assert RdPermsBaked == ("RdBox<mut RdNode&>[RdBox(RdNode(1))] RdNode&[RdNode(1)] Array<mut RdNode&>&[RdNode&[RdNode(1)]] "
-        "fn(b RdBox<mut RdNode&>&) mut RdNode&")
-    assert rdPerms(RdRunN) == RdPermsBaked
+    assert RenPermsBaked == ("RenBox<mut RenNode&>[RenBox(RenNode(1))] RenNode&[RenNode(1)] Array<mut RenNode&>&[RenNode&[RenNode(1)]] "
+        "fn(b RenBox<mut RenNode&>&) mut RenNode&")
+    assert renPerms(RenRunN) == RenPermsBaked
 }
