@@ -1,0 +1,23 @@
+# check: fail error[O20]: the container outlives what this refers to
+# also: note: this borrows a value made here, which lives only in this block
+# E16a (tonight9's review): a slice of a temporary - here an inline field of a call's value result - borrows that
+# temporary where it is made, the block the slice is written in, so it is not stored where it outlives that block. It
+# was accepted, and h.r pointed into set's dead frame
+type Big struct(n I64) {
+    a Array<I64, 4>
+    a[0] = n
+    a[1] = n + 1
+}
+type H struct(k I64) {
+    k
+    r Array<I64>& = null
+}
+fn mk(n I64) Big { return Big(n) }
+fn set(h mut H&, n I64) {
+    h.r = mk(n).a[0:2]
+}
+fn main() ? {
+    h mut H& = H(1)
+    set(h, 7)
+    println($h.r[1])
+}

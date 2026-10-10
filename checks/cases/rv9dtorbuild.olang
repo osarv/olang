@@ -1,0 +1,28 @@
+# check: run
+# flags: -d -s
+# C9/O16 (tonight9's review): a destructor's top level is the scope being closed, where its instance lives - so a node it
+# builds through its instance's field ("n.next = Node(k)") lives until that scope's destructors have all run, and the
+# next destructor reads it. It was built in a scope of the destructor's own, closed as it returned
+Log mut I64 = 0
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Res struct(n mut Node&, k I64) {
+    n
+    k
+} destruct {
+    if n.next != null { Log = Log * 100 + n.next.v }
+    n.next = Node(k)
+    for j in range 20 { t := Node(j) }
+}
+fn f() {
+    a mut Node& = Node(0)
+    r1 Res&a = Res(a, 11)
+    r2 Res&a = Res(a, 22)
+    r3 Res&a = Res(a, 33)
+}
+fn main() ? {
+    f()
+    if Log != 3322 { fail }
+}

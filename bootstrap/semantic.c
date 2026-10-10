@@ -6279,6 +6279,12 @@ struct checkCtx {
                       //operator, index or slice on a declared type calls its Try form here
     bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
                              //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
+    //D8a: building a parameter's default for one call - a lambda in it is made for the code the call stands in: emitted
+    //with that host (and in that module's object), and shared by every call there (paramDefault's lambdas)
+    struct paramDefault* defaultFor;
+    struct var* defaultHost;
+    bool defaultInTest;
+    struct semaModule* defaultObject;
     struct var* destructSelfVar; //non-NULL only while checking a destruct{} body: a bare identifier that
                                   //isn't a real local but does name one of this var's own type's fields
                                   //resolves to member access on it instead of UNKNOWN_VAR - see buildPrimary
@@ -7613,14 +7619,14 @@ struct operand* OperandNullLiteral(struct token tok);
 //D13c: the call giving t's zero value - its constructor on each parameter's default where declared, else that
 //parameter's own zero (a nested constructor's, recursively). A fallible constructor is called as tried with a clause
 //that cannot run: the call is evaluated while compiling, and one that fails makes the declaration an error.
-static struct operand* defaultArgFor(struct var* param);
+static struct operand* defaultArgFor(struct checkCtx* ctx, struct var* param);
 static struct operand* zeroCtorCall(struct checkCtx* ctx, struct type t, struct token tok, int depth) {
     struct var* ctor = t.ctorFunc;
     struct list args = ListInit(sizeof(struct operand*));
     for (int i = 0; i < ctor->type.vars.len; i++) {
         struct var* p = ListGetIdx(&ctor->type.vars, i);
         struct operand* a;
-        if (p->defaultVal) a = defaultArgFor(p);
+        if (p->defaultVal) a = defaultArgFor(ctx, p);
         else if (typeHasZeroCtor(p->type) && p->type.bType != BASETYPE_ARRAY && depth < 8) a = zeroCtorCall(ctx, p->type, tok, depth + 1);
         else if (TypeIsNullable(p->type)) a = OperandNullLiteral(tok);
         else {
@@ -8369,6 +8375,26 @@ static void noteLiteralOwnType(struct operand* op, struct type want) {
     else Note(v->litOwnRangeEnd->tok, NOTE_LITERAL_RANGE_EXPR, v->name, &own, &w, &w);
 }
 
+//E16a: a note at a slice of a temporary in what an error about where it lives was reported for - the temporary is made
+//in the block the slice is written in, which a reader would not guess from the slice
+static bool sliceBorrowsTemporary(struct operand* slice);
+static struct operand* heldResult(struct operand* op);
+static void noteSliceOfTemporary(struct operand* op) {
+    if (!op) return;
+    if (heldResult(op)) { noteSliceOfTemporary(heldResult(op)); return; }
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        noteSliceOfTemporary(*(struct operand**)ListGetIdx(&op->args, 1));
+        noteSliceOfTemporary(*(struct operand**)ListGetIdx(&op->args, 2));
+        return;
+    }
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) noteSliceOfTemporary(*(struct operand**)ListGetIdx(&vs, i));
+        return;
+    }
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1) { noteSliceOfTemporary(*(struct operand**)ListGetIdx(&op->args, 0)); return; }
+    if (sliceBorrowsTemporary(op)) Note(op->tok, NOTE_SLICE_OF_TEMPORARY);
+}
 void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struct type want) {
     if (fit == TYPE_FIT_LITERAL_RANGE || fit == TYPE_FIT_LITERAL_EXPR) {
         struct operand* u = unfitLiteralValue(op, want);
@@ -8378,8 +8404,8 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
             fit = u->isLiteral ? TYPE_FIT_LITERAL_RANGE : TYPE_FIT_LITERAL_EXPR;
         }
     }
-    if (fit == TYPE_FIT_SCOPE_MISMATCH) Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
-    else if (fit == TYPE_FIT_SCOPE_OWN) Err(tok, ERR_OWN_CANNOT_OUTLIVE);
+    if (fit == TYPE_FIT_SCOPE_MISMATCH) { Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE); noteSliceOfTemporary(op); }
+    else if (fit == TYPE_FIT_SCOPE_OWN) { Err(tok, ERR_OWN_CANNOT_OUTLIVE); noteSliceOfTemporary(op); }
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
@@ -8690,6 +8716,7 @@ struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defN
     d->type = paramType;
     d->readsVars = syntaxReadsDeclVar(defNode);
     d->bindings = ListInit(sizeof(struct typeBinding));
+    d->lambdas = ListInit(sizeof(struct defaultLambda));
     ListAdd(&paramDefaults, &d);
     return d;
 }
@@ -8703,6 +8730,7 @@ static struct paramDefault* boundParamDefault(struct paramDefault* d, struct typ
     b->building = false;
     b->type = paramType;
     b->bindings = ListInit(sizeof(struct typeBinding));
+    b->lambdas = ListInit(sizeof(struct defaultLambda)); //an instantiation's lambdas are its own
     for (int i = 0; i < d->bindings.len; i++) {
         struct typeBinding tb = *(struct typeBinding*)ListGetIdx(&d->bindings, i);
         tb.type = TypeSubstitute(tb.type, bindings);
@@ -8715,21 +8743,64 @@ static struct paramDefault* boundParamDefault(struct paramDefault* d, struct typ
     return b;
 }
 
+//B3d/D16: the object whose code f's body is part of, and whether in a test - its module's, for a function the module
+//declares; a lambda's host's, or with no host the module whose initializers, tests or destructors made it. False where
+//it is the root object's to define, as an instantiation is
+static bool funcObjectOf(struct var* f, struct semaModule** obj, bool* inTest) {
+    while (f && f->isLambda) {
+        if (!f->lambdaHost) {
+            *obj = f->lambdaObject ? f->lambdaObject : f->owner;
+            *inTest = f->lambdaInTest;
+            return true;
+        }
+        f = f->lambdaHost;
+    }
+    if (!f || !f->owner || f->type.typeParams.len) return false;
+    struct list* vs = &f->owner->vars;
+    if ((char*)f < (char*)vs->ptr || (char*)f >= (char*)vs->ptr + (size_t)vs->len * (size_t)vs->elemSize) return false;
+    *obj = f->owner;
+    *inTest = false;
+    return true;
+}
 //D8a: builds a parameter's declared default. Deliberately checked in the DECLARING module's own context
 //- a caller's context would resolve a type name against the wrong module. It must be computable at compile
 //time (K1), so it has a value and no other behaviour - nothing it does can depend on which caller omitted
 //it - which is why one build judges it for every call site (each call is given one of its own, defaultArgFor). One
 //that does not fit its parameter is reported here and stands in as the unknown type, so no call reports it again.
 //again: built once more for one call (defaultArgFor) - checked and judged already, so nothing it finds is reported twice
-static struct operand* buildParamDefault(struct paramDefault* d, bool again) {
+static struct operand* buildParamDefault(struct paramDefault* d, bool again, struct checkCtx* caller) {
     //G23: one reading its declaration's variables is its instantiations' - the generic's own is never built
     if (d->readsVars && !d->bindings.len) return unknownPlaceholder(firstTokAnywhere(d->syntax));
+    //built in the declaration's own context, whichever call needs it: its module, and as its variables only those of
+    //its declaration, bound for this instantiation (G23) - never what the caller being checked has in scope. A rebuild
+    //(again) runs inside the caller's check, and a caller's constant "N" read this module's global "N" as its own
     struct checkCtx dctx = {0};
     dctx.mod = d->mod;
+    //D16: a lambda in it is made once for each object holding code that uses it - the first build's in the declaring
+    //module's (paramDefaultOp), one for each other module's calls; with the calling function itself where that is the
+    //root object's to define (an instantiation, B3d), which emits it with that function
+    dctx.defaultFor = d;
+    dctx.defaultObject = d->mod;
+    if (again && caller) {
+        dctx.defaultInTest = caller->inTest;
+        dctx.defaultObject = caller->mod;
+        if (caller->func && !funcObjectOf(caller->func, &dctx.defaultObject, &dctx.defaultInTest)) {
+            dctx.defaultHost = caller->func;
+            dctx.defaultObject = caller->mod;
+            dctx.defaultInTest = caller->inTest;
+        }
+    }
     struct list* prevB = currentBindings;
-    if (d->readsVars) currentBindings = &d->bindings;
+    struct list* prevCV = currentConstVars;
+    struct list* prevTP = currentTypeParamNames;
+    struct list* prevSI = currentSigIntros;
+    currentBindings = d->readsVars ? &d->bindings : NULL;
+    currentConstVars = currentTypeParamNames = currentSigIntros = NULL;
     struct operand* def = buildExprFromSyntax(&dctx, d->syntax);
     currentBindings = prevB;
+    currentConstVars = prevCV;
+    currentTypeParamNames = prevTP;
+    currentSigIntros = prevSI;
     //G18: a default for a parameter whose type is a type variable ("alpha <T> = 1") has no type to fit yet - it is
     //fitted at each call, against the instantiation's, a literal adapting there as any literal argument does
     if (TypeIsGeneric(d->type) && def->isLiteral) return def;
@@ -8752,7 +8823,7 @@ struct operand* paramDefaultOp(struct var* param) {
     if (d->op) return d->op;
     if (d->building) return unknownPlaceholder(firstTokAnywhere(d->syntax)); //a default reaching itself
     d->building = true;
-    d->op = buildParamDefault(d, false);
+    d->op = buildParamDefault(d, false, NULL);
     d->building = false;
     return d->op;
 }
@@ -8763,7 +8834,7 @@ static void buildParamDefaults(void) {
         struct paramDefault* d = *(struct paramDefault**)ListGetIdx(&paramDefaults, i);
         if (d->op || d->building || d->readsVars) continue; //G23: an instantiation's, built where a call needs it
         d->building = true;
-        d->op = buildParamDefault(d, false);
+        d->op = buildParamDefault(d, false, NULL);
         d->building = false;
     }
 }
@@ -8775,7 +8846,7 @@ static void buildParamDefaults(void) {
 //(O18a), the bindings a call in it makes, what codegen records on it. One operand shared by every call kept the first
 //call's landing, and a call in another function built "n Node&r = Node(7)" in a scope variable of the first one's
 //frame (a crash, or with a scope of the same name, the wrong one)
-static struct operand* defaultArgFor(struct var* param) {
+static struct operand* defaultArgFor(struct checkCtx* ctx, struct var* param) {
     struct operand* d = paramDefaultOp(param);
     if (!d) return d;
     if (d->isLiteral && !d->args.len) {
@@ -8786,7 +8857,7 @@ static struct operand* defaultArgFor(struct var* param) {
     struct paramDefault* pd = param->defaultVal;
     if (d->type.unknown || pd->building) return d;
     pd->building = true;
-    struct operand* fresh = buildParamDefault(pd, true);
+    struct operand* fresh = buildParamDefault(pd, true, ctx);
     pd->building = false;
     return fresh;
 }
@@ -9029,11 +9100,83 @@ static struct operand* heldResult(struct operand* op) {
 
 //O18a: a field, an element, a slice or a payload of a value - reading it reads the value, so where a call's value is
 //still to land, so is what is read out of it: it lands where the read is put
+//(a slice of an inline value - a fixed array held by value, not through a reference - is no read out of it: it borrows
+//that value's own storage, which is where the value is made, never where the slice is put - sliceTemporaryRoot)
 static struct operand* projectionBase(struct operand* op) {
     if ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_SLICE
-            || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len && !op->isAtCall)
-        return *(struct operand**)ListGetIdx(&op->args, 0);
+            || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len && !op->isAtCall) {
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (op->opType == OPERATION_SLICE && !b->type.structMAlloc && !b->type.arrMalloc) return NULL;
+        return b;
+    }
     return NULL;
+}
+
+//E16a: the value a slice or a view borrows, where that value has no storage of its own - a call's result, a
+//constructor's instance, a literal, a new array - reached through no reference: the temporary it is made as, in the
+//block the slice is written in. NULL for a slice of a variable's storage or of what a reference names
+static struct operand* sliceTemporaryRoot(struct operand* slice) {
+    if (slice->opType != OPERATION_SLICE || !slice->args.len) return NULL;
+    struct operand* r = *(struct operand**)ListGetIdx(&slice->args, 0);
+    while ((r->opType == OPERATION_MEMBER || r->opType == OPERATION_INDEX) && !r->type.structMAlloc && r->args.len
+           && !r->isAtCall)
+        r = *(struct operand**)ListGetIdx(&r->args, 0);
+    //(a payload read with "as" from an enum held by value is a copy made where it is read - a temporary, whatever the enum
+    //is; one read through a reference is in place, where the referent is)
+    if (r->opType == OPERATION_AS && r->args.len && !(*(struct operand**)ListGetIdx(&r->args, 0))->type.structMAlloc) return r;
+    if (r->type.structMAlloc || r->isNullLiteral || r->opType == OPERATION_READ_VAR || r->opType == OPERATION_AS
+            || r->opType == OPERATION_SLICE || heldResult(r))
+        return NULL;
+    return r;
+}
+//a call's result, or a conditional or a match of calls' results - a run-time-length array so given has its buffer built
+//by the call, in its result scope (T7b), which lands where the result is put (O18a)
+static bool callsGiveArray(struct operand* op) {
+    if (op->opType == OPERATION_FUNCCALL) return true;
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1) return callsGiveArray(*(struct operand**)ListGetIdx(&op->args, 0));
+    if (op->opType == OPERATION_COND && op->args.len == 3)
+        return callsGiveArray(*(struct operand**)ListGetIdx(&op->args, 1)) && callsGiveArray(*(struct operand**)ListGetIdx(&op->args, 2));
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!callsGiveArray(*(struct operand**)ListGetIdx(&vs, i))) return false;
+        return vs.len > 0;
+    }
+    return false;
+}
+//T25d: a slice of text written in the program - constant data, as long-lived as the program, and read-only
+static bool sliceOfConstantText(struct operand* slice) {
+    struct operand* root = sliceTemporaryRoot(slice);
+    return root && root->opType == OPERATION_NONE && root->isLiteral && root->tok.type == TOK_STR_LIT;
+}
+//E16a: whether a slice borrows a temporary made where the slice is written - its base, reached through no reference, a
+//value with no storage of its own - and not a call's run-time-length array result, whose buffer lands where the slice is
+//put (O18a), nor written text. Decided by the program's shape alone, so it says the same before and after the statement
+//lands its calls
+static bool sliceBorrowsTemporary(struct operand* slice) {
+    struct operand* root = sliceTemporaryRoot(slice);
+    return root && !(root->type.arrMalloc && callsGiveArray(root)) && !sliceOfConstantText(slice);
+}
+//E16a: where a temporary a slice borrows is made - the block the slice is written in; at a constructor's top level its
+//frame, which closes as it returns, as its by-value parameters' slots do (C2g), never the instance's scope
+static int temporaryDepth(struct checkCtx* ctx) {
+    return ctx->inCtor && ctx->blockDepth < 2 ? 2 : ctx->blockDepth;
+}
+//E16a/C2d: a slice or a view, made - a borrow of its base's storage. A value local's storage is then borrowed, so a
+//constructor's field kept a view of is stored where the instance lands (slotBorrowed), as one lent by reference is; a
+//temporary's lives in the block the slice is written in, which the slice's type says
+static void noteSliceBorrow(struct checkCtx* ctx, struct operand* sl) {
+    if (sl->opType != OPERATION_SLICE || !sl->args.len) return;
+    if (ctx && sliceBorrowsTemporary(sl)) {
+        sl->type.scopeParam = NULL;
+        sl->type.scopeDepth = temporaryDepth(ctx);
+        return;
+    }
+    struct operand* r = *(struct operand**)ListGetIdx(&sl->args, 0);
+    while ((r->opType == OPERATION_MEMBER || r->opType == OPERATION_INDEX || r->opType == OPERATION_SLICE)
+           && !r->type.structMAlloc && r->args.len && !r->isAtCall)
+        r = *(struct operand**)ListGetIdx(&r->args, 0);
+    if (r->opType == OPERATION_READ_VAR && r->readVar && !r->type.structMAlloc && !canonicalVar(r->readVar)->owner)
+        canonicalVar(r->readVar)->slotBorrowed = true;
 }
 
 bool callIsLanding(struct operand* op) {
@@ -10880,7 +11023,10 @@ static void ensureBodyChecked(struct var* func);
 //G9a/D16a: what a lambda passed for a function-typed parameter says itself - each parameter and the result whose type it
 //writes - unified with the parameter's own function type, so a variable only those reach is bound by them; a type that
 //does not agree binds nothing (FinalizeLambda reports it)
-struct pendingLambda { struct syntax* node; struct checkCtx ctx; };
+//(and the declaration context it was written in - an instantiation's bindings, a default's (D8a) - which its written
+//types and body are resolved in, wherever it is finished)
+struct pendingLambda { struct syntax* node; struct checkCtx ctx; struct list* bindings; struct list* constVars;
+                       struct list* typeParams; struct list* sigIntros; };
 static void syntaxTokensInto(struct syntax* n, struct list* out);
 //T7a: whether a generic's body holds its type variable v in an array or a struct - names it bare as a type argument
 //("Array<U>(n)", "Pair<U, V>"), where an array value bound to v would be an array held by value inside another
@@ -11145,11 +11291,11 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     }
     for (int i = 0; i < func->type.vars.len; i++) {
         struct var* param = ListGetIdx(&func->type.vars, i);
-        if (i >= args.len) { struct operand* d = defaultArgFor(param); ListAdd(&args, &d); continue; }
+        if (i >= args.len) { struct operand* d = defaultArgFor(ctx, param); ListAdd(&args, &d); continue; }
         struct operand* a = *(struct operand**)ListGetIdx(&args, i);
         if (!a->isDefaultArg) continue;
         if (!param->defaultVal) { Err(a->tok, ERR_DEFAULT_ARG_NO_DEFAULT, param->name); return op; }
-        *(struct operand**)ListGetIdx(&args, i) = defaultArgFor(param);
+        *(struct operand**)ListGetIdx(&args, i) = defaultArgFor(ctx, param);
     }
     op->args = args;
     //records, for each of func's own scope variables, what this call site binds it to (O17/O18). Built
@@ -11359,6 +11505,7 @@ bool numericPrimitiveBaseType(struct str name, enum baseType* out) {
 //It is what makes a nominal array type constructible at all; without it "type String byte[]" would have
 //an identity and no way to produce a value of it.
 struct operand* OperandSlice(struct operand* base, struct operand* lo, struct operand* hi, struct token tok);
+static void noteSliceBorrow(struct checkCtx* ctx, struct operand* sl);
 struct operand* OperandNominalConversion(struct type target, struct operand* arg, struct token tok) {
     //"fits", not "is identical": a compile-time-length literal reaching a run-time-length named type is
     //E12's ordinary promotion, and a conversion should admit everything an assignment to the underlying
@@ -11393,6 +11540,7 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
         hi->intLiteralVal = target.arrLen->intLiteralVal;
         struct operand* sl = OperandSlice(arg, NULL, hi, tok);
         if (sl->opType != OPERATION_SLICE) return sl;
+        noteSliceBorrow(NULL, sl);
         struct type t = target;
         t.structMAlloc = true;
         t.refMut = sl->type.refMut;
@@ -11413,7 +11561,10 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
     //(C2e) is lent as a slice of it, as everywhere a run-time length is wanted.
     if (target.bType == BASETYPE_ARRAY && target.arrMalloc && target.arrElem && arg->type.bType == BASETYPE_ARRAY
             && arg->type.arrElem && (OperandIsLvalue(arg) || arg->opType == OPERATION_SLICE)) {
-        if (!arg->type.arrMalloc) arg = OperandSlice(arg, NULL, NULL, tok);
+        if (!arg->type.arrMalloc) {
+            arg = OperandSlice(arg, NULL, NULL, tok);
+            noteSliceBorrow(NULL, arg);
+        }
         struct type t = target;
         t.structMAlloc = arg->type.structMAlloc;
         t.refMut = arg->type.refMut;
@@ -14071,6 +14222,7 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         hi->intLiteralVal = n;
         struct operand* sl = OperandSlice(x, NULL, hi, kw);
         if (sl->opType != OPERATION_SLICE) return sl;
+        noteSliceBorrow(ctx, sl);
         struct type rt = sl->type;
         rt.arrMalloc = false;
         rt.arrLen = want.arrLen;
@@ -14299,7 +14451,10 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 result = operatorCallArgs(ctx, result, sargs, slName, sq);
             } else if (result->type.bType != BASETYPE_ARRAY && notOperatorError(result->type, "Slice", sq, "'x[lo:hi]'")) {
                 result = unknownPlaceholder(sq); //E31: a Slice of another shape is an ordinary method
-            } else result = OperandSlice(result, lo, hi, sq);
+            } else {
+                result = OperandSlice(result, lo, hi, sq);
+                noteSliceBorrow(ctx, result);
+            }
         } else if (p->sntx->type == SNTX_EXPR_VALUE_CALL) {
             result = buildValueCall(ctx, result, p->sntx, i == s->parts.len - 1 && allowLast);
         } else { //SNTX_EXPR_MEMBR
@@ -15665,8 +15820,9 @@ static void roInheritFrom(struct var* v, struct operand* init);
 //S4c: a temporary going into a reference target, held as that reference - built where the target's referent lives, as
 //the assignment alone builds it (E12c), so the assignment that follows only repoints. Held as a value, it was a copy in
 //this block that the target then borrowed: refused in any block but the one the target's referent lives in (O17a,
-//O25 - "a.next, a.v = Node(i), i" on a parameter), and there a pointer into the frame. NULL where the target's referent
-//lives nowhere this function can build (the program's scope, a scope not known here), which keeps the value hold
+//O25 - "a.next, a.v = Node(i), i" on a parameter), and there a pointer into the frame. A target in the program's scope -
+//a global, or a field reached from one - holds it there (O1b), as "G.next = Node(i)" builds it. NULL where the target's
+//referent lives nowhere this function can build (a scope not known here, a derived one), which keeps the value hold
 static struct var* holdForRefTarget(struct checkCtx* ctx, struct operand* v, struct operand* target, struct token tok,
                                     struct list* out) {
     if (!target->type.structMAlloc || v->type.structMAlloc || OperandIsLvalue(v) || !ctx->scope || !ctx->hasOwnScope
@@ -15675,7 +15831,11 @@ static struct var* holdForRefTarget(struct checkCtx* ctx, struct operand* v, str
     struct var* lv = NULL;
     int ld = 0;
     bool lu = false;
-    if (!RefExactScope(ctx, target, true, &lv, &ld, &lu) || lu || lv == SCOPE_AMBIGUOUS || (lv && lv->derivedFrom)) return NULL;
+    if (!RefExactScope(ctx, target, true, &lv, &ld, &lu) || lv == SCOPE_AMBIGUOUS || (lv && lv->derivedFrom)) return NULL;
+    if (lu) { //the program's scope - which the value is built in where it lands (landAtTarget), as the target's own is
+        lv = NULL;
+        ld = 0;
+    }
     char* nm = MallocOrCrash(32);
     snprintf(nm, 32, "$par%d", ++destructCounter);
     struct token ht = tok;
@@ -15691,7 +15851,8 @@ static struct var* holdForRefTarget(struct checkCtx* ctx, struct operand* v, str
     hv->declInit = v;
     roInheritFrom(hv, v);
     hv->scopeBindings = v->scopeBindings;
-    checkCtorHereFits(ctx, v, dt.scopeParam, dt.scopeDepth, tok);
+    if (lu) hv->scopeUnnamed = hv->inProgram = true;
+    checkCtorHereFits(ctx, v, lu ? SCOPE_AMBIGUOUS : dt.scopeParam, dt.scopeDepth, tok);
     struct statement d = (struct statement){0};
     d.sType = STATEMENT_VAR_DECL;
     d.var = *hv;
@@ -16628,7 +16789,23 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
     }
     if (op->opType == OPERATION_SLICE) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
-        return RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed);
+        if (RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed)) return true;
+        //E16a: a slice of a temporary borrows it where it is made - the block the slice is written in - unless what it
+        //borrows is a call's result, built where the slice is put (O18a), or text written in the program, which is
+        //constant data, as long-lived as the program (T25d), and read-only
+        if (sliceOfConstantText(op)) {
+            *outVar = NULL;
+            *outDepth = 0;
+            *unnamed = true;
+            return true;
+        }
+        if (!sliceBorrowsTemporary(op)) return false;
+        int d = op->type.scopeDepth;
+        if (ctx && temporaryDepth(ctx) > d) d = temporaryDepth(ctx);
+        *outVar = NULL;
+        *outDepth = d;
+        *unnamed = false;
+        return true;
     }
     if (op->opType == OPERATION_READ_VAR && op->readVar) {
         struct var* v = canonicalVar(op->readVar);
@@ -18688,10 +18865,14 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                         if (!scopeCanFlowInto(ctx->func, rv, 0, tv, 0) || !scopeCanFlowInto(ctx->func, tv, 0, rv, 0)) {
                             Err(opTok, ERR_REFERENCE_NARROWED);
                         }
-                    } else if (ru || !sameExactScope(tv, td, rv, rd)) Err(opTok, ERR_REFERENCE_NARROWED);
+                    } else if (ru || !sameExactScope(tv, td, rv, rd)) {
+                        Err(opTok, ERR_REFERENCE_NARROWED);
+                        noteSliceOfTemporary(rhs);
+                    }
                 } else if (!ru && !scopeCanFlowInto(ctx->func, rv, normDepth(rd), tv, normDepth(td))) {
                     //(a referent in the program's scope - a global's, constant data, T25d - outlives every slot)
                     Err(opTok, ERR_STORED_REF_OUTLIVED);
+                    noteSliceOfTemporary(rhs);
                 }
             }
         }
@@ -22240,6 +22421,10 @@ struct operand* OperandPendingLambda(struct checkCtx* ctx, struct syntax* node) 
     struct pendingLambda* pl = MallocOrCrash(sizeof(struct pendingLambda));
     pl->node = node;
     pl->ctx = *ctx;
+    pl->bindings = currentBindings;
+    pl->constVars = currentConstVars;
+    pl->typeParams = currentTypeParamNames;
+    pl->sigIntros = currentSigIntros;
     struct type ft = (struct type){0};
     ft.bType = BASETYPE_FUNC;
     ft.vars = ListInit(sizeof(struct var));
@@ -22364,12 +22549,43 @@ bool lambdaInferError(struct var* f, struct type* e) {
     return true;
 }
 
+static void lambdaValueOperand(struct operand* op, struct var* L);
+static void finalizeLambdaIn(struct operand* op, struct type* expected);
+//D16/D8a: a lambda is finished in the declaration context it was written in - one in a parameter's default is finished
+//where a call fits it, inside the caller's check, whose constant and type variables are not the default's
 void FinalizeLambda(struct operand* op, struct type* expected) {
     struct pendingLambda* pl = op->pendingLambda;
     if (!pl) return;
+    struct list* prevB = currentBindings;
+    struct list* prevCV = currentConstVars;
+    struct list* prevTP = currentTypeParamNames;
+    struct list* prevSI = currentSigIntros;
+    currentBindings = pl->bindings;
+    currentConstVars = pl->constVars;
+    currentTypeParamNames = pl->typeParams;
+    currentSigIntros = pl->sigIntros;
+    finalizeLambdaIn(op, expected);
+    currentBindings = prevB;
+    currentConstVars = prevCV;
+    currentTypeParamNames = prevTP;
+    currentSigIntros = prevSI;
+}
+static void finalizeLambdaIn(struct operand* op, struct type* expected) {
+    struct pendingLambda* pl = op->pendingLambda;
     op->pendingLambda = NULL;
     struct checkCtx* octx = &pl->ctx;
     struct syntax* node = pl->node;
+    //D8a: a default's lambda captures nothing - a default has no locals - so every call in one host shares the one made
+    //for it there, a static function value
+    if (octx->defaultFor) {
+        for (int i = 0; i < octx->defaultFor->lambdas.len; i++) {
+            struct defaultLambda* dl = ListGetIdx(&octx->defaultFor->lambdas, i);
+            if (dl->node != node || dl->host != octx->defaultHost || dl->inTest != octx->defaultInTest
+                    || dl->object != octx->defaultObject) continue;
+            lambdaValueOperand(op, dl->L);
+            return;
+        }
+    }
     struct syntax* sig = firstPartOfType(node, SNTX_FUNC_SIG);
     struct token kw = firstTokOfType(node, TOK_FUNC);
     struct type* exp = expected && expected->bType == BASETYPE_FUNC ? expected : NULL;
@@ -22423,6 +22639,13 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
     L->isLambda = true;
     L->lambdaHost = octx->func;
     L->lambdaInTest = octx->inTest;
+    if (octx->defaultFor) { //D8a: made for the code a call stands in, and emitted with it - in its module's object
+        L->lambdaHost = octx->defaultHost;
+        L->lambdaInTest = octx->defaultInTest;
+        L->lambdaObject = octx->defaultObject;
+        struct defaultLambda dl = { node, octx->defaultHost, octx->defaultInTest, octx->defaultObject, L };
+        ListAdd(&octx->defaultFor->lambdas, &dl);
+    }
     L->mayBeInitialized = true;
     L->lambdaCaptures = ListInit(sizeof(struct lambdaCapture));
 
@@ -22523,16 +22746,7 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
 
-    op->opType = OPERATION_READ_VAR;
-    op->readVar = L;
-    op->type = L->type;
-    op->type.structMAlloc = true; //D16: a function value
-    //a capture's scope is the lambda's own business, never part of its type as a value
-    op->type.scopeVars = ListInit(sizeof(struct var*));
-    for (int i = 0; i < L->type.scopeVars.len; i++) {
-        struct var* sv = *(struct var**)ListGetIdx(&L->type.scopeVars, i);
-        if (!sv->isCaptureScope) ListAdd(&op->type.scopeVars, &sv);
-    }
+    lambdaValueOperand(op, L);
     //D16c: the captured values, read where the lambda is made, and each captured reference's scope bound from
     //what it captured - as a call binds a reference parameter's (O17)
     if (L->lambdaCaptures.len) {
@@ -22592,6 +22806,20 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
     //O14b: written for a callback whose result is a type variable, it may require what that type does (T22a)
     if (exp && exp->resultViaTypeVar && funcValueUses.len)
         ((struct funcValueUse*)ListGetIdx(&funcValueUses, funcValueUses.len - 1))->viaTypeVarResult = true;
+}
+
+//D16: the function value a lambda is, as an operand
+static void lambdaValueOperand(struct operand* op, struct var* L) {
+    op->opType = OPERATION_READ_VAR;
+    op->readVar = L;
+    op->type = L->type;
+    op->type.structMAlloc = true; //D16: a function value
+    //a capture's scope is the lambda's own business, never part of its type as a value
+    op->type.scopeVars = ListInit(sizeof(struct var*));
+    for (int i = 0; i < L->type.scopeVars.len; i++) {
+        struct var* sv = *(struct var**)ListGetIdx(&L->type.scopeVars, i);
+        if (!sv->isCaptureScope) ListAdd(&op->type.scopeVars, &sv);
+    }
 }
 
 static bool blockLeavesValue(struct list* block) {

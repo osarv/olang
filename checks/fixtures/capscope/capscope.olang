@@ -17,6 +17,7 @@ fn orNew(n mut Node&, i I64) mut Node&n { return n.next if i < 0 else Node(i) }
 fn keep(a mut Node&, n mut Node&a) { a.next = n }
 fn two(a mut Node&, i I64) (mut Node&a, I64) { return a.next if i < 0 else Node(i), i }
 fn mk(i I64) Node { return Node(i) }
+fn rd(n Node&) I64 { return n.v }
 type Adder struct(n mut Node&) {
     n
 }
@@ -35,8 +36,8 @@ fn both(f fn(i I64), g fn(i I64)) {
     }
 }
 fn main() ? {
-    nodes := Array<mut Node&>(20)
-    for k in range 20 { nodes[k] = Node(k) }
+    nodes := Array<mut Node&>(26)
+    for k in range 26 { nodes[k] = Node(k) }
     a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 := nodes[0], nodes[1], nodes[2], nodes[3], nodes[4], nodes[5], nodes[6], nodes[7], nodes[8], nodes[9]
     b0, b1, b2, b3, b4, b5, b6, b7, b8, b9 := nodes[10], nodes[11], nodes[12], nodes[13], nodes[14], nodes[15], nodes[16], nodes[17], nodes[18], nodes[19]
     both(fn(i I64) { a0.next = a0.next if i < 0 else Node(i) }, fn(i I64) { b0.next = b0.next if i < 0 else Node(i) })
@@ -64,8 +65,24 @@ fn main() ? {
         b8.v = k
     })
     both(fn(i I64) { a9.next = a9.next if i < 0 else mk(i) }, fn(i I64) { b9.next = b9.next if i < 0 else mk(i) })
+    # a "catch default" built where a callee that builds nothing puts its result - into a local, an argument, a condition
+    # (tonight9's ICE: codegen resolved the captured scope only for reading there, and the prologue never asked for it)
+    c0, c1, c2, d0, d1, d2 := nodes[20], nodes[21], nodes[22], nodes[23], nodes[24], nodes[25]
+    both(fn(i I64) {
+        x := try find(c0) catch default Node(i)
+        c0.v = x.v
+    }, fn(i I64) {
+        x := try find(d0) catch default Node(i)
+        d0.v = x.v
+    })
+    both(fn(i I64) { c1.v = rd(try find(c1) catch default Node(i)) }, fn(i I64) { d1.v = rd(try find(d1) catch default Node(i)) })
+    both(fn(i I64) { if (try find(c2) catch default Node(i)).v == i { c2.v = i } },
+         fn(i I64) { if (try find(d2) catch default Node(i)).v == i { d2.v = i } })
     for k in range 20 {
         if nodes[k].next == null or nodes[k].next.v != N - 1 { fail }
+    }
+    for k in range 20, 26 {
+        if nodes[k].v != N - 1 { fail }
     }
     println("capscope: ok")
 }

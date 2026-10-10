@@ -1395,7 +1395,7 @@ fn capscope(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "capscope: ok\n", "capscope output", dir)
     ll String& = " build/capscope.main.ll"
     asks String& = ("awk '/^define internal .*lambda[$]/ { n++; inl = 1; has = 0 } inl && /call ptr @__olang_capture_scope/ { has = 1 }"
-                    " inl && /^}/ { if (has) ok++; inl = 0 } END { exit !(n == 18 && ok == 18) }'")
+                    " inl && /^}/ { if (has) ok++; inl = 0 } END { exit !(n == 24 && ok == 24) }'")
     try r.expect(sh(dir, $asks $ll) == 0, "a lambda building into its captured scope does not ask for it", dir)
     try r.expect(sh(dir, "grep -q '__olang_scope_mine(ptr %iscope0)'" $ll) == 0, "the Call adapter does not ask for its scope", dir)
     try r.expect(sh(dir, "\"$OLANG\" -D N=200 -i capscope.olang > out.txt 2>&1") == 0, "capscope -i", dir)

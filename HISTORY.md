@@ -13935,3 +13935,105 @@ lambda's entry asks for its captured scope (`__olang_capture_scope`), the `Call`
 `rv8defaultshared` (defaults used by callers in several functions, a lambda and nested blocks, read back after a churn)
 and `rv8parallelparam` (a parameter's, a capture's and two parameters' fields assigned in parallel, and a top-level one
 that no longer points into the frame), both `-d -s`.
+
+### Tonight9's review of decision 48's fixes, fixed (P2, D8a, E16a, C2d/C2g, C9a, E10, K1, S4c/O1b, 2026-10-10)
+
+A read-only soundness review of 91ab3ba (`/home/user/review/tonight9`) reproduced two new defects, one made worse, and
+five older ones. Each is fixed here with a regression test; the decisions below are mine.
+
+**A false internal error (P2, `repro/01`).** `x := try find(a) catch default Node(i)` in a closure, `find` building
+nothing, stopped the build with "builds into a scope it was handed where the checker found it builds nothing". The walk
+was right - `mbClauses` sees the default. `cgCallTargetAndArgs` resolves a callee's scope arguments under `capReadOnly`
+when the callee builds nothing, so a captured scope handed to it is not marked for the closure's prologue; it then
+recorded that same value as the call's result scope (`cgResultScope`), and `cgTryDefaultStore` built the default there.
+The build was noted against the handed value, the capture was never marked, and `cgCheckMayBuild` found a build the
+prologue had not asked for. The fixture's form (`a.next = try find(a) catch default Node(i)`) passed only because the
+store into `a.next` resolved the scope a second time, for writing. `cgNoteBuildInto` now marks a captured scope built
+whenever anything is built into a value loaded from it, however that value was resolved - so the prologue asks for every
+scope the body builds into, by construction, and `cgCheckMayBuild` holds only the walk: a body the walk says builds
+nothing that builds anyway. The message says that now, where it blamed the walk for codegen's own bookkeeping. The
+`capscope` fixture gained the three shapes (a local, an argument, a condition); its IR check counts 24 lambdas, each
+asking for its captured scope, and it runs clean under `-r`.
+
+**D8a's rebuild read the caller's constant variables (`repro/02`).** A default rebuilt for one call
+(`buildParamDefault(d, true)`) ran inside the caller's check without clearing `currentConstVars`,
+`currentTypeParamNames` or `currentSigIntros`, and set `currentBindings` only for a default reading its own variables.
+So `lib.F()` - `F(x I64 = N + 1)`, `N` lib's global - called from an instantiation whose constant `N` is 5 gave 6: built,
+`-d` and `-i` alike, and the first build K1 judged still read the global, so nothing caught it; from a `Bool` constant
+`N` it was two errors reported in `lib.olang`. Every build of a default now saves the four and sets them to the
+declaration's own (its bindings for an instantiation's, G23, else none), as `resolveTypeDecl` does. The same leak reached
+a lambda in a default by another way: a pending lambda is finished where a call fits it, inside the caller's check, so its
+written types (`fn(v T) T`) were resolved against the caller's - "unknown type 'T'" for any generic function whose default
+is a lambda, pre-existing on the base. A pending lambda now carries the four from where it was written and is finished
+with them.
+
+**A lambda default called from another module (`repro/04`, pre-existing, made worse by the rebuild).** A lambda made
+while a default is built had no host, so it was emitted only in the declaring module's object, as `internal`, and a
+caller in another module named a symbol its own object did not define (clang: `use of undefined value
+'@lib_lambda$2'`). With the per-call rebuild, every call site also made a lambda of its own. **Decided (mine)**: a
+lambda in a default is made once for each module whose code calls it, keyed on the default and its syntax node
+(`paramDefault.lambdas`), and emitted in that module's object (`lambdaObject`) - the first build's, in the declaring
+module, serves that module's own calls; a call in an instantiation (the root object's to define, B3d) or in a lambda
+whose host chain ends in one gets one emitted with that function. A default has no locals, so its lambdas capture
+nothing and are static function values: sharing one is observable only by `is` - two calls in one module are given one
+function value, calls in two modules two. The review's
+`dl1` (four calls in one module) is back to two lambda functions.
+
+**A constructor field kept a view of stayed frame storage (C2d, `repro/03`).** C2d stores a field a reference was taken
+to where the instance lands (`slotBorrowed`), but only `borrowLifetimeFits` and a call's lvalue argument set it: a slice
+(`view Array<I64>& = big[0:2]`), an `as` view, a conditional of slices or a slice a nested instance keeps
+(`Holder(big[0:2])`) left the field in the constructor's frame - a dead stack frame read back for a small field, and since
+91ab3ba, which moved frame storage over 64KB to the constructor's own scope, a use after scope closed for a large one.
+Making a slice or a view now marks the local it borrows (`noteSliceBorrow`), reached through no reference.
+
+**A slice of a temporary was stored past its frame (E16a, `repro/03b`, `repro/05`, pre-existing).** `h.r =
+Big(n).a[0:2]` compiled: the slice's base is a value with no storage of its own, `RefExactScope` answered "a temporary,
+built where it lands", and no check followed - while codegen made the temporary in the frame (the stack, or for one over
+64KB the block's arena). Eight shapes reproduced it: a call's value result, a fixed array result, `Array<I64>(n)`, an
+array literal, an `as` view, a conditional of instances - in a function and in a constructor field - and a ninth found
+writing the tests: a payload read with `as` from an enum held by value is a copy made where it is read, so a slice of it
+(`(mkE(n) as E.C)[0:2]`) is one too. The checker
+disagreed with itself: the declaration `x Array<I64>&h = Big(n).a[0:2]` was already refused (O10d). **Decided (mine): a
+slice of such a value borrows the temporary in the block it is written in** (at a constructor's top level, its frame,
+which the instance outlives), stamped on the slice's type and answered by `RefExactScope`, so every existing check
+applies: the store is O20's error, with a note at the slice saying what it borrows. Building the temporary where the
+slice lands instead (as O18a lands a call's result scope) was the alternative; it would allocate a whole value to keep
+part of it - an allocation the program never wrote - and needs a landing for calls with no result scope at all. A
+slice of an inline value is no projection O18a lands any more (`projectionBase`), so a conditional of such slices is
+judged by its values. Two are not such temporaries and keep what they did: a call's run-time-length array result, whose
+buffer the call builds in its result scope, landed where the slice is put (`h.r = mkv(n)[0:2]`, which worked), and text
+written in the program, which is constant data (`h.t = "abcdef"[1:3]`, `@.str` at run time).
+
+**A destructor built into a scope it closed at its return (C9a, `repro/06`, pre-existing).** A destructor allocated
+from a scope header of its own, so `n.next = Node(k)` - accepted, since the checker reads the destructor's top level and
+its instance's storage as one scope - stored a node from a closed scope where the next destructor read it (`-d -s`: use
+after scope closed). **Decided (mine): the destructor's top level is the scope being closed**, as the checker already
+assumed: the runtime passes it (`fn(instance, scope)`), the destructor allocates there and does not close it, and its
+chunks go back once every destructor has run. A destructor-bearing value it builds there registers in that scope; the
+walk puts such nodes ahead of the rest (`dsplice`), so each runs as the destructor that built it returns, as it did when
+the destructor's own scope closed - the corpus's destructor order is unchanged. Refusing such builds was the other
+option; it needed the checker to separate the instance's scope from the destructor's top level, which buys nothing over
+making them one. The destructor's unwind node (test builds) holds an empty scope, so a test left inside a destructor
+never closes the scope being closed a second time.
+
+**An empty fixed array was null while compiling (E10, K1, `repro/07`, pre-existing, the fuzzer's).** `$(x3[0:0])` on an
+`Array<I16, 0>` rendered `null` baked and under `-i`, `I16[]` built: the evaluator took an aggregate of no elements and
+no element storage for an array value's zero value, which has no storage. A fixed-length array is storage of its own -
+a slot of no bytes at run time - so a reference to it or a slice of it is not null (`ctArrayRefNull`), and is its own
+instance for `is` (`ctArrayStorage`). E10 says so.
+
+**A parallel assignment into a global's reference field was refused (S4c, O1b, low).** `G.next, k = Node(i), i` gave O1b
+and O17a while `G.next = Node(i)` compiles: `holdForRefTarget` kept the value hold for a target in the program's scope.
+It holds the temporary as a reference in the program's scope now (a hidden local marked as `x := G` marks one), and
+codegen builds it there (`cgVarDecl`, for a reference local in the program's scope given a temporary). A target through
+a `&p` field is still refused with O17a and O25 where the single form says C2d - correct, worded worse; left.
+
+**Tests.** Corpus (`shared.olang`, read back after `obChurn`): constructor views of a 4-element and a 20000-element field;
+slices of temporaries used where they are made, a call's array result and a literal's text kept further; a destructor
+building through its field, with the destruction order; a lambda default in its own module; the empty fixed array,
+baked and at run time (an assert the evaluator decides); the parallel global. `worker.olang`: shared's default from an
+instantiation whose constant variable is named like shared's global (an `I64` and a `Bool` one), and shared's lambda
+default from another module and from a lambda. Checks: `rv9slicetemp`, `rv9slicetempview`, `rv9slicetempas`,
+`rv9slicetempctor` must fail, naming the error and the note; `rv9ctorview`, `rv9dtorbuild`, `rv9parallelglobal` run under `-d -s`; `capscope`
+gained the review's three ICE shapes. A scope fuzz (seed 4242, 60 programs) and a differential one (seed 3153, where
+finding 7 was found, 30 programs) found nothing.

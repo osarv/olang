@@ -1,0 +1,16 @@
+# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# also: note: this borrows a value made here
+# E16a/C2g (tonight9's review): a constructor field keeping a slice of a temporary - the temporary is the constructor's
+# frame storage, gone when it returns, which over 64KB was its own scope (a use after scope closed, and a wrong value)
+type Big struct(n I64) {
+    a Array<I64, 20000>
+    a[0] = n
+    a[1] = n + 1
+}
+type K struct(n I64) {
+    r Array<I64>& = Big(n).a[0:2]
+}
+fn main() ? {
+    k := K(7)
+    println($k.r[1])
+}
