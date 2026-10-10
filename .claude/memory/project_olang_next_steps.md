@@ -597,6 +597,12 @@ because what it finds about structure feeds the refactor.
   temporary stored past its block now refused (E16a). C9a: a destructor's top level is the scope being closed, which
   the runtime passes in. Also: one lambda per default per calling module; the evaluator's empty fixed slice; the
   parallel global target. C9a and the parallel global form were not reviewed - include them in the next review.
+- 13:40 CEST: chk5 merged and pushed (623b9d8 via 116fb31; I resolved conflicts in semantic.c and shared.olang; the
+  full verify passed on the merged tip). It fixes resultgrowth/r02, fieldofresult, the cascades and study6, plus its
+  review's growth and cycle regressions. O18c now lands a `:=` call only where something is kept or an obligation forces
+  it; an unsettled callee keeps its argument. This round is unreviewed: include it in the next review with rv9fix's C9a
+  and the parallel global. The user (13:25 CEST): slow down early in the week, 1-2 agents. Next: decision 50 (failing
+  spawns), then `own` + `take` + liveness-checked local borrows, then Vec<T> as the default growable array.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
