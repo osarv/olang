@@ -16188,7 +16188,8 @@ static bool varInResultScope(struct checkCtx* ctx, struct var* v) {
 struct flowCont { struct list* stmts; int idx; struct flowCont* outer; };
 //borrowRoot: the local being decided holds no reference, but its own storage can be borrowed (O26a's borrowable value) -
 //a view of it, an array or a struct read out of it by value, carries that storage
-struct flowScan { struct checkCtx* ctx; struct list seen; struct str root; struct type rootType; bool borrowRoot; };
+struct flowScan { struct checkCtx* ctx; struct list seen; struct str root; struct type rootType; bool borrowRoot;
+                  struct list elemNames; struct list elemTypes; }; //a for-in element's type, where its collection's is known
 static bool exprGivesName(struct syntax* e, struct str name);
 static bool exprIsNameChain(struct syntax* e, struct str name);
 //whether a written type ends in a reference marker ("Node&", "Node&x", "mut List<I32>&")
@@ -16441,7 +16442,8 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
         }
         case SNTX_STMNT_FOR_IN: {
             //S9a: the loop's element is an element of what it walks, read out - so where the body puts it is where the
-            //collection's elements go: "for p in all { out.Push(p) }" with out returned is "out.Push(all[i])"
+            //collection's elements go: "for p in all { out.Push(p) }" with out returned is "out.Push(all[i])". An element
+            //that can hold no reference - a character of text - carries nothing of it (as a number computed from it does not)
             struct syntax* e = firstPartOfType(n, SNTX_EXPR);
             struct syntax* body = firstPartOfType(n, SNTX_BLOCK);
             if (e && body && syntaxMentionsName(e, name, false)) {
@@ -16449,6 +16451,28 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
                 for (int i = 0; i < n->parts.len; i++) {
                     struct syntaxPart* p = ListGetIdx(&n->parts, i);
                     if (p->isToken && p->tok.type == TOK_IDEN) elem = p->tok;
+                }
+                struct type ct;
+                bool known = false;
+                if (exprIsNameChain(e, name) && !hasTokOfType(e, TOK_DOT)) { //the collection walked is the local itself
+                    if (StrCmp(name, fs->root)) { ct = fs->rootType; known = true; }
+                    for (int i = 0; !known && i < fs->elemNames.len; i++) {
+                        if (!StrCmp(*(struct str*)ListGetIdx(&fs->elemNames, i), name)) continue;
+                        ct = *(struct type*)ListGetIdx(&fs->elemTypes, i);
+                        known = true;
+                    }
+                    struct var* lv = known ? NULL : scopeFindLocalByCtx(fs->ctx, name);
+                    if (lv) { ct = lv->type; known = true; }
+                }
+                struct type et = (struct type){0};
+                bool elemKnown = known && !ct.unknown && ((ct.bType == BASETYPE_ARRAY && ct.arrElem)
+                                                         || (ct.genericOrigin && ct.typeArgs.len == 1));
+                if (elemKnown) et = ct.bType == BASETYPE_ARRAY ? *ct.arrElem : *(struct type*)ListGetIdx(&ct.typeArgs, 0);
+                if (elemKnown && !et.structMAlloc && !TypeHoldsReferences(et) && et.bType != BASETYPE_TYPEVAR) break;
+                if (elem.type == TOK_IDEN && elemKnown) {
+                    struct str en = strFromTok(elem);
+                    ListAdd(&fs->elemNames, &en);
+                    ListAdd(&fs->elemTypes, &et);
                 }
                 if (elem.type == TOK_IDEN) {
                     struct list inner = allPartsOfType(body, SNTX_STMNT);
@@ -16678,7 +16702,8 @@ static bool flowScanList(struct flowScan* fs, struct list* stmts, int from, stru
 }
 
 static bool localFlowsToResult(struct checkCtx* ctx, struct str name, struct type t, bool borrowRoot) {
-    struct flowScan fs = { ctx, ListInit(sizeof(struct str)), name, t, borrowRoot };
+    struct flowScan fs = { ctx, ListInit(sizeof(struct str)), name, t, borrowRoot, ListInit(sizeof(struct str)),
+                           ListInit(sizeof(struct type)) };
     struct flowCont k = { &ctx->blockStmts, ctx->blockStmtIdx + 1, NULL };
     bool r = flowExplore(&fs, name, &k);
     ListDestroy(fs.seen);
