@@ -1,0 +1,14 @@
+# check: fail error[P4a]: a spawn without targets gives no value, so its clauses take no default
+# P4a: without targets the clauses are a statement's (R10) - a default has nothing to give its value to
+error E {
+    BAD
+}
+fn sq(n I32) I32 ? E {
+    if n < 0 { error E.BAD }
+    return n * n
+}
+fn main() ? {
+    join {
+        spawn try sq(-1) catch default 0
+    }
+}

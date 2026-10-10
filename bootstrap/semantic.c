@@ -6308,6 +6308,9 @@ struct checkCtx {
     bool inTextJoin; //E11b: building a piece of a text join - "(" after a piece is a call of it, never what was meant
     struct list assignPlaces; //S4d: the value places an assignment being built writes over (struct operand*) - a borrow
                               //of storage within one, kept in what the value builds, takes its old value (copiesOld)
+    struct list* joinErrs; //P4c: the error types the innermost join's tasks let through (struct type*), with joinHasSpawn
+    bool* joinFallibleTarget; //P4d: set by a spawn with targets whose task can fail into that join
+    bool inTaskClause; //P4a: checking a clause of a spawned try - code of the task, which it may not leave
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -14708,6 +14711,7 @@ void rejectDefaultArgs(struct list args) {
 //deliberate simplification (checking only the escaping subset would need catch-exhaustiveness analysis)
 void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
+    if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
     if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
     for (int i = 0; i < calleeType.errors.len; i++) {
@@ -22022,9 +22026,14 @@ static void noteRegionHandOut(struct checkCtx* ctx, struct operand* v, struct ty
     }
 }
 
+static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, struct list* vals);
 struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (ctx->inDefer) { //S19b: what it would return is beside the point - it may not leave at all
         Err(firstTokOfType(s, TOK_RET), ERR_DEFER_RETURNS);
+        return (struct statement){.sType = STATEMENT_RET};
+    }
+    if (ctx->inTaskClause) { //P4a: a task's clause is the task's code, and ends where its block does
+        Err(firstTokOfType(s, TOK_RET), ERR_TASK_CLAUSE_RETURNS);
         return (struct statement){.sType = STATEMENT_RET};
     }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
@@ -22033,16 +22042,24 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
                              ? ctx->func->type.retType : NULL;
     struct operand* val = exprNode ? buildExpecting(ctx, exprNode, retExpect) : NULL; //G10c
     struct token tok = firstTokOfType(s, TOK_RET);
+    struct list vals = ListInit(sizeof(struct operand*));
+    if (val) ListAdd(&vals, &val);
+    for (int i = 1; i < exprNodes.len; i++) {
+        struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprNodes, i));
+        ListAdd(&vals, &v);
+    }
+    return buildRetValues(ctx, tok, &vals);
+}
+
+//the return of vals, already built - none for a bare "return", several for "return a, b" (D8c); also what a task's
+//clause gives its targets (P4a), as its lambda's return
+static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, struct list* valsIn) {
+    struct operand* val = valsIn->len ? *(struct operand**)ListGetIdx(valsIn, 0) : NULL;
     //D8c: "return a, b" builds the function's several results - as the struct literal of its result tuple,
     //so each value is fit-checked against its own result type exactly as a field is. "return f()" of a call
     //returning the same results passes them on whole.
-    if (exprNodes.len > 1) {
-        struct list vals = ListInit(sizeof(struct operand*));
-        ListAdd(&vals, &val);
-        for (int i = 1; i < exprNodes.len; i++) {
-            struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprNodes, i));
-            ListAdd(&vals, &v);
-        }
+    if (valsIn->len > 1) {
+        struct list vals = *valsIn;
         lambdaInferResult(ctx->func, &vals, tok); //D16b
         struct type rt = ctx->func && ctx->func->type.hasRetType ? *ctx->func->type.retType : TypeVanilla(BASETYPE_VOID);
         if (!rt.isTuple || rt.vars.len != vals.len) {
@@ -22168,6 +22185,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.sType = STATEMENT_ERROR;
 
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return stmt; } //S19b
+    if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return stmt; } //P4a
     if (!ctx->func) { Err(tok, ERR_ERROR_OUTSIDE_FUNCTION); return stmt; }
 
     //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
@@ -22270,17 +22288,41 @@ bool storageInProgram(struct operand* op) {
 //P1: "join { ... }" is an ordinary block - any statements at all - that waits at its end for every task
 //spawned directly inside it. It is the only thing that waits, so a spawn needs one and a join with no
 //spawn of its own is pointless rather than harmless.
+//P4c: "try join { ... } [catch ...]" - what the join can fail with is what its tasks let through, collected by the
+//spawns in it (buildSpawnStmnt); it is tried as a call is, its clauses a statement's (R10), and what they do not take
+//propagates. P4d: a target left unwritten by a failed task is never read after the join - every clause leaves
 struct statement buildJoinStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_JOIN);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_JOIN;
+    stmt.tried = hasTokOfType(s, TOK_TRY);
+    stmt.joinErrors = MallocOrCrash(sizeof(struct list));
+    *stmt.joinErrors = ListInit(sizeof(struct type*));
 
-    bool hasSpawn = false;
+    bool hasSpawn = false, fallibleTarget = false;
     struct checkCtx joinCtx = *ctx;
     joinCtx.joinHasSpawn = &hasSpawn;
     joinCtx.joinDepth = ctx->blockDepth + 1; //the block buildBlock is about to open
+    joinCtx.joinErrs = stmt.joinErrors;
+    joinCtx.joinFallibleTarget = &fallibleTarget;
     stmt.block = buildBlock(&joinCtx, firstPartOfType(s, SNTX_BLOCK));
     if (!hasSpawn) Err(tok, ERR_JOIN_WITHOUT_SPAWN);
+    bool clauses = firstPartOfType(s, SNTX_CATCH_CLAUSE) != NULL;
+    struct list* errs = stmt.joinErrors;
+    if (errs->len && !stmt.tried) {
+        Err(tok, ERR_JOIN_NOT_TRIED, *(struct type**)ListGetIdx(errs, 0));
+        return stmt;
+    }
+    if (!errs->len) {
+        if (stmt.tried) Err(firstTokOfType(s, TOK_TRY), ERR_JOIN_CANNOT_FAIL);
+        else if (clauses) Err(firstTokOfType(firstPartOfType(s, SNTX_CATCH_CLAUSE), TOK_CATCH), ERR_JOIN_CATCH_NEEDS_TRY);
+        return stmt;
+    }
+    buildCatchClauses(ctx, s, NULL, errs, false, NULL, tok, &stmt.catchClauses);
+    for (int c = 0; fallibleTarget && c < stmt.catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&stmt.catchClauses, c);
+        if (!blockLeavesValue(&cc->block)) Err(cc->tok, ERR_JOIN_CLAUSE_MUST_LEAVE);
+    }
     return stmt;
 }
 
@@ -22298,8 +22340,17 @@ struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
     dctx.inLoop = false;
     dctx.loopBreak = NULL;
     dctx.joinHasSpawn = NULL;
+    dctx.joinErrs = NULL;
+    dctx.joinFallibleTarget = NULL;
     stmt.block = buildBlock(&dctx, firstPartOfType(s, SNTX_BLOCK));
     return stmt;
+}
+
+//P1g: a task stores its result into a value run-time-length array target as it is - its length and storage, never a
+//copy into the target's own, since there is no frame left on the task's thread to copy in - so the storage the result
+//was built in is the target's from then on, and the result is built where the target's own storage is
+static bool spawnTargetTakesStorage(struct operand* t) {
+    return t && t->type.bType == BASETYPE_ARRAY && t->type.arrMalloc && !t->type.structMAlloc;
 }
 
 //O18a: a call's several results go to several targets (S4b, P1g) and share one result scope - which lands where all the
@@ -22311,7 +22362,7 @@ bool landAtTargets(struct checkCtx* ctx, struct operand* call, struct list* targ
     bool have = false, agree = true, program = false;
     for (int i = 0; i < targets->len; i++) {
         struct operand* t = *(struct operand**)ListGetIdx(targets, i);
-        if (!t || !(t->type.structMAlloc || TypeHoldsReferences(t->type))) continue;
+        if (!t || !(t->type.structMAlloc || TypeHoldsReferences(t->type) || spawnTargetTakesStorage(t))) continue;
         struct var* troot = lvalueRootVar(t);
         struct var* v;
         int d;
@@ -22373,6 +22424,232 @@ static bool argBindingsLastUntilJoin(struct checkCtx* ctx, struct operand* op) {
     return true;
 }
 
+static bool blockAlwaysExits(struct list* block);
+static struct type lambdaOwnType(struct type t);
+static void lambdaMakeValue(struct checkCtx* octx, struct operand* op, struct var* L, struct token kw, struct type* exp);
+static void lambdaRegister(struct var* L);
+//P4: the try a spawn's expression is - "spawn try f(a) catch ..." - past the expression's one-part wrappers, or NULL
+static struct syntax* spawnTryNode(struct syntax* e) {
+    while (e && e->type != SNTX_EXPR_TRY && e->parts.len == 1 && !partAt(e, 0)->isToken) e = partSntx(e, 0);
+    return e && e->type == SNTX_EXPR_TRY ? e : NULL;
+}
+
+//D16e/P2: a hidden local holding a lambda a task runs - the task itself, or one of its clauses (P4a) - declared where
+//the spawn is, its closure built to last until the join: a closure capturing references lives where they do (D16d) -
+//unless they live in several scopes, where it would be the block it is made in; spawned, it is built in the join block
+//instead whenever every scope it captured from lasts until the join, which is what a spawned lambda needs and no more
+static struct var* spawnHoldLambda(struct checkCtx* ctx, struct operand* lam, struct token tok, struct statement* decl,
+                                   const char* prefix) {
+    struct type dt = lam->type;
+    bool homeIsBlockMadeIn = lam->lambdaHomeSet && !lam->lambdaHome && lam->lambdaCapScopes.len;
+    for (int i = 0; homeIsBlockMadeIn && i < lam->lambdaCapScopes.len; i++) {
+        struct scopeAt* at = ListGetIdx(&lam->lambdaCapScopes, i);
+        if (!lastsUntilJoin(ctx, at->v, at->depth, false)) homeIsBlockMadeIn = false;
+    }
+    if (homeIsBlockMadeIn) lam->lambdaHomeDepth = ctx->joinDepth;
+    if (lam->lambdaHomeSet) {
+        dt.scopeParam = lam->lambdaHome;
+        dt.scopeDepth = lam->lambdaHomeDepth;
+    } else {
+        dt.scopeWritten = true;
+        dt.scopeDepth = ctx->joinDepth;
+    }
+    char nm[32];
+    snprintf(nm, sizeof(nm), "%s%d", prefix, ++lambdaCounter);
+    struct var* tv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(heapCopy(nm)), tok, dt, true);
+    *decl = (struct statement){0};
+    decl->sType = STATEMENT_VAR_DECL;
+    decl->var = *tv;
+    decl->op = lam;
+    decl->line = tok.lineNr;
+    if (tok.owner) decl->file = TokenGetFileName(tok.owner);
+    return tv;
+}
+
+//P4a: what a task's default holds that it did not build - existing storage, in it or in what it is built from - or NULL
+//when it builds all it holds: null, text written in the program or rendered, numbers, and constructor calls, enum cases,
+//array literals and calls made only of such. Built where the call's result lands, it cannot be shown to agree with
+//storage the task's lambda sees only as a capture
+static struct operand* taskDefaultHolds(struct checkCtx* ctx, struct operand* d) {
+    if (!d || d->isNullLiteral || !typeCarriesScopes(d->type)) return NULL;
+    if (d->isLiteral && d->tok.type == TOK_STR_LIT && !d->args.len) return NULL;
+    if (d->opType == OPERATION_STR_OF || d->opType == OPERATION_CONCAT) return NULL; //new text, copied from its pieces
+    bool built = opIsCtorCall(d) || opIsEnumCtor(d) || opIsArrayLiteral(d) || d->opType == OPERATION_SIZED_ARRAY_ALLOC
+                 || (d->opType == OPERATION_FUNCCALL && operandIsTemporary(ctx, d));
+    if (!built) return d;
+    for (int i = 0; i < d->args.len; i++) {
+        struct operand* h = taskDefaultHolds(ctx, *(struct operand**)ListGetIdx(&d->args, i));
+        if (h) return h;
+    }
+    return NULL;
+}
+
+//P4a: one clause of a spawned try, made a lambda - its block, then (with targets) a return of its default - checked as
+//code of the task: captures what it reads of the spawner (D16c), may not leave (no return, error or loop jump out of
+//it), and is held where the spawn is, to be called on the task's thread. rt: the targets' type, when there are any
+static void buildTaskClauseLambda(struct checkCtx* octx, struct syntax* cn, struct type* rt, struct catchClause* cc,
+                                  struct list* pre, struct token spawnTok) {
+    struct token kw = cc->tok;
+    struct syntax* blk = firstPartOfType(cn, SNTX_BLOCK);
+    bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
+    struct token dtok = hasDefault ? firstTokOfType(cn, TOK_DEFAULT) : kw;
+    struct list dnodes = ListInit(sizeof(struct syntax*));
+    for (int i = 0; i < cn->parts.len; i++) {
+        struct syntaxPart* pt = partAt(cn, i);
+        if (!pt->isToken && pt->sntx->type != SNTX_CATCH_ERR_LIST && pt->sntx->type != SNTX_BLOCK) ListAdd(&dnodes, &pt->sntx);
+    }
+    if (hasDefault && !rt) { Err(dtok, ERR_TASK_DEFAULT_IN_STATEMENT); hasDefault = false; }
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_FUNC;
+    t.vars = ListInit(sizeof(struct var));
+    t.scopeVars = ListInit(sizeof(struct var*));
+    t.errors = ListInit(sizeof(struct type*));
+    t.typeParams = ListInit(sizeof(struct str));
+    t.scopeObligations = ListInit(sizeof(struct scopeObligation));
+    if (hasDefault) {
+        t.hasRetType = true;
+        t.retType = MallocOrCrash(sizeof(struct type));
+        *t.retType = lambdaOwnType(*rt);
+        finishResultScope(&t, kw);
+    }
+    struct var* L = VarAllocSetOrigin();
+    char nm[48];
+    snprintf(nm, sizeof(nm), "lambda$%d", ++lambdaCounter);
+    L->name = StrFromCStr(heapCopy(nm));
+    L->tok = kw;
+    L->owner = octx->mod;
+    L->isFuncDecl = true;
+    L->isLambda = true;
+    L->lambdaHost = octx->func;
+    L->lambdaInTest = octx->inTest;
+    L->mayBeInitialized = true;
+    L->lambdaCaptures = ListInit(sizeof(struct lambdaCapture));
+    L->type = t;
+
+    struct scope fnScope = scopePush(octx->scope);
+    fnScope.lambda = L;
+    struct checkCtx c = {0};
+    c.mod = octx->mod;
+    c.scope = &fnScope;
+    c.func = L;
+    c.hasOwnScope = true;
+    c.inTest = octx->inTest;
+    c.inTaskClause = true;
+    c.bodyId = bodyBegin();
+    struct list savedDischarges = pendingDischarges;
+    pendingDischarges = ListInit(sizeof(struct pendingDischarge));
+    int errsBefore = ErrMsgGetNErrors();
+    L->codeBlock = blk ? buildBlock(&c, blk) : ListInit(sizeof(struct statement));
+    bool leaves = blk && blockAlwaysExits(&L->codeBlock); //D10a: on a task, only ending the process leaves (P4a)
+    if (hasDefault && leaves) Err(dtok, ERR_DEFAULT_DEAD);
+    else if (rt && !hasDefault && !leaves) Err(kw, ERR_TASK_CLAUSE_NEEDS_DEFAULT);
+    bool gives = hasDefault && !leaves;
+    if (gives) { //R9a: one default per result, each fitting it - given as the lambda's return
+        struct list vals = ListInit(sizeof(struct operand*));
+        for (int i = 0; i < dnodes.len; i++) {
+            struct syntax* dn = *(struct syntax**)ListGetIdx(&dnodes, i);
+            struct operand* d = dnodes.len == 1 ? buildExpecting(&c, dn, L->type.retType) : buildExprFromSyntax(&c, dn);
+            ListAdd(&vals, &d);
+        }
+        int want = rt->isTuple ? rt->vars.len : 1;
+        bool ok = vals.len == want;
+        if (!ok) Err(dtok, ERR_DEFAULT_COUNT, want, vals.len);
+        for (int i = 0; ok && i < vals.len; i++) {
+            struct operand* d = *(struct operand**)ListGetIdx(&vals, i);
+            struct type et = rt->isTuple ? ((struct var*)ListGetIdx(&rt->vars, i))->type : *rt;
+            //P4a: built where the call's result lands, so it builds all it holds - existing storage has a scope of its own
+            struct operand* held = et.structMAlloc || TypeHoldsReferences(et) ? taskDefaultHolds(&c, d) : NULL;
+            if (held) {
+                Err(held->tok, ERR_TASK_DEFAULT_EXISTING);
+                ok = false;
+            }
+        }
+        if (ok) {
+            int pendingFrom = pendingDischarges.len;
+            struct token prevOrigin = obligationOrigin;
+            obligationOrigin = dtok;
+            struct statement ret = buildRetValues(&c, dtok, &vals);
+            flushPendingDischargesFrom(pendingFrom);
+            obligationOrigin = prevOrigin;
+            ret.line = dtok.lineNr;
+            if (dtok.owner) ret.file = TokenGetFileName(dtok.owner);
+            ListAdd(&L->codeBlock, &ret);
+        }
+    }
+    pendingDischarges = savedDischarges;
+    bodyEnd(c.bodyId, L->codeBlock);
+    L->bodyHadErrors = ErrMsgGetNErrors() != errsBefore;
+    cc->givesValue = gives;
+    if (!gives && !L->codeBlock.len) return; //"catch E { }" - nothing to run: the error is taken, and that is all
+    if (!gives && L->type.hasRetType) { //it ends the process, so no value is ever returned
+        L->type.hasRetType = false;
+        L->type.retType = NULL;
+        L->type.resultScope = NULL;
+    }
+    lambdaRegister(L);
+    struct operand* lam = operandNew(kw, OPERATION_NONE, L->type);
+    lambdaMakeValue(octx, lam, L, kw, NULL);
+    struct statement decl;
+    struct var* tv = spawnHoldLambda(octx, lam, spawnTok, &decl, "$clause");
+    ListAdd(pre, &decl);
+    //P2: what it captured lasts until the join, as a spawned lambda's captures do
+    if (!tv->type.scopeParam && normDepth(tv->type.scopeDepth) > octx->joinDepth) Err(kw, ERR_SPAWN_CAPTURE_TOO_SHORT);
+    cc->taskFn = tv;
+    struct operand* tc = operandNew(kw, OPERATION_FUNCCALL, gives ? *L->type.retType : TypeVanilla(BASETYPE_VOID));
+    tc->readVar = tv;
+    cc->taskCall = tc;
+}
+
+//P4a/P4b/P4c: a spawned try's clauses, each run on the task's thread (buildTaskClauseLambda) when the call fails with an
+//error it takes, in order (R11a); every error type the call declares that they do not take whole reaches the join - the
+//join's error set gains it - and a task with targets that lets one through leaves them unwritten (P4d)
+static void buildTaskClauses(struct checkCtx* ctx, struct syntax* tryNode, struct operand* call, struct statement* stmt,
+                             struct list* pre, struct token tok) {
+    call->isTried = true;
+    struct list* errs = &call->readVar->type.errors;
+    struct type* rt = NULL;
+    if (stmt->spawnTargets.len && call->readVar->type.hasRetType) rt = call->readVar->type.retType;
+    stmt->catchClauses = ListInit(sizeof(struct catchClause));
+    struct list nodes = allPartsOfType(tryNode, SNTX_CATCH_CLAUSE);
+    struct list seen = ListInit(sizeof(struct catchMatch));
+    bool sawAll = false;
+    unsigned prevMask = builtinWordMask;
+    builtinWordMask = 0;
+    for (int n = 0; n < nodes.len; n++) {
+        struct syntax* cn = *(struct syntax**)ListGetIdx(&nodes, n);
+        struct catchClause cc = (struct catchClause){0};
+        cc.tok = firstTokOfType(cn, TOK_CATCH);
+        cc.matches = ListInit(sizeof(struct catchMatch));
+        cc.block = ListInit(sizeof(struct statement));
+        if (sawAll) Err(cc.tok, ERR_CATCH_AFTER_CATCH_ALL);
+        struct syntax* el = firstPartOfType(cn, SNTX_CATCH_ERR_LIST);
+        if (!el) {
+            cc.catchAll = true;
+            sawAll = true;
+        } else {
+            buildCatchMatches(ctx, el, errs, &cc.matches);
+            bool anyNew = false;
+            for (int i = 0; i < cc.matches.len; i++) if (!catchMatchCovered(&seen, ListGetIdx(&cc.matches, i))) anyNew = true;
+            if (cc.matches.len > 0 && !anyNew && !sawAll) Err(cc.tok, ERR_CATCH_UNREACHABLE);
+            for (int i = 0; i < cc.matches.len; i++) ListAdd(&seen, ListGetIdx(&cc.matches, i));
+        }
+        buildTaskClauseLambda(ctx, cn, rt, &cc, pre, tok);
+        ListAdd(&stmt->catchClauses, &cc);
+    }
+    bool escapes = false;
+    for (int i = 0; !sawAll && i < errs->len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(errs, i);
+        if (StatementCatchCoversType(&seen, *e)) continue;
+        escapes = true;
+        bool have = false;
+        for (int k = 0; k < ctx->joinErrs->len && !have; k++) have = TypeIsSame(**(struct type**)ListGetIdx(ctx->joinErrs, k), *e);
+        if (!have) ListAdd(ctx->joinErrs, &e);
+    }
+    builtinWordMask = prevMask;
+    if (escapes && stmt->spawnTargets.len && ctx->joinFallibleTarget) *ctx->joinFallibleTarget = true;
+    stmt->joinErrors = ctx->joinErrs;
+}
+
 struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_SPAWN);
     struct statement stmt = (struct statement){0};
@@ -22394,19 +22671,31 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         ListAdd(&stmt.spawnTargets, &t);
     }
 
+    //P4: "spawn [targets =] try CALL [catch ...]" - the call is the task as in the plain form; the clauses are the task's
+    //own (P4a), built below as lambdas, never as code of the spawner
+    struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
+    struct syntax* tryNode = spawnTryNode(exprNode);
+    struct syntax* callNode = exprNode;
+    if (tryNode) {
+        stmt.tried = true;
+        callNode = firstPartOfType(tryNode, SNTX_EXPR_POSTFIX);
+        if (!callNode) callNode = firstPartOfType(tryNode, SNTX_EXPR_PRIMARY);
+        //R9b: a default belongs to a clause - "catch default d"
+        if (hasTokOfType(tryNode, TOK_DEFAULT)) Err(firstTokOfType(tryNode, TOK_DEFAULT), ERR_DEFAULT_NEEDS_CATCH);
+    }
+
     bool prevAllow = ctx->allowFallibleCall;
     ctx->allowFallibleCall = true; //fallibility is rejected below with a message of its own
     struct list prevPlaces = ctx->assignPlaces;
     ctx->assignPlaces = placesWrittenOver(stmt.spawnTargets); //S4d: the targets are written over by the results
-    struct operand* call = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    struct operand* call = buildExprFromSyntax(ctx, callNode);
     ctx->assignPlaces = prevPlaces;
     ctx->allowFallibleCall = prevAllow;
     //D16e: "spawn fn() { ... }" - a task running the lambda's body. Its closure is held by a hidden local built
     //in the JOIN block's scope, so it lasts as long as the task can run, and the task is a call through it.
     //"spawn fn(...) { ... }(args)" - a lambda called where it is made - is the same task with arguments: its closure
     //is made at the spawn and held there too, never in the block the spawn is written in, which closes first
-    struct statement taskDecl = (struct statement){0};
-    bool lambdaTask = false;
+    struct list pre = ListInit(sizeof(struct statement)); //hidden locals made at the spawn, run before it
     struct operand* lam = NULL; //the lambda the task runs
     if (call && call->pendingLambda) {
         FinalizeLambda(call, NULL);
@@ -22416,32 +22705,11 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
                && call->callee->readVar && call->callee->readVar->isLambda) {
         lam = call->callee;
     }
+    bool lambdaTask = false;
     if (lam && ctx->joinHasSpawn && lam->readVar) {
-        struct type dt = lam->type;
-        //P2: a closure capturing references lives where they do (D16d) - unless they live in several scopes, where it
-        //would be the block it is made in; spawned, it is built in the join block instead whenever every scope it
-        //captured from lasts until the join, which is what a spawned lambda needs and no more
-        bool homeIsBlockMadeIn = lam->lambdaHomeSet && !lam->lambdaHome && lam->lambdaCapScopes.len;
-        for (int i = 0; homeIsBlockMadeIn && i < lam->lambdaCapScopes.len; i++) {
-            struct scopeAt* at = ListGetIdx(&lam->lambdaCapScopes, i);
-            if (!lastsUntilJoin(ctx, at->v, at->depth, false)) homeIsBlockMadeIn = false;
-        }
-        if (homeIsBlockMadeIn) lam->lambdaHomeDepth = ctx->joinDepth;
-        if (lam->lambdaHomeSet) {
-            dt.scopeParam = lam->lambdaHome;
-            dt.scopeDepth = lam->lambdaHomeDepth;
-        } else {
-            dt.scopeWritten = true;
-            dt.scopeDepth = ctx->joinDepth;
-        }
-        char nm[32];
-        snprintf(nm, sizeof(nm), "$task%d", ++lambdaCounter);
-        struct var* tv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(heapCopy(nm)), tok, dt, true);
-        taskDecl.sType = STATEMENT_VAR_DECL;
-        taskDecl.var = *tv;
-        taskDecl.op = lam;
-        taskDecl.line = tok.lineNr;
-        if (tok.owner) taskDecl.file = TokenGetFileName(tok.owner);
+        struct statement taskDecl;
+        struct var* tv = spawnHoldLambda(ctx, lam, tok, &taskDecl, "$task");
+        ListAdd(&pre, &taskDecl);
         if (lam == call) {
             call = OperandFuncCall(ctx, tv, ListInit(sizeof(struct operand*)), call->tok, ListInit(sizeof(struct syntax*)));
         } else { //the call already made, now through the hidden local - same type, same arguments and bindings
@@ -22465,11 +22733,21 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(tok, ERR_SPAWN_NOT_CALL);
         return stmt;
     }
-    //P4: an error raised on another thread has nowhere to propagate to - the join carries no value, and
-    //the spawner is not at the call site any more
-    if (call->readVar->type.errors.len != 0) {
+    //P4: a call that can fail is spawned with "try", and a "try" before one that cannot is an error, as anywhere (R8)
+    if (call->readVar->type.errors.len != 0 && !stmt.tried) {
         Err(call->tok, ERR_SPAWN_FALLIBLE);
+        //...and its errors are still what the join can fail with, so a "try join" around it is not reported as well
+        for (int i = 0; ctx->joinErrs && i < call->readVar->type.errors.len; i++) {
+            struct type* e = *(struct type**)ListGetIdx(&call->readVar->type.errors, i);
+            bool have = false;
+            for (int k = 0; k < ctx->joinErrs->len && !have; k++) have = TypeIsSame(**(struct type**)ListGetIdx(ctx->joinErrs, k), *e);
+            if (!have) ListAdd(ctx->joinErrs, &e);
+        }
         return stmt;
+    }
+    if (call->readVar->type.errors.len == 0 && stmt.tried) {
+        Err(firstTokOfType(tryNode, TOK_TRY), ERR_SPAWN_TRY_INFALLIBLE);
+        stmt.tried = false;
     }
     //P2: the task runs until the join, so everything it was handed has to still be there then. An
     //argument declared in a block NESTED inside the join closes first - the same containment question O10
@@ -22555,7 +22833,10 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct operand* t0 = *(struct operand**)ListGetIdx(&stmt.spawnTargets, 0);
             struct token asTok = tok;
             asTok.type = TOK_ASS; //checked as the plain assignment it is (no compound form exists, P1g)
-            if (results == 1 && t0) buildAssignCore(ctx, t0, call, asTok);
+            if (results == 1 && t0) {
+                if (spawnTargetTakesStorage(t0) && callIsLanding(call)) landAtTargets(ctx, call, &stmt.spawnTargets);
+                buildAssignCore(ctx, t0, call, asTok);
+            }
             else if (callIsLanding(call) && !landAtTargets(ctx, call, &stmt.spawnTargets))
                 Err(tok, ERR_SPAWN_RESULTS_DISAGREE);
             else {
@@ -22577,18 +22858,20 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             }
         }
     }
-    if (lambdaTask) { //the closure, then the task - one block, run as written
+    //P4a/P4b: the task's own clauses, run on its thread; what they do not take reaches the join
+    if (stmt.tried) buildTaskClauses(ctx, tryNode, call, &stmt, &pre, tok);
+    (void)lambdaTask;
+    if (pre.len) { //the closures, then the task - one block, run as written
         struct statement blk = (struct statement){0};
         blk.sType = STATEMENT_IF;
         struct token t = tok;
         t.type = TOK_BOOL_LIT;
         t.str = StrFromCStr("true");
         blk.op = OperandBoolLiteral(t);
-        blk.block = ListInit(sizeof(struct statement));
-        ListAdd(&blk.block, &taskDecl);
+        blk.block = pre;
         ListAdd(&blk.block, &stmt);
         blk.line = tok.lineNr;
-        blk.file = taskDecl.file;
+        blk.file = ((struct statement*)ListGetIdx(&pre, 0))->file;
         return blk;
     }
     return stmt;
@@ -22636,6 +22919,13 @@ static bool stmntAlwaysExits(struct statement* s) {
         }
         //D10a: "for { }" with no break of its own never falls through - it leaves only by what leaves its function
         case STATEMENT_FOR: return s->leavesOnlyByJump;
+        //D10a/P4c: a join leaves when its block does - a failed task replaces that way out with its error, which a
+        //"try join" clause takes (leaving only when the clause does) or propagates
+        case STATEMENT_JOIN:
+            if (!blockAlwaysExits(&s->block)) return false;
+            for (int i = 0; i < s->catchClauses.len; i++)
+                if (!blockAlwaysExits(&((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block)) return false;
+            return true;
         //any other loop is never counted, even a "do" whose body always returns: with break (S11) the body
         //exiting is not the same as the loop exiting, and proving otherwise needs a reachability pass
         //this rule deliberately does not have
@@ -22663,6 +22953,7 @@ static struct list funcValueUses; //struct funcValueUse - T22a, checked once eve
 struct funcValueUse { struct var* f; struct token tok; bool viaTypeVarResult; };
 
 struct list* SemanticAllLambdas(void) { return &allLambdas; }
+static void lambdaRegister(struct var* L) { ListAdd(&allLambdas, &L); }
 
 static void noteFuncValueUse(struct var* f, struct token tok) {
     struct funcValueUse u = { f, tok, false };
@@ -22873,6 +23164,7 @@ bool lambdaInferError(struct var* f, struct type* e) {
 }
 
 static void lambdaValueOperand(struct operand* op, struct var* L);
+static void lambdaMakeValue(struct checkCtx* octx, struct operand* op, struct var* L, struct token kw, struct type* exp);
 static void finalizeLambdaIn(struct operand* op, struct type* expected);
 //D16/D8a: a lambda is finished in the declaration context it was written in - one in a parameter's default is finished
 //where a call fits it, inside the caller's check, whose constant and type variables are not the default's
@@ -23068,7 +23360,12 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
     L->inferRet = false;
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
+    lambdaMakeValue(octx, op, L, kw, exp);
+}
 
+//D16c/D16d: op becomes the value of the lambda L, whose body has been checked in octx's body: its captures read where
+//it is made, each captured reference's scope bound from what it captured, and where the closure lives
+static void lambdaMakeValue(struct checkCtx* octx, struct operand* op, struct var* L, struct token kw, struct type* exp) {
     lambdaValueOperand(op, L);
     //D16c: the captured values, read where the lambda is made, and each captured reference's scope bound from
     //what it captured - as a call binds a reference parameter's (O17)
@@ -23156,7 +23453,7 @@ static bool blockLeavesValue(struct list* block) {
 //nesting an if/match/try inside the body changes nothing - ctx->inLoop is simply inherited by buildBlock.
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
-    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b
+    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ctx->inTaskClause ? ERR_TASK_CLAUSE_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b, P4a
     if (kind == STATEMENT_BREAK && ctx->loopBreak) *ctx->loopBreak = true; //D10a
     return (struct statement){.sType = kind};
 }
@@ -23311,6 +23608,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         struct type* e = *(struct type**)ListGetIdx(errors, i);
         if (StatementCatchCoversType(matches, *e)) continue;
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
+        if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
         if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
         bool found = false;

@@ -1988,16 +1988,23 @@ struct syntax* parseStmntBlock(SyntaxCtx sc) {
     return s;
 }
 
+struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk);
 //P1: "join { ... }" - an ordinary block, which happens to wait at its end for every task spawned in it
+//P4c: "try join { ... } [catch ...]" - a join whose tasks can fail, tried as a call is. The clauses are read after a
+//join without "try" too, so the checker can say what is missing rather than the parser stopping at "catch"
 struct syntax* parseStmntJoin(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
+    struct token tryKw = acceptTok(sc, TOK_TRY);
     struct token kw = acceptTok(sc, TOK_JOIN);
-    if (kw.type == TOK_NONE) return NULL;
+    if (kw.type == TOK_NONE) return tryKw.type == TOK_NONE ? NULL : parseFail(sc, cur);
     struct syntax* block = parseBlock(sc);
     if (!block) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_STMNT_JOIN);
+    if (tryKw.type != TOK_NONE) addTok(s, tryKw);
     addTok(s, kw);
     addSntx(s, block);
+    struct syntax* clause;
+    while ((clause = parseCatchClause(sc, false))) addSntx(s, clause);
     return s;
 }
 
@@ -2023,7 +2030,11 @@ struct syntax* parseStmntSpawn(SyntaxCtx sc) {
         targets.len = 0;
         TokenSetCursor(sc->tc, afterKw);
     }
+    //P4a: "spawn q, r = try f() catch default 0, 0" - one default per target, as a destructuring's try takes
+    int prevListAt = sc->defaultListAt;
+    if (targets.len > 1) sc->defaultListAt = TokenGetCursor(sc->tc);
     struct syntax* call = parseExpr(sc);
+    sc->defaultListAt = prevListAt;
     if (!call) return parseFail(sc, cur);
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_STMNT_SPAWN);

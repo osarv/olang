@@ -15952,3 +15952,285 @@ test "C2d/E25: a constructor with a scope argument, declared with ':='" {
     sbChurn()
     assert g.parent.n == 2 and g.parent.parent == g
 }
+
+# P4: a spawned call may fail - "spawn try f(a)", with catch clauses of its own run on the task's thread (P4a); what they
+# do not take reaches the join, which waits for every task and then fails with the earliest-spawned failure (P4b), as
+# "try join { ... } catch ..." - tried as a call is (P4c). A target its failed task leaves unwritten is never read
+# after the join: every clause of such a join leaves (P4d)
+error peErr {
+    NEG
+    BIG
+}
+error peOther {
+    SEVEN
+}
+fn peSq(n I64) I64 ? peErr {
+    if n < 0 { error peErr.NEG }
+    if n > 1000 { error peErr.BIG }
+    return n * n
+}
+fn peSeven(n I64) ? peOther {
+    if n == 7 { error peOther.SEVEN }
+}
+fn peSpin(n I64, spin I64) I64 ? peErr {
+    k I64 = 0
+    for i in range spin { k = k + i }
+    if k < 0 { return 0 }
+    return try peSq(n)
+}
+fn peSumSq(a Array<I64>&) I64 ? peErr {
+    out := Array<I64>(a.Len())
+    try join {
+        for i in range a.Len() { spawn out[i] = try peSq(a[i]) }
+    }
+    t I64 = 0
+    for x in out { t = t + x }
+    return t
+}
+fn peFirst(a Array<I64>&) I64 {
+    return try peSumSq(a) catch peErr.NEG default -1 catch peErr.BIG default -2
+}
+fn peDefaulted(a Array<I64>&) I64 {
+    out := Array<I64>(a.Len())
+    join {
+        for i in range a.Len() { spawn out[i] = try peSq(a[i]) catch peErr.NEG default 0 catch peErr.BIG default 1000 }
+    }
+    t I64 = 0
+    for x in out { t = t + x }
+    return t
+}
+fn peMixed(a I64, b I64) I64 ? peErr + peOther {
+    try join {
+        spawn try peSeven(a)
+        spawn try peSq(b)
+    }
+    return 0
+}
+fn peClassify(a I64, b I64) I64 {
+    return try peMixed(a, b) catch peOther default 70 catch peErr.NEG default 80 catch peErr.BIG default 90
+}
+# P4b/K1: the evaluator runs a join's tasks in spawn order, keeps the first failure and fails the join with it - so a
+# global computed through one is baked to what the running program computes
+PeBaked := peFirst(I64[1, 2, 3])
+PeBakedNeg := peFirst(I64[1, -2, 3000])
+PeBakedBig := peFirst(I64[1, 3000, -2])
+PeBakedDefaults := peDefaulted(I64[1, -2, 3000, 4])
+PeBakedMixed := peClassify(7, -1)
+test "P4: a join's tasks that fail - evaluated while compiling" {
+    assert PeBaked == 14 and PeBakedNeg == -1 and PeBakedBig == -2
+    assert PeBakedDefaults == 1017 and PeBakedMixed == 70
+    assert peFirst(I64[2, 2]) == 8 and peFirst(I64[-2, 2000]) == -1 and peClassify(1, 2000) == 90
+}
+test "P4: ...and the same at run time" {
+    a := I64[1, 2, 3]
+    a[0] = sbRun
+    assert peFirst(a) == 14
+    b := I64[1, -2, 3000]
+    b[0] = sbRun
+    assert peFirst(b) == -1
+    c := I64[1, 3000, -2]
+    c[0] = sbRun
+    assert peFirst(c) == -2
+    d := I64[1, -2, 3000, 4]
+    d[0] = sbRun
+    assert peDefaulted(d) == 1017
+    assert peClassify(6 + sbRun, -sbRun) == 70 and peClassify(sbRun, -sbRun) == 80 and peClassify(sbRun, 2000) == 90
+}
+
+# P4b: the earliest-SPAWNED failure is the join's, whichever finishes first - the first task spins before failing
+test "P4b: the join fails with the task spawned earliest among those that failed" {
+    n I64 = 0
+    try join {
+        spawn try peSpin(-sbRun, 2000000)
+        spawn try peSpin(2000 * sbRun, 0)
+    } catch peErr.NEG { n = 1 } catch peErr.BIG { n = 2 }
+    assert n == 1
+    #...and a loop's iterations are spawned in order: the first failing one wins
+    m I64 = 0
+    try join {
+        for i in range 50 { spawn try peSq(I64(1100 + 10 * i) * sbRun - 3000 * I64(i % 2)) }
+    } catch peErr.NEG { m = 1 } catch peErr.BIG { m = 2 }
+    assert m == 2
+}
+
+# P4a: a clause runs on the task, capturing what it reads - here a writable reference, the explicit way to change outer
+# state - and an error it does not take still reaches the join
+test "P4a: a task's clause runs on its thread and counts what it takes" {
+    tally mut Array<I64>& = Array<I64>(2)
+    j I64 = 0
+    try join {
+        for i in range 20 {
+            spawn try peSq(I64(i) - 10) catch peErr.NEG { tally[0].AtomicAdd(1) }
+        }
+        spawn try peSeven(7 * sbRun) catch { tally[1].AtomicAdd(1) }
+    } catch peErr { j = 1 }
+    assert tally[0] == 10 and tally[1] == 1 and j == 0
+}
+
+# P4a: several targets take one default per target, as a destructuring's try does
+fn peDivmod(a I64, b I64) (I64, I64) ? peErr {
+    if b == 0 { error peErr.NEG }
+    return a / b, a % b
+}
+test "P4a: a task with several targets gives each a default" {
+    q, r, s, t I64
+    join {
+        spawn q, r = try peDivmod(17, 5 * sbRun) catch default -1, -2
+        spawn s, t = try peDivmod(17, 0 * sbRun) catch default -1, -2
+    }
+    assert q == 3 and r == 2 and s == -1 and t == -2
+}
+
+# P4a/P1g: a default holding references is built where the call's result lands, so it outlives the join as the result
+# would - read back after the arena is churned
+type peNode struct(v I64) {
+    v
+}
+fn peMk(n I64) peNode& ? peErr {
+    if n < 0 { error peErr.NEG }
+    return peNode(n * 10)
+}
+fn peText(n I64) String ? peErr {
+    if n < 0 { error peErr.NEG }
+    return "n=" $n
+}
+fn peMany(n I64) List<I64> ? peErr {
+    if n < 0 { error peErr.NEG }
+    l := List<I64>()
+    for i in range n { l.Push(i) }
+    return l
+}
+test "P4a: defaults holding references outlive the join" {
+    a, b String
+    p, q peNode&
+    l1, l2 List<I64>
+    z peNode& = peNode(5)
+    join {
+        spawn a = try peText(5 * sbRun) catch default "none"
+        spawn b = try peText(-5 * sbRun) catch default "none"
+        spawn p = try peMk(4 * sbRun) catch default peNode(-1)
+        spawn q = try peMk(-4 * sbRun) catch default peNode(-1)
+        spawn l1 = try peMany(3 * sbRun) catch default List<I64>()
+        spawn l2 = try peMany(-3 * sbRun) catch default List<I64>()
+        spawn z = try peMk(-sbRun) catch default null
+    }
+    sbChurn()
+    assert a == "n=5" and b == "none" and p.v == 40 and q.v == -1
+    assert l1.Len() == 3 and l1[2] == 2 and l2.Len() == 0 and z == null
+}
+
+# P4b: a failure takes the place of the way the block is left - a return's value is dropped, a break is not taken - but
+# an error already leaving the block leaves as it would
+fn peReturnReplaced() I64 ? peErr {
+    try join {
+        spawn try peSq(-5 * sbRun)
+        return 1
+    }
+    return 2
+}
+fn peBreakReplaced() I64 {
+    n I64 = 0
+    for i in range 3 {
+        try join {
+            spawn try peSq((I64(i) - 1) * sbRun)
+            if i < 5 { break }
+        } catch peErr { n = n + 10 }
+        n = n + 1
+    }
+    return n
+}
+fn peContinueReplaced() I64 {
+    n I64 = 0
+    for i in range 4 {
+        try join {
+            spawn try peSq((I64(i) - 2) * sbRun)
+            continue
+        } catch peErr { n = n + 10 }
+        n = n + 100
+    }
+    return n
+}
+fn peOwnErrorWins() I64 ? peErr + peOther {
+    try join {
+        spawn try peSq(-sbRun)
+        try peSeven(7 * sbRun)
+    }
+    return 0
+}
+test "P4b: a failed join replaces a return, a break and a continue, but not an error already leaving" {
+    assert (try peReturnReplaced() catch peErr.NEG default 30 catch default 31) == 30
+    assert peBreakReplaced() == 11
+    assert peContinueReplaced() == 220
+    assert (try peOwnErrorWins() catch peOther default 1 catch peErr default 2) == 1
+}
+
+# P4b: deferred code runs before the wait, as the block's last statements, and the failure is the join's after it
+test "P4b: a failed join's deferred code runs, then the clause" {
+    log mut Array<I64>& = Array<I64>(2)
+    try join {
+        defer log[0] = 1
+        spawn try peSq(-sbRun)
+    } catch peErr { log[1] = log[0] + 1 }
+    assert log[0] == 1 and log[1] == 2
+}
+
+# P4: a spawned lambda may fail too, its errors those its body lets through (D16b), and joins nest - an inner join's
+# failure is its task's, which the outer join takes
+test "P4: a spawned lambda fails, and nested joins pass a failure out" {
+    n I64 = 0
+    try join {
+        spawn try fn() {
+            try join {
+                spawn try peSq(-sbRun)
+            }
+        }
+    } catch peErr.NEG { n = 5 } catch peErr { n = 4 }
+    assert n == 5
+    m I64 = 0
+    try join {
+        spawn try fn() { x := try peSq(2000 * sbRun) }
+    } catch peErr.BIG { m = 9 } catch peErr { m = 8 }
+    assert m == 9
+}
+
+# R17/P4c: a task calling a function declared with "?" alone fails with the default error, which only an untyped clause
+# takes; and a "try join" in a function declared with "?" alone lets every failure out as its own
+fn peBare(n I64) ? {
+    if n < 0 { error }
+}
+fn peBareJoin(n I64) ? {
+    try join {
+        spawn try peSq(n)
+    }
+}
+test "R17/P4c: the default error through a join" {
+    k I64 = 0
+    try join {
+        spawn try peBare(-sbRun)
+    } catch { k = 1 }
+    assert k == 1
+    j I64 = 0
+    try peBareJoin(-sbRun) catch { j = 1 }
+    assert j == 1
+}
+
+# D10a/P4c: a join leaves when its block does and every clause of its "try join" does - what no clause takes leaves by
+# propagating - so a function may end in one
+fn peEndsInJoin(n I64) I64 ? peErr {
+    try join {
+        spawn try peSq(n)
+        return 1
+    } catch peErr.NEG { return -1 }
+}
+test "D10a/P4c: a function may end in a join that leaves" {
+    assert (try peEndsInJoin(sbRun) catch default 0) == 1 and (try peEndsInJoin(-sbRun) catch default 0) == -1
+    assert (try peEndsInJoin(2000 * sbRun) catch peErr.BIG default -2 catch default -3) == -2
+}
+
+# P4b: a test left early by "done" while a task's failure is pending still waits for its tasks (P1d) and drops the error
+test "P4b: a test ending early waits for a failing task and drops its error" {
+    try join {
+        spawn try peSpin(-sbRun, 200000)
+        done
+    } catch peErr { unreachable }
+}

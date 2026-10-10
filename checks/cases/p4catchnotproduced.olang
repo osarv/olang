@@ -1,0 +1,16 @@
+# check: fail error[R14]: the call does not fail with F
+# P4a: a task's clause names what its call can fail with, as any clause does
+error E {
+    BAD
+}
+error F {
+    NOPE
+}
+fn work(n I32) ? E {
+    if n < 0 { error E.BAD }
+}
+fn main() ? E {
+    try join {
+        spawn try work(-1) catch F { }
+    }
+}

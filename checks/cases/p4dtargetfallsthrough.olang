@@ -1,0 +1,16 @@
+# check: fail error[P4d]: a task of this join binds a target it leaves unwritten when it fails - this clause must leave
+# P4d: a target a failed task leaves unwritten is never read after the join - every clause of the "try join" leaves
+error E {
+    BAD
+}
+fn sq(n I32) I32 ? E {
+    if n < 0 { error E.BAD }
+    return n * n
+}
+fn main() ? {
+    r I32 = 0
+    try join {
+        spawn r = try sq(-1)
+    } catch E { println("failed") }
+    println($r)
+}

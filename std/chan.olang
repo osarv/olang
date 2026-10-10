@@ -310,6 +310,35 @@ test "Cancel wakes a task blocked in a wait" {
     assert cancel.NowNs() - start < 1000000000
 }
 
+# P4: a task's wait may fail - RecvUntil when its token is cancelled - and the error reaches the join, which a "try join"
+# takes (its clause leaving, since the target is left unwritten, P4d); or the task's own clause gives the target a value
+fn recvOrStop(c mut Chan<I32>&, tok mut cancel.Token&) I32 {
+    v I32 = 0
+    start := cancel.NowNs()
+    try join {
+        spawn v = try RecvUntil(c, tok)
+        for cancel.NowNs() - start < 5000000 { }
+        tok.Cancel()
+    } catch cancel.Stopped.CANCELLED { return -1 } catch { return -2 }
+    return v
+}
+
+test "P4: a task cancelled in RecvUntil fails into its join, or takes its own default" {
+    c mut Chan<I32>& = Chan<I32>(1)
+    Init(c)
+    assert recvOrStop(c, cancel.Token()) == -1
+    tok mut cancel.Token& = cancel.Token()
+    v, w I32
+    join {
+        spawn v = try RecvUntil(c, tok) catch cancel.Stopped.CANCELLED default -1 catch default -2
+        spawn w = try Recv(c) catch default -3
+        Send(c, 7)
+        tok.Cancel()
+        Close(c)                             # what is buffered is still taken, then a Recv fails
+    }
+    assert (v == 7 and w == -3) or (v == -1 and w == 7)
+}
+
 # a channel of any element type - here a struct, carried by value, and text, each across tasks
 type reading struct(sensor I32, value F64) {
     sensor

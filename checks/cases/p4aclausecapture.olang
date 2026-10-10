@@ -1,0 +1,20 @@
+# check: fail error[P2, D16e]: this lambda captures a variable declared inside the join, which closes while the task may run
+# P4a/P2: a task's clause is a lambda made at the spawn - what it captures lasts until the join, as a spawned lambda's does
+error E {
+    BAD
+}
+type Node struct(v I64) {
+    v
+}
+fn work(n I64) ? E {
+    if n < 0 { error E.BAD }
+}
+fn note(n Node&) { }
+fn main() ? {
+    join {
+        for i in range 4 {
+            n Node& = Node(i)
+            spawn try work(i - 2) catch E { note(n) }
+        }
+    }
+}

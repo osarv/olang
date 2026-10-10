@@ -520,6 +520,12 @@ struct catchClause {
     struct list block;       //struct statement
     struct operand* dflt;    //value position: the value this clause gives (a tuple literal for several
                              //results), or NULL when its block leaves
+    //P4a: a clause of a spawned try - its block and default are the code of taskFn, a hidden local holding a lambda
+    //made at the spawn and called on the task's thread when the clause takes the error; taskCall is that call (no
+    //arguments), and givesValue whether it returns the targets' values. block and dflt are empty: they are its body
+    struct var* taskFn;
+    struct operand* taskCall;
+    bool givesValue;
 };
 
 //D16: one variable a lambda captured - as the body around it sees it, and the lambda's own copy
@@ -583,7 +589,11 @@ struct statement {
     bool leavesOnlyByJump;       //FOR only (D10a): "for { }" with no break of its own - it never falls through
     struct list nomatchBlock;    //MATCH only
     struct operand* nomatchValue; //MATCH used as a value only (S12b): "nomatch => v", NULL for a block
-    struct list catchClauses;    //TRY_CATCH only: struct catchClause, in order (R9b)
+    struct list catchClauses;    //TRY_CATCH: struct catchClause, in order (R9b); JOIN: a "try join"'s clauses (P4c);
+                                 //SPAWN: a spawned try's own clauses, run on the task's thread (P4a)
+    bool tried;                  //JOIN: written "try join" (P4c); SPAWN: "spawn try" (P4)
+    struct list* joinErrors;     //JOIN: what its tasks let through, which the join fails with (struct type*, P4c);
+                                 //SPAWN: the same list, its join's - a task's error is carried under it (P4b)
 };
 
 enum operation {
@@ -688,6 +698,8 @@ struct operand {
     bool landedInProgram; //O1b: a constructor call landed in the program's scope - assigned to a global, or into one
     //codegen: what this call passed for the callee's result scope (an SSA value), for a "catch default" built there
     char* cgResultScope;
+    int cgTaskResultArg; //P4a: for a spawned call, 1 + the index of the argument passed for its result scope (0: none) -
+                         //where a clause's default, built as the result is, lands too
     //O13c: a call whose borrowed result the callee always returns from one of its derived scopes (O23a) - what that
     //resolves to here, which is where the result's referent lives: the referent of a field the argument bound
     bool resultRefined;

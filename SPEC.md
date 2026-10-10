@@ -1450,7 +1450,8 @@ Whether a path leaves is decided **structurally**, with no dataflow analysis and
 `return` leaves, and so does an `error` (§7), `done`, `fail`, `abort` and `unreachable` (§6.6). An `if`
 leaves only when it has an `else` and both sides leave; a `match` only when every clause leaves and it is
 either exhaustive by §6.4 S13a or has a `nomatch` that leaves; a block written as a statement (S1a) when its statements
-do. **A loop counts only as `for { }` - no condition - with no `break` of its own** (one in a nested loop is that
+do; a `join` (§6.8) when its block leaves and, for a `try join`, every clause does (P4c - what no clause takes leaves
+by propagating). **A loop counts only as `for { }` - no condition - with no `break` of its own** (one in a nested loop is that
 loop's): it is left only by what leaves the function, never by falling through. Any other loop never counts, even one
 whose body always returns — `break` (S11) makes a body leaving and the loop leaving different questions, and
 answering the second needs a reachability pass this rule does not have.
@@ -3455,7 +3456,8 @@ actually open (§6.8 P1d), which also lets a `join` among them wait for its task
 
 ### 6.8 Concurrency
 
-**P1.** `spawn-stmnt ::= "spawn" [ target { "," target } "=" ] ( call | lambda ) STMNT_END` and `join-stmnt ::= "join" block`. A `spawn` statement
+**P1.** `spawn-stmnt ::= "spawn" [ target { "," target } "=" ] [ "try" ] ( call | lambda ) { catch-clause } STMNT_END` and
+`join-stmnt ::= [ "try" ] "join" block { catch-clause }` (the `try` and the clauses: P4-P4d). A `spawn` statement
 starts one **task**: the call runs on its own thread, and the statement itself completes immediately. A
 `join` block is an ordinary block in every other respect, and its end is where every task spawned in it is
 waited for.
@@ -3547,7 +3549,7 @@ save; an ordinary parallel workload never reaches it.
 **P1g.** `spawn TARGET = CALL` binds what the call returns; for a call returning several values (D8c),
 `spawn T1, T2 = CALL` binds one target per result, `_` discarding one, each on the terms below. `TARGET` is an lvalue, written with plain `=`
 and no compound form — a compound assignment reads the target on the task's own thread, which is a data
-race written by accident. The plain `spawn CALL` form is unchanged and discards the result (P4). The target's place
+race written by accident. The plain `spawn CALL` form discards the result. The target's place
 is evaluated at the `spawn`, in the spawner, before the call's arguments - left to right, as an assignment's is (S4).
 
 The store happens **on the task's thread, the instant its call returns** — somewhere between the `spawn`
@@ -3555,8 +3557,9 @@ and the `join`. Two things follow. The target's type must be **exactly** the cal
 there is no caller frame left in which a conversion or a promotion could run. And the target must outlive
 the `join` block, on precisely the terms P2 states for an argument: one declared in a block nested inside
 the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2): a result
-built where it lands (§8 O18a) is built where the target is - several targets sharing one result scope must all be in
-one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an assignment's
+built where it lands (§8 O18a) is built where the target is - a run-time-length array value's storage included, which
+becomes the target's own, since no frame is left to copy it into storage the target already has; several targets sharing
+one result scope must all be in one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an assignment's
 value would (§8 O25, O1b). With several targets each is judged as the assignment of its own result, as a
 destructuring's are (S4b), and each is a store into what its target is in (§8 O17).
 
@@ -3626,7 +3629,7 @@ of tasks or the size of what they did.
 **P6.** A failing `assert` (§6.7 S18) on a task's thread always aborts the process; it is never the
 recoverable, per-test failure S18 describes, even under `-t`. A test's recovery point belongs to the
 spawner's stack, which the spawner is still parked on at the join, so there is nothing on a task's thread
-to recover to — the same reason P4 gives for errors.
+to recover to. An error a task lets through is different: it is a value the task hands to its join (P4b), not a jump.
 
 **P3.** *(withdrawn.)* Within one spawn block — the form P1 used to describe, where every statement in a
 block was a task — a variable passed to a task through a `mut`-marked
@@ -3691,9 +3694,70 @@ its signal. And ThreadSanitizer records each thread's calls on a stack of fixed 
 chain deeper than roughly 200,000 frames (possible on `os.RunOnStack`'s stacks) corrupts its state: such a run may
 crash, abort, or hang inside the detector, and only a build without `-r` runs it as written.
 
-**P4.** A spawned function may not declare an error set (§7): an error raised on another thread has nowhere
-to propagate to, since the join carries no value and the spawner is no longer at the call site. A spawned
-call's return value, if any, is discarded — `spawn` is a statement, never an expression.
+**P4.** A spawned call **may fail**. A task whose call can fail - a function declaring errors (§7 R1), or a spawned
+lambda (D16e) whose body lets one out - is written `spawn try CALL`, optionally with catch clauses (§7.5) after it:
+
+```
+join {
+    spawn try check(a)
+    spawn n = try count(b) catch ParseError default 0
+}
+```
+
+`try` there is required, as before a fallible call anywhere (R8): a fallible spawned call without it is a compile-time
+error, and so is `try` before one that cannot fail. Without targets a spawn is never an expression; its call's result,
+if any, is discarded (P1).
+
+**P4a.** A task's **clauses run on the task's thread**. Each clause written after a spawned `try` is part of the task:
+when the call fails with an error the clause takes (R11a), its block and its default run on the task's own thread,
+before the task is finished, as the body of a spawned lambda would (D16e) - what they read of the spawner's variables
+is captured (D16c), copied when the `spawn` runs, and must last until the join on the terms P2 states for a lambda's
+captures. A task is a function of its own, and its clauses are its code, so they may not leave it: a `return`, a
+`break` or `continue` not inside a loop written in the clause, an `error` statement, and a `try` an error can leave the
+clause through are compile-time errors. `abort`, `unreachable`, `done` and `fail` end the process from a task's thread
+(P6, S16) and may be written.
+
+- Without targets the clauses are a statement's (R10): each has a block and no default.
+- With targets (P1g) they are in value position (R9a): each gives the targets' values with `default v` - one default
+  per target, as a destructuring's `try` takes one per result: `spawn q, r = try divmod(a, b) catch default 0, 0` - or
+  its block provably ends the process. A default is stored into the targets as the call's result would be, so it fits
+  the call's result type, and one holding references is built where the call's result lands (P1g, §8 O18a): it builds
+  all it holds - `null`, text written in the program, a temporary such as a constructor call - and never names
+  existing storage, whose scope a task cannot match against the targets'.
+
+**P4b.** What no clause of a task takes **reaches its join**. The error ends the task, leaving its targets as they
+were, and is carried to the task's `join` block - as its code (R6), written before the task is reported finished, so
+the join's edge (P8) orders it. The join still waits for every task (P1b), and then, if any task failed, the join
+**fails** with the error of the task spawned **earliest** among those that failed - in the order the `spawn`
+statements ran, so in the order of a loop's iterations - and every other task's error is dropped. A failing task stops
+no other: stopping siblings is cooperative, through a cancellation token (`std/cancel`) the tasks watch.
+
+The join fails on **every** way out of its block - falling off its end, a `return`, a `break`, a `continue` - and its
+failure takes the place of that way out: a return's value is discarded and a loop is not jumped, exactly as an error
+raised there would do. The one exception is an error already leaving the block - raised by the block's own code, or
+propagated through it - which leaves as it would, the tasks' errors dropped. `done`, `fail`, `abort` and `unreachable`
+end the process or the test (P1b, P1d) and fail no join.
+
+**P4c.** A join that can fail is written **`try join`**. `try join { ... }`, with catch clauses (§7.5) after the block
+or none, is the statement form of `try` (R10) with the join as what it tries. What the join can fail with is what its
+tasks let through: for each of its `spawn try` statements, every error type the spawned call declares that the task's
+own clauses do not take whole - coverage judged at the level of declared types, as R14 judges a call's. The clauses are
+tried in order (R11a); one that takes the error runs its block and, when that does not leave, continues after the
+statement (R10); what no clause takes propagates from the enclosing function, which must declare it (R9, R13), or
+leaves as its own default error (R17). A join none of whose tasks can fail is written without `try`, and `try join` on
+it is a compile-time error, as `try` on a call that cannot fail is; a join that can fail written without `try` is a
+compile-time error too. The join's errors are its tasks' only: an error raised by the block's own statements is the
+block's, and leaves it as from any other block.
+
+**P4d.** A target whose task fails into the join is **left unwritten**. So when a join holds one - a `spawn` with
+targets whose task lets some error through - every clause of its `try join` must provably leave (D10a, counting
+`break` and `continue`, as R9a does in value position), and the code after the join runs only when every such task
+succeeded or was given its default by its own clause. A join whose failing tasks bind no targets may continue after a
+clause, as a sequential `try f(buf) catch E { }` leaves `buf` as far as `f` wrote it. Partial results come from a
+default per task (P4a).
+
+Nothing about memory changes: every task is still joined before the block is left, and its stand-ins and parts (P2)
+are folded on every way out, a failed join's included.
 
 **P9.** Every integer type has five **atomic methods**, called on a place `t` of that type:
 
@@ -3870,7 +3934,8 @@ value, or nothing.
 
 **R8.** `try` applies only directly to a call whose target function or constructor declares at
 least one error (E13, E15); a bare, un-`try`'d call to such a function is a compile-time error, and
-`try` on a call to a function that declares no errors is unnecessary and rejected as such.
+`try` on a call to a function that declares no errors is unnecessary and rejected as such. A spawned call (§6.8 P4)
+and a `join` block (P4c) are tried on the same terms: whatever can fail is written with `try`, and nothing else is.
 
 **R9.** As an **expression** (`try-expr`, §5.1 E24, only where a value is expected): evaluates the
 call; if it produced its success value, the `try` expression's value is that; if it produced an
@@ -3926,7 +3991,9 @@ evaluates the call; if it produced its success value, that value is discarded (t
 binds one — see §7.5) and control continues after the statement; if it produced an error, the first
 clause that handles it runs (§7.5) and, if its block does not leave, control continues after the
 statement. The error is never exposed to the block — no error object or word is bound to a name. A clause
-of a statement has no value to give, so it always has a block and never a `default`.
+of a statement has no value to give, so it always has a block and never a `default`. `try join { ... }` (§6.8 P4c) is
+this statement with a join in place of the call, and a spawned `try` without targets (P4a) takes clauses on these
+terms too, run on the task's thread.
 
 ### 7.5 `catch`
 
@@ -5973,7 +6040,8 @@ evaluated, and one on a global is refused as any other write of it (or, for `Ato
 
 A `join` block's **tasks** (P1) are evaluated **in sequence**: a `spawn` binds its call's arguments, and takes its
 targets' places (P1g), where it is written, and when the block is left - by whichever way (P1b), after its deferred code
-(S19) - each task runs to completion in the order it was spawned, its result then stored. That is one of the orders
+(S19) - each task runs to completion in the order it was spawned, its result then stored, or, when its call fails, its
+own clause run (P4a) or its error kept; after the last, the join fails with the earliest kept error (P4b). That is one of the orders
 the running program may take, with every edge P8 states holding in it, so a program free of data races (P8b) gets the
 result it gets at run time - one whose result depends on the order its tasks run in, through atomic operations, gets
 this order's. A task waiting for something only another task or the spawner after the join would do (spinning on an
