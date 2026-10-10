@@ -677,6 +677,13 @@ because what it finds about structure feeds the refactor.
   runs (/home/user/wt/rvown1 @ 42efc87 -> /home/user/review/own1); fix its findings on wt-own, then merge. Phase 2 after
   that: owning parameters and results (O36/O37), own elements in List/Map (TakeAt, SwapTake, Map.Take), then Vec<T>.
   The user (2026-10-10): own and Vec are built in the C compiler before the port. Pace: one agent at a time.
+- 23:25 CEST: own's review (/home/user/review/own1) found two use-after-frees the borrow check accepts:
+  - C1: a `take` into another owner keeps a loan's old root, so a release through the new owner misses it. Decided:
+    Rust's rule, refuse a move out of a slot while a loan on it is live.
+  - C2: a task borrows internally while the spawner releases (channel-synchronised, so TSan is silent). Decided: a
+    borrow effect dual to OwnEffects, whose loans are held to the join.
+  Also: a pre-existing destructor leak on field assignment (P1), and two safe over-rejections. Sent back to the own
+  agent (afe0b23) on wt-own. A follow-up soundness review runs before the merge.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
