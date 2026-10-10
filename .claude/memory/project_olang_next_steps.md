@@ -556,6 +556,13 @@ because what it finds about structure feeds the refactor.
   `type Letter extends Char` gets U8's methods, not Char's (VarGetMethod, MethodReceiverAccepts, InterfaceMethodImpl,
   unifyThroughMethods, T29f result typing follow the bare U8); study6 r02/r04/r05/r07/r10/r13-r15, G5 over-rejections,
   oann lambdalend, r10 T(x), for-in iterator in place, the semantic.c cleanup.
+- 07:10 CEST (2026-10-10): the weekly window reset at 06:00 CEST (weekly 0, next reset Sat 2026-10-17 06:00 CEST).
+  s6std merged with its fix (ada716d, pushed): List.Clone read the old `chunks` after s6std's first-chunk change (the
+  segfaults), and E11c's effect analysis over-rejected Map.Str (effShallow: a parameter's own storage is charged to a
+  caller only where the caller hands in pre-existing storage; effHoldsUnknownRefs closes a pre-existing hole). A
+  read-only soundness review of that E11c change runs (/home/user/wt/rv7 -> /home/user/review/tonight7). Decision 47
+  failed its gate (+10%); round 3 builds decision 48 (closure-call check) in wt-rv3fix. oann phase 10 started (catch-up
+  to ada716d via /home/user/wt/oannc5, settling open questions 15-17). Morning report posted 06:10 CEST.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
