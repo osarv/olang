@@ -1189,6 +1189,9 @@ static void cgNoteHandedOn(struct cgCtx* ctx, struct operand* op, struct var* fu
     }
 }
 
+static char* cgRegionSlot(struct cgCtx* ctx, struct var* R);
+static void cgOwnBorrowHeader(struct cgCtx* ctx, struct operand* op, const char* val);
+static char* cgTake(struct cgCtx* ctx, struct operand* op);
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
@@ -1198,9 +1201,10 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
             if (StrCmp(c->sv->name, scopeParam->name)) c->built = true;
         }
     }
-    char* addr = cgLookupVarAddr(ctx, scopeParam);
+    char* addr = scopeParam->isRegion ? cgRegionSlot(ctx, scopeParam) : cgLookupVarAddr(ctx, scopeParam); //O32
     char* loaded = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", loaded, addr);
+    if (scopeParam->isRegion) return loaded; //(a region is no scope this body was handed)
     struct cgHanded h = { loaded, scopeParam, false };
     ListAdd(&ctx->handed, &h);
     return loaded;
@@ -1390,8 +1394,14 @@ char* cgBoundScopeArg(struct cgCtx* ctx, struct operand* callOp, struct var* sv)
 //construction site, which is exactly where O16 says registration belongs. A destructor-declaring type
 //is reference-only (C11), so it is never an array element or an embedded field and this never needs to
 //walk into an aggregate - one instance, one allocation, one registration.
+static char* cgOwnDropFn(struct cgCtx* ctx, struct type t);
 void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr) {
     if (t.bType == BASETYPE_STRUCT) {
+        if (TypeIsOwning(t)) { //O35: its own fields released as its scope closes - after its destructor, registered next
+            cgNoteBuildInto(ctx, scopeVal);
+            fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr,
+                    cgOwnDropFn(ctx, t));
+        }
         if (!t.hasDestruct) return;
         char dtorSym[256];
         mangleFuncSym(t.destructFunc, dtorSym, sizeof(dtorSym));
@@ -2061,11 +2071,18 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
 //address an instance gets is not observable; its destructor is registered once its constructor has completed (O16),
 //exactly as before, so destructors still run in the order O15 gives. A value whose building fails leaves its slot to
 //the scope, reclaimed when that closes.
+static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap);
 static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
-    char storTy[256];
-    llvmType(op->type, storTy, sizeof(storTy));
     char* heap = cgNewTmp(ctx);
     cgArenaAllocFor(ctx, heap, scopeVal, op->type);
+    cgPromoteAt(ctx, op, scopeVal, heap);
+    return heap;
+}
+
+//...op built into heap, storage already made for it in scopeVal (an own reference's region, cgOwnNew)
+static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap) {
+    char storTy[256];
+    llvmType(op->type, storTy, sizeof(storTy));
     char* prev = ctx->targetScopeOverride;
     ctx->targetScopeOverride = scopeVal;
     ctx->promotedOp = op;
@@ -2084,7 +2101,6 @@ static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
     }
     cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
-    return heap;
 }
 
 //op's value stored into dstAddr, a slot of type dstT: cgValueForTarget then cgStoreInto, except where the value is new
@@ -4603,7 +4619,8 @@ static int rdSigDepth;               //how many signatures the type being spelle
 //could give two different types. Each part's key is length-prefixed, so no two structures spell one key.
 static void rdKey(struct type t, struct cgBuf* b) {
     char inner[512] = "";
-    const char* ref = t.structMAlloc ? (t.refMut ? "mw" : "m") : ""; //T25b: a permission is spelled, so it is keyed
+    const char* ref = t.structMAlloc ? (t.refOwn ? (t.refMut ? "mwo" : "mo") : t.refMut ? "mw" : "m") : ""; //T25b: a permission
+                                                                                                    //is spelled, so it is keyed (T25e: and own)
     if (t.owner && t.name.len > 0) mangleTypeName(t.owner, t.name, inner, sizeof(inner));
     switch (t.bType) {
         case BASETYPE_ARRAY: {
@@ -4703,6 +4720,7 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
     }
     //T25b: a writable reference is written "mut" at every level, as source writes it - a caller with no place for the
     //outermost level's (a diagnostic, an array literal's element type, a parameter) clears it first
+    if (t.refOwn) cgBufAdd(b, "own "); //T25e: before "mut", as written
     if (t.structMAlloc && t.refMut && t.bType != BASETYPE_FUNC) cgBufAdd(b, "mut ");
     if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - T7c: with its length if fixed
         cgBufAdd(b, "Array<");
@@ -5873,8 +5891,11 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
                 if (op->readVar->isLambda && op->readVar->lambdaCaptures.len) return cgClosure(ctx, op, addr); //D16c
                 return cgFuncValue(ctx, op->readVar, addr);
             }
-            return cgLoadOrAddr(ctx, op->type, addr, op->opType == OPERATION_INDEX);
+            char* r = cgLoadOrAddr(ctx, op->type, addr, op->opType == OPERATION_INDEX);
+            if (op->ownRegion && op->ownRegion->isRegion) cgOwnBorrowHeader(ctx, op, r); //O32
+            return r;
         }
+        case OPERATION_TAKE: return cgTake(ctx, op); //E34
         case OPERATION_FUNCCALL: return cgFuncCall(ctx, op);
         case OPERATION_NOT: case OPERATION_BTWSE_INV: case OPERATION_MINUS:
             return cgUnaryOp(ctx, op);
@@ -6392,6 +6413,122 @@ static void cgFillLoop(struct cgCtx* ctx, struct type elemT, char* basePtr, char
     cgLabel(ctx, endLbl);
 }
 
+// ---- own references (§8.8) ----
+
+//O32: the slot holding the region a borrow's referent is in, for building there - made where the function starts (null
+//there, at the function's base scope, where every block finds it), set where the borrow is read (cgOwnBorrowHeader)
+static char* cgRegionSlot(struct cgCtx* ctx, struct var* R) {
+    struct cgLocal* l = cgFindLocalKind(ctx, R->name, true);
+    if (l) return l->llvmVal;
+    if (!ctx->scope) cgPushScope(ctx); //a global's initializer has none of its own
+    struct cgScope* root = ctx->scope;
+    while (root->parent) root = root->parent;
+    char* buf = MallocOrCrash(32);
+    snprintf(buf, 32, "%%loc.%d", ctx->tmpCtr++);
+    struct cgLocal local = {0};
+    local.name = R->name;
+    local.type = R->type;
+    local.llvmVal = buf;
+    ListAdd(&root->locals, &local);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n  store ptr null, ptr %s\n", buf, buf);
+    return buf;
+}
+
+//O32: a borrow just read - val the object's address - records its region, the word before the object; a null borrow's
+//from a word holding null, so reading it is no fault (only a build into it would be one, as reading through the null is)
+static void cgOwnBorrowHeader(struct cgCtx* ctx, struct operand* op, const char* val) {
+    char* isNull = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", isNull, val);
+    char* word = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr i8, ptr %s, i64 -8\n", word, val);
+    char* at = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = select i1 %s, ptr @__olang_own_nullhdr, ptr %s\n", at, isNull, word);
+    char* hdr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", hdr, at);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
+}
+
+static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap);
+
+//O30: an owner made here - its object the first allocation of a new region, which is its constructor's %here (so what
+//it builds into itself lands there too), recorded in the region's slot before anything is built
+static char* cgOwnNew(struct cgCtx* ctx, struct operand* op) {
+    char* obj = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_own_new(i64 %lld, i64 %lld)\n", obj, TypeGetSize(op->type),
+            cgAllocAlign(op->type));
+    char* word = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr i8, ptr %s, i64 -8\n", word, obj);
+    char* hdr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", hdr, word);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
+    cgPromoteAt(ctx, op, hdr, obj);
+    return obj;
+}
+
+//O34: what a move position receives - null, the owner "take" gives, or one made here
+static char* cgOwnValue(struct cgCtx* ctx, struct operand* op) {
+    if (!op || op->isNullLiteral) return "null";
+    if (op->ownNewRegion) return cgOwnNew(ctx, op);
+    return cgValue(ctx, op);
+}
+
+//E34: the owner a slot holds, the slot left null
+static char* cgTake(struct cgCtx* ctx, struct operand* op) {
+    char* addr = cgAddr(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
+    char* v = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", v, addr);
+    fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", addr);
+    return v;
+}
+
+//O35: "slot = owner" - the place first (S4), then the owner, then the one the slot held released
+static void cgOwnAssign(struct cgCtx* ctx, struct statement* s) {
+    char* addr = cgAddr(ctx, s->target);
+    char* v = cgOwnValue(ctx, s->op);
+    char* old = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", old, addr);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", v, addr);
+    fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", old);
+}
+
+//O35: an owner local - released as its block's scope closes, unless moved on before (its slot then null). A
+//constructor's field is moved into the instance, which releases it (cgOwnDropFn)
+static void cgOwnDecl(struct cgCtx* ctx, struct statement* s, char* slot) {
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", cgOwnValue(ctx, s->op), slot);
+    if (s->ctorField) return;
+    char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+    cgNoteBuildInto(ctx, scope);
+    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_slot)\n", scope, slot);
+}
+
+//O35: "ptr @olang.owndrop.<T>(ptr inst, ptr scope)" - an owning struct's own fields released, the last first, as its
+//instance's scope closes (after its destructor, registered after this)
+static char* cgOwnDropFn(struct cgCtx* ctx, struct type t) {
+    struct type keyT = t;
+    keyT.structMAlloc = false;
+    keyT.refMut = false;
+    keyT.refOwn = false;
+    struct cgBuf key = {0};
+    rdKey(keyT, &key);
+    struct cgBuf symB = {0};
+    cgBufAdd(&symB, "@olang.owndrop.%s", cgBufStr(&key));
+    free(key.p);
+    char* sym = cgBufStr(&symB);
+    if (cgSymAlreadyEmitted(ctx, sym)) return sym;
+    char agg[1024];
+    structAggSpelling(keyT, agg, sizeof(agg));
+    fprintf(ctx->out, "define linkonce_odr void %s(ptr %%inst, ptr %%scope) {\nentry:\n", sym);
+    for (int i = t.vars.len - 1; i >= 0; i--) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        if (!f->type.refOwn) continue;
+        fprintf(ctx->out, "  %%f%d = getelementptr %s, ptr %%inst, i32 0, i32 %d\n", i, agg, i);
+        fprintf(ctx->out, "  %%o%d = load ptr, ptr %%f%d\n  store ptr null, ptr %%f%d\n", i, i, i);
+        fprintf(ctx->out, "  call void @__olang_own_free(ptr %%o%d)\n", i);
+    }
+    fprintf(ctx->out, "  ret void\n}\n\n");
+    return sym;
+}
+
 void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     //D13c: a zero value its constructor was found to give as zero bits is the declaration with no initializer
     struct statement plain;
@@ -6415,6 +6552,10 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
         cgArenaAllocFor(ctx, slot, ctx->ctorHere, s->var.type);
     } else cgValueSlotAs(ctx, slot, s->var.type, ty);
     cgDbgVar(ctx, slot, s->var.name, s->var.type, s->line, 0);
+    if (s->var.type.refOwn) { //O34/O35
+        cgOwnDecl(ctx, s, slot);
+        return;
+    }
     //D15c: "Array<T>(n, v)" - every element gets v
     if (s->fillValue) {
         struct type elemT = *s->var.type.arrElem;
@@ -6475,6 +6616,10 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
 }
 
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
+    if (s->target->type.refOwn) { //O35
+        cgOwnAssign(ctx, s);
+        return;
+    }
     //a bare "&" struct field or array element has no declared scope of its own (neither a field nor an
     //array's own element type can carry a "&name" tag independently of the whole array - see the report)
     //- by rule, its effective scope is always the SAME as whatever contains it. When the target of

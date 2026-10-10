@@ -508,6 +508,7 @@ bool TypeIsSame(struct type a, struct type b) {
     //unconditionally, so "byte[]" and "byte[]&" are both { len, ptr } and the marker carries nothing but a
     //scope name, which T25 keeps out of identity. Identity tracks representation, not annotation.
     if (a.structMAlloc != b.structMAlloc) return false;
+    if (a.refOwn != b.refOwn) return false; //T25e: an own reference is a type of its own
     if (isTypeVanilla(a.bType)) {
         //T29: a DECLARED type is nominal even when its underlying shape is a primitive. "type Meters int32"
         //and "type Feet int32" are different types, and both differ from int32 - which is the entire point
@@ -1743,6 +1744,10 @@ void semaCollectNames(struct semaModule* mod) {
 // ---- pass 2: resolve type shapes and function signatures ----
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
+//T25e: whether "own" may stand on the type being resolved - set by the declarations that take one (a field, a local, a
+//global) around their type's resolution only, and never inside it: a type argument, a function type's parameter or a
+//payload resolved within sees it cleared
+static bool ownAllowed;
 struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
 static struct paramDefault* boundParamDefault(struct paramDefault* d, struct type paramType, struct list* bindings);
 struct operand* paramDefaultOp(struct var* param);
@@ -1965,6 +1970,7 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
         out.scopeParam = t.scopeParam;
         out.scopeDepth = t.scopeDepth;
         out.refMut = t.refMut;
+        out.refOwn = t.refOwn; //T25e: and "own"
         return out;
     }
     //a declared struct that mentions no type variable is already what it is - and walking its fields
@@ -2099,7 +2105,7 @@ static int unifyFrozen;
 //there, once (O16). Bound by value, the instance was copied in and out of the callee, each copy registered, and
 //destructed twice
 static struct type unifyTempAsRef(struct type param, struct type arg) {
-    if (!param.structMAlloc && arg.bType == BASETYPE_STRUCT && arg.hasDestruct && !arg.structMAlloc) {
+    if (!param.structMAlloc && arg.bType == BASETYPE_STRUCT && (arg.hasDestruct || TypeIsOwning(arg)) && !arg.structMAlloc) {
         arg.structMAlloc = true;
         arg.refMut = true;
     }
@@ -2605,6 +2611,7 @@ static void typeSpell(struct sbuf* b, struct type t) {
     }
     //reference-shapedness is part of identity (T27), and so is a reference's permission (T25b)
     if (t.structMAlloc) sbufStr(b, t.bType == BASETYPE_FUNC || !t.refMut ? "-r" : "-w");
+    if (t.refOwn) sbufStr(b, "-o"); //T25e: an own reference is a type of its own
 }
 
 struct str typeShortName(struct type t) {
@@ -2804,11 +2811,13 @@ static void refreshTypeSnapshot(struct type* ft) {
     //the marker and scope belong to this USE of the type, not to the declaration
     bool mAlloc = ft->structMAlloc;
     bool refMut = ft->refMut; //T25b: the permission belongs to the use too
+    bool refOwn = ft->refOwn; //T25e: and so does "own"
     struct var* scopeParam = ft->scopeParam;
     int scopeDepth = ft->scopeDepth;
     *ft = *c;
     ft->structMAlloc = mAlloc;
     ft->refMut = refMut;
+    ft->refOwn = refOwn;
     ft->scopeParam = scopeParam;
     ft->scopeDepth = scopeDepth;
 }
@@ -4401,6 +4410,28 @@ static bool typeHasBareDestructStructAt(struct type t, int depth) {
 }
 bool typeHasBareDestructStruct(struct type t) { return typeHasBareDestructStructAt(t, 0); }
 
+//O31: whether t is an owning type - a struct holding an own reference in a field (by value, any owning struct being held
+//only by reference, below)
+bool TypeIsOwning(struct type t) {
+    if (t.bType != BASETYPE_STRUCT || t.isTuple) return false;
+    if (t.owning) return true;
+    for (int i = 0; i < t.vars.len; i++) {
+        if (((struct var*)ListGetIdx(&t.vars, i))->type.refOwn) return true;
+    }
+    return false;
+}
+//O31: an owning struct held by value where its type is written - C11's rule, for the same reason: a copy of the value
+//would be a second owner of what its own fields own
+static bool typeHasBareOwningStructAt(struct type t, int depth) {
+    if (depth > VALUE_WALK_LIMIT) return false;
+    if (t.bType == BASETYPE_STRUCT) return !t.structMAlloc && TypeIsOwning(t);
+    struct list kids = TypeValueChildren(t);
+    for (int i = 0; i < kids.len; i++) {
+        if (typeHasBareOwningStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) return true;
+    }
+    return false;
+}
+
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
     struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
     //T24: a type carries at most one marker, so a second one is that position written twice - "Point&s&a" -
@@ -4411,6 +4442,8 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     struct type t = applyRefMarker(base, firstPartOfType(refNode, SNTX_ELEM_REF_MARKER), scopeParams);
     if (typeHasBareDestructStruct(t)) {
         Err(firstTokAnywhere(refNode), ERR_DESTRUCT_TYPE_BY_VALUE, &t, &t);
+    } else if (typeHasBareOwningStructAt(t, 0)) {
+        Err(firstTokAnywhere(refNode), ERR_OWNING_TYPE_BY_VALUE, &t, &t);
     }
     //T30: a trait is a constraint (G19) and nothing else - never the type of a value, a reference, a field, an element
     if (t.bType == BASETYPE_INTERFACE && !resolvingConstraint) Err(firstTokAnywhere(refNode), ERR_TRAIT_NOT_A_TYPE, &t);
@@ -4682,7 +4715,9 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
             struct list* prevTF = scopeTagFields;
             scopeTagParams = &ctorParams; //O3c: a field may live where a parameter or an earlier field does
             scopeTagFields = &t->vars;
+            ownAllowed = true; //T25e: a field may own
             v.type = resolveTypeExpr(mod, typeExprNode, &t->scopeVars);
+            ownAllowed = false;
             declTypePermission(&v, f, ERR_MUT_ON_VALUE_FIELD); //C3/T25b: a field's "mut" is its reference's
             scopeTagParams = prevTP;
             scopeTagFields = prevTF;
@@ -4708,6 +4743,10 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
 
     currentSigIntros = prevIntros;
     currentTypeParamNames = prevTPN;
+    //O31: a field of an own reference type makes the struct an owning type, held only by reference
+    for (int i = 0; i < t->vars.len; i++) {
+        if (((struct var*)ListGetIdx(&t->vars, i))->type.refOwn) t->owning = true;
+    }
     //G10d: a field holds what every call builds alike - its type names none of the constructor's variables, and is
     //written (or a pun's), since ":=" would take it from each instantiation's body
     for (int i = 0; ctorVars.len && i < t->vars.len; i++) {
@@ -5395,8 +5434,19 @@ static bool typeExprHasMut(struct syntax* typeExprNode) {
     return false;
 }
 
+static struct token typeExprOwnTok(struct syntax* typeExprNode) {
+    for (int i = 0; i < typeExprNode->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&typeExprNode->parts, i);
+        if (p->isToken && p->tok.type == TOK_OWN) return p->tok;
+    }
+    return (struct token){0};
+}
+
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
+    bool ownHere = ownAllowed;
+    ownAllowed = false;
     struct type t = resolveTypeExprShape(mod, typeExprNode, scopeParams);
+    ownAllowed = ownHere;
     //T20: an error type names no value - it is raised and caught, so a parameter, local, field, result, element or type
     //argument of one could never be given anything. Said here, where it is written; afterwards it fits anything
     if (t.bType == BASETYPE_ERROR && !t.unknown) {
@@ -5411,6 +5461,27 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
         //a type variable may be bound to a reference, which it then makes writable (G8a)
         if (TypeIsPermRef(t) || t.bType == BASETYPE_TYPEVAR) t.refMut = true;
         else Err(firstTokOfType(typeExprNode, TOK_MUT), ERR_MUT_ON_VALUE_TYPE, &t);
+    }
+    //T25e: "own" before a reference type - one owning its object, which lives in a region of its own (O30). Taken on a
+    //struct reference written on a field, a local or a global; anywhere else it is reported here, once
+    struct token ot = typeExprOwnTok(typeExprNode);
+    if (ot.type == TOK_OWN && !t.unknown) {
+        struct type shown = t;
+        shown.refMut = false;
+        if (!TypeIsPermRef(t) && t.bType != BASETYPE_TYPEVAR) {
+            shown.structMAlloc = false;
+            Err(ot, ERR_OWN_ON_VALUE, &shown);
+        } else if (t.bType != BASETYPE_STRUCT || t.isTuple) {
+            shown.scopeParam = NULL;
+            shown.scopeWritten = false;
+            Err(ot, ERR_OWN_KIND_NOT_YET, &shown);
+        } else if (t.scopeParam || t.scopeWritten) {
+            Err(ot, ERR_OWN_SCOPE_MARKER);
+        } else if (!ownHere) {
+            Err(ot, ERR_OWN_POSITION_NOT_YET);
+        } else {
+            t.refOwn = true;
+        }
     }
     return t;
 }
@@ -6279,7 +6350,9 @@ void semaResolveModule(struct semaModule* mod) {
             //":=" (no type node) is resolved later in semaCheckBodies instead, once the initializer
             //operand that its type gets read off exists
             if (typeExprNode) {
+                ownAllowed = true; //T25e: a global may own
                 v->type = resolveTypeExpr(mod, typeExprNode, NULL); //global, no function context
+                ownAllowed = false;
                 declPermission(v); //T25b: "v mut Point&" is a writable global reference
             }
         }
@@ -6838,6 +6911,13 @@ bool scopeOutlives(struct var* func, struct var* longer, int longerDepth, struct
     //(O4a), and the callee's body is bracketed by the call, so every caller scope outlives it.
     if (longer == NULL && shorter == NULL) return shorterDepth == 0 || longerDepth <= shorterDepth;
     if (longer == shorter) return true;
+    //O33: a region outlives no scope but itself, and is outlived by what outlives its reach - the scope its slot lives
+    //in, which it is released by at the latest. A region's reach is never a region (ownBorrowRead)
+    if (longer && longer->isRegion) return false;
+    if (shorter && shorter->isRegion) {
+        if (shorter->regionReachUnnamed) return false;
+        return scopeOutlives(func, longer, longerDepth, shorter->regionReach, shorter->regionReachDepth);
+    }
     if (shorter == NULL) return varIsOwnParam(longer, func); //a signature's scope outlives any block
     return false;                                            //a block scope never outlives a named one (O10d)
 }
@@ -6911,6 +6991,9 @@ bool scopeCanFlowInto(struct var* func, struct var* srcScope, int srcDepth, stru
     srcScope = canonicalVar(srcScope);
     dstScope = canonicalVar(dstScope);
     if (scopeOutlives(func, srcScope, srcDepth, dstScope, dstDepth)) return true;
+    //O33: into a region, what may flow into its reach - an obligation where that is one of func's scope variables
+    if (dstScope && dstScope->isRegion && (!srcScope || !srcScope->isRegion) && !dstScope->regionReachUnnamed)
+        return scopeCanFlowInto(func, srcScope, srcDepth, dstScope->regionReach, dstScope->regionReachDepth);
     //O10d: own can never outlive a scope variable, and no caller's binding could make it so - this is a
     //bug in the body, not something to defer. Reported by the caller of this function, which has the token.
     if (srcScope == NULL) return false;
@@ -8525,7 +8608,7 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
     //built where the declaration lives and registered there. A value took it in, and its destructor never ran
     struct type t = declaredArrayType(rhs);
-    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
+    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && (t.hasDestruct || TypeIsOwning(t))) { //O31: an owning type too
         t.structMAlloc = true;
         t.refMut = OperandGivesWritable(rhs);
         reportTypeFit(OperandFitsType(func, rhs, t), rhs->tok, rhs, t);
@@ -8722,6 +8805,133 @@ static bool typeCarriesScopes(struct type t) {
 }
 
 static struct var* handleField(struct type t);
+// ---- own references (§8.8): reading a slot gives a borrow ----
+
+//O39: where the slot a borrow was read out of was reached from - a parameter, by own fields only (what a call may release
+//below that parameter, and nothing above it), an owner local of the function (nothing a caller holds), or anything else
+enum { OWN_ROOT_ANY, OWN_ROOT_PARAM, OWN_ROOT_LOCAL };
+//the context a read is checked in - set while an expression a program wrote is built (buildExprFromSyntax), so a read
+//the checker makes for itself (a lowering's hidden local) is never converted
+static struct checkCtx* ownCtx;
+static int ownRegionCount;
+
+static struct var* ownRegionNew(struct token tok, struct var* reach, int reachDepth, bool unnamed, int root, int rootParam) {
+    struct var* R = VarAllocSetOrigin();
+    char* nm = MallocOrCrash(24);
+    snprintf(nm, 24, "&own.%d", ++ownRegionCount); //no scope a program writes can be spelled this way
+    R->name = StrFromCStr(nm);
+    R->tok = tok;
+    R->type = TypeScope();
+    R->mayBeInitialized = true;
+    R->isRegion = true;
+    R->regionReach = reach ? canonicalVar(reach) : NULL;
+    R->regionReachDepth = reachDepth;
+    R->regionReachUnnamed = unnamed;
+    R->regionRoot = root;
+    R->regionRootParam = rootParam;
+    return R;
+}
+
+//which of func's parameters v is, or -1
+static int ownParamIndex(struct var* func, struct var* v) {
+    if (!func || !v) return -1;
+    v = canonicalVar(v);
+    for (int i = 0; i < func->type.vars.len; i++) {
+        if (canonicalVar(ListGetIdx(&func->type.vars, i)) == v) return i;
+    }
+    return -1;
+}
+
+//the region a value is a borrow of, or derived from - a read made into one, or a local holding one (O25a takes the
+//region exactly), else NULL
+static struct var* ownRegionOf(struct operand* op) {
+    if (!op) return NULL;
+    if (op->ownRegion && op->ownRegion->isRegion) return op->ownRegion;
+    if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->type.scopeParam
+            && op->readVar->type.scopeParam != SCOPE_AMBIGUOUS && canonicalVar(op->readVar->type.scopeParam)->isRegion)
+        return canonicalVar(op->readVar->type.scopeParam);
+    return NULL;
+}
+
+//O39: where op was reached from, for what releasing below it may reach
+static int ownRootOf(struct var* func, struct operand* op, int* param) {
+    *param = -1;
+    struct var* R = ownRegionOf(op);
+    if (R) { *param = R->regionRootParam; return R->regionRoot; }
+    if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->type.structMAlloc) {
+        int i = ownParamIndex(func, op->readVar);
+        if (i >= 0) { *param = i; return OWN_ROOT_PARAM; }
+    }
+    return OWN_ROOT_ANY;
+}
+
+//O33: the reach of a slot in base's referent - where base's referent lives, a region's own reach where it is in one
+static void ownReachOfBase(struct checkCtx* ctx, struct operand* base, struct var** rv, int* rd, bool* ru) {
+    *rv = NULL;
+    *rd = 0;
+    *ru = false;
+    struct var* R = ownRegionOf(base);
+    if (!R) {
+        struct var* v;
+        int d;
+        bool u;
+        if (!RefExactScope(ctx, base, true, &v, &d, &u)) { *rv = SCOPE_AMBIGUOUS; return; } //(not known: outlived by nothing)
+        if (!v || v == SCOPE_AMBIGUOUS || !canonicalVar(v)->isRegion) {
+            *rv = v && v != SCOPE_AMBIGUOUS ? canonicalVar(v) : v;
+            *rd = d;
+            *ru = u;
+            return;
+        }
+        R = canonicalVar(v);
+    }
+    *rv = R->regionReach;
+    *rd = R->regionReachDepth;
+    *ru = R->regionReachUnnamed;
+}
+
+//O32: an own slot read where it is not moved is a borrow - the own type without "own", in a region of its own (O33),
+//writable only where the own type is and the slot is reached writably (deep: a read-only path gives a read-only
+//borrow). The read keeps the type it had (ownOrig), so a move position or "take" restores it
+static struct operand* ownBorrowRead(struct operand* op) {
+    if (!ownCtx || !op->type.refOwn || op->type.unknown) return op;
+    struct checkCtx* ctx = ownCtx;
+    struct var* rv = NULL;
+    int rd = 0;
+    bool ru = false;
+    int root = OWN_ROOT_ANY, rootParam = -1;
+    if (op->opType == OPERATION_MEMBER) {
+        struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
+        ownReachOfBase(ctx, base, &rv, &rd, &ru);
+        root = ownRootOf(ctx->func, base, &rootParam);
+    } else if (op->opType == OPERATION_READ_VAR && op->readVar) {
+        if (op->readVar->owner && !op->readVar->isFuncDecl) ru = true; //a global's: the program's
+        else {
+            rd = op->readVar->type.scopeDepth;
+            root = OWN_ROOT_LOCAL;
+        }
+    } else return op;
+    struct var* R = ownRegionNew(op->tok, rv, rd, ru, root, rootParam);
+    R->regionSlot = op;
+    bool writable = op->type.refMut && OperandIsMutableLvalue(op);
+    op->ownOrig = MallocOrCrash(sizeof(struct type));
+    *op->ownOrig = op->type;
+    op->type.refOwn = false;
+    op->type.refMut = writable;
+    op->type.scopeParam = R;
+    op->type.scopeDepth = 0;
+    op->type.scopeWritten = false;
+    op->ownRegion = R;
+    return op;
+}
+
+//the read made into a borrow, back to the slot it read - a target, or what "take" moves out of
+static void ownRestore(struct operand* op) {
+    if (!op->ownOrig) return;
+    op->type = *op->ownOrig;
+    op->ownOrig = NULL;
+    op->ownRegion = NULL;
+}
+
 struct operand* OperandReadVar(struct var* v, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_READ_VAR, v->type);
     canonicalVar(v)->valueEscapes = true; //D16c: every read the checker makes of a variable as a value goes through here
@@ -8741,7 +8951,7 @@ struct operand* OperandReadVar(struct var* v, struct token tok) {
     }
     //propagated one hop at declaration time - see buildVarDeclStmnt
     if (typeCarriesScopes(op->type)) op->scopeBindings = v->scopeBindings;
-    return op;
+    return ownBorrowRead(op); //O32
 }
 
 void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func);
@@ -12836,7 +13046,7 @@ struct operand* OperandMember(struct semaModule* referencingMod, struct operand*
         b.viaPath = carriedPath;
         ListAdd(&op->scopeBindings, &b);
     }
-    return op;
+    return ownBorrowRead(op); //O32
 }
 
 struct operand* incDec(struct operand* in, enum operation opType, struct token tok) {
@@ -14568,6 +14778,7 @@ struct operand* buildText(struct checkCtx* ctx, struct syntax* s) {
 static void reportUnknownMethod(struct operand* recv, struct token name);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok);
 static struct list placesWrittenOver(struct list targets);
+struct operand* buildTake(struct checkCtx* ctx, struct operand* place, struct token tok);
 struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     int n = s->parts.len;
     struct operand* result = buildExprFromSyntax(ctx, partSntx(s, n -1)); //last part is EXPR_POSTFIX
@@ -14588,6 +14799,10 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
             if (!(s == ctx->incDecRoot && n == 2)) Err(opTok, ERR_INCDEC_IN_EXPRESSION, opTok); //S3a
             struct operand* r = buildIncDec(ctx, result, opTok.type == TOK_INC, true, opTok);
             if (r) { result = r; continue; }
+        }
+        if (opTok.type == TOK_TAKE) { //E34
+            result = buildTake(ctx, result, opTok);
+            continue;
         }
         result = OperandUnary(result, prefixOpFromTok(opTok.type), opTok);
         if (opTok.type == TOK_STR_OF) { //M6b: a private str renders only in its own module
@@ -16465,7 +16680,16 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     return buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
 }
 
+static struct operand* buildExprFromSyntaxIn(struct checkCtx* ctx, struct syntax* s);
 struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
+    struct checkCtx* saved = ownCtx;
+    ownCtx = ctx; //O32: reads written in the program become borrows
+    struct operand* r = buildExprFromSyntaxIn(ctx, s);
+    ownCtx = saved;
+    return r;
+}
+
+static struct operand* buildExprFromSyntaxIn(struct checkCtx* ctx, struct syntax* s) {
     switch (s->type) {
         //SNTX_EXPR is always a single-child wrapper around whatever parseBinaryExpr actually built - a
         //degenerate 1-part "chain" itself when parts.len==1, so buildBinChain's own generic handling of
@@ -18978,6 +19202,127 @@ static bool localPermission(struct syntax* s, struct syntax* typeExprNode, struc
     return true;
 }
 
+// ---- own references (§8.8): moves and take ----
+
+enum operation compoundOpFromAssignTok(enum tokenType t, bool* isCompound);
+
+//whether two types name one struct, whatever reference, permission or scope is written on them
+static bool ownSameStruct(struct type a, struct type b) {
+    if (a.bType != BASETYPE_STRUCT || b.bType != BASETYPE_STRUCT || a.isTuple || b.isTuple) return false;
+    a.structMAlloc = b.structMAlloc = false;
+    a.refOwn = b.refOwn = false;
+    a.refMut = b.refMut = false;
+    a.scopeParam = b.scopeParam = NULL;
+    a.scopeDepth = b.scopeDepth = 0;
+    a.scopeWritten = b.scopeWritten = false;
+    return TypeIsSame(a, b);
+}
+
+//"s.cur" as the program wrote it, for a message
+static const char* ownPlaceText(struct operand* op) {
+    if (op->opType == OPERATION_READ_VAR && op->readVar) {
+        char* t = MallocOrCrash((size_t)op->readVar->name.len + 1);
+        snprintf(t, (size_t)op->readVar->name.len + 1, "%.*s", op->readVar->name.len, op->readVar->name.ptr);
+        return t;
+    }
+    if (op->opType == OPERATION_MEMBER && op->args.len) {
+        const char* b = ownPlaceText(*(struct operand**)ListGetIdx(&op->args, 0));
+        size_t n = strlen(b) + (size_t)op->memberName.len + 2;
+        char* t = MallocOrCrash(n);
+        snprintf(t, n, "%s.%.*s", b, op->memberName.len, op->memberName.ptr);
+        return t;
+    }
+    return "it";
+}
+
+//E34: "take p" - the owner an own slot holds, the slot left null. Its region (ownRegion) is the slot's read: the reach
+//the owner's references were checked against, which a move position holds the destination's to
+struct operand* buildTake(struct checkCtx* ctx, struct operand* place, struct token tok) {
+    (void)ctx;
+    if (place->type.unknown) return place;
+    if (!place->ownOrig) {
+        Err(tok, ERR_TAKE_NOT_OWN, &place->type);
+        return unknownPlaceholder(tok);
+    }
+    struct var* R = place->ownRegion;
+    ownRestore(place);
+    if (!OperandIsMutableLvalue(place)) Err(tok, ERR_TAKE_READ_ONLY);
+    struct operand* op = operandNew(tok, OPERATION_TAKE, place->type);
+    op->ownRegion = R;
+    ListAdd(&op->args, &place);
+    return op;
+}
+
+//O34: what a move position receives, its slot's reach (rv, rd, ru) - an owner, or null. An owner is a constructor call
+//made here, built in a new region of its own whose reach is the slot's (so what it refers to outlives the slot, C2d), or
+//one taken from another own slot whose reach outlives this one's. A borrow owns nothing: it is taken from its slot
+static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type slotT, struct var* rv, int rd, bool ru) {
+    if (val->type.unknown || val->isNullLiteral) return;
+    if (val->opType == OPERATION_TAKE) {
+        struct var* S = val->ownRegion;
+        val->ownMoved = true;
+        if (!S || S->regionReachUnnamed) return;
+        if (ru || rv == SCOPE_AMBIGUOUS || S->regionReach == SCOPE_AMBIGUOUS
+                || !scopeCanFlowInto(ctx->func, S->regionReach, S->regionReachDepth, rv, rd))
+            Err(val->tok, ERR_OWN_REACH);
+        return;
+    }
+    if (val->ownOrig) {
+        const char* t = ownPlaceText(val);
+        Err(val->tok, ERR_OWN_TAKE_NEEDED, t, t);
+        return;
+    }
+    if (opIsCtorCall(val) && ownSameStruct(val->type, slotT) && !val->isTried) {
+        struct var* R = ownRegionNew(val->tok, rv, rd, ru, OWN_ROOT_LOCAL, -1);
+        val->ownNewRegion = true;
+        val->ownRegion = R;
+        landCall(val, R, 0);
+        checkCtorHereFits(ctx, val, R, 0, val->tok);
+        return;
+    }
+    Err(val->tok, ERR_OWN_NOT_AN_OWNER, val->isTried ? "may fail" : opIsCtorCall(val) ? "builds another type" : "is not one");
+}
+
+//O34/O35: "slot = owner" - the owner moved in, the one the slot held released (codegen); "slot = null" releases it
+static struct statement buildOwnAssign(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
+    struct var* R = target->ownRegion;
+    ownRestore(target);
+    bool compound;
+    compoundOpFromAssignTok(opTok.type, &compound);
+    char opText[8];
+    snprintf(opText, sizeof(opText), "%.*s", opTok.str.len < 7 ? opTok.str.len : 7, opTok.str.ptr);
+    if (compound) Err(opTok, ERR_OWN_COMPOUND, opText);
+    else if (!OperandIsMutableLvalue(target)) reportWriteBlocked(opTok, target);
+    else ownMoveInto(ctx, rhs, target->type, R->regionReach, R->regionReachDepth, R->regionReachUnnamed);
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_ASSIGN;
+    stmt.target = target;
+    stmt.op = rhs;
+    return stmt;
+}
+
+//O34: a local - a constructor's field among them - or a global declared own: an owner local, its reach its block (the
+//instance's scope for a constructor's field, C2g), released at that block's end unless moved on (codegen)
+static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok, struct type declType, struct operand* rhs,
+                                     struct syntax* exprNode) {
+    declType.scopeParam = NULL;
+    declType.scopeWritten = false;
+    declType.scopeDepth = ctx->blockDepth;
+    if (!rhs && exprNode) {
+        struct type want = declType;
+        want.refOwn = false;
+        rhs = buildExpecting(ctx, exprNode, &want);
+    }
+    if (rhs) ownMoveInto(ctx, rhs, declType, NULL, ctx->blockDepth, false);
+    struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
+    if (rhs) v->declInit = rhs;
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_VAR_DECL;
+    stmt.var = *v;
+    stmt.op = rhs;
+    return stmt;
+}
+
 struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token nameTok = firstTokOfType(s, TOK_IDEN);
     bool mut = true; //D11: a local is always mutable - "mut" on one belongs to its type (localPermission)
@@ -18999,8 +19344,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!exprNode) {
         //D13: no initializer - the type's zero value, which for anything reference-shaped is null (T2a)
         scopeTagBody = ctx; //O3c: "&x" may name a local or parameter
+        ownAllowed = true; //T25e: a local or a global may own
         declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
+        ownAllowed = false;
         scopeTagBody = NULL;
+        if (declType.refOwn) return buildOwnDecl(ctx, nameTok, declType, NULL, NULL); //O34: null until given an owner
         bareLocalLivesInBlock(ctx, &declType);
         if (ctx->hasOwnScope) permByType = !localPermission(s, typeExprNode, &declType) && TypeIsPermRef(declType); //T25b
         rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
@@ -19010,8 +19358,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     } else {
         if (typeExprNode) {
             scopeTagBody = ctx; //O3c
+            ownAllowed = true; //T25e
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
+            ownAllowed = false;
             scopeTagBody = NULL;
+            if (declType.refOwn) return buildOwnDecl(ctx, nameTok, declType, NULL, exprNode); //O34
             bool bareVar = typeExprIsBareTypeVar(typeExprNode);
             //T25b: what the written type permits - "x mut T&" writable, "x T&" read-only; a type variable's binding
             //carries its own permission ("acc U = init"), which "mut" may make writable
@@ -19041,6 +19392,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         } else { // ":=" - type read straight off the initializer (D15)
             roInheritDecl = true;
             rhs = buildExprFromSyntax(ctx, exprNode);
+            if (rhs->opType == OPERATION_TAKE) return buildOwnDecl(ctx, nameTok, rhs->type, rhs, NULL); //O34: an owner local
             declType = inferredDeclType(ctx->func, rhs);
             //":=" writes no scope tag, so the local is a bare "&" one and takes its initializer's exact
             //scope (O25a) - the initializer's own tag may be a callee's scope variable, meaningless here
@@ -19684,6 +20036,7 @@ static void condArmsInto(struct operand* op, struct list* out) {
 }
 
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
+    if (target->ownOrig) return buildOwnAssign(ctx, target, rhs, opTok); //O34: an own slot
     if (target->isAtCall) {
         //an element of an element - "rows[i][j] = v" - is stored into the copy "rows[i]" gives, written back as a field
         //of one is (below); an element of a handle's copy needs none, its state is shared (O17b)
@@ -25221,7 +25574,16 @@ void semaBuildGlobalInits(struct semaModule* mod) {
         if (!exprNode) {
             v->initExpr = zeroValueFor(&ctx, v->type, nameTok, false); //D13c: a constructor's zero value, if not zero bits
         } else {
-            struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
+            struct type want = v->type;
+            want.refOwn = false;
+            struct operand* rhs = v->type.refOwn ? buildExpecting(&ctx, exprNode, &want) : buildExprFromSyntax(&ctx, exprNode);
+            if (v->type.refOwn || rhs->opType == OPERATION_TAKE) { //O34: an own global - its reach the program's scope
+                if (!v->type.refOwn) v->type = rhs->type;
+                ownMoveInto(&ctx, rhs, v->type, NULL, 0, true);
+                v->initExpr = rhs;
+                buildDefaultFor(mod, v, nameTok);
+                continue;
+            }
             if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
                 reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
             } else { // ":=" - type read straight off the initializer

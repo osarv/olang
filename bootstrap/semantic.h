@@ -72,6 +72,8 @@ struct type {
     bool structMAlloc; //true when referenced via a trailing "{}" or "{name}" - heap-indirect, breaks
                         //recursive embedding
     bool refMut;       //T25b: a WRITABLE reference ("mut T&") - through a read-only one nothing may be written
+    bool refOwn;       //T25e/O31: an OWN reference ("own Conn&") - the one reference owning its object, which lives in a
+                       //region of its own (O30). Its scope tag is the slot's reach (O34): where its storage lives
     bool isTuple; //D8c: the anonymous result of a function returning several values - fields "0", "1", ...
                   //It is never a value in its own right: only destructured, returned, or discarded
     //valid only when structMAlloc: NULL for a bare "&" (O4: this value's own function's "own" scope);
@@ -124,6 +126,8 @@ struct type {
                                     //fields around it is exactly what decides when it runs.
 
     bool hasDestruct;
+    bool owning; //O31: an OWNING type - a struct with a field of an own reference type (T25e), held only by reference
+                 //(C11's rule, so no value copy duplicates an owner); set with its fields, as hasDestruct is
     struct var* destructFunc; //synthetic BASETYPE_FUNC var, one param (the instance, by value, plain
                                 //struct type), no return type, no error union - a destructor can never
                                 //propagate a failure to anyone (see the report), so any fallible call in
@@ -439,6 +443,17 @@ struct var {
     bool bodyHadErrors;       //K3: checking this function's body reported errors, so its body is not the
                               //program's and must never be evaluated
     char mayBuild;            //P2: SemanticMayBuild's answer - 0 not known, 1 being found, 2 no, 3 yes
+    //O33: a REGION - a synthetic scope variable standing for the region of the object one read of an own slot borrows
+    //(O32). It outlives no scope but itself and is outlived by its reach - the scope the slot's storage lives in - and by
+    //what outlives that (scopeOutlives). regionSlot is the read, whose ownOrig is the own type read; regionRoot says
+    //where the slot was reached from (OWN_ROOT_*), regionRootParam which parameter for OWN_ROOT_PARAM
+    bool isRegion;
+    struct operand* regionSlot;
+    struct var* regionReach;    //...its reach: a scope variable, or NULL for a block at regionReachDepth
+    int regionReachDepth;
+    bool regionReachUnnamed;    //...the program's scope (a global's slot)
+    int regionRoot;
+    int regionRootParam;
     int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
                               //value, which codegen writes out as the global's data instead of setting it
@@ -631,6 +646,7 @@ enum operation {
     OPERATION_BITCAST, //E33: "x.Bits()", "u.F64FromBits()" - args[0]'s bits read as op->type, of the same width: a value
                        //made from a value, never a view of storage (T36)
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
+    OPERATION_TAKE, //E34: "take p" - args[0] is the place (an own slot); the owner it held, the place left null
     OPERATION_NOMINAL_CONVERT, //T29: "Name(x)" between a declared type and its underlying one - same
                                 //representation, so it emits nothing
                                  //(byte/int32/int64/float32/float64) - the explicit conversion builtin (see
@@ -723,6 +739,13 @@ struct operand {
                         //type is that method's result, as a call's is (D15)
     bool viaConversion; //T29a: a variable, field, element or slice read under a declared array type's name ("String(b)")
                         //- the argument's own storage, lent as it is, but no place an assignment may name
+    //O32: an own slot read where it is not moved - a borrow: its type is the own type without "own", its scope this
+    //region (a struct var with isRegion); ownOrig is the type it had, for a move position or a take that restores it
+    struct var* ownRegion;
+    struct type* ownOrig;
+    bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
+    bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
+    bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
@@ -905,6 +928,7 @@ struct list* SemanticAllModules(void);
 struct list* SemanticPreludeModules(void); //list of struct semaModule*: every file of <std>/prelude (M19d)
 struct list* SemanticAllLambdas(void);
 bool TypeIsPermRef(struct type t); //T25b: a reference type carrying a permission
+bool TypeIsOwning(struct type t); //O31: a struct holding an own reference in a field
 bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including the outermost permission //D16: every lambda's hidden function
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.

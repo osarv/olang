@@ -50,6 +50,8 @@ enum tokenType {
     TOK_FUNC,
     TOK_ERROR,
     TOK_MUT,
+    TOK_OWN,  //T25e: "own Conn&" - the one reference that owns its object, which lives in a region of its own (O30)
+    TOK_TAKE, //E34: "take p" - moves the owner out of the slot p, leaving it null
     TOK_IMPORT,
     TOK_TEST,
     TOK_DESTRUCT, //struct destructor block - "destruct { ... }", trailing a "struct(params) { ... }"

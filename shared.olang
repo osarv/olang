@@ -9663,12 +9663,12 @@ fn eqWords(s String&) I32 {
 fn eqAll() Bool {
     t := eqText(EqLen)
     a := EqLabel(t)
-    own Bool = a == EqLabel("zz") and a != EqLabel("zzz")
+    label Bool = a == EqLabel("zz") and a != EqLabel("zzz")
     field Bool = EqBox(a, 1) == EqBox(EqLabel("qq"), 1) and EqBox(a, 1) != EqBox(EqLabel("qq"), 2)
     elems Bool = EqLabel[a, EqLabel("x")] == EqLabel[EqLabel("12"), EqLabel("y")]
     payload Bool = EqShape.Named(a) == EqShape.Named(EqLabel("..")) and EqShape.Both(1, a) != EqShape.Both(2, a)
     cases Bool = EqShape.Blank != EqShape.Named(a) and eqMatch(a) == 2 and EqLabel("..") in EqLabel[EqLabel("1"), a]
-    return own and field and elems and payload and cases
+    return label and field and elems and payload and cases
 }
 EqBaked := eqAll()
 

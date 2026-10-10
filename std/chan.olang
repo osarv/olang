@@ -87,7 +87,7 @@ fn place(c mut Chan<<T>>&, v T) I64 {
 }
 
 # the oldest value out of the ring, the lock held and the ring not empty
-fn take(c mut Chan<<T>>&) T {
+fn oldest(c mut Chan<<T>>&) T {
     v := c.data[c.head]
     c.head = (c.head + 1) % c.data.Len()
     c.count = c.count - 1
@@ -167,7 +167,7 @@ fn Recv(c mut Chan<<T>>&) T ? ChanError {
         pthread_mutex_unlock(c.lock)
         error ChanError.CLOSED
     }
-    v := take(c)
+    v := oldest(c)
     pthread_mutex_unlock(c.lock)
     return v
 }
@@ -228,7 +228,7 @@ fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) T ? cancel.Stopped + ChanError
         pthread_mutex_unlock(c.lock)
         error ChanError.CLOSED
     }
-    v := take(c)
+    v := oldest(c)
     pthread_mutex_unlock(c.lock)
     return v
 }
