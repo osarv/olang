@@ -1,0 +1,10 @@
+# check: fail a task is not handed x[i]: the element is copied here, and the copy would not last until the join
+# E31b/P2: a call on a handle element runs on a copy of the handle held in the spawner's block - which closes, or is
+# made again by the next turn of a loop, before the join; a function taking the collection does "x[i].Push(v)" itself
+fn main() ? {
+    users := List<List<I64>>()
+    for i in range 4 { users.Push(List<I64>()) }
+    join {
+        for i in range 4 { spawn users[i].Push(i) }
+    }
+}

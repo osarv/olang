@@ -1,0 +1,17 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# E25/O10c: destructured results land in the block the statement stands in; without a scope argument ("mk2&rows(k)")
+# the list is the loop's, and cannot be pushed outward
+fn mk2(n I64) (List<String&>, I64) {
+    l := List<String&>()
+    for i in range n { l.Push($i) }
+    return l, n + 1
+}
+
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 3 {
+        rec, next := mk2(k)
+        rows.Push(rec)
+        println($next)
+    }
+}

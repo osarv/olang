@@ -1,0 +1,14 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# E31b/O17b: a store into an element of a handle element - "names[i][0] = t" - is the inner list's SetAt on a copy of
+# the handle lent as its reference: what it keeps lives where the inner list's state does, which a loop's text does not
+fn main() ? {
+    names := List<List<String&>>()
+    for i in range 3 {
+        names.Push(List<String&>())
+        names[i].Push("init")
+    }
+    for i in range 3 {
+        t := $i "-loop-text"
+        names[i][0] = t
+    }
+}

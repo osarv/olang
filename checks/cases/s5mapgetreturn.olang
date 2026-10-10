@@ -1,0 +1,15 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# O26a (the review of study 5's fixes, F4): a local returned directly lives in the result scope - what a local Map gives
+# for it is a copy of the map's handle state, which the function's own block holds, so it cannot be returned
+fn group() List<I64> ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    l := try m.Get(1)
+    l.Push(5)
+    return l
+}
+
+fn main() ? {
+    l := try group()
+    assert l.Len() == 1
+}

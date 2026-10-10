@@ -1,0 +1,14 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (the review of study 5's fixes, F8): a spawned "mut" method on x[i] is refused as the same call unspawned is
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    join {
+        spawn l[0].Add()
+    }
+}

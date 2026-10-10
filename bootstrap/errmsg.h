@@ -57,6 +57,7 @@ struct type;
     X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
     /* ---- characters and tokens ---- */ \
     X(ERR_UNKNOWN_CHAR,                 "L16",   "unexpected character '%c'") \
+    X(ERR_SEMICOLON,                    "L18",   "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") \
     X(ERR_NON_ASCII,                    "L1",    "non-ASCII byte '%c' - olang source is ASCII") \
     X(ERR_CARRIAGE_RETURN,              "L3",    "carriage return - save the file with LF line endings") \
     X(ERR_NUL_BYTE,                     "L1",    "NUL byte in the source - is this a text file?") \
@@ -370,6 +371,9 @@ struct type;
     X(ERR_SLICE_NEEDS_LEN,              "E31",   "a slice with no end runs to Len(), and %t has none") \
     X(ERR_AT_UNDECLARED,                "E31",   "%t declares SetAt but not At, which reading x[i] calls") \
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
+    X(ERR_WRITE_THROUGH_AT_NO_SETAT,    "E31",   "this writes through x[i] on %t, which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") \
+    X(ERR_WRITE_THROUGH_AT_BUILDS,      "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')") \
+    X(ERR_WRITE_THROUGH_AT_CALL,        "E31b",  "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") \
     X(ERR_DEFAULT_ARG_NOT_ALLOWED,      "E14a",  "'default' stands only for a parameter's declared default, in a call") \
     X(ERR_DEFER_ERROR_ESCAPES,          "S19b",  "an error may not leave deferred code - catch it here") \
     X(ERR_TRY_NOWHERE_TO_GO,            "R13",   "an error tried here has nowhere to go - catch every one it can be") \
@@ -476,6 +480,7 @@ struct type;
     X(ERR_SPAWN_LAMBDA_PARAMS,          "D16e",  "a spawned lambda takes no parameters - it captures what it needs") \
     X(ERR_SPAWN_IN_DEFER,               "S19b, P1a", "a spawn in deferred code needs a join written in the deferred code") \
     X(ERR_SPAWN_OUTSIDE_JOIN,           "P1",    "'spawn' is written inside a 'join' block, which waits for the task") \
+    X(ERR_SPAWN_AT_ELEMENT,             "E31b, P2", "a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself") \
     X(ERR_SPAWN_NOT_CALL,               "P1",    "'spawn' takes a call") \
     X(ERR_SPAWN_FALLIBLE,               "P4",    "a spawned function may not declare errors - they would have nowhere to go") \
     X(ERR_SPAWN_ARG_TOO_SHORT,          "P2",    "this argument's storage closes before the join does - declare it at the join's level or wider") \
@@ -492,7 +497,6 @@ struct type;
     X(ERR_FUNC_VALUE_OBLIGATIONS,       "T22a",  "'%S' relates its arguments' scopes, which a call through a function value cannot check - call it directly") \
     X(ERR_LAMBDA_VALUE_OBLIGATIONS,     "T22a",  "this lambda keeps '%S' beyond the call, which a call through a function value cannot check - keep a copy instead") \
     X(ERR_LAMBDA_VALUE_RELATES,         "T22a",  "this lambda relates its arguments' scopes, which a call through a function value cannot check") \
-    X(ERR_CAPTURE_HOLDS_REFERENCES,     "D16c",  "a lambda copies what it captures, and a copy of this loses its references' scopes - capture a reference to it") \
     X(ERR_LAMBDA_RESULT_UNINFERABLE,    "D16b",  "this value gives the lambda no result type - write one") \
     X(ERR_LAMBDA_ARITY,                 "D16a",  "%t takes %d parameter%s, and this lambda %d") \
     X(ERR_LAMBDA_SIGNATURE,             "D16a",  "this lambda's signature disagrees with %t - leave that part out, or make them agree") \
@@ -521,6 +525,9 @@ struct type;
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
     X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
+    X(NOTE_LOOP_COPY_LENT,              "",      "'%S' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") \
+    X(NOTE_HELD_INDEX_WHERE,            "",      "the index is held here, for both the read and the write, in a block that closes first - make it where '%S' lives first, then index with it") \
+    X(NOTE_TEXT_COPY_WHERE,             "",      "this text lives in a block that closes first - pass a copy, which is made where '%S' lives: write '$' before it") \
     X(NOTE_LOOP_COPY,                   "",      "'%S' is the loop's copy of an element, made in the loop's block - lend the element itself: '%S[i]', with 'for i in range %S.Len()'") \
     X(ERR_COND_UNDECIDABLE,             "B9c",   "this top-level condition cannot be decided while compiling: %s") \
     X(ERR_COND_UNSEEN,                  "B9c",   "this top-level condition uses what exists only in the branches it decides, or does not check") \

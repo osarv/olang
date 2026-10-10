@@ -1,0 +1,8 @@
+# check: fail error[L18]: olang has no ';'
+# also: compilation failed with 1 error
+# L18: a ';' written as C writes it is one error, and ends the statement - what follows on the line is read as the next
+# statement, not reported again ("'return' is a keyword, not a name")
+fn main() ? {
+    f := fn(x I64) I64 { y := x + 1; return y }
+    println($f(1))
+}

@@ -1,0 +1,16 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a "mut" method called on x[i] - on a type declaring At and no SetAt too: the call is refused before any
+# write back is asked for
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+type Ro struct() {
+    a Acc = Acc()
+}
+fn (r Ro&) At(i I64) Acc { return r.a }
+
+fn main() ? {
+    r := Ro()
+    r[0].Add()
+}

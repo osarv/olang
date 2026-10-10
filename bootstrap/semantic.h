@@ -343,11 +343,13 @@ struct var {
     bool roToResult;
     bool callsFnThrough; //P2: on a parameter (or a lambda's capture): its body calls a function value reached through it
     struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
-    //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
-    //reached through it something not read out of that region (built, or handed in), itself or through a callee
-    //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
-    bool regionStored;
-    bool regionHandedOut;
+    //O17: on a function, for each of its scope variables, what its body does with the region the variable names - stores
+    //into a slot reached through it something not read out of that region (built, or handed in), itself or through a
+    //callee (stored); or returns a reference or value carrying it through which a store is possible (handed out). Kept on
+    //the function, never on the variable: a generic's instantiations share its scope variables, and each has its own
+    //body. regionFlagsOf is the function the list belongs to - a var copied whole starts a list of its own
+    struct list regionFlags;
+    struct var* regionFlagsOf;
     //E11c: on a function, that it may write storage that was there before it was called - through a reference whose
     //scope is a parameter's, a capture's, the program's or one not known here, a global's own, or by calling what does
     //with such an argument, or through a function value it did not make. effTok: where it was first found
@@ -366,6 +368,8 @@ struct var {
     int valueHomeDepth;
     bool slotBorrowed;  //C2d: a value local whose storage a reference was taken to (E12c) - a constructor's field local so
                         //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
+    bool atElemCopy; //E31: the hidden local an element "x[i]" is read into to be written through, then written back
+    bool atHandleCopy; //E31b/O17b: a hidden copy of a handle element x[i], lent to a call as its reference
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
                              //the first
@@ -696,6 +700,8 @@ struct operand {
     bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
+    bool isWriteBack;           //E31b: an OPERATION_SEQ standing for a call on a handle element - "users[i].Push(x)":
+                                //the handle's copy held in a hidden local, then the call lending it as its reference
     bool isOperatorCall;        //E31: a call the compiler made for an operator, an index or a slice - "try" reaches
                                 //through it to what is inside, as it does through a built-in operation (R20)
     bool isTryStmt;             //E31: an OPERATION_SEQ standing for "try x[i] = v" - its clauses are a statement's,
