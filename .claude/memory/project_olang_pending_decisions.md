@@ -285,6 +285,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    instructions); `IndexOf` fails on a miss, `Remove(x)` returns a Bool like Map.Remove, `SwapRemove(i)` returns the
    element; `chan.Chan(cap I64)`. Merge only after rv3fix (its c3Holder test needs rv3fix's C2g fix).
 
+44. (mine, s5scope follow-up review G1-G3) handle elements: every level of `users[i][j].Push(t)` is held and lent;
+   the handle exemption from E31b applies only when the callee uses the handle only through its reference (O17b's
+   checked-body analysis) - a mut method repointing the handle's own field is E31b's error; a value that shrinks the
+   collection before an At/SetAt store (`v[0].E = shrink(v)`) makes the program's index out of range at the access -
+   E16e's unchecked index, stated in SPEC, no check added. Spawn on a handle element is E31b/P2's error (s5scope).
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
