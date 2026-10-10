@@ -14914,3 +14914,71 @@ test "O25h: copies of a local enum's payload build where the enum's references l
     k I64 = I64(ctRuntimeZero)
     assert rv3PayloadCopies(300 + k) == 424344 and Rv3PayloadBaked == 424344
 }
+
+# P2 (a review of rv3fix): what a task keeps of a function value it was handed - through a spawn target - or makes over a
+# scope it was handed, past the join. The environment's copy is made where the closure lives and its stand-ins forward
+# to their scopes once folded, so each is read back after a churn; one spawn's copy is the closure it copies ("is")
+type rv5N struct(v I64) {
+    v
+    next mut rv5N& = null
+}
+fn rv5Id(f fn() I64) fn() I64 { return f }
+fn rv5Work(n mut rv5N&, fns mut List<fn() I64>&) {
+    fns.Push(fn() I64 {
+        n.next = rv5N(n.v + 41)
+        return n.next.v
+    })
+}
+fn rv5Same(f fn() I64, g fn() I64) Bool { return f is g }
+fn rv5Kept(k I64, churns I64) I64 {
+    n mut rv5N& = rv5N(1 + k)
+    g := fn() I64 {
+        n.next = rv5N(n.v + 41)
+        return n.next.v
+    }
+    r fn() I64 = g
+    same Bool = false
+    fns mut List<fn() I64>& = List<fn() I64>()
+    m mut rv5N& = rv5N(2 + k)
+    join {
+        spawn r = rv5Id(g)
+        spawn same = rv5Same(g, g)
+        spawn rv5Work(m, fns)
+    }
+    rv3Churn(churns)
+    a := r()
+    rv3Churn(churns)
+    f := fns[0]
+    b := f()
+    rv3Churn(churns)
+    return a * 10000 + b * 10 + (1 if same and r is g else 0)
+}
+Rv5KeptBaked := rv5Kept(0, 2)
+test "P2: a task keeps the closure it was handed, and one it made over a scope it was handed, past the join" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv5Kept(k, 300) == 420431 and Rv5KeptBaked == 420431
+}
+
+# O25h (a review of rv3fix): a payload copied out of a conditional of enums keeps its references where the arms' are - one
+# arm a temporary with none - so a callee given it by value builds there
+type rv5E enum {
+    A(b rv3Box)
+    Z
+}
+fn rv5Growv(b rv3Box) { b.head.next = rv3Node() }
+fn rv5CondPayload(c Bool, churns I64) I64 {
+    e1 := rv5E.A(rv3Box())
+    k1 := (e1 as rv5E.A).head
+    {
+        y := (e1 if c else rv5E.Z) as rv5E.A
+        rv5Growv(y)
+        y.head.next.v = 44
+    }
+    rv3Churn(churns)
+    return k1.next.v
+}
+Rv5CondBaked := rv5CondPayload(true, 2)
+test "O25h: a payload copied out of a conditional builds where the arms' references live" {
+    c := ctRuntimeZero == 0
+    assert rv5CondPayload(c, 300) == 44 and Rv5CondBaked == 44
+}
