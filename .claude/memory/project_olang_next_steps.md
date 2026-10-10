@@ -575,6 +575,9 @@ because what it finds about structure feeds the refactor.
   stack per frame. Sent back to the str1 agent with direction: Str's receiver scope is O12's unknown, nothing built
   there; revert item 3; fix P1; the builder overflow comes from the arena. It needs a second review before merging.
   Running: rv3fix (F1), i64lit (QD), chk5, str1 (round 2).
+- 09:55 CEST: i64lit merged and pushed (43ce396): an integer literal's own type is I64 (T6a). The agent's single full
+  verify had shared.olang OOM-killed beside other agents; it then passed on its own (658 tests), with everything else
+  passing too. oann must run `tools/int_literal_i64.py` when its compiler next moves.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

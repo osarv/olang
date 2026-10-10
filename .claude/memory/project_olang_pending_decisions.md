@@ -30,7 +30,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
 **Answered 2026-10-10 08:15 CEST:**
-- QD (integer literal's own type I64): YES ("1) yes"). Being built (wt-i64lit).
+- QD (integer literal's own type I64): YES ("1) yes"). BUILT 43ce396 (T6a; oann migrates with tools/int_literal_i64.py).
 - QE (spawned functions failing): the user: "We need some way to make spawn functions fail, exactly how that would be
   done is harder since not all variables may be fine to use anymore. Solve it." -> decision 50 below, mine.
 **Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
