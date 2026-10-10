@@ -62,3 +62,84 @@ test "CountOf, Replace, Repeat and Reverse, evaluated while compiling as at run 
     assert arrayReshapedBaked == 6 * 1000 + 18 * 10 + 4
     assert arrayReshaped() == arrayReshapedBaked
 }
+
+# a record holding a reference - sorted through positions, a scratch array being unable to hold it (Sort)
+type sortRec struct(key I64, at I64, name String&) {
+    key
+    at
+    name
+}
+
+# whether a is in order by less and, for equal keys, in the order "first" gives
+fn sortedStably(a Array<sortRec>&) Bool {
+    for i in range 1, a.Len() {
+        if a[i].key < a[i - 1].key { return false }
+        if a[i].key == a[i - 1].key and a[i].at < a[i - 1].at { return false }
+        if a[i].name != $a[i].at { return false }
+    }
+    return true
+}
+
+# n records with keys 0 to k - 1 scattered, each named by where it started - so stability is checkable
+fn sortRecs(n I64, k I64) Array<sortRec> {
+    keep := Array<String&>(n, "")
+    out := Array<sortRec>(n, sortRec(0, 0, keep[0]))
+    for i in range n {
+        keep[i] = $i
+        out[i] = sortRec((i * 7919 + 13) % k, i, keep[i])
+    }
+    return out
+}
+
+test "Sort is O(n log n) and stable on numbers, merging through a scratch array" {
+    for n in I64[2, 23, 24, 25, 100, 12287, 12288, 12289, 30001] {
+        a := Array<I64>(n)
+        for i in range n { a[i] = (i * 7919 + 13) % 1000 }
+        a.Sort(fn(x, y) { return x < y })
+        ok := true
+        for i in range 1, n {
+            if a[i] < a[i - 1] { ok = false }
+        }
+        assert ok, "numbers out of order at " $n
+        # stability on numbers: order by the hundreds only, the rest kept in the order it came
+        b := Array<I32>(n)
+        for i in range n { b[i] = I32(i) }
+        b.Sort(fn(x, y) { return x / 100 % 7 < y / 100 % 7 })
+        for i in range 1, n {
+            if b[i] / 100 % 7 == b[i - 1] / 100 % 7 and b[i] < b[i - 1] { ok = false }
+        }
+        assert ok, "numbers unstable at " $n
+    }
+    f := F32[2.5, -1, 0, 7.25, -3, 2.5]
+    f.Sort(fn(x, y) { return x > y })
+    assert f == F32[7.25, 2.5, 2.5, 0, -1, -3]
+    c := Char['o', 'l', 'a', 'n', 'g']
+    c.Sort(fn(x, y) { return x < y })
+    assert String(c) == "aglno"
+}
+
+test "Sort orders elements holding references through positions, in blocks, stably" {
+    for n in I64[2, 24, 25, 1000, 12288, 12289, 40000] {
+        a := sortRecs(n, 37)
+        a.Sort(fn(x, y) { return x.key < y.key })
+        assert sortedStably(a), "records out of order at " $n
+    }
+    words := "pear fig apple kiwi banana fig date".Split(" ")
+    words.Sort(fn(x, y) { return x < y })
+    assert words.Join(" ") == "apple banana date fig fig kiwi pear"
+}
+
+# the same sorts, while compiling (K2) - numbers through the scratch, records through positions
+fn sortBakedSum() I64 {
+    a := Array<I64>(100)
+    for i in range 100 { a[i] = (i * 37) % 100 }
+    a.Sort(fn(x, y) { return x > y })
+    r := sortRecs(60, 5)
+    r.Sort(fn(x, y) { return x.key < y.key })
+    return a[0] * 1000 + a[99] * 100 + r[0].key * 10 + (1 if sortedStably(r) else 0)
+}
+sortBakedSumBaked := sortBakedSum()
+
+test "Sort evaluated while compiling as at run time" {
+    assert sortBakedSumBaked == 99001 and sortBakedSum() == sortBakedSumBaked
+}

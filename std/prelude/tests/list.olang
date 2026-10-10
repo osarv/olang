@@ -289,3 +289,41 @@ test "a List's Clone outlives the list it copies, across chunk boundaries" {
     copy := words.Clone()                         # a List of references clones to the same references
     assert copy.Len() == 3 and copy[2] is words[2]
 }
+
+test "Truncate keeps the first n, across chunk boundaries, and Push carries on after them" {
+    for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 100] {
+        l := listUpTo(100)
+        l.Truncate(n)
+        assert l.Len() == n, "Truncate(" $n ")"
+        ok := true
+        for i, x in l {
+            if x != i { ok = false }
+        }
+        assert ok
+        l.Push(-1)                           # the next Push goes right after them, into the chunk they ended in
+        l.PushAll(I64[-2, -3])
+        assert l.Len() == n + 3 and l[n] == -1 and l[n + 2] == -3
+        assert (try l.Last() catch default 0) == -3
+    }
+    l := listUpTo(5)
+    l.Truncate(9)                            # more than it holds: nothing changes
+    assert listShow(l) == "[0 1 2 3 4]"
+    # top k: sorted, then cut
+    s := I64[5, 1, 9, 3, 7, 8].ToList()
+    s.Sort(fn(a, b) { return a > b })
+    s.Truncate(3)
+    assert listShow(s) == "[9 8 7]"
+}
+
+# Truncate while compiling (K2)
+fn listTruncated() I64 {
+    l := listUpTo(40)
+    l.Truncate(17)
+    l.Push(100)
+    return l.Len() * 1000 + l[16] + l[17]
+}
+listTruncatedBaked := listTruncated()
+
+test "Truncate evaluated while compiling as at run time" {
+    assert listTruncatedBaked == 18116 and listTruncated() == listTruncatedBaked
+}
