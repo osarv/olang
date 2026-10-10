@@ -61,6 +61,19 @@ design. Do what you want") - nothing to decide until a GUI is written.
   problem might fail like this"-gap so it doesn't really introduce anything new" -> taken as GO, with their early free:
   decision 51 below. Queued after decision 50 (QE).
 
+**Asked 2026-10-10 08:55 CEST:**
+- QG. `owned` references (the user's design, replacing the Region<T>+With spelling): `items List<owned Msg&>`, an
+  object built into an owned slot gets its own small arena (a region per object), is used in place directly, freed by
+  `x.Free()` or with its holder's scope, can never leave (a plain reference taken from it is block-scoped, never stored
+  or returned; leaving is a copy). Without Rust's borrow checker two run-time facts need covering: (a) freed-then-used -
+  every owned reference to a freed object reads as null (a generation stamp: ONE COMPARE PER USE of an owned reference,
+  the price of a visible null check, paid only where `owned` is written); (b) freed-while-in-use - refused at compile
+  time: a call handed an owned object may not free an owned object of that type (read off bodies, a fixed point), and a
+  join block that hands a task an owned object may not free one of that type before the join. The question: is the
+  per-use compare acceptable? Alternative: true uniqueness (no copies, only moves, freeing nulls the one slot, zero
+  cost) - needs move semantics, a new concept every container would have to be rewritten for. My recommendation: the
+  compare. In effect: nothing built; failing spawns (decision 50) go first.
+
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
   tooling (formatter, editor support) is built.
@@ -364,6 +377,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    hidden per-operation cost, or a ban on copying), a value read out of such a field is a second reference the nulling
    cannot reach, and another thread can be using the value when its scope closes. Revisit a `weak` reference with a
    `try` read only if real code needs one regions do not cover. Queued after decision 50 (QE).
+   REDIRECTED 2026-10-10 08:50 CEST - the user: "I want something like the rusts ownership rule for references we can't
+   guarantee outlive the scope. My struct Queue can not hold references that don't outlive queue today. What if we make
+   it able to hold such references with a special keyword like "owned" maybe. Then we can create objects in the queue,
+   put them in the queue and free them at will without them ever being able to leave the queue. If we need them to
+   leave, we copy into a larger scope. This would be great for things like network loops etc. Or is that basically
+   what you are already doing?" -> QG below; decision 51 becomes the `owned` design once answered.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
