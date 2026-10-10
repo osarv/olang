@@ -9800,6 +9800,11 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                     break;
                 }
                 if (vv == SCOPE_AMBIGUOUS && valueRefsAdmitStores(pt)) Err(arg->tok, ERR_BUILD_INTO_UNKNOWN_SCOPE);
+                //C2d/O23a: a copy out of a reference read through a "&p" field - its references live where the argument
+                //for p was bound at construction, which is not known here: the callee would build into the scope the
+                //field was read through, and hang what it built where the references really are
+                else if (valueRefsAdmitStores(pt) && (scopeViaFallback(arg) || (vv && scopeIsDerived(vv))))
+                    Err(arg->tok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
                 boundTo = vv;
                 boundDepth = vd;
                 unnamed = vu;
