@@ -1,0 +1,7 @@
+# check: fail error[T25c]: a mutable global holds no copy of a read-only List<I32>
+# T25c: a mutable global's initializer is stored where it can be written - a read-only copy of an immutable global's List
+# would let pushes to it change that list
+G List<I32> = I32[1, 2].ToList()
+M mut List<I32> = G
+fn main() ? {
+}

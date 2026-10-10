@@ -183,10 +183,13 @@ fn runCase(name String&) String& {
     }
     if status != 0 { return failure($name " did not build", dir) }
     bin := base
-    for f in flags.Split(" ") {                 # -d and -r name their binary for what it was built as (B2c, P7)
+    san := false
+    for f in flags.Split(" ") {                 # -d, -r and -s name their binary for what it was built as (B2c, P7, B2f)
         if f == "-d" { bin = $base ".debug" }
         if f == "-r" { bin = $base ".race" }
+        if f == "-s" { san = true }
     }
+    if san { bin = $bin ".san" }
     if check.Eq("run") and sh(dir, "./build/" $bin " > out.txt 2>&1") != 0 {
         return failure($name " built but did not run cleanly", dir)
     }

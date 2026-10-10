@@ -14619,3 +14619,298 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     assert bs[0].P[0] == 9 and bs[1].P[0] == 9
     assert QcBaked == 42 and qcAll(k) == QcBaked and qcAll(0) == 42
 }
+
+# rv3 - a review of the night's merges. O25h: a value copied out of a reference keeps its references where the referent
+# is, whatever expression gave the reference - a call's borrowed result, a reference handed to a by-value parameter, or a
+# payload read by value - so building through them builds there. Read back after an arena churn; each would have built in
+# the callee's own block, reclaimed at its return. (A constructor or an enum case given the reference is held to it:
+# checks/cases/rv3ctorcopy.olang)
+type rv3Node struct() {
+    next mut rv3Node& = null
+    v I64 = 0
+}
+type rv3Box struct() {
+    head mut rv3Node& = rv3Node()
+    tag I64 = 0
+}
+type rv3W struct(b rv3Box) { b }
+type rv3E enum {
+    A(b rv3Box)
+    Z
+}
+fn rv3Pick(x mut rv3Box&) mut rv3Box&x { return x }
+fn rv3ViaCall(r mut rv3Box&) {
+    d rv3Box = rv3Pick(r)
+    d.head.next = rv3Node()
+    d.head.next.v = 41
+}
+fn rv3Build(b rv3Box) {
+    b.head.next = rv3Node()
+    b.head.next.v = 42
+}
+fn rv3ViaParam(r mut rv3Box&) { rv3Build(r) }
+fn rv3ViaMatch(e rv3E) {
+    match e {
+        case rv3E.A(b) {
+            b.head.next = rv3Node()
+            b.head.next.v = 44
+        }
+        case rv3E.Z { }
+    }
+}
+fn rv3ViaAs(e rv3E) {
+    b := e as rv3E.A
+    b.head.next = rv3Node()
+    b.head.next.v = 45
+}
+# an arena churn of n rounds - few while compiling, where nothing is reclaimed, and 300 at run time
+fn rv3Churn(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn rv3CopiesOut(k I64, n I64) I64 {
+    w1 := rv3W(rv3Box())
+    w2 := rv3W(rv3Box())
+    w4 := rv3W(rv3Box())
+    w5 := rv3W(rv3Box())
+    rv3ViaCall(w1.b)
+    rv3ViaParam(w2.b)
+    rv3ViaMatch(rv3E.A(w4.b))
+    rv3ViaAs(rv3E.A(w5.b))
+    rv3Churn(n)
+    return w1.b.head.next.v + w2.b.head.next.v + w4.b.head.next.v + w5.b.head.next.v + k
+}
+Rv3CopiedBaked := rv3CopiesOut(0, 2)
+test "O25h: a copy out of a reference, by any expression, builds where the referent's references live" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3CopiesOut(k, 300) == 172 and Rv3CopiedBaked == 172
+    sbChurn()
+    assert rv3CopiesOut(k, 300) == Rv3CopiedBaked
+}
+
+# S4d/O18a: a compound assignment and an increment are "x = x + v" and "x = x.Inc()", so an operator method keeping its
+# receiver keeps the place's old value - never the place itself, written over in place (an endless Add) - and the
+# result lands where the target lives, not in the loop body's block it is written in
+type rv3X enum {
+    Lit(v I64)
+    Add(a rv3X&, b rv3X&)
+}
+fn rv3Eval(e rv3X&) I64 {
+    return match e {
+        case rv3X.Lit(v) => v
+        case rv3X.Add(a, b) => rv3Eval(a) + rv3Eval(b)
+    }
+}
+fn (a rv3X&) Plus(b rv3X&) rv3X { return rv3X.Add(a, b) }
+fn (a rv3X&) Inc() rv3X { return rv3X.Add(a, rv3X.Lit(1)) }
+type rv3XH struct() { e rv3X = rv3X.Lit(10) }
+fn rv3Compound(k I64, n I64) I64 {
+    x := rv3X.Lit(1)
+    x += rv3X.Lit(2)
+    for i in range 3 + k {
+        x += rv3X.Lit(i)
+        x++
+        rv3Churn(n)
+    }
+    h := rv3XH()
+    for i in range 2 + k {
+        h.e += rv3X.Lit(i)
+        h.e++
+    }
+    rv3Churn(n)
+    return rv3Eval(x) * 100 + rv3Eval(h.e)
+}
+Rv3CompoundBaked := rv3Compound(0, 2)
+test "S4d: a compound assignment and an increment keep the place's old value, and land where the place lives" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3Compound(k, 300) == 913 and Rv3CompoundBaked == 913
+}
+
+# E4a/E6d: a conditional of literals beside an operand that cannot hold one of its values meets it at the widest of its
+# values' own types, each folded exactly - a shift among them included - while compiling as at run time
+fn rv3Sh(c Bool, b U8) I64 { return b + (1 if c else (1 << 40)) }
+fn rv3CondLit(c Bool, b U8) I64 { return b + (0 if c else (2000000000 + 2000000000)) }
+Rv3ShBaked := rv3Sh(false, 3)
+Rv3CondBaked := rv3CondLit(false, 3)
+test "E6d: a conditional of literals folds each value exactly and meets the other operand at the widest" {
+    c := ctRuntimeZero != 0
+    assert rv3Sh(c, 3) == 1099511627779 and Rv3ShBaked == 1099511627779
+    assert rv3CondLit(c, 3) == 4000000003 and Rv3CondBaked == 4000000003
+    assert rv3Sh(not c, 3) == 4
+}
+
+# E11c: a Str may change what it makes for itself - a builder, a local list, a counter - and "$" gives the same text
+# however often it calls it, while compiling as at run time
+type rv3Pt struct(xs List<I64>&, name String&) {
+    xs
+    name
+}
+fn (p rv3Pt&) Str() String {
+    sb := StringBuilder()
+    sb.Push(p.name)
+    seen := List<I64>()
+    for x in p.xs {
+        sb.Push($x)
+        seen.Push(x)
+    }
+    n := 0
+    n++
+    sb.Push($(n + seen.Len()))
+    return sb.ToString()
+}
+fn rv3PtText(k I64) String { return $rv3Pt(I64[1, 2 + k].ToList(), "nm") }
+Rv3PtText := rv3PtText(0)
+test "E11c: a Str building only for itself renders the same however often it runs" {
+    p := rv3Pt(I64[1, 2].ToList(), "nm")
+    assert $p == "nm123" and Rv3PtText == "nm123" and rv3PtText(I64(ctRuntimeZero)) == Rv3PtText
+}
+
+# T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, Clone, ToList
+# and Filter over collections of Lists work on writable ones (the copies they give are writable, and the lists inside
+# are the same lists), and on a read-only one read what they give
+fn rv3First(l List<<T>>&) T { return l[0] }
+fn rv3ReadOnly(ls List<List<I64>>&) I64 { return ls[0].Len() + rv3First(ls).Len() }
+fn rv3Handles(k I64, n I64) I64 {
+    m := Map<I64, List<I64>>()
+    m.Put(1, I64[1, 2].ToList())
+    g := try m.Get(1) catch { return -1 }
+    g.Push(3 + k)
+    mm := try m.Get(1) catch { return -2 }
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll.Push(I64[5].ToList())
+    c := ll.Clone()
+    c[0].Push(6)
+    first := rv3First(ll)
+    first.Push(8)
+    arr := Array<List<I64>>(1, I64[7].ToList())
+    t := arr.ToList()
+    f := arr.Filter(fn(x List<I64>) Bool { return x.Len() > 0 })
+    rv3Churn(n)
+    return rv3ReadOnly(ll) * 1000 + mm.Len() * 100 + t[0].Len() * 10 + f.Len()
+}
+Rv3HandlesBaked := rv3Handles(0, 2)
+test "T25c: a generic's read-only parameter gives copies as writable as its argument" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3Handles(k, 300) == 4311 and Rv3HandlesBaked == 4311
+}
+
+# P2: a spawned lambda building through a reference it captured from the spawner's block builds into its task's own
+# stand-in for that scope, folded in at the join - so four tasks never bump one arena unlocked
+type rv3TN struct(v I64) {
+    v
+    w I64 = v * 3
+}
+fn rv3Spawned(n I64, churns I64) I64 {
+    a mut List<rv3TN&>& = List<rv3TN&>()
+    b mut List<rv3TN&>& = List<rv3TN&>()
+    c mut List<rv3TN&>& = List<rv3TN&>()
+    d mut List<rv3TN&>& = List<rv3TN&>()
+    join {
+        spawn fn() { for i in range n { a.Push(rv3TN(i)) } }
+        spawn fn() { for i in range n { b.Push(rv3TN(i + 1000000)) } }
+        spawn fn() { for i in range n { c.Push(rv3TN(i + 2000000)) } }
+        spawn fn() { for i in range n { d.Push(rv3TN(i + 3000000)) } }
+    }
+    rv3Churn(churns)
+    bad I64 = 0
+    for i, x in a { if x.v != i or x.w != 3 * i { bad++ } }
+    for i, x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } }
+    for i, x in c { if x.v != i + 2000000 or x.w != 3 * (i + 2000000) { bad++ } }
+    for i, x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } }
+    return bad * 1000000000 + a.Len() + b.Len() + c.Len() + d.Len()
+}
+Rv3SpawnedBaked := rv3Spawned(50, 2)
+test "P2: spawned lambdas building through what they captured each build into a stand-in of their own" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3Spawned(40000 + k, 300) == 160000 and Rv3SpawnedBaked == 200
+}
+
+# C2g/O2d: a constructor growing a field's List - or a list a field holds - inside a nested block (a loop, an if, a bare
+# block) builds into the instance's scope, as at its top level: the call's binding named the field local's depth 0,
+# which codegen read as the block the call is written in, so each chunk went with the loop body's arena
+type rv3Inner struct() {
+    xs List<I64>
+}
+type rv3Countdown struct(n I64) {
+    left List<I64>
+    inr rv3Inner = rv3Inner()
+    for i in range n {
+        if i % 2 == 0 {
+            left.Push(n - i)
+            for j in range 2 { inr.xs.Push(j + i) }
+        } else {
+            left.Push(n - i)
+        }
+    }
+    {
+        k := List<I64>()
+        k.Push(5)
+        left.Push(k[0])
+    }
+}
+fn rv3CountdownSum(n I64, churns I64) I64 {
+    c := rv3Countdown(n)
+    rv3Churn(churns)
+    s I64 = 0
+    for v in c.left { s += v }
+    for v in c.inr.xs { s += v * 1000 }
+    return s
+}
+Rv3CountdownBaked := rv3CountdownSum(20, 2)
+test "C2g: a constructor's nested blocks build through its fields into the instance's scope" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3CountdownSum(20 + k, 300) == 190215 and Rv3CountdownBaked == 190215
+}
+
+# O25h: a copy of a local enum's payload - a match binding, an "as" - keeps its references where the enum's are, so a
+# callee given it by value, or a lambda through a reference read out of it, builds there and not in the clause's block
+type rv3PN struct(v I64) {
+    v
+    next mut rv3PN& = null
+}
+type rv3PBox struct() { head mut rv3PN& = rv3PN(1) }
+type rv3PE enum {
+    A(b rv3PBox)
+    Z
+}
+fn rv3PBuild(b rv3PBox) { b.head.next = rv3PN(42) }
+fn rv3PSecond(e rv3PE) I64 {
+    b := e as rv3PE.A
+    if b.head.next == null { return 0 }
+    return b.head.next.v
+}
+fn rv3PayloadCopies(n I64) I64 {
+    e1 := rv3PE.A(rv3PBox())
+    match e1 {
+        case rv3PE.A(y) { rv3PBuild(y) }
+        case _ { }
+    }
+    e2 := rv3PE.A(rv3PBox())
+    {
+        y := e2 as rv3PE.A
+        y.head.next = rv3PN(43)
+    }
+    e3 := rv3PE.A(rv3PBox())
+    match e3 {
+        case rv3PE.A(y) {
+            h := y.head
+            f := fn(v I64) { h.next = rv3PN(v) }
+            f(44)
+        }
+        case _ { }
+    }
+    rv3Churn(n)
+    return rv3PSecond(e1) * 10000 + rv3PSecond(e2) * 100 + rv3PSecond(e3)
+}
+Rv3PayloadBaked := rv3PayloadCopies(2)
+test "O25h: copies of a local enum's payload build where the enum's references live" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3PayloadCopies(300 + k) == 424344 and Rv3PayloadBaked == 424344
+}

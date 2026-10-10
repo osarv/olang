@@ -1,0 +1,16 @@
+# check: fail error[O12]: where this place's references live is not known here
+# O12: a value copied from a conditional whose values' references live in different scopes keeps them in one not known
+# here - nothing new is built into it
+type Node struct() {
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+fn f(c Bool, r mut Box&) {
+    l mut Box& = Box()
+    d Box = r if c else l
+    d.head = Node()
+}
+fn main() ? {
+}

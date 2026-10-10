@@ -1,0 +1,26 @@
+# check: run
+# flags: -d -s
+# P2 unoptimized: four spawned lambdas pushing into lists they captured from the spawner's block each build into a stand-in
+# of their own - they bumped the spawner's arena from four threads at once, and elements came back overwritten
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    b mut List<N&>& = List<N&>()
+    c mut List<N&>& = List<N&>()
+    d mut List<N&>& = List<N&>()
+    join {
+        spawn fn() { for i in range 30000 { a.Push(N(i)) } }
+        spawn fn() { for i in range 30000 { b.Push(N(i + 1000000)) } }
+        spawn fn() { for i in range 30000 { c.Push(N(i + 2000000)) } }
+        spawn fn() { for i in range 30000 { d.Push(N(i + 3000000)) } }
+    }
+    bad I64 = 0
+    for i, x in a { if x.v != i or x.w != 3 * i { bad++ } }
+    for i, x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } }
+    for i, x in c { if x.v != i + 2000000 or x.w != 3 * (i + 2000000) { bad++ } }
+    for i, x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } }
+    if bad != 0 or a.Len() + b.Len() + c.Len() + d.Len() != 120000 { fail }
+}

@@ -1,0 +1,16 @@
+# check: fail error[O25h]
+# O25h: a value assigned a copy out of a reference keeps the referent's references - a local whose references live in
+# its own block may not take them, whatever expression gives the reference (a call's borrowed result here)
+type Node struct() {
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+fn pick(x mut Box&) mut Box&x { return x }
+fn f(r mut Box&) {
+    d := Box()
+    d = pick(r)
+}
+fn main() ? {
+}

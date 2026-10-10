@@ -334,11 +334,23 @@ struct var {
     bool paramCopy;       //T25c: a parameter's own copy in its function's body (canonicalVar is the signature's)
     bool roNeedsWritable; //T25c: a signature's by-value parameter holding writable references whose copy the body writes
                           //through, lends writably or stores where it can be written - no read-only value may be passed
+    //T25c: a read-only reference parameter of a generic's instantiation, on its signature and its copy in the body - a
+    //value copied out of what it reaches is as read-only as its argument: a by-value result copied out of it is read-only
+    //where its argument is (roToResult), and where such a copy is kept writable its argument has to be writable
+    //(roNeedsWritable). Its declaration cannot say "mut" for some instantiations and not others
+    bool roByArg;
+    bool roToResult;
+    struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
     //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
     //reached through it something not read out of that region (built, or handed in), itself or through a callee
     //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
     bool regionStored;
     bool regionHandedOut;
+    //E11c: on a function, that it may write storage that was there before it was called - through a reference whose
+    //scope is a parameter's, a capture's, the program's or one not known here, a global's own, or by calling what does
+    //with such an argument, or through a function value it did not make. effTok: where it was first found
+    bool effWrites;
+    struct token effTok;
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program

@@ -1,0 +1,15 @@
+# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect - it writes, through a reference
+# E11c: a Str writing through its receiver's reference - here through a helper it hands the reference to - would run
+# twice per "$" at run time and once under -i
+type Ctr struct() {
+    n I64 = 0
+}
+fn bump(c mut Ctr&) { c.n++ }
+type B struct(c mut Ctr&) { c }
+fn (a B&) Str() String {
+    bump(a.c)
+    return "b"
+}
+fn main() ? {
+    println($B(Ctr()))
+}

@@ -307,11 +307,11 @@ fn (l mut List<<T>>&) Sort(less fn(x T, y T) Bool) {
 # so a List of references gives a list of the same references
 fn (l List<<T>>&) Clone() List<T> {
     c := List<T>()
-    at I64 = 0
-    for {
-        run := try l.RunFrom(at) catch Exhausted { break }
-        c.PushAll(run)
-        at += run.Len()
+    s := l.s
+    for k in range s.nChunks {
+        n I64 = s.chunks[k].Len()
+        if k == s.nChunks - 1 { n = s.used }
+        c.PushAll(s.chunks[k][:n])
     }
     return c
 }

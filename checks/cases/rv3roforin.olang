@@ -1,0 +1,22 @@
+# check: fail error[T25c]: 'look' writes through or keeps its parameter 'x'
+# T25c: a by-value parameter whose body writes through a loop's elements needs a writable argument - a read-only copy of
+# an immutable global is not one
+type Node struct() {
+    v I64 = 0
+}
+type B struct() {
+    arr Array<mut Node&, 2>
+}
+fn mk() B {
+    b := B()
+    b.arr[0] = Node()
+    b.arr[1] = Node()
+    return b
+}
+G B = mk()
+fn look(x B) {
+    for e in x.arr { e.v += 1 }
+}
+fn main() ? {
+    look(G)
+}
