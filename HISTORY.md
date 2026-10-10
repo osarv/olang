@@ -13307,3 +13307,46 @@ the slice `a[:k]`, a List's `c := l.Clone(); c.Truncate(k)`. **A sorted walk of 
 `Keys().ToList()` then `Get`, whose default error cannot sit beside named ones in `main`'s signature, r20) - documented
 on `Map.Iter`, tested, not added. **No conversion helper for `T(x)`** through a type variable (r10, `linalg.Cast` in the
 study): the fix is the conversion itself, a checker change, and a prelude helper would be one more spelling to retire.
+
+### Rendering: a declared type over `Char`, arrays of arrays, inner `mut` (E11a, T29h, T25b, E21, 2026-10-10)
+
+Three rendering bugs found while giving `List` and `Map` a `Str`, each the same at run time, under `-d` and under `-i`
+(the evaluator spells types with codegen's own speller, so they agreed on every wrong answer).
+
+**A declared type over `Char` rendered as a number.** E11a already said a declared type over a primitive renders "as
+the type it is declared over", and T29h that a `Char` renders as its character - but `type Letter extends Char` (or a
+plain `type Letter Char`) printed `97`. A declared type keeps nothing of the declared type it is over (T29: it takes
+none of its constructor, destructor, `extends` or generic identity), so by the time codegen saw a `Letter` it was a
+`U8` with another name, and `TypeIsChar` - the prelude's `Char` exactly - said no. The type now records that it is over
+`Char` (`overChar`, copied on to a type over it), and the scalar renderings - top level and nested - ask
+`TypeRendersAsChar`. **Decided (mine)**: an array of such a type is not text - "an array of `Char`" means `Char`
+itself (`String` is one) - so `Array<Letter>` renders `Letter['a', 'b']`, its element type then its items, as any
+other array does; text stays the one shape that renders without its type.
+
+**An array of arrays named only its innermost element type.** `$` of an `Array<Array<I64, 3>>` printed
+`I64[[1, 2, 3], [4, 5, 6]]` - the rendering from the multi-dimensional arrays (`I32[[1, 2], [3, 4]]`, a row written
+without its own element type), which T7a removed: an array of arrays is a literal of arrays now, each its own literal
+(E21, `Array<I64, 3>[I64[1, 2, 3], I64[4, 5, 6]]`). The "row" was a parameter threaded through every rendering
+function in both codegen and the evaluator; it is gone, and an element type is spelled whole. A `List` of fixed
+arrays showed it through its chunks.
+
+**`mut` was dropped from rendered types.** The speller wrote a reference's `mut` only for a diagnostic (B11), so
+`List<mut Node&>` rendered `List<Node&>` and a function value `fn(...) Node&` for a result written `mut Node&` - but
+the permission is part of the type at every level (T25b), and a rendering writes a type as source does. It is written
+everywhere now, the callers with no place for the outermost level clearing it first: a diagnostic (T25c says it in
+words, as before), a parameter (written once before its type, as before) and an array rendering's element type, since
+a literal's element type takes no `mut` (`mut Node&[n]` does not parse - its elements take their permission from where
+the literal goes, T25b). So an `Array<mut Node&>` renders `Node&[...]` and an `Array<List<mut Node&>>`
+`List<mut Node&>[...]`. A rendering helper is a `linkonce_odr` function named by the type's structure (`rdKey`), which
+did not include permission - two types told apart only by an inner `mut` would have shared one body, and the linker
+kept either; the key includes it now. Diagnostics are unchanged, except that a function type is never written `mut`
+(it is not valid source either) and a reference to a type variable keeps its `&` (`T&` was spelled `T`).
+
+**On the way**: E21's message still said an array of arrays "holds references" - true before T7c's fixed arrays; it
+now shows the fixed-array form. **Found, not fixed** (semantic.c's method machinery, outside this change): `type Letter
+extends Char` inherits `U8`'s methods but not `Char`'s (`IsDigit`, `ToUpper` ...) - `VarGetMethod` falls back to the
+anonymous representation, not the declared type extended, and `MethodReceiverAccepts`, trait satisfaction and T29f's
+result typing do the same, so a fix records the base type and walks it in all of them.
+
+Tests: a section at the end of shared.olang - each rendering computed by a function baked into a global (K2) and the
+same call at run time from a mutable global, under `-t`, `-t -d -s` and failing on the previous compiler with S18c.

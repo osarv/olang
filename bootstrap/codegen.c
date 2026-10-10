@@ -4416,7 +4416,7 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
 
 #define RD_MAX_DEPTH 8 //E11a: references followed along one path before the rest is written as "..."
 
-static char* cgRenderFn(struct cgCtx* ctx, struct type t, bool row);
+static char* cgRenderFn(struct cgCtx* ctx, struct type t);
 
 static void rdSpellTypeB(struct type t, struct cgBuf* b);
 static bool rdForDiag;              //spelling a type for a diagnostic (DiagSpellType) rather than for a rendering
@@ -4430,19 +4430,20 @@ static int rdSigDepth;               //how many signatures the type being spelle
 //could give two different types. Each part's key is length-prefixed, so no two structures spell one key.
 static void rdKey(struct type t, struct cgBuf* b) {
     char inner[512] = "";
+    const char* ref = t.structMAlloc ? (t.refMut ? "mw" : "m") : ""; //T25b: a permission is spelled, so it is keyed
     if (t.owner && t.name.len > 0) mangleTypeName(t.owner, t.name, inner, sizeof(inner));
     switch (t.bType) {
         case BASETYPE_ARRAY: {
             struct cgBuf e = {0};
             rdKey(*t.arrElem, &e);
-            if (t.arrMalloc) cgBufAdd(b, "%s%sa.r.%s", inner, t.structMAlloc ? "m" : "", cgBufStr(&e));
-            else cgBufAdd(b, "%s%sa.%lld.%s", inner, t.structMAlloc ? "m" : "", t.arrLen ? t.arrLen->intLiteralVal : 0,
+            if (t.arrMalloc) cgBufAdd(b, "%s%sa.r.%s", inner, ref, cgBufStr(&e));
+            else cgBufAdd(b, "%s%sa.%lld.%s", inner, ref, t.arrLen ? t.arrLen->intLiteralVal : 0,
                           cgBufStr(&e));
             free(e.p);
             return;
         }
         case BASETYPE_STRUCT: case BASETYPE_CHOICE:
-            cgBufAdd(b, "%s", t.structMAlloc ? "m" : "");
+            cgBufAdd(b, "%s", ref);
             if (inner[0]) { cgBufAdd(b, "%s", inner); return; }
             cgBufAdd(b, "anon.%c%d", t.bType == BASETYPE_CHOICE ? 'e' : t.isTuple ? 't' : 's', t.vars.len);
             for (int i = 0; i < t.vars.len; i++) {
@@ -4527,8 +4528,9 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
             snprintf(mark, sizeof(mark), "&");
         else snprintf(mark, sizeof(mark), "%s%.*s", implicitName ? "" : "&", sn.len, sn.ptr);
     }
-    //a diagnostic tells apart what a rendering need not: a writable reference from a read-only one, at every level
-    if (rdForDiag && t.structMAlloc && t.refMut) cgBufAdd(b, "mut ");
+    //T25b: a writable reference is written "mut" at every level, as source writes it - a caller with no place for the
+    //outermost level's (a diagnostic, an array literal's element type, a parameter) clears it first
+    if (t.structMAlloc && t.refMut && t.bType != BASETYPE_FUNC) cgBufAdd(b, "mut ");
     if (t.bType == BASETYPE_ARRAY && !(t.owner && t.name.len)) { //T7: as it is written - T7c: with its length if fixed
         cgBufAdd(b, "Array<");
         rdSpellTypeB(*t.arrElem, b);
@@ -4557,7 +4559,7 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
         return;
     }
     //G8b: a diagnostic writes a variable as the program does once it is introduced - bare, "T", never "<T>" again
-    if (t.bType == BASETYPE_TYPEVAR) { cgBufAdd(b, rdForDiag ? "%.*s" : "<%.*s>", t.name.len, t.name.ptr); return; }
+    if (t.bType == BASETYPE_TYPEVAR) { cgBufAdd(b, rdForDiag ? "%.*s%s" : "<%.*s>%s", t.name.len, t.name.ptr, mark); return; }
     if (t.isTuple) {
         cgBufAdd(b, "(");
         for (int i = 0; i < t.vars.len; i++) {
@@ -4615,6 +4617,11 @@ static void rdSpellSig(struct type f, char* buf, size_t n) {
 
 //the compile-time evaluator renders "$x" exactly as the generated code does, so it spells types with these
 void RdSpellType(struct type t, char* buf, size_t n) { rdSpellType(t, buf, n); }
+char* RdSpelled(struct type t) { //the same, in storage of its own (freed by the caller) - a type has no length limit
+    struct cgBuf b = {0};
+    rdSpellTypeB(t, &b);
+    return cgBufStr(&b);
+}
 void RdSpellSig(struct type f, char* buf, size_t n) { rdSpellSig(f, buf, n); }
 //a type as a diagnostic names it (errmsg.c's "%t")
 void DiagSpellType(struct type t, char* buf, size_t n) {
@@ -4749,7 +4756,7 @@ static void rdPutStr(struct cgCtx* ctx, struct var* m, char* addr) {
 
 //renders the value of type t at addr into the helper being emitted: a primitive inline, anything else
 //through its own helper
-static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth, bool rowCtx) {
+static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth) {
     if (!t.structMAlloc && SemanticStrOf(t)) { rdPutStr(ctx, SemanticStrOf(t), addr); return; } //E11c
     {
         if (t.bType == BASETYPE_BOOL) {
@@ -4764,12 +4771,11 @@ static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth
             rdPut(ctx, sp, sl);
             return;
         }
-        if (TypeIsChar(t)) { rdPutQuoted(ctx, addr, "1", '\''); return; } //nested: 'c' (T29h)
+        if (TypeRendersAsChar(t)) { rdPutQuoted(ctx, addr, "1", '\''); return; } //nested: 'c' (T29h, E11a)
 
         if (TypeIsNumeric(t)) { rdPutNumber(ctx, t, addr); return; }
     }
-    //an unmarked array inside an array is a ROW of it, written without its own element type
-    char* fn = cgRenderFn(ctx, t, rowCtx);
+    char* fn = cgRenderFn(ctx, t);
     char* at;
     char* p = rdHere(ctx, &at);
     char* k = cgNewTmp(ctx);
@@ -4777,10 +4783,11 @@ static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth
     rdAdvance(ctx, at, k);
 }
 
-//"T[e0, e1, ...]" over count elements of type elem starting at base - the way an array literal is written:
-//the element type once, then the items, a nested unmarked array being a bare "[...]" row of the outer one.
-//A byte array is text instead, in quotes.
-static void rdPutElems(struct cgCtx* ctx, struct type elem, char* base, char* count, bool row) {
+//"T[e0, e1, ...]" over count elements of type elem starting at base - the way an array literal is written (E19):
+//the element type as written, without the permission a literal's elements take from their target (T25b), then the
+//items, each a value of its own - an array of fixed arrays "Array<I64, 3>[I64[1, 2, 3]]" (E21). An array of Chars is
+//text instead, in quotes.
+static void rdPutElems(struct cgCtx* ctx, struct type elem, char* base, char* count) {
     if (TypeIsChar(elem)) { rdPutQuoted(ctx, base, count, '"'); return; } //T29h: Chars are text
     char ety[256];
     llvmType(elem, ety, sizeof(ety));
@@ -4788,14 +4795,12 @@ static void rdPutElems(struct cgCtx* ctx, struct type elem, char* base, char* co
     char* iSlot = cgNewTmp(ctx);
     fprintf(cgAllocaOut(ctx), "  %s = alloca i64\n", iSlot);
     fprintf(ctx->fnOut, "  store i64 0, ptr %s\n", iSlot);
-    if (!row) {
-        struct type base0 = elem;
-        while (base0.bType == BASETYPE_ARRAY && !base0.structMAlloc && !(base0.owner && base0.name.len)
-               && !TypeIsChar(*base0.arrElem)) base0 = *base0.arrElem;
-        char spelled[600];
-        rdSpellType(base0, spelled, sizeof(spelled));
-        rdPutText(ctx, spelled);
-    }
+    struct type spelledElem = elem;
+    spelledElem.refMut = false;
+    struct cgBuf sp = {0};
+    rdSpellTypeB(spelledElem, &sp);
+    rdPutText(ctx, cgBufStr(&sp));
+    free(sp.p);
     rdPutText(ctx, "[");
     fprintf(ctx->fnOut, "  br label %%rd.cond.%d\nrd.cond.%d:\n", id, id);
     char* iv = cgNewTmp(ctx);
@@ -4810,7 +4815,7 @@ static void rdPutElems(struct cgCtx* ctx, struct type elem, char* base, char* co
     fprintf(ctx->fnOut, "  br label %%rd.elem.%d\nrd.elem.%d:\n", id, id);
     char* ea = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i64 %s\n", ea, ety, base, iv);
-    rdPutValue(ctx, elem, ea, "%rd.depth", true);
+    rdPutValue(ctx, elem, ea, "%rd.depth");
     char* inc = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", inc, iv);
     fprintf(ctx->fnOut, "  store i64 %s, ptr %s\n", inc, iSlot);
@@ -4834,12 +4839,12 @@ static void rdPutFields(struct cgCtx* ctx, struct type t, char* addr) {
         if (i > 0) rdPutText(ctx, ", ");
         char* fa = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fa, storTy, addr, i);
-        rdPutValue(ctx, m->type, fa, "%rd.depth", false);
+        rdPutValue(ctx, m->type, fa, "%rd.depth");
     }
 }
 
 //the body of t's helper, rendering the value at %rd.val
-static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
+static void rdBody(struct cgCtx* ctx, struct type t) {
     if (!t.structMAlloc && SemanticStrOf(t)) { rdPutStr(ctx, SemanticStrOf(t), "%rd.val"); return; } //E11c
     int id = ctx->lblCtr++;
     bool markedRuntime = t.bType == BASETYPE_ARRAY && t.arrMalloc && t.structMAlloc;
@@ -4871,7 +4876,7 @@ static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
         fprintf(ctx->fnOut, "  br label %%rd.end.%d\nrd.in.%d:\n", id, id);
         char* d1 = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = add i32 %%rd.depth, 1\n", d1);
-        rdPutValue(ctx, referent, target, d1, false);
+        rdPutValue(ctx, referent, target, d1);
         fprintf(ctx->fnOut, "  br label %%rd.end.%d\nrd.end.%d:\n", id, id);
         return;
     }
@@ -4888,11 +4893,11 @@ static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
                 fprintf(ctx->fnOut, "  %s = getelementptr { i64, ptr }, ptr %%rd.val, i32 0, i32 1\n", pp);
                 char* base = cgNewTmp(ctx);
                 fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", base, pp);
-                rdPutElems(ctx, *t.arrElem, base, len, row);
+                rdPutElems(ctx, *t.arrElem, base, len);
             } else {
                 char cnt[24];
                 snprintf(cnt, sizeof(cnt), "%lld", t.arrLen ? t.arrLen->intLiteralVal : 0);
-                rdPutElems(ctx, *t.arrElem, "%rd.val", cnt, row);
+                rdPutElems(ctx, *t.arrElem, "%rd.val", cnt);
             }
             return;
         }
@@ -4963,18 +4968,17 @@ static void rdBody(struct cgCtx* ctx, struct type t, bool row) {
         }
         default:
             //a primitive reached as a helper's own type (a top-level "$x" on a number or a bool)
-            rdPutValue(ctx, t, "%rd.val", "%rd.depth", false);
+            rdPutValue(ctx, t, "%rd.val", "%rd.depth");
             return;
     }
 }
 
 //emits (once per object) the rendering helper for t and returns its symbol
-static char* cgRenderFn(struct cgCtx* ctx, struct type t, bool row) {
-    row = row && t.bType == BASETYPE_ARRAY && !t.structMAlloc;
+static char* cgRenderFn(struct cgCtx* ctx, struct type t) {
     struct cgBuf key = {0};
     rdKey(t, &key);
     struct cgBuf symB = {0};
-    cgBufAdd(&symB, "@olang.rd.%s%s", row ? "row." : "", cgBufStr(&key));
+    cgBufAdd(&symB, "@olang.rd.%s", cgBufStr(&key));
     free(key.p);
     char* sym = cgBufStr(&symB);
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
@@ -4993,7 +4997,7 @@ static char* cgRenderFn(struct cgCtx* ctx, struct type t, bool row) {
     fprintf(cgAllocaOut(ctx), "  %%rd.n = alloca i64\n");
     fprintf(ctx->fnOut, "  store i64 0, ptr %%rd.n\n");
     fprintf(ctx->fnOut, "  %%rd.measure = icmp eq ptr %%rd.dst, null\n");
-    rdBody(ctx, t, row);
+    rdBody(ctx, t);
     fprintf(ctx->fnOut, "  %%rd.result = load i64, ptr %%rd.n\n  ret i64 %%rd.result\n}\n\n");
     cgBodyEnd(ctx, &bb);
     ctx->fnOut = savedOut;
@@ -5057,7 +5061,7 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", d1, (int)strlen(text));
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, g);
-        } else if (TypeIsChar(in->type) && !viaStr) {
+        } else if (TypeRendersAsChar(in->type) && !viaStr) {
             char* addr = cgValueAddr(ctx, in);
             char* d1 = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 1, 0\n", d1);
@@ -5066,7 +5070,7 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
         } else if (in->type.bType == BASETYPE_ARRAY && TypeIsChar(*in->type.arrElem) && !viaStr) {
             tp.desc = cgBorrowValue(ctx, textT, in->type, cgValue(ctx, in));
         } else {
-            tp.fn = cgRenderFn(ctx, in->type, false);
+            tp.fn = cgRenderFn(ctx, in->type);
             tp.addr = cgValueAddr(ctx, in);
             tp.len = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = call i64 %s(ptr null, ptr %s, i32 0)\n", tp.len, tp.fn, tp.addr);

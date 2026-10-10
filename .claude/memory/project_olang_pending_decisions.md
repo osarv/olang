@@ -36,6 +36,21 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QE. Should a spawned function be allowed to fail (P4 forbids it)? In effect: no - a task catches inside, or reports
   through a channel or a spawn target. My recommendation: allow it only through the task's own clauses -
   `spawn x = try f() catch default v` - and keep P4 otherwise (an error has nowhere to go at the join).
+**Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
+- QF. Long-lived, mutated structures only ever grow: what is removed from or replaced in a List/Map/struct that lives
+  for the whole program (an interpreter's frames and values, an ECS world, an editor's undo stack) stays in its scope
+  until that scope closes - 1.8 KB per interpreter loop turn (717 MB at 400k turns), ~0.8 KB per ECS step. Scopes are
+  lexical, so there is no way to move a structure into a fresh scope and close the old one while the program runs.
+  In effect: nothing (it grows). Options: (a) a library/language "generation" idiom - a value rebuilt into a fresh
+  scope every N steps by a loop whose scope holds two generations (needs a scope that outlives one iteration but not
+  the program - e.g. a `region` value: an arena you can create, build into, and drop explicitly, the compiler checking
+  nothing escapes it); (b) per-collection recycling only (Map already reuses slots, List keeps chunks) - covers fixed-
+  size elements, not text/nested lists; (c) a tracing collector or reference counting for one opt-in type - against
+  principle 1. My recommendation: (a) as a first-class region value checked by section 8 (a named, droppable scope
+  created at run time - `r := Region(); x := Build&r(...); ... r.Drop()` with drop refused while anything outlives
+  it) - it keeps "no GC, no free" in spirit (no per-object free; a whole region at once), and is what game engines and
+  compilers do with arenas. Needs design work; not built.
+
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
   tooling (formatter, editor support) is built.
@@ -240,6 +255,41 @@ rule and where it is recorded; the morning report lists them all, then they move
    borrow the text unless unquoted; std/stats' default variance is the sample one (n-1), percentiles numpy's linear
    method, pairwise sums; Array.Sort a stable O(n log n) merge with an n/2 scratch for numbers, blocks of positions for
    the rest; List.Truncate(n) changes nothing past the length.
+
+39. (wt-rv3fix) a spawned lambda's captured scopes get P2 stand-ins folded at the join (RunOnStack too); O25h holds a
+   copy out of whatever expression gives the reference; a conditional of references from different scopes is "not known
+   here" (building into it is O12); slices/views of split values refused; an instantiation's read-only reference
+   parameter is as read-only as its argument, so `ro.Clone()` on a read-only `List<List<I64>>&` is an error; a `Str` may
+   not write through a reference to anything that existed before it ran; S4d covers `+=`/`++`; a binding an argument
+   determines at depth 0 means the body's top level (in a constructor, the instance's scope).
+40. (mine, rv3fix's open item 1) a closure held in a struct given to a task builds into its captured scope from the
+   task's thread (heap corruption): decided to REFUSE it statically under P2 - a task argument may not reach a function
+   value that captures a writable reference (it could build into that scope off-thread); read-only captures stay
+   allowed. Chosen over a per-allocation owner check (a run-time cost on every allocation). To be built next batch.
+
+41. (wt-s5scope, E31b/O18c/O26a/E25/D16c/O17) decision 33 built: a write through `x[i]` reads the element where the
+   place is evaluated and writes it back by SetAt, one level at a time for nested collections; a fallible or
+   multi-result call is not written back (an error saying how); a call that builds into the element's copy is refused
+   (no hidden per-write allocation). r01 fixed at the root (a landed call result sets the by-value parameter's scope);
+   O17's region facts belong to each function, not the shared scope variable; a lambda capturing a value holding
+   references gets an implicit scope (D16c); destructured results keep a scope argument's placement (E25).
+
+42. (mine, revising 33 after the s5scope soundness review, /home/user/review/tonight6) the hidden copy through x[i]
+   is sound only where no user code runs between reading the element and writing it back: a FIELD store
+   (`x[i].f = v`, op=, ++) keeps the write-back, place held and value evaluated first; a `mut` method or `mut &`
+   argument on x[i] is a compile-time error naming `t := l[i]; t.M(); l[i] = t` (the callee could reach the collection
+   another way - heap corruption, lost writes; exclusivity checking would be needed). Being built in wt-s5scope.
+
+43. (wt-s6std) `$` renders a List as `List<I64>[1, 2, 3]`, a Map as `Map<K, V>{k: v}` (walk order), a StringBuilder as
+   its text; a List's first chunk held on its own (a list up to 8 elements is one allocation; 3-element walk 195 -> 66
+   instructions); `IndexOf` fails on a miss, `Remove(x)` returns a Bool like Map.Remove, `SwapRemove(i)` returns the
+   element; `chan.Chan(cap I64)`. Merge only after rv3fix (its c3Holder test needs rv3fix's C2g fix).
+
+44. (mine, s5scope follow-up review G1-G3) handle elements: every level of `users[i][j].Push(t)` is held and lent;
+   the handle exemption from E31b applies only when the callee uses the handle only through its reference (O17b's
+   checked-body analysis) - a mut method repointing the handle's own field is E31b's error; a value that shrinks the
+   collection before an At/SetAt store (`v[0].E = shrink(v)`) makes the program's index out of range at the access -
+   E16e's unchecked index, stated in SPEC, no check added. Spawn on a handle element is E31b/P2's error (s5scope).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

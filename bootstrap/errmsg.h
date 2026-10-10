@@ -393,7 +393,7 @@ struct type;
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
     X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
     /* ---- literals and constructions ---- */ \
-    X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - an array of arrays holds references: Array<I32>&[r0, r1]") \
+    X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") \
     X(ERR_ARRAY_OF_ERRORS,              "T20",   "%t has no values to put in an array") \
     X(ERR_ERROR_TYPE_AS_VALUE,          "T20",   "%t is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch %t.WORD { }')") \
     X(ERR_COMPREHENSION_REFERENCES,     "E27",   "a comprehension's elements may not be or hold references yet - build the array with a loop") \
