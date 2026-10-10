@@ -7472,7 +7472,9 @@ struct var* lvalueStorageScope(struct operand* op, bool* outIsGlobal, int* outDe
     while (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
         *outDepth = base->type.scopeDepth;
-        if (base->type.structMAlloc) return resolveEffectiveScopeVar(base, base->type.scopeParam);
+        //...where the reference it is reached through leads - which, for a field or an element with no scope of its own
+        //("g.arr[0]", arr a bare reference field of g), is where its container lives (O20), as above
+        if (base->type.structMAlloc) return lvalueStorageScope(base, outIsGlobal, outDepth);
         op = base;
     }
     if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->owner) *outIsGlobal = true;
@@ -9445,6 +9447,36 @@ static bool landDeclByObligations(struct checkCtx* ctx, struct operand* rhs) {
     return true;
 }
 
+//O18c: ...but a ":=" from a call, or from a part of one, lands there only where that costs nothing or is forced. Landed
+//where its obligations say, everything the callee builds into its result scope lives as long as what the result holds
+//lives - in a loop body, every turn's: "t := lx.next().text" kept every token's new text where the lexer lives, and
+//"x := mk(base, 64).p" every array where base does. So it lands there where the callee builds nothing (an element, a
+//borrowed part, which cost nothing to keep where the collection is), or where an obligation needs the result scope to
+//outlive, or to be, one an argument gives (an element that can be stored through, O25g - exactly where the collection
+//is); else it is the block's, as any new value is, and what is kept longer is put there by its own statement
+static bool mayBuildWhileChecking(struct var* func);
+static bool localKeptBeyondBlock(struct checkCtx* ctx, struct str name, struct type t);
+static bool landKeptAll; //set while a comprehension's element is declared: it is kept, in what the comprehension builds
+static bool landDeclWhereFree(struct checkCtx* ctx, struct operand* rhs, struct str name, struct type t) {
+    if (rhs->opType != OPERATION_FUNCCALL || !rhs->readVar) return false;
+    struct var* func = rhs->readVar;
+    struct var* R = func->type.resultScope;
+    if (!R || func->bodyState != 2) return false;
+    R = canonicalVar(R);
+    bool forced = false;
+    for (int i = 0; i < func->type.scopeObligations.len && !forced; i++) {
+        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
+        if (o->shorterViaParam) continue;
+        struct var* lo = canonicalVar(o->longer);
+        struct var* sh = canonicalVar(o->shorter);
+        forced = (lo == R && sh != R) || (o->exact && sh == R && lo != R);
+    }
+    //(...and a local kept beyond its block - "tk := lx.next(); toks.Push(tk)", toks outside the loop - takes what the
+    //callee builds there with it: that is the program's own keeping)
+    if (!forced && !landKeptAll && mayBuildWhileChecking(func) && !localKeptBeyondBlock(ctx, name, t)) return false;
+    return landDeclByObligations(ctx, rhs);
+}
+
 //O18c: a collection a for-in walks lands as ":=" from it does - and so does the call a field, an element or a slice of
 //it is read out of ("for x in l[0].tags"), whose result is what the loop then borrows
 static void landWalkedByObligations(struct checkCtx* ctx, struct operand* src) {
@@ -10745,7 +10777,7 @@ static bool mbStmt(struct statement* s, struct var* func) {
         if (mbFunc && mbFunc->type.hasRetType && mbFunc->type.retType) {
             struct type rt = *mbFunc->type.retType;
             if (mbBoundary(rt, s->op)) return true;
-            if (rt.bType == BASETYPE_ARRAY && rt.arrMalloc) return true; //T7b: a value array copied into the result scope
+            if (rt.bType == BASETYPE_ARRAY && rt.arrMalloc && !rt.structMAlloc) return true; //T7b: a value array copied into the result scope
         }
         return mbOperand(s->op);
     case STATEMENT_DEFER:
@@ -10766,6 +10798,10 @@ static bool mbBlock(struct list* block, struct var* func) {
     return false;
 }
 
+//O18c: set while the checker asks (mayBuildWhileChecking) - a body not checked yet, or not wholly (a call cycle's), is
+//taken to build, and that answer is not kept: once every body is checked the walk answers again, as codegen asks it
+static bool mbChecking;
+static bool mbUnsure;
 bool SemanticMayBuild(struct var* func) {
     if (!func) return true;
     if (func->type.isExtern) return false;
@@ -10778,12 +10814,18 @@ bool SemanticMayBuild(struct var* func) {
     struct type* ct = func->type.hasRetType ? func->type.retType : NULL;
     bool isCtor = ct && ct->bType == BASETYPE_STRUCT && ct->ctorFunc && canonicalVar(ct->ctorFunc) == canonicalVar(func);
     bool checked = func->isLambda ? func->codeBlock.elemSize != 0 : isCtor ? ct->ctorBodyState == 2 : func->bodyState == 2;
+    if (mbChecking && (!checked || func->bodyIncomplete)) {
+        mbUnsure = true;
+        return true;
+    }
     if (!checked || func->bodyHadErrors || func->bodyIncomplete || func->type.typeParams.len) {
         func->mayBuild = 3;
         return true;
     }
     int savedLow = mbLow;
     struct var* savedFunc = mbFunc;
+    bool savedUnsure = mbUnsure;
+    mbUnsure = false;
     mbLow = 0x7fffffff;
     mbFunc = func;
     func->mayBuild = 1;
@@ -10791,10 +10833,21 @@ bool SemanticMayBuild(struct var* func) {
     bool r = mbBlock(isCtor ? &ct->ctorFunc->codeBlock : &func->codeBlock, func);
     mbDepth--;
     mbFunc = savedFunc;
-    if (r) func->mayBuild = 3;
+    if (r) func->mayBuild = mbUnsure ? 0 : 3; //(found on a body not checked yet: asked again)
     else func->mayBuild = mbLow < func->mayBuildAt ? 0 : 2;
     int low = mbLow < func->mayBuildAt ? mbLow : 0x7fffffff;
     mbLow = savedLow < low ? savedLow : low;
+    mbUnsure |= savedUnsure;
+    return r;
+}
+static bool mayBuildWhileChecking(struct var* func) {
+    bool saved = mbChecking;
+    bool savedUnsure = mbUnsure;
+    mbChecking = true;
+    mbUnsure = false;
+    bool r = SemanticMayBuild(func);
+    mbChecking = saved;
+    mbUnsure = savedUnsure;
     return r;
 }
 
@@ -11244,6 +11297,9 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     //supplied by the caller's scope argument, defaulting to the caller's own scope (NULL).
     copyOldBorrows(ctx, func, args, false); //S4d: before anything asks whether an argument is borrowed
     ensureBodyChecked(func); //O10b: its obligations, before this call is held to them
+    //O10c: a callee whose obligation set may still grow - still being checked (a cycle), or itself calling such a one -
+    //leaves the caller's growing too, which O26a must not read as settled (calleeMayKeepArg)
+    if (ctx && ctx->func && (func->bodyState != 2 || canonicalVar(func)->obligUnsettled)) canonicalVar(ctx->func)->obligUnsettled = true;
     int obligedNow = func->type.scopeObligations.len;
     effCall(ctx, op, func, args, tok); //E11c
     bindCallScopeVars(ctx, op, func, args, tok, scopeArgNodes);
@@ -17082,7 +17138,7 @@ static struct statement buildVarDeclFromOperandIn(struct checkCtx* ctx, struct t
     //held it ("(try m.Get(k))[0]", E31b) - keeps its references where it landed, as the same declaration would have
     bool landedAlready = !inResult && rhs->opType == OPERATION_FUNCCALL && rhs->readVar && rhs->readVar->type.resultScope
                          && !callIsLanding(rhs);
-    bool landedByOblig = !inResult && (landedAlready || landDeclByObligations(ctx, rhs));
+    bool landedByOblig = !inResult && (landedAlready || landDeclWhereFree(ctx, rhs, strFromTok(nameTok), declType));
     bool unnamedScope = false;
     if (!adoptInitializerScope(ctx, &declType, rhs, &unnamedScope)) declType.scopeDepth = ctx->blockDepth;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
@@ -17216,7 +17272,9 @@ static void syntaxTokensNoRendering(struct syntax* n, struct list* out) {
     }
 }
 
-static bool syntaxMentionsName(struct syntax* e, struct str name, bool skipFirst) {
+//methods: a method called on it counts too ("p.expr(1)") - where its type is not known yet, so whether the method can keep it
+//is not either
+static bool syntaxMentionsNameIn(struct syntax* e, struct str name, bool skipFirst, bool methods) {
     struct list toks = ListInit(sizeof(struct token));
     syntaxTokensNoRendering(e, &toks);
     bool found = false;
@@ -17242,10 +17300,15 @@ static bool syntaxMentionsName(struct syntax* e, struct str name, bool skipFirst
             }
             break;
         }
-        found = j >= toks.len || tokEndsWhole(((struct token*)ListGetIdx(&toks, j))->type);
+        found = j >= toks.len || tokEndsWhole(((struct token*)ListGetIdx(&toks, j))->type)
+                || (methods && j > i + 1 && ((struct token*)ListGetIdx(&toks, j))->type == TOK_PAREN_O
+                    && ((struct token*)ListGetIdx(&toks, j - 2))->type == TOK_DOT);
     }
     ListDestroy(toks);
     return found;
+}
+static bool syntaxMentionsName(struct syntax* e, struct str name, bool skipFirst) {
+    return syntaxMentionsNameIn(e, name, skipFirst, false);
 }
 
 //O26a: the local a place or a call statement starts from - "a" in "a.b[i].c = v" or in "a.Push(x)"
@@ -17277,9 +17340,11 @@ struct flowCont { struct list* stmts; int idx; struct flowCont* outer; };
 //borrowRoot: the local being decided holds no reference, but its own storage can be borrowed (O26a's borrowable value) -
 //a view of it, an array or a struct read out of it by value, carries that storage
 struct flowScan { struct checkCtx* ctx; struct list seen; struct str root; struct type rootType; bool borrowRoot;
-                  struct list elemNames; struct list elemTypes; }; //a for-in element's type, where its collection's is known
+                  struct list elemNames; struct list elemTypes; //a for-in element's type, where its collection's is known
+                  bool kept; }; //O18c: whether it flows beyond its own block at all, not only into the result
 static bool exprGivesName(struct syntax* e, struct str name);
 static bool exprIsNameChain(struct syntax* e, struct str name);
+static bool syntaxIsBareName(struct syntax* e, struct str name);
 //whether a written type ends in a reference marker ("Node&", "Node&x", "mut List<I32>&")
 static bool syntaxEndsWithMarker(struct syntax* te) {
     struct list toks = ListInit(sizeof(struct token));
@@ -17356,6 +17421,8 @@ static bool flowNameType(struct flowScan* fs, struct str name, struct type* out)
     return true;
 }
 static struct var* callAround(struct checkCtx* ctx, struct list* toks, int i, int* idx);
+static bool calleeMayHoldArg(struct var* m, int idx);
+static bool tokIs(struct list* toks, int i, enum tokenType tt);
 static bool calleeMayKeepArg(struct var* m, int idx);
 //O26a: whether expression e uses the local named as a whole value (syntaxMentionsName) where the value e gives can carry
 //what the local refers to: never as an argument of a call whose result cannot hold it (calleeMayKeepArg - "v :=
@@ -17450,9 +17517,21 @@ static bool flowIsCopy(struct flowScan* fs, struct syntax* e, struct str name, b
 
 //whether what is put in target T flows: a local declared before the one being decided says so itself; one declared
 //after it flows when the rest after this statement says so
+//...and, asked whether the local is kept beyond its block (localKeptBeyondBlock): a local of that same block is not,
+//unless it is a reference (what it points to may live anywhere) or in the result scope; one of an outer block, a
+//parameter or a global is
 static bool flowTarget(struct flowScan* fs, struct str T, struct flowCont* after) {
     struct var* v = scopeFindLocalByCtx(fs->ctx, T);
+    if (v && fs->kept) {
+        struct scope* own = fs->ctx->scope;
+        for (int i = 0; own && i < own->localPtrs.len; i++) {
+            struct var* l = *(struct var**)ListGetIdx(&own->localPtrs, i);
+            if (StrCmp(l->name, T)) return l->type.structMAlloc || varInResultScope(fs->ctx, l);
+        }
+        return true;
+    }
     if (v) return varInResultScope(fs->ctx, v);
+    if (fs->kept && VarGetList(&fs->ctx->mod->vars, T)) return true;
     return flowExplore(fs, T, after);
 }
 
@@ -17474,13 +17553,13 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             else {
                 struct var* v = scopeFindLocalByCtx(fs->ctx, name);
                 if (v) t = v->type;
-                else known = false; //declared later in the block, its type not known yet: as a whole value only
+                else known = false; //declared later in the block, its type not known yet: as a whole value or a receiver
             }
             for (int i = 0; i < n->parts.len; i++) {
                 struct syntaxPart* p = ListGetIdx(&n->parts, i);
                 if (p->isToken || p->sntx->type != SNTX_EXPR) continue;
                 if (exprGivesName(p->sntx, name)) return true;
-                if (known ? exprReadsName(fs->ctx, p->sntx, name, t) : syntaxMentionsName(p->sntx, name, false)) return true;
+                if (known ? exprReadsName(fs->ctx, p->sntx, name, t) : syntaxMentionsNameIn(p->sntx, name, false, true)) return true;
             }
             return false;
         }
@@ -17490,8 +17569,14 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             struct str T;
             if (!e || !tgt || !flowMentionsName(fs, e, name, false) || !syntaxRootName(tgt, &T)) return false;
             //a whole value local assigned is a copy; a field or an element of one is a slot of it, which may hold a reference
-            if (exprIsNameChain(tgt, T) && flowIsCopy(fs, e, name, flowNameIsValue(fs, T))) return false;
+            //(kept beyond its block, a copy holds its references where they are - O25h - so it carries them there too)
+            if (!fs->kept && exprIsNameChain(tgt, T) && flowIsCopy(fs, e, name, flowNameIsValue(fs, T))) return false;
             if (flowPlaceCarriesNothing(fs, tgt, T)) return false; //a number put in a field holding no reference
+            //(kept beyond its block: a place reached through a local not declared yet - "c[j] = v", c a reference to a
+            //list's chunk declared further on - may be storage of anything, so what is put there is taken to be kept)
+            if (fs->kept && !scopeFindLocalByCtx(fs->ctx, T) && !VarGetList(&fs->ctx->mod->vars, T)
+                    && !syntaxIsBareName(tgt, T))
+                return true;
             return flowTarget(fs, T, after);
         }
         case SNTX_VAR_DECL: {
@@ -17501,7 +17586,7 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             struct syntax* te = firstPartOfType(n, SNTX_TYPE_EXPR);
             if (te && flowWrittenTypeCarriesNothing(fs, te)) return false; //a number declared from it
             bool valueTarget = te ? !syntaxEndsWithMarker(te) : flowNameIsValue(fs, name);
-            if (flowIsCopy(fs, e, name, valueTarget)) return false;
+            if (!fs->kept && flowIsCopy(fs, e, name, valueTarget)) return false;
             return flowExplore(fs, strFromTok(firstTokOfType(n, TOK_IDEN)), after);
         }
         case SNTX_STMNT_DESTRUCT: {
@@ -17526,6 +17611,23 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             struct str T;
             if (e && syntaxRootName(e, &T) && !StrCmp(T, name) && flowMentionsName(fs, e, name, true) && flowTarget(fs, T, after))
                 return true;
+            //...kept beyond its block, also by a plain call that can keep an argument anywhere but its result ("keep(outer,
+            //t)"): every place it is written as an argument, the innermost call around it asked (an unknown one keeps it)
+            if (fs->kept && e && syntaxRootName(e, &T) && !StrCmp(T, name) && !scopeFindLocalByCtx(fs->ctx, T)
+                    && syntaxMentionsName(e, name, false)) {
+                struct list toks = ListInit(sizeof(struct token));
+                syntaxTokensInto(e, &toks);
+                bool kept = false;
+                for (int i = 1; i < toks.len && !kept; i++) {
+                    struct token* t = ListGetIdx(&toks, i);
+                    if (t->type != TOK_IDEN || !StrCmp(strFromTok(*t), name) || tokIs(&toks, i - 1, TOK_DOT)) continue;
+                    int idx = 0;
+                    struct var* m = callAround(fs->ctx, &toks, i, &idx);
+                    kept = !m || calleeMayHoldArg(m, idx);
+                }
+                ListDestroy(toks);
+                if (kept) return true;
+            }
             break;
         }
         case SNTX_STMNT_FOR_IN: {
@@ -17582,6 +17684,15 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
 }
 
 //O26a: whether expression e is the local named, or a field read through it ("x", "x.a.b", parenthesized or not)
+//O26a: e is the name alone
+static bool syntaxIsBareName(struct syntax* e, struct str name) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(e, &toks);
+    bool ok = toks.len == 1 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN
+              && StrCmp(strFromTok(*(struct token*)ListGetIdx(&toks, 0)), name);
+    ListDestroy(toks);
+    return ok;
+}
 static bool exprIsNameChain(struct syntax* e, struct str name) {
     struct list toks = ListInit(sizeof(struct token));
     syntaxTokensInto(e, &toks);
@@ -17700,7 +17811,8 @@ static bool calleeMayKeepArg(struct var* m, int idx) {
     if (!sv || m->type.resultViaTypeVar) return true;
     if (rt.scopeParam && canonicalVar(rt.scopeParam) == sv) return true; //borrowed from it
     ensureBodyChecked(m);
-    if (m->bodyState != 2) return true;
+    //(a body not checked, or one in a call cycle whose late obligations are not added yet, may keep it)
+    if (m->bodyState != 2 || canonicalVar(m)->obligUnsettled) return true;
     struct var* rs = m->type.resultScope ? canonicalVar(m->type.resultScope) : NULL;
     if (!rs) return false; //borrowed from another parameter
     for (int i = 0; i < m->type.scopeObligations.len; i++) {
@@ -17725,7 +17837,7 @@ static bool calleeMayHoldArg(struct var* m, int idx) {
     if (!sv) return p->type.structMAlloc || TypeHoldsReferences(p->type) || TypeIsGeneric(p->type)
                    || p->type.bType == BASETYPE_FUNC;
     ensureBodyChecked(m);
-    if (m->bodyState != 2 || m->bodyHadErrors) return true;
+    if (m->bodyState != 2 || m->bodyHadErrors || canonicalVar(m)->obligUnsettled) return true;
     for (int i = 0; i < m->type.scopeObligations.len; i++) {
         struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, i);
         if (canonicalVar(ob->longer) == sv || (ob->exact && canonicalVar(ob->shorter) == sv)) return true;
@@ -17794,7 +17906,7 @@ static struct var* callAround(struct checkCtx* ctx, struct list* toks, int i, in
             if (depth > 0) { depth--; continue; }
             if (tt != TOK_PAREN_O || !tokIs(toks, j - 1, TOK_IDEN)) return NULL;
             if (tokIs(toks, j - 2, TOK_DOT)) {
-                bool isMethod;
+                bool isMethod = false;
                 struct var* m = calleeThroughDot(ctx, toks, j, &isMethod);
                 *idx = commas + (isMethod ? 1 : 0);
                 //a method may keep the argument in its receiver ("s.longest.Push(head)", s returned), which flows where
@@ -17866,9 +17978,22 @@ static bool flowScanList(struct flowScan* fs, struct list* stmts, int from, stru
     return false;
 }
 
+//O18c: whether a local is kept beyond the block it is declared in - put into a local of an outer block, a parameter,
+//a global or what a reference points to, handed to a call that can keep it there, or returned - read off the rest of
+//its block as O26a reads a flow into the result. An over-approximation: what it costs is that a call's result is landed
+//where its obligations say rather than in the block (landDeclWhereFree)
+static bool localKeptBeyondBlock(struct checkCtx* ctx, struct str name, struct type t) {
+    struct flowScan fs = { ctx, ListInit(sizeof(struct str)), name, t, false, ListInit(sizeof(struct str)),
+                           ListInit(sizeof(struct type)), true };
+    struct flowCont k = { &ctx->blockStmts, ctx->blockStmtIdx + 1, NULL };
+    bool r = flowExplore(&fs, name, &k);
+    ListDestroy(fs.seen);
+    return r;
+}
+
 static bool localFlowsToResult(struct checkCtx* ctx, struct str name, struct type t, bool borrowRoot) {
     struct flowScan fs = { ctx, ListInit(sizeof(struct str)), name, t, borrowRoot, ListInit(sizeof(struct str)),
-                           ListInit(sizeof(struct type)) };
+                           ListInit(sizeof(struct type)), false };
     struct flowCont k = { &ctx->blockStmts, ctx->blockStmtIdx + 1, NULL };
     bool r = flowExplore(&fs, name, &k);
     ListDestroy(fs.seen);
@@ -18056,13 +18181,13 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
                 inferredInResult = true;
                 if (callIsLanding(rhs)) landCall(rhs, declType.scopeParam, 0);
             } else if (!inResult) {
-                landedByOblig = landDeclByObligations(ctx, rhs); //O18c
+                landedByOblig = landDeclWhereFree(ctx, rhs, strFromTok(nameTok), declType); //O18c
                 //...as does the call a field, an element, a slice or a payload is read out of: "l := args[0] as V.Items"
                 //is "a := args[0]; l := a as V.Items", "t := p.next().text" is "n := p.next(); t := n.text"
                 struct operand* c = rhs;
                 while (heldResult(c) || projectionBase(c)) c = heldResult(c) ? heldResult(c) : projectionBase(c);
                 if (c != rhs && c->opType == OPERATION_FUNCCALL && !spreadSourceOf(c) && callIsLanding(c)
-                        && landDeclByObligations(ctx, c))
+                        && landDeclWhereFree(ctx, c, strFromTok(nameTok), declType))
                     projLanded = c;
             }
         }
@@ -20487,6 +20612,14 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     lctx.loopBreak = &inBroken; //D10a: its own breaks, not an outer loop's
     //the body starts with what the loop hands it; the program's own statements follow
     struct list body = ListInit(sizeof(struct statement));
+    //O18c: the element is a local of the body - whether it is kept beyond the body is read from the body's own statements
+    //(a comprehension's element is kept: it is pushed into what the comprehension builds)
+    struct syntax* bodyBlock = spec ? NULL : firstPartOfType(s, SNTX_BLOCK);
+    struct list bodyStmts = bodyBlock ? allPartsOfType(bodyBlock, SNTX_STMNT) : ListInit(sizeof(struct syntax*));
+    lctx.blockStmts = bodyStmts;
+    lctx.blockStmtIdx = -1;
+    bool savedKeptAll = landKeptAll;
+    landKeptAll = spec != NULL;
     if (isArray || indexable) {
         if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
         struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
@@ -20511,7 +20644,11 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         ListAdd(&body, &d);
         if (idxTok) { struct statement di = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &di); }
     }
+    landKeptAll = savedKeptAll;
+    lctx.blockStmts = ctx->blockStmts;
+    lctx.blockStmtIdx = ctx->blockStmtIdx;
     struct list user = forInBody(&lctx, s, spec, kw);
+    ListDestroy(bodyStmts);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
     recheckLoopReturns(mark);

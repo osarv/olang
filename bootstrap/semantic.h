@@ -414,6 +414,8 @@ struct var {
     bool bodyUnparsed;        //its body did not parse (the error reported): declared by its signature, never checked
     bool bodyIncomplete;      //S8b: a branch in this body is still being decided (it was skipped unparsed),
                               //so its body is not yet the program's and must not be evaluated
+    bool obligUnsettled;      //O10c/O26a: its body called one still being checked (a cycle) or one so marked - its
+                              //obligations may still grow (dischargeLateObligations), so what it keeps is not known yet
     bool isLambda;            //D16: a lambda's hidden function - emitted with the function it is written in
     struct list lambdaCaptures; //D16: struct lambdaCapture - what the lambda reads from the body around it
     struct var* paramOf;      //O23a: a parameter's copy in its function's body - that function (NULL for every other var)

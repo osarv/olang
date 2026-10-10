@@ -2439,7 +2439,9 @@ behind it — and for an array it is also what keeps a copy proportional to the 
 inferred from a marker rather than written down. The borrow is therefore a claim about lifetime, and the
 claim is checked: the scope the borrowed storage belongs to must outlive the target's own scope (§8 O10),
 which is derived as the declaring block's for a local, the function's own for a value parameter, as the enclosing reference's scope for a field or
-element reached through one, and as unbounded for a global. Handing storage in this function's own scope to
+element reached through one - where that reference is itself a field or an element with no scope of its own, the scope
+of the container it is read through (O20: `g.arr[0]`, `arr` a bare reference field of a reference parameter `g`, lives
+where `g`'s instance does) - and as unbounded for a global. Handing storage in this function's own scope to
 a reference tagged to a longer-lived scope is a compile-time error — that, and not the absence of a copy, is
 the defect in such a program. A value that is *not* an lvalue (a literal, a call's result) has no storage to
 borrow and is allocated in the target's scope instead (§8 O6), which is construction rather than copying and
@@ -4487,7 +4489,8 @@ handed back - as an argument or a receiver (`return Node.Many(l.ToArray())`, `re
 method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new,
 nor as an argument of a call - of a function, of a method of a local, a parameter or a global, or of an imported
 module's function - that can keep it nowhere: not in its result, nor in its receiver or another argument, which its
-body's obligations (O10b) say (`i := g.infos[k]; return View(g.mem, g.count(i))` leaves the copy `i` in the frame):
+body's obligations (O10b) say, once they are all known (a callee in a cycle of calls, whose obligations grow until every
+body is checked, O10c, keeps it) (`i := g.infos[k]; return View(g.mem, g.count(i))` leaves the copy `i` in the frame):
 what is built from it holds what it holds, which must live where the result does. A local that can hold nothing and
 whose storage nothing can name - a number, a `Bool` - is never moved, whatever the result is. Where the result is put is the
 result scope for a built result, and for a borrowed one (`T&p`, `p` a reference parameter, O14) the scope `p`'s
@@ -4712,7 +4715,19 @@ determined scope is the program's (a global argument, O25e), the temporary is bu
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
 where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
 value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
-not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
+not in the loop body. It lands there only where that costs nothing or is needed: the callee builds nothing (what it
+gives is an element or a borrowed part), one of its obligations requires the result scope to **outlive**, or to be, one an
+argument gives (an element that can be stored through, O25g), or the local is **kept beyond its block** - put into a local
+of an outer block, a parameter, a global or what a reference points to, handed to a call that can keep it there, or
+returned - read off the rest of its block as O26a reads a flow. Otherwise the result scope is the local's block: in
+`for ... { t := lx.next().text; total += t.Len() }`, `next` building new text, each turn's text is the loop body's and
+is reclaimed with it, where landed where the lexer lives every turn's would stay until that scope closes; with
+`toks.Push(tk)` after `tk := lx.next()`, `toks` outside the loop, `tk` is kept and lands where its obligations say. A
+callee whose body is not checked, or whose obligations are not all known yet (O10c), is taken to build. A `for ... in`'s
+element is a local of the loop body and is judged the same way, from the body's statements (`for k in m.Keys() {
+l.Push(k) }` keeps `k`, which lands where the map's keys are; an element its `Next` builds and the body does not keep is
+the body's); a comprehension's element is kept, in what the comprehension builds. A value local
+so declared keeps its references where its result scope landed: a reference read
 out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
 `for ... in`, lands the same way before anything else is bound - `adj[a].Push(v)` and `for x in adj[a]` are
@@ -4727,7 +4742,7 @@ result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pa
 `p := pair(t); bs.Push(p.a)`, an error on the same terms; a reference read out of one and passed on (`sum(g.params().Data)`)
 has the scope its result landed in, as `p := g.params(); sum(p.Data)` gives it. A `:=` declared from a field, an element, a
 slice or a payload of a call's result (`t := p.next().text`, `l := args[0] as V.Items`, `x := st.get(i).inner`) lands the
-call the same way, and the local has its scope - or, for a value, its references there - as through a local named for
+call the same way, on the same terms, and the local has its scope - or, for a value, its references there - as through a local named for
 the result. A call whose result nothing puts anywhere - read by an operator, a rendering or a condition (`$mods[i].name`)
 - is in the block it is written in, unless its callee requires its result scope to **outlive** one an argument gives
 (exactly where the copy of an element holding writable references is, O25g): it then lands by its obligations as above,
@@ -5330,6 +5345,8 @@ the same form with `note` in place of `error[RULE]`, followed by its source. The
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
 order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).
+An error identical to one already reported - the same message about the same token, found again by another check that
+reads the same thing - is reported once, and counted once.
 A statement reports at most **one error about where something lives** - a rule of §8, C2d's or T17c's - since a scope
 found wrong is wrong for every check that reads it after, and the first says what to change; a statement nested in it
 (a clause's block, a lambda's body) is one of its own. Where such an error is about an argument or a value made in a

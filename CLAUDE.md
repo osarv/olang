@@ -4576,6 +4576,28 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   (`w.alive.Clear()`, r10); `case X => return v` gets S12b's hint whatever `v` starts with (r13); O10c's note names every
   argument made in a block (r14); T17c's headline says to make the storage where the value is kept (r15). Each
   relaxation has a must-fail case; `checks` runs `resultviews` under `ulimit -v`.
+- **That batch's review, fixed: a call lands where it costs nothing (O18c, O26a, O10c, B11, E12c/O20, 2026-10-10; the
+  review /home/user/review/chk5, details mine).** **O18c, unbounded growth**: `t := lx.next().text` and `x := mk(base,
+  64).p` in a loop kept every turn's new text (206 MB) or array (1 GB) where the lexer, or base, lives - and `tk :=
+  lx.next()` already did on base. The cause: landing by obligations takes the shortest scope the obligations say must
+  outlive the result scope, which is the LONGEST legal place for it (they are upper bounds), so everything the callee
+  builds lived there. **Decided (mine)**: a `:=` from a call or a part of one lands by its obligations only where the
+  callee builds nothing (an element, a borrowed part), an obligation needs the result scope to outlive, or be, one an
+  argument gives (O25g), or the local is kept beyond its block (pushed outside, stored through a reference, returned,
+  handed to a call that can keep it - read off the rest of the block as O26a reads flows, a store through a local not
+  declared yet counting); else it is the block's. A for-in's element is judged from the loop body's statements, a
+  comprehension's is kept. A callee unchecked or in an unsettled cycle is taken to build. `checks` runs `callparts`
+  (four shapes, a for-in's included) under `ulimit -v`: 1.6 MB where it was 213 MB-1 GB. **O26a/O10c**: a callee whose
+  obligations are not all known yet (a cycle of calls: `obligUnsettled`, propagated to every caller in the cycle) or
+  unchecked is taken to keep its argument - mutually recursive methods returning through a local were refused (plain
+  calls already on base); and a method called on a local declared later in the block, its type not known yet, counts as
+  reading it (`toks := lex(src); p := Parser(toks); return p.expr(1)`). **B11**: an identical error found twice (C2d by
+  E25's scope argument and by the declaration) is reported, and counted, once. **E12c/O20, pre-existing O10d**:
+  `sizeFn(g.arr[0])`, `arr` a bare reference field of a reference parameter, read the element's storage as this
+  function's; it is where `g`'s instance is. **Found on the way**: the may-build walk took a returned array REFERENCE for
+  T7b's value copy, so every function returning `String&` "built" (a Map's `Keys()` element then landed in the loop
+  body); `callAround`'s `isMethod` was read uninitialized. Not changed: a for-in element its `Next` builds and the body
+  keeps is still O10c's "loop's copy" error (pre-existing; write `$x`, as io.Lines says).
 - **An integer literal's own type is `I64` (T6a, L10, T6, D15, E4a, E6d, E8b, S9b, G9a, B9a, B10/B10a, B11,
   2026-10-10, the user: "yes" to QD).** Where nothing adapts it an integer literal is an `I64` (a decimal one above
   `I64`'s maximum a `U64`), as a float literal is an `F64`: `x := 0` and `x := 1 + 2` declare `I64`s, `for i in range

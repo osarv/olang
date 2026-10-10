@@ -13759,7 +13759,74 @@ frees nothing, and the fixture churns arenas), so with other work on the machine
 scenario fails; run alone it passes. **Found and fixed (pre-existing)**: the `-t goes on past a crash` scenario ran its
 two ordinary files on a 256KB stack, which the unoptimized compiler needs about all of to check them (measured: they
 crashed one run in ten at 256KB, on master's compiler as on this one, never at 264KB) - it failed this batch's verify
-once. The scenario runs at 1MB now; deep.olang still crashes.
+once. The scenario runs at 1MB now; deep.olang still crashes. (The integer-literal batch on master found and made the
+same fix independently; the merge kept one.)
+
+### That batch's review, fixed: a call lands where it costs nothing; cycles keep their arguments; one error, said once (O18c, O26a, O10c, B11, E12c/O20, 2026-10-10)
+
+A read-only soundness review of the batch above (/home/user/review/chk5/README.md, reproducers in `repro/`) found no
+use-after-free, but two regressions, a duplicated diagnostic and a pre-existing over-rejection.
+
+**1. Unbounded growth from landing a call by its obligations.** `for ... { t := lx.next().text; total += t.Len() }`,
+`next` building new text into its result scope, kept every turn's text where the lexer lives (206 MB over 8M turns), and
+`x := mk(base, 64).p` every array where `base` lives (1 GB); the whole-call form `tk := lx.next()` already did on base.
+The coordinator asked why O18c, landing a free result scope at the SHORTEST scope the callee's obligations say must
+outlive it, picks the lexer's scope. It does pick the shortest - but the obligations are all of the form "X outlives the
+result scope R", upper bounds on R, so the shortest X is the LONGEST place R may legally be, and nothing ever says how
+short R can be: the block is always legal for a value nobody keeps. Landing there was introduced so that `w :=
+it.Next()` (an element, a borrow of the collection) lives where the collection does - free, since `Next` builds nothing -
+and it was applied to every call. **Decided (mine)**: a `:=` from a call, or from a part of one, lands by its
+obligations only where (a) the callee builds nothing - `SemanticMayBuild` asked while checking (`mayBuildWhileChecking`):
+an unchecked body, or one in an unsettled cycle, answers "builds" and the answer is not cached; (b) an obligation forces
+it - one requires the result scope to outlive, or (exactly) to be, a scope an argument gives (O25g's element that can be
+stored through); or (c) the local is kept beyond its block - `localKeptBeyondBlock`, O26a's flow scan in a "kept" mode:
+put into a local of an outer block, a reference local, a parameter, a global or what a reference points to, handed to a
+call that can hold it (`calleeMayHoldArg`, also an unsettled or unchecked callee), or returned. Otherwise the result scope
+is the block's (`landDeclWhereFree`). A wrong "not kept" can only over-reject: the checker validates every later store
+against the block, so the scan is a placement heuristic, never a soundness argument. `checks/fixtures/landing/
+callparts.olang` runs the review's three shapes and a for-in's (below) under `ulimit -v 50000`: 1.6 MB resident where
+771a922 took 213 MB, 1 GB and 222 MB.
+
+Three corpus regressions came out of the first version, each a place the scan saw too little. (i) The for-in lowering
+declares its element with the enclosing block's statements as "the rest of the block", so `for k in m.Keys() {
+l.Push(k) }` never saw the push and landed the key in the loop body (O10c) - the lowering now hands the element
+declaration the body's statements (a comprehension's element is kept: it goes into the comprehension's array,
+`landKeptAll`). (ii) Under that the key still landed in the body, because the may-build walk took every function
+returning `String&` to build: its T7b clause (a value array copied into the result scope) tested `arrMalloc` without
+`!structMAlloc`, so an array *reference* result counted - pre-existing since decision 48's walk, harmless there (over-
+approximation), and codegen's own test (`cgRet`) already had the reference excluded. (iii) `List.Sort` with `T =
+Pair<String&, I64>` copies `a := l.ToArray()` back through `c[j] = a[at + j]`, `c` a chunk reference declared further
+on: the scan did not know `c`'s type and treated it as a value local. In kept mode a store through a local not declared
+yet is taken to keep.
+
+**2. Mutually recursive methods returning through a local.** O26a lets a local stay in the frame where the callee it is
+passed to "can keep it nowhere", read off the callee's checked body - but a callee in a cycle of calls is checked
+before its callees' obligations are complete (`dischargeLateObligations` finishes them), so its own obligations were
+missing the ones it inherits, and the local was left in the frame, then refused (O10c) once the obligations arrived. The
+plain-call form was already refused on base. **Fix**: a call to a callee whose body is not wholly checked, or which is
+itself unsettled, marks the caller `obligUnsettled` (canonical var, so instantiations share it); `calleeMayKeepArg` and
+`calleeMayHoldArg` answer "keeps" for such a callee. The review's repros (`o26a_cycle_*`) build and run under `-b`, `-s`
+and `-i`; cases `o26acyclemethod`, `o26acycleplain`. It exposed a gap in the scan (shared.olang's `sc3Parse`): `toks :=
+lex(src); p := Parser(toks); return p.expr(1)` - `p` moved to the result scope (its methods are now unsettled), but the
+scan for `toks` reached the return with `p`'s type unknown (declared later, not checked yet) and counted only whole
+mentions, so `p.expr(1)` did not read `p`, `toks` stayed in the frame, and C2d refused `Parser(toks)`. A method call on
+a local whose type is not known yet now counts as reading it (`o26acyclereceiver`).
+
+**3. One error, said once.** `x := Env&c(local)` reported C2d twice at one token - once from E25's judgment where the
+scope argument puts the instance, once from the declaration's. `errorV` now formats the message first and drops an
+error identical to one already recorded (same file, line, column and text) along with its notes (`lastDropped`), so it is
+counted once; SPEC B11 says so (`c2de25once`).
+
+**4. Pre-existing: an element of a reference field read through a parameter.** `sizeFn(g.arr[0])` and
+`g.arr[0].size()`, `arr` a bare reference field of a reference parameter `g`, were O10d's "lives in this function's own
+scope": `lvalueStorageScope` walked `g.arr[0]` to `arr`, a reference whose own scope tag is the field's empty one, and
+read that as the frame. A reference with no scope of its own is where the container it is read through is (O20), so the
+walk continues to `g` (E12c now says so; `o10delementfield`, and `o10celementstash` that stashing such an element in a
+local of an inner block is still refused). Also: `callAround`'s `isMethod` was read uninitialized on one path.
+
+**Left (pre-existing)**: a for-in element its `Next` builds and the body keeps (`for tk in TokIter(src, n) {
+kept.Push(tk.text) }`) is O10c's "the loop's copy" error on 771a922 too - consistent with S9a's io.Lines rule (keep a
+line with `$line`); and the landing scenario's `-i handles.olang` still peaks around 7.5 GB.
 ### An integer literal's own type is `I64` (T6a, L10, T6, D15, E4a, E6d, E8b, S9b, G9a, B9a, B10/B10a, B11, 2026-10-10)
 
 **The decision.** Usage study 4 asked it (QD): float literals had become `F64` (T6a, 2026-10-08), while an integer

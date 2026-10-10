@@ -1,0 +1,71 @@
+# check: run
+# O26a: a local a later-declared local's method reads in a return - "p := Parser(toks); return p.expr(1)", expr and
+# primary calling each other, so their obligations are not all known when the return is read - moves with it into the
+# result scope: the type of p is not known where toks is declared, so a method called on it is taken to keep it
+type Tok struct(kind Char, val I64) {
+    kind
+    val
+}
+type Expr enum {
+    Num(v I64)
+    Bin(op Char, l Expr&, r Expr&)
+}
+type Parser struct(toks List<Tok>&) {
+    toks
+    at I64 = 0
+}
+fn lex(src String&) List<Tok> {
+    out := List<Tok>()
+    for c in src {
+        if c.IsDigit() { out.Push(Tok('n', I64(c - '0'))) }
+        else if c != ' ' { out.Push(Tok(c, 0)) }
+    }
+    out.Push(Tok('$', 0))
+    return out
+}
+fn prec(c Char) I64 { return 2 if c == '*' else 1 if c == '+' else 0 }
+fn (p mut Parser&) primary() Expr& {
+    t := p.toks[p.at]
+    p.at++
+    if t.kind == '(' {
+        e := p.expr(1)
+        p.at++
+        return e
+    }
+    return Expr.Num(t.val)
+}
+fn (p mut Parser&) expr(minPrec I64) Expr& {
+    lhs := p.primary()
+    for {
+        op := p.toks[p.at]
+        if prec(op.kind) < minPrec { break }
+        p.at++
+        rhs := p.expr(prec(op.kind) + 1)
+        lhs = Expr.Bin(op.kind, lhs, rhs)
+    }
+    return lhs
+}
+fn eval(e Expr&) I64 {
+    return match e {
+        case Expr.Num(v) => v
+        case Expr.Bin(op, l, r) => eval(l) * eval(r) if op == '*' else eval(l) + eval(r)
+    }
+}
+fn parse(src String&) Expr& {
+    toks := lex(src)
+    p := Parser(toks)
+    return p.expr(1)
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, k * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    e := parse("1 + 2 * (3 + 4)")
+    churn()
+    assert eval(e) == 15
+}
