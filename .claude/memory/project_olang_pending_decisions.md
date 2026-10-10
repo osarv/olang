@@ -117,6 +117,15 @@ central parts to the language that will be useful for the compiler" -> `own`, `t
 borrows and Vec<T> (the default growable array) are built in the C compiler BEFORE the port starts, so the port can be
 written with them. Order: decision 49 merges, then `own` (spec first), then Vec, then the port.
 
+**Asked 2026-10-10 20:00 CEST (from the own spec, wt-own fdc5848, docs/own.md):**
+- QJ1. `b := a` means different things for the two growable types: on a `Vec` it is a borrowed copy (b cannot push;
+  `take a` moves, `a.Clone()` copies), on a `List` it is a second name for the same list (a handle). Recommended:
+  keep it - a handle `Vec` would make every `Vec` of one element type conflict with every other in the borrow check.
+- QJ2. A callback cannot free an own object through what it captures or a global (O40): an event-handler lambda that
+  closes a connection takes the server as a parameter. Recommended: accept for now - otherwise every call through a
+  function value (Fold, Map, Any) conflicts with every live borrow.
+In effect: both as recommended; implementation waits for decision 49 to merge.
+
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
   - An object built into an owned slot lives in a small region of its own. Its parts live there too.
