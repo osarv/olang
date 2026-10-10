@@ -29,13 +29,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
-**Asked 2026-10-09 23:50 CEST (from usage study 4, /home/user/review/study4):**
-- QD. Should an integer literal's own type be `I64` (so `x := 0` is an I64), as float literals became `F64` (T6a)?
-  Every length, count and position is `I64`, and `x := 0; x += a.Len()` fails today. Typed targets are unaffected (a
-  literal adapts). In effect: I32. My recommendation: yes - Go's `int`, and it matches the F64 decision.
-- QE. Should a spawned function be allowed to fail (P4 forbids it)? In effect: no - a task catches inside, or reports
-  through a channel or a spawn target. My recommendation: allow it only through the task's own clauses -
-  `spawn x = try f() catch default v` - and keep P4 otherwise (an error has nowhere to go at the join).
+**Answered 2026-10-10 08:15 CEST:**
+- QD (integer literal's own type I64): YES ("1) yes"). Being built (wt-i64lit).
+- QE (spawned functions failing): the user: "We need some way to make spawn functions fail, exactly how that would be
+  done is harder since not all variables may be fine to use anymore. Solve it." -> decision 50 below, mine.
 **Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
 - QF. Long-lived, mutated structures only ever grow: what is removed from or replaced in a List/Map/struct that lives
   for the whole program (an interpreter's frames and values, an ECS world, an editor's undo stack) stays in its scope
@@ -50,6 +47,55 @@ design. Do what you want") - nothing to decide until a GUI is written.
   created at run time - `r := Region(); x := Build&r(...); ... r.Drop()` with drop refused while anything outlives
   it) - it keeps "no GC, no free" in spirit (no per-object free; a whole region at once), and is what game engines and
   compilers do with arenas. Needs design work; not built.
+  The user, 2026-10-10 08:15 CEST: "I don't necessarily understand how this would work. Wouldn't it break the compile
+  time guarantees? Maybe if we make them owned and unreferencable? Basically a "don't borrow this it's not safe" way?
+  What is your plan?" -> PLAN GIVEN, awaiting their go: `Region<T>`, contents reachable only inside `r.With(fn(w mut
+  T&) ...)` where w's scope is opaque (lambda parameter scopes already are, O4b/T22a), so nothing outside ever points
+  in; `r.Set(...)`/`r.Compact(fn(old T&) T ...)` replace the contents and free the old arena at once (Compact forbids
+  new->old pointers: unrelated scopes, so a checked hand-written copying collector); contents may reference only the
+  program scope outside; a Set/Compact on a region inside its own With (reached another way) aborts at run time, one
+  compare per Set; the handle itself is passed freely and its arena freed when the scope it was made in closes. Not
+  built until the user says go.
+  The user, 2026-10-10 08:25 CEST: "That way we could assign shorter lived structures to longer moves contexts and null
+  the reference when we free because we always know where the one reference is. Null variables are already a "the
+  problem might fail like this"-gap so it doesn't really introduce anything new" -> taken as GO, with their early free:
+  decision 51 below. Queued after decision 50 (QE).
+
+**Asked 2026-10-10 08:55 CEST:**
+- QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
+  - An object built into an owned slot lives in a small region of its own. Its parts live there too.
+  - It is used in place.
+  - It is freed when its slot is removed, overwritten or set to `null`, and at latest when the container's scope closes.
+  - A reference read out of it (`c := try conns.Get(id)`) is a BORROW. Its scope outlives nothing, so the existing
+    section-8 rules already stop it being stored anywhere outside the object.
+  - What Rust's borrow checker does is done here only for owned objects, at compile time, with zero run-time cost.
+    The compiler refuses a free that may happen while a borrow is in use:
+    - locals: by liveness within the function;
+    - calls: by a "may free an owned T reachable from this parameter/global" fact read off bodies (a fixed point, as
+      O17's);
+    - tasks: by the join rule.
+  - Considered and REJECTED: generation stamps, a compare on every use. They would still need the same effect rule for
+    plain borrows passed to calls, and they leave a cross-thread check-then-use race.
+  - Containers move elements with an explicit `take` (the source is left null). The prelude's List/Map are made
+    move-aware once.
+  - Questions put to the user:
+    1. compile-time checks (Rust-like errors, only where `owned` is written) - recommended yes;
+    2. may an owned object also leave by MOVING out (`Pop` hands it to the caller, who then owns it), besides copying -
+       recommended yes, explicit `take` rather than Rust's implicit moves (`x = y` keeps meaning `x == y`).
+  - In effect: nothing built. The decision-48 fix and failing spawns (decision 50) go first.
+  - The user, 09:20 CEST (dictated, read as heap): "Then we have a normal heap for this memory. So it's a special case of
+    the language where we restrict ourselves to not borrowing." My answer, recommended:
+    - The memory is the ordinary heap: one allocation per object, from the chunk pool's size classes, holding the
+      object and what it builds into itself, freed in one step.
+    - Adopt the restriction in its workable form: no borrow outlives the expression or statement that takes it.
+      - No local, field or element may hold a reference into an owned object (`c := try conns.Get(id)` is refused).
+      - Use goes through the path: `(try s.conns.Get(id)).Handle(msg)`, or one call `handle(try s.conns.Get(id), msg)`.
+      - This drops my liveness analysis of locals entirely.
+    - Two borrows cannot be avoided, because the object would be unusable without them, and both keep the "may free"
+      rule:
+      - a method call or argument: the callee may not free an owned object of that type;
+      - a for-in over owned elements: the loop variable is the one named borrow, and the body may not free one.
+    - Allowing local borrows later (with liveness) is additive, so start strict.
 
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
@@ -324,6 +370,42 @@ rule and where it is recorded; the morning report lists them all, then they move
    method. Sound because K1 already refuses every effect that would be observable if a run-time call were skipped
    (global writes, mutable-global reads), so S18c/K2 skipping stays unobservable. The purity rule was my own reasoning
    (2026-10-08), not the user's.
+50. (mine, the user's QE "solve it") a spawned call may fail: `spawn try f(a)` / `spawn x = try f(a)` - its errors leave
+   the task and reach its join; a task's own clauses (`spawn x = try f(a) catch E default v`, or a block that may not
+   leave the task) run on its thread as a spawned lambda's body would, captures copied. The join waits for every task
+   on every exit (P1b, unchanged), then fails with the error of the EARLIEST-SPAWNED failed task (deterministic; the
+   rest dropped; siblings are not cancelled - cooperative std/cancel as today). A join that can fail is written
+   `try join { } [catch ...]`, propagating or caught like any try statement. Which variables are fine afterwards
+   (the user's worry), as R9b says for a value-position try: a spawn TARGET whose task can fail into the join is left
+   unwritten, so if the join holds one, every clause on it must provably leave - code after the join runs only when
+   every task succeeded; a join whose failing tasks bind no targets may fall through, as a sequential `try f(buf) catch
+   E { }` leaves buf partly written. Partial results: a per-task default. Memory is unaffected (every task joined,
+   stand-ins/parts folded on every exit). Evaluator/-i: tasks in spawn order to completion, then the first failure.
+   Replaces P4. To be built after decision 48 merges (it rewrites the same spawn runtime).
+51. (the user's regions + their early free, revised 08:40 CEST after the user asked to generalize to "any reference
+   (maybe just in structs) might hold a shorter lived value ... whenever that thing goes out of scope the ref is
+   nulled. This would need a new keyword. Or is this a bad idea?") `Region<T>`: a value in its own arena, reached only
+   inside `r.With(fn(w mut T&) ...)` (w's scope opaque, as every lambda parameter's is, so nothing outside points in).
+   The HANDLE is plain data - {pooled header, generation}, headers recycled and never unmapped - so it can be stored in
+   any struct, List, Map or global however long-lived. The region dies at `r.Drop()` or when the scope its constructor
+   result landed in closes (O18a: `app.dialog = Region<Dialog>(...)` lives with app, `d := Region<Dialog>(...)` in a
+   handler block dies when the handler returns), whichever is first; after that every copy of the handle compares equal
+   to `null` and `With` on it traps as a null read does (the user's "nulled" semantics, one compare per With). `Set`/
+   `Compact(fn(old T&) T)` replace the contents and free the old arena (Compact forbids new->old pointers). Threads:
+   With takes a reader count by CAS on the header; a death (Drop or scope close) while readers are inside is deferred
+   to the last reader's exit - no trap, no wait, no UAF; Drop/Set/Compact inside its own With traps. Contents may point
+   outside only at program-scope data; a region made inside another's With lives in that arena and dies with it.
+   NOT a weak modifier on arbitrary references (the user's generalization, answered as the region generalized instead):
+   nulling plain references needs the runtime to find every holder (registration on every store and every struct copy -
+   hidden per-operation cost, or a ban on copying), a value read out of such a field is a second reference the nulling
+   cannot reach, and another thread can be using the value when its scope closes. Revisit a `weak` reference with a
+   `try` read only if real code needs one regions do not cover. Queued after decision 50 (QE).
+   REDIRECTED 2026-10-10 08:50 CEST - the user: "I want something like the rusts ownership rule for references we can't
+   guarantee outlive the scope. My struct Queue can not hold references that don't outlive queue today. What if we make
+   it able to hold such references with a special keyword like "owned" maybe. Then we can create objects in the queue,
+   put them in the queue and free them at will without them ever being able to leave the queue. If we need them to
+   leave, we copy into a larger scope. This would be great for things like network loops etc. Or is that basically
+   what you are already doing?" -> QG below; decision 51 becomes the `owned` design once answered.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
