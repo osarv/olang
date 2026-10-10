@@ -1,5 +1,7 @@
-# check: fail error[P2]: this task calls a function value held in what it is handed
-# P2 (decision 40): likewise a spawned lambda capturing a value that holds one
+# check: run
+# flags: -d -s
+# P2 (decision 48, replacing decision 40's refusal): a spawned lambda calling a closure held in what it captured - the
+# closure builds, from the task's thread, into its own part of the scope it captured
 type H struct(f fn(i I64)) { f }
 fn main() ? {
     a mut List<I64>& = List<I64>()
@@ -7,5 +9,6 @@ fn main() ? {
     join {
         spawn fn() { for i in range 10 { ha.f(i) } }
     }
-    println($a.Len())
+    if a.Len() != 10 { fail }
+    for i, x in a { if x != i { fail } }
 }

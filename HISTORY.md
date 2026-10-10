@@ -13679,3 +13679,105 @@ only a callee writing through such a field into storage the `Str` itself made, w
 `checks/cases/s6strref` pins the reference and temporary shapes. SPEC's E11c now says what a `Str` makes for itself - an
 iterator or cursor included - it may change, through a callee too, and that what such a value's references reach (a
 `&p` field's included) is not its own. The evaluator needed nothing: E11c is a check, and `Str`s it accepts are K1-pure.
+
+### A scope belongs to one thread: a closure called elsewhere builds into that thread's part of it (P2, decision 48, 2026-10-10)
+
+**Why.** Round 2 left three holes in P2 that its follow-up review reproduced, all about a closure running on a thread
+other than the one that owns a scope it captured: decision 40's static refusal ("a task may not call a function value
+held in what it is handed") was evaded by a helper calling its parameter, by a lambda over the handed struct and by the
+task's own list (`h1`, `h1b`, `h1c` - wrong elements, segfaults, TSan reports); the program's stand-in, reached through
+a scope variable a task bound at run time, was captured by a closure that outlived the join block holding its header
+(`h2`); and the environment copy a task made of a closure it handed on was allocated in the closure's home - its owner's
+scope - from the task's thread (`h4`, and `h4b` through `os.RunOnStack`). Decision 47 (every scope has an owner; an
+allocation from another thread goes to a foreign part) was built as a prototype (branch `wt-rv3fix-p2b`, 55cf0d5) and
+measured: right answers everywhere, and about five instructions per allocation through a scope parameter - binarytrees
++9.7% instructions, a scope-churn loop +13.8%, timings +6-12% - over the coordinator's 2% gate. Of the three options put
+then (accept the cost; move the check from every allocation to every closure call; keep decision 40 and close its
+evasions one by one), the coordinator chose the second, refined: the check only where a closure may build into what it
+captured, and the program's scope a part per worker.
+
+**The invariant.** A scope pointer reaches another thread in exactly three ways: a task's scope arguments (each a
+stand-in of its own, made on the spawner's thread, already), a function value's captures (a lambda's environment, or the
+instance scope a `Call` adapter holds), and the program's scope. So every scope header gains an **owner** (the thread
+that builds into it itself), **parts** and a **parent**: `{ head, dtors, tail, owner, parts, parent }`, 48 bytes. The
+owner is null until the scope first reaches another thread, which means its opener - true because each of the three ways
+claims it first: a closure's creation claims each scope it captured (`__olang_scope_escape`), a stand-in's creation
+claims its parent for the spawner (`__olang_standin`), and a fold claims its destination for the joiner. The program's
+scope and every part of it have the owner `@__olang_global_scope`; a folded stand-in has `@__olang_fwd_chunk`.
+
+**The check.** A closure whose body may build into a captured scope reads it in its entry block through
+`__olang_capture_scope` (null is the program's scope, as before): `__olang_scope_mine`, inlined, compares the owner with
+the calling thread (`@__olang_self`) and returns the scope itself on a match; otherwise `__olang_scope_mine_slow` claims
+an unowned one, gives the calling thread's own part of the program's scope, follows a folded stand-in, and for another
+thread's scope goes up the parents to the scope at the top - a block or function scope, which is what closes - and
+returns it if this thread owns it, else this thread's **part** of it (`__olang_scope_part`): a malloc'd header owned by
+the thread, made the first time and pushed with a compare-and-swap onto the top scope's list, which is only ever pushed
+onto until that scope closes, so finding one takes no lock. The closing thread folds every part in first
+(`__olang_scope_fold_parts`, out of line and handed the lists as values so the header never escapes): their destructor
+lists ahead of its own, their chunks with its own, each part's header freed - then it closes as ever, so destructors all
+run before any chunk goes back. Nothing is checked per allocation.
+
+**Where a closure "may build".** Read in two halves that must both hold. Codegen marks a captured scope when the body
+resolves it (`cgResolveScope`) for anything but reading, with three exemptions: handing it to a nested closure's
+environment (that closure asks for itself), a hidden scope argument to a callee that builds nothing anywhere, and a
+parameter's override scope where the argument builds nothing (an existing reference, a borrow - `cgArgMayBuild` mirrors
+the paths `cgBoundaryValue` would take). The prologue is written after the body (`cgCapScopesRead`, into the entry
+block's stream) so the marks are known. The callee half is `SemanticMayBuild` in the checker: a walk of the checked body
+that is coarse on purpose - any allocation anywhere, a value with no storage of its own reaching a reference (a promotion,
+an adapter, a value array copied), a local O26a stores in the result scope, a constructor field C2d stores where the
+instance lands, a task, a closure made, a destructor-bearing construction, a call through a function value or to a body
+not checked - and a greatest fixed point over calls (a function whose answer rested on one still being followed is
+found again when next asked). The coordinator suggested the may-build analysis O4b already uses for by-value parameters;
+it is permission-based and unsound for this: `fn f(r N&) I64 { return g(r, N(5)) }` with `g(a N&, b N&a)` builds
+`N(5)` into a read-only reference's scope. The lambda's own walk gates the codegen marks too, and the creation's claim:
+a lambda whose body allocates nothing at all neither asks nor claims, so a Fold, Count or Map predicate that only reads
+what it captured costs nothing anywhere.
+
+**The program's scope.** Each worker makes a part of the program's scope as it starts (`__olang_worker_loop`) and keeps
+it for every task it runs; a task's scope argument bound to the program's scope gets no stand-in (`__olang_standin`
+returns null) and the trampoline reads null as the worker's part. The coordinator asked for the part to be folded into
+the program's scope before the worker reports its task done, under a lock taken for that splice only. It is not folded
+at all, which needs no lock: the program's scope never closes and runs no destructors (O1b), so a fold would change
+nothing observable, while a splice beside the main thread's own unlocked bumps of that scope's chunk list would have
+needed one. P8's edges are untouched - what a task built is ordered before its join's end by the join itself. A
+retiring worker's part stays (what it holds is live). A capture in the program's scope stays null in the environment.
+
+**What went.** Environment copies (`__olang_env_standin`, `__olang_env_home`, `__olang_env_canon`, `%olang.envmap`)
+and the three-word header every environment opened with: a task is handed a function value as it is, so `is` needs no
+canonical form, and one closure called on two tasks gives each its own part. The task's per-spawn stand-in for the
+program's scope (`progIdx`). `__olang_scope_resolve` (the fold and the destructor registration ask
+`__olang_scope_mine`). A stand-in's merge node is `{ next, stand-in }`, the destination its parent. **Decision 40**:
+`callsFnThrough`, `fnRootsIn`, `fnEdges`, `settleFnThrough` and `ERR_SPAWN_ARG_HOLDS_FUNC`; `rv5taskfunccapture` and
+`rv5taskfuncfield` are run cases now. **RunOnStack's thread is its caller**: it takes the caller's identity
+(`%olang.stackrun` carries it), so it builds into what the caller owns directly and into the caller's parts of anything
+else - the caller is parked in `pthread_join` until it ends, so the two never build at once; its fold chain went with
+the environment copies.
+
+**Found on the way: a thread's identity cannot be an address of its own.** The first version used the address of
+`@__olang_self` (its TLS address) as the thread's identity. glibc reuses a finished thread's stack - and the TLS block
+in it - for the next one, so a worker created after another retired could take the dead worker's identity: its parts
+would be fine to reuse, but a stand-in the dead worker claimed and a later join had not yet folded would then be
+allocated into, unchecked, beside the fold. Identities are numbers from a counter now (odd, so never an address).
+
+**Measured** (callgrind, built `-a x86-64-v3`; base 48f82fb): binarytrees 16 +0.05%, a scope-churn loop 0.000%, List
+push 0.000%, `sum listfold`/`arrayfold` (a lambda capturing a number) 0.000%; Fold, Count and Map over 10M elements with a
+lambda that reads through a captured reference +0.001%, +0.000%, +0.000% - no check is emitted, verified in the IR. With a
+lambda that builds a node per element in the scope it captured: Fold +7.4% and Map +6.9% - two instructions per call
+(the owner load and compare; the load cannot leave the loop, since the allocation in it may write anything). Timings,
+native, nine interleaved runs each with the machine's load at 3-4 (noise about 3-5%): binarytrees 19 -3.2%, the churn
+loop -0.7%, List push -1.7%, reading Fold -0.1%, Count +3.1%, Map -2.1%, building Fold +0.2%, Map +4.8%. An earlier version of the
+benchmark had all modes in `main`, and the reading Count measured +4.4%: register allocation over the one huge
+function, not the lambda - split into a function per mode it is 0.000%.
+
+**Tests.** `checks/cases/rv6closuretasks` (one closure building into its capture, called on two tasks while the main
+thread builds there too), `rv6closurekept` (a closure made on a task capturing its stand-in, called after the join on
+the main thread and on two tasks at once, with destructors counted), `rv6nestedjoins`, `rv6runonstack` (on the main
+thread, on tasks, and tasks spawned inside it), `rv6taskfuncbaked` (a task calling a closure held in a struct, computed
+for a global while compiling and at run time); all built `-d -s`, and run clean under `-r` by hand. The review's `h1`,
+`h1b`, `h1c`, `h2`, `h3`, `h3b`, `h4` and `h4b` give the right answers under `-b`, `-d -s` and `-r` with no report.
+
+**Found on the way, pre-existing on master: a flaky check.** `checks.olang`'s "-t goes on past a file the compiler
+crashed on" runs the compiler under `ulimit -v 800000 && ulimit -s 256`, where it cannot reserve its own 1GB stack and
+runs on the 256KB one - meant to make the deeply nested file crash. Checking the prelude a test file compiles now takes
+about that much by itself, so the two ordinary files crashed too, now and then: master's own compiler failed 2 of 6 runs
+from a fresh build directory, this branch's 3 of 6. The check gives that run 1MB, which the nesting still overflows.

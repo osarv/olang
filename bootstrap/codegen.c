@@ -1098,7 +1098,7 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
 }
 
 //O1b: the program's scope, as this thread reaches it (@__olang_prog_scope): code in a function may run on a task, which
-//allocates into a private stand-in for it (P2), never into the shared scope itself
+//allocates into its worker's own part of it (P2), never into the shared scope itself
 char* cgProgramScope(struct cgCtx* ctx) {
     char* t = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr @__olang_prog_scope\n", t);

@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-struct scope { void *head, *dtors, *tail; };
+struct scope { void *head, *dtors, *tail, *owner, *parts, *parent; }; /* %olang.scope */
 void *__olang_scope_alloc_a(struct scope *s, int64_t size, int64_t align);
 void __olang_san_quarantine_list(void *head); /* what closing a scope does under -s */
 void __olang_san_init(void);

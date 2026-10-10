@@ -1,0 +1,47 @@
+# check: run
+# flags: -d -s
+# P2 (decision 48): nested joins - tasks spawning tasks, all calling one closure the main thread made, which builds into
+# the scope it captured, while each also builds into the stand-ins it was handed and the main thread builds into both
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn inner(n Node&, f fn(i I64) I64) I64 {
+    s I64 = 0
+    for i in range 10000 {
+        s += f(i)
+        m := mk(n, i)
+        s += m.v
+    }
+    return s
+}
+fn outer(n Node&, f fn(i I64) I64) I64 {
+    a, b I64
+    join {
+        spawn a = inner(n, f)
+        spawn b = inner(n, f)
+    }
+    return a + b + f(1)
+}
+fn main() ? {
+    root Node& = Node(0)
+    n Node& = Node(1)
+    f := fn(i I64) I64 {
+        m := mk(root, i)
+        return m.v
+    }
+    x, y, z I64
+    join {
+        spawn x = outer(n, f)
+        spawn y = outer(n, f)
+        for i in range 10000 {
+            z += f(i)
+            m := mk(n, i)
+            z += m.v
+        }
+    }
+    one I64 = 0
+    for i in range 10000 { one += 2 * i }
+    if x != 2 * one + 1 or y != 2 * one + 1 or z != one { fail }
+}

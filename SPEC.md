@@ -3552,27 +3552,33 @@ function call does.
 A scope a task is handed as a scope variable (§8 O3) is **not** shared with the task that was handed it: the task
 allocates into a private arena of its own standing in for that scope, and the spawner folds each one back
 into the scope it stands for after the join - the scope the call bound that variable to, exactly as for an ordinary
-call (§8 O17, O18a), never the join block merely because the spawn is written in it. The program's scope (§8 O1b) is
-such a scope for every task: whatever a task builds there - a result borrowed from a global, a value assigned to one -
-goes into its own stand-in for it, folded into the spawner's at the join. So is the scope of every reference a **function
-value** a task is handed captured (D16c): a spawned lambda (D16e), or a lambda passed as an argument, builds through what
-it captured into the task's own stand-in for that reference's scope, never into the spawner's arena from the task's
-thread. `os.RunOnStack` runs its function the same way, its thread building into stand-ins folded in when the function
-returns. What a task makes or is handed may outlive it - a closure capturing a reference it was handed, a function value
-it returns through a spawn target or stores - so a stand-in lives as long as the scope it stands in for and, once folded,
-**forwards** to it: whatever builds through it afterwards builds in that scope, on whichever thread then owns it, and a
-later task's stand-in whose parent is such a stand-in is folded into the scope it forwards to. The
-function value a task is handed is the same value it was (`is` holds between the two), and one spawn hands one function
-value once however many of its arguments reach it. A capture living in the program's scope is that scope as the thread
-calling the closure reaches it. A task **calls no function value held in what it is handed** - in a field, an element or
-a payload, through references too - nor does a spawned lambda through one held in what it captured: such a function
-value is called on the task's thread with the scopes it captured as they are, and would build into them beside the
-thread that owns them. Handing the function value itself as an argument stands it in. Whether a task calls one is read
-off its body, and the bodies it hands such a value to, once every body is checked. A value a task allocates through such
-a scope therefore lives
-exactly as long as that scope, and is reachable from the spawner once the block ends, while no arena is
-ever bumped by more than one thread. Destructors registered on a task thread run when the scope they were
-registered with closes, ahead of those registered before the spawn.
+call (§8 O17, O18a), never the join block merely because the spawn is written in it. What a task makes or is handed may
+outlive it - a closure capturing a reference it was handed, a function value it returns through a spawn target or
+stores - so a stand-in lives as long as the scope it stands in for and, once folded, **forwards** to it: whatever builds
+through it afterwards builds in that scope, and a later task's stand-in whose parent is such a stand-in is folded into
+the scope it forwards to.
+
+Every other scope a thread builds into belongs to one thread, its **owner** - the thread that opened it, or for a
+stand-in the task it was made for - and no thread but its owner ever allocates there. A scope reaches another thread in
+two ways only, and each is answered where it is reached:
+- **The program's scope** (§8 O1b): every thread has a **part** of it of its own - the main thread the scope itself, each
+  worker a part made when the worker starts and kept for every task it runs - and whatever a task builds there - a
+  result borrowed from a global, a value assigned to one - goes into that part. The program's scope never closes, so its
+  parts are never folded.
+- **A function value's captures** (D16c): a closure - or a value whose type declares `Call`, given as a function value
+  (E31) - may be called on any thread: a task calls one it is handed, or one held in what it is handed (a field, an
+  element, a payload, through references too), and a closure a task made may be called after the join. A closure whose
+  body may build into a scope it captured - allocate there, register a destructor there, or hand the scope to a callee
+  that may - builds, on a thread that is not that scope's owner, into that thread's own part of it: made the first time
+  that thread builds there and closed with the scope. A closure that only reads through what it captured builds nowhere
+  and asks for nothing. `os.RunOnStack` runs its function on a thread that builds as its caller would, its caller
+  waiting for it.
+
+So a value a task allocates lives exactly as long as the scope it was built for, and is reachable from the spawner once
+the block ends, while no arena is ever bumped by more than one thread - and nothing is checked per allocation, only once
+per call of a closure that may build into what it captured. Destructors registered from another thread run when the
+scope they were registered with closes: a stand-in's ahead of those registered before the spawn, and a part's ahead of
+every destructor the scope's owner registered there.
 
 A task handed no scope variable allocates into its caller's own block, which inside a `join` block is the **join
 block's** arena (O2) — so such a value, and any destructor it registers, lives until the block closes and
@@ -4014,7 +4020,7 @@ already living somewhere that is stored there must live there too: a global's, o
 anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
 or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
 determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
-there. Each task reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do
+there. Each thread reaches the program's scope through a part of it of its own (§6.8 P2). Destructors registered in it do
 not run at exit. `&g`, for a global `g`, names
 it (O4a).
 

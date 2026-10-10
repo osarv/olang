@@ -10568,6 +10568,9 @@ static bool mbOperand(struct operand* op) {
 static bool mbStmt(struct statement* s, struct var* func) {
     switch (s->sType) {
     case STATEMENT_VAR_DECL:
+        //O26a: a local the function returns has its storage where the result goes; C2d: a constructor's field a
+        //reference was taken to, where the instance lands
+        if (s->var.storeInResult || (s->ctorField && canonicalVar(&s->var)->slotBorrowed)) return true;
         return mbBoundary(s->var.type, s->op) || mbOperand(s->op) || mbOperand(s->fillValue);
     case STATEMENT_ASSIGN:
         return (s->target && mbBoundary(s->target->type, s->op)) || mbOperand(s->target) || mbOperand(s->op);

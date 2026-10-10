@@ -4437,22 +4437,23 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   once folded, **forwards** to it (a sentinel chunk; the allocator's slow path follows it - no fast-path cost); an
   environment copy is made where the closure lives (its first captured scope), once per spawn, and remembers its
   original, so `is`/`==` canonicalize and a function value keeps its identity; a capture in the program's scope is held
-  as null and read as the calling thread's program scope (or its task stand-in). **P2, older**: a closure a task makes
-  captured the task's stand-in and was kept past the join - closed by the same forwarding. **Decision 40 (as asked,
-  narrowed by what can be seen)**: a task, or a spawned lambda, **calling** a function value held in what it is handed
-  (a field, element or payload, through references too) is refused - read off the bodies (`callsFnThrough`, a fixed point
-  over calls once every body is checked); one only carried, stored or handed on is allowed. Read-only captures cannot be
-  allowed separately: a function type does not say what its value captured, and a read-only capture can still build
-  through a borrowed result. **S13b (new)**: a match binding lives in its clause's block, not the matching block.
-  **C2g/C2d (older)**: a constructor keeping a borrow of its by-value parameter in a reference field kept the dying
-  frame's slot - a constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with
-  "outside the body", depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the
-  instance. **O25h (older)**: a member, element or `as` of a conditional or match copies the references the way the
-  conditional does. **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling
-  a capturing lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee
-  that can build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a
-  stand-in header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task,
-  not borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
+  as null and read as the calling thread's program scope (or its task stand-in; environment copies removed by decision
+  48). **P2, older**: a closure a task makes captured the task's stand-in and was kept past the join - closed by the
+  same forwarding. **Decision 40 (as asked, narrowed by what can be seen; removed by decision 48, below)**: a task, or a
+  spawned lambda, **calling** a function value held in what it is handed (a field, element or payload, through
+  references too) is refused - read off the bodies (`callsFnThrough`, a fixed point over calls once every body is
+  checked); one only carried, stored or handed on is allowed. Read-only captures cannot be allowed separately: a
+  function type does not say what its value captured, and a read-only capture can still build through a borrowed result.
+  **S13b (new)**: a match binding lives in its clause's block, not the matching block. **C2g/C2d (older)**: a
+  constructor keeping a borrow of its by-value parameter in a reference field kept the dying frame's slot - a
+  constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with "outside the body",
+  depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the instance. **O25h
+  (older)**: a member, element or `as` of a conditional or match copies the references the way the conditional does.
+  **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling a capturing
+  lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee that can
+  build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a stand-in
+  header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task, not
+  borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
   (new): a fold into a stand-in folded already spliced into the forwarder, which no one closes - destructors lost; the
   merge now resolves its destination. And an over-rejection: a `:=` field copying a by-value parameter took the
   parameter's depth (2), so `keep P& = q` was O10; a field's local is the top level whatever it copies.
@@ -4553,6 +4554,30 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   or referent a `Str` made, holding writable references in `&p` fields (a cursor over the value), was taken to reach
   nothing - `cur := Cur(b); poke(cur)` writing `cur.c.v` changed the rendered value; such an argument now counts as
   reaching storage that was there (where an `&p` field refers is its instance's binding, O23a, not known there).
+- **A scope belongs to one thread; a closure called elsewhere builds into that thread's part of it (P2, decision 48,
+  2026-10-10, the coordinator's choice of option 2 with its refinement; details mine).** Decision 40's static refusal was
+  evadable (a helper, a lambda, the task's own list - `h1`, `h1b`, `h1c`) and decision 47's per-allocation owner check
+  cost ~10% on allocation-heavy code (prototype kept on `wt-rv3fix-p2b`). A scope reaches another thread only as a task's
+  scope argument (a stand-in, as before), through a function value's captures, or as the program's scope - so the check
+  sits in the prologue of a closure that may build into what it captured: every scope header has an owner (a thread
+  number; null until it first reaches another thread, i.e. its opener's), parts and a parent, and
+  `__olang_capture_scope` gives the scope itself on its owner's thread, else the calling thread's **part** of the scope at
+  the top of what it stands in for - made once per thread, linked lock-free, folded in as that scope closes (its
+  destructors ahead of the scope's own, its chunks with it). A Call adapter does the same for its instance's scope.
+  **"May build"** is codegen's mark on a captured scope resolved for anything but reading (not a nested closure's
+  capture, not a hidden argument to a callee building nothing, not a parameter scope where the argument builds nothing)
+  AND the checker's `SemanticMayBuild` - a coarse body walk (any allocation anywhere, a promotion, an O26a or C2d slot, a
+  task, a closure made, a call through a function value or to an unchecked body), a greatest fixed point over calls; the
+  permission-based may-build O4b uses is unsound for this (`g(r, N(5))` builds into a read-only `r`'s scope). Reading
+  lambdas (Fold, Count, Map predicates) emit nothing - 0.000% instructions; a lambda building a node per element pays two
+  instructions a call (+7%); binarytrees, a churn loop, List push within +0.05%. **Program scope: each worker has a part
+  of its own, made when it starts and kept for every task - never folded** (a deviation from "folded before the worker
+  reports done, under a lock": the program's scope never closes, so a fold changes nothing, and not folding needs no lock).
+  **Gone**: environment copies and the env header (a task is handed a function value as it is), the per-spawn program
+  stand-in, **decision 40** (`callsFnThrough`, `ERR_SPAWN_ARG_HOLDS_FUNC` - its two cases now run). **RunOnStack's thread is
+  its caller** (takes its identity; the caller waits). **Found on the way**: a thread identity that is an address of its
+  own (TLS) is reused by the next thread on the same stack, which would take a dead worker's unfolded stand-in claim -
+  identities are numbers from a counter.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

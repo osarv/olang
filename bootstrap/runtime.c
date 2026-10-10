@@ -314,9 +314,12 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //of its own, made when the worker starts and kept for every task it runs (never closed, as the program's scope is
         //not) - so no two threads ever bump one at once. A thread RunOnStack makes reaches it as its caller does
         "@__olang_prog_scope = linkonce_odr thread_local(initialexec) global ptr @__olang_global_scope\n"
-        //P2: who this thread is, to a scope's owner word - the address of this word, set as the thread starts; a thread
-        //RunOnStack makes is its caller, which waits for it
+        //P2: who this thread is, to a scope's owner word - a number no other thread has had (an odd one, so never the
+        //address of anything), set as the thread starts; a thread RunOnStack makes is its caller, which waits for it.
+        //Not an address of the thread's own: a thread's storage is reused for the next one, which would then take a part
+        //made for the one before, or a stand-in it claimed, for its own
         "@__olang_self = linkonce_odr thread_local(initialexec) global ptr null\n"
+        "@__olang_thread_next = linkonce_odr global i64 1\n"
         "\n"
         "", out);
     fputs(
@@ -1414,7 +1417,9 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //own part of it (@__olang_prog_scope); a stand-in folded already is followed to what it forwards to
         "define linkonce_odr void @__olang_thread_init() {\n"
         "entry:\n"
-        "  store ptr @__olang_self, ptr @__olang_self\n"
+        "  %n = atomicrmw add ptr @__olang_thread_next, i64 2 monotonic, align 8\n"
+        "  %id = inttoptr i64 %n to ptr\n"
+        "  store ptr %id, ptr @__olang_self\n"
         "  ret void\n"
         "}\n\n"
         "define linkonce_odr ptr @__olang_scope_mine(ptr %s) alwaysinline {\n"
@@ -1487,9 +1492,12 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %rop = getelementptr %olang.scope, ptr %r, i32 0, i32 3\n"
         "  %ro = load atomic ptr, ptr %rop acquire, align 8\n"
         "  %rown = icmp eq ptr %ro, %me\n"
-        "  br i1 %rown, label %rootmine, label %part\n"
+        "  br i1 %rown, label %rootmine, label %rootprog\n"
         "rootmine:\n"
         "  ret ptr %r\n"
+        "rootprog:\n" //(no stand-in is made for the program's scope - __olang_standin - so none is reached here)
+        "  %risprog = icmp eq ptr %ro, @__olang_global_scope\n"
+        "  br i1 %risprog, label %prog, label %part\n"
         "part:\n"
         "  %f = call ptr @__olang_scope_part(ptr %r, ptr %me)\n"
         "  ret ptr %f\n"

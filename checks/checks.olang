@@ -460,8 +460,10 @@ fn tcrash(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/ttolerant/* " $os.Quote(dir))
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
     try os.WriteFile($dir "/deep.olang", deep) catch { }
-    # (the status is kept in a file, so the shell that saw a crash is not the one that reports it)
-    run String& = "( (ulimit -v 800000 && ulimit -s 256 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
+    # (the status is kept in a file, so the shell that saw a crash is not the one that reports it). 1MB of stack:
+    # checking the prelude a test file compiles takes about 256KB by itself, so with 256 (as the -c check below has) t1
+    # and t2 crashed too, now and then; the nesting still overflows 1MB
+    run String& = "( (ulimit -v 800000 && ulimit -s 1024 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
     try r.expect(sh(dir, $run " && test $(cat rc.txt) -eq 1") == 0,
                  "-t did not fail for the crash, or crashed itself", dir)
     out := outOf(dir)
