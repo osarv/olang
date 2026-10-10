@@ -1,5 +1,7 @@
-# check: fail error[P2]: this task calls a function value held in what it is handed
-# P2 (decision 40): a task calling a closure held in a struct it is given would build into the scopes the closure captured from the task's thread
+# check: run
+# flags: -d -s
+# P2 (decision 48, replacing decision 40's refusal): tasks calling closures held in structs they are given - each closure
+# builds into the scope it captured from the task's thread, into that thread's own part of it
 type N struct(v I64) {
     v
     w I64 = v * 3
@@ -22,5 +24,5 @@ fn main() ? {
     for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
     i = 0
     for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
-    println("wrong elements: " $bad " of " $(a.Len() + b.Len()))
+    if bad != 0 or a.Len() + b.Len() != 400000 { fail }
 }

@@ -6,7 +6,7 @@ error E { X }
 if TargetVectorBits == 128 and not TargetHasFma {
     Level String& = TargetCpu
 }
-Bits mut I32 = TargetVectorBits
+Bits mut I64 = TargetVectorBits
 fn main() ? E {
     assert TargetCpu == "x86-64-v2" and TargetArch == "x86_64" and TargetOs == "linux"
     assert TargetVectorBits == 128 and not TargetHasFma

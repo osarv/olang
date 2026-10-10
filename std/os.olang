@@ -1013,9 +1013,9 @@ if TestBuild {
         assert stackDrops == 1
     }
 
-    # O1b/P2: f reaches the program's scope as the task that called RunOnStack reaches it - through the task's private
-    # stand-in, folded back at its join - so two tasks' threads never share one arena unlocked. The thread started with
-    # the real scope: -r reported the race, and now and then an element was overwritten by another task's allocation
+    # O1b/P2: f reaches the program's scope as the task that called RunOnStack reaches it - through the part of it the
+    # task's worker has - so two tasks' threads never share one arena unlocked. The thread started with the real scope
+    # once: -r reported the race, and now and then an element was overwritten by another task's allocation
     type stackNode struct(v I64) {
         v
         pad Array<I64>& = Array<I64>(8, v)
@@ -1029,7 +1029,7 @@ if TestBuild {
         }
         return bad
     }
-    test "RunOnStack from tasks builds into the program's scope through each task's own stand-in" {
+    test "RunOnStack from tasks builds into the program's scope through each task's own part of it" {
         bad mut Array<I64>& = Array<I64>(4)
         join {
             for t in range 4 {

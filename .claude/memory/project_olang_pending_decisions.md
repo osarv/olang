@@ -30,7 +30,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
 **Answered 2026-10-10 08:15 CEST:**
-- QD (integer literal's own type I64): YES ("1) yes"). Being built (wt-i64lit).
+- QD (integer literal's own type I64): YES ("1) yes"). BUILT 43ce396 (T6a; oann migrates with tools/int_literal_i64.py).
 - QE (spawned functions failing): the user: "We need some way to make spawn functions fail, exactly how that would be
   done is harder since not all variables may be fine to use anymore. Solve it." -> decision 50 below, mine.
 **Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
@@ -83,6 +83,19 @@ design. Do what you want") - nothing to decide until a GUI is written.
     2. may an owned object also leave by MOVING out (`Pop` hands it to the caller, who then owns it), besides copying -
        recommended yes, explicit `take` rather than Rust's implicit moves (`x = y` keeps meaning `x == y`).
   - In effect: nothing built. The decision-48 fix and failing spawns (decision 50) go first.
+  - The user, 09:20 CEST (dictated, read as heap): "Then we have a normal heap for this memory. So it's a special case of
+    the language where we restrict ourselves to not borrowing." My answer, recommended:
+    - The memory is the ordinary heap: one allocation per object, from the chunk pool's size classes, holding the
+      object and what it builds into itself, freed in one step.
+    - Adopt the restriction in its workable form: no borrow outlives the expression or statement that takes it.
+      - No local, field or element may hold a reference into an owned object (`c := try conns.Get(id)` is refused).
+      - Use goes through the path: `(try s.conns.Get(id)).Handle(msg)`, or one call `handle(try s.conns.Get(id), msg)`.
+      - This drops my liveness analysis of locals entirely.
+    - Two borrows cannot be avoided, because the object would be unusable without them, and both keep the "may free"
+      rule:
+      - a method call or argument: the callee may not free an owned object of that type;
+      - a for-in over owned elements: the loop variable is the one named borrow, and the body may not free one.
+    - Allowing local borrows later (with liveness) is additive, so start strict.
 
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
@@ -349,7 +362,7 @@ rule and where it is recorded; the morning report lists them all, then they move
    folded (the program scope never closes); RunOnStack's thread takes its caller's identity; thread identities come from
    a counter (glibc reuses a dead thread's TLS). Environment copies and decision 40's static refusal are removed.
    Measured (callgrind): 0% on reading lambdas and plain allocation, +7% (2 instructions a call) on closures that build
-   on every call. Built on wt-rv3fix 45eea97, verified; soundness review /home/user/review/tonight8 before merging.
+   on every call. Built on wt-rv3fix 45eea97; review tonight8 found F1 (fixed 91ab3ba); MERGED 5ebd16f; follow-up review tonight9.
    Option 3 (keep 40's static refusal and close evasions one by one) rejected as evadable by design.
 49. (mine, under the revisit rule, from review tonight7: 3 new + ~12 older E11c holes, baked globals disagreeing with
    the run time, and over-rejection of `r.l.Iter().Fold(...)` in a Str) `$` calls a declared Str EXACTLY ONCE per

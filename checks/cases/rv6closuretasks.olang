@@ -1,0 +1,40 @@
+# check: run
+# flags: -d -s
+# P2 (decision 48): one closure made on the main thread, building into the scope it captured, called on two tasks at once
+# while the main thread builds into that same scope itself - each thread builds into its own part of it
+type Node struct(v I64) {
+    v
+    w I64 = v * 3
+    next mut Node& = null
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn work(f fn(i I64) I64, base I64) I64 {
+    s I64 = 0
+    for i in range 50000 { s += f(base + i) }
+    return s
+}
+fn main() ? {
+    root Node& = Node(0)
+    f := fn(i I64) I64 {
+        n := mk(root, i)
+        return n.v + n.w
+    }
+    s1, s2, s3 I64
+    join {
+        spawn s1 = work(f, 0)
+        spawn s2 = work(f, 1000000)
+        for i in range 50000 {
+            n := mk(root, 2000000 + i)
+            s3 += n.v + n.w
+        }
+    }
+    want1 I64 = 0
+    want2 I64 = 0
+    want3 I64 = 0
+    for i in range 50000 {
+        want1 += 4 * i
+        want2 += 4 * (1000000 + i)
+        want3 += 4 * (2000000 + i)
+    }
+    if s1 != want1 or s2 != want2 or s3 != want3 { fail }
+}

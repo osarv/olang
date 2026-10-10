@@ -34,7 +34,7 @@ fn c0(x0 I32) I64 {
         x12.Push(3)
     }
     x13 Map<I32, I32> = Map<I32, I32>()
-    for x14 in range 2 {
+    for x14 in range I32(2) {
         x15 Map<I32, I32> = x13
         x15.Put(x14, 3)
     }

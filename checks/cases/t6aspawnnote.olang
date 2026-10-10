@@ -1,0 +1,8 @@
+# check: fail error[P1g]: a spawn target has exactly the call's type I32, found I64
+# also: note: 'q' is I64, its literal's own type - declare the type it should have, 'q I32 = ...'
+# P1g/T6a: a spawn target declared from a literal is an I64, and a task's result is stored exactly
+fn half(n I32) I32 { return n / 2 }
+fn main() ? {
+    q := 0
+    join { spawn q = half(10) }
+}

@@ -1,0 +1,23 @@
+# check: run
+# flags: -d -s
+# P2 (decision 48): a task calling a closure held in a struct it is handed, building into the scope the closure captured -
+# computed while compiling (K1 runs a join's tasks in order) for a global, and at run time, alike
+type H struct(f fn(i I64)) { f }
+fn work(h H&, n I64) {
+    for i in range n { h.f(i) }
+}
+fn viaTask(n I64) I64 {
+    a mut List<I64>& = List<I64>()
+    h := H(fn(i I64) { a.Push(i * i) })
+    join {
+        spawn work(h, n)
+    }
+    s I64 = 0
+    for x in a { s += x }
+    return s
+}
+Baked I64 = viaTask(10)
+N mut I64 = 10
+fn main() ? {
+    if Baked != 285 or viaTask(N) != Baked { fail }
+}

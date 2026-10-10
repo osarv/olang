@@ -1,4 +1,4 @@
-# check: fail I32 does not satisfy the constraint CtShape on T: it has no method Area that fits
+# check: fail I64 does not satisfy the constraint CtShape on T: it has no method Area that fits
 # G19: a constraint is checked at the call that infers the variable
 type CtShape trait {
     Area() I32

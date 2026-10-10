@@ -694,9 +694,9 @@ test "when both operands are literals of differing numeric types, the narrower a
     assert m + 1 == 3.5
 }
 
-# T6a: an integer literal's own type follows its value - I32 when it fits one, I64 otherwise. Without
-# that, a literal too large for I32 was tagged I32 anyway, so an I32 target matched it EXACTLY,
-# skipped T6 entirely and truncated it silently at codegen.
+# T6a: an integer literal's own type is I64. Before that it followed its value - I32 when it fit one - and before that
+# a literal too large for I32 was tagged I32 anyway, so an I32 target matched it EXACTLY, skipped T6 entirely and
+# truncated it silently at codegen.
 test "an integer literal too large for I32 is typed I64, so it is never silently truncated" {
     n := 5000000000
     assert n == 5000000000
@@ -732,6 +732,66 @@ test "T6a: a float literal is an F64 where nothing adapts it, and still adapts w
     y := 0.1
     y = y + 0.2                                             # written, so not fixed (S8c): this runs
     assert y == FloatLitSum and floatWidth(y) == 64
+}
+
+# T6a: an integer literal's own type is I64, as a float literal's is F64 - where nothing adapts it, ":=", a range of
+# literals, a type variable only literals reach and a top-level condition's untyped global are I64, so a count or a
+# product nobody typed never wraps at 32 bits; a typed target still adapts it. The globals are baked (K2) and the fixed
+# locals' asserts decided while compiling (S18c); the mutable global and the written local run, and agree
+fn intLitSquare(n I64) I64 {
+    x := 100000                                             # an I64: its square does not wrap at 32 bits
+    return x * x + n
+}
+fn intLitRangeKind() I32 {
+    for i in range 3 { return litKind(i) }                  # S9b: a range of literals counts in I64
+    unreachable
+}
+fn intLitWrap() I64 {
+    x := 9223372036854775807
+    x = x + 1                                               # E6c: an I64 wraps, at 64 bits
+    return x
+}
+IntLitSquare := intLitSquare(0)                             # baked while compiling (K2)
+IntLitWrap := intLitWrap()
+IntLitSeen mut I64 = 0
+IntLitTop := 2147483647
+if IntLitTop + 1 > 0 {                                      # B9a: an I64, so the sum is decided, and does not wrap
+    fn intLitTopKind() I32 { return 64 }
+} else {
+    fn intLitTopKind() I32 { return 32 }
+}
+
+test "T6a: an integer literal is an I64 where nothing adapts it, and still adapts where something does" {
+    x := 0
+    assert litKind(x) == 64 and litKind(7) == 64 and litKind(1 + 2) == 64       # D15, E4a
+    assert intLitRangeKind() == 64 and litKind(PickSecond(1, 2)) == 64          # S9b, G9a
+    assert IntLitSquare == 10000000000 and IntLitWrap == -9223372036854775807 - 1 and intLitTopKind() == 64
+    assert litKind(18446744073709551615 & 7) == 65 and (18446744073709551615 & 7) == 7 # T6: beside a U64, a U64
+    b U8 = 3                                                # a typed target still adapts the literal
+    i I32 = 5
+    assert litKind(b) == 8 and litKind(i + 1) == 32 and litKind(b + 300) == 64 and litKind('a' + 1) == 64
+    for k in range I32(2) { assert litKind(k) == 32 }       # S9b: a bound that is no literal gives the range its type
+    IntLitSeen = 100000                                     # mutable: this runs
+    assert IntLitSeen * IntLitSeen == IntLitSquare and intLitSquare(IntLitSeen) == IntLitSquare + 100000
+    y := 9223372036854775807
+    y = y + 1                                               # written, so not fixed (S8c): this runs, and wraps at 64 bits
+    assert y == IntLitWrap and y == intLitWrap()
+}
+
+# O26a: a rendering is new text holding nothing of what it renders - "$(x)" returned, parenthesized or not, does not
+# move x to where the result goes, so x stays its block's and assigning it another local of that block is no narrowing
+type RendBox struct(a I32) {
+    a
+}
+fn renderParenReturn(k I32) String {
+    first mut RendBox& = RendBox(k)
+    shown RendBox& = RendBox(0)
+    shown = first
+    return $(shown) " " $(k)
+}
+
+test "O26a: a parenthesized rendering returned does not move what it renders" {
+    assert renderParenReturn(4) == "RendBox(4) 4"
 }
 
 # E4a/S13: a case value that is a literal-only expression adapts to the matched type as a single literal does - the
@@ -808,7 +868,7 @@ test "E4a: an expression built only from literals adapts to its target as one li
 # E6d: a literal beside an operand whose type cannot hold it meets it at the literal's own type, losing nothing (T6b)
 test "E6d: a literal the other operand cannot hold meets it at the literal's own type" {
     b U8 = 250
-    assert b + 300 == 550 and litKind(b + 300) == 32 and litKind(b + 3) == 8 and litKind(b + (200 + 100)) == 32
+    assert b + 300 == 550 and litKind(b + 300) == 64 and litKind(b + 3) == 8 and litKind(b + (200 + 100)) == 64
     one I32 = 1
     assert litKind(0x7FF0000000000001 * one) == 64 and 0x7FF0000000000001 * one == 0x7FF0000000000001
     h F32 = 2.0
@@ -1069,7 +1129,7 @@ fn describeType(v<T>) I32 {
 }
 
 test "a type match selects a different arm per instantiation" {
-    assert describeType(41) == 42
+    assert describeType(I32(41)) == 42 and describeType(41) == 64   # a literal alone binds I64 (T6a)
     assert describeType(I64(1)) == 64
     assert describeType(Point(7, 8)) == 7
 }
@@ -1852,7 +1912,7 @@ test "P1g: a spawned call's result is bound to a target" {
 test "P1g: one slot per task is parallel map" {
     out := Array<I32>(8, 0)
     join {
-        for i in range 8 { spawn out[i] = square(i) }
+        for i in range I32(8) { spawn out[i] = square(i) }
     }
     total I32 = 0
     for i in range 8 { total = total + out[i] }
@@ -1901,7 +1961,7 @@ test "O2c: a local declared in a loop does not grow the stack" {
 
 test "O2c: and a temporary in a loop does not either" {
     n I32 = 0
-    for i in range 2000000 {
+    for i in range I32(2000000) {
         q Pt = Pt(i, i)
         touchPt(q)
         n = q.X - i
@@ -2279,7 +2339,7 @@ test "T36: alternating enum cases over the same payload bytes read back correctl
 
 test "T36: and in a loop, where a reordering optimizer has room to move things" {
     total I64 = 0
-    for i in range 1000 {
+    for i in range I32(1000) {
         e Either = Either.Small(i)
         total = total + readSmall(e)
         e = Either.Big(I64(i) * 1000000)
@@ -2416,7 +2476,7 @@ test "O2d: a call inside a block allocates into the scope its argument names, no
 
 test "O2d: and the same through a loop, which is what growing a buffer actually looks like" {
     c mut Growable& = Growable(1)
-    for i in range 500 {
+    for i in range I32(500) {
         if c.n == c.data.Len() { c = c.regrow(c.n * 2) }
         c.data[c.n] = i
         c.n = c.n + 1
@@ -2682,7 +2742,7 @@ test "G8b: a variable is written bare after its introduction" {
     assert t.Sum() == 6
     assert t.all[2] == 3
     assert (try firstOf(I32[4, 7, 9], fn(x) { return x > 5 }) catch default 0) == 7
-    assert widthOf(1) == 32              # decided while compiling
+    assert widthOf(I32(1)) == 32 and widthOf(1) == 64   # decided while compiling; a literal alone binds I64 (T6a)
     assert widthOf(I64(1)) == 64
     assert TrioBaked == 6
     k I32 = 2
@@ -2938,7 +2998,7 @@ fn addUpIdx(ts mut Array<mut Tally&>&, i I32, times I32) {
 test "a loop inside a join starts one task per iteration" {
     ts mut Array<mut Tally&>& = Tally&[Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0)]
     join {
-        for i in range 8 {
+        for i in range I32(8) {
             spawn addUpIdx(ts, i, 1000)
         }
     }
@@ -3015,7 +3075,7 @@ fn allocatesOnTask(n I32) I32 {
 }
 
 test "a task that allocates repeatedly does not accumulate memory" {
-    for round in range 50 {
+    for round in range I32(50) {
         join {
             spawn allocatesOnTask(round)
             spawn allocatesOnTask(round)
@@ -3604,7 +3664,7 @@ test "a plain struct literal promotes correctly into a heap-indirect parameter a
 
 test "the real arena allocator handles chunk growth and reuse across many scope open/close cycles" {
     expectedOneRound I32 = 0
-    for i in range 300 {
+    for i in range I32(300) {
         expectedOneRound = expectedOneRound + i
     }
     total I32 = 0
@@ -3861,7 +3921,7 @@ test "a bare '&' field assigned through a scope-tagged parameter survives the ca
         # force reuse of fillBoxedPoint's own now-closed private scope's chunk - would corrupt "inner" if it
         # had dangled into that scope instead of the one actually passed in
     noise I32 = 0
-    for i in range 20 {
+    for i in range I32(20) {
         noise = noise + noisePoint(i)
     }
 
@@ -3882,7 +3942,7 @@ test "a constructor field's scope tag, naming the constructor's own scope variab
         # force reuse of fillBoxViaCtor's own now-closed private scope's chunk - would corrupt "q" if
         # ScopedBox's "inner" field had actually landed there instead of in "outer" (passed in)
     noise I32 = 0
-    for i in range 20 {
+    for i in range I32(20) {
         noise = noise + noisePoint(i)
     }
 
@@ -3907,7 +3967,7 @@ fn makeC2dBox(v I32) C2dBox& { return C2dBox(v) }
 
 fn c2dChurn() {
     noise I32 = 0
-    for i in range 20 { noise = noise + noisePoint(i) }
+    for i in range I32(20) { noise = noise + noisePoint(i) }
 }
 
 test "C2d: a field built in the constructor body survives the constructor returning" {
@@ -3943,7 +4003,7 @@ test "a plain struct's bare '&' field survives a function boundary by inheriting
         # force reuse of makeNestedBox's own now-closed private scope's chunk - would corrupt nb.inner if
         # "inner" had actually landed there instead of in the caller's own scope, tagged via "s"
     noise I32 = 0
-    for i in range 20 {
+    for i in range I32(20) {
         noise = noise + noisePoint(i)
     }
 
@@ -3962,7 +4022,7 @@ test "a bare '&' field assigned through a two-hop chain of bare '&' bases resolv
         # the old one-hop-only resolution (which only ever looked at "co.mid" itself, always bare, and so
         # always fell back to "whatever function is executing right now") had actually been used here
     noise I32 = 0
-    for i in range 20 {
+    for i in range I32(20) {
         noise = noise + noisePoint(i)
     }
 
@@ -4457,7 +4517,7 @@ test "a test after one that ended early still runs" {
 # loop still advances either way.
 fn firstOver(limit I32) I32 {
     found I32 = -1
-    for i in range 10 {
+    for i in range I32(10) {
         if i > limit {
             found = i
             break
@@ -5379,7 +5439,7 @@ fn mtWidth(v <T>) I32 {
 }
 
 test "a type match takes several types per case" {
-    assert mtWidth(1) == 32 and mtWidth(U32(1)) == 32
+    assert mtWidth(I32(1)) == 32 and mtWidth(U32(1)) == 32 and mtWidth(1) == 64
     assert mtWidth(I64(1)) == 64 and mtWidth(U64(1)) == 64
     assert mtWidth(true) == 0
 }
@@ -5717,7 +5777,7 @@ test "a match used as a value" {
     assert mtFirstBig(I32[0, 1, 0, 5]) == 50
     assert mtFirstBig(I32[0, -1, 5]) == -1
     assert mtFirstBig(I32[1, 2]) == 0
-    assert mtBytes(1) == 4 and mtBytes(U64(1)) == 8 and mtBytes(true) == 0
+    assert mtBytes(I32(1)) == 4 and mtBytes(1) == 8 and mtBytes(U64(1)) == 8 and mtBytes(true) == 0
     k I32 = match MtShape.Square(4) { case MtShape.Square(n) if n > 3 => n nomatch => 0 }
     assert k == 4
     w := match mtRuntimeZero { case 0 => "zero" nomatch => "other" }        # every value text: a String
@@ -6328,9 +6388,9 @@ test "D8c: with try, scopes, generics, methods and interfaces" {
 }
 
 test "D8c: spawn binds several results" {
-    q := 0
-    r := 0
-    only := 0
+    q I32 = 0
+    r I32 = 0
+    only I32 = 0
     join {
         spawn q, r = divmodD(17, 5)
         spawn _, only = divmodD(9, 4)
@@ -6612,7 +6672,7 @@ test "R9a: a reference default lives in exactly the result's scope, or is built 
     assert t.v == 9
     assert tdOther(a, b) == b
     f := tdFresh(a)
-    for i in range 64 {
+    for i in range I32(64) {
         churn TdBox& = TdBox(i)
         assert churn.v == i
     }
@@ -6775,7 +6835,7 @@ if TargetVectorBits >= 256 {
 } else {
     ccVectorKernel String& = "narrow"
 }
-ccRunBits mut I32 = TargetVectorBits
+ccRunBits mut I64 = TargetVectorBits
 ccRunFma mut Bool = TargetHasFma
 ccRunCpu mut String = TargetCpu
 
@@ -6822,7 +6882,7 @@ fn ktFib(n I32) I32 {
 
 fn ktSquares() Array<I32>& {
     t mut Array<I32>&return = Array<I32>(8)
-    for i in range 8 {
+    for i in range I32(8) {
         t[i] = i * i
     }
     return t
@@ -7158,7 +7218,7 @@ test "E7a: and, or, not - not binds looser than a comparison" {
 # S9b: "range end" or "range start, end [, step]" - start (default 0, included) up to end (excluded), step
 # (default 1) apart. It only counts upward: nothing runs unless start is below end and step is positive.
 fn rangeSum(n I32) I32 {
-    s := 0
+    s I32 = 0
     for i in range n { s += i }
     return s
 }
@@ -7250,7 +7310,7 @@ fn (o mut GenOnce<<T>>&) Next() T ? Exhausted {
 }
 
 fn genDrain(s mut <G GenSource<I32>>&) I32 {
-    t := 0
+    t I32 = 0
     for {
         v := try s.Next() catch Exhausted { break }
         t += v
@@ -7263,7 +7323,7 @@ fn genFirst(s mut <G GenSource<<T>>>&) T ? Exhausted {
 }
 
 fn iterSum(it mut <I Iterator<I32>>&) I32 {
-    t := 0
+    t I32 = 0
     for v in it { t += v }
     return t
 }
@@ -7317,7 +7377,7 @@ DrainBothBaked := drainBoth()
 test "K1: interface calls are evaluated while compiling, and agree with the run time" {
     assert IterTotalBaked == 15
     assert DrainBothBaked == 16
-    n := 5
+    n I32 = 5
     n++
     assert iterTotalOf(n - 1) == IterTotalBaked
     assert drainBoth() == DrainBothBaked
@@ -7387,13 +7447,13 @@ test "E27: comprehensions over arrays, ranges and text, with and without a filte
     t := "hello"
     up := U8[c - 32 for c in t]
     assert String(up).Eq("HELLO")
-    nested := I64[I32[y for y in range x].Len() for x in range 4]
+    nested := I64[I32[y for y in range x].Len() for x in range I32(4)]
     assert nested[3] == 3
-    ps := ComprPt[ComprPt(i, i * i) for i in range 3]
+    ps := ComprPt[ComprPt(i, i * i) for i in range I32(3)]
     assert ps[2].y == 4
     total := 0
-    for r in range 1000 {
-        row := I32[x + r for x in range 3]
+    for r in range I32(1000) {
+        row := I32[x + r for x in range I32(3)]
         total += row[2]
     }
     assert total == 501500
@@ -7402,11 +7462,11 @@ test "E27: comprehensions over arrays, ranges and text, with and without a filte
 test "E27: a comprehension is evaluated while compiling, and agrees with the run time" {
     assert ComprSquaresBaked[4] == 16 and ComprSquaresBaked.Len() == 5
     assert ComprEvensBaked.Len() == 2 and ComprEvensBaked[1] == 14
-    n := 5
+    n I32 = 5
     n++
     assert comprSquares(n - 1)[4] == ComprSquaresBaked[4]
     assert comprEvens(I32[1, 5, 2, 7])[1] == ComprEvensBaked[1]
-    assert I32[x for x in range 4 if x % 2 == 1][1] == 3
+    assert I32[x for x in range I32(4) if x % 2 == 1][1] == 3
 }
 
 test "E27/T7: a comprehension or Array<T>(n) returned through a reference result is built in the result's scope" {
@@ -7439,7 +7499,7 @@ ComprNothingBaked String = comprNothing(0)
 test "E27/T2a: a comprehension over an empty source is an empty array, not null" {
     assert ComprNothingBaked == "U16[] false U16[] false U16[] false"
     assert comprNothing(0) == "U16[] false U16[] false U16[] false"
-    n := 0
+    n I32 = 0
     n++
     n--
     assert comprNothing(n) == ComprNothingBaked
@@ -7522,7 +7582,7 @@ test "E29: membership - Has for an element, Contains for a run of the collection
 
 test "E28/E29/E30: evaluated while compiling, as at run time" {
     assert CondMaxBaked == 9 and ChainBaked and InBaked
-    n := 9
+    n I32 = 9
     n++
     assert condMax(3, n - 1) == CondMaxBaked
 }
@@ -7598,7 +7658,7 @@ test "S4c/D12b: parallel assignment swaps; several names share one type" {
 # L4a: a block comment, opened by two hashes and closed by the next two
 fn blockCommented() I32 {
     x I32 = 1 ## inside a line ## + 2
-    y := 3 ##
+    y I32 = 3 ##
     across lines, it ends the statement as a line break would ##
     return x + y
 }
@@ -8137,7 +8197,7 @@ fn txReads() I32 {
 
 fn txStores() I32 {
     g mut TxGrid& = TxGrid(3)
-    m := 0
+    m I32 = 0
     try g[1] = 5 catch { m += 1 }
     try g[5] = 9 catch BuiltinError.OUT_OF_BOUNDS { m += 10 }
     try g[1] += 2 catch { m += 100 }
@@ -8152,7 +8212,7 @@ fn txStores() I32 {
 }
 
 fn txWalk(n I32, failAt I32) I32 {
-    t := 0
+    t I32 = 0
     l mut TxLines& = TxLines(n, failAt)
     for x in try l {
         if x == 2 { continue }
@@ -8168,7 +8228,7 @@ fn txWalk(n I32, failAt I32) I32 {
 }
 
 fn txWalkPropagates() I32 ? TxErr {
-    t := 0
+    t I32 = 0
     l mut TxLines& = TxLines(5, 2)
     for x in try l { t += x }
     return t
@@ -8206,7 +8266,7 @@ fn (r TxRemote&) Has(x I32) Bool ? TxErr {
 
 fn txMember(down Bool) I32 {
     r TxRemote& = TxRemote(down)
-    t := 0
+    t I32 = 0
     if try (5 in r) catch default false { t += 1 }
     if try (2 not in r) catch default false { t += 10 }
     return t
@@ -8215,7 +8275,7 @@ fn txMember(down Bool) I32 {
 fn txCollect(n I32, failAt I32) I32 {
     l mut TxLines& = TxLines(n, failAt)
     xs := try I32[x * 2 for x in l if x != 2] catch TxErr + BuiltinError default I32[-1]
-    t := 0
+    t I32 = 0
     for x in xs { t += x }
     return t
 }
@@ -8306,7 +8366,7 @@ type IdExpr enum {
 }
 
 fn idCount() I32 {
-    t := 0
+    t I32 = 0
     a mut IdNode& = IdNode(1, null)
     b IdNode& = IdNode(1, null)
     a.next = a
@@ -8510,7 +8570,7 @@ test "a reference stored into an element of a reference-reached array lives in t
     b.push(2)
     b.push(3)
     noise I32 = 0
-    for i in range 20 { noise = noise + noisePoint(i) }        # reuses any chunk a returned call freed
+    for i in range I32(20) { noise = noise + noisePoint(i) }   # reuses any chunk a returned call freed
     n I32 = 0
     for p PreNode& = b.a[0], p != null and n < 10, p = p.next { n++ }
     assert n == 3 and b.a[0].v == 3 and b.a[0].next.next.v == 1
@@ -8547,7 +8607,7 @@ test "O4b: a structure built through bare reference parameters, with no scope wr
     m.Put("b", 2)
     m.Put("a", 3)
     noise I32 = 0
-    for i in range 20 { noise = noise + noisePoint(i) }
+    for i in range I32(20) { noise = noise + noisePoint(i) }
     assert m.Get("a") == 3 and m.Get("b") == 2 and m.Get("c") == -1
 }
 
@@ -8569,7 +8629,7 @@ test "O18a: a result lands in an outer variable from an inner block" {
     x LandE& = landMk(1)
     if x.v == 1 { x = landMk(2) }
     noise I32 = 0
-    for i in range 30 { noise = noise + noisePoint(i) }
+    for i in range I32(30) { noise = noise + noisePoint(i) }
     assert x.v == 2
 }
 
@@ -8577,7 +8637,7 @@ test "O18a: nested builders land with their caller's result" {
     p LandE& = landPair(3, 4)
     c LandE& = landChain(3)
     noise I32 = 0
-    for i in range 30 { noise = noise + noisePoint(i) }
+    for i in range I32(30) { noise = noise + noisePoint(i) }
     assert p.v == 3 and p.l.v == 4
     assert c.v == 3 and c.l.l.l.v == 0
 }
@@ -8612,7 +8672,7 @@ fn oxMk(v I32) OxN& { return OxN(v, null) }
 
 # reuses every chunk a closed block gave back, so a value wrongly built in one reads back as garbage
 fn oxChurn() I32 {
-    t := 0
+    t I32 = 0
     for i in range 200 {
         y := OxN(I32(i), OxN(1, null))
         t = t + y.next.v
@@ -8847,7 +8907,7 @@ test "T29: a type over a declared number does not take its constructor" {
 # D15: ":=" takes a field read - the field's declared type, and where its referent lives (O25a) - which is how
 # a cursor starts
 fn oSumFrom(l OxN&) I32 {
-    t := 0
+    t I32 = 0
     for c := l.next, c != null, c = c.next { t = t + c.v }
     return t
 }
@@ -9399,7 +9459,7 @@ test "D16e: a lambda called where it is spawned keeps its captures until the joi
 # T29e/T29f: a declared array type extending its base inherits every array method - text counts, maps and searches
 # like any array
 type LamNums extends Array<I32>
-fn (n LamNums&) Total() I32 { return n.Fold(0, fn(acc, x) { return acc + x }) }
+fn (n LamNums&) Total() I64 { return n.Fold(0, fn(acc, x) { return acc + x }) }
 LamVowels I64 = "olang inherits".Count(fn(c) { return c == 'a' or c == 'e' or c == 'i' or c == 'o' or c == 'u' })
 
 test "T29e: String and a program's own array type inherit the array methods" {
@@ -11833,7 +11893,7 @@ fn cbBlocks() I32 {
 test "S1a: a bare block closes its scope at its end, and leaves as its statements do (D10a)" {
     cbClosed = 0
     assert cbBlocks() == 1
-    x := 1
+    x I32 = 1
     {
         y I32 = x + 1
         x = y
@@ -11882,11 +11942,11 @@ test "E28: ':=' from a conditional of text, and of numbers of one type" {
 # E10/E10b/T29e/G19, from the prelude Map's tests: keys that rely on the hash the compiler supplies, or that a type
 # inherits through extends - here rather than in std/prelude/map.olang, whose tests every test build compiles
 test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {
-    a := Pair(1, I64(2))
-    assert a == Pair(1, I64(2)) and a != Pair(2, I64(2))
+    a := Pair(I32(1), 2)
+    assert a == Pair(I32(1), 2) and a != Pair(I32(2), 2)
     m := Map<Pair<I32, I64>, I32>()
     m.Put(a, 7)
-    assert try m.Get(Pair(1, I64(2))) catch default 0 == 7
+    assert try m.Get(Pair(I32(1), 2)) catch default 0 == 7
 }
 
 # E10b: keys with no Hash written - the compiler supplies one from the parts, while compiling as at run time
@@ -12419,16 +12479,16 @@ type lbPoint struct(x I32) {
 LbSeven := 7
 LbFourteen := LbSeven * 2
 fn lbInfer(n I32) I64 {
-    a := 1 + 2                    # a literal-only expression: what its value as one literal is, I32
-    b := 2147483647 + 1           # ...here an I64, as 2147483648 is
+    a := 1 + 2                    # a literal-only expression: what its value as one literal is, an I64 (T6a)
+    b := 2147483647 + 1           # ...an I64 too, as 2147483648 is
     c := n * 3                    # an I32
     d := a < c                    # a Bool
-    e := c if d else a            # an I32
+    e := I64(c) if d else a       # an I64
     p := lbPoint(4)
     q := p                        # a copy: a struct value
     q.x = 9
     r := LbSeven                  # a global's type
-    w := I64(e) + b
+    w := e + b
     big := 1 << 40                # exact, an I64
     f := 0.5 * 2.0                # an F64
     assert $b == "2147483648" and p.x == 4 and q.x == 9 and f == 1.0 and big == 1099511627776
@@ -14066,8 +14126,8 @@ fn rvBig(a <T>, b T) T { return a if a > b else b }
 fn rvLitCond(k I64) I64 {
     on Bool = k % 2 == 0
     u U8 = 200
-    w := u + (1 if on else 300)                      # E6d: 300 does not fit U8, so they meet at I32
-    wi I32 = w
+    w := u + (1 if on else 300)                      # E6d: 300 does not fit U8, so they meet at I64
+    wi I64 = w
     f F32 = 1.5
     g := f * (2.0 if on else 0.5)                    # an F32 product
     gf F32 = g
@@ -14080,7 +14140,7 @@ fn rvLitCond(k I64) I64 {
         case 1 => 1.0 if f > 0.0 else 0.0
         nomatch => f * 2.0
     }
-    return I64(wi) * 1000 + I64(gf * 4.0) * 100 + I64(m * 4.0) * 10 + I64(z * 4.0) + I64(yf * 2.0) * 10000 +
+    return wi * 1000 + I64(gf * 4.0) * 100 + I64(m * 4.0) * 10 + I64(z * 4.0) + I64(yf * 2.0) * 10000 +
            I64(s * 2.0) * 100000
 }
 RvLitCondBaked := rvLitCond(0) * 1000000000 + rvLitCond(1)

@@ -1,6 +1,6 @@
 error E { X }
 fn twice(n I32) I32 { return n * 2 }
 fn main() ? E {
-    k := 4
+    k I32 = 4
     assert twice(k) == 8
 }

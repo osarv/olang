@@ -1,0 +1,8 @@
+# check: fail error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+# also: note: the range's literals make 'i' I64 - write 'I32(10)' here for I32 values
+# S9b/T6a: a range of literals counts in I64, which does not flow into a List<I32>'s Push - the note names the bound to
+# convert, which gives the range its type
+fn main() ? {
+    l := List<I32>()
+    for i in range 1, 10 { l.Push(i) }
+}

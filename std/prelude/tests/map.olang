@@ -51,9 +51,9 @@ test "Update, evaluated while compiling as at run time" {
 
 test "a map grows, and keeps every key through it" {
     m := Map<I32, I32>()
-    for i in range 1000 { m.Put(i, i * i) }
+    for i in range I32(1000) { m.Put(i, i * i) }
     assert m.Len() == 1000
-    for i in range 1000 {
+    for i in range I32(1000) {
         assert (try m.Get(i) catch default -1) == i * i
     }
 }
