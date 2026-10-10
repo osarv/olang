@@ -13,7 +13,7 @@ fn bumpAll(h mut H&, n I64) {
 
 fn churn() I64 {
     t I64 = 0
-    for i in range 3000 {
+    for i in range 300 {
         x := "churn " $i " " $(i * 7)
         l := List<String&>()
         l.Push(x)

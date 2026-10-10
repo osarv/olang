@@ -30,5 +30,6 @@ fn main() ? {
     b := Bag(Cell())
     one := B1(b)
     two := B2(b)
-    assert $one $two $b.c.v == "x1y22"
+    assert $one $two $b.c.v == "x1y20"           # v read before the pieces render (E11b)
+    assert b.c.v == 2
 }

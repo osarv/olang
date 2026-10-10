@@ -1923,24 +1923,56 @@ static void ctTextParts(struct operand* op, struct list* out) {
     ListAdd(out, &op);
 }
 
-//"$x" or a join: every piece in order - a literal's bytes, a byte as its character, text as itself, a function
-//named directly as its name and signature, anything else rendered (cgText's top-level rules)
+//E11a/E11b: what a join's piece holds once its operand is evaluated, as the generated code holds it (cgTextOperands) - a
+//struct or anything held by value as it is then; an array its length and storage then, its elements read when the piece
+//renders; a fixed-length array and what a reference names read when it renders
+static struct ctVal* ctPieceValue(struct ctVal* v, struct type t) {
+    if (t.bType == BASETYPE_ARRAY && (t.arrMalloc || t.structMAlloc)) {
+        if (v->kind == CT_NULL || (v->kind == CT_REF && ctArrayRefNull(v))) return v;
+        struct ctVal* a = ctDeref(v);
+        struct ctVal* c = ctNew(a->kind, a->type);
+        *c = *a; //the same elements
+        return c;
+    }
+    if (t.bType == BASETYPE_ARRAY) return v; //Array<T, N>: the storage it lies in
+    if (ctIsRef(t)) {
+        if (v->kind != CT_REF) return v;
+        struct ctVal* c = ctNew(CT_REF, v->type);
+        *c = *v; //the instance it names now
+        return c;
+    }
+    return ctCopy(ctDeref(v));
+}
+
+//"$x" or a join: every operand evaluated, left to right, then every piece rendered in order - a literal's bytes, a byte
+//as its character, text as itself, a function named directly as its name and signature, anything else rendered
+//(cgText's top-level rules)
 static struct ctVal* ctText(struct ctState* st, struct operand* op) {
     struct list parts = ListInit(sizeof(struct operand*));
     ctTextParts(op, &parts);
+    struct ctVal** vals = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(parts.len ? parts.len : 1));
+    for (int i = 0; i < parts.len; i++) {
+        struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
+        struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
+        vals[i] = NULL;
+        if (in && in->type.bType == BASETYPE_FUNC && in->opType == OPERATION_READ_VAR && in->readVar && in->readVar->isFuncDecl && !in->readVar->isLambda)
+            continue;
+        struct ctVal* v = ctEval(st, in ? in : p);
+        if (!v) { free(vals); ListDestroy(parts); return NULL; }
+        vals[i] = ctPieceValue(v, in ? in->type : p->type);
+    }
     struct ctText b = {0};
     for (int i = 0; i < parts.len; i++) {
         struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
         struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
-        if (in && in->type.bType == BASETYPE_FUNC && in->opType == OPERATION_READ_VAR && in->readVar && in->readVar->isFuncDecl && !in->readVar->isLambda) {
+        struct ctVal* v = vals[i];
+        if (!v) {
             char sig[1200];
             RdSpellSig(in->type, sig, sizeof(sig));
             ctTextPut(&b, in->readVar->name.ptr, (size_t)in->readVar->name.len);
             ctTextStr(&b, sig);
             continue;
         }
-        struct ctVal* v = ctEval(st, in ? in : p);
-        if (!v) return NULL;
         struct type t = in ? in->type : p->type;
         bool viaStr = in && SemanticStrOf(t); //E11c: the type's own Str, at the top level too
         if (!in || (t.bType == BASETYPE_ARRAY && TypeIsChar(*t.arrElem) && !viaStr)) {
@@ -1951,9 +1983,13 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
             char c = (char)ctDeref(v)->i;
             ctTextPut(&b, &c, 1);
         } else if (!ctRenderValue(st, &b, v, t, 0, p->tok)) {
+            free(vals);
+            ListDestroy(parts);
             return NULL;
         }
     }
+    free(vals);
+    ListDestroy(parts);
     struct ctVal* a = ctNew(CT_AGG, op->type);
     a->n = (int)b.n;
     a->elems = MallocOrCrash(sizeof(struct ctVal*) * (b.n ? b.n : 1));

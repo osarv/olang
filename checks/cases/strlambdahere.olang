@@ -1,0 +1,38 @@
+# check: run
+# flags: -s
+# E11c/D16d/D16e: a lambda a Str makes capturing what its receiver reaches lives in the block it is made in, since
+# nothing is built where the receiver lives - called there, handed to a helper, or spawned (built in the join block)
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn apply(f fn()) { f() }
+fn (b Bag&) Str() String {
+    f := fn() { b.c.v++ }
+    f()
+    apply(f)
+    join {
+        for i in range 3 {
+            spawn fn() { b.c.v.AtomicAdd(i + 1) }
+        }
+    }
+    return "b" $b.c.v
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Cell())
+    s := $b
+    churn()
+    t := $b
+    churn()
+    assert s == "b8" and t == "b16" and b.c.v == 16
+}

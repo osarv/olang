@@ -64,6 +64,7 @@ struct errRecord {
     char* text;
     size_t size;
     bool dropped; //G16b: given way to the same error from another instantiation, which could spell the generic's types
+    int d;        //the diagnostic it reports (ErrOncePerLine)
 };
 static struct errRecord** recs;
 static int nRecs, capRecs;
@@ -83,6 +84,7 @@ static void closeCur(void) {
     if (cur) { fclose(cur); cur = NULL; }
 }
 
+static int recDiag = -1; //the diagnostic the next record reports, where it is known
 static void newRecord(struct str file, int line) {
     closeCur();
     if (nRecs == capRecs) {
@@ -90,7 +92,7 @@ static void newRecord(struct str file, int line) {
         recs = ReallocOrCrash(recs, sizeof(*recs) * capRecs);
     }
     struct errRecord* r = MallocOrCrash(sizeof(*r));
-    *r = (struct errRecord){ .file = file, .line = line, .seq = nRecs };
+    *r = (struct errRecord){ .file = file, .line = line, .seq = nRecs, .d = recDiag };
     recs[nRecs++] = r;
     cur = open_memstream(&r->text, &r->size);
 }
@@ -581,6 +583,25 @@ void Err(struct token at, enum diag d, ...) {
     va_start(ap, d);
     errorV(whereOf(at), false, d, ap);
     va_end(ap);
+}
+
+//one cause met by several checks of a line - a Str storing where its receiver lives, found where it binds a callee and
+//again once the callee's body is known - is one error: a second one of the same kind on a line already reported is
+//dropped. Kept by the records themselves, so an attempt thrown away (B9c) takes its own with it
+void ErrOncePerLine(struct token at, enum diag d, ...) {
+    struct where w = whereOf(at);
+    if (!muteDepth)
+        for (int i = 0; i < nRecs; i++)
+            if (recs[i]->d == (int)d && !recs[i]->dropped && recs[i]->line == w.line && StrCmp(recs[i]->file, w.file)) {
+                lastDropped = true;
+                return;
+            }
+    recDiag = (int)d;
+    va_list ap;
+    va_start(ap, d);
+    errorV(w, false, d, ap);
+    va_end(ap);
+    recDiag = -1;
 }
 
 void ErrSyntax(struct token at, enum diag d, ...) {

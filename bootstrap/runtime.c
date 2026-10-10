@@ -1777,14 +1777,33 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "}\n\n", out);
 }
 
-//E11c: a rendering built in one pass - text that grows as it is written, { ptr data, i64 len, i64 cap, ptr first }: data
-//starts as first, room on the builder's own stack, and moves to malloc'd storage once it outgrows it - freed by whoever
-//built it, once copied out. Written only into an object that builds one (a rendering that reaches a Str, or a join
-//whose later piece runs code an earlier one could see)
+//E11c: a rendering built in one pass - text that grows as it is written, { ptr data, i64 len, i64 cap, ptr scope }: data
+//starts in a small room beside the builder and grows in the arena of the block building it, so every way out of that
+//block - its end, a test's unwind - reclaims it with the block, and nothing is freed by hand. Written only into an
+//object that builds one (a rendering that reaches a Str)
 void emitTextBuilderRuntime(FILE* out) {
     fputs(
-        //room for need more bytes past what it holds - the place they go. Doubles, so building n bytes copies fewer than 2n
-        "define linkonce_odr ptr @__olang_sb_room(ptr %sb, i64 %need) {\n"
+        //room for need more bytes past what it holds - the place they go: inline where it fits, else grown
+        "define linkonce_odr ptr @__olang_sb_room(ptr %sb, i64 %need) alwaysinline {\n"
+        "entry:\n"
+        "  %lenp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 1\n"
+        "  %capp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 2\n"
+        "  %len = load i64, ptr %lenp\n"
+        "  %cap = load i64, ptr %capp\n"
+        "  %want = add i64 %len, %need\n"
+        "  %fits = icmp ule i64 %want, %cap\n"
+        "  br i1 %fits, label %ok, label %grow\n"
+        "ok:\n"
+        "  %data = load ptr, ptr %sb\n"
+        "  %p = getelementptr i8, ptr %data, i64 %len\n"
+        "  ret ptr %p\n"
+        "grow:\n"
+        "  %g = call ptr @__olang_sb_grow(ptr %sb, i64 %need)\n"
+        "  ret ptr %g\n"
+        "}\n\n"
+        //...grown: in the arena of the builder's scope, at least doubling, so building n bytes copies fewer than 2n and
+        //leaves fewer than 2n behind there
+        "define linkonce_odr ptr @__olang_sb_grow(ptr %sb, i64 %need) noinline {\n"
         "entry:\n"
         "  %lenp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 1\n"
         "  %capp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 2\n"
@@ -1792,29 +1811,16 @@ void emitTextBuilderRuntime(FILE* out) {
         "  %cap = load i64, ptr %capp\n"
         "  %data = load ptr, ptr %sb\n"
         "  %want = add i64 %len, %need\n"
-        "  %fits = icmp ule i64 %want, %cap\n"
-        "  br i1 %fits, label %ok, label %grow\n"
-        "grow:\n"
         "  %dbl = shl i64 %cap, 1\n"
         "  %more = icmp ugt i64 %dbl, %want\n"
-        "  %nc0 = select i1 %more, i64 %dbl, i64 %want\n"
-        "  %small = icmp ult i64 %nc0, 128\n"
-        "  %nc = select i1 %small, i64 128, i64 %nc0\n"
-        "  %nd = call ptr @malloc(i64 %nc)\n"
-        "  %none = icmp eq ptr %nd, null\n"
-        "  br i1 %none, label %oom, label %copy\n"
-        "oom:\n"
-        "  call void @__olang_check_failed(ptr @__olang_msg_oom)\n"
-        "  unreachable\n"
-        "copy:\n"
+        "  %nc = select i1 %more, i64 %dbl, i64 %want\n"
+        "  %scopep = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 3\n"
+        "  %scope = load ptr, ptr %scopep\n"
+        "  %nd = call ptr @__olang_scope_alloc(ptr %scope, i64 %nc)\n"
         "  call void @llvm.memcpy.p0.p0.i64(ptr %nd, ptr %data, i64 %len, i1 false)\n"
-        "  call void @__olang_sb_free(ptr %sb)\n"
         "  store ptr %nd, ptr %sb\n"
         "  store i64 %nc, ptr %capp\n"
-        "  br label %ok\n"
-        "ok:\n"
-        "  %d = phi ptr [ %data, %entry ], [ %nd, %copy ]\n"
-        "  %p = getelementptr i8, ptr %d, i64 %len\n"
+        "  %p = getelementptr i8, ptr %nd, i64 %len\n"
         "  ret ptr %p\n"
         "}\n\n"
         //k more bytes written where @__olang_sb_room said
@@ -1824,20 +1830,6 @@ void emitTextBuilderRuntime(FILE* out) {
         "  %len = load i64, ptr %lenp\n"
         "  %l2 = add i64 %len, %k\n"
         "  store i64 %l2, ptr %lenp\n"
-        "  ret void\n"
-        "}\n\n"
-        //what it holds given back, where that is not the builder's own room
-        "define linkonce_odr void @__olang_sb_free(ptr %sb) {\n"
-        "entry:\n"
-        "  %data = load ptr, ptr %sb\n"
-        "  %firstp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 3\n"
-        "  %first = load ptr, ptr %firstp\n"
-        "  %own = icmp eq ptr %data, %first\n"
-        "  br i1 %own, label %done, label %give\n"
-        "give:\n"
-        "  call void @free(ptr %data)\n"
-        "  br label %done\n"
-        "done:\n"
         "  ret void\n"
         "}\n\n"
         //n bytes from src appended

@@ -13800,3 +13800,140 @@ cases counting once per rendering, `strstoresreceiver` for the new rule, `rv3str
 rendered 450,000 times: 220.7M -> 109.8M - Str and List.Str ran twice per rendering before. A join of a text local and a
 call, `$name " = " $f(i)`, 1M times: 105.9M -> 122.9M (+16%), the price of rendering it in one pass so the call cannot
 change what was measured. Numbers, plain structs and joins of numbers: identical IR.
+
+**Revised the same day, after its soundness review (`/home/user/review/str1`).** A read-only review of d6c7f52 found three
+new use-after-frees, a leak and a stack regression in the version above, and four older holes. All are fixed; each has a
+checks case or a corpus test read back after an arena churn, built, under `-s` and under `-i` where `-i` runs it.
+
+*N1/N1b/N1c/N2 - what Str built "in a scope of the call's own" escaped it.* `rdPutStr` gave every scope variable of Str a
+scope closed once the text was copied, on the reasoning that Str stores nothing where its receiver reaches. Four
+programs stored there anyway, none through a statement the store check saw: a lambda Str makes, writing a new node
+through a read-only capture's writable field (`f := fn() { b.head.next = Node(5, null) }`); the same lambda spawned; a
+read-only local the lambda captures (`w Wr&b = Wr(b.head)`); and a destructor-bearing value built where the receiver
+lives (`x Res&b = Res(b.head)`, its destructor storing through the node when that scope closed) - each read back as
+garbage once the arena churned. And N2's variant: built in the result scope, the value was held to live where the
+receiver's node does, an obligation on a scope `$` gives none of. **Decided (the coordinator's direction, my
+mechanism)**: the receiver's scope variables are `noBuild` - "where the receiver lives is not known here" (O12) as far as
+building and storing go: nothing is built into one (a temporary, an argument a callee builds into, a scope argument, a
+local declared to live there, a destructor-bearing value), nothing is stored through one (directly, through a lambda's
+capture, through a callee - O17's region facts, settled once every body is checked), and no obligation may hold one
+(the result scope or a block outliving it would be held to a scope nobody passes) - each `ERR_STR_STORES_IN_RECEIVER`,
+with a note at the store. Codegen passes `null` for them, so a hole the checker missed would fault on the null scope
+rather than read freed memory, and `cgCheckNoNullScope` turns an allocation naming it in emitted code into an internal
+compiler error. **Why not O12's `SCOPE_AMBIGUOUS` itself, as the direction literally said**: an
+ambiguous scope "never determines a scope a callee may build into", so it is refused as a binding wherever a callee's
+scope variable could be built into - which is every callee whose body is not yet known, every generic, and the
+prelude's iterators. `r.l.Iter().Fold(...)`, `for e in m`, `r.m.Keys().ToList()` and `List.Str` itself walking its
+runs all bind a callee's variable to the receiver's scope; under `SCOPE_AMBIGUOUS` they were refused, under `noBuild`
+they are allowed exactly when the callee's settled body builds and stores nothing there (`unknownBuilds` with a
+`strReceiver` flag, decided in `settleRegions`). That is the same promise - nothing built or stored where the receiver
+lives - checked where it can be answered rather than refused wholesale. `checks/cases/strstorelambda`, `strstorespawn`,
+`strstorelocal`, `strstoredtor`, `strobligation` (all `error[E11c, O12]`), and `strwalks` (`-s`: a Str walking a List
+and a Map of Lists by `for`, `Iter().Fold`, `Keys()` and its own methods, clean).
+
+*N3 - a value built only to be rendered was waived C2d (`hereChecked`).* Reverted, as the direction asked: the waiver
+was what let `$Wrap(x)` build a destructor-bearing field whose destructor stored a new node into `x`'s node from a scope
+closed before it (`checks/cases/rendercopyc2d`, `error[C2d]`). It existed for `Map.Str`, whose `$MapEntry<Bool, V>(false,
+e.Value)` built a temporary holding a value with writable references (a Map of Lists) - so `Map.Str` no longer builds a
+`MapEntry`: it renders `$alone(e.Key)` and `$alone(e.Value)`, `fn alone(x <T>) (T, Bool)` giving the part and a `Bool`,
+rendered as a call's several results are (`(` the part `, false)`, E11a), from which the part's text is sliced. The
+part is rendered exactly as inside any other value (text quoted, characters quoted), its Str once.
+
+*N4/N6 - the builder held across a call; the in-order rule for joins reversed to Go's.* d6c7f52 rendered a join piece by
+piece wherever a later operand ran code, so that "each piece is rendered where it stands" - which held the text being
+built across that call: 256 bytes of stack in every frame and malloc'd storage freed only when the join finished. A
+`continue` out of the join's operand (`try` in a loop) leaked the malloc'd part - **1.5GB** over the review's loop (N4) -
+and a recursion through a join (`$name $r(n - 1, name)`) put 256 bytes in every frame, overflowing at 104,000 levels
+where the base reached 120,000 (N6). Moving the builder to the arena, as first suggested, fixed the leak and not the
+stack: the header still lived in every frame, and the arena took 4KB a frame (each frame's builder took a chunk of its
+own). The rule itself was the problem - mine, hours old: it made a join's evaluation order depend on whether a later
+piece rendered a Str, and needed a builder exactly where nothing else did. **Decided (mine)**: Go's rule (E11b) - every
+operand is evaluated left to right first, to its value, and then the pieces are rendered left to right. A struct value is
+copied out where it is evaluated if anything after it could change it (a later operand running code, or the join
+reaching a Str); an array keeps the length and storage it had when evaluated and its elements are read when its piece
+renders; a reference keeps the referent it named; scalars and enums are values. The join-time heap overflow (`$G
+$bump()`) stays fixed - the measure and the write of each piece are adjacent again, nothing between them - and
+`joinwritesafter` now asserts Go's answers (`$G $bump()` renders the new numbers in the array's evaluated storage, `$X $P
+$inc() $X $P` the struct as it was and the scalar as it was). A join needs a builder only when it reaches a Str; one that
+does not is the two-pass code it always was (measure each piece, one allocation, write each piece). The evaluator does
+the same (`ctPieceValue`: arrays shallowly, references as they are, everything else copied). A corpus test
+(`JoinOrderBaked`) bakes such a join while compiling and compares it with the run time.
+
+*The builder itself (deviation from "take it from the arena").* A builder for a join or a `$` reaching a Str is now `{data,
+len, cap, scope}` starting in a **64-byte room** beside it in the entry block, growing into the arena of the block the
+`$` stands in (`__olang_sb_grow`, out of line; `__olang_sb_room` inlined, so a piece that fits costs a compare), and at
+the end the text is kept where it is when it already lives in the scope it lands in, else copied there once. Nothing is
+ever freed by hand - an exit from the block, however it happens, reclaims it with the block (N4's leak cannot recur).
+Only the arena, as the direction asked, cost 4KB a frame through a recursive Str (the chunk a frame's first piece
+takes): a 20,000-deep recursion through `$` on a type whose Str renders a child went to 87MB; with the room, 6MB. The
+room is 64 bytes, not 256: the entry-block alloca sits in every frame of a recursion through a Str, and 64 bytes holds
+the text of most single values. Measured with callgrind: a join of text and a call 1M times (`$name " = " $f(i)`) 104.9M
+instructions against the base's 104.9M (d6c7f52 had 122.9M - the +16% above is gone); a join reaching a Str 82.8M
+against the base's 146M (which called Str twice) and d6c7f52's 77.7M; the review's N4 loop peaks at 1.6MB (d6c7f52 1.5GB,
+the base 1.6MB); N6 reaches 120,000 levels in 9MB, as the base did. Under `-i` N4 runs out of memory and N6 stops at
+`-i`'s depth limit exactly as on the base (`-i` frees nothing, stage 1). `checks/fixtures/landing/joinleak` (500,000
+joins left by `continue`, under `ulimit -v 150000`) and `joindepth` (100,000-deep) pin both in the landing scenario.
+
+*N5 - `done` inside a Str dropped the destructors of `$`'s result scope.* The scope `$` opens for Str's result scope is
+now on the test unwind chain (`%olang.unwind`, emitted in test builds as every block scope is), so a test ended by `done`
+or a failed check inside a Str unwinds it with its destructors. A corpus test (`doneStrRes`/`doneStrBag`) ends a test by
+`done` inside a Str holding three destructor-bearing values and the next test counts three destructions.
+
+*P1 (older) - O17 skipped read-only captures.* A lambda storing through a read-only capture's writable field stores into
+the region it was lent, but O17 only treated writable captures as lent regions - so a copy whose references live
+elsewhere than its storage could be lent to a method making such a lambda (`b := src.b; b.grow()`, `grow` storing a new
+node through `b.head`), building the node in `bump`'s block (`checks/cases/o17readonlycapture`, `error[O17]`).
+
+*P2 (older) - a destructor-bearing constructor call that no promotion took was never destructed.* `Wrap(local)` as a
+statement, read through (`Wrap(local).a.v`) or rendered (`$Wrap(local)`) built a by-value instance no scope registered
+(O16 says every constructor call registers, once). `cgFuncCall` now places such an instance in the scope the call builds into and registers it, unless a promotion
+already does (`cgPromote` and the promoting branch of `cgValueForTarget` mark the call, `promotedOp`, so it is never
+registered twice). `checks/cases/ctortempdestruct` (`-s`) counts eleven shapes and eleven destructions.
+
+*P3 (older) - a `$` operand was built where the text lands.* The operands of a rendering or join were evaluated with the
+target-scope override of the text still in force, so a value built only to be rendered was built in the scope the text
+lands in - which can outlive what the value holds (a destructor-bearing field ran after `local` was gone and read
+garbage). The override is now cleared around the operands and restored for the text: an operand is built in the block
+the `$` stands in and judged there (E11a, C2d) - `checks/cases/renderoperandhere` (`-s`).
+
+*P4 (older) - a reference read out of a conditional of values from two scopes.* `w((i if j < 0 else o).m.inner)`, `i`
+and `o` two `Bag` values in different blocks, gave `m.inner` (a value field through `m`, a writable reference) the scope
+of the conditional's temporary - the loop body - so `w` pushed into `o`'s list in the loop body's arena. `RefExactScope`
+now reads a member or element of a conditional or match of values through `condValueRefsHome`: arms that are literals,
+landings or temporaries say nothing, the rest give where their references live (`valueRefsHome`/`RefExactScope`), and
+arms that disagree or cannot be traced give `SCOPE_AMBIGUOUS` (O12) - not known here, so a callee may not build through
+it (`checks/cases/condvaluefield`, `error[O11, O12]`), while the same with both values in one scope compiles and runs
+clean under `-s` (`condvaluesame`). Found writing it, pre-existing: `h.f = local if i == 0 else Node(7)` stored a
+conditional of an existing reference and a new value into a longer-lived field - the new value built where `local`
+lives, and the stored reference judged by the conditional's arms only for permission - so the field kept `local`'s node
+after its block closed (`checks/cases/condmixedstore`, `error[O20]` now). And a local of two references from different
+scopes could be named as where a declaration lives (`x Node&l`): now `error[O12]` (`tagunknownscope`).
+
+*The stale `SemanticRendersStr` memo, judged not real.* The review suspected the memo could answer "renders no Str" for a
+type checked before one of its parts' Str was registered. The memo is cleared whenever a `$` registers a new Str
+(`checkStrRendered`), and codegen only asks after every body is checked, so a stale answer can reach neither; no program
+was found that shows one, and none of the review's reproducers did. Left as it is.
+
+*Found by the full verify, fixed.* (1) A lambda a Str makes capturing what its receiver reaches - `k := a.c; f := fn() {
+k.n++ }` - lived, by D16d, where its capture lives, which is now where nothing is built: codegen allocated its closure in
+the `null` scope and `cgCheckNoNullScope` stopped the compiler (`rv5strlambda`, `rv5strlambdaalias`, `rv7p5lambda`,
+all run cases of the first version). **Decided (mine)**: such a lambda lives in the block it is made in (D16d) - the
+receiver's region outlives Str's body, so a closure there lives shorter than what it captured, as a lambda capturing
+from several scopes does; spawned, it is built in the join block when what it captured lasts until the join (D16e,
+`lastsUntilJoin` of the receiver's variable). `checks/cases/strlambdahere` (`-s`) calls one, hands it to a helper and
+spawns three in a loop in a join. (2) One cause met by several checks gave the same `ERR_STR_STORES_IN_RECEIVER` up to
+four times on one line (where a callee is bound, where the callee's settled body is read, and in the Str's own summary):
+`ErrOncePerLine` drops a second error of that kind on a line already reported - kept by the error records themselves,
+so an attempt thrown away (B9c) takes its own with it and a muted probe is never answered by an earlier report. (3)
+Four run cases written for the in-order join rule read a number in the last piece after a Str in an earlier piece
+changed it (`$t " " $b " v=" $b.c.v`); under Go's rule the number is read before the pieces render, so `v=1`, not `v=2`
+(`rv7p1bctorcallee`, `rv7r1condmember`, `rv7r3helpercond`, `s6strref` - the first two bake the value while compiling,
+so the evaluator and the run time are shown to agree on the new rule). (4) `-i handles.olang` in the landing scenario was
+killed by the OOM killer in both verifies, beside other agents' runs: it peaked at 7.7GB, as on the base (7.6GB), since
+`-i` frees nothing (stage 1) and the fixture's arena churn ran 3,000 turns twenty times where every other case's runs
+300. At 300 it peaks at 845MB, with the same output built, `-d`, `-s` and `-i`.
+
+**Corpus migrated**: one line in shared.olang - `q SfNode& = match i { case 0 => n  nomatch => SfNode(7) }` inside a
+loop is now `q := match ...`: a match of an existing reference and a new node lives where the existing one does (the
+condmixedstore fix), not in the loop body a bare `q SfNode&` names (O25a). Everything else in shared, worker, runner,
+std, geom and checks compiled unchanged.

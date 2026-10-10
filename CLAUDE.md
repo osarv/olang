@@ -4562,22 +4562,39 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   cause was the run time calling Str twice per rendering (measure, then write) where the evaluator called it once, and a
   review found three new and about twelve older holes in the analysis plus over-rejections (`r.l.Iter().Fold(...)`).
   Now a rendering reaching a Str is built **in one pass**, in order, onto text that grows (`@olang.rdb.*` helpers,
-  `@__olang_sb_*`, starting in 256 bytes of the builder's stack), and the evaluator agrees (it always rendered in one
+  `@__olang_sb_*`: a 64-byte room beside it, then the arena of the block the `$` stands in), and the evaluator agrees (it always rendered in one
   pass): once per `$`, joins left to right, depth first through fields/elements/payloads, once per List element and Map
   key and value (`Map.Str` rendered every key twice). Skipping a call while compiling stays sound because K1 refuses
   every effect skipping would show (globals, externs). **Decided (mine)**: (1) an array's length and storage are read
   where its rendering starts and an enum is read whole before its payload (a Str putting another case there would have
-  had its payload's bytes read as fields they are not - memory safety), in codegen and the evaluator alike; (2) **Str
-  may store nothing it built or was handed into what its receiver reaches** (O17's region; `ERR_STR_STORES_IN_RECEIVER`)
-  - `$` cannot know where a part lives, so Str's scope variables get a scope of the call's own; (3) a value built only
-  to be rendered (`$MapEntry<K, V>(k, v)`) need not live exactly where what it holds does (C2d/O25c); (4) a join is
-  rendered piece by piece in order wherever a later piece's operand runs code an earlier piece could see - **a
-  pre-existing heap overflow**: `$G $bump()` measured G, let bump lengthen its numbers, then wrote past the allocation
-  (`checks/cases/joinwritesafter`); (5) a lambda made where it is called is judged by its body for O17 (a writable
-  capture was taken to be stored through); (6) the review's side note x1: a value field reached through a bare `mut`
-  reference field lives where that field's container does (E12c/O20), not in the function's own scope. Cost: `$` on
-  numbers, plain structs and joins of numbers is byte-identical IR; Str renderings half the instructions; a join of
-  text followed by a call +16%.
+  had its payload's bytes read as fields they are not - memory safety), in codegen and the evaluator alike; (2) **where
+  Str's receiver lives is not known in its body (O12)**: it may read and walk what the receiver reaches, build in its
+  own blocks and its result scope (one `$` opens and closes once the text is copied, on the test unwind chain), but
+  build or store nothing where the receiver reaches and require nothing of it (`ERR_STR_STORES_IN_RECEIVER`) - the
+  receiver's scope variables are `noBuild`, and codegen passes `null` for them, an IR check (`cgCheckNoNullScope`)
+  making sure nothing allocates there; (3) a join's operands are evaluated left to right **before** any piece is
+  rendered, Go's rule (a struct or a number as it is then, an array's elements and what a reference names read when the
+  piece renders) - **a pre-existing heap overflow**: `$G $bump()` measured G, let bump lengthen its numbers, then wrote
+  past the allocation (`checks/cases/joinwritesafter`); (4) a lambda made where it is called is judged by its body for
+  O17 (a writable capture was taken to be stored through), read-only captures included; (5) the review's side note x1:
+  a value field reached through a bare `mut` reference field lives where that field's container does (E12c/O20), not in
+  the function's own scope. Cost: `$` on numbers, plain structs and joins without a Str is the two-pass code it was.
+  **Revised the same day after its soundness review** (`/home/user/review/str1`: 3 new use-after-frees, a leak, a stack
+  regression, 4 older holes): the first version gave Str's scope variables a scope of the call's own (a lambda's
+  read-only capture, a destructor and an obligation each built or stored through it - N1/N2), waived C2d for a value
+  built only to be rendered (N3, reverted), rendered a join piece by piece wherever a later operand ran code - holding a
+  builder (256 bytes of stack, then malloc freed only at the join's end) across the call: 1.5GB lost leaving joins by
+  `continue` (N4) and 100,000-deep recursion through a join overflowing (N6; 4KB of arena a frame had it been the arena)
+  - so the in-order rule for joins (my own, hours old) went for Go's, which needs no builder outside a Str (a join of
+  text and a call back to the base's instruction count, the review's leak loop 1.5GB -> 1.6MB, 120,000-deep recursion
+  through a join as the base); the builder starts in a 64-byte room rather than the arena alone, which cost 4KB a frame
+  through a recursive Str (20,000 deep: 87MB -> 6MB); and `done` in a Str dropped the destructors of `$`'s result scope
+  (N5, now on the unwind chain). The receiver is `noBuild` rather than O12's ambiguous scope itself, which would refuse
+  every iterator walk of it (`for e in m`, `r.l.Iter().Fold`); a callee bound there is judged by its settled body, a
+  lambda capturing what it reaches lives in the block it is made in (D16d), and one cause is one error per line. Older, found by the review and
+  fixed: O17 skipped read-only captures (P1), a destructor-bearing constructor call no promotion took (a statement,
+  `Wrap(x).a.v`, `$Wrap(x)`) was never destructed (P2, O16), a `$` operand was built where the text lands (P3), and a
+  reference read out of a conditional of values from two scopes was built through in a temporary's block (P4, O12).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

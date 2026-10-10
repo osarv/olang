@@ -1,0 +1,42 @@
+# check: run
+# flags: -s
+# E11a/C2d: a value built only to be rendered is built where the '$' stands and judged there - never where the text
+# lands, which may outlive what it holds: its destructor-bearing field ran after 'local' was gone and read garbage
+type Node struct(v I64) {
+    v
+}
+Seen mut I64 = 0
+type Res struct(a Node&) {
+    a
+} destruct { Seen = a.v }
+type Wrap struct(a Node&) {
+    a
+    r Res& = Res(a)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn f(x Node&) String {
+    return $Wrap(x)
+}
+fn main() ? {
+    outer String& = ""
+    {
+        local Node& = Node(42)
+        outer = $Wrap(local)
+    }
+    churn()
+    assert Seen == 42 and outer == "Wrap(Node(42), Res(Node(42)))"
+    Seen = 0
+    {
+        local Node& = Node(43)
+        outer = f(local)
+    }
+    churn()
+    assert Seen == 43 and outer == "Wrap(Node(43), Res(Node(43)))"
+}

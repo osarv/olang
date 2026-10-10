@@ -272,6 +272,7 @@ struct type;
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
     X(ERR_BUILD_INTO_UNKNOWN_SCOPE,     "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") \
     X(ERR_STORE_INTO_UNKNOWN_SCOPE,     "O12",   "where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope") \
+    X(ERR_TAG_UNKNOWN_SCOPE,            "O12",   "where %n lives is not known here, so nothing is declared to live there - read it through %n, or declare the local with ':='") \
     X(ERR_BUILD_THROUGH_UNKNOWN_SCOPE,  "C2d",   "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") \
     X(ERR_SCOPE_ARG_UNKNOWN,            "E25",   "%n is no local or parameter here - a scope argument names where the result is built") \
     X(ERR_RETURN_TYPE_MISMATCH,         "D8",    "this function returns %t, found %t") \
@@ -315,8 +316,8 @@ struct type;
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
     X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
     X(ERR_IMMUTABLE,                    "S6",    "%S cannot be written - only a local, a parameter or a 'mut' global can") \
+    X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
-    X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O17", "'$' does not know where a value it renders lives, so Str may not store into what its receiver reaches") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_ZERO_BY_REFERENCE,           "",      "'%s' holds it by reference, whose zero value is null") \
@@ -546,6 +547,8 @@ enum diag {
 
 //an error about the token at
 void Err(struct token at, enum diag d, ...);
+//the same, unless an error of kind d was already reported on that line - one cause several checks meet
+void ErrOncePerLine(struct token at, enum diag d, ...);
 //the same, counted as a syntax error too - which may have hidden a declaration, so a missing one is not reported
 void ErrSyntax(struct token at, enum diag d, ...);
 //an error about the whole of a file

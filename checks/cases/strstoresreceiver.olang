@@ -1,6 +1,6 @@
-# check: fail error[E11c, O17]: '$' does not know where a value it renders lives, so Str may not store into what its receiver reaches
-# E11c: "$" calls Str on parts it renders without knowing where they live, so what Str builds is kept in a scope of the
-# call's own - storing it into what the receiver reaches (here through a helper) would leave it there once that closes
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: "$" calls Str on parts it renders without knowing where they live, so where its receiver lives is not known in
+# Str's body - a helper building a node there and storing it into what the receiver reaches is refused, once
 type Node struct(v I64, next mut Node&) {
     v
     next

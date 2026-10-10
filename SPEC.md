@@ -1409,7 +1409,8 @@ A lambda's parameters and locals may not reuse the name of a variable it could c
 reference is built where it lands, as any temporary is (E12c). One capturing references - or values holding them
 (D16c) - lives where they do:
 in their one scope, or - when they live in several - in the innermost block among them, or else the block it is
-made in; one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
+made in; one capturing what a `Str`'s receiver reaches, where nothing is built (E11c), lives in the block it is made in;
+one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
 instead, each scope it captures from required to outlive that - an obligation of the function (O10b) where it is
 another of its scope variables, as returning a parameter's function value is (O14a). Every rule for a reference (§8)
 then decides where it may be stored, passed and returned, so it can never be called after something it captured is gone. A function named as a value captures nothing and fits
@@ -1424,7 +1425,8 @@ takes no parameters; its captures are made when the `spawn` runs, so a loop spaw
 each task its own copy of the loop's variables. A lambda called where it is spawned, `spawn fn(k I64) { ... }(10)`, is
 the same task with arguments: its captures are made when the `spawn` runs and it lives as the uncalled form does.
 Either way the lambda lives until the join (P2): where D16d would put it in the block it is made in because what it
-captured lives in several scopes, it is built in the join block when each of those lasts until the join.
+captured lives in several scopes, or where a `Str`'s receiver lives, it is built in the join block when each of those
+lasts until the join.
 
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
@@ -2286,9 +2288,10 @@ one is wanted (T29c) — holding its operand's textual rendering. It
 is a **value** and a **temporary**: it has no storage of its own to borrow, so it is built in the scope of
 whatever it flows into (E12c) — the current block for a local it initializes, the target's scope for a
 reference it is assigned to or returned as. It binds as the other prefix operators do, tighter than any
-binary operator, so `$a.b` renders `a.b`. An operand built only to be rendered (`$MapEntry<K, V>(k, v)`) is read once
-and dropped, nothing being stored through it (a `Str` rendering a part of it included, E11c), so it need not live
-exactly where the existing storage it holds lives (O25c, C2d).
+binary operator, so `$a.b` renders `a.b`. Its operand is evaluated where the `$` stands: a value built only to be
+rendered (`$Wrap(x)`) is built in the block the `$` is in and held to every rule there (C2d, O25c), never where the
+text lands, which may outlive what that value holds. An instance of a type declaring a destructor built so is
+destructed once, when that block closes (O16).
 
 A type may say how it renders by declaring **`Str`** (E11c); every other value has exactly one rendering, fixed by
 its type: the value written the way it would be in source:
@@ -2351,11 +2354,14 @@ renders is a function there, it is a compile-time error that says to write the v
 
 String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
-text **value** (T29c) and a temporary, exactly as `$` is (E11a): its pieces are rendered left to right, each where it
-stands - its operand evaluated, then rendered, before the next piece's operand is - and one allocation of the total is
-made in the scope the result flows into, so the cost is linear in the result however many pieces there are. A
-piece's operand that changes what an earlier piece rendered (a call writing it) changes nothing already rendered. A `:=` declaration takes its type from a join or a
-`$` rendering (D15), since both are text by construction.
+text **value** (T29c) and a temporary, exactly as `$` is (E11a). Its pieces' operands are evaluated left to right,
+each to its value as any expression's is - a number, a `Bool`, a `Char`, a struct, an enum or a function value as it is
+then, a reference as the instance it names, an array as the array it names (T7b) - and only then are the pieces
+rendered, left to right, each once; one allocation of the total is made in the scope the result flows into, so the cost
+is linear in the result however many pieces there are. So a later operand changing what an earlier piece holds shows
+in that piece only through what a reference or an array names: in `$g $bump()`, a `bump` writing `g`'s elements
+shows in `g`'s piece if `g` is an array, and does not if `g` is a struct value. A `:=` declaration takes its type from a
+join or a `$` rendering (D15), since both are text by construction.
 
 **E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
 (M6b): then `$` on it, or on a value rendering it as a part, is an error anywhere else. No parameters, result `String`,
@@ -2364,7 +2370,8 @@ compile-time error; one taking parameters is an ordinary method (E31), and `$` r
 with none declared. Otherwise `Str` is an ordinary method: it may write what it reaches, a global, through an `extern`.
 
 `$` calls it **exactly once per rendering** of a value of its type, where the rendering reaches that value, in
-**rendering order**: a join's pieces left to right, a value's parts depth first - fields in declaration order, an
+**rendering order**: a join's pieces left to right, after every operand of the join is evaluated (E11b), a value's parts
+depth first - fields in declaration order, an
 array's elements in index order, an enum's payload fields, what a reference names - and a `List`'s elements, a
 `Map`'s keys and values and a `StringBuilder`'s text as their own `Str` renders them, each once. What a rendering reads,
 it reads where it reaches it, so a `Str` changing the value being rendered changes what is rendered after it and
@@ -2375,10 +2382,13 @@ another case where the enum is, leaves the rest of that rendering on what was re
 skipped at run time is refused (K1 - a global written, a mutable global read, an `extern` called), a `Str` with such an
 effect leaves its rendering to run time.
 
-`$` does not know where a part it renders lives, so `Str` is called with a scope of its own for each of its scope
-variables, closed once its text is copied: it may build there what it uses itself, but may **store** nothing it built
-or was handed into what its receiver reaches - O17's region of its receiver, a reference or a value holding references
-read out of that region being all it may put there - which would outlive the call (a compile-time error at `Str`).
+`$` does not know where a part it renders lives, so where `Str`'s receiver - and anything it reaches - lives is not
+known in `Str`'s body (O12): `Str` may read and walk all of it, and build what it uses in its own blocks or in its
+result's scope (one `$` opens for the call and closes once the text is copied), but may **build or store nothing**
+where its receiver reaches - no new value built into such a scope, nothing it built or was handed stored into what the
+receiver reaches (O17's region; a reference or a value holding references read out of that region being all it may put
+there) - and may require nothing of such a scope (an obligation, O10b, naming one). Each is a compile-time error at
+`Str`, which `$` hands no scope for its receiver to build into.
 And since `$` renders read-only values too (an immutable global, a part of a read-only reference, T25c), a by-value
 receiver of `Str` is one that takes a read-only copy: one whose body lends what it holds writably, or keeps it, is a
 compile-time error.
@@ -4260,7 +4270,11 @@ through which something can be stored (O25g) or which a borrowed result names (t
 scope argument (E25) may not name it. Nothing new is built into a place holding such a reference by value either - a
 value local copied from a conditional or a match whose values' references live in different scopes, say: what is
 assigned there is a value whose references already live somewhere, never a temporary, since a temporary would be built
-in one scope and kept where the place's references really are.
+in one scope and kept where the place's references really are. A conditional or a `match` gives such a reference when
+the values it can give live - or, for values held by value, hold their references - in different scopes, or in one not
+traced: `w((i if k else o).m.inner)` with `i` and `o` from different blocks lends a value whose scope is not known
+(a value built for the conditional lands with it, and decides nothing). A declaration naming such a local's scope as
+where it lives (`x T&l`) is a compile-time error: nothing is declared to live where that is not known.
 
 **O20.** A bare reference slot reached **through** a reference-shaped container — a field or element of a
 value that is itself `&`-marked — lives in the **container's** scope (O5), not in the scope of the function
@@ -4738,7 +4752,9 @@ therefore one-per-construction: a value that reaches a variable, field, or array
 copied from an already-constructed instance is the same instance, registers nothing further, and is
 destructed exactly once (C10). No storage location is registered on its own account, and no
 never-constructed storage is registered at all — in particular, a zero-filled aggregate (D13)
-contains no instances and causes no destructor to run.
+contains no instances and causes no destructor to run. A constructor call no reference takes - one standing as a
+statement, read through (`Wrap(x).a.v`), rendered (`$Wrap(x)`) - is an instance all the same: it is registered with
+the scope it was built in (where its constructor's instance landed, C2d) and destructed once when that closes.
 
 ## 9. Constructors and Destructors
 

@@ -263,7 +263,7 @@ fn scenario(r mut report&, name String&) ? Failed {
 
 # O1b/P2: tasks building into the program's scope at once, at -d where nothing hides the allocations (it corrupted the
 # heap); O18a: a value local's references are reclaimed with its loop body's block, under an address-space limit ten
-# million passes would exceed when they went to the function's own scope
+# million passes would exceed when they went to the function's own scope; E11b: a join left part way, or recursing
 test "where a value lands, as whole builds" { assert passed("landing") }
 
 fn landing(r mut report&) ? Failed {
@@ -279,6 +279,14 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b numberflow.olang > out.txt 2>&1") == 0, "numberflow build", dir)
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
     try r.expect(outOf(dir) == "22\n", "numberflow output", dir)
+    #E11b: a join left part way leaves nothing behind (a builder freed only at its end lost 1.5GB), and one recursing
+    #through its later piece holds nothing across the call (100,000 deep overflowed the stack)
+    try r.expect(sh(dir, "\"$OLANG\" -b joinleak.olang > out.txt 2>&1") == 0, "joinleak build", dir)
+    try r.expect(sh(dir, "(ulimit -v 150000 && ./build/joinleak) > out.txt 2>&1") == 0, "joinleak", dir)
+    try r.expect(outOf(dir) == "805138895\n", "joinleak output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b joindepth.olang > out.txt 2>&1 && ./build/joindepth > out.txt 2>&1") == 0,
+                 "joindepth", dir)
+    try r.expect(outOf(dir) == "1\n", "joindepth output", dir)
     #O17b: handles lent as their references - built, built -d and interpreted, read back after the arena churned
     try r.expect(sh(dir, "\"$OLANG\" -b handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b -d handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0,
@@ -1229,7 +1237,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
     for name in list.Split("\n") {
         if name.Len() == 0 { continue }
         src := try os.ReadFile(name) catch default ""
-        for fname in String&["Err(", "ErrSyntax(", "ErrFile(", "ErrFatal(", "ErrUsage(", "Note("] {
+        for fname in String&["Err(", "ErrOncePerLine(", "ErrSyntax(", "ErrFile(", "ErrFatal(", "ErrUsage(", "Note("] {
             from := I64(0)
             for {
                 hit := try src[from:].Find(fname) catch { break }

@@ -10966,7 +10966,7 @@ test "E28/S12b: a conditional or match of a reference and a new value is a refer
     m SfNode& = n
     for i in range 2 {
         m = SfNode(i + 40) if i > 0 else n
-        q SfNode& = match i { case 0 => n  nomatch => SfNode(7) }
+        q := match i { case 0 => n  nomatch => SfNode(7) }      #(lives where n does - a bare "q SfNode&" is its block, O25a)
         assert q.v == 5 or q.v == 7
     }
     p := sfPick(n, false)
@@ -14932,6 +14932,122 @@ test "E11c: a Str writing a global is called once per rendering - keys and value
     l.Push(strOnceKey(6))
     assert $l == "List<strOnceKey>[k5, k6]" and StrOnceCalls == calls + 6
     assert StrOnceOrder.EndsWith("123456")
+}
+
+# E11b: a join's operands are evaluated left to right before any piece renders, each to its value - a number or a struct as
+# it is then, an array its storage, whose elements are read when it renders - while compiling as at run time
+type joinOpS struct(v I64) {
+    v
+}
+fn joinOpBump(s mut joinOpS&, a mut Array<I64>&) I64 {
+    s.v = 50
+    a[0] = 7
+    return 9
+}
+fn joinOrder(k I64) String {
+    s := joinOpS(5 + k)
+    a := I64[1, 2]
+    x I64 = 3
+    return $x $s $a $joinOpBump(s, a) $s $a
+}
+JoinOrderBaked := joinOrder(0)
+
+test "E11b: a join's operands are evaluated before any piece renders - while compiling as at run time" {
+    want := "3joinOpS(5)I64[7, 2]9joinOpS(50)I64[7, 2]"
+    assert JoinOrderBaked == want and joinOrder(I64(ctRuntimeZero)) == want
+    assert joinOrder(0) == want
+}
+
+# E11c/O12: a Str walks what its receiver reaches - a Map, a List, an iterator over the receiver - and builds only in
+# scopes of its own; what it renders reads back the same after the arena churned
+type strWalkNode struct(v I64, next mut strWalkNode&) {
+    v
+    next
+}
+type strWalkIt struct(of strWalkBag&) {
+    slot mut strWalkNode&of = of.head
+}
+type strWalkBag struct(head mut strWalkNode&) {
+    head
+    m Map<String&, I64> = Map<String&, I64>()
+    l List<I64> = List<I64>()
+}
+fn (b strWalkBag&) Str() String {
+    n I64 = 0
+    for e in b.m { n += e.Value }
+    for x in b.l { n += x }
+    it := strWalkIt(b)
+    return $n "/" $it.slot.v "/" $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
+}
+
+test "E11c: a Str walking a Map and a List of its receiver renders the same after the arena churned" {
+    b := strWalkBag(strWalkNode(1, null))
+    b.m.Put("a", 2)
+    b.m.Put("b", 5)
+    b.l.Push(10)
+    b.l.Push(20)
+    s := $b
+    m := Map<I64, List<I64>>()
+    m.Put(1, I64[4, 5].ToList())
+    t := $m
+    churnArena()
+    assert s == "37/1/30" and t == "Map<I64, List<I64>>{1: List<I64>[4, 5]}"
+}
+
+# S16/E11c: "done" inside a Str ends the test as passed - the scope "$" opened for the Str's result and the Str's own block
+# are closed on the way out, their destructors running
+DoneStrDestructs mut I64 = 0
+type doneStrRes struct(k I64) {
+    k
+} destruct { DoneStrDestructs += k }
+type doneStrBag struct(n I64) {
+    n
+}
+fn (b doneStrBag&) Str() String {
+    r doneStrRes&return = doneStrRes(1)
+    q := doneStrRes(2)
+    if b.n == 7 { done }
+    return "b" $r.k $q.k
+}
+
+test "S16/E11c: done inside a Str ends the test, closing what it built" {
+    b := doneStrBag(7)
+    s := $b
+    assert s == "never"
+}
+
+test "S16/E11c: ...and both of the Str's destructors ran" {
+    assert DoneStrDestructs == 3
+}
+
+# C11/O16: every constructor call of a type declaring a destructor is one instance, destructed once when the scope it was
+# built in closes - one standing as a statement, read through, rendered, passed, stored, in a conditional, pushed alike
+CtorTempDestructs mut I64 = 0
+type ctorTempWrap struct(a Crate2&) {
+    a
+} destruct { CtorTempDestructs++ }
+type ctorTempBox struct(w ctorTempWrap&) {
+    w
+}
+fn ctorTempTake(w ctorTempWrap&) I32 { return w.a.v }
+
+test "C11/O16: a constructor call's instance is destructed once wherever it is used" {
+    local := Crate2(42)
+    k I32 = 0
+    {
+        ctorTempWrap(local)
+        k = ctorTempWrap(local).a.v
+        s := $ctorTempWrap(local)
+        w ctorTempWrap& = ctorTempWrap(local)
+        b := ctorTempBox(ctorTempWrap(local))
+        n := ctorTempTake(ctorTempWrap(local))
+        z := (ctorTempWrap(local) if k == 42 else ctorTempWrap(local)).a.v
+        l := List<ctorTempWrap&>()
+        l.Push(ctorTempWrap(local))
+        assert CtorTempDestructs == 0 and n == 42 and z == 42 and s.StartsWith("ctorTempWrap(")
+    }
+    churnArena()
+    assert CtorTempDestructs == 8 and k == 42
 }
 
 # T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, Clone, ToList

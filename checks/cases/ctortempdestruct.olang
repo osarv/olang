@@ -1,0 +1,36 @@
+# check: run
+# flags: -s
+# C11/O16: every constructor call of a type declaring a destructor is one instance, destructed once when the scope it
+# was built in closes - a call standing as a statement, read through, rendered, passed, stored, kept in a conditional
+# or pushed alike (the first three were never destructed)
+type Node struct(v I64) {
+    v
+}
+Count mut I64 = 0
+type Wrap struct(a Node&) {
+    a
+} destruct { Count++ }
+type Box struct(w Wrap&) {
+    w
+}
+fn take(w Wrap&) I64 { return w.a.v }
+fn main() ? {
+    local := Node(42)
+    {
+        Wrap(local)
+        k := Wrap(local).a.v
+        s := $Wrap(local)
+        w Wrap& = Wrap(local)
+        x := Wrap(local)
+        b := Box(Wrap(local))
+        n := take(Wrap(local))
+        c := k == 42
+        y Wrap& = Wrap(local) if c else Wrap(local)
+        z := (Wrap(local) if c else Wrap(local)).a.v
+        l := List<Wrap&>()
+        l.Push(Wrap(local))
+        assert Count == 0
+        assert k + n + z == 126 and s == "Wrap(Node(42))"
+    }
+    assert Count == 11
+}

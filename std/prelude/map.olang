@@ -188,15 +188,19 @@ fn (m Map<<K>, <V>>&) Str() String {
     for e in m {
         if n > 0 { b.Push(", ") }
         n++
-        k := $MapEntry<K, Bool>(e.Key, false)                  # "MapEntry(" the key ", false)"
-        b.Push(k[9:k.Len() - 8])
+        k := $alone(e.Key)                                     # "(" the key ", false)"
+        b.Push(k[1:k.Len() - 8])
         b.Push(": ")
-        v := $MapEntry<Bool, V>(false, e.Value)                # "MapEntry(false, " the value ")"
-        b.Push(v[16:v.Len() - 1])
+        v := $alone(e.Value)
+        b.Push(v[1:v.Len() - 8])
     }
     b.PushChar('}')
     return b.ToString()
 }
+
+# x and false - so that "$" renders x as it does inside another value, text and characters quoted (E11a), with nothing
+# built around it: a value built only to be rendered would have to live exactly where what it holds lives
+fn alone(x <T>) (T, Bool) { return x, false }
 
 # T as written - what "$" puts before an array's items, and what a Map's rendering names its key and value types by
 fn typeWritten(a Array<<T>>&) String {

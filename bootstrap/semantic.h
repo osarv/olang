@@ -366,6 +366,8 @@ struct var {
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
                              //the first
+    bool renderStr; //E11c/O12: a method "$" may call (a Str) - its receiver's scope variables are noBuild in its body
+    bool noBuild;   //E11c/O12: a Str's receiver's scope variable - "$" hands it no scope, so nothing is built or stored there
     bool storeInResult; //O26a: a value local the function returns - its storage, and its references (valueHome), are in
                         //the result scope
     //O18c: a value local whose ":=" call landed by its obligations in one of this function's scope variables - where

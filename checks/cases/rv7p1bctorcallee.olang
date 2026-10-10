@@ -25,6 +25,6 @@ fn render(k I64) String {
 Baked := render(0)
 Zero mut I64 = 0                        # read at run time: the call below is made there
 fn main() ? {
-    assert Baked == "b1 b2 v=2"
+    assert Baked == "b1 b2 v=1"                 # v read where it is evaluated, before the pieces render (E11b)
     assert render(Zero) == Baked
 }

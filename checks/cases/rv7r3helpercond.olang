@@ -19,5 +19,6 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Mid(), Mid())
-    assert $b $b " k=" $b.m.inner.k == "bb k=2"
+    assert $b $b " k=" $b.m.inner.k == "bb k=0"   # k read before the pieces render (E11b)
+    assert b.m.inner.k == 2
 }

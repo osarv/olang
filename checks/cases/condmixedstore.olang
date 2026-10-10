@@ -1,0 +1,26 @@
+# check: fail error[O20]
+# O20/E28: a conditional of an existing reference and a new value lives where the existing one does, so it is stored
+# only where that outlives the slot (the local's node was freed and read back)
+type Node struct(v I64) {
+    v
+}
+type Hold struct() {
+    f Node& = null
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    h mut Hold& = Hold()
+    for i in range 1 {
+        local Node& = Node(42)
+        h.f = local if i == 0 else Node(7)
+    }
+    churn()
+    println($h.f.v)
+}

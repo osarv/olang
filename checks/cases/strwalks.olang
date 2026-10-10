@@ -1,0 +1,58 @@
+# check: run
+# flags: -s
+# E11c/O12: a Str walks what its receiver reaches - a Map, a List, an iterator built over the receiver, a field read
+# through it - and builds what it needs in scopes of its own: nothing is built where the receiver lives, and nothing
+# read there outlives it (built under the scope sanitizer, after an arena churn)
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type It struct(of Bag&) {
+    slot mut Node&of = of.head
+    n I64 = of.k
+}
+type Bag struct(head mut Node&) {
+    head
+    k I64 = 3
+    m Map<String&, I64> = Map<String&, I64>()
+    l List<I64> = List<I64>()
+}
+fn (b Bag&) mk() It { return It(b) }
+fn (b Bag&) Str() String {
+    n I64 = 0
+    for e in b.m { n += e.Value }
+    for x in b.l { n += x }
+    it := b.mk()
+    direct := It(b)
+    return $n "/" $b.m.Len() "/" $it.slot.v "/" $direct.n "/" $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    b.m.Put("a", 2)
+    b.m.Put("b", 5)
+    b.l.Push(10)
+    b.l.Push(20)
+    s := $b
+    churn()
+    assert s == "37/2/1/3/30"
+    m := Map<Char, List<Char>>()
+    l := List<Char>()
+    l.Push('x')
+    m.Put('a', l)
+    t := $m
+    e := Map<I64, List<I64>>()
+    u := $e
+    churn()
+    assert t == "Map<Char, List<Char>>{'a': List<Char>['x']}"
+    assert u == "Map<I64, List<I64>>{}"
+}

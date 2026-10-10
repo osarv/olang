@@ -1,0 +1,30 @@
+# check: fail error[E11c, O12]
+# E11c/O12: a lambda Str makes, storing a new node through a read-only capture's writable field, stores where the
+# receiver reaches - which '$' gives no scope (it was built in a scope closed with the call, read back as -7)
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    f := fn() { b.head.next = Node(5, null) }
+    f()
+    return "b"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    churn()
+    println(s)
+    println($b.head.next.v)
+}

@@ -1,0 +1,39 @@
+# check: fail error[E11c, O12]
+# E11c/O12: built in the result scope, the value is held to live where the receiver's node does - an obligation on a
+# scope '$' gives none of (it stored through the node when the result scope closed)
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Res struct(a mut Node&) {
+    a
+} destruct { a.next = Node(9, null) }
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    x Res&return = Res(b.head)
+    return "b"
+}
+type Junk struct(a I64, b I64) {
+    a
+    b
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        j Junk& = Junk(-7, -7)
+        a := Array<I64>(64, -7)
+        t += a[3] + j.a
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    keep := List<Junk&>()
+    for i in range 2000 { keep.Push(Junk(-7, -7)) }
+    churn()
+    println(s)
+    println($b.head.next.v)
+}
