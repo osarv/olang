@@ -1324,10 +1324,10 @@ fn fuzz(r mut report&) ? Failed {
     os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
-    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/run*/found)", dir)
     # B2f: scope-stress programs built under the scope sanitizer and interpreted give one output (seeds that ran clean)
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug scope 3 2 1 12 > out.txt 2>&1") == 0,
-                 "fuzz scope found something (build/checks/fuzz/build/fz/scope)", dir)
+                 "fuzz scope found something (build/checks/fuzz/build/fz/run*/scope)", dir)
 }
 
 # B2f: the scope sanitizer. Its runtime, driven from C: storage a closed scope gave back, read or written - a small chunk

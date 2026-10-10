@@ -104,7 +104,8 @@ race: build/out
 
 # the differential fuzzer (fuzz/, K1): random programs whose every value is computed while compiling, built -O3, built
 # -O0 and interpreted, each run compared. Not part of "verify" - it runs as long as it is asked to. "make fuzz
-# SEED=500 COUNT=1000" picks the seeds; findings land in build/fz/found and build/fz/findings.txt.
+# SEED=500 COUNT=1000" picks the seeds. Each run works in a directory of its own, build/fz/runXXXXXX, kept and named
+# when something was found (findings.txt and found/ in it), removed otherwise.
 SEED ?= 1
 COUNT ?= 100
 JOBS ?= 2
@@ -122,7 +123,7 @@ scopesan: build/out
 
 # the scope fuzzer (fuzz/scopegen.olang, B2f): random programs storing, lending, copying and returning where scopes close,
 # built under the scope sanitizer and interpreted, the two outputs compared. "make scopefuzz SEED=1 COUNT=300 SCENARIOS=12";
-# findings land in build/fz/scope, a line each in build/fz/scope/findings.txt.
+# a run's findings land in its own directory's scope/, a line each in scope/findings.txt (named when there are any).
 SCENARIOS ?= 12
 scopefuzz: build/out
 	nice -n 19 build/out -b -d fuzz/fuzz.olang
