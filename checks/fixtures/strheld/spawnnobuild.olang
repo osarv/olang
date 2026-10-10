@@ -1,0 +1,15 @@
+# P2: a task whose call builds nothing into a scope is handed it raw - no stand-in
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn hr(n Node&) I64 { return n.v }
+fn hjoin(n Node&) I64 {
+    x I64 = 0
+    join { spawn x = hr(n) }
+    return x
+}
+fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
+fn main() ? { println($Bag(Node(6))) }

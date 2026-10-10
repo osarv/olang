@@ -1,0 +1,26 @@
+# O18a/E28: a conditional of a call still landing and a new value, passed on, is built where the call stands - each
+# instance destructed in its iteration
+Made mut I64 = 0
+Gone mut I64 = 0
+type Res struct(k I64) {
+    k
+    pad Array<I64, 16>
+    Made++
+} destruct {
+    Gone++
+}
+fn id(x <T>) T { return x }
+fn takeR(r Res&) I64 { return r.k }
+fn work() I64 {
+    c := true
+    t I64 = 0
+    for i in range 100000 {
+        t += takeR(id(Res(i)) if c else Res(16))
+    }
+    println("in work: made " $Made " gone " $Gone)
+    return t
+}
+fn main() ? {
+    t := work()
+    println("after: made " $Made " gone " $Gone " " $t)
+}

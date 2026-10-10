@@ -1,0 +1,13 @@
+# D16c: a helper's local lambda that is only ever called lives in its frame - nothing built where the node lives
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn peek(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    return f()
+}
+fn (b Bag&) Str() String { return "b" $peek(b.head) }
+fn main() ? { println($Bag(Node(4))) }

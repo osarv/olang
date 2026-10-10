@@ -2089,6 +2089,22 @@ struct var* SemanticCallOf(struct type t);
 //G24: why the last failed unification failed, where it was a constant's doing - a variable bound to two values, or an
 //array whose length its type does not hold - for the call to report as that rather than as "cannot infer"
 static struct { bool set; struct str name; long long a, b; bool runtimeLength; struct type arrayType; } unifyConstMismatch;
+//G9: the first bindings, which a method's receiver made (G9b), are the instantiation's own type and never meet a later
+//argument's permission - set by the call inferring them, 0 anywhere else
+static int unifyFrozen;
+//G9d/C11: a value of a type declaring a destructor is only ever a temporary - C11 lets nothing else hold one by value - so
+//a bare "<T>" it reaches binds the reference to it: writable, as any built value is (T25c), meeting another argument's
+//read-only reference at read-only (TypeUnify), and read-only in a generic constructor, which binds every reference so
+//(G10c). The temporary is then promoted into the parameter, built where the parameter's scope says (O18b) and registered
+//there, once (O16). Bound by value, the instance was copied in and out of the callee, each copy registered, and
+//destructed twice
+static struct type unifyTempAsRef(struct type param, struct type arg) {
+    if (!param.structMAlloc && arg.bType == BASETYPE_STRUCT && arg.hasDestruct && !arg.structMAlloc) {
+        arg.structMAlloc = true;
+        arg.refMut = true;
+    }
+    return arg;
+}
 bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
     if (param.bType == BASETYPE_TYPEVAR) {
         struct type* bound = bindingGet(bindings, param.name);
@@ -2103,16 +2119,24 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
             }
             return false;
         }
-        //G9d/C11: a value of a type declaring a destructor is only ever a temporary - C11 lets nothing else hold one by
-        //value - so a bare "<T>" it reaches binds the reference to it: the temporary is promoted into the parameter
-        //(built where the parameter's scope says, O18b) and registered there, once (O16), as a generic constructor binds
-        //an array value as a reference (G10c). Bound by value, the instance was copied in and out of the callee, each
-        //copy registered, and destructed twice
-        if (!param.structMAlloc && arg.bType == BASETYPE_STRUCT && arg.hasDestruct && !arg.structMAlloc) {
-            arg.structMAlloc = true;
-            arg.refMut = true; //T25c: a built value is writable - nothing else holds it
+        arg = unifyTempAsRef(param, arg);
+        if (bound) {
+            //G9d/T25c: two references of one type that differ in permission meet at the read-only one, whichever comes
+            //first - as two numbers meet at the wider (T6b) - so the order of the arguments decides nothing. Never a
+            //variable a method's receiver bound (G9b): the receiver is the instantiation's own type
+            if (bound->structMAlloc && arg.structMAlloc && bound->refMut != arg.refMut) {
+                struct type a2 = arg;
+                a2.refMut = bound->refMut;
+                if (!TypeIsSame(*bound, a2)) return false;
+                bool frozen = false;
+                for (int i = 0; i < unifyFrozen && i < bindings->len; i++)
+                    frozen |= &((struct typeBinding*)ListGetIdx(bindings, i))->type == bound;
+                if (frozen) return TypeIsSame(*bound, arg);
+                bound->refMut = false;
+                return true;
+            }
+            return TypeIsSame(*bound, arg);
         }
-        if (bound) return TypeIsSame(*bound, arg);
         struct typeBinding b = (struct typeBinding){0};
         b.name = param.name;
         b.type = arg;
@@ -6323,6 +6347,9 @@ struct checkCtx {
     bool inTextJoin; //E11b: building a piece of a text join - "(" after a piece is a call of it, never what was meant
     struct list assignPlaces; //S4d: the value places an assignment being built writes over (struct operand*) - a borrow
                               //of storage within one, kept in what the value builds, takes its old value (copiesOld)
+    struct list* joinErrs; //P4c: the error types the innermost join's tasks let through (struct type*), with joinHasSpawn
+    bool* joinFallibleTarget; //P4d: set by a spawn with targets whose task can fail into that join
+    bool inTaskClause; //P4a: checking a clause of a spawned try - code of the task, which it may not leave
 };
 
 struct scope scopePush(struct scope* parent) {
@@ -8908,6 +8935,8 @@ bool scopeViaFallback(struct operand* op);
 static bool bindingIsLanding(struct operand* callOp, struct var* sv);
 static struct operand* projectionBase(struct operand* op);
 static struct operand* heldResult(struct operand* op);
+static bool opIsCtorCall(struct operand* op);
+static bool opIsEnumCtor(struct operand* op);
 bool argDeterminesScope(struct operand* arg) {
     if (heldResult(arg)) return argDeterminesScope(heldResult(arg));
     if (!(arg->type.structMAlloc || (arg->type.bType == BASETYPE_ARRAY && arg->type.arrMalloc))) return false;
@@ -8916,6 +8945,22 @@ bool argDeterminesScope(struct operand* arg) {
     if (arg->opType == OPERATION_FUNCCALL && arg->type.scopeParam && bindingIsLanding(arg, arg->type.scopeParam))
         return false;
     if (projectionBase(arg) && callIsLanding(arg)) return false;
+    //E28/S12b: so does a conditional or a match none of whose values is existing storage - each a call still landing or a
+    //new value, built where the parameter says, as the call alone would be ("takeR(idr(Node(i)) if c else Node(16))"
+    //built both nodes in the function's own scope, kept until it returned)
+    if ((arg->opType == OPERATION_COND || arg->opType == OPERATION_MATCH) && callIsLanding(arg)) {
+        struct list vs = ListInit(sizeof(struct operand*));
+        if (arg->opType == OPERATION_COND && arg->args.len == 3) {
+            ListAdd(&vs, ListGetIdx(&arg->args, 1));
+            ListAdd(&vs, ListGetIdx(&arg->args, 2));
+        } else if (arg->opType == OPERATION_MATCH) vs = SemanticMatchValues(arg);
+        bool existing = false;
+        for (int i = 0; i < vs.len && !existing; i++) {
+            struct operand* v = *(struct operand**)ListGetIdx(&vs, i);
+            existing = !v->isNullLiteral && !argIsFreshTemp(v) && !callIsLanding(v) && !opIsCtorCall(v) && !opIsEnumCtor(v);
+        }
+        if (!existing) return false;
+    }
     return true;
 }
 
@@ -10062,9 +10107,10 @@ static bool regionBuiltIn(struct var* func, struct var* sv) {
     struct regionFlag* f = regionFlagOf(func, sv, false);
     return f && f->built;
 }
-//...and reported where it happens when it is a Str's receiver's (E11c/O12)
+//(a Str's receiver's is decided by the may-build walk, E11c/O12 - not by these region facts, which take a call through
+//a function value to build wherever it is bound)
 static void builtAt(struct checkCtx* ctx, struct var* r, struct token tok) {
-    if (scopeIsNoBuild(r)) ErrOncePerLine(tok, ERR_STR_STORES_IN_RECEIVER);
+    (void)tok;
     markRegionBuilt(ctx->func, r);
 }
 static void markRegionHandedOut(struct var* func, struct var* sv) {
@@ -11200,7 +11246,9 @@ static bool mayBuildWhileChecking(struct var* func) {
 //anything to it; a closure made, where it lives there, or where its body may build into a capture bound to it.
 //The answers a Str's acceptance relied on are held to by codegen (cgCheckMayBuild): a body building into such a
 //variable is an internal error at compile time, so a site missed here is never a null scope reached at run time
-struct mbiMemo { struct var* func; struct var* v; char state; int at; char said; }; //said: 1 no, 2 yes, as last found
+//deps: the function-typed parameters of func (a bit each, by position) its body calls, or hands on to be called, with
+//something bound to v - what it builds there is what the function passed for them builds, decided at each call
+struct mbiMemo { struct var* func; struct var* v; char state; int at; char said; unsigned long long deps; }; //said: 1 no, 2 yes
 static struct list mbiMemos;
 static struct var* mbiV;          //canonical: the scope variable asked about
 static struct var* mbiF;          //the function whose body is read
@@ -11211,6 +11259,10 @@ static bool mbiFirstSet;
 static struct token mbiLastSite;  //the site the outermost body found, once a question is answered yes
 static int mbiDepth = 0;
 static int mbiLow = 0x7fffffff;
+static unsigned long long mbiDeps; //the body being read: its mbiMemo.deps so far
+static bool mbiTransient; //a capturing lambda passed for a parameter its callee keeps nothing of: its environment is in
+                          //the caller's frame (codegen's cgEnvOnStack), built nowhere
+static bool mbiInSpawn;   //(never so for a task's arguments: they outlive the spawning statement)
 static bool mbiStmt(struct statement* s);
 static bool mbiOperand(struct operand* op, bool tgt);
 static bool mbiBlock(struct list* block);
@@ -11221,7 +11273,7 @@ static int mbiMemoOf(struct var* func, struct var* v) {
         struct mbiMemo* m = ListGetIdx(&mbiMemos, i);
         if (m->func == func && m->v == v) return i;
     }
-    struct mbiMemo m = { func, v, 0, 0, 0 };
+    struct mbiMemo m = { func, v, 0, 0, 0, 0 };
     ListAdd(&mbiMemos, &m);
     return mbiMemos.len - 1;
 }
@@ -11248,9 +11300,26 @@ static bool mbiPlaced(struct operand* op, bool tgt) {
     if (op->type.scopeParam && op->opType != OPERATION_FUNCCALL && mbiIs(op->type.scopeParam, op->type.scopeDepth)) return true;
     return tgt;
 }
+static bool mbiPlaceIs(struct operand* p);
+static bool mbiBodyKnown(struct var* f);
+static bool mayBuildInto(struct var* func, struct var* v);
+static bool mayBuildIntoRaw(struct var* func, struct var* v);
+static unsigned long long mbiDepsOf(struct var* func, struct var* v);
+//E31: a value adapted to a function type through its Call - a call of Call with its receiver bound to where the instance
+//lives (cgCallAdapterValue: the instance's own scope, or the temporary's, placed with the adapter). So where the
+//instance may live in the variable asked about, Call's own body is asked about its receiver's variable
+static bool mbiAdapter(struct type dst, struct operand* src) {
+    if (!src || dst.bType != BASETYPE_FUNC || src->type.bType == BASETYPE_FUNC || src->isNullLiteral) return false;
+    struct var* call = SemanticCallOf(src->type);
+    if (!call || !call->type.vars.len) return false;
+    struct var* recv = ListGetIdx(&call->type.vars, 0);
+    if (!recv->type.scopeParam) return false; //a receiver by value holding nothing: nothing of the instance's scope reaches Call
+    if (!(src->type.structMAlloc || OperandIsLvalue(src)) || !mbiPlaceIs(src)) return false; //(a temporary: mbBoundary)
+    return !mbiBodyKnown(call) || SemanticMayBuildInto(call, recv->type.scopeParam);
+}
 //a value reaching dst, where that alone may allocate (mbBoundary): in dst's scope, or the target the store gives it
 static bool mbiBoundary(struct type dst, struct operand* src, bool tgt) {
-    return mbBoundary(dst, src) && (tgt || mbiIs(dst.scopeParam, dst.scopeDepth));
+    return (mbBoundary(dst, src) && (tgt || mbiIs(dst.scopeParam, dst.scopeDepth))) || mbiAdapter(dst, src);
 }
 //the scope a call binds its callee's variable w to - the hidden argument codegen passes (cgBoundScopeArg)
 static bool mbiBound(struct operand* call, struct var* w) {
@@ -11273,8 +11342,38 @@ static bool mbiOperandList(struct list* ops, bool tgt) {
     return false;
 }
 
+//the position of the function-typed parameter of the body being read that f is, or -1
+static int mbiOwnFnParam(struct var* f) {
+    if (!f || !mbiF || f->isFuncDecl || f->owner || f->type.bType != BASETYPE_FUNC) return -1;
+    for (int j = 0; j < mbiF->type.vars.len && j < 64; j++) {
+        struct var* pv = ListGetIdx(&mbiF->type.vars, j);
+        if (canonicalVar(pv) == canonicalVar(f) || (pv->tok.str.ptr == f->tok.str.ptr && StrCmp(pv->name, f->name)))
+            return pv->type.bType == BASETYPE_FUNC ? j : -1;
+    }
+    return -1;
+}
+//whether a function handed in as an argument may build into a scope one of its parameters is bound to - the body of a
+//lambda, a named function or a Call (E31) when known; anything else may
+static bool mbiFnArgBuilds(struct operand* a) {
+    if (!a || a->isNullLiteral) return false;
+    struct var* fv = NULL;
+    int from = 0;
+    if (a->opType == OPERATION_READ_VAR && a->readVar && (a->readVar->isLambda || a->readVar->isFuncDecl)) fv = a->readVar;
+    else if (a->type.bType != BASETYPE_FUNC && SemanticCallOf(a->type)) { fv = SemanticCallOf(a->type); from = 1; }
+    if (!fv || !mbiBodyKnown(fv)) return true;
+    struct var* recvScope = from && fv->type.vars.len ? ((struct var*)ListGetIdx(&fv->type.vars, 0))->type.scopeParam : NULL;
+    for (int i = 0; i < fv->type.scopeVars.len; i++) {
+        struct var* u = *(struct var**)ListGetIdx(&fv->type.scopeVars, i);
+        if (u->isCaptureScope || (recvScope && canonicalVar(u) == canonicalVar(recvScope))) continue; //(where it is made)
+        if (mayBuildInto(fv, u)) return true;
+    }
+    return false;
+}
 static bool mbiCall(struct operand* op, bool tgt) {
     struct var* f = op->readVar;
+    //a call through a function-typed parameter of the body being read: what it may build is the argument's, asked at
+    //each call of this body (mbiDeps) - so a higher-order function is not taken to build where its callback does not
+    int own = op->callee ? -1 : mbiOwnFnParam(f);
     //an instance of a type declaring a destructor registers it where it is built (O16)
     if (f && f->type.hasRetType && f->type.retType && f->type.retType->hasDestruct && mbiPlaced(op, tgt)) return mbiSite(op);
     if (op->callee && mbiOperand(op->callee, tgt)) return true;
@@ -11283,7 +11382,17 @@ static bool mbiCall(struct operand* op, bool tgt) {
         for (int i = 0; i < f->type.scopeVars.len; i++) {
             struct var* w = *(struct var**)ListGetIdx(&f->type.scopeVars, i);
             if (!mbiBound(op, w)) continue;
-            if (!known || SemanticMayBuildInto(f, w)) return mbiSite(op);
+            if (!known && own >= 0) { mbiDeps |= 1ull << own; continue; }
+            if (!known || mayBuildIntoRaw(f, w)) return mbiSite(op);
+            //...and what it calls through its own function-typed parameters there is what is passed for them here
+            unsigned long long deps = f->type.isExtern ? 0 : mbiDepsOf(f, w);
+            for (int j = 0; deps && j < 64; j++) {
+                if (!(deps & (1ull << j))) continue;
+                struct operand* a = j < op->args.len ? *(struct operand**)ListGetIdx(&op->args, j) : NULL;
+                int passed = a && a->opType == OPERATION_READ_VAR ? mbiOwnFnParam(a->readVar) : -1;
+                if (passed >= 0) mbiDeps |= 1ull << passed;
+                else if (!a || mbiFnArgBuilds(a)) return mbiSite(a && a->tok.owner ? a : op);
+            }
         }
         //a constructor builds what its fields hold where its instance lands (C2g)
         if (mbiIsCtor(f) && mbiPlaced(op, tgt) && (!known || SemanticMayBuild(f))) return mbiSite(op);
@@ -11291,8 +11400,10 @@ static bool mbiCall(struct operand* op, bool tgt) {
     if (!known) { //anything bound here may be built into, by code not known
         for (int i = 0; i < op->scopeBindings.len; i++) {
             struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
-            if (!b->boundUnnamed && (mbiIs(b->boundTo, b->boundDepth) || mbiIs(SemanticBoundScope(op, b->typeParam), 0)))
+            if (!b->boundUnnamed && (mbiIs(b->boundTo, b->boundDepth) || mbiIs(SemanticBoundScope(op, b->typeParam), 0))) {
+                if (own >= 0) { mbiDeps |= 1ull << own; continue; }
                 return mbiSite(op);
+            }
         }
     }
     for (int i = 0; i < op->args.len; i++) {
@@ -11302,9 +11413,22 @@ static bool mbiCall(struct operand* op, bool tgt) {
             struct type pt = ((struct var*)ListGetIdx(&f->type.vars, i))->type;
             //(cgResolveParamScopeOverride: a temporary for a reference parameter is built where its scope is bound)
             if (pt.scopeParam) at = tgt || mbiBound(op, pt.scopeParam);
-            if (mbBoundary(pt, a) && at) return mbiSite(a);
+            //E31/D16c: an adapter made for a callee that keeps nothing of it is in the caller's frame (codegen's
+            //adapterHere) - an instance with storage of its own is then all it holds, and nothing is built
+            bool adapterHere = !mbiInSpawn && !op->callee && pt.bType == BASETYPE_FUNC && a->type.bType != BASETYPE_FUNC
+                               && (a->type.structMAlloc || OperandIsLvalue(a)) && SemanticCallOf(a->type)
+                               && SemanticParamTransient(f, i);
+            if ((!adapterHere && mbBoundary(pt, a) && at) || mbiAdapter(pt, a)) return mbiSite(a);
         }
-        if (mbiOperand(a, at)) return true;
+        //D16c: a capturing lambda made for a callee that keeps nothing of it lives in this frame, as codegen makes it
+        //(cgEnvOnStack) - what its body builds into what it captured is still asked
+        bool transient = !mbiInSpawn && !op->callee && f && a->opType == OPERATION_READ_VAR && a->readVar
+                         && a->readVar->isLambda && a->readVar->lambdaCaptures.len && SemanticParamTransient(f, i);
+        bool savedTransient = mbiTransient;
+        mbiTransient = transient;
+        bool r = mbiOperand(a, at);
+        mbiTransient = savedTransient;
+        if (r) return true;
     }
     return false;
 }
@@ -11320,6 +11444,7 @@ static bool mbiOperand(struct operand* op, bool tgt) {
             struct catchClause* c = ListGetIdx(&op->catchClauses, i);
             if (mbiBlock(&c->block) || mbiOperand(c->dflt, dt)) return true;
             if (c->dflt && (mbBoundary(op->type, c->dflt) || mbBoundary(op->tryDefaultType, c->dflt)) && dt) return mbiSite(c->dflt);
+            if (c->dflt && (mbiAdapter(op->type, c->dflt) || mbiAdapter(op->tryDefaultType, c->dflt))) return mbiSite(c->dflt);
         }
     }
     switch (op->opType) {
@@ -11336,7 +11461,8 @@ static bool mbiOperand(struct operand* op, bool tgt) {
         return mbiOperandList(&op->args, tgt);
     case OPERATION_READ_VAR:
         if (op->readVar && op->readVar->isLambda && op->readVar->lambdaCaptures.len) { //a closure made (D16d)
-            if (op->lambdaHomeSet ? mbiIs(op->lambdaHome, op->lambdaHomeDepth) : tgt) return mbiSite(op);
+            if (!mbiTransient && !op->cgEnvOnStack && (op->lambdaHomeSet ? mbiIs(op->lambdaHome, op->lambdaHomeDepth) : tgt))
+                return mbiSite(op);
             for (int i = 0; i < op->scopeBindings.len; i++) {
                 struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
                 if (mbiIs(b->boundTo, b->boundDepth) && (!mbiBodyKnown(op->readVar) || SemanticMayBuildInto(op->readVar, b->typeParam)))
@@ -11351,11 +11477,13 @@ static bool mbiOperand(struct operand* op, bool tgt) {
         bool at = mbiPlaced(op, tgt);
         for (int i = 1; i < op->args.len; i++) {
             struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
-            if (mbBoundary(op->type, a) && at) return mbiSite(a);
+            if ((mbBoundary(op->type, a) && at) || mbiAdapter(op->type, a)) return mbiSite(a);
         }
         if (op->args.len && mbiOperand(*(struct operand**)ListGetIdx(&op->args, 0), tgt)) return true;
-        for (int i = 1; i < op->args.len; i++)
-            if (mbiOperand(*(struct operand**)ListGetIdx(&op->args, i), at)) return true;
+        for (int i = 1; i < op->args.len; i++) {
+            struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+            if (!CtIsStaticLiteral(a, op->type) && mbiOperand(a, at)) return true; //(T25d: constant data, built nowhere)
+        }
         return false;
     }
     case OPERATION_MATCH: {
@@ -11363,7 +11491,8 @@ static bool mbiOperand(struct operand* op, bool tgt) {
         struct list vs = SemanticMatchValues(op);
         for (int i = 0; i < vs.len; i++) {
             struct operand* v = *(struct operand**)ListGetIdx(&vs, i);
-            if ((mbBoundary(op->type, v) && at) || mbiOperand(v, at)) return mbiFound ? true : mbiSite(v);
+            if (CtIsStaticLiteral(v, op->type)) continue; //(T25d)
+            if ((mbBoundary(op->type, v) && at) || mbiAdapter(op->type, v) || mbiOperand(v, at)) return mbiFound ? true : mbiSite(v);
         }
         return mbiBlock(&op->comprBody) || mbiOperandList(&op->args, tgt);
     }
@@ -11483,12 +11612,22 @@ static bool mbiStmt(struct statement* s) {
     }
     case STATEMENT_DEFER:
     case STATEMENT_JOIN:
-        return mbiBlock(&s->block);
+        if (mbiBlock(&s->block)) return true;
+        for (int i = 0; i < s->catchClauses.len; i++) //P4c: a "try join"'s clauses
+            if (mbiBlock(&((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block)) return true;
+        return false;
     case STATEMENT_SPAWN:
+        for (int i = 0; i < s->catchClauses.len; i++) { //P4a: a spawned try's clauses, each a call of its own
+            struct catchClause* c = ListGetIdx(&s->catchClauses, i);
+            if (mbiOperand(c->taskCall, false) || mbiBlock(&c->block) || mbiOperand(c->dflt, false)) return true;
+        }
         //P2: a task's stand-in for each scope its call binds is made in that scope
         if (s->op && s->op->opType == OPERATION_FUNCCALL) {
+            struct var* tf = s->op->callee ? NULL : s->op->readVar;
             for (int i = 0; i < s->op->scopeBindings.len; i++) {
                 struct scopeBinding* b = ListGetIdx(&s->op->scopeBindings, i);
+                //(none where its callee builds nothing into that variable - settleTaskStandins)
+                if (tf && !tf->type.isExtern && !tf->isLambda && mbiBodyKnown(tf) && !mayBuildInto(tf, b->typeParam)) continue;
                 if (!b->boundUnnamed && (mbiIs(b->boundTo, b->boundDepth) || mbiIs(SemanticBoundScope(s->op, b->typeParam), 0)))
                     return mbiSite(s->op);
             }
@@ -11501,7 +11640,13 @@ static bool mbiStmt(struct statement* s) {
                 }
             }
         }
-        return mbiOperand(s->op, false);
+        {
+            bool savedSpawn = mbiInSpawn;
+            mbiInSpawn = true;
+            bool r = mbiOperand(s->op, false);
+            mbiInSpawn = savedSpawn;
+            return r;
+        }
     case STATEMENT_TRY_CATCH:
         if (mbiOperand(s->op, false)) return true;
         for (int i = 0; i < s->catchClauses.len; i++)
@@ -11519,7 +11664,7 @@ static bool mbiBlock(struct list* block) {
 }
 
 //whether func may build into its scope variable v - every answer of no is held to by codegen (SemanticReliesNoBuild)
-static bool mayBuildInto(struct var* func, struct var* v) {
+static bool mayBuildIntoRaw(struct var* func, struct var* v) {
     if (!func || !v) return true;
     v = canonicalVar(v);
     if (func->type.isExtern) return false;
@@ -11540,10 +11685,12 @@ static bool mayBuildInto(struct var* func, struct var* v) {
     struct token savedTok = mbiTok;
     bool savedFound = mbiFound;
     int savedLow = mbiLow;
+    unsigned long long savedDeps = mbiDeps;
     mbiV = v;
     mbiF = func;
     mbiFound = false;
     mbiLow = 0x7fffffff;
+    mbiDeps = 0;
     m->state = 1;
     m->at = ++mbiDepth;
     struct type* ct = func->type.hasRetType ? func->type.retType : NULL;
@@ -11553,6 +11700,8 @@ static bool mayBuildInto(struct var* func, struct var* v) {
     if (r) m->state = 3;
     else m->state = mbiLow < m->at ? 0 : 2;
     m->said = r ? 2 : 1;
+    m->deps = r ? 0 : mbiDeps;
+    mbiDeps = savedDeps;
     if (r) mbiLastSite = mbiFound ? mbiTok : func->tok;
     int low = mbiLow < m->at ? mbiLow : 0x7fffffff;
     mbiV = savedV;
@@ -11561,6 +11710,20 @@ static bool mayBuildInto(struct var* func, struct var* v) {
     if (savedFound) { mbiTok = savedTok; mbiFound = true; }
     else mbiFound = false;
     return r;
+}
+//the deps of the answer last found for (func, v)
+static unsigned long long mbiDepsOf(struct var* func, struct var* v) {
+    v = canonicalVar(v);
+    for (int k = 0; k < mbiMemos.len; k++) {
+        struct mbiMemo* m = ListGetIdx(&mbiMemos, k);
+        if (m->func == func && m->v == v) return m->deps;
+    }
+    return 0;
+}
+//...whatever is passed for its function-typed parameters: asked where that is not known, it is taken to build
+static bool mayBuildInto(struct var* func, struct var* v) {
+    if (mayBuildIntoRaw(func, v)) return true;
+    return v && mbiMemos.elemSize && mbiDepsOf(func, v) != 0;
 }
 bool SemanticMayBuildInto(struct var* func, struct var* v) { return mayBuildInto(func, v); }
 
@@ -11820,6 +11983,8 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
         int requiredG = func->type.vars.len;
         while (requiredG > 0 && (*(struct var*)ListGetIdx(&func->type.vars, requiredG -1)).defaultVal) requiredG--;
         bool ok = args.len >= requiredG && args.len <= func->type.vars.len;
+        int savedFrozen = unifyFrozen;
+        unifyFrozen = 0;
         //G9a: a numeric literal has no type worth defending (T6), so it binds nothing while any other
         //argument can: every non-literal is unified first, and a literal reaching an already-bound
         //variable is then left to adapt at the fit check like any other literal. A variable reached ONLY
@@ -11842,11 +12007,25 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                 for (int k = 0; k < numBound.len && !byNumber; k++) byNumber = StrCmp(*(struct str*)ListGetIdx(&numBound, k), paramT.name);
                 struct type* bt = bindingGet(&bindings, paramT.name);
                 if (byNumber && !operandAdaptsAsLiteral(arg) && NumericFlows(*bt, arg->type, true)) *bt = TypeVanilla(arg->type.bType);
+                //G9d/T25c: a writable reference meets a later read-only one of its type at read-only, as TypeUnify meets
+                //them, so the order of the arguments decides nothing
+                struct type at = unifyTempAsRef(paramT, arg->type);
+                bool frozenHere = false;
+                for (int k = 0; k < unifyFrozen && k < bindings.len; k++)
+                    frozenHere |= &((struct typeBinding*)ListGetIdx(&bindings, k))->type == bt;
+                if (!frozenHere && bt->structMAlloc && at.structMAlloc && bt->refMut && !at.refMut) {
+                    at.refMut = true;
+                    if (TypeIsSame(*bt, at)) bt->refMut = false;
+                }
                 continue;
             }
             if (paramT.bType == BASETYPE_TYPEVAR && !operandAdaptsAsLiteral(arg) && TypeIsNumeric(arg->type)) ListAdd(&numBound, &paramT.name);
             if (!TypeUnify(paramT, arg->type, &bindings)) ok = false;
+            if (i == 0 && func->isMethod) unifyFrozen = bindings.len; //G9b: the receiver's bindings
         }
+        //...and only the arguments meet: what a constraint binds through a receiver's methods is the receiver's, and a
+        //lambda's written read-only parameter fits a writable one (T22) rather than lowering it
+        unifyFrozen = 1 << 30;
         //G9a: written text adapts as a numeric literal does - "m.Put("apple", 1)" on a Map<String&, Int32> is the
         //String& the receiver already bound, and the text is then built as a temporary for it. Reached only by
         //text, the variable is the text's own type.
@@ -11906,6 +12085,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             FinalizeLambda(arg, &paramT);
             if (!TypeUnify((*(struct var*)ListGetIdx(&func->type.vars, i)).type, arg->type, &bindings)) ok = false;
         }
+        unifyFrozen = savedFrozen;
         //G11a: a "<T>&" parameter takes a reference, so T must be bound to what can be one
         for (int i = 0; ok && i < func->type.vars.len; i++) {
             struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
@@ -15088,6 +15268,7 @@ void rejectDefaultArgs(struct list args) {
 //deliberate simplification (checking only the escaping subset would need catch-exhaustiveness analysis)
 void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
+    if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
     if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
     for (int i = 0; i < calleeType.errors.len; i++) {
@@ -17917,6 +18098,28 @@ static bool syntaxMentionsName(struct syntax* e, struct str name, bool skipFirst
     return syntaxMentionsNameIn(e, name, skipFirst, false);
 }
 
+//D16c: whether the local named is only ever called in the statements after its declaration - every mention "name(",
+//never after a "." or "spawn", and none inside a lambda written after it (which would copy it out of this frame). D3a
+//makes the name this one local's throughout its block, and the block is as far as it reaches
+static bool localOnlyCalled(struct checkCtx* ctx, struct str name) {
+    bool ok = true;
+    for (int i = ctx->blockStmtIdx + 1; ok && i < ctx->blockStmts.len; i++) {
+        struct list toks = ListInit(sizeof(struct token));
+        syntaxTokensInto(*(struct syntax**)ListGetIdx(&ctx->blockStmts, i), &toks);
+        bool inLambda = false;
+        for (int k = 0; ok && k < toks.len; k++) {
+            struct token* t = ListGetIdx(&toks, k);
+            if (t->type == TOK_FUNC) inLambda = true;
+            if (t->type != TOK_IDEN || !StrCmp(strFromTok(*t), name)) continue;
+            enum tokenType prev = k ? ((struct token*)ListGetIdx(&toks, k - 1))->type : TOK_NONE;
+            enum tokenType next = k + 1 < toks.len ? ((struct token*)ListGetIdx(&toks, k + 1))->type : TOK_NONE;
+            ok = !inLambda && next == TOK_PAREN_O && prev != TOK_DOT && prev != TOK_SPAWN;
+        }
+        ListDestroy(toks);
+    }
+    return ok;
+}
+
 //O26a: the local a place or a call statement starts from - "a" in "a.b[i].c = v" or in "a.Push(x)"
 static bool syntaxRootName(struct syntax* e, struct str* out) {
     struct list toks = ListInit(sizeof(struct token));
@@ -18864,6 +19067,11 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         }
         checkCtorHereFits(ctx, rhs, hereDst, hereDepth, nameTok);
     }
+    //D16c: a capturing lambda held in a local that is only ever called afterwards never leaves this frame - its
+    //environment is made there (cgEnvOnStack), as one passed to a callee that keeps nothing of it is, and built nowhere
+    if (rhs && rhs->opType == OPERATION_READ_VAR && rhs->readVar && rhs->readVar->isLambda
+            && rhs->readVar->lambdaCaptures.len && ctx->hasOwnScope && localOnlyCalled(ctx, strFromTok(nameTok)))
+        rhs->cgEnvOnStack = true;
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_VAR_DECL;
     stmt.var = *v;
@@ -22460,9 +22668,14 @@ static void noteRegionHandOut(struct checkCtx* ctx, struct operand* v, struct ty
     }
 }
 
+static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, struct list* vals);
 struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (ctx->inDefer) { //S19b: what it would return is beside the point - it may not leave at all
         Err(firstTokOfType(s, TOK_RET), ERR_DEFER_RETURNS);
+        return (struct statement){.sType = STATEMENT_RET};
+    }
+    if (ctx->inTaskClause) { //P4a: a task's clause is the task's code, and ends where its block does
+        Err(firstTokOfType(s, TOK_RET), ERR_TASK_CLAUSE_RETURNS);
         return (struct statement){.sType = STATEMENT_RET};
     }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
@@ -22471,16 +22684,24 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
                              ? ctx->func->type.retType : NULL;
     struct operand* val = exprNode ? buildExpecting(ctx, exprNode, retExpect) : NULL; //G10c
     struct token tok = firstTokOfType(s, TOK_RET);
+    struct list vals = ListInit(sizeof(struct operand*));
+    if (val) ListAdd(&vals, &val);
+    for (int i = 1; i < exprNodes.len; i++) {
+        struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprNodes, i));
+        ListAdd(&vals, &v);
+    }
+    return buildRetValues(ctx, tok, &vals);
+}
+
+//the return of vals, already built - none for a bare "return", several for "return a, b" (D8c); also what a task's
+//clause gives its targets (P4a), as its lambda's return
+static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, struct list* valsIn) {
+    struct operand* val = valsIn->len ? *(struct operand**)ListGetIdx(valsIn, 0) : NULL;
     //D8c: "return a, b" builds the function's several results - as the struct literal of its result tuple,
     //so each value is fit-checked against its own result type exactly as a field is. "return f()" of a call
     //returning the same results passes them on whole.
-    if (exprNodes.len > 1) {
-        struct list vals = ListInit(sizeof(struct operand*));
-        ListAdd(&vals, &val);
-        for (int i = 1; i < exprNodes.len; i++) {
-            struct operand* v = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprNodes, i));
-            ListAdd(&vals, &v);
-        }
+    if (valsIn->len > 1) {
+        struct list vals = *valsIn;
         lambdaInferResult(ctx->func, &vals, tok); //D16b
         struct type rt = ctx->func && ctx->func->type.hasRetType ? *ctx->func->type.retType : TypeVanilla(BASETYPE_VOID);
         if (!rt.isTuple || rt.vars.len != vals.len) {
@@ -22608,6 +22829,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.sType = STATEMENT_ERROR;
 
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return stmt; } //S19b
+    if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return stmt; } //P4a
     if (!ctx->func) { Err(tok, ERR_ERROR_OUTSIDE_FUNCTION); return stmt; }
 
     //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
@@ -22710,17 +22932,41 @@ bool storageInProgram(struct operand* op) {
 //P1: "join { ... }" is an ordinary block - any statements at all - that waits at its end for every task
 //spawned directly inside it. It is the only thing that waits, so a spawn needs one and a join with no
 //spawn of its own is pointless rather than harmless.
+//P4c: "try join { ... } [catch ...]" - what the join can fail with is what its tasks let through, collected by the
+//spawns in it (buildSpawnStmnt); it is tried as a call is, its clauses a statement's (R10), and what they do not take
+//propagates. P4d: a target left unwritten by a failed task is never read after the join - every clause leaves
 struct statement buildJoinStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_JOIN);
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_JOIN;
+    stmt.tried = hasTokOfType(s, TOK_TRY);
+    stmt.joinErrors = MallocOrCrash(sizeof(struct list));
+    *stmt.joinErrors = ListInit(sizeof(struct type*));
 
-    bool hasSpawn = false;
+    bool hasSpawn = false, fallibleTarget = false;
     struct checkCtx joinCtx = *ctx;
     joinCtx.joinHasSpawn = &hasSpawn;
     joinCtx.joinDepth = ctx->blockDepth + 1; //the block buildBlock is about to open
+    joinCtx.joinErrs = stmt.joinErrors;
+    joinCtx.joinFallibleTarget = &fallibleTarget;
     stmt.block = buildBlock(&joinCtx, firstPartOfType(s, SNTX_BLOCK));
     if (!hasSpawn) Err(tok, ERR_JOIN_WITHOUT_SPAWN);
+    bool clauses = firstPartOfType(s, SNTX_CATCH_CLAUSE) != NULL;
+    struct list* errs = stmt.joinErrors;
+    if (errs->len && !stmt.tried) {
+        Err(tok, ERR_JOIN_NOT_TRIED, *(struct type**)ListGetIdx(errs, 0));
+        return stmt;
+    }
+    if (!errs->len) {
+        if (stmt.tried) Err(firstTokOfType(s, TOK_TRY), ERR_JOIN_CANNOT_FAIL);
+        else if (clauses) Err(firstTokOfType(firstPartOfType(s, SNTX_CATCH_CLAUSE), TOK_CATCH), ERR_JOIN_CATCH_NEEDS_TRY);
+        return stmt;
+    }
+    buildCatchClauses(ctx, s, NULL, errs, false, NULL, tok, &stmt.catchClauses);
+    for (int c = 0; fallibleTarget && c < stmt.catchClauses.len; c++) {
+        struct catchClause* cc = ListGetIdx(&stmt.catchClauses, c);
+        if (!blockLeavesValue(&cc->block)) Err(cc->tok, ERR_JOIN_CLAUSE_MUST_LEAVE);
+    }
     return stmt;
 }
 
@@ -22738,8 +22984,17 @@ struct statement buildDeferStmnt(struct checkCtx* ctx, struct syntax* s) {
     dctx.inLoop = false;
     dctx.loopBreak = NULL;
     dctx.joinHasSpawn = NULL;
+    dctx.joinErrs = NULL;
+    dctx.joinFallibleTarget = NULL;
     stmt.block = buildBlock(&dctx, firstPartOfType(s, SNTX_BLOCK));
     return stmt;
+}
+
+//P1g: a task stores its result into a value run-time-length array target as it is - its length and storage, never a
+//copy into the target's own, since there is no frame left on the task's thread to copy in - so the storage the result
+//was built in is the target's from then on, and the result is built where the target's own storage is
+static bool spawnTargetTakesStorage(struct operand* t) {
+    return t && t->type.bType == BASETYPE_ARRAY && t->type.arrMalloc && !t->type.structMAlloc;
 }
 
 //O18a: a call's several results go to several targets (S4b, P1g) and share one result scope - which lands where all the
@@ -22751,7 +23006,7 @@ bool landAtTargets(struct checkCtx* ctx, struct operand* call, struct list* targ
     bool have = false, agree = true, program = false;
     for (int i = 0; i < targets->len; i++) {
         struct operand* t = *(struct operand**)ListGetIdx(targets, i);
-        if (!t || !(t->type.structMAlloc || TypeHoldsReferences(t->type))) continue;
+        if (!t || !(t->type.structMAlloc || TypeHoldsReferences(t->type) || spawnTargetTakesStorage(t))) continue;
         struct var* troot = lvalueRootVar(t);
         struct var* v;
         int d;
@@ -22813,6 +23068,271 @@ static bool argBindingsLastUntilJoin(struct checkCtx* ctx, struct operand* op) {
     return true;
 }
 
+static bool blockAlwaysExits(struct list* block);
+static struct type lambdaOwnType(struct type t);
+static void lambdaMakeValue(struct checkCtx* octx, struct operand* op, struct var* L, struct token kw, struct type* exp);
+static void lambdaRegister(struct var* L);
+//P4: the try a spawn's expression is - "spawn try f(a) catch ..." - past the expression's one-part wrappers, or NULL
+static struct syntax* spawnTryNode(struct syntax* e) {
+    while (e && e->type != SNTX_EXPR_TRY && e->parts.len == 1 && !partAt(e, 0)->isToken) e = partSntx(e, 0);
+    return e && e->type == SNTX_EXPR_TRY ? e : NULL;
+}
+
+//D16e/P2: a hidden local holding a lambda a task runs - the task itself, or one of its clauses (P4a) - declared where
+//the spawn is, its closure built to last until the join: a closure capturing references lives where they do (D16d) -
+//unless they live in several scopes, where it would be the block it is made in; spawned, it is built in the join block
+//instead whenever every scope it captured from lasts until the join, which is what a spawned lambda needs and no more
+static struct var* spawnHoldLambda(struct checkCtx* ctx, struct operand* lam, struct token tok, struct statement* decl,
+                                   const char* prefix) {
+    struct type dt = lam->type;
+    bool homeIsBlockMadeIn = lam->lambdaHomeSet && !lam->lambdaHome && lam->lambdaCapScopes.len;
+    for (int i = 0; homeIsBlockMadeIn && i < lam->lambdaCapScopes.len; i++) {
+        struct scopeAt* at = ListGetIdx(&lam->lambdaCapScopes, i);
+        if (!lastsUntilJoin(ctx, at->v, at->depth, false)) homeIsBlockMadeIn = false;
+    }
+    if (homeIsBlockMadeIn) lam->lambdaHomeDepth = ctx->joinDepth;
+    if (lam->lambdaHomeSet) {
+        dt.scopeParam = lam->lambdaHome;
+        dt.scopeDepth = lam->lambdaHomeDepth;
+    } else {
+        dt.scopeWritten = true;
+        dt.scopeDepth = ctx->joinDepth;
+    }
+    char nm[32];
+    snprintf(nm, sizeof(nm), "%s%d", prefix, ++lambdaCounter);
+    struct var* tv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(heapCopy(nm)), tok, dt, true);
+    *decl = (struct statement){0};
+    decl->sType = STATEMENT_VAR_DECL;
+    decl->var = *tv;
+    decl->op = lam;
+    decl->line = tok.lineNr;
+    if (tok.owner) decl->file = TokenGetFileName(tok.owner);
+    return tv;
+}
+
+//P4a: what a task's default holds that it did not build - existing storage, in it or in what it is built from - or NULL
+//when it builds all it holds: null, text written in the program or rendered, numbers, and constructor calls, enum cases,
+//array literals and calls made only of such. Built where the call's result lands, it cannot be shown to agree with
+//storage the task's lambda sees only as a capture
+static struct operand* taskDefaultHolds(struct checkCtx* ctx, struct operand* d) {
+    if (!d || d->isNullLiteral || !typeCarriesScopes(d->type)) return NULL;
+    if (d->isLiteral && d->tok.type == TOK_STR_LIT && !d->args.len) return NULL;
+    if (d->opType == OPERATION_STR_OF || d->opType == OPERATION_CONCAT) return NULL; //new text, copied from its pieces
+    bool built = opIsCtorCall(d) || opIsEnumCtor(d) || opIsArrayLiteral(d) || d->opType == OPERATION_SIZED_ARRAY_ALLOC
+                 || (d->opType == OPERATION_FUNCCALL && operandIsTemporary(ctx, d));
+    if (!built) return d;
+    for (int i = 0; i < d->args.len; i++) {
+        struct operand* h = taskDefaultHolds(ctx, *(struct operand**)ListGetIdx(&d->args, i));
+        if (h) return h;
+    }
+    return NULL;
+}
+
+//P4a: one clause of a spawned try, made a lambda - its block, then (with targets) a return of its default - checked as
+//code of the task: captures what it reads of the spawner (D16c), may not leave (no return, error or loop jump out of
+//it), and is held where the spawn is, to be called on the task's thread. rt: the targets' type, when there are any
+static void buildTaskClauseLambda(struct checkCtx* octx, struct syntax* cn, struct type* rt, struct catchClause* cc,
+                                  struct list* pre, struct token spawnTok) {
+    struct token kw = cc->tok;
+    struct syntax* blk = firstPartOfType(cn, SNTX_BLOCK);
+    bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
+    struct token dtok = hasDefault ? firstTokOfType(cn, TOK_DEFAULT) : kw;
+    struct list dnodes = ListInit(sizeof(struct syntax*));
+    for (int i = 0; i < cn->parts.len; i++) {
+        struct syntaxPart* pt = partAt(cn, i);
+        if (!pt->isToken && pt->sntx->type != SNTX_CATCH_ERR_LIST && pt->sntx->type != SNTX_BLOCK) ListAdd(&dnodes, &pt->sntx);
+    }
+    if (hasDefault && !rt) { Err(dtok, ERR_TASK_DEFAULT_IN_STATEMENT); hasDefault = false; }
+    struct type t = (struct type){0};
+    t.bType = BASETYPE_FUNC;
+    t.vars = ListInit(sizeof(struct var));
+    t.scopeVars = ListInit(sizeof(struct var*));
+    t.errors = ListInit(sizeof(struct type*));
+    t.typeParams = ListInit(sizeof(struct str));
+    t.scopeObligations = ListInit(sizeof(struct scopeObligation));
+    if (hasDefault) {
+        t.hasRetType = true;
+        t.retType = MallocOrCrash(sizeof(struct type));
+        *t.retType = lambdaOwnType(*rt);
+        finishResultScope(&t, kw);
+    }
+    struct var* L = VarAllocSetOrigin();
+    char nm[48];
+    snprintf(nm, sizeof(nm), "lambda$%d", ++lambdaCounter);
+    L->name = StrFromCStr(heapCopy(nm));
+    L->tok = kw;
+    L->owner = octx->mod;
+    L->isFuncDecl = true;
+    L->isLambda = true;
+    L->lambdaHost = octx->func;
+    L->lambdaInTest = octx->inTest;
+    L->mayBeInitialized = true;
+    L->lambdaCaptures = ListInit(sizeof(struct lambdaCapture));
+    L->type = t;
+
+    struct scope fnScope = scopePush(octx->scope);
+    fnScope.lambda = L;
+    struct checkCtx c = {0};
+    c.mod = octx->mod;
+    c.scope = &fnScope;
+    c.func = L;
+    c.hasOwnScope = true;
+    c.inTest = octx->inTest;
+    c.inTaskClause = true;
+    c.bodyId = bodyBegin();
+    struct list savedDischarges = pendingDischarges;
+    pendingDischarges = ListInit(sizeof(struct pendingDischarge));
+    int errsBefore = ErrMsgGetNErrors();
+    L->codeBlock = blk ? buildBlock(&c, blk) : ListInit(sizeof(struct statement));
+    bool leaves = blk && blockAlwaysExits(&L->codeBlock); //D10a: on a task, only ending the process leaves (P4a)
+    if (hasDefault && leaves) Err(dtok, ERR_DEFAULT_DEAD);
+    else if (rt && !hasDefault && !leaves) Err(kw, ERR_TASK_CLAUSE_NEEDS_DEFAULT);
+    bool gives = hasDefault && !leaves;
+    if (gives) { //R9a: one default per result, each fitting it - given as the lambda's return
+        struct list vals = ListInit(sizeof(struct operand*));
+        for (int i = 0; i < dnodes.len; i++) {
+            struct syntax* dn = *(struct syntax**)ListGetIdx(&dnodes, i);
+            struct operand* d = dnodes.len == 1 ? buildExpecting(&c, dn, L->type.retType) : buildExprFromSyntax(&c, dn);
+            ListAdd(&vals, &d);
+        }
+        int want = rt->isTuple ? rt->vars.len : 1;
+        bool ok = vals.len == want;
+        if (!ok) Err(dtok, ERR_DEFAULT_COUNT, want, vals.len);
+        for (int i = 0; ok && i < vals.len; i++) {
+            struct operand* d = *(struct operand**)ListGetIdx(&vals, i);
+            struct type et = rt->isTuple ? ((struct var*)ListGetIdx(&rt->vars, i))->type : *rt;
+            //P4a: built where the call's result lands, so it builds all it holds - existing storage has a scope of its own
+            struct operand* held = et.structMAlloc || TypeHoldsReferences(et) ? taskDefaultHolds(&c, d) : NULL;
+            if (held) {
+                Err(held->tok, ERR_TASK_DEFAULT_EXISTING);
+                ok = false;
+            }
+        }
+        if (ok) {
+            int pendingFrom = pendingDischarges.len;
+            struct token prevOrigin = obligationOrigin;
+            obligationOrigin = dtok;
+            struct statement ret = buildRetValues(&c, dtok, &vals);
+            flushPendingDischargesFrom(pendingFrom);
+            obligationOrigin = prevOrigin;
+            ret.line = dtok.lineNr;
+            if (dtok.owner) ret.file = TokenGetFileName(dtok.owner);
+            ListAdd(&L->codeBlock, &ret);
+        }
+    }
+    pendingDischarges = savedDischarges;
+    bodyEnd(c.bodyId, L->codeBlock);
+    L->bodyHadErrors = ErrMsgGetNErrors() != errsBefore;
+    cc->givesValue = gives;
+    if (!gives && !L->codeBlock.len) return; //"catch E { }" - nothing to run: the error is taken, and that is all
+    if (!gives && L->type.hasRetType) { //it ends the process, so no value is ever returned
+        L->type.hasRetType = false;
+        L->type.retType = NULL;
+        L->type.resultScope = NULL;
+    }
+    lambdaRegister(L);
+    struct operand* lam = operandNew(kw, OPERATION_NONE, L->type);
+    lambdaMakeValue(octx, lam, L, kw, NULL);
+    struct statement decl;
+    struct var* tv = spawnHoldLambda(octx, lam, spawnTok, &decl, "$clause");
+    ListAdd(pre, &decl);
+    //P2: what it captured lasts until the join, as a spawned lambda's captures do
+    if (!tv->type.scopeParam && normDepth(tv->type.scopeDepth) > octx->joinDepth) Err(kw, ERR_SPAWN_CAPTURE_TOO_SHORT);
+    cc->taskFn = tv;
+    struct operand* tc = operandNew(kw, OPERATION_FUNCCALL, gives ? *L->type.retType : TypeVanilla(BASETYPE_VOID));
+    tc->readVar = tv;
+    cc->taskCall = tc;
+}
+
+//P4a/P4b/P4c: a spawned try's clauses, each run on the task's thread (buildTaskClauseLambda) when the call fails with an
+//error it takes, in order (R11a); every error type the call declares that they do not take whole reaches the join - the
+//join's error set gains it - and a task with targets that lets one through leaves them unwritten (P4d)
+static void buildTaskClauses(struct checkCtx* ctx, struct syntax* tryNode, struct operand* call, struct statement* stmt,
+                             struct list* pre, struct token tok) {
+    call->isTried = true;
+    struct list* errs = &call->readVar->type.errors;
+    struct type* rt = NULL;
+    if (stmt->spawnTargets.len && call->readVar->type.hasRetType) rt = call->readVar->type.retType;
+    stmt->catchClauses = ListInit(sizeof(struct catchClause));
+    struct list nodes = allPartsOfType(tryNode, SNTX_CATCH_CLAUSE);
+    struct list seen = ListInit(sizeof(struct catchMatch));
+    bool sawAll = false;
+    unsigned prevMask = builtinWordMask;
+    builtinWordMask = 0;
+    for (int n = 0; n < nodes.len; n++) {
+        struct syntax* cn = *(struct syntax**)ListGetIdx(&nodes, n);
+        struct catchClause cc = (struct catchClause){0};
+        cc.tok = firstTokOfType(cn, TOK_CATCH);
+        cc.matches = ListInit(sizeof(struct catchMatch));
+        cc.block = ListInit(sizeof(struct statement));
+        if (sawAll) Err(cc.tok, ERR_CATCH_AFTER_CATCH_ALL);
+        struct syntax* el = firstPartOfType(cn, SNTX_CATCH_ERR_LIST);
+        if (!el) {
+            cc.catchAll = true;
+            sawAll = true;
+        } else {
+            buildCatchMatches(ctx, el, errs, &cc.matches);
+            bool anyNew = false;
+            for (int i = 0; i < cc.matches.len; i++) if (!catchMatchCovered(&seen, ListGetIdx(&cc.matches, i))) anyNew = true;
+            if (cc.matches.len > 0 && !anyNew && !sawAll) Err(cc.tok, ERR_CATCH_UNREACHABLE);
+            for (int i = 0; i < cc.matches.len; i++) ListAdd(&seen, ListGetIdx(&cc.matches, i));
+        }
+        buildTaskClauseLambda(ctx, cn, rt, &cc, pre, tok);
+        ListAdd(&stmt->catchClauses, &cc);
+    }
+    bool escapes = false;
+    for (int i = 0; !sawAll && i < errs->len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(errs, i);
+        if (StatementCatchCoversType(&seen, *e)) continue;
+        escapes = true;
+        bool have = false;
+        for (int k = 0; k < ctx->joinErrs->len && !have; k++) have = TypeIsSame(**(struct type**)ListGetIdx(ctx->joinErrs, k), *e);
+        if (!have) ListAdd(ctx->joinErrs, &e);
+    }
+    builtinWordMask = prevMask;
+    if (escapes && stmt->spawnTargets.len && ctx->joinFallibleTarget) *ctx->joinFallibleTarget = true;
+    stmt->joinErrors = ctx->joinErrs;
+}
+
+//P2: every spawned call to a named function, for settleTaskStandins
+static struct list spawnCalls;
+//P2: a task is handed a stand-in for each scope its call binds, so that it allocates there without a lock - where the
+//may-build walk finds its callee never builds into that scope variable, no stand-in is made and the scope is handed raw.
+//Asked here, once every body is checked, so codegen holds each callee's body to the answer (cgCheckMayBuild)
+static void settleTaskStandins(void) {
+    for (int i = 0; i < spawnCalls.len; i++) {
+        struct var* f = (*(struct operand**)ListGetIdx(&spawnCalls, i))->readVar;
+        if (!f || f->type.isExtern || f->isLambda || !mbiBodyKnown(f)) continue;
+        for (int k = 0; k < f->type.scopeVars.len; k++) mayBuildInto(f, *(struct var**)ListGetIdx(&f->type.scopeVars, k));
+    }
+    //every answer found inside a call cycle while one of its members was assumed (state 0) is asked again, now that the
+    //cycle's own answer is known - what codegen holds a body to (SemanticReliesNoBuild, SemanticTaskBuildsInto) is final
+    for (int round = 0; round < 8; round++) {
+        bool again = false;
+        for (int k = 0; k < mbiMemos.len; k++) {
+            struct mbiMemo* m = ListGetIdx(&mbiMemos, k);
+            if (m->state != 0) continue;
+            again = true;
+            mayBuildIntoRaw(m->func, m->v);
+        }
+        if (!again) break;
+    }
+    for (int k = 0; k < mbiMemos.len; k++) { //(never settled: taken to build, which nothing relies on)
+        struct mbiMemo* m = ListGetIdx(&mbiMemos, k);
+        if (m->state == 0) m->said = 2;
+    }
+}
+//codegen: whether a task calling func needs a stand-in for its scope variable sv - unless settleTaskStandins found it
+//builds nothing there
+bool SemanticTaskBuildsInto(struct var* func, struct var* sv) {
+    if (!func || !sv || func->type.isExtern || func->isLambda || !mbiMemos.elemSize) return true;
+    struct var* v = canonicalVar(sv);
+    for (int k = 0; k < mbiMemos.len; k++) {
+        struct mbiMemo* m = ListGetIdx(&mbiMemos, k);
+        if (m->func == func && m->v == v) return m->said != 1 || m->deps != 0;
+    }
+    return true;
+}
 struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct token tok = firstTokOfType(s, TOK_SPAWN);
     struct statement stmt = (struct statement){0};
@@ -22834,19 +23354,31 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         ListAdd(&stmt.spawnTargets, &t);
     }
 
+    //P4: "spawn [targets =] try CALL [catch ...]" - the call is the task as in the plain form; the clauses are the task's
+    //own (P4a), built below as lambdas, never as code of the spawner
+    struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
+    struct syntax* tryNode = spawnTryNode(exprNode);
+    struct syntax* callNode = exprNode;
+    if (tryNode) {
+        stmt.tried = true;
+        callNode = firstPartOfType(tryNode, SNTX_EXPR_POSTFIX);
+        if (!callNode) callNode = firstPartOfType(tryNode, SNTX_EXPR_PRIMARY);
+        //R9b: a default belongs to a clause - "catch default d"
+        if (hasTokOfType(tryNode, TOK_DEFAULT)) Err(firstTokOfType(tryNode, TOK_DEFAULT), ERR_DEFAULT_NEEDS_CATCH);
+    }
+
     bool prevAllow = ctx->allowFallibleCall;
     ctx->allowFallibleCall = true; //fallibility is rejected below with a message of its own
     struct list prevPlaces = ctx->assignPlaces;
     ctx->assignPlaces = placesWrittenOver(stmt.spawnTargets); //S4d: the targets are written over by the results
-    struct operand* call = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
+    struct operand* call = buildExprFromSyntax(ctx, callNode);
     ctx->assignPlaces = prevPlaces;
     ctx->allowFallibleCall = prevAllow;
     //D16e: "spawn fn() { ... }" - a task running the lambda's body. Its closure is held by a hidden local built
     //in the JOIN block's scope, so it lasts as long as the task can run, and the task is a call through it.
     //"spawn fn(...) { ... }(args)" - a lambda called where it is made - is the same task with arguments: its closure
     //is made at the spawn and held there too, never in the block the spawn is written in, which closes first
-    struct statement taskDecl = (struct statement){0};
-    bool lambdaTask = false;
+    struct list pre = ListInit(sizeof(struct statement)); //hidden locals made at the spawn, run before it
     struct operand* lam = NULL; //the lambda the task runs
     if (call && call->pendingLambda) {
         FinalizeLambda(call, NULL);
@@ -22856,32 +23388,11 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
                && call->callee->readVar && call->callee->readVar->isLambda) {
         lam = call->callee;
     }
+    bool lambdaTask = false;
     if (lam && ctx->joinHasSpawn && lam->readVar) {
-        struct type dt = lam->type;
-        //P2: a closure capturing references lives where they do (D16d) - unless they live in several scopes, where it
-        //would be the block it is made in; spawned, it is built in the join block instead whenever every scope it
-        //captured from lasts until the join, which is what a spawned lambda needs and no more
-        bool homeIsBlockMadeIn = lam->lambdaHomeSet && !lam->lambdaHome && lam->lambdaCapScopes.len;
-        for (int i = 0; homeIsBlockMadeIn && i < lam->lambdaCapScopes.len; i++) {
-            struct scopeAt* at = ListGetIdx(&lam->lambdaCapScopes, i);
-            if (!lastsUntilJoin(ctx, at->v, at->depth, false)) homeIsBlockMadeIn = false;
-        }
-        if (homeIsBlockMadeIn) lam->lambdaHomeDepth = ctx->joinDepth;
-        if (lam->lambdaHomeSet) {
-            dt.scopeParam = lam->lambdaHome;
-            dt.scopeDepth = lam->lambdaHomeDepth;
-        } else {
-            dt.scopeWritten = true;
-            dt.scopeDepth = ctx->joinDepth;
-        }
-        char nm[32];
-        snprintf(nm, sizeof(nm), "$task%d", ++lambdaCounter);
-        struct var* tv = scopeDeclare(ctx->mod, ctx->scope, StrFromCStr(heapCopy(nm)), tok, dt, true);
-        taskDecl.sType = STATEMENT_VAR_DECL;
-        taskDecl.var = *tv;
-        taskDecl.op = lam;
-        taskDecl.line = tok.lineNr;
-        if (tok.owner) taskDecl.file = TokenGetFileName(tok.owner);
+        struct statement taskDecl;
+        struct var* tv = spawnHoldLambda(ctx, lam, tok, &taskDecl, "$task");
+        ListAdd(&pre, &taskDecl);
         if (lam == call) {
             call = OperandFuncCall(ctx, tv, ListInit(sizeof(struct operand*)), call->tok, ListInit(sizeof(struct syntax*)));
         } else { //the call already made, now through the hidden local - same type, same arguments and bindings
@@ -22905,11 +23416,21 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(tok, ERR_SPAWN_NOT_CALL);
         return stmt;
     }
-    //P4: an error raised on another thread has nowhere to propagate to - the join carries no value, and
-    //the spawner is not at the call site any more
-    if (call->readVar->type.errors.len != 0) {
+    //P4: a call that can fail is spawned with "try", and a "try" before one that cannot is an error, as anywhere (R8)
+    if (call->readVar->type.errors.len != 0 && !stmt.tried) {
         Err(call->tok, ERR_SPAWN_FALLIBLE);
+        //...and its errors are still what the join can fail with, so a "try join" around it is not reported as well
+        for (int i = 0; ctx->joinErrs && i < call->readVar->type.errors.len; i++) {
+            struct type* e = *(struct type**)ListGetIdx(&call->readVar->type.errors, i);
+            bool have = false;
+            for (int k = 0; k < ctx->joinErrs->len && !have; k++) have = TypeIsSame(**(struct type**)ListGetIdx(ctx->joinErrs, k), *e);
+            if (!have) ListAdd(ctx->joinErrs, &e);
+        }
         return stmt;
+    }
+    if (call->readVar->type.errors.len == 0 && stmt.tried) {
+        Err(firstTokOfType(tryNode, TOK_TRY), ERR_SPAWN_TRY_INFALLIBLE);
+        stmt.tried = false;
     }
     //P2: the task runs until the join, so everything it was handed has to still be there then. An
     //argument declared in a block NESTED inside the join closes first - the same containment question O10
@@ -22995,7 +23516,10 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct operand* t0 = *(struct operand**)ListGetIdx(&stmt.spawnTargets, 0);
             struct token asTok = tok;
             asTok.type = TOK_ASS; //checked as the plain assignment it is (no compound form exists, P1g)
-            if (results == 1 && t0) buildAssignCore(ctx, t0, call, asTok);
+            if (results == 1 && t0) {
+                if (spawnTargetTakesStorage(t0) && callIsLanding(call)) landAtTargets(ctx, call, &stmt.spawnTargets);
+                buildAssignCore(ctx, t0, call, asTok);
+            }
             else if (callIsLanding(call) && !landAtTargets(ctx, call, &stmt.spawnTargets))
                 Err(tok, ERR_SPAWN_RESULTS_DISAGREE);
             else {
@@ -23017,18 +23541,25 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             }
         }
     }
-    if (lambdaTask) { //the closure, then the task - one block, run as written
+    //P4a/P4b: the task's own clauses, run on its thread; what they do not take reaches the join
+    if (stmt.tried) buildTaskClauses(ctx, tryNode, call, &stmt, &pre, tok);
+    (void)lambdaTask;
+    //P2: whether the task needs a stand-in for each scope its call binds is asked once every body is checked
+    if (stmt.op && stmt.op->opType == OPERATION_FUNCCALL && !stmt.op->callee && stmt.op->readVar) {
+        if (!spawnCalls.elemSize) spawnCalls = ListInit(sizeof(struct operand*));
+        ListAdd(&spawnCalls, &stmt.op);
+    }
+    if (pre.len) { //the closures, then the task - one block, run as written
         struct statement blk = (struct statement){0};
         blk.sType = STATEMENT_IF;
         struct token t = tok;
         t.type = TOK_BOOL_LIT;
         t.str = StrFromCStr("true");
         blk.op = OperandBoolLiteral(t);
-        blk.block = ListInit(sizeof(struct statement));
-        ListAdd(&blk.block, &taskDecl);
+        blk.block = pre;
         ListAdd(&blk.block, &stmt);
         blk.line = tok.lineNr;
-        blk.file = taskDecl.file;
+        blk.file = ((struct statement*)ListGetIdx(&pre, 0))->file;
         return blk;
     }
     return stmt;
@@ -23076,6 +23607,13 @@ static bool stmntAlwaysExits(struct statement* s) {
         }
         //D10a: "for { }" with no break of its own never falls through - it leaves only by what leaves its function
         case STATEMENT_FOR: return s->leavesOnlyByJump;
+        //D10a/P4c: a join leaves when its block does - a failed task replaces that way out with its error, which a
+        //"try join" clause takes (leaving only when the clause does) or propagates
+        case STATEMENT_JOIN:
+            if (!blockAlwaysExits(&s->block)) return false;
+            for (int i = 0; i < s->catchClauses.len; i++)
+                if (!blockAlwaysExits(&((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block)) return false;
+            return true;
         //any other loop is never counted, even a "do" whose body always returns: with break (S11) the body
         //exiting is not the same as the loop exiting, and proving otherwise needs a reachability pass
         //this rule deliberately does not have
@@ -23103,6 +23641,7 @@ static struct list funcValueUses; //struct funcValueUse - T22a, checked once eve
 struct funcValueUse { struct var* f; struct token tok; bool viaTypeVarResult; };
 
 struct list* SemanticAllLambdas(void) { return &allLambdas; }
+static void lambdaRegister(struct var* L) { ListAdd(&allLambdas, &L); }
 
 static void noteFuncValueUse(struct var* f, struct token tok) {
     struct funcValueUse u = { f, tok, false };
@@ -23313,6 +23852,7 @@ bool lambdaInferError(struct var* f, struct type* e) {
 }
 
 static void lambdaValueOperand(struct operand* op, struct var* L);
+static void lambdaMakeValue(struct checkCtx* octx, struct operand* op, struct var* L, struct token kw, struct type* exp);
 static void finalizeLambdaIn(struct operand* op, struct type* expected);
 //D16/D8a: a lambda is finished in the declaration context it was written in - one in a parameter's default is finished
 //where a call fits it, inside the caller's check, whose constant and type variables are not the default's
@@ -23508,7 +24048,12 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
     L->inferRet = false;
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
+    lambdaMakeValue(octx, op, L, kw, exp);
+}
 
+//D16c/D16d: op becomes the value of the lambda L, whose body has been checked in octx's body: its captures read where
+//it is made, each captured reference's scope bound from what it captured, and where the closure lives
+static void lambdaMakeValue(struct checkCtx* octx, struct operand* op, struct var* L, struct token kw, struct type* exp) {
     lambdaValueOperand(op, L);
     //D16c: the captured values, read where the lambda is made, and each captured reference's scope bound from
     //what it captured - as a call binds a reference parameter's (O17)
@@ -23605,7 +24150,7 @@ static bool blockLeavesValue(struct list* block) {
 //nesting an if/match/try inside the body changes nothing - ctx->inLoop is simply inherited by buildBlock.
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
-    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b
+    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ctx->inTaskClause ? ERR_TASK_CLAUSE_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b, P4a
     if (kind == STATEMENT_BREAK && ctx->loopBreak) *ctx->loopBreak = true; //D10a
     return (struct statement){.sType = kind};
 }
@@ -23760,6 +24305,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         struct type* e = *(struct type**)ListGetIdx(errors, i);
         if (StatementCatchCoversType(matches, *e)) continue;
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
+        if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
         if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
         bool found = false;
@@ -25121,6 +25667,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     checkFuncValueUses(); //T22a: and final
     checkLiteralShifts(); //E4a/E8a: every literal-only expression that adapts has been folded now
     checkStrRendered(); //E11c
+    settleTaskStandins(); //P2
 
     //K2: every immutable global whose initializer can be computed now is - its value becomes the global's
     //data, and nothing is left to run at startup. Only once the program has checked cleanly: evaluation

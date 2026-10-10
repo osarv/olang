@@ -1,0 +1,10 @@
+# E11c: array callbacks over references the receiver reaches - the callback's body is asked, not the higher-order
+# function's call through it
+type Bag struct(words Array<String&>&) {
+    words
+}
+fn (b Bag&) Str() String {
+    long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
+    return "n" $long
+}
+fn main() ? { println($Bag(String&["ab", "c"])) }

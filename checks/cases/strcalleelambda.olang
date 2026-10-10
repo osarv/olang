@@ -1,6 +1,7 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: a helper handed the receiver's node makes a lambda capturing it, and the closure lives where the capture does (D16d) -
-# where the receiver lives, which '$' does not say: refused at the Str, with a note at the lambda
+# check: run
+# flags: -s
+# E11c/D16c: a helper handed the receiver's node makes a lambda capturing it, only ever called - its environment is in
+# the helper's frame, so nothing is built where the node lives
 type Node struct(v I64, next mut Node&) {
     v
     next

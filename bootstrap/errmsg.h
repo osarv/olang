@@ -488,7 +488,18 @@ struct type;
     X(ERR_SPAWN_OUTSIDE_JOIN,           "P1",    "'spawn' is written inside a 'join' block, which waits for the task") \
     X(ERR_SPAWN_AT_ELEMENT,             "E31b, P2", "a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself") \
     X(ERR_SPAWN_NOT_CALL,               "P1",    "'spawn' takes a call") \
-    X(ERR_SPAWN_FALLIBLE,               "P4",    "a spawned function may not declare errors - they would have nowhere to go") \
+    X(ERR_SPAWN_FALLIBLE,               "P4",    "this call can fail - write 'spawn try', and what its clauses do not take reaches the join") \
+    X(ERR_SPAWN_TRY_INFALLIBLE,         "P4",    "this task cannot fail - drop the 'try'") \
+    X(ERR_TASK_CLAUSE_RETURNS,          "P4a",   "a task's clause runs on the task and may not return - it ends where its block does") \
+    X(ERR_TASK_CLAUSE_LOOP_JUMP,        "P4a",   "%n may not leave a task's clause - it runs on the task, outside the spawner's loops") \
+    X(ERR_TASK_CLAUSE_ERROR,            "P4a",   "an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take") \
+    X(ERR_TASK_CLAUSE_NEEDS_DEFAULT,    "P4a",   "this clause takes an error the targets would get no value for - end it with 'default v', or end the process") \
+    X(ERR_TASK_DEFAULT_IN_STATEMENT,    "P4a",   "a spawn without targets gives no value, so its clauses take no default") \
+    X(ERR_TASK_DEFAULT_EXISTING,        "P4a",   "a task's default is built where its result lands, and this names existing storage - build the value here, or give null") \
+    X(ERR_JOIN_NOT_TRIED,               "P4c",   "this join's tasks can fail with %t - write 'try join', with catch clauses for what it handles here") \
+    X(ERR_JOIN_CANNOT_FAIL,             "P4c",   "no task of this join can fail - drop the 'try'") \
+    X(ERR_JOIN_CATCH_NEEDS_TRY,         "P4c",   "a join takes catch clauses only as 'try join', and no task of this one can fail") \
+    X(ERR_JOIN_CLAUSE_MUST_LEAVE,       "P4d",   "a task of this join binds a target it leaves unwritten when it fails - this clause must leave") \
     X(ERR_SPAWN_ARG_TOO_SHORT,          "P2",    "this argument's storage closes before the join does - declare it at the join's level or wider") \
     X(ERR_SPAWN_ARG_HOLDS_SHORT,        "P2",    "this argument refers to storage that closes before the join does - declare that at the join's level or wider") \
     X(ERR_SPAWN_CAPTURE_TOO_SHORT,      "P2, D16e", "this lambda captures a variable declared inside the join, which closes while the task may run") \

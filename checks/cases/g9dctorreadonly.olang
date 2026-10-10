@@ -1,0 +1,17 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# G9d/G10c: a generic constructor binds a destructor temporary read-only, as every reference
+type Res struct(k I64) {
+    k
+} destruct { println("d") }
+type Box<T> struct(x T) {
+    x
+}
+type Node struct(k I64) {
+    k
+}
+fn main() ? {
+    b1 := Box(Res(1))
+    b1.x.k = 5
+    b2 := Box(Node(1))
+    println($b1.x.k " " $b2.x.k)
+}

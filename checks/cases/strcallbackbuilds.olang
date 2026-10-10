@@ -1,0 +1,28 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c: a callback handed to a higher-order function over what the receiver reaches - the callback's own body is
+# asked about the scope it is called with, directly and through a helper passing it on
+type Bag struct(words Array<String&>&) {
+    words
+}
+fn via(a Array<String&>&, f fn(x String&) Bool) I64 { return a.Count(f) }
+fn (b Bag&) Str() String {
+    n := b.words.Count(fn(s String&) Bool {
+        t String&s = $s "x"
+        return t.Len() > 2
+    })
+    return "n" $n
+}
+type Bag2 struct(words Array<String&>&) {
+    words
+}
+fn (b Bag2&) Str() String {
+    n := via(b.words, fn(s String&) Bool {
+        t String&s = $s "x"
+        return t.Len() > 2
+    })
+    return "n" $n
+}
+fn main() ? {
+    println($Bag(String&["ab", "c"]))
+    println($Bag2(String&["ab", "c"]))
+}

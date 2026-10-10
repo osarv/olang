@@ -1,0 +1,3 @@
+x 5
+destruct 5 (this instance destructed before: false)
+end

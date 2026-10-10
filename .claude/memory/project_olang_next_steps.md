@@ -610,6 +610,38 @@ because what it finds about structure feeds the refactor.
   `SemanticMayBuild` walk and `cgCheckMayBuild`, one predicate for both. The reviewer's structural point, for the port:
   "where is this built" must be ONE predicate that the checker and codegen share. Running: str1 (round 3), decision 50
   (wt-spawnerr).
+- 14:45 CEST: decision 50 merged and pushed (9802fc3 via 40fb1c5, full verify on the same code):
+  - `spawn try f(a)`; task clauses as lambdas run on the task's thread;
+  - `try join`, which fails with the earliest-spawned failure on every way out of the block;
+  - P4d: a target left unwritten forces the clauses to leave;
+  - D10a counts a leaving join.
+  Also fixed: P1g, where a String value spawn target was built in the join block. A combined soundness review runs
+  next (/home/user/review/batch6) over chk5 round 2, rv9fix C9a and the parallel global, and decision 50. Then
+  `own`/`take`, liveness-checked local borrows, and Vec.
+- 15:20 CEST: batch6 review (/home/user/review/batch6) found:
+  - a use-after-free from chk5 round 1: an element field store judged against a landing scope that the O18c pre-pass
+    re-lands later, never re-judged;
+  - a C9a leak: parts made during the destructor walk are never folded;
+  - a PRE-EXISTING use-after-free: a conditional of references from different scopes stored into a field is never
+    checked;
+  - six minor findings.
+  All go to wt-b6fix, which also extends the scope fuzzer with conditionals of references, At/Get element stores,
+  destructors and failing spawns; the fuzzer missed all three findings. str1 round 3 (e27b83b, merged with master
+  b6259d1) is under its third review (/home/user/wt/rvstr3 -> /home/user/review/str3). Running: b6fix and the str3
+  review.
+- 15:50 CEST: str3 review (/home/user/review/str3):
+  - The walk held: no false ICE, and 16 receiver builds refused.
+  - New segfaults: the null receiver scope meets decision 48's escape/mine header reads (closures, Call adapters).
+  - A walk gap: an adapter's Call body is not read.
+  - G9d side effects: inference depends on argument order, and G10c disagrees.
+  - Double destruction through a try default; shallower recursion; a pre-existing landing bug (P1).
+  Round 4 sent:
+  - a real empty scope per Str call instead of null;
+  - the walk reads an adapter's Call body;
+  - G9d kept but order-independent and agreeing with G10c (or reverted for a hand-off, the agent's call);
+  - P1, N7 and N8 fixed;
+  - over-rejections: o6, the "anon" idiom via T25d, cgEnvOnStack in the walk, adapter and stand-in skips.
+  Running: str1 (round 4), b6fix.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

@@ -1,4 +1,5 @@
-# E11b/E11c: later operands running At, Slice, Less, a chain and a conditional, each writing a global an earlier piece holds
+# E11b/E11c: later operands running At, Slice, Less, a chain and a conditional, each writing a global an earlier piece
+# holds
 type Cnt struct(n I64) {
     n
 }

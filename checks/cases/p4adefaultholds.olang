@@ -1,0 +1,20 @@
+# check: fail error[P4a]: a task's default is built where its result lands, and this names existing storage - build the value here, or give null
+# P4a: a default builds all it holds - a constructor call holding existing storage does not, its argument is reported
+error E {
+    BAD
+}
+type Node struct(v I64, next Node&) {
+    v
+    next
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.BAD }
+    return Node(n, null)
+}
+fn main() ? {
+    anchor Node& = Node(7, null)
+    r Node& = null
+    join {
+        spawn r = try mk(-1) catch default Node(-1, anchor)
+    }
+}

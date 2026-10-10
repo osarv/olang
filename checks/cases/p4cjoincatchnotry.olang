@@ -1,0 +1,8 @@
+# check: fail error[P4c]: a join takes catch clauses only as 'try join', and no task of this one can fail
+# P4c: a join's clauses are a try's - and this join cannot fail at all
+fn work(n I32) { }
+fn main() ? {
+    join {
+        spawn work(1)
+    } catch { }
+}

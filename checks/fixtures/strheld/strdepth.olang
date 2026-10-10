@@ -1,0 +1,22 @@
+# E11c: a recursion through a Str renders a list as deep as its frames allow - a builder whose text fits its room keeps no scope header
+# in the frame (38,000 deep in an 8MB stack; a header in every frame stopped it at about 32,400)
+import "std/os"
+type L struct(v I64, next L&) {
+    v
+    next
+}
+fn (l L&) Str() String {
+    if l.next == null { return $l.v }
+    return $l.v "," $l.next
+}
+fn depthOf() I64 {
+    a := os.Args()
+    return 0 if a.Len() < 2 else try a[1].ParseInt() catch default 0
+}
+fn main() ? {
+    d := depthOf()
+    l L& = L(0, null)
+    for i in range d { l = L(i, l) }
+    s := $l
+    println($s.Len())
+}

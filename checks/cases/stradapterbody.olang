@@ -1,0 +1,21 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/E31: a Call adapter made of a receiver part runs Call with its receiver where the part lives - a Call building there
+# is refused through the adapter as it is called directly (the walk reads Call's body)
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 {
+    x Ctr&c = Ctr(c.v + 1)
+    return x.v
+}
+type Bag struct(c mut Ctr&) {
+    c
+}
+fn (b Bag&) Str() String {
+    g fn() I64 = b.c
+    return "b" $g()
+}
+fn main() ? {
+    b := Bag(Ctr(2))
+    println($b)
+}

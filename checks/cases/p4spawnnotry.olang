@@ -1,0 +1,13 @@
+# check: fail error[P4]: this call can fail - write 'spawn try', and what its clauses do not take reaches the join
+# P4: a spawned call that can fail is written with "try", as a fallible call is anywhere (R8)
+error E {
+    BAD
+}
+fn work(n I32) ? E {
+    if n < 0 { error E.BAD }
+}
+fn main() ? E {
+    try join {
+        spawn work(1)
+    }
+}

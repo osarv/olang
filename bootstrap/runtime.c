@@ -38,7 +38,8 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san);
  * rather than longjmping. A recovery point belongs to the stack that set it up, and a longjmp from a task
  * would restore the SPAWNER's stack pointer onto the task's thread while the spawner itself is still
  * parked in pthread_join on that very stack - two threads on one stack, which happened to appear to work.
- * There is nowhere on a task thread to recover to, for exactly the reason P4 gives for errors. */
+ * There is nowhere on a task thread to recover to (P6) - unlike an error, which a task hands to its join as a value
+ * (P4b), a failed check is a jump, and a jump has to land on the stack it was set up on. */
 void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan) {
     fputs(
         "declare i32 @printf(ptr, ...)\n"
@@ -271,7 +272,7 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //lifetime the bookkeeping needs, since the join happens before that scope is reclaimed. An alloca
         //would not do: a join block inside a loop would grow the stack by a node per task.
         "%olang.unwind = type { ptr, ptr, ptr }\n" //prev frame's node, this block's scope, its join head
-        "%olang.task = type { ptr, i64, ptr }\n"   //next, done flag, merge list
+        "%olang.task = type { ptr, i64, ptr, i64 }\n"   //next, done flag, merge list, error code (P4b: 0 when none)
         //P1e: a cached worker thread. It owns the mutex/condvar it parks on, so waiting for one task
         //never blocks another. glibc's PTHREAD_MUTEX_INITIALIZER is all-zero, which is what lets the
         //free-list lock below be a plain zeroinitializer; a worker's own pair is explicitly init'd.
@@ -1253,7 +1254,10 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  call i32 @pthread_mutex_unlock(ptr %m)\n"
         //S2: a crash in the task is reported as on any thread, a stack overflow included - once OnCrash has run
         "  call void @__olang_alt_stack()\n"
-        "  call ptr %fn(ptr %env)\n"
+        //P4b: what the task's trampoline returns is the error it lets through to its join (0: none), stored with the
+        //done flag below, under the lock that orders it for the joiner (P8)
+        "  %rv = call ptr %fn(ptr %env)\n"
+        "  %rc = ptrtoint ptr %rv to i64\n"
         //O8b: a worker about to park keeps at most a batch of its pool (1MB), the rest going where every thread can take
         //it - before the task is reported finished, so that what the task gave back is there for whoever its join lets
         //go on. Not a worker about to retire (P1f), which gives its pool back to the system instead: the load that made
@@ -1268,6 +1272,8 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //the task is finished the moment its call returns - report that first, so a joiner can proceed
         "done:\n"
         "  call i32 @pthread_mutex_lock(ptr @__olang_task_lock)\n"
+        "  %ep = getelementptr %olang.task, ptr %tk, i32 0, i32 3\n"
+        "  store i64 %rc, ptr %ep\n"
         "  %dp = getelementptr %olang.task, ptr %tk, i32 0, i32 1\n"
         "  store i64 1, ptr %dp\n"
         "  call i32 @pthread_cond_broadcast(ptr @__olang_task_cv)\n"
@@ -1376,7 +1382,9 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  call i32 @pthread_mutex_unlock(ptr @__olang_task_lock)\n"
         "  ret void\n"
         "}\n\n"
-        "define linkonce_odr void @__olang_join_tasks(ptr %headslot) {\n"
+        //P4b: returns the error of the task spawned earliest among those that failed, 0 when none did. The list is
+        //newest first, so the last failure the walk meets is that one
+        "define linkonce_odr i64 @__olang_join_tasks(ptr %headslot) {\n"
         "entry:\n"
         "  %head = load ptr, ptr %headslot\n"
         "  store ptr null, ptr %headslot\n"
@@ -1384,7 +1392,12 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  br i1 %nonone, label %done, label %task\n"
         "task:\n"
         "  %cur = phi ptr [ %head, %entry ], [ %tnext, %aftermerge ]\n"
+        "  %acc = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]\n"
         "  call void @__olang_task_wait(ptr %cur)\n"
+        "  %errp = getelementptr %olang.task, ptr %cur, i32 0, i32 3\n"
+        "  %err = load i64, ptr %errp\n"
+        "  %failed = icmp ne i64 %err, 0\n"
+        "  %acc1 = select i1 %failed, i64 %err, i64 %acc\n"
         "  %mheadptr = getelementptr %olang.task, ptr %cur, i32 0, i32 2\n"
         "  %mhead = load ptr, ptr %mheadptr\n"
         "  %nomerge = icmp eq ptr %mhead, null\n"
@@ -1404,7 +1417,8 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %tatend = icmp eq ptr %tnext, null\n"
         "  br i1 %tatend, label %done, label %task\n"
         "done:\n"
-        "  ret void\n"
+        "  %res = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]\n"
+        "  ret i64 %res\n"
         "}\n\n", out);
     fputs(
         //P2: a scope belongs to the thread that builds into it (its owner word). Every scope another thread can reach reaches
@@ -1653,7 +1667,7 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %nojoin = icmp eq ptr %j, null\n"
         "  br i1 %nojoin, label %closeit, label %joinit\n"
         "joinit:\n"
-        "  call void @__olang_join_tasks(ptr %j)\n"
+        "  call i64 @__olang_join_tasks(ptr %j)\n"
         "  br label %closeit\n"
         "closeit:\n"
         "  %sslot = getelementptr %olang.unwind, ptr %cur, i32 0, i32 1\n"
@@ -1872,9 +1886,10 @@ static void emitScopeRuntime(FILE* out, bool san) {
 }
 
 //E11c: a rendering built in one pass - text that grows as it is written, { ptr data, i64 len, i64 cap, ptr scope }: data
-//starts in a small room beside the builder and grows in the arena of the block building it, so every way out of that
-//block - its end, a test's unwind - reclaims it with the block, and nothing is freed by hand. Written only into an
-//object that builds one (a rendering that reaches a Str)
+//starts in a small room beside the builder and, once it outgrows that, grows in a scope of the builder's own - made on
+//that first growth, so a frame that never outgrows its room keeps no header (@__olang_sb_scratch), and closed when the
+//text is copied out (@__olang_sb_done). While it exists it is on the unwind chain, so a test left part way through a
+//rendering reclaims its chunks. Written only into an object that builds one (a rendering that reaches a Str)
 void emitTextBuilderRuntime(FILE* out) {
     fputs(
         //room for need more bytes past what it holds - the place they go: inline where it fits, else grown
@@ -1909,13 +1924,52 @@ void emitTextBuilderRuntime(FILE* out) {
         "  %more = icmp ugt i64 %dbl, %want\n"
         "  %nc = select i1 %more, i64 %dbl, i64 %want\n"
         "  %scopep = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 3\n"
-        "  %scope = load ptr, ptr %scopep\n"
+        "  %scope0 = load ptr, ptr %scopep\n"
+        "  %none = icmp eq ptr %scope0, null\n"
+        "  br i1 %none, label %mk, label %have\n"
+        "mk:\n"
+        "  %made = call ptr @__olang_sb_scratch(ptr %scopep)\n"
+        "  br label %have\n"
+        "have:\n"
+        "  %scope = phi ptr [ %scope0, %entry ], [ %made, %mk ]\n"
         "  %nd = call ptr @__olang_scope_alloc(ptr %scope, i64 %nc)\n"
         "  call void @llvm.memcpy.p0.p0.i64(ptr %nd, ptr %data, i64 %len, i1 false)\n"
         "  store ptr %nd, ptr %sb\n"
         "  store i64 %nc, ptr %capp\n"
         "  %p = getelementptr i8, ptr %nd, i64 %len\n"
         "  ret ptr %p\n"
+        "}\n\n"
+        //the builder's own scope, on its first growth: { unwind node, scope header }, the node pushed on the unwind chain
+        "define linkonce_odr ptr @__olang_sb_scratch(ptr %scopep) noinline {\n"
+        "entry:\n"
+        "  %blk = call ptr @malloc(i64 72)\n"
+        "  call void @__olang_alloc_check(ptr %blk)\n"
+        "  store [9 x i64] zeroinitializer, ptr %blk\n"
+        "  %h = getelementptr i8, ptr %blk, i64 24\n"
+        "  %top = load ptr, ptr @__olang_unwind_top\n"
+        "  store ptr %top, ptr %blk\n"
+        "  %sslot = getelementptr %olang.unwind, ptr %blk, i32 0, i32 1\n"
+        "  store ptr %h, ptr %sslot\n"
+        "  store ptr %blk, ptr @__olang_unwind_top\n"
+        "  store ptr %h, ptr %scopep\n"
+        "  ret ptr %h\n"
+        "}\n\n"
+        //the text copied out: the builder's own scope, if it grew one, closed - its node popped, its memory freed
+        "define linkonce_odr void @__olang_sb_done(ptr %sb) {\n"
+        "entry:\n"
+        "  %scopep = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 3\n"
+        "  %h = load ptr, ptr %scopep\n"
+        "  %none = icmp eq ptr %h, null\n"
+        "  br i1 %none, label %done, label %close\n"
+        "close:\n"
+        "  call void @__olang_scope_close(ptr %h)\n"
+        "  %blk = getelementptr i8, ptr %h, i64 -24\n"
+        "  %prev = load ptr, ptr %blk\n"
+        "  store ptr %prev, ptr @__olang_unwind_top\n"
+        "  call void @free(ptr %blk)\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret void\n"
         "}\n\n"
         //k more bytes written where @__olang_sb_room said
         "define linkonce_odr void @__olang_sb_add(ptr %sb, i64 %k) {\n"

@@ -1,0 +1,14 @@
+# check: fail error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
+# P4a: an error statement in a clause would leave it - what the task lets through is what its clauses do not take
+error E {
+    BAD
+    WORSE
+}
+fn work(n I32) ? E {
+    if n < 0 { error E.BAD }
+}
+fn main() ? E {
+    try join {
+        spawn try work(-1) catch E.BAD { error E.WORSE }
+    }
+}

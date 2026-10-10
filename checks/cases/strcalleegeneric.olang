@@ -1,5 +1,7 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: the lambda of strcalleelambda in a generic function and in a trait's default (G19): refused
+# check: run
+# flags: -s
+# E11c/D16c: a lambda over the receiver's parts, in a generic function and in a trait's default, held in a local that is
+# only ever called - its environment is in the frame, so nothing is built where the parts live
 type Sized trait {
     Len() I64
 }

@@ -1,0 +1,9 @@
+# check: fail error[P4]: this task cannot fail - drop the 'try'
+# P4: "try" before a spawned call that cannot fail is rejected, as before any call that cannot (R8)
+fn work(n I32) I32 { return n }
+fn main() ? {
+    r I32 = 0
+    join {
+        spawn r = try work(1)
+    }
+}

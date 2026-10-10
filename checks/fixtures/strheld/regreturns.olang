@@ -1,0 +1,39 @@
+# C11/O16: conditionals and matches of destructor temporaries through generics, returns and spawn targets
+Made mut I64 = 0
+Gone mut I64 = 0
+type Res struct(k I64) {
+    k
+    Made++
+} destruct { Gone++ }
+fn id(x <T>) T { return x }
+fn r1(c Bool) Res& { return Res(1) if c else id(Res(2)) }
+fn r2(c Bool) Res& { return id(Res(1) if c else Res(2)) }
+fn r3(c Bool) Res& {
+    return match c {
+        case true => id(Res(3))
+        nomatch => Res(4)
+    }
+}
+fn mk(c Bool) Res& { return Res(5) if c else Res(6) }
+fn show(i I64) { println($i ": " $(Made - Gone)) }
+fn main() ? {
+    c := false
+    { x := r1(c) }
+    show(0)
+    { x := r2(c) }
+    show(1)
+    { x := r3(c) }
+    show(2)
+    {
+        x Res& = Res(0)
+        join { spawn x = mk(c) }
+    }
+    show(3)
+    {
+        a := Array<Res&>(3, Res(7))
+        join {
+            for i in range 3 { spawn a[i] = mk(c) }
+        }
+    }
+    show(4)
+}

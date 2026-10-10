@@ -1,4 +1,5 @@
-# E11b/E11c: a conditional of a reference and a new value where both live in one scope, a global's or a parameter's, compiles and runs
+# E11b/E11c: a conditional of a reference and a new value where both live in one scope, a global's or a parameter's,
+# compiles and runs
 type P struct(v I64) {
     v
 }

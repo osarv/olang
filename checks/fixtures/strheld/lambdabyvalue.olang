@@ -1,0 +1,17 @@
+# E11c/O4b: a by-value receiver holding a reference, captured by a lambda
+type Node struct(v I64) {
+    v
+}
+type VBag struct(head Node&) {
+    head
+}
+fn (b VBag) Str() String {
+    f := fn() I64 {
+        s := $b.head.v
+        return s.Len()
+    }
+    return "vbag " $f()
+}
+fn main() ? {
+    println($VBag(Node(3)))
+}

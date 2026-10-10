@@ -1,0 +1,17 @@
+# E11c/D16c: a Str folding its receiver's List with a lambda rendering a receiver field
+type Bag struct(k I64) {
+    k
+    l List<I64> = List<I64>()
+}
+fn (b Bag&) Str() String {
+    n := b.l.Iter().Fold(0, fn(a I64, x I64) I64 {
+        s := $(x + b.k)
+        return a + s.Len()
+    })
+    return "b" $n
+}
+fn main() ? {
+    b := Bag(1)
+    b.l.Push(4)
+    println($b)
+}

@@ -1,14 +1,29 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: a conditional of the receiver's text and a literal builds the literal where the text lives (E28): refused in
-# Str's own body, where codegen held a null scope
+# check: run
+# flags: -s
+# E11c/T25d: a conditional or a match of the receiver's text and constant text, in a Str - the literal is the constant
+# itself (a read-only conditional is a place T25d reaches), so nothing is built where the receiver lives. The same site
+# is one instance however often it is reached, while compiling as at run time (E10, "is")
 type Bag struct(name String&) {
     name
 }
 fn (b Bag&) Str() String {
     name := b.name if b.name.Len() > 0 else "anon"
-    return $name
+    kind := match b.name.Len() {
+        case 0 => "empty"
+        nomatch => b.name
+    }
+    return $name "/" $kind
 }
+fn pick(t String&, c Bool) String&t { return t if c else "same" }
+Baked := pick("x", false) is pick("y", false)
 fn main() ? {
-    println($Bag(""))
-    println($Bag("x"))
+    a := $Bag("")
+    b := $Bag("x")
+    k I64 = 0
+    for i in range 1000 {
+        s := $i
+        k += s.Len()
+    }
+    assert a == "anon/empty" and b == "x/x", "rendered"
+    assert Baked and pick("x", false) is pick("y", false), "one site, one instance"
 }

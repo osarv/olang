@@ -933,7 +933,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   is a `byte[40]` and a `pthread_cond_t` a `byte[48]`, which X3 marshals to exactly the pointer pthread
   wants. Those sizes are glibc/x86-64 and a wrong one is silent corruption - the honest cost of having no
   way to name a foreign struct, and the strongest argument yet for extern gaining one.
-  A spawned function **may not declare errors** (P4): an error raised on another thread has nowhere to
+  (Superseded 2026-10-10 by decision 50, the entry "A spawned call may fail" near the end:) A spawned function **may
+  not declare errors** (P4): an error raised on another thread has nowhere to
   propagate, since the join carries no value and the spawner has left the call site. Runtime-wise a task is
   an OS thread (`pthread_create`/`pthread_join`, 1:1 rather than M:N) driven by a per-task trampoline that
   unpacks an env struct. That env, the task node and the merge records are all bump-allocated **from the
@@ -4721,7 +4722,8 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   own blocks and its result scope (one `$` opens and closes once the text is copied, on the test unwind chain), but
   build or store nothing where the receiver reaches and require nothing of it (`ERR_STR_STORES_IN_RECEIVER`) - the
   receiver's scope variables are `noBuild` - a walk finding nothing built there, by Str's body or anything it hands a
-  part of the receiver to (round 3, below) - and codegen passes `null` for them; (3) a join's operands are evaluated left to right **before** any piece is
+  part of the receiver to (round 3, below) - and `$` hands them the scope it opens for the call, nothing ever built in it
+  through them (round 4); (3) a join's operands are evaluated left to right **before** any piece is
   rendered, Go's rule (a struct or a number as it is then, an array's elements and what a reference names read when the
   piece renders) - **a pre-existing heap overflow**: `$G $bump()` measured G, let bump lengthen its numbers, then wrote
   past the allocation (`checks/cases/joinwritesafter`); (4) a lambda made where it is called is judged by its body for
@@ -4765,6 +4767,72 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   the note for a local that cannot live where the receiver does no longer proposes declaring it there. Left: O3 (by
   design), and two natural shapes refused rather than built - a helper making a lambda over a node it was handed, and a
   conditional of the receiver's text and a literal (constant data, but T25d does not reach a conditional's values).
+  **Round 4, after the third review** (`/home/user/review/str3`; the walk held - no false internal error, 16 builds into
+  the receiver refused through every path): **N1/N2**, master's decision-48 `__olang_scope_escape`/`__olang_scope_mine`
+  read a scope header without allocating, so the null `$` passed crashed every closure or `Call` adapter made over the
+  receiver (ordinary Strs: a lambda for `Any` or `Fold`) - the receiver's variables now get the scope `$` opens for the
+  call, a real one nothing is built in through them (the walk, and `cgCheckMayBuild`, which now also sees the builder's
+  final copy); **n2b**, the walk now asks a `Call` adapter's `Call` body about its receiver wherever the instance may live
+  in the variable asked about. **G9d made consistent (mine)**: a temporary binds `T` writable, and two references of one
+  type differing in permission meet at read-only whichever argument comes first (never a receiver's binding) - so
+  `pick(Res(2), r)`/`pick(r, Res(2))` and `addA`/`addB` agree; a generic constructor binds every reference read-only
+  (G10c), `Box(Res(1))` included; SPEC G9d says so, and that `==` on `T` is identity and `Hashable` needs a declared `Hash`
+  (C11's consequence). Binding read-only everywhere was tried first and refused the review's own registration batteries
+  (`task(id(Res(25)))` for a `mut` parameter, a built result returning `id(Res(2))`). **N6/P1** (pre-existing): a
+  conditional or match none of whose values is existing storage no longer determines its parameter's scope - it lands with
+  the call (166/139MB -> 1.5MB at 1M iterations). **N7**: a try's catch default is promoted with the try (one destruction).
+  **N8**: the builder's scope header is made, off the stack, on its first growth past the room (~32,400 -> ~40,200 levels
+  of recursion through a Str; decision 48's larger header is the rest of the way to 7345ff9's ~43,400). **Over-rejections
+  removed**: the walk is parametric in a body's function-typed parameters (`mbiMemo.deps`), so `Count`/`Any`/`Fold`/`Map`/
+  `Filter` over what the receiver reaches ask their callback's body (o6); T25d reaches a read-only conditional's or match's
+  value, so `b.name if ... else "anon"` runs in a Str (o5, the evaluator agreeing on identity); a capturing lambda passed to
+  a callee that keeps nothing of it, or held in a local only ever called afterwards (read off the rest of its block), keeps
+  its environment in the frame and builds nowhere (o1/o2, D16c), and so does a `Call` adapter for such a callee (o3); a task
+  whose call builds nothing into a scope gets no stand-in for it, read off the walk once every body is checked (o4, P2).
+  Also: O17's region facts no longer report E11c (they took a call through a function value to build where it was bound,
+  a second path refusing o6); decision 50's join and spawn clauses, merged from master, are walked. Left by design: n4
+  (identity, `Hashable`), n5 (read-only by G10c), n2b refused; `-i` refuses destructors (stage 1).
+- **A spawned call may fail; a join that can fail is `try join` (P4/P4a-P4d replace the old P4, P1, P1g, R8, R10, D10a,
+  K1, 2026-10-10; decision 50, the user's QE "We need some way to make spawn functions fail ... Solve it", the shape
+  approved; details mine).** `spawn try f(a)`, `spawn x = try f(a) catch E default v`, `spawn try f(a) catch E { ... }`;
+  a fallible task without `try`, or `try` on one that cannot fail, is an error, as for any call (R8). **The clauses run
+  on the task's thread** (P4a): each is a lambda made where the spawn is, capturing as a spawned lambda does (D16c, P2),
+  called by the trampoline when the call fails with what it takes; it may not leave the task (no return, error, escaping
+  try, or loop jump out of it - `abort`, `unreachable`, `done`, `fail` end the process and may). **What no clause takes
+  reaches the join** (P4b): carried as the task's code, stored with its done flag under the lock that orders it (P8,
+  TSan-clean), the join waits for every task and then fails with the earliest-SPAWNED failure, the rest dropped, no
+  sibling stopped. **`try join { } [catch ...]`** (P4c) is R10's statement form with the join as what it tries; its error
+  set is what its tasks let through, judged at the declared-type level (R14); a join that can fail without `try`, and
+  `try join` on one that cannot, are errors. **P4d**: a target whose task fails is left unwritten, so a join holding one
+  has only clauses that leave. **Decided (mine)**: the clause syntax is a try-expression's (R9b/R11), clauses after the
+  call; several targets take one default per target, as a destructuring's try (`spawn q, r = try divmod(a, b) catch
+  default 0, 0`); with targets a clause gives a default or ends the process (R9a's rule, where leaving the task can only
+  mean that); a task's default holding references must build all it holds (`null`, text, constructor calls, enum cases
+and literals made only of such, never existing storage anywhere in it) - it is
+  built where the call's result lands (the clause lambda gets the task's result-scope stand-in), and existing storage
+  could not be matched to the targets' scope; **a join fails on every way out but an error already leaving** - its
+  failure replaces falling off the end, a `return` (value discarded), a `break` or `continue` (not taken) - which keeps
+  P4d's promise for code after a loop or a caller reading a target, while the block's own error wins when both happen;
+  the join's errors are its tasks' only, never its block's own statements'; `catch` clauses after a join without `try`
+  are parsed so the checker can say what is missing; a clause `catch E { }` makes no lambda at all (the error is simply
+  taken); D10a counts a join that leaves (its block leaves and every clause of its `try join` does). **How it is
+  built**: the task call is unchanged (arguments, P2, landing); each clause is a hidden local holding its lambda, made in
+  the spawn's `if true` wrapper as a spawned lambda's is, its code and environment captured in the task env; the
+  trampoline dispatches on the code with the callee's ordinals, stores a clause's value as the call's, and returns what
+  is left re-encoded under the join's list (`cgReencodeInto`); `%olang.task` gained the error word and
+  `__olang_join_tasks` returns the earliest (the list is newest first, so the last failure the walk meets);
+  `cgLeaveBlocks` diverts a way out of a failed fallible join to the join's handler (`cgLeaveJoin`) unless an error is
+  leaving (`leavingWithError`); the evaluator binds each clause where the spawn is, runs it at the join on the task's
+  failure, keeps the first failure and fails the join with it (baked globals and decided asserts agree with the run
+  time, `-i` too). **Found and fixed on the way, pre-existing (P1g)**: `spawn s = f()` with `f` returning a value
+  `String` (any run-time-length array value) stored the result's `{length, storage}` as built - in a stand-in of the
+  JOIN block's scope, reclaimed at its end - so `s` read freed memory (the scope sanitizer caught it; master too): such
+  a result is now landed where the target's own storage is (`spawnTargetTakesStorage`). Tests: shared.olang's P4
+  section (evaluated while compiling and at run time, earliest wins, clauses, several targets, defaults holding
+  references read after a churn, return/break/continue replaced, deferred code, nested joins and lambdas, the default
+  error, D10a, an early `done`), std/chan's cancelled `RecvUntil`, 17 `checks/cases/p4*`, and the `spawnerr` scenario
+  comparing `-b`, `-b -d -s` and `-i` on one program (and its unhandled error); `-r` run by hand, clean.
+
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld"]
+                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -256,6 +256,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "scopesan" { try scopesan(r) }
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
+        case "spawnerr" { try spawnerr(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -294,6 +295,9 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b joincond.olang > out.txt 2>&1") == 0, "joincond build", dir)
     try r.expect(sh(dir, "(ulimit -v 110000 && ./build/joincond) > out.txt 2>&1") == 0, "joincond", dir)
     try r.expect(outOf(dir) == "50000\n", "joincond output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b condarg.olang > out.txt 2>&1") == 0, "condarg build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/condarg) > out.txt 2>&1") == 0, "condarg", dir)
+    try r.expect(outOf(dir) == "499999500000\n", "condarg output", dir)
     #O26a: a view's function keeps no local in the structure's scope that what it returns cannot hold - a copy handed to
     #a method or another module's function giving a number, numbers for a slice (the master compiler: out of memory)
     try r.expect(sh(dir, "\"$OLANG\" -b resultviews.olang > out.txt 2>&1") == 0, "resultviews build", dir)
@@ -1012,6 +1016,22 @@ fn typereview(r mut report&) ? Failed {
     try oneError(r, dir, "lambdaalias", "is an import's alias in this module")
 }
 
+# P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land
+# where results do - the same built, built -d -s (where a use after a scope closed stops the program) and under -i, which
+# runs a join's tasks in sequence; and an error no clause takes leaves main as an unhandled error in all three
+test "failing tasks agree built, sanitized and interpreted" { assert passed("spawnerr") }
+
+fn spawnerr(r mut report&) ? Failed {
+    dir := fresh("spawnerr")
+    os.Run("cp checks/fixtures/spawnerr/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b tasks.olang > out.txt 2>&1") == 0, "tasks", dir)
+    try r.expect(sh(dir, "./build/tasks > b.txt 2>&1") == 1, "tasks did not end in its error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d -s tasks.olang > out.txt 2>&1") == 0, "tasks -d -s", dir)
+    try r.expect(sh(dir, "./build/tasks.debug.san > d.txt 2>&1") == 1, "tasks -d -s did not end in its error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > i.txt 2>&1") == 1, "tasks -i did not end in its error", dir)
+    try r.expect(sh(dir, "cmp -s tasks.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "tasks output", dir)
+}
+
 # K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at
 # -O0, and -i must agree on - each program printed once by each, all three the same and right - and the data baked
 # globals are written out as: one instance where two globals name one, a slice as a place in its base's data, and what a
@@ -1429,23 +1449,35 @@ fn capscope(r mut report&) ? Failed {
                  "capscope -d -s", dir)
 }
 
-# E11b/E11c: joins reaching a Str - Go's order, left part way, in deferred code, tasks, a Map's Str through a helper, a
-# conditional of one scope's values - each built and built -s, and interpreted where -i runs it (not a destructor's, nor
-# 20,000 joins: -i reclaims nothing), giving what it was reviewed to give
+# E11b/E11c, D16c, E31, G9d, O16, O18a, P2, T25d: Strs, joins and destructor temporaries the reviews of decision 49 wrote -
+# joins in Go's order, left part way, in deferred code and tasks, a Map's Str through a helper, lambdas and Call adapters
+# made in a Str or a helper of one, callbacks over what the receiver reaches, generic calls of destructor temporaries -
+# each built, built -s and built -d, and interpreted where -i runs it (not a destructor's, nor 20,000 joins: -i
+# reclaims nothing), giving what it was reviewed to give
 test "joins reaching a Str give what they did when reviewed" { assert passed("strheld") }
 
 fn strheld(r mut report&) ? Failed {
     dir := fresh("strheld")
     os.Run("cp checks/fixtures/strheld/* " $os.Quote(dir))
     for n in String&["concurrent", "deferred", "earlyexits", "eqwrites", "globals", "manyplaces", "mapalone", "opmethods",
-                     "order", "samescope", "shrinks", "strchanges"] {
+                     "order", "samescope", "shrinks", "strchanges", "lambdaany", "lambdamade", "lambdafold", "lambdaspawn",
+                     "lambdabyvalue", "adapterlocal", "adaptercallee", "g9dorder", "condlanding", "trydefault",
+                     "helperlambda", "transientlambda", "transientadapter", "spawnnobuild", "condliteral",
+                     "arraycallback", "regbattery", "regreturns", "g9deval", "g9dcontainers"] {
         try r.expect(sh(dir, "\"$OLANG\" -b " $n ".olang > out.txt 2>&1 && ./build/" $n " > b.txt 2>&1 && cmp -s b.txt " $n ".want")
                      == 0, n, dir)
         try r.expect(sh(dir, "\"$OLANG\" -b -s " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > s.txt 2>&1 && cmp -s s.txt "
                         $n ".want") == 0, $n " -s", dir)
-        if n == "earlyexits" or n == "manyplaces" { continue }
+        try r.expect(sh(dir, "\"$OLANG\" -b -d " $n ".olang > out.txt 2>&1 && ./build/" $n ".debug > d.txt 2>&1 && cmp -s d.txt "
+                        $n ".want") == 0, $n " -d", dir)
+        if n in String&["earlyexits", "manyplaces", "g9dorder", "condlanding", "trydefault", "regbattery", "regreturns",
+                        "g9deval", "g9dcontainers"] { continue }
         try r.expect(sh(dir, "\"$OLANG\" -i " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" -t donenested.olang > out.txt 2>&1") == 0, "donenested", dir)
     try r.expect(outOf(dir).Contains("3 passed, 0 failed"), "donenested output", dir)
+    #N8: a recursion through a Str keeps no builder header in a frame whose text fits its room
+    try r.expect(sh(dir, "\"$OLANG\" -b strdepth.olang > out.txt 2>&1 && ./build/strdepth 38000 > out.txt 2>&1") == 0,
+                 "strdepth", dir)
+    try r.expect(outOf(dir) == "216891\n", "strdepth output", dir)
 }

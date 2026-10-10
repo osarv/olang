@@ -1,0 +1,11 @@
+# E31/D16c: a Call adapter made for a callee that keeps nothing of it lives in the frame
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 { return c.v }
+fn apply(f fn() I64) I64 { return f() }
+type Bag struct(c Ctr&) {
+    c
+}
+fn (b Bag&) Str() String { return "b" $apply(b.c) }
+fn main() ? { println($Bag(Ctr(5))) }

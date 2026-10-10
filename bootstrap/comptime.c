@@ -116,7 +116,11 @@ struct ctCallFrame { struct var* func; struct list locals; };
 
 //P1/K1: a task spawned while compiling - its call bound and its targets' places taken where the spawn is written (P8,
 //P1g), run to completion at its join, in the order spawned
-struct ctTask { struct operand* op; struct ctCallFrame frame; struct list targets; };
+//P4a: and a spawned try's clauses, each bound where the spawn is too (struct ctCallFrame, func NULL for one with no code)
+struct ctTask { struct operand* op; struct ctCallFrame frame; struct list targets; struct statement* s; struct list clauses; };
+
+//P4b: what the tasks of a join let through - the earliest failure, as the join fails with it
+struct ctJoinFail { bool failed; struct type errType; long long errWord; };
 
 //B3e: tasks spawned and not yet run, and the task running now (NULL: none) - while either is so, a wait for another
 //thread can never end under -i, which runs a join's tasks one after another
@@ -1205,7 +1209,7 @@ static void ctScanStmt(struct ctScan* sc, struct statement* s) {
             ctScanBlock(sc, &s->nomatchBlock);
             ctScanOp(sc, s->nomatchValue);
             break;
-        case STATEMENT_TRY_CATCH:
+        case STATEMENT_TRY_CATCH: case STATEMENT_JOIN: //P4c: a "try join"'s clauses run here too
             for (int c = 0; c < s->catchClauses.len && !sc->why; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
                 ctScanBlock(sc, &cc->block);
@@ -2103,7 +2107,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_COND: { //E28: only the chosen value is evaluated
             struct ctVal* c = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!c) return NULL;
-            return ctFit(st, *(struct operand**)ListGetIdx(&op->args, ctDeref(c)->i ? 1 : 2), op->type);
+            //T25d: a literal of constant text reaching a read-only conditional is its site's one instance, as at a call
+            return ctFitBoundary(st, *(struct operand**)ListGetIdx(&op->args, ctDeref(c)->i ? 1 : 2), op->type);
         }
         case OPERATION_CMP_CHAIN: { //E30: each comparison in turn, the shared operand evaluated once
             struct ctVal* prev = NULL;
@@ -2506,13 +2511,13 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
             hit = ctDeref(g)->i != 0;
         }
         if (!hit) { st->locals->len = mark; continue; }
-        if (c->op && out) *out = ctFit(st, c->op, want);
+        if (c->op && out) *out = ctFitBoundary(st, c->op, want); //T25d, as a conditional
         else ctExecBlock(st, &c->block);
         st->locals->len = outer;
         return;
     }
     if (st->flow == CF_NORMAL && s->hasNomatch) {
-        if (s->nomatchValue && out) *out = ctFit(st, s->nomatchValue, want);
+        if (s->nomatchValue && out) *out = ctFitBoundary(st, s->nomatchValue, want);
         else ctExecBlock(st, &s->nomatchBlock);
     } else if (st->flow == CF_NORMAL && out) { //S12b: covered by every case, so not reached - checked, as cgMatch checks it
         if (ctRun) ctRunAbortAt(s, "reached unreachable code", NULL);
@@ -2524,7 +2529,7 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
 //K1/P1: a join's tasks, run in the order they were spawned, each to completion, each result stored into its targets
 //(P1g). What the block was doing when it was left - a return's value, an error in flight, a loop jump - waits for them,
 //as the running program's does (P1b); a task that cannot be evaluated ends the evaluation
-static void ctRunTasks(struct ctState* st, struct list* tasks) {
+static void ctRunTasks(struct ctState* st, struct list* tasks, struct ctJoinFail* jf) {
     if (st->flow == CF_FAIL) ctTasksPending -= tasks->len;
     if (st->flow == CF_FAIL || !tasks->len) return;
     enum ctFlow flow = st->flow;
@@ -2541,12 +2546,46 @@ static void ctRunTasks(struct ctState* st, struct list* tasks) {
         ctTasksPending--;
         ctTaskRunning = t;
         struct ctVal* v = ctCallRun(st, t->op, &t->frame);
+        bool stores = true;
+        if (st->flow == CF_ERROR && t->s) {
+            //P4a: the task's own clauses take its error, on its thread - the first naming it runs, its value (when it
+            //gives one) what the targets get. P4b: what none takes is the task's failure, the join's if it is the first
+            int hit = -1;
+            for (int c = 0; hit < 0 && c < t->s->catchClauses.len; c++) {
+                struct catchClause* cc = ListGetIdx(&t->s->catchClauses, c);
+                bool match = cc->catchAll;
+                for (int k = 0; !match && k < cc->matches.len; k++) {
+                    struct catchMatch* cm = ListGetIdx(&cc->matches, k);
+                    match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
+                }
+                if (match) hit = c;
+            }
+            if (hit < 0) {
+                if (!jf->failed) {
+                    jf->failed = true;
+                    jf->errType = st->errType;
+                    jf->errWord = st->errWord;
+                }
+                st->flow = CF_NORMAL;
+                st->errBypass = false;
+                stores = false;
+                v = NULL;
+            } else {
+                struct catchClause* cc = ListGetIdx(&t->s->catchClauses, hit);
+                struct ctCallFrame* cf = ListGetIdx(&t->clauses, hit);
+                st->flow = CF_NORMAL;
+                st->errBypass = false;
+                v = cf->func ? ctCallRun(st, cc->taskCall, cf) : ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+                stores = cc->givesValue;
+            }
+        }
         ctTaskRunning = outerTask;
-        if (!v || st->flow != CF_NORMAL) { //a task declares no error (P4), so only a failure stops it
+        if ((stores && !v) || st->flow != CF_NORMAL) { //a failure stops it; an error was taken above
             ctTasksPending -= tasks->len - 1 - i;
             if (st->flow != CF_FAIL) ctFail(st, t->op->tok, "a task it starts does not finish");
             return;
         }
+        if (!stores) { ListDestroy(t->targets); continue; } //P4d: left as they were
         for (int k = 0; k < t->targets.len; k++) {
             struct ctVal* node = *(struct ctVal**)ListGetIdx(&t->targets, k);
             if (!node) continue; //"_"
@@ -2690,9 +2729,33 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->tasks = &tasks;
             ctExecBlock(st, &s->block);
             st->tasks = outer;
-            ctRunTasks(st, &tasks);
+            struct ctJoinFail jf = (struct ctJoinFail){0};
+            ctRunTasks(st, &tasks, &jf);
             ListDestroy(tasks);
-            return;
+            //P4b: a failed task fails the join on every way out of it but an error already leaving - its error in place
+            //of a return, a loop jump or the block's end, taken by the "try join"'s clauses or propagated (P4c)
+            if (!jf.failed || st->flow == CF_ERROR || st->flow == CF_FAIL) return;
+            st->flow = CF_ERROR;
+            st->ret = NULL;
+            st->errType = jf.errType;
+            st->errWord = jf.errWord;
+            st->errBypass = false;
+            st->errCheckRoot = NULL;
+            for (int c = 0; c < s->catchClauses.len; c++) {
+                struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+                bool match = cc->catchAll;
+                for (int i = 0; !match && i < cc->matches.len; i++) {
+                    struct catchMatch* cm = ListGetIdx(&cc->matches, i);
+                    match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
+                }
+                if (!match) continue;
+                st->flow = CF_NORMAL;
+                int mark = st->locals->len;
+                ctExecBlock(st, &cc->block);
+                st->locals->len = mark;
+                return;
+            }
+            return; //no clause named it: it propagates
         }
         case STATEMENT_SPAWN: {
             //P8, P1g: the arguments and the targets' places are taken here, where the spawn is written
@@ -2709,6 +2772,15 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 ListAdd(&t.targets, &node);
             }
             if (!ctCallBind(st, op, &t.frame)) return;
+            //P4a: the task's clauses, made where it is (their closures read from the hidden locals holding them)
+            t.s = s;
+            t.clauses = ListInit(sizeof(struct ctCallFrame));
+            for (int c = 0; c < s->catchClauses.len; c++) {
+                struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+                struct ctCallFrame cf = (struct ctCallFrame){0};
+                if (cc->taskCall && !ctCallBind(st, cc->taskCall, &cf)) return;
+                ListAdd(&t.clauses, &cf);
+            }
             ListAdd(st->tasks, &t);
             ctTasksPending++;
             return;

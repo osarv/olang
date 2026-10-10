@@ -1,5 +1,7 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: a Str whose result borrows from its receiver gives a conditional of the receiver's text and a literal: refused
+# check: run
+# flags: -s
+# E11c/T25d: a Str whose result borrows from its receiver gives a conditional of the receiver's text and a literal - the
+# literal is the constant itself, built nowhere, so nothing is built where the receiver lives
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -25,6 +27,8 @@ fn (b Bag&) Str() String&b {
 fn main() ? {
     b := Bag(Node(4, null), "bag", 1)
     s := $b
+    b0 := Bag(Node(4, null), "bag", 0)
+    s0 := $b0
     churn()
-    println(s)
+    assert s == "lit" and s0 == "bag", "the rendered text, read back after churning"
 }

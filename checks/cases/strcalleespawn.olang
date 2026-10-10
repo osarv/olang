@@ -1,6 +1,6 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: a helper handed the receiver's node spawns a call with it, and the task's stand-in for its scope (P2) is made
-# where the receiver lives: refused
+# check: run
+# flags: -s
+# E11c/P2: a helper handed the receiver's node spawns a call with it that builds nothing there - no stand-in is made
 type Node struct(v I64, next mut Node&) {
     v
     next

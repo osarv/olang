@@ -1,6 +1,7 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: a helper handed a part of the receiver with a Call method passes it where a function value is wanted, and the
-# adapter (E31) is made where the part lives: refused
+# check: run
+# flags: -s
+# E11c/E31/D16c: a helper handed a part of the receiver passes it, adapted through its Call, to a callee keeping nothing
+# of it - the adapter is in the helper's frame, so nothing is built where the part lives
 type Node struct(v I64, next mut Node&) {
     v
     next

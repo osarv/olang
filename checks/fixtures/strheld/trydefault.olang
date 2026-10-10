@@ -1,0 +1,17 @@
+# C11/O16: a try's catch default promoted with the try - one constructor call, one destruction
+error E { X }
+type FRes struct(k I64) ? E {
+    k
+    gone Bool = false
+    if k < 0 { error E.X }
+} destruct {
+    println("destruct " $k " (this instance destructed before: " $gone ")")
+    gone = true
+}
+fn main() ? {
+    {
+        x := try FRes(-1) catch default (try FRes(5) catch { unreachable })
+        println("x " $x.k)
+    }
+    println("end")
+}

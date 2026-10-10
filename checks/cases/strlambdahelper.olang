@@ -1,6 +1,8 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
-# E11c/O12: a lambda a Str makes calls a helper that makes a closure over the receiver's node: refused (the closure read the
-# null scope as the program's and was never reclaimed)
+# check: run
+# flags: -s
+# E11c/D16c: a lambda a Str makes calls a helper whose closure over the receiver's node is only ever called - nothing is
+# built where the node lives, and nothing left behind over 2M renderings (the closure once read the null scope as the
+# program's and was never reclaimed)
 type Node struct(v I64) {
     v
 }
