@@ -259,6 +259,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    O17's region facts belong to each function, not the shared scope variable; a lambda capturing a value holding
    references gets an implicit scope (D16c); destructured results keep a scope argument's placement (E25).
 
+42. (mine, revising 33 after the s5scope soundness review, /home/user/review/tonight6) the hidden copy through x[i]
+   is sound only where no user code runs between reading the element and writing it back: a FIELD store
+   (`x[i].f = v`, op=, ++) keeps the write-back, place held and value evaluated first; a `mut` method or `mut &`
+   argument on x[i] is a compile-time error naming `t := l[i]; t.M(); l[i] = t` (the callee could reach the collection
+   another way - heap corruption, lost writes; exclusivity checking would be needed). Being built in wt-s5scope.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
