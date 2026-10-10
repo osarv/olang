@@ -17,6 +17,11 @@
 # costs that bit position - six comparisons - and two loads, whatever the length. A chunk Pop or Clear empties is
 # kept, and filled again by the next Push to reach it, so a list that shrinks and grows again allocates nothing new.
 #
+# Most lists are short - a cell of a spatial grid, a node's neighbours, the words of a line - so the first chunk is held
+# on its own: a list that never outgrows it is one allocation, made by its first Push, with no array of chunks at all
+# (that is made with the second chunk), and "l[i]" below 8 and a walk of such a list read it directly, with no bit
+# position to find.
+#
 # A List is a HANDLE: everything it holds - the chunks and the counts - is one record, made where the List is
 # constructed (C2d), and a List value is one reference to it. So a copy of a List value ("b := a", a field, an element, a
 # by-value argument) is a second name for the same list, as a Go map is, and a Push through either is seen through both;
@@ -33,7 +38,9 @@ type List<T> struct() {
 
 # what a List holds - private, reached only through a List
 type listState<T> struct() {
-    chunks mut Array<mut Array<T>&>& = null          # the chunks made, in order: chunk k holds firstChunk << k elements
+    chunks mut Array<mut Array<T>&>& = null          # the chunks made, in order, once there are two: chunk k holds
+                                                     # firstChunk << k elements
+    first mut Array<T>& = null                       # chunk 0, made by the first Push
     nChunks I64 = 0                                  # how many of them are in use - the last of those is the tail
     made I64 = 0                                     # how many are made: those past nChunks wait to be filled again
     tail mut Array<T>& = null                        # the last chunk in use, which Push fills
@@ -83,10 +90,15 @@ fn (l mut List<<T>>&) PushAll(a Array<T>&) {
 # no zero value at all (D13c) - a List of such values is as ordinary as any other
 fn (s mut listState<<T>>&) grow(fill T) {
     if s.nChunks < s.made {
-        s.tail = s.chunks[s.nChunks]
+        s.tail = s.chunk(s.nChunks)
+    } else if s.made == 0 {
+        s.first = Array<T>(firstChunk, fill)
+        s.tail = s.first
+        s.made = 1
     } else {
         if s.chunks == null {
             s.chunks = Array<mut Array<T>&>(4)
+            s.chunks[0] = s.first
         } else if s.made == s.chunks.Len() {
             more mut Array<mut Array<T>&>&s = Array<mut Array<T>&>(s.made * 2)
             for k in range s.made { more[k] = s.chunks[k] }
@@ -99,6 +111,12 @@ fn (s mut listState<<T>>&) grow(fill T) {
     s.nChunks++
     s.used = 0
     s.room = s.tail.Len()
+}
+
+# chunk k of those made - the first is held on its own, so a list that never outgrows it has no array of chunks
+fn (s listState<<T>>&) chunk(k I64) mut Array<T>&s {
+    if k == 0 { return s.first }
+    return s.chunks[k]
 }
 
 fn (l List<<T>>&) Len() I64 { return l.s.count }
@@ -133,6 +151,7 @@ fn highBit(x I64) I64 {
 # the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l[i]" checks i against
 # Len() first and fails with BuiltinError.OUT_OF_BOUNDS (E31a, derived from this and Len)
 fn (l List<<T>>&) At(i I64) T {
+    if i < firstChunk { return l.s.first[i] }
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     return l.s.chunks[k][p - (firstChunk << k)]
@@ -140,6 +159,10 @@ fn (l List<<T>>&) At(i I64) T {
 
 # replaces the element at position i - "l[i] = x" (E31), unchecked as At is; "try l[i] = x" checks it
 fn (l mut List<<T>>&) SetAt(i I64, x T) {
+    if i < firstChunk {
+        l.s.first[i] = x
+        return
+    }
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     l.s.chunks[k][p - (firstChunk << k)] = x
@@ -149,14 +172,17 @@ fn (l mut List<<T>>&) SetAt(i I64, x T) {
 # "try l.First() catch default 0" gives a fallback
 fn (l List<<T>>&) First() T ? {
     if l.s.count == 0 { error }
-    return l.s.chunks[0][0]
+    return l.s.first[0]
 }
 
 # the last element - failing with the default error when there is none
 fn (l List<<T>>&) Last() T ? {
     s := l.s
     if s.count == 0 { error }
-    if s.used == 0 { return s.chunks[s.nChunks - 2][s.chunks[s.nChunks - 2].Len() - 1] }
+    if s.used == 0 {
+        c := s.chunk(s.nChunks - 2)
+        return c[c.Len() - 1]
+    }
     return s.tail[s.used - 1]
 }
 
@@ -174,7 +200,7 @@ fn (l mut List<<T>>&) Pop() T ? {
 fn (s mut listState<<T>>&) dropLast() {
     if s.used == 0 {
         s.nChunks--
-        s.tail = s.chunks[s.nChunks - 1]
+        s.tail = s.chunk(s.nChunks - 1)
         s.room = s.tail.Len()
         s.used = s.room
     }
@@ -190,7 +216,7 @@ fn (l mut List<<T>>&) Clear() {
     s.used = 0
     if s.made > 0 {
         s.nChunks = 1
-        s.tail = s.chunks[0]
+        s.tail = s.first
         s.room = s.tail.Len()
     }
 }
@@ -210,7 +236,7 @@ fn (l mut List<<T>>&) Truncate(n I64) {
     p I64 = n - 1 + firstChunk               # where element n - 1 lives, as At finds it
     k I64 = highBit(p) - firstChunkLog
     s.nChunks = k + 1
-    s.tail = s.chunks[k]
+    s.tail = s.chunk(k)
     s.room = s.tail.Len()
     s.used = p - (firstChunk << k) + 1
     s.count = n
@@ -225,14 +251,14 @@ fn (l mut List<<T>>&) RemoveAt(i I64) T {
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
-    c := s.chunks[k]
+    c := s.chunk(k)
     x := c[o]
     for n in range s.count - 1 - i {          # each element after i into the place before it, chunk by chunk
         if o + 1 < c.Len() {
             c[o] = c[o + 1]
             o++
         } else {
-            next := s.chunks[k + 1]
+            next := s.chunk(k + 1)
             c[o] = next[0]
             c = next
             k++
@@ -257,13 +283,13 @@ fn (l mut List<<T>>&) Insert(i I64, x T) {
     p I64 = s.count - 1 + firstChunk
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
-    c := s.chunks[k]
+    c := s.chunk(k)
     for n in range s.count - 1 - i {          # each element from the end down to i into the place after it
         if o > 0 {
             c[o] = c[o - 1]
             o--
         } else {
-            before := s.chunks[k - 1]
+            before := s.chunk(k - 1)
             c[0] = before[before.Len() - 1]
             c = before
             k--
@@ -294,7 +320,7 @@ fn (l mut List<<T>>&) Sort(less fn(x T, y T) Bool) {
     a.Sort(less)
     at I64 = 0
     for k in range s.nChunks {
-        c := s.chunks[k]
+        c := s.chunk(k)
         n I64 = c.Len()
         if k == s.nChunks - 1 { n = s.used }
         for j in range n { c[j] = a[at + j] }
@@ -332,7 +358,7 @@ type ListIter<T> struct(of List<T>&) {
 fn (it mut ListIter<<T>>&) Next() T ? Exhausted {
     if it.at >= it.list.count { error Exhausted.END }
     if it.i == it.room {                  # this chunk is used up: on to the next one
-        it.chunk = it.list.chunks[it.k]
+        it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
         it.room = it.chunk.Len()
         it.k++
         it.i = 0
@@ -347,7 +373,7 @@ fn (it mut ListIter<<T>>&) Next() T ? Exhausted {
 fn (it mut ListIter<<T>>&) enter() ? Exhausted {
     if it.at >= it.list.count { error Exhausted.END }
     if it.i == it.room {
-        it.chunk = it.list.chunks[it.k]
+        it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
         it.room = it.chunk.Len()
         it.k++
         it.i = 0
@@ -471,12 +497,14 @@ fn (it mut ListIter<<T>>&) Filter(keep fn(x T) Bool) List<T>& {
 fn (l List<<T>>&) RunFrom(at I64) Array<T>&l ? Exhausted {
     s := l.s
     if at >= s.count or at < 0 { error Exhausted.END }
-    p I64 = at + firstChunk
-    k I64 = highBit(p) - firstChunkLog
-    from I64 = p - (firstChunk << k)
-    to I64 = s.chunks[k].Len()
-    if k == s.nChunks - 1 { to = s.used }
-    return s.chunks[k][from:to]
+    if s.nChunks == 1 { return s.first[at:s.used] }          # a list in one chunk - most are - is one run
+    return s.runIn(highBit(at + firstChunk) - firstChunkLog, at)
+}
+
+# the run in chunk k from position at: to the chunk's end, or the list's when k is the last chunk in use
+fn (s listState<<T>>&) runIn(k I64, at I64) Array<T>&s {
+    if k == s.nChunks - 1 { return s.chunk(k)[at + firstChunk - (firstChunk << k):s.used] }
+    return s.chunk(k)[at + firstChunk - (firstChunk << k):]
 }
 
 # the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
@@ -485,10 +513,10 @@ fn (l List<<T>>&) RunFrom(at I64) Array<T>&l ? Exhausted {
 fn (l List<<T>>&) ToArray() mut Array<T>& {
     s := l.s
     if s.count == 0 { return Array<T>(0) }           # no element, so no zero value of T is needed (D13c)
-    out mut Array<T>&return = Array<T>(s.count, s.chunks[0][0])
+    out mut Array<T>&return = Array<T>(s.count, s.first[0])
     at I64 = 0
     for k in range s.nChunks {
-        c := s.chunks[k]
+        c := s.chunk(k)
         n I64 = c.Len()
         if k == s.nChunks - 1 { n = s.used }
         for i in range n { out[at + i] = c[i] }
@@ -525,6 +553,83 @@ fn (l List<<T>>&) Has(x T) Bool {
         if y == x { return true }
     }
     return false
+}
+
+# the position of the first element equal to x, compared with "==" - failing with the default error when there is
+# none, as Find does: "try l.IndexOf(x) catch default -1" gives a fallback
+fn (l List<<T>>&) IndexOf(x T) I64 ? {
+    for i, y in l {
+        if y == x { return i }
+    }
+    error
+}
+
+# removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
+# moves them - and says whether there was one, as Map's Remove does
+fn (l mut List<<T>>&) Remove(x T) Bool {
+    i := try l.IndexOf(x) catch { return false }
+    l.RemoveAt(i)
+    return true
+}
+
+# removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
+# the length, where RemoveAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
+# one that is not is a mistake in the program, checked once per call, as RemoveAt checks it
+fn (l mut List<<T>>&) SwapRemove(i I64) T {
+    s := l.s
+    assert i >= 0 and i < s.count
+    x := l.At(i)
+    s.dropLast()
+    if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
+    return x
+}
+
+# how "$" renders a List (E11c): as an array of its elements renders, with the List named in front - "List<I64>[1, 2, 3]",
+# "List<String&>["a", "b"]", "List<I64>[]" - so a List prints apart from an array of the same elements, and each element
+# renders as it does inside any other value: text quoted, a Char as a character literal, a value whose type declares
+# Str as its Str says. Rendered run by run from the list's own storage, so nothing is copied but the text
+fn (l List<<T>>&) Str() String {
+    b := StringBuilder()
+    match T {
+        case Char {                                            # an array of Char renders as text, so these are written here
+            b.Push("List<Char>[")
+            for i, c in l {
+                if i > 0 { b.Push(", ") }
+                b.Push(charLiteral(c))
+            }
+        }
+        nomatch {
+            b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+            at I64 = 0
+            for {
+                run := try l.RunFrom(at) catch Exhausted { break }
+                r := $run                                      # "T[...]": the element type as written, then the items
+                o := try r.FindByte('[') catch { unreachable }
+                if at > 0 { b.Push(", ") }
+                b.Push($r[o + 1:r.Len() - 1])
+                at += run.Len()
+            }
+        }
+    }
+    b.PushChar(']')
+    return b.ToString()
+}
+
+# T as written - what "$" puts before an array's items
+fn typeWritten(a Array<<T>>&) String {
+    r := $a[0:0]                                               # "T[]"
+    return $r[:r.Len() - 2]
+}
+
+# c as a character literal writes it - how "$" renders a Char inside another value (E11a)
+fn charLiteral(c Char) String {
+    if c == '\n' { return "'\\n'" }
+    if c == '\t' { return "'\\t'" }
+    if c == '\r' { return "'\\r'" }
+    if c == '\0' { return "'\\0'" }
+    if c == '\\' { return "'\\\\'" }
+    if c == '\'' { return "'\\''" }
+    return "'" $c "'"
 }
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the

@@ -1008,6 +1008,9 @@ fn (b StringBuilder&) ToString() mut String& { return String(b.chars.ToArray()) 
 # leaves the old one's storage where the builder lives until that scope closes (O1): in a long-running loop, Clear
 fn (b mut StringBuilder&) Clear() { b.chars.Clear() }
 
+# how "$" renders a StringBuilder (E11c): the text it holds, as ToString gives it
+fn (b StringBuilder&) Str() String { return b.ToString() }
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 

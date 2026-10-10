@@ -178,6 +178,38 @@ fn (m Map<<K>, <V>>&) Clone() Map<K, V> {
     return c
 }
 
+# how "$" renders a Map (E11c): its entries in the order a walk gives them, each "key: value", in braces after the Map's
+# type - "Map<String&, I64>{"a": 1, "b": 2}", "Map<I64, Bool>{}" - each key and value rendering as it does inside any
+# other value: text quoted, a Char as a character literal, a value whose type declares Str as its Str says. An entry
+# renders as "MapEntry(key, value)"; where its key ends is read off the key rendered beside a value of known length
+fn (m Map<<K>, <V>>&) Str() String {
+    b := StringBuilder()
+    b.Push("Map<" $typeWritten(Array<K>(0)) ", " $typeWritten(Array<V>(0)) ">{")
+    n I64 = 0
+    for e in m {
+        if n > 0 { b.Push(", ") }
+        n++
+        k := $MapEntry<K, Bool>(e.Key, false)                  # "MapEntry(" the key ", false)"
+        r := $e                                                # "MapEntry(" the key ", " the value ")"
+        kn := k.Len() - 17
+        b.Push($r[9:9 + kn])
+        b.Push(": ")
+        b.Push($r[11 + kn:r.Len() - 1])
+    }
+    b.PushChar('}')
+    return b.ToString()
+}
+
+# T as written - what "$" puts before an array's items, and what a Map's rendering names its key and value types by
+fn typeWritten(a Array<<T>>&) String {
+    match T {
+        case Char { return "Char" }                            # an array of Char renders as text
+        nomatch { }
+    }
+    r := $a[0:0]                                               # "T[]"
+    return $r[:r.Len() - 2]
+}
+
 # a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own. It holds the
 # next slot itself, so each step follows one link rather than walking a chain from its start. The entry just given may
 # be removed while the walk goes on; any other change to the map during a walk leaves which entries the rest of it gives
