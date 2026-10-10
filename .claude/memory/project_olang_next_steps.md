@@ -642,6 +642,16 @@ because what it finds about structure feeds the refactor.
   - P1, N7 and N8 fixed;
   - over-rejections: o6, the "anon" idiom via T25d, cgEnvOnStack in the walk, adapter and stand-in skips.
   Running: str1 (round 4), b6fix.
+- 16:30 CEST: b6fix merged and pushed (4fb40b0 via 0eb9332; full verify on the same code, clean). Fixed:
+  - a store through a landing element lands its call first (O18c, `storeRelied`);
+  - conditionals and matches of references from different scopes are "not known here" where a known scope is needed,
+    and each value is judged alone for a field store (O12/E28; four more pre-existing use-after-frees: arguments,
+    literals, obligations, a call on the result);
+  - late parts are folded after each destructor (C9a);
+  - minors 04-09.
+  The scope fuzzer gained conditionals of references, At/Get/First element stores, failing spawns and destructors: it
+  finds 24 on 6af6a4e and 0 on the fix over seeds 1-40 and 100-399. Running: str1 (round 4) only. When it merges: `own`
+  + `take` + liveness-checked local borrows, then Vec.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
