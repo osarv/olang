@@ -485,7 +485,6 @@ struct type;
     X(ERR_SPAWN_FALLIBLE,               "P4",    "a spawned function may not declare errors - they would have nowhere to go") \
     X(ERR_SPAWN_ARG_TOO_SHORT,          "P2",    "this argument's storage closes before the join does - declare it at the join's level or wider") \
     X(ERR_SPAWN_ARG_HOLDS_SHORT,        "P2",    "this argument refers to storage that closes before the join does - declare that at the join's level or wider") \
-    X(ERR_SPAWN_ARG_HOLDS_FUNC,         "P2",    "this task calls a function value held in what it is handed - on its thread that would build into the scopes it captured, beside their owner; pass the function value itself") \
     X(ERR_SPAWN_CAPTURE_TOO_SHORT,      "P2, D16e", "this lambda captures a variable declared inside the join, which closes while the task may run") \
     X(ERR_SPAWN_FUNC_TOO_SHORT,         "P2, D16e", "this function value closes before the join does - make it outside, or spawn the lambda itself") \
     X(ERR_SPAWN_RESULT_VOID,            "P1g",   "this call returns nothing to bind - drop the target") \
