@@ -344,6 +344,7 @@ struct var {
     struct operand* roFrom; //T25c: ...a local read-only exactly when this is: a for-in element (the collection walked), a
                             //match binding (the place it reads)
     bool paramCopy;       //T25c: a parameter's own copy in its function's body (canonicalVar is the signature's)
+    bool valueEscapes;    //D16c: read as a value anywhere (OperandReadVar), captured, or spawned - anything but called
     bool roNeedsWritable; //T25c: a signature's by-value parameter holding writable references whose copy the body writes
                           //through, lends writably or stores where it can be written - no read-only value may be passed
     //T25c: a read-only reference parameter of a generic's instantiation, on its signature and its copy in the body - a

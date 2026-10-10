@@ -1,0 +1,38 @@
+# D16c: a capturing lambda held in a local whose every use is a call through it - in its block, a nested block, a loop,
+# deferred code, under try - keeps its environment in the frame (three here), and a Str's helper making one builds
+# nothing where the receiver lives
+type Node struct(v I64) {
+    v
+}
+error Bad { NO }
+fn peek(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    if n.v > 0 {
+        return f() + f()
+    }
+    return f()
+}
+fn looped(n Node&) I64 {
+    total I64 = 0
+    for i in range 3 {
+        g := fn() I64 { return n.v + i }
+        total += g()
+        defer { total += g() }
+    }
+    return total
+}
+fn tried(n Node&) I64 ? {
+    h := fn() I64 ? {
+        if n.v < 0 { error }
+        return n.v
+    }
+    return try h()
+}
+type Bag struct(head Node&) {
+    head
+}
+fn (b Bag&) Str() String { return "b" $peek(b.head) " " $looped(b.head) " " $(try tried(b.head) catch default 0) }
+fn main() ? {
+    s := $Bag(Node(4))
+    assert s == "b8 30 4", s
+}

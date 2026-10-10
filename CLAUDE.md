@@ -4786,8 +4786,9 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   removed**: the walk is parametric in a body's function-typed parameters (`mbiMemo.deps`), so `Count`/`Any`/`Fold`/`Map`/
   `Filter` over what the receiver reaches ask their callback's body (o6); T25d reaches a read-only conditional's or match's
   value, so `b.name if ... else "anon"` runs in a Str (o5, the evaluator agreeing on identity); a capturing lambda passed to
-  a callee that keeps nothing of it, or held in a local only ever called afterwards (read off the rest of its block), keeps
-  its environment in the frame and builds nowhere (o1/o2, D16c), and so does a `Call` adapter for such a callee (o3); a task
+  a callee that keeps nothing of it, or held in a local every use of which the checker recorded is a call through it
+  (never a read as a value, a capture or a spawn - decided from the checked operands, not the tokens), keeps its
+  environment in the frame and builds nowhere (o1/o2, D16c), and so does a `Call` adapter for such a callee (o3); a task
   whose call builds nothing into a scope gets no stand-in for it, read off the walk once every body is checked (o4, P2).
   Also: O17's region facts no longer report E11c (they took a call through a function value to build where it was bound,
   a second path refusing o6); decision 50's join and spawn clauses, merged from master, are walked. Left by design: n4

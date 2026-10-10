@@ -14603,8 +14603,18 @@ it on (`strcallbackbuilds`). **o5**: T25d reaches a conditional's or a match's v
 so `b.name if b.name.Len() > 0 else "anon"` is the constant itself - in codegen (`cgStoreArm`), the evaluator
 (`ctFitBoundary`, so a site's one instance compares `is` alike while compiling, `strcondtext`) and the walk.
 **o1/o2 (D16c)**: a capturing lambda passed to a callee that keeps nothing of it already kept its environment in the
-frame (`cgEnvOnStack`); the walk now counts it built nowhere, and a lambda held in a local that is only ever called in the
-rest of its block - every mention `f(`, none after a `.` or `spawn` or inside a later lambda - is made the same way.
+frame (`cgEnvOnStack`); the walk now counts it built nowhere, and a lambda held in a local that is only ever called is
+made the same way. Which locals those are is decided from what the checker recorded, once every body is checked
+(`settleFrameLambdas`): every read of a variable as a value goes through `OperandReadVar`, which marks it
+(`valueEscapes`), and so do a capture by a later lambda (`lambdaCapture`) and a spawned call through it, while a call
+through it is an `OperandFuncCall` naming it and marks nothing - so a use the checker did not make a call counts as
+leaving. The first version read the rest of the block's tokens (every mention `f(`, none after a `.` or `spawn` or
+inside a later lambda); the coordinator sent it back under the project's standing lesson - a soundness decision never
+rests on a token scan, as O17b's first version, fooled by a user `BitAnd`, showed. The `frameenv` scenario counts the
+environments made in a stack slot and in an arena in the emitted IR: three in the frame for locals only called (in a
+nested block, a loop, deferred code, under `try`), none for a local passed on, stored, captured by a later lambda,
+spawned, compared with `is`, assigned to another local or returned - each also run built, built `-s` and interpreted,
+the closures that leave called after the frames that made them are gone.
 **o3**: a `Call` adapter made for such a callee is in the frame too (`adapterHere`). **o4 (P2)**: a task gets no stand-in
 for a scope its call can build nothing into - every spawned call is recorded, asked once every body is checked
 (`settleTaskStandins`), and handed the scope raw; the callee's body is then held to the answer by the internal-error

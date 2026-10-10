@@ -8721,6 +8721,7 @@ static bool typeCarriesScopes(struct type t) {
 static struct var* handleField(struct type t);
 struct operand* OperandReadVar(struct var* v, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_READ_VAR, v->type);
+    canonicalVar(v)->valueEscapes = true; //D16c: every read the checker makes of a variable as a value goes through here
     //D16: a function value is reference-shaped - it names what its captures live in - while a declaration's own
     //type is its signature
     if (v->isFuncDecl) op->type.structMAlloc = true;
@@ -18026,6 +18027,10 @@ static bool typeExprIsBareTypeVar(struct syntax* typeExprNode) {
     return b && b->bType != BASETYPE_CONST && !b->isConstVar;
 }
 
+//D16c: a capturing lambda held in a local (settleFrameLambdas)
+struct frameLambda { struct var* local; struct operand* lambda; };
+static struct list frameLambdas;
+
 //O26a: the tokens of a syntax node, in order
 static void syntaxTokensInto(struct syntax* n, struct list* out) {
     for (int i = 0; i < n->parts.len; i++) {
@@ -18096,28 +18101,6 @@ static bool syntaxMentionsNameIn(struct syntax* e, struct str name, bool skipFir
 }
 static bool syntaxMentionsName(struct syntax* e, struct str name, bool skipFirst) {
     return syntaxMentionsNameIn(e, name, skipFirst, false);
-}
-
-//D16c: whether the local named is only ever called in the statements after its declaration - every mention "name(",
-//never after a "." or "spawn", and none inside a lambda written after it (which would copy it out of this frame). D3a
-//makes the name this one local's throughout its block, and the block is as far as it reaches
-static bool localOnlyCalled(struct checkCtx* ctx, struct str name) {
-    bool ok = true;
-    for (int i = ctx->blockStmtIdx + 1; ok && i < ctx->blockStmts.len; i++) {
-        struct list toks = ListInit(sizeof(struct token));
-        syntaxTokensInto(*(struct syntax**)ListGetIdx(&ctx->blockStmts, i), &toks);
-        bool inLambda = false;
-        for (int k = 0; ok && k < toks.len; k++) {
-            struct token* t = ListGetIdx(&toks, k);
-            if (t->type == TOK_FUNC) inLambda = true;
-            if (t->type != TOK_IDEN || !StrCmp(strFromTok(*t), name)) continue;
-            enum tokenType prev = k ? ((struct token*)ListGetIdx(&toks, k - 1))->type : TOK_NONE;
-            enum tokenType next = k + 1 < toks.len ? ((struct token*)ListGetIdx(&toks, k + 1))->type : TOK_NONE;
-            ok = !inLambda && next == TOK_PAREN_O && prev != TOK_DOT && prev != TOK_SPAWN;
-        }
-        ListDestroy(toks);
-    }
-    return ok;
 }
 
 //O26a: the local a place or a call statement starts from - "a" in "a.b[i].c = v" or in "a.Push(x)"
@@ -19067,11 +19050,13 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         }
         checkCtorHereFits(ctx, rhs, hereDst, hereDepth, nameTok);
     }
-    //D16c: a capturing lambda held in a local that is only ever called afterwards never leaves this frame - its
-    //environment is made there (cgEnvOnStack), as one passed to a callee that keeps nothing of it is, and built nowhere
+    //D16c: a capturing lambda held in a local - decided once every body is checked (settleFrameLambdas)
     if (rhs && rhs->opType == OPERATION_READ_VAR && rhs->readVar && rhs->readVar->isLambda
-            && rhs->readVar->lambdaCaptures.len && ctx->hasOwnScope && localOnlyCalled(ctx, strFromTok(nameTok)))
-        rhs->cgEnvOnStack = true;
+            && rhs->readVar->lambdaCaptures.len && ctx->hasOwnScope) {
+        if (!frameLambdas.elemSize) frameLambdas = ListInit(sizeof(struct frameLambda));
+        struct frameLambda fl = { v, rhs };
+        ListAdd(&frameLambdas, &fl);
+    }
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_VAR_DECL;
     stmt.var = *v;
@@ -23296,6 +23281,17 @@ static void buildTaskClauses(struct checkCtx* ctx, struct syntax* tryNode, struc
 
 //P2: every spawned call to a named function, for settleTaskStandins
 static struct list spawnCalls;
+//D16c: a capturing lambda held in a local that is only ever called - every use the checker made of the local a call
+//through it (OperandFuncCall naming it), never a read as a value (OperandReadVar: passed, stored, returned, compared,
+//rendered, assigned from or to), a capture by a later lambda, or a spawn - never leaves this frame: its environment is
+//made there (cgEnvOnStack), as one passed to a callee that keeps nothing of it is, and is built nowhere. Decided from
+//what the checker recorded once every body is checked, where a use it did not record is never taken to be a call
+static void settleFrameLambdas(void) {
+    for (int i = 0; i < frameLambdas.len; i++) {
+        struct frameLambda* fl = ListGetIdx(&frameLambdas, i);
+        if (!canonicalVar(fl->local)->valueEscapes) fl->lambda->cgEnvOnStack = true;
+    }
+}
 //P2: a task is handed a stand-in for each scope its call binds, so that it allocates there without a lock - where the
 //may-build walk finds its callee never builds into that scope variable, no stand-in is made and the scope is handed raw.
 //Asked here, once every body is checked, so codegen holds each callee's body to the answer (cgCheckMayBuild)
@@ -23544,6 +23540,9 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     //P4a/P4b: the task's own clauses, run on its thread; what they do not take reaches the join
     if (stmt.tried) buildTaskClauses(ctx, tryNode, call, &stmt, &pre, tok);
     (void)lambdaTask;
+    //D16c: a function value a task calls through is handed to another thread - it leaves the frame it was made in
+    if (stmt.op && stmt.op->opType == OPERATION_FUNCCALL && stmt.op->readVar && !stmt.op->readVar->isFuncDecl)
+        canonicalVar(stmt.op->readVar)->valueEscapes = true;
     //P2: whether the task needs a stand-in for each scope its call binds is asked once every body is checked
     if (stmt.op && stmt.op->opType == OPERATION_FUNCCALL && !stmt.op->callee && stmt.op->readVar) {
         if (!spawnCalls.elemSize) spawnCalls = ListInit(sizeof(struct operand*));
@@ -23762,6 +23761,7 @@ static struct type lambdaOwnType(struct type t) {
 //an implicit scope of its own as a reference parameter does (O4b) - bound, when the lambda is made, to the scope
 //the captured reference lives in
 static struct var* lambdaCapture(struct var* L, struct var* outer, struct token tok) {
+    canonicalVar(outer)->valueEscapes = true; //D16c: a lambda's copy of it may outlive this frame
     for (int i = 0; i < L->lambdaCaptures.len; i++) {
         struct lambdaCapture* c = ListGetIdx(&L->lambdaCaptures, i);
         if (canonicalVar(c->outer) == canonicalVar(outer)) return c->inner;
@@ -25666,6 +25666,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     settleReadOnlyArgs(); //T25c: and which by-value parameters need a writable argument
     checkFuncValueUses(); //T22a: and final
     checkLiteralShifts(); //E4a/E8a: every literal-only expression that adapts has been folded now
+    settleFrameLambdas(); //D16c: before the may-build walk, which reads it
     checkStrRendered(); //E11c
     settleTaskStandins(); //P2
 

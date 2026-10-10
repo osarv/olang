@@ -31,7 +31,8 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr"]
+                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr",
+                     "frameenv"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -257,6 +258,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
+        case "frameenv" { try frameenv(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -1480,4 +1482,25 @@ fn strheld(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b strdepth.olang > out.txt 2>&1 && ./build/strdepth 38000 > out.txt 2>&1") == 0,
                  "strdepth", dir)
     try r.expect(outOf(dir) == "216891\n", "strdepth output", dir)
+}
+
+# D16c: a capturing lambda held in a local keeps its environment in the frame exactly when every use the checker made of
+# the local is a call through it - one passed on, stored, captured by a later lambda, spawned, compared with "is",
+# assigned to another local or returned never does (envcheck.awk counts the environments made in a stack slot and in
+# an arena), and each runs clean built, built -s and interpreted
+test "a local lambda only ever called keeps its environment in the frame, and no other" { assert passed("frameenv") }
+
+fn frameenv(r mut report&) ? Failed {
+    dir := fresh("frameenv")
+    os.Run("cp checks/fixtures/frameenv/* " $os.Quote(dir))
+    for n in String&["frameonly", "frameescapes"] {
+        try r.expect(sh(dir, "\"$OLANG\" -b " $n ".olang > out.txt 2>&1 && ./build/" $n " > out.txt 2>&1") == 0, n, dir)
+        try r.expect(sh(dir, "\"$OLANG\" -b -s " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > out.txt 2>&1") == 0,
+                     $n " -s", dir)
+        try r.expect(sh(dir, "\"$OLANG\" -i " $n ".olang > out.txt 2>&1") == 0, $n " -i", dir)
+    }
+    try r.expect(sh(dir, "awk -f envcheck.awk build/frameonly.main.ll > out.txt") == 0 and outOf(dir) == "3 0\n",
+                 "frameonly's three environments in the frame", dir)
+    try r.expect(sh(dir, "awk -f envcheck.awk build/frameescapes.main.ll > out.txt") == 0 and outOf(dir) == "0 8\n",
+                 "no environment of a local that leaves the frame in it", dir)
 }
