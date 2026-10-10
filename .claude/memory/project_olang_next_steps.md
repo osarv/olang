@@ -671,6 +671,12 @@ because what it finds about structure feeds the refactor.
   The scope fuzzer has Str scenarios: 20 findings in 60 programs on round 5, 0 in 450 on round 6. The own spec is done
   (wt-own fdc5848, docs/own.md, SPEC §8.8 O30-O42, T25e, E34); QJ1/QJ2 were asked. Next: implement own on wt-own,
   following docs/own.md's 12 steps, with a soundness review and own shapes in the scope fuzzer.
+- 22:55 CEST: own's first cut is done on wt-own (42efc87, verified): own references as fields, locals and globals,
+  each object in a region of its own; `take`; reads as borrows; a borrow check settled over bodies (loans to their last
+  use, judged by type and root); regionArgs; own scenarios in the scope fuzzer (24 findings -> 0). A soundness review
+  runs (/home/user/wt/rvown1 @ 42efc87 -> /home/user/review/own1); fix its findings on wt-own, then merge. Phase 2 after
+  that: owning parameters and results (O36/O37), own elements in List/Map (TakeAt, SwapTake, Map.Take), then Vec<T>.
+  The user (2026-10-10): own and Vec are built in the C compiler before the port. Pace: one agent at a time.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
