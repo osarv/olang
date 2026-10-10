@@ -65,7 +65,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - Decision 50 (failing spawns, the design as given) - APPROVED; BUILT 9802fc3 (P4-P4d, `try join`), merged 40fb1c5.
 - QG question 2: owned objects may also move out with an explicit `take` - YES. QG question 1 was answered earlier by
   the user's own no-borrowing refinement (compile-time, strict start).
-- Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted.
+- Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted; MERGED 2fdb262 after six rounds.
 **Asked 2026-10-10 12:20 CEST (the user: "Given the new borrowing rules, it is now possible to create the dynamic
 length Vec<T> again right?"):**
 - QH. Yes, once `owned` exists. `Vec<T>` is library code: its buffer is an owned array, growth makes the next buffer,

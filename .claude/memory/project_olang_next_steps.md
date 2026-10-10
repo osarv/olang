@@ -662,6 +662,15 @@ because what it finds about structure feeds the refactor.
   Round 5 sent: REVERT deps, raw task scopes and frame adapters (over-rejections are fine until the port's section-8
   pass); fix C5, C9, C6, PE1, PE2; keep the rest. LESSON: removing over-rejections in the C checker keeps opening
   holes - leave the remaining over-rejections to the port.
+- 20:30 CEST: decision 49 merged and pushed (4296fe6 via 2fdb262) after six rounds and five reviews:
+  - Str's receiver gets a real scope that nothing may be built into, decided by SemanticMayBuildInto with codegen's ICE
+    check (helpers too);
+  - G9d's meet; Go's join order; the builder in a scratch scope;
+  - T25d for conditional values;
+  - T22a for Call adapters; PE2.
+  The scope fuzzer has Str scenarios: 20 findings in 60 programs on round 5, 0 in 450 on round 6. The own spec is done
+  (wt-own fdc5848, docs/own.md, SPEC §8.8 O30-O42, T25e, E34); QJ1/QJ2 were asked. Next: implement own on wt-own,
+  following docs/own.md's 12 steps, with a soundness review and own shapes in the scope fuzzer.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
