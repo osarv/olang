@@ -583,6 +583,14 @@ because what it finds about structure feeds the refactor.
   the walk (an ICE on a miss); 02, a default rebuilt per call (D8a); and 03 (S4c holdForRefTarget). Verified in pieces:
   checks.olang was OOM-killed beside other agents and passed when rerun. A narrow follow-up review runs
   (/home/user/wt/rv9 -> /home/user/review/tonight9). Decision 50 (failing spawns) can start now that 48 is on master.
+- 10:55 CEST: tonight9, the follow-up review of 91ab3ba (/home/user/review/tonight9), found three new problems:
+  - a false ICE: a catch default in a closure built into a scope resolved read-only;
+  - D8a's per-call default rebuild reading the caller's constant variables, giving a wrong value;
+  - a constructor field keeping a view in frame storage that now dies at the return, above 64KB (older below).
+  Four older finds: a slice of a value temporary stored, a destructor building into its own frame, a lambda default
+  across modules, and `$` of an empty fixed slice rendering `null` in the evaluator. All go to wt-rv9fix (master
+  04f4a4d). chk5 (771a922) is done and under soundness review (/home/user/wt/rv10 -> /home/user/review/chk5). str1 is
+  on round 2. Decision 50 waits for capacity: this week's pace is about one agent at a time.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
