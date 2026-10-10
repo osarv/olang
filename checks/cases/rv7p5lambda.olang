@@ -1,0 +1,20 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - a lambda capturing the receiver, called by a helper:
+# once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn apply(f fn()) { f() }
+fn (b Bag&) Str() String {
+    f := fn() { b.c.v++ }
+    apply(f)
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

@@ -1,0 +1,20 @@
+# check: run
+# E11c: Str is an ordinary method - listing the keys of a Map the receiver holds compiles (it was refused when a Str
+# could have no effect)
+type Reg struct(m Map<String&, I64>, l List<I64>, a mut Array<I64>&) {
+    m
+    l
+    a
+}
+fn (r Reg&) Str() String {
+    keys := r.m.Keys().ToList()
+    return "x"
+}
+fn main() ? {
+    m := Map<String&, I64>()
+    m.Put("b", 1)
+    l := List<I64>()
+    l.Push(3)
+    r := Reg(m, l, I64[3, 1, 2])
+    assert $r == "x"
+}

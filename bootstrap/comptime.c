@@ -1249,13 +1249,6 @@ static const char* ctGlobalWhy(struct var* v, struct token* tok) {
     return sc.why;
 }
 
-const char* CtWhyNotEvaluable(struct var* func, struct token* where) {
-    struct token t = (struct token){0};
-    const char* why = ctFuncWhy(func, &t);
-    if (where) *where = t;
-    return why;
-}
-
 // ---- B5a: the order a module's globals are initialized in ----
 //
 //A global's initializer runs after the initializers of the globals it reads - directly, or through a function it
@@ -1817,9 +1810,13 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
             ctTextStr(b, spelled);
             free(spelled);
             ctTextStr(b, "[");
-            for (int i = 0; i < v->n; i++) {
+            //E11c: its length and storage as they are where the rendering reaches it - as the generated code reads the
+            //pair once - whatever a Str an element renders through assigns there later
+            int n = v->n;
+            struct ctVal** elems = v->elems;
+            for (int i = 0; i < n; i++) {
                 if (i) ctTextStr(b, ", ");
-                if (!ctRenderValue(st, b, v->elems[i], elem, depth, tok)) return false;
+                if (!ctRenderValue(st, b, elems[i], elem, depth, tok)) return false;
             }
             ctTextStr(b, "]");
             return true;
@@ -1831,6 +1828,8 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
             ctTextStr(b, ")");
             return true;
         case BASETYPE_CHOICE: {
+            //E11c: a payload rendering through a Str is read from a copy of the whole value, as the generated code reads it
+            if (ChoiceHasPayload(t) && SemanticRendersStr(t)) v = ctCopy(v);
             struct var* c = ListGetIdx(&t.vars, (int)v->i);
             char word[600];
             snprintf(word, sizeof(word), "%s%s%.*s", name, name[0] ? "." : "", c->name.len, c->name.ptr);
@@ -1857,11 +1856,14 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
 
 //rdPutValue's rules: a primitive inline - a nested byte quoted, a number as snprintf writes it - anything else
 //through its body
-//E11c: the text a type's own Str gives for v - called as the run time calls it, receiver as its parameter wants it
+//E11c: the text a type's own Str gives for v - called once, where the rendering reaches it, as the run time calls it,
+//receiver as its parameter wants it
 static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, struct ctVal* v, struct token tok) {
-    struct token whyTok;
-    const char* why = ctFuncWhy(m, &whyTok);
-    if (why) { ctFail(st, whyTok, why); return false; }
+    if (!ctRun) { //K3: as any call - a Str that can never be evaluated is refused before any of it runs
+        struct token whyTok;
+        const char* why = ctFuncWhy(m, &whyTok);
+        if (why) { ctFail(st, whyTok, why); return false; }
+    }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
         ctFail(st, tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
         return false;

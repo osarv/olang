@@ -1,0 +1,30 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - a Str handing a field of a conditional of references
+# from two scopes to a helper that writes it: once per "$", while compiling (Baked, K2) as at run time
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn poke(p mut In&) { p.k++ }
+fn (b Bag&) Str() String {
+    loc mut Mid& = Mid()
+    poke((b.m if b.m.inner.k >= 0 else loc).inner)
+    return "b" $b.m.inner.k
+}
+fn render(k I64) String {
+    b := Bag(Mid())
+    b.m.inner.k += k
+    first := $b
+    return $first " " $b " k=" $b.m.inner.k
+}
+Baked := render(0)
+Zero mut I64 = 0                        # read at run time: the call below is made there
+fn main() ? {
+    assert Baked == "b1 b2 k=2"
+    assert render(Zero) == Baked
+}

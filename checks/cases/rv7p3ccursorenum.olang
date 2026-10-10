@@ -1,0 +1,31 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - the same through an enum payload: once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Cur struct(of Bag&) {
+    c mut Cell&of = of.c
+}
+type Opt enum {
+    Some(c mut Cur&)
+    None
+}
+fn pokeE(e mut Opt&) {
+    match e {
+        case Opt.Some(c) { c.c.v++ }
+        nomatch { }
+    }
+}
+fn (b Bag&) Str() String {
+    e mut Opt& = Opt.Some(Cur(b))
+    pokeE(e)
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

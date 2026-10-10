@@ -1,0 +1,22 @@
+# check: run
+# E11c: a Str changing the value being rendered part way through changes nothing already read - an array's length and
+# storage are read where its rendering starts, so a Str giving the array new storage of another length leaves the rest
+# of the rendering on the old one; an element the rendering has not reached yet is read when it is reached. Built and
+# interpreted alike (-i reads the same; nothing here can be baked, the Str writing a global)
+type Re struct(n I64) {
+    n
+}
+Rs mut Array<Re> = Re[Re(1), Re(2), Re(3)]
+Seen mut I64 = 0
+fn (r Re&) Str() String {
+    Seen++
+    if r.n == 1 { Rs = Re[Re(7), Re(8)] }         # new storage, another length (T11b)
+    if r.n == 8 { Rs[1] = Re(9) }
+    return "r" $r.n
+}
+fn main() ? {
+    assert $Rs == "Re[r1, r2, r3]" and Seen == 3
+    assert $Rs == "Re[r7, r9]" and Seen == 5        # the second's Str writes its own receiver before reading it
+    Rs = Re[Re(8), Re(5)]                           # the same length: written in place (T11b) - the Str of the first
+    assert $Rs == "Re[r8, r9]" and Seen == 7       # element writes the second before the rendering reaches it
+}

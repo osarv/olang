@@ -11566,7 +11566,7 @@ test "K1: a function holding unreachable or abort is evaluated until it reaches 
 }
 
 # K1/S13a/E11c: a statement match covering every case of an enum reference holds an unreachable for a null one - which
-# made every function with such a match unevaluable, and a Str written that way an error, until unreachable stopped an
+# made every function with such a match unevaluable, a Str written that way included, until unreachable stopped an
 # evaluation only where reached
 type fzShape enum {
     Dot
@@ -14745,8 +14745,8 @@ test "E6d: a conditional of literals folds each value exactly and meets the othe
     assert rv3Sh(not c, 3) == 4
 }
 
-# E11c: a Str may change what it makes for itself - a builder, a local list, a counter - and "$" gives the same text
-# however often it calls it, while compiling as at run time
+# E11c: a Str may change what it makes for itself - a builder, a local list, a counter - and "$" calls it once per
+# rendering, while compiling as at run time
 type rv3Pt struct(xs List<I64>&, name String&) {
     xs
     name
@@ -14766,14 +14766,14 @@ fn (p rv3Pt&) Str() String {
 }
 fn rv3PtText(k I64) String { return $rv3Pt(I64[1, 2 + k].ToList(), "nm") }
 Rv3PtText := rv3PtText(0)
-test "E11c: a Str building only for itself renders the same however often it runs" {
+test "E11c: a Str building only for itself renders the same while compiling as at run time" {
     p := rv3Pt(I64[1, 2].ToList(), "nm")
     assert $p == "nm123" and Rv3PtText == "nm123" and rv3PtText(I64(ctRuntimeZero)) == Rv3PtText
 }
 
 # E11c: a Str may walk with an iterator it made - a Map's entries, or a cursor of its own holding a writable reference
-# into the value, stepped through helpers that hand it, or a field of it, on - since a step writes only the cursor;
-# a step writing what the cursor reaches is an effect still (checks/cases/s6strdeep.olang). While compiling as at run time
+# into the value, stepped through helpers that hand it, or a field of it, on (a step writing what the cursor reaches
+# is an effect "$" makes once per rendering, checks/cases/s6strdeep.olang). While compiling as at run time
 type s6Cell struct() {
     v I64 = 0
 }
@@ -14819,6 +14819,119 @@ test "E11c: a Str walks with an iterator it made, whose steps write only the ite
     b := s6Bag(m, s6Cell())
     assert $b == "k=3 220" and S6WalkText == "k=3 220" and s6WalkText(I64(ctRuntimeZero)) == S6WalkText
     assert $b == $b and b.c.v == 0
+}
+
+# E11c: "$" calls a declared Str exactly once per rendering, in rendering order - left to right in a join, depth first
+# through fields, elements and payloads, once per element of a List and per key and value of a Map - so a Str may have
+# an effect, and every call here counts itself through a writable reference. Built in one pass where a rendering reaches
+# a Str; while compiling (StrOnceBaked, K2) exactly as at run time (and under -i)
+type strOnceCounter struct() {
+    n I64 = 0
+}
+type strOnceTick struct(name String&, c mut strOnceCounter&) {
+    name
+    c
+}
+fn (t strOnceTick&) Str() String {
+    t.c.n++
+    return $t.name $t.c.n
+}
+type strOnceTwo struct(a strOnceTick, b strOnceTick) {
+    a
+    b
+}
+type strOnceMaybe enum {
+    Some(t strOnceTick, k I64)
+    None
+}
+fn strOnceTrace(k I64) String {
+    c := strOnceCounter()
+    one := $strOnceTick("a", c)
+    three := $strOnceTick("x", c) "-" $strOnceTick("y", c) "-" $strOnceTick("z", c)
+    l := List<strOnceTick>()
+    l.Push(strOnceTick("p", c))
+    l.Push(strOnceTick("q", c))
+    l.Push(strOnceTick("r", c))
+    listed := $l
+    two := $strOnceTwo(strOnceTick("m", c), strOnceTick("n", c))
+    arr := $Array<strOnceTick>(2, strOnceTick("e", c))
+    some := $strOnceMaybe.Some(strOnceTick("s", c), 7 + k)
+    m := Map<I64, strOnceTick>()
+    m.Put(1 + k, strOnceTick("v", c))
+    mapped := $m
+    return $one "|" $three "|" $listed "|" $two "|" $arr "|" $some "|" $mapped "|" $c.n
+}
+StrOnceBaked := strOnceTrace(0)
+StrOnceWant String& = ("a1|x2-y3-z4|List<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|strOnceTick[e10, e11]|"
+                       "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>{1: v13}|13")
+
+# ...and a Str changing the value being rendered part way through changes nothing already read: an enum is read whole
+# before its payload is (here the Str puts another case where it is), a field when the rendering reaches it
+type strOnceHolder struct() {
+    e strOnceCase = strOnceCase.Num(0)
+    alt strOnceCase = strOnceCase.Num(99)
+    n I64 = 0
+}
+type strOnceSwap struct(h mut strOnceHolder&) {
+    h
+}
+fn (s strOnceSwap&) Str() String {
+    s.h.e = s.h.alt                                     # (what it stores is read out of what it reaches, E11c)
+    s.h.n = 5
+    return "swap"
+}
+type strOnceCase enum {
+    Pair(sw strOnceSwap, x I64)
+    Num(v I64)
+}
+type strOnceOuter struct(sw strOnceSwap, h strOnceHolder&) {
+    sw
+    h
+}
+fn strOnceChanged(k I64) String {
+    h := strOnceHolder()
+    h.e = strOnceCase.Pair(strOnceSwap(h), 3 + k)
+    before := $h.e
+    after := $h.e
+    h2 := strOnceHolder()
+    o := strOnceOuter(strOnceSwap(h2), h2)
+    return $before "|" $after "|" $o
+}
+StrChangedBaked := strOnceChanged(0)
+
+# ...and a Str writing a global - which a value baked while compiling cannot do (K1) - is called once per rendering too
+StrOnceCalls mut I64 = 0
+StrOnceOrder mut String& = ""
+type strOnceKey struct(n I64) {
+    n
+}
+fn (k strOnceKey) Hash() I64 { return k.n }
+fn (k strOnceKey) Eq(o strOnceKey) Bool { return k.n == o.n }
+fn (k strOnceKey) Str() String {
+    StrOnceCalls++
+    StrOnceOrder = $StrOnceOrder $k.n
+    return "k" $k.n
+}
+
+test "E11c: Str is called once per rendering, in order - while compiling as at run time" {
+    assert StrOnceBaked == StrOnceWant and strOnceTrace(I64(ctRuntimeZero)) == StrOnceWant
+    want := ("strOnceCase.Pair(swap, 3)|strOnceCase.Num(99)|"
+             "strOnceOuter(swap, strOnceHolder(strOnceCase.Num(99), strOnceCase.Num(99), 5))")
+    assert StrChangedBaked == want and strOnceChanged(I64(ctRuntimeZero)) == want
+}
+
+test "E11c: a Str writing a global is called once per rendering - keys and values of a Map included" {
+    calls := StrOnceCalls
+    s := $strOnceKey(1) "," $strOnceKey(2)
+    assert s == "k1,k2" and StrOnceCalls == calls + 2
+    m := Map<strOnceKey, strOnceKey>()
+    m.Put(strOnceKey(3), strOnceKey(4))
+    assert $m == "Map<strOnceKey, strOnceKey>{k3: k4}" and StrOnceCalls == calls + 4
+    l := List<strOnceKey>()
+    l.Push(strOnceKey(5))
+    l.Push(strOnceKey(6))
+    assert $l == "List<strOnceKey>[k5, k6]" and StrOnceCalls == calls + 6
+    assert StrOnceOrder.EndsWith("123456")
 }
 
 # T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, Clone, ToList

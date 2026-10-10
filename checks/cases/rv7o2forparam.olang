@@ -1,0 +1,22 @@
+# check: run
+# E11c: Str is an ordinary method - a helper walking an iterator it is handed compiles (it was refused when a Str could
+# have no effect)
+type Reg struct(l List<I64>) {
+    l
+}
+fn h1(it mut ListIter<I64>&) I64 {
+    n I64 = 0
+    for x in it { n += x }
+    return n
+}
+fn (r Reg&) Str() String {
+    it := r.l.Iter()
+    n := h1(it)
+    return "x"
+}
+fn main() ? {
+    l := List<I64>()
+    l.Push(3)
+    r := Reg(l)
+    assert $r == "x"
+}

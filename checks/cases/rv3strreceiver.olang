@@ -1,4 +1,4 @@
-# check: fail error[E11c, T25c]: Str renders read-only values too, so it only reads its receiver
+# check: fail error[E11c, T25c]: '$' renders read-only values too, so Str only reads its receiver
 # E11c/T25c: "$" renders read-only copies (an immutable global here), so a by-value receiver of Str may not lend what it
 # holds writably
 type Ctr struct() {

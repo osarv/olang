@@ -1,0 +1,24 @@
+# check: run
+# O17/D16c: a lambda made where it is called is judged by its body, as a declared callee is - this one only counts
+# through what its capture reaches, so a copy whose references live elsewhere than its own storage may be lent to the
+# function making it (o17lambdastore.olang stores instead)
+type Box struct(n I64) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+type W struct(b Box) {
+    b
+}
+fn (b mut Box&) count(v I64) {
+    f := fn() { b.Data[0] = b.Data[0] + v }
+    f()
+}
+fn bump(src mut W&) {
+    b := src.b
+    b.count(7)
+    b.count(1)
+}
+fn main() ? {
+    w := W(Box(3))
+    bump(w)
+    assert w.b.Data[0] == 8
+}

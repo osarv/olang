@@ -2286,7 +2286,9 @@ one is wanted (T29c) — holding its operand's textual rendering. It
 is a **value** and a **temporary**: it has no storage of its own to borrow, so it is built in the scope of
 whatever it flows into (E12c) — the current block for a local it initializes, the target's scope for a
 reference it is assigned to or returned as. It binds as the other prefix operators do, tighter than any
-binary operator, so `$a.b` renders `a.b`.
+binary operator, so `$a.b` renders `a.b`. An operand built only to be rendered (`$MapEntry<K, V>(k, v)`) is read once
+and dropped, nothing being stored through it (a `Str` rendering a part of it included, E11c), so it need not live
+exactly where the existing storage it holds lives (O25c, C2d).
 
 A type may say how it renders by declaring **`Str`** (E11c); every other value has exactly one rendering, fixed by
 its type: the value written the way it would be in source:
@@ -2349,30 +2351,37 @@ renders is a function there, it is a compile-time error that says to write the v
 
 String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
-text **value** (T29c) and a temporary, exactly as `$` is (E11a): every piece is measured, one allocation of the
-total is made in the scope the result flows into, and each piece is written into it once, so the cost is
-linear in the result however many pieces there are. A `:=` declaration takes its type from a join or a
+text **value** (T29c) and a temporary, exactly as `$` is (E11a): its pieces are rendered left to right, each where it
+stands - its operand evaluated, then rendered, before the next piece's operand is - and one allocation of the total is
+made in the scope the result flows into, so the cost is linear in the result however many pieces there are. A
+piece's operand that changes what an earlier piece rendered (a call writing it) changes nothing already rendered. A `:=` declaration takes its type from a join or a
 `$` rendering (D15), since both are text by construction.
 
 **E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
 (M6b): then `$` on it, or on a value rendering it as a part, is an error anywhere else. No parameters, result `String`,
 no errors, and a receiver that is not `mut`. Any other method named `Str` or `str` taking no parameters is a
 compile-time error; one taking parameters is an ordinary method (E31), and `$` renders the type's values as it would
-with none declared. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
-sense of K1a, and it may **write nothing that was there before it ran** - no store, increment or atomic through a
-reference whose referent the call did not make (a parameter's, a capture's, the program's, one not known here), and
-no call that writes such storage through an argument it is given or through a function value whose body is not known
-there (settled over every call once every body is checked). A lambda the function makes is judged as part of it: calling
-it does what its body does, a write through one of its captures counting where what the capture copies reaches such
-storage. A `Str` that does either is a compile-time error naming
-what stops it. What `Str` builds for itself - a local list, a `StringBuilder`, an iterator or cursor over the value it
-renders (a `for` over a `Map` makes one) - it may change freely, through a callee it hands it to as well; what such a
-value's references reach is not its own, so a write through them is the effect above (a reference in a field written
-`&p` counts as reaching storage that was there: where it refers is its instance's binding, not known there, O23a).
-That is what lets a rendering call it as often as building the text needs - once to measure, once to write, or not at
-all when the text is computed while compiling - with nothing to tell the difference. And since `$` renders read-only
-values too (an immutable global, a part of a read-only reference, T25c), a by-value receiver of `Str` is one that takes
-a read-only copy: one whose body lends what it holds writably, or keeps it, is a compile-time error.
+with none declared. Otherwise `Str` is an ordinary method: it may write what it reaches, a global, through an `extern`.
+
+`$` calls it **exactly once per rendering** of a value of its type, where the rendering reaches that value, in
+**rendering order**: a join's pieces left to right, a value's parts depth first - fields in declaration order, an
+array's elements in index order, an enum's payload fields, what a reference names - and a `List`'s elements, a
+`Map`'s keys and values and a `StringBuilder`'s text as their own `Str` renders them, each once. What a rendering reads,
+it reads where it reaches it, so a `Str` changing the value being rendered changes what is rendered after it and
+nothing before - except that an array's length and storage are read where its rendering starts, and an enum is read
+whole (its case and payload) before any of its payload is rendered, so a `Str` giving the array new storage, or putting
+another case where the enum is, leaves the rest of that rendering on what was read. Text computed while compiling
+(K2, S18c) calls it exactly as the running program would; and since an evaluation that would be observable if it were
+skipped at run time is refused (K1 - a global written, a mutable global read, an `extern` called), a `Str` with such an
+effect leaves its rendering to run time.
+
+`$` does not know where a part it renders lives, so `Str` is called with a scope of its own for each of its scope
+variables, closed once its text is copied: it may build there what it uses itself, but may **store** nothing it built
+or was handed into what its receiver reaches - O17's region of its receiver, a reference or a value holding references
+read out of that region being all it may put there - which would outlive the call (a compile-time error at `Str`).
+And since `$` renders read-only values too (an immutable global, a part of a read-only reference, T25c), a by-value
+receiver of `Str` is one that takes a read-only copy: one whose body lends what it holds writably, or keeps it, is a
+compile-time error.
 
 ### 5.3 Assignability ("fits")
 
@@ -2430,7 +2439,8 @@ behind it — and for an array it is also what keeps a copy proportional to the 
 inferred from a marker rather than written down. The borrow is therefore a claim about lifetime, and the
 claim is checked: the scope the borrowed storage belongs to must outlive the target's own scope (§8 O10),
 which is derived as the declaring block's for a local, the function's own for a value parameter, as the enclosing reference's scope for a field or
-element reached through one, and as unbounded for a global. Handing storage in this function's own scope to
+element reached through one - through a writable reference field or element with no scope of its own, where its
+container lives (O20), when that container is reached through a reference in turn - and as unbounded for a global. Handing storage in this function's own scope to
 a reference tagged to a longer-lived scope is a compile-time error — that, and not the absence of a copy, is
 the defect in such a program. A value that is *not* an lvalue (a literal, a call's result) has no storage to
 borrow and is allocated in the target's scope instead (§8 O6), which is construction rather than copying and
@@ -4594,7 +4604,9 @@ element, through any depth - by an assignment, or as a spawned task's result, P1
 that region that can be stored through (the caller could then build through it), or when it passes the region on to a
 call that does either - a fixed point over the program's calls, every call taking part whether the callee's body was
 checked before it or after, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is
-not known keeps everything. What a body does is the **function's own**: each instantiation of a generic (G16) is
+not known keeps everything. A lambda is known where it is made, its body checked there: making one whose body stores
+into what a writable capture reaches is such a store, into the region it captured from, wherever it is later called -
+and one that only reads through its captures, or writes numbers, is none (D16c). What a body does is the **function's own**: each instantiation of a generic (G16) is
 answered from its own body, so `List<String&>.At` handing nothing out is not made to hand its region out by
 `List<List<String&>>.At` doing so, whatever order the program uses them in. Only what is read out of the region by following a reference from the parameter brings in
 nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the

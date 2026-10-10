@@ -1,0 +1,19 @@
+# check: fail error[E11c, O17]: '$' does not know where a value it renders lives, so Str may not store into what its receiver reaches
+# E11c: "$" calls Str on parts it renders without knowing where they live, so what Str builds is kept in a scope of the
+# call's own - storing it into what the receiver reaches (here through a helper) would leave it there once that closes
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn grow(n mut Node&) { n.next = Node(6, null) }
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    grow(b.head)
+    return "b"
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+}

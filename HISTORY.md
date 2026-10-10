@@ -13679,3 +13679,124 @@ only a callee writing through such a field into storage the `Str` itself made, w
 `checks/cases/s6strref` pins the reference and temporary shapes. SPEC's E11c now says what a `Str` makes for itself - an
 iterator or cursor included - it may change, through a callee too, and that what such a value's references reach (a
 `&p` field's included) is not its own. The evaluator needed nothing: E11c is a check, and `Str`s it accepts are K1-pure.
+
+## `$` calls a Str exactly once per rendering; Str may have effects (E11c, E11a, E11b, O17, O20/E12c, 2026-10-10)
+
+**The decision (decision 49, the coordinator's, under the revisit rule).** E11c had two halves: a shape (no parameters, a
+`String`, no errors, a receiver that is not `mut`, privacy by M6b) and a purity rule - Str had to be K1a-evaluable and
+"write nothing that was there before it ran". The purity half existed for one reason: the run time called Str as often
+as building the text needed. Every rendering helper (`@olang.rd.T(dst, val, depth)`) ran twice - once with a null
+destination to measure, once to write - and `rdPutStr` called Str in both passes, while the evaluator rendered in one
+pass and called it once. So a Str with an effect gave a baked global (K2) or a decided assert (S18c) one answer and the
+running program another, and the analysis meant to forbid such effects (`effWrite`, `effCall`, `effSettle`, per-parameter
+`effShallow`, `effHoldsUnknownRefs`, `effCaps`) kept growing: a read-only review of 0859cbe
+(`/home/user/review/tonight7`) reproduced three new holes (a conditional or match of references from two scopes read as
+a temporary of the Str's own) and about twelve older ones (constructor bare fields, arrays of references, cursors with
+`&p` fields behind a reference, in an array, in a payload, lambdas handed on, a generic identity), every one a value
+baked while compiling that disagreed with the run time - and over-rejections of the idioms the prelude documents
+(`r.l.Iter().Fold(...)`, `r.m.Keys().ToList()`, a helper walking an iterator parameter). The root cause was never the
+analysis; it was the second call. So the rule is now about the call count: `$` calls a declared Str exactly once per
+rendering, in rendering order, at run time, under `-d`, under `-i` and while compiling alike, and Str is an ordinary
+method that may write, read globals and call externs. Recorded as a reversal of E11c's purity half - the coordinator's
+reasoning, not the user's.
+
+**Codegen: one pass where a Str is reached.** `SemanticRendersStr(t)` says whether rendering a value of type t calls a
+Str (its own, or a part's: fields, elements, payloads, referents; memoized, the memo cleared whenever a `$` registers a
+new Str). A rendering that does is built in one pass, in order, by a second family of helpers,
+`@olang.rdb.T(ptr sb, ptr val, i32 depth)`, emitted from the same `rdBody` with a mode flag (`ctx->rdBuild`) that turns
+every emitter (`rdPut`, `rdPutQuoted`, `rdPutNumber`, the child call in `rdPutValue`, `rdPutStr`) into an append to a
+growing text, `{ ptr data, i64 len, i64 cap, ptr first }` (`@__olang_sb_room/add/put/free`, emitted only into an object
+that builds one, `emitTextBuilderRuntime`). The text starts in 256 bytes of the building function's stack and moves to
+malloc'd storage only past that; the join copies it into one arena allocation where it lands and frees what it took.
+A part that does not reach a Str is still measured and written by its ordinary helper - nothing can run between the
+two - straight into room made at the end of the text. `rdPutStr` is only reachable in build mode now (an
+`ErrorBugFound` otherwise). The fast paths are untouched: `$` on a number, a plain struct, or a join of numbers is
+byte-identical IR (compared after normalizing paths, over every bench program and a dedicated one).
+
+**What a rendering reads, and when.** With Str allowed to write, what it writes can be what the rendering reads next. The
+rule chosen (mine): a rendering reads each part where it reaches it - so a Str changing the value changes what is
+rendered after it and nothing before - except an array's length and storage, read where its rendering starts (as the
+generated code always read `{len, ptr}` once), and an **enum, read whole before its payload is rendered**. The second is
+memory safety, not taste: a Str putting another case where the enum is would otherwise have the rest of the payload's
+bytes read as the old case's fields - a reference field read out of an integer. The builder helper copies the enum to a
+stack slot first (only where its payload reaches a Str); the evaluator copies it with `ctCopy` (only then too) and takes
+an array's length and element vector once (`ctAssign` gives an array of another length new elements and writes one of
+the same length in place, exactly as T11b says the run time does). `shared.olang`'s `strOnceChanged` (an enum whose
+payload's Str puts another case where it is, baked and run) and `checks/cases/strrenderchanges` (a global array given new
+storage of another length, and written in place, by an element's Str) pin both, built, `-d` and `-i` agreeing.
+
+**What Str may do with what it builds (decided, mine).** `rdPutStr` hands every scope variable of Str a scope of the
+call's own, closed once the text is copied - `$` does not know where a part it renders lives (a part behind a reference,
+an element, an `&p` field's referent), so there is no right scope to pass for the receiver's. That was safe only while
+Str wrote nothing. Now Str may build there what it uses, but may **store nothing it built or was handed into what its
+receiver reaches**: `checkStrRendered` reads O17's region flags (`calleeStoresRegion` on every scope variable but the
+result scope), settled over every call once every body is checked, and reports `ERR_STR_STORES_IN_RECEIVER` (E11c, O17)
+with a note at the first store (`regionFlag` now remembers its token, and `regionEdge` the call's). Writing numbers, or
+storing what was read out of the region (`s.h.e = s.h.alt`), is fine; `b.head.next = Node(5, null)` or handing
+`b.head` to a helper that does is not. The T25c half (a by-value receiver needing a writable argument) stays, now
+checked for every rendered Str rather than only evaluable ones. Alternatives weighed: passing the program's scope for the
+receiver's variables (safe, but a lambda capturing the receiver - D16d builds it where its captures live - would leak a
+closure per rendering), and lowering rendering into the checker as `==` is lowered (every array and reference walk as
+prelude loops - far larger).
+
+**A value built only to be rendered.** `Map.Str` rendered every key twice (`$MapEntry<K, Bool>(e.Key, false)` to find
+where the key ends, then `$e`), so a key's Str ran twice per entry. It now renders each key and value once, through
+`$MapEntry<K, Bool>(e.Key, false)` and `$MapEntry<Bool, V>(false, e.Value)` - and the second was refused by C2d for a
+value holding writable references (a Map of Lists): a temporary holding existing storage was judged against the block
+it was built in, exactly, since something could be stored through it. Nothing can: it is only rendered and dropped, and
+a Str rendering a part of it stores nothing into what its receiver reaches. So an operand of `$` is marked judged
+(`hereChecked`) and never landed (E11a; mine). `List.Str` rendered each run once already; `StringBuilder.Str` renders no
+element.
+
+**Found on the way, pre-existing: a join wrote past its allocation.** A join measured every piece as it went, then
+allocated, then wrote them all - so a later piece's operand running code could change what an earlier piece reads
+between its measuring and its writing. `$G $bump()`, with `bump` writing longer numbers into the global array `G`,
+measured `I64[1, 2]`, wrote `I64[123456789012345, ...` over the 11-byte allocation and printed `I64[123457` (`-i` printed
+`I64[1, 2]7`). A join is now built in one pass wherever a piece whose rendering reads storage again when written (an
+aggregate, text, a reference) is followed by a piece whose operand may run the program's code (`cgRunsCode`: a call, a
+statement an operand carries, a write such as an atomic; a whitelist of operations that cannot) - and so is every join
+reaching a Str. The rule (E11b) is now that pieces are rendered left to right, each where it stands.
+`checks/cases/joinwritesafter` pins the array and an in-place text change.
+
+**Found on the way: `-i` refused a Str it could run.** `ctRenderStr` asked K1a's static question (`ctFuncWhy`) even
+under `-i`, where an ordinary call does not - harmless while every Str had to be evaluable, wrong once one may call an
+extern. Guarded by `!ctRun` as `ctCall` is. `CtWhyNotEvaluable` had no other user and went.
+
+**A lambda made where it is called is judged by its body (O17/D16c, mine).** Making a lambda that captures a writable
+reference counted as storing into the region it captured from, whatever its body did - so a Str calling a lambda it
+made that counts through its capture (`checks/cases/rv5strlambda`, refused under the old rule as an effect) fell foul of
+the new receiver rule. The lambda's body is checked where it is made, so its region facts are known: the synthetic callee
+binding its captures now carries it (`capturesOf`), the binding records an O17 edge to it (settled with every other, a
+lambda counting as known), and only a body that stores into what the capture reaches is a store.
+`checks/cases/o17lambdastore` (a lambda storing a new array through its capture, lent a split value: still O17's error)
+and `o17lambdareads` (one counting through it: accepted, refused before) pin both directions.
+
+**The review's side note x1 (O20/E12c).** `fn f(b Bag&) { w(b.m.inner) }`, `b.m` a bare `mut Mid&` field and
+`w(p mut In&)`, was O10d's "lives in this function's own scope": `lvalueStorageScope` stopped at the first reference on
+the way down from a value field and took its tag, which a bare field does not write - while the same lend through a
+local (`x := b.m; w(x.inner)`) or a conditional compiled. A value field reached through a bare **writable** reference
+field now lives where that field's container does, when the container is reached through a reference in turn (exactly,
+O25g) - in b's scope. A read-only bare field's referent may live longer than its container, and a value's references
+elsewhere than the value (O25h), so for either the walk stops as before. `checks/cases/o20valuefield` lends such a field
+to a callee pushing into a List it holds, churns the arena and reads it back, clean under `-s`.
+
+**Skipping a call while compiling stays sound - checked, not assumed.** A Str whose call would be observable if skipped -
+it writes a global, reads a mutable one, calls an `extern` other than X8's math functions - cannot be evaluated (K1),
+so a global rendering it is set at startup (`X := $T()`, `Y := $P()` with `P.Str` calling `getpid`: `global`, Str run
+once at startup, `-b` and `-i` agreeing), an assert on it is not decided while compiling (S18c) and a local `if` on it is
+an ordinary one (S8b); one calling only `math.Sqrt` is baked. A B10c default rendering such a value runs its Str at
+startup without `-D`, and not at all with it - B10c's own rule (`-D` replaces the initializer), as for any call there.
+No case was found where skipping a call would be observable.
+
+**Tests.** `shared.olang`: one `$`, a join of three in order, a List of three, a struct holding two, an array, an enum
+payload and a Map entry each counting once through a writable reference, a baked global (`StrOnceBaked`) agreeing with
+the same computation at run time and under `-i`; the enum read whole; a Str writing a global counted once per `$`,
+per Map key and value, per List element. checks: the review's reproducers as run cases (`rv7*`, r1-r3 and p1-p7 counting
+once per rendering in every mode - r1 and p1b with a baked global - and o1/o1b/o2 compiling), the old E11c failure
+cases (`rv3strwrites`, `rv5strlambda`, `rv5strlambdaalias`, `s6strchain`, `s6strdeep`, `s6strref`, `streffect`) as run
+cases counting once per rendering, `strstoresreceiver` for the new rule, `rv3strreceiver` reworded.
+
+**Cost (callgrind, instructions).** A mix of `$m` (a type with a Str), a struct holding two and an 8-element List,
+rendered 450,000 times: 220.7M -> 109.8M - Str and List.Str ran twice per rendering before. A join of a text local and a
+call, `$name " = " $f(i)`, 1M times: 105.9M -> 122.9M (+16%), the price of rendering it in one pass so the call cannot
+change what was measured. Numbers, plain structs and joins of numbers: identical IR.

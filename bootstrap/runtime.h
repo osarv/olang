@@ -11,5 +11,7 @@ void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan);
 void emitDyncallRuntime(FILE* out, const char* arch);
 //E11a: a float's text and the powers of ten it needs - only into an object that renders a float
 void emitFloatTextRuntime(FILE* out);
+//E11c: the growing text a rendering built in one pass writes to - only into an object that builds one
+void emitTextBuilderRuntime(FILE* out);
 
 #endif //RUNTIME_H

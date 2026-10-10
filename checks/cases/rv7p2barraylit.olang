@@ -1,0 +1,19 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - an array literal of them handed to a helper: once per
+# "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn pokeArr(a mut Array<mut Cell&>&) { a[0].v++ }
+fn (b Bag&) Str() String {
+    pokeArr(Cell&[b.c])
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

@@ -1,13 +1,24 @@
-# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect
-# E11c: "$" calls Str as often as building the text needs, so one that writes a global is rejected
+# check: run
+# E11c: a Str writing a global is called once per rendering - one "$", a join of three in order, a struct holding two
 Shown mut I32 = 0
+Seen mut String& = ""
 type Pt struct(n I32) {
     n
 }
 fn (p Pt&) Str() String {
     Shown++
+    Seen = $Seen $p.n
     return "pt"
+}
+type Two struct(a Pt, b Pt) {
+    a
+    b
 }
 fn main() ? {
     s := $Pt(1)
+    assert s == "pt" and Shown == 1
+    t := $Pt(2) "," $Pt(3) "," $Pt(4)
+    assert t == "pt,pt,pt" and Shown == 4 and Seen == "1234"
+    u := $Two(Pt(5), Pt(6))
+    assert u == "Two(pt, pt)" and Shown == 6 and Seen == "123456"
 }

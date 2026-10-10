@@ -1,0 +1,22 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - a constructor holding a field of the receiver, written
+# through: once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Box struct(c mut Cell&) {
+    c
+}
+fn (b Bag&) Str() String {
+    x := Box(b.c)
+    x.c.v++
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

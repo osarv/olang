@@ -180,8 +180,7 @@ fn (m Map<<K>, <V>>&) Clone() Map<K, V> {
 
 # how "$" renders a Map (E11c): its entries in the order a walk gives them, each "key: value", in braces after the Map's
 # type - "Map<String&, I64>{"a": 1, "b": 2}", "Map<I64, Bool>{}" - each key and value rendering as it does inside any
-# other value: text quoted, a Char as a character literal, a value whose type declares Str as its Str says. An entry
-# renders as "MapEntry(key, value)"; where its key ends is read off the key rendered beside a value of known length
+# other value: text quoted, a Char as a character literal, a value whose type declares Str as its Str says (once each)
 fn (m Map<<K>, <V>>&) Str() String {
     b := StringBuilder()
     b.Push("Map<" $typeWritten(Array<K>(0)) ", " $typeWritten(Array<V>(0)) ">{")
@@ -190,11 +189,10 @@ fn (m Map<<K>, <V>>&) Str() String {
         if n > 0 { b.Push(", ") }
         n++
         k := $MapEntry<K, Bool>(e.Key, false)                  # "MapEntry(" the key ", false)"
-        r := $e                                                # "MapEntry(" the key ", " the value ")"
-        kn := k.Len() - 17
-        b.Push($r[9:9 + kn])
+        b.Push(k[9:k.Len() - 8])
         b.Push(": ")
-        b.Push($r[11 + kn:r.Len() - 1])
+        v := $MapEntry<Bool, V>(false, e.Value)                # "MapEntry(false, " the value ")"
+        b.Push(v[16:v.Len() - 1])
     }
     b.PushChar('}')
     return b.ToString()

@@ -1,0 +1,22 @@
+# check: run
+# E11a: a join's pieces are rendered in order, each where it stands - a later piece's call changing what an earlier
+# piece reads changes nothing already rendered (measured first and written last, the array was written past the end
+# of its text: "I64[123457" and the arena overrun), built (-b, -d) and interpreted (-i) alike
+G mut Array<I64> = I64[1, 2]
+Name mut String& = "ab"
+fn bump() I64 {
+    G[0] = 123456789012345
+    G[1] = 987654321098765
+    return 7
+}
+fn rename() I64 {
+    Name[0] = 'x'
+    return 8
+}
+fn main() ? {
+    s := $G $bump()
+    assert s == "I64[1, 2]7"
+    assert $G == "I64[123456789012345, 987654321098765]"
+    t := $Name $rename() $Name
+    assert t == "ab8xb"
+}

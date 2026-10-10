@@ -1,0 +1,19 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - an array of references to the receiver's parts, written
+# through: once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn (b Bag&) Str() String {
+    refs := Array<mut Cell&>(1, b.c)
+    refs[0].v++
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

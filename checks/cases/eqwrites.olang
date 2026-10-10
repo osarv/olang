@@ -1,4 +1,4 @@
-# check: fail error[E10a, E11c]: Eq only reads
+# check: fail error[E10a, E11c]: Eq takes what it is given read-only
 # E10a: a comparison writes nothing - a mut receiver is rejected
 type Pt struct(n I32) {
     n

@@ -2725,7 +2725,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   **`Str`** (no parameters, a `String`, always capitalized - a rendering belongs to the type, not to one module's
   view of it) takes over `$` for its type wherever the value sits, and **must be K1a-evaluable**: `$` calls it as often
   as building the text needs (measure, write, or never when the text is computed while compiling), which is only
-  unobservable if it has no effect - the same argument that settled zero values. A mis-shaped `Eq`/`Str` is an error at
+  unobservable if it has no effect - the same argument that settled zero values. (Reversed 2026-10-10, decision 49: `$`
+  calls Str once per rendering and Str may have effects - the entry near the end.) A mis-shaped `Eq`/`Str` is an error at
   its declaration and is then ignored by `==`/`$`, so it is one error rather than two.
   **E10b - the compiler supplies `Hash`** for a struct, enum or array value whose type declares neither `Hash` nor
   `Eq` and whose parts all hash (combined in order, an enum's case first; arrays through the prelude's
@@ -4542,7 +4543,8 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   1.27-1.40 -> 1.15-1.20 s, long Lists unchanged. `IndexOf(x)` fails on a miss, `Remove(x)` says whether it removed
   (as `Map.Remove`), `SwapRemove(i)` moves one element. `chan.Chan(cap I64)`. Found, not fixed (compiler): a declared
   type over `Char` renders as a number.
-- **Merging wt-s6std onto the soundness fixes: `List.Clone` and E11c (E11c, O23a, 2026-10-10).** The merge took
+- **Merging wt-s6std onto the soundness fixes: `List.Clone` and E11c (E11c, O23a, 2026-10-10; its E11c half superseded
+  the same day by decision 49, below).** The merge took
   rv3fix's `Clone`, reading `chunks[k]` directly, beside s6std's first chunk held on its own (`chunks` null until a
   second is made), so every one-chunk Clone read through null (segfaults in the corpus, std and checks); it walks
   `chunk(k)` now. **E11c refined (mine)**: a write of a reference parameter's referent's own storage - the first
@@ -4553,6 +4555,29 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   or referent a `Str` made, holding writable references in `&p` fields (a cursor over the value), was taken to reach
   nothing - `cur := Cur(b); poke(cur)` writing `cur.c.v` changed the rendered value; such an argument now counts as
   reaching storage that was there (where an `&p` field refers is its instance's binding, O23a, not known there).
+- **`$` calls a Str exactly once per rendering, in order; Str may have effects (E11c, E11a, E11b, O17, O20/E12c,
+  2026-10-10; decision 49, the coordinator's, under the revisit rule - my reasoning, not the user's).** **Reverses E11c's
+  purity half**: Str no longer has to be K1a-evaluable or write nothing that was there before it ran, and the effect
+  analysis behind that (`effWrite`, `effCall`, `effSettle`, `effShallow`, `effHoldsUnknownRefs`, ...) is gone. Its root
+  cause was the run time calling Str twice per rendering (measure, then write) where the evaluator called it once, and a
+  review found three new and about twelve older holes in the analysis plus over-rejections (`r.l.Iter().Fold(...)`).
+  Now a rendering reaching a Str is built **in one pass**, in order, onto text that grows (`@olang.rdb.*` helpers,
+  `@__olang_sb_*`, starting in 256 bytes of the builder's stack), and the evaluator agrees (it always rendered in one
+  pass): once per `$`, joins left to right, depth first through fields/elements/payloads, once per List element and Map
+  key and value (`Map.Str` rendered every key twice). Skipping a call while compiling stays sound because K1 refuses
+  every effect skipping would show (globals, externs). **Decided (mine)**: (1) an array's length and storage are read
+  where its rendering starts and an enum is read whole before its payload (a Str putting another case there would have
+  had its payload's bytes read as fields they are not - memory safety), in codegen and the evaluator alike; (2) **Str
+  may store nothing it built or was handed into what its receiver reaches** (O17's region; `ERR_STR_STORES_IN_RECEIVER`)
+  - `$` cannot know where a part lives, so Str's scope variables get a scope of the call's own; (3) a value built only
+  to be rendered (`$MapEntry<K, V>(k, v)`) need not live exactly where what it holds does (C2d/O25c); (4) a join is
+  rendered piece by piece in order wherever a later piece's operand runs code an earlier piece could see - **a
+  pre-existing heap overflow**: `$G $bump()` measured G, let bump lengthen its numbers, then wrote past the allocation
+  (`checks/cases/joinwritesafter`); (5) a lambda made where it is called is judged by its body for O17 (a writable
+  capture was taken to be stored through); (6) the review's side note x1: a value field reached through a bare `mut`
+  reference field lives where that field's container does (E12c/O20), not in the function's own scope. Cost: `$` on
+  numbers, plain structs and joins of numbers is byte-identical IR; Str renderings half the instructions; a join of
+  text followed by a call +16%.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

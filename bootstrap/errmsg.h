@@ -220,7 +220,7 @@ struct type;
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
     X(ERR_STR_SHAPE,                    "E11c",  "Str gives a String") \
-    X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s only reads - neither its receiver nor a parameter may be 'mut'") \
+    X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s takes what it is given read-only - neither its receiver nor a parameter may be 'mut'") \
     X(ERR_PROTOCOL_BOTH_SPELLINGS,      "M6b",   "%t declares %s twice, public and private - keep one: %s, or %s for its own module only") \
     X(ERR_PROTOCOL_PRIVATE,             "M6b",   "%n needs %t's %S, which is private to its module - declare it %s to use it here") \
     X(ERR_OVERRIDE_SIGNATURE,           "M19e",  "%S does not have the signature of the default it overrides - match it, or choose another name") \
@@ -315,9 +315,8 @@ struct type;
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
     X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
     X(ERR_IMMUTABLE,                    "S6",    "%S cannot be written - only a local, a parameter or a 'mut' global can") \
-    X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
-    X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "Str renders read-only values too, so it only reads its receiver - pass on what it holds read-only") \
-    X(ERR_STR_WRITES,                   "E11c",  "Str runs as often as '$' needs, so it must have no effect - it writes, through a reference, what was there before it ran") \
+    X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
+    X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O17", "'$' does not know where a value it renders lives, so Str may not store into what its receiver reaches") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_ZERO_BY_REFERENCE,           "",      "'%s' holds it by reference, whose zero value is null") \

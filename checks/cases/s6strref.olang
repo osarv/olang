@@ -1,6 +1,6 @@
-# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect - it writes, through a reference
-# E11c: a cursor Str builds - held by a reference, or a temporary - is its own, but what its "&p" field refers to is not:
-# a helper writing through that field writes the value being rendered
+# check: run
+# E11c: a cursor Str builds - held by a reference, or a temporary - whose "&p" field refers to the value being rendered,
+# written through by a helper: once per "$", in rendering order
 type Cell struct() {
     v I64 = 0
 }
@@ -17,18 +17,18 @@ type B1 struct(b Bag&) {
 fn (s B1&) Str() String {
     x mut Cur& = Cur(s.b)
     poke(x)
-    return "x"
+    return "x" $s.b.c.v
 }
 type B2 struct(b Bag&) {
     b
 }
 fn (s B2&) Str() String {
     poke(Cur(s.b))
-    return "y"
+    return "y" $s.b.c.v
 }
 fn main() ? {
     b := Bag(Cell())
     one := B1(b)
     two := B2(b)
-    println($one $two $b.c.v)
+    assert $one $two $b.c.v == "x1y22"
 }

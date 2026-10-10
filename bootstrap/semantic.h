@@ -350,19 +350,6 @@ struct var {
     //body. regionFlagsOf is the function the list belongs to - a var copied whole starts a list of its own
     struct list regionFlags;
     struct var* regionFlagsOf;
-    //E11c: on a function, that it may write storage that was there before it was called - through a reference whose
-    //scope is a parameter's, a capture's, the program's or one not known here, a global's own, or by calling what does
-    //with such an argument, or through a function value it did not make. effTok: where it was first found
-    bool effWrites;
-    struct token effTok;
-    //E11c: the reference parameters (bit j, the first 64) whose referent's own storage it writes - a field, an element,
-    //reached from the parameter with no further reference - itself or through a callee it hands the parameter on to. An
-    //effect of a caller only where what that caller hands in is itself storage that was there before it ran: a borrow of
-    //its own local (an iterator it made) is written, never what the local's references reach. effShallowTok: the first
-    unsigned long long effShallow;
-    struct token effShallowTok;
-    struct list effCaps; //E11c: on a lambda, the captures it writes through (struct var*) - an effect of whoever made it
-                         //exactly where what the capture copies reaches storage that was there before that function ran
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program
@@ -417,6 +404,7 @@ struct var {
     struct var* capturedFrom; //D16c: ...the variable it copies (B11: a diagnostic about its permission names that one)
     bool isBorrowedCapture;   //D16c: ...a read-only borrow of a captured value array
     bool isCaptureScope;      //D16: the scope variable of a captured reference, bound when the lambda is made
+    struct var* capturesOf;   //O17/D16c: on the callee binding a lambda's captures where it is made, that lambda
     struct var* lambdaHost;   //D16: the function the lambda is written in, NULL in a test or a global initializer
     bool lambdaInTest;        //D16: written in a test block, so emitted with the test harness
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
@@ -781,6 +769,7 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
 //E31: a type's Call method, and whether it matches a function type exactly
 struct var* SemanticCallOf(struct type t);
 struct var* SemanticStrOf(struct type t); //E11c: the Str "$" renders a value of type t through, or NULL
+bool SemanticRendersStr(struct type t); //E11c: whether a rendering of t calls a Str - its own, or a part's
 bool SemanticCallMatches(struct type t, struct type fnType);
 //S12b: the values a match used as one can give, in order
 struct list SemanticMatchValues(struct operand* op);

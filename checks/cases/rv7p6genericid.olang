@@ -1,21 +1,20 @@
 # check: run
-# E11c: a helper writing only its parameter's own fields, handed a reference the value being rendered holds, through a
-# second helper - once per "$"
+# E11c: "$" calls a Str once per rendering, whatever it writes - a part handed through a generic identity to a helper
+# writing it: once per "$"
 type Cell struct() {
     v I64 = 0
 }
 type Bag struct(c mut Cell&) {
     c
 }
+fn id(x <T>) T { return x }
 fn bump(c mut Cell&) { c.v++ }
-fn bump2(c mut Cell&) { bump(c) }
 fn (b Bag&) Str() String {
-    bump2(b.c)
+    bump(id(b.c))
     return "b" $b.c.v
 }
 fn main() ? {
     b := Bag(Cell())
     assert $b == "b1"
-    assert $Bag(Cell()) == "b1"
     assert $b == "b2" and b.c.v == 2
 }
