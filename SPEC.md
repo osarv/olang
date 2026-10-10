@@ -3706,7 +3706,9 @@ storage (`spawn h.f()`, `spawn fs[i]()`) is held there - its closure lives no sh
 storage must last until the join, as an argument's would. The same holds for everything an argument
 **holds**: a value's fields, an enum's payload, a lambda's captures, and what a temporary built in the join block was
 built from (a constructor's or an enum case's arguments) - a task is handed the value, but what it refers to must still
-last until the join. Each task gets its own scope, as any
+last until the join. A borrow of an owned object (§8.8 O32) lasts no longer than the slot it was read from - an owner
+local's block, a field's container - so a borrow of an owner local declared in a block inside the join is rejected
+too. Each task gets its own scope, as any
 function call does.
 
 A scope a task is handed as a scope variable (§8 O3) is **not** shared with the task that was handed it: the task
@@ -5057,7 +5059,8 @@ An owned object is part of its owner, so **ownership is deep**: a borrow read fr
 immutable global, through a read-only reference, a read-only or a borrowed copy, a capture) is read-only, whatever the
 own reference's own permission. Reading is how `$` (E11a), `==` (E10), `is` (E10c), `match` (S12), `for ... in` (S9a),
 a method's receiver and a lambda's capture (D16c) see an owned object: through a borrow. Each read makes a **loan**
-(O38).
+(O38). *(Not yet implemented: a lambda capturing an owner local is a compile-time error - a capture is a copy, which of
+an owner would be a second owner; it captures a borrow read into a local before, `b := o`.)*
 
 **O33 (where a borrow lives).** A borrow's scope is its object's region. A region is outlived by the **reach** of the
 slot holding its object (O34) - a scope everything the object refers to outside its region is known to outlive - and
@@ -5068,11 +5071,12 @@ in a result but a borrowed one (O37), never in a closure that outlives the funct
 never refer to one another except by owning: a borrow of one is stored neither into another nor into anything outside
 its own region.
 
-Each read is a region of its own to the check, even when it reads an object read before. A reference local given
-borrows of different reads - `best = c` in a walk - holds them where it is **not known** (O12): it may be read,
-walked, compared and lent, but nothing is built into or stored through it. A reference local declared with a written
-type and given only `null` and borrows of one read takes that read's region, as a `:=` local takes its initializer's
-scope (O25a).
+Each read is a region of its own to the check, even when it reads an object read before. A borrow is held in a local
+declared with `:=`, which takes the read's region exactly (O25a); a local declared with a written type lives in its
+block (O25a), where no borrow does. A reference local given borrows of different reads - `best = c` in a walk - holds
+them where it is **not known** (O12): it may be read, walked, compared and lent, but nothing is built into or stored
+through it. *(Not yet implemented: a `:=` local holds the borrow it was declared with and no other - given a borrow of
+another read, it is O10's error.)*
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
 borrowed result that is the object (O37) - or through a reference this function read out of such a borrow. A borrow of
@@ -5173,7 +5177,7 @@ path from there, of anything **derived** from it: the borrow or the borrowed cop
 holding such a reference, a closure capturing one, and each local holding one of these, until that local is given
 something not derived from the loan. A number, a `Bool`, or any value holding no reference read out of it is not
 derived from it and carries nothing (O26a). A loan given as an argument lasts until its call returns, and one given to
-a task until its join (P2). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
+a task until its join (P2) - as does every loan a task's call may make (O41). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
 conservatively: a local holding a loan uses it wherever it is read after in its block, anywhere in a loop enclosing
 both inside its scope, and in deferred code, whichever path is taken.)*
 
@@ -5190,10 +5194,13 @@ made and where it is next used - when, at a point where a loan is live:
 - a block closes, releasing owners its instances or owner locals hold (O35);
 - a task (§6.8) whose call may release such an object was spawned before this point and is joined after it (O41).
 
-Which releases can reach a loan's object is decided by type and by root, never by what a run happens to do. A release
-of an object of type `T` reaches a loan on an object of type `U` only when `U` is `T` or an own type an object of type
-`T` can hold (in its fields, its elements and what its region can hold, transitively), and only when their **roots**
-meet. A slot reached from a variable holding owners - an owner local, an owning parameter, a local value of an owning
+Which releases can reach a loan's object is decided by type, by root and by place, never by what a run happens to do. A
+release of an object of type `T` reaches a loan on an object of type `U` only when `U` is `T` or an own type an object
+of type `T` can hold (in its fields, its elements and what its region can hold, transitively), only when their
+**roots** meet, and never when the release and the loan go through two different own slots of one object - the same
+variable, then the same fields, then two different fields: two own slots hold two objects, and what each owns is apart
+(`s.other = null` while a borrow of `s.cur` is used). Since nothing is moved while a loan on it is live, a loan's
+object stays below the root it was read through until the loan ends. A slot reached from a variable holding owners - an owner local, an owning parameter, a local value of an owning
 type that is not a borrowed copy - through parts held by value and own references only, has that variable as its root:
 such a variable alone reaches what it owns. A reference to such a variable's storage (E12c - a writable argument, a
 method's receiver, a reference local) has its root too, and so does a release made through it. A loan's roots are its
@@ -5215,8 +5222,16 @@ anything that may being a compile-time error naming the release.)*
 
 **O41 (tasks and threads).** An owning parameter of a spawned call (P1) takes its argument as any owning parameter
 does: the task owns it, and releases it on the task's thread. A borrow given to a task is a loan lasting until the
-join (O38, P2). A spawned call's releases are pending from the `spawn` to the join: a loan live anywhere between on an
-object they may reach is O39's error. That is what O39 can see - one function and the tasks of its join blocks; a task
+join (O38, P2). So is what the task's call may **borrow** of its own: what a function may borrow is read off its body -
+the own slots it reads, by type and by root (below which parameter, or through anything else: a global, a capture), the
+borrows of the functions it calls below its arguments, what `$` and `==` may read of a value through the methods they
+call, and what the destructors of what it builds may - and settled over every call once every body is checked, as O39's
+releases are; a call through a function value, or a body that is not known, may borrow anything. A task's clauses
+(P4a), run on its thread, borrow likewise. Between a `spawn` and its join - in the join block after the spawn, in
+deferred code that runs before the join waits, and on the later turns of a loop inside the join block around the spawn
+- a release or a move that may reach what the task may borrow is O39's error, naming the spawn and where the task
+borrows; it is so whether or not the program orders the two (a channel, an atomic flag). A spawned call's releases are
+pending from the `spawn` to the join: a loan live anywhere between on an object they may reach is O39's error. That is what O39 can see - one function and the tasks of its join blocks; a task
 releasing an object another thread uses through storage both reach (a global, a structure two tasks are given) is a
 data race (§6.8.1 P8b), undefined as every data race is. *(Not yet implemented as written: a spawned call that may
 release anything is a compile-time error.)*

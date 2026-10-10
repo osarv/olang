@@ -28,7 +28,9 @@
 # An own scenario (§8.8) holds owned objects in a holder's own slots and gives them new owners, moves them between the
 # slots and through owner locals, releases them (null, take, a call, a block's end), and builds into an owned object's
 # region through borrows - directly, through a call, a method or a task, before and after other arguments - with some
-# borrows kept across a release, which the checker must refuse (O39).
+# borrows kept across a release, which the checker must refuse (O39): an object moved to another owner's tree while
+# borrowed and released there, a task borrowing through the holder (synchronised by an atomic flag) while the spawner
+# releases, a loop releasing what the last turn's task builds into, deferred code releasing before the join waits.
 #
 # One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
 # through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
@@ -95,6 +97,7 @@ AvoidKnown mut Bool = false
 
 # the types and helpers every program has
 Prelude := (
+    "import \"std/time\"\n"
     "extern fn getpid() I32\n"
     "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
     "type Node struct(v I64) {\n"
@@ -279,6 +282,21 @@ Prelude := (
     "    h.other = take t\n"
     "}\n"
     "fn osetN(x mut Node&, o mut ONode&) { o.n = x }\n"
+    "# a flag set atomically; owait waits for it 2 ms at most (-i runs a task only at its join, so there it never comes)\n"
+    "type OFlag struct() {\n"
+    "    v I64 = 0\n"
+    "}\n"
+    "fn owait(f OFlag&) {\n"
+    "    t0 := time.Now()\n"
+    "    for f.v.AtomicLoad() == 0 and time.Since(t0) < 2000000 { }\n"
+    "}\n"
+    "# a task borrowing what its holder owns, through the holder, and using it once the spawner has gone on (O41)\n"
+    "fn otask(h OHold&, f mut OFlag&, g OFlag&, out mut OFlag&) {\n"
+    "    b := h.cur\n"
+    "    f.v.AtomicStore(1)\n"
+    "    owait(g)\n"
+    "    out.v = onode(b)\n"
+    "}\n"
 )
 
 # the targets: what a scenario declares, and what it returns (the last, a Str scenario, declares its own - strScenario)
@@ -715,7 +733,7 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
 fn (g mut SG&) ownOp(h String&, ind String&) String& {
     v := g.val()
-    k := g.r(22)
+    k := g.r(26)
     c := $h ".cur"
     o := $h ".other"
     if k == 0 { return $ind $c " = ONode(" $v ")\n" }
@@ -757,6 +775,39 @@ fn (g mut SG&) ownOp(h String&, ind String&) String& {
     if k == 20 {    # a value built for a region a local borrow names
         b := g.name("b")
         return $ind $b " := " $c "\n" $ind "if " $b " != null { osetN(Node(" $v "), " $b ") }\n"
+    }
+    if k == 22 {    # an owner moved to another owner local's tree while borrowed, then released through that one (O39: refused)
+        p := g.name("p")
+        q := g.name("q")
+        b := g.name("b")
+        return ($ind "{\n" $ind "    " $p " own mut OHold& = OHold()\n" $ind "    " $p ".cur = ONode(" $v ")\n" $ind "    " $q
+                " own mut OHold& = OHold()\n" $ind "    " $b " := " $p ".cur\n" $ind "    " $q ".cur = take " $p ".cur\n" $ind "    " $q
+                ".cur = null\n" $ind "    churn()\n" $ind "    " $b "v := onode(" $b ") % 997 + " $v "\n" $ind "    " $o " = ONode(" $b
+                "v)\n" $ind "}\n")
+    }
+    if k == 23 {    # ...from below a parameter into an owner local of its reach, in a helper (O39: refused)
+        f := g.name("ocross")
+        g.addHelper("fn " $f "(p mut OHold&) I64 {\n    if p.cur == null or p.other == null { return 0 }\n    o own mut ONode& = take p.other\n"
+                    "    b := p.cur\n    o.sub = take p.cur\n    o.sub = null\n    churn()\n    t := onode(b)\n    p.other = take o\n"
+                    "    return t\n}\n")
+        return $ind $c " = ONode(" $f "(" $h ") % 997 + " $v ")\n"
+    }
+    if k == 24 {    # a task borrowing through the holder, synchronised, while the spawner releases (O41: refused)
+        f := g.name("f")
+        e := g.name("e")
+        r := g.name("r")
+        return ($ind $f " := OFlag()\n" $ind $e " := OFlag()\n" $ind $r " := OFlag()\n" $ind "if " $c " != null {\n" $ind
+                "    join {\n" $ind "        spawn otask(" $h ", " $f ", " $e ", " $r ")\n" $ind "        owait(" $f ")\n" $ind "        " $c
+                " = null\n" $ind "        churn()\n" $ind "        " $e ".v.AtomicStore(1)\n" $ind "    }\n" $ind "}\n" $ind $o " = ONode("
+                $r ".v % 997 + " $v ")\n")
+    }
+    if k == 25 {    # a loop giving the slot a new owner while the last turn's task builds into the old one (O41: refused)
+        return ($ind "join {\n" $ind "    for i in range 3 {\n" $ind "        " $c " = ONode(" $v " + i)\n" $ind "        spawn ogrow(" $c
+                ", " $v ")\n" $ind "    }\n" $ind "}\n")
+    }
+    if k == 21 and g.chance(50) {    # deferred code releasing before the join waits (O41: refused)
+        return ($ind "if " $c " != null {\n" $ind "    join {\n" $ind "        defer { " $c " = null }\n" $ind "        spawn ogrow(" $c ", "
+                $v ")\n" $ind "    }\n" $ind "}\n")
     }
     if g.chance(50) { return $ind "if " $c " != null and " $c ".sub != null { ogrow(" $c ".sub, " $v ") }\n" }
     return $ind "if " $c " != null { osetN(Node(" $v "), " $c ") }\n"    # built before its region is read (O33: refused)

@@ -15039,3 +15039,88 @@ time (0.10 s).
 holding owners (`TakeAt`, `SwapTake`, `Map.Take`), `Vec`, owning value types and borrowed copies, implicit last-use
 moves, the other move positions, O40/O41 through parameters, the evaluator marking released objects dead, small region
 classes, flow-sensitive liveness.
+
+### The own first cut's soundness review, fixed (§8.8 O32, O33, O38, O39, O41, §6.8 P2, O16/O30, 2026-10-10)
+
+A read-only review of the first cut (42efc87, /home/user/review/own1) found two use-after-frees the borrow check
+accepted and one pre-existing leak. Fixing them turned up four more holes in the cut itself. The detail is in
+docs/own.md section 12; this is the story.
+
+**C1: a move dropped a loan's root.** The first cut made a `take` into a field or a global of the same reach a move
+that released nothing (decision 6). A move frees nothing, but it takes the object into another owner's tree. A loan on
+the object kept the root it was read through (decision 3: a release through an owner local meets only loans rooted
+there), so a release through the new owner missed it:
+
+    c := o1.cur; o2.cur = take o1.cur; o2.cur = null; println(c.name)
+
+This aborted under `-s` and printed garbage at `-O3`, as did the param-to-local and local-to-param variants. The
+coordinator decided on Rust's rule: no move while borrowed. Every `take` is checked as a release would be, wherever the
+owner goes. So an object never leaves the tree its loans were read through while they are live, and the root model is
+sound again with nothing re-rooted. The checker's `ownKeptReach` is gone. A callee's `take` from below a parameter is
+an effect to its callers, like a release.
+
+Done naively, the rule refused 22 scenarios of the old fuzz programs that 42efc87 ran, all of the shape
+`h.cur.sub = take h.other`: the target's place borrows `h.cur` while a sibling slot is moved. Types alone cannot tell
+the two apart, but the paths can. Two own slots of one object hold two objects, and what each owns is apart, because an
+object has one owner and none owns itself. So a release or move through one own slot never reaches a loan read through
+another (`ownLoanBesidePlace`, comparing the two paths slot by slot up through the borrows they were read through).
+With it, the refusals on those programs are identical to 42efc87's. The first cut's own over-rejection
+`c := s.cur; s.other = null; use c` goes with it.
+
+**C2: a task borrowing through what it was handed.** `spawn work(s, a, b)`, `work` reading `h.cur` internally, and the
+spawner's `s.cur = null` ordered before the task's use by channels. TSan was silent because it is race-free, and the
+task read freed memory. Only borrows handed to a task as arguments were held until the join. The coordinator decided
+on a borrow effect, dual to the release effect: per function, what it may borrow, by type and by root (below which
+parameter, or through anything else). It is computed in the same fixed point:
+- the own slots the body reads;
+- its calls' borrows, mapped through their arguments' roots;
+- `$`, `==` on values: the own types they reach, and whatever every `Str`/`Eq`/`Hash` may borrow;
+- what the destructor of a value it builds may borrow through a global;
+- a call through a function value, or a body not known: anything.
+
+At a spawn, the call's borrows and its clause lambdas' (P4a) become loans held until the join, rooted at the
+arguments' roots, or the shared root for globals and captures. Doing this exposed three places where even argument
+loans had never been checked:
+- deferred code in the join block runs before the join waits, but was walked before the spawn;
+- a loop in the join block releases on its next turn before re-spawning, and the walk saw the release before the spawn;
+- a spawn's targets are stored into when the task's call returns.
+
+The first two are walked again with only the task loans checked; the third counts the target places as loans.
+
+**Holes in the cut, found while fixing (decided by me).**
+- A lambda captured an owner local as a copy - a second owner. `fn() { o.cur = null }` released with no effect, and
+  `fn() { p := take o }` freed `o` twice. This is now an error naming the fix, `b := o`, until the capture is made a
+  borrow implicitly.
+- P2 took every region to outlast the join. A borrow of an owner local declared in a block inside the join, lent to a
+  task, died at that block's end. A region now records where its slot lives, and P2 judges it by that.
+- An assignment's value may use a borrow of what the assignment releases. Decision 5 said so, but locals holding loans
+  counted the read.
+- A statement gets one error, not one for its `take` and another for its store.
+
+**P1, pre-existing in codegen.** A temporary stored into a reference field was built in the function's own scope,
+however short-lived the field's container. `a.kid = Node(5)` in a loop body kept every turn's node, its destructor run
+only at the function's end. Through a borrow (`s.cur.kid = Node(5)`) the node was outside the owned object's region, so
+releasing `s.cur` ran only one destructor of two, undercutting O30. `cgResolveEffectiveScope` now builds through a
+borrow into its region and through a reference local where the checker says it lives, resolved after the place is
+evaluated.
+
+**Over-rejections left.**
+- A typed borrow local (`best Node& = s.cur`) lives in its block by O25a. O33 now says only `:=` holds a borrow, and the
+  O10 error gains a note saying so.
+- Reassigning a borrow local to another read stays O10's error, at the reassignment.
+- Task loans are matched by type: a task borrowing `s.cur` forbids replacing `s.other` in its join block.
+
+**Fuzzer.** The own scenarios gained the review's shapes:
+- a move across owner locals while borrowed, then released;
+- a helper moving from below its parameter;
+- a task borrowing through its holder, synchronised by an atomic flag with a bounded wait so `-i` (which runs tasks only
+  at the join) goes on;
+- a loop releasing what the last turn's task builds into;
+- deferred code in a join block releasing.
+
+All-own, seeds 1-60:
+
+| compiler | findings | scenarios run | refused |
+|---|---|---|---|
+| 42efc87 | 56 | 567 | 153 |
+| fixed | 0 | 294 | 426 |

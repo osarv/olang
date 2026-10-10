@@ -16866,3 +16866,101 @@ test "O32/O33: a call builds into the region of a borrow it is handed - its scop
     sbChurn()
     assert s.cur.n.v == 4 and s.cur.n.next.v == 5
 }
+test "O39: a release or a move beside a borrow - through another own slot of the same object - leaves it alone" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(1 * OwnRun)
+    s.other = OwnConn(2 * OwnRun)
+    s.other.sock = OwnSock(7)
+    c := s.cur
+    s.cur.sock = take s.other.sock              # moved from beside c into what c names
+    s.other = null                              # released beside c
+    sbChurn()
+    assert c.name == "c1" and c.sock.n == 7 and OwnDropped == 1
+}
+test "O39: an assignment's value may use a borrow of what it releases - the value is computed before the store" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(1 * OwnRun)
+    c := s.cur
+    s.cur = OwnConn(c.fd + 1)
+    sbChurn()
+    assert s.cur.fd == 2 and s.cur.name == "c2" and OwnDropped == 1
+}
+type OwnOut struct() {
+    v I64 = 0
+}
+fn ownTaskRead(s OwnServer&, out mut OwnOut&) {
+    c := s.cur
+    out.v = c.fd
+}
+test "O41: what a task borrows lasts until its join - a release before the spawn, after the join, or of another type is not" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(1 * OwnRun)
+    s.cur = OwnConn(2 * OwnRun)                 # released before the spawn
+    out := OwnOut()
+    join {
+        spawn ownTaskRead(s, out)
+        s.cur.sock = OwnSock(3)                 # an object of another type: the task borrows a Conn
+    }
+    s.other = OwnConn(5 * OwnRun)
+    sbChurn()
+    assert out.v == 2 and s.cur.sock.n == 3
+    s.cur = null                                # after the join
+    assert OwnDropped == 3
+}
+test "O34/D16c: a lambda captures a borrow of an owner local, and reads through it afresh at each call" {
+    o own mut OwnServer& = OwnServer()
+    o.cur = OwnConn(4 * OwnRun)
+    b := o
+    f := fn() I64 { return b.cur.fd }
+    x := f()
+    o.cur = OwnConn(5 * OwnRun)                 # a Conn released - the lambda's borrow is of the Server
+    sbChurn()
+    assert x == 4 and f() == 5
+}
+type OwnKid struct(n I64) {
+    n
+    kid mut OwnKid& = null
+} destruct { OwnDropped++ }
+type OwnKidHolder struct() {
+    cur own mut OwnKid&
+}
+test "O16/O30: a value built into a reference field lives where the field's container does, destructed as that closes" {
+    OwnDropped = 0
+    for i in range 3 {
+        a mut OwnKid& = OwnKid(i * OwnRun)
+        a.kid = OwnKid(i + 10)                  # built where a lives - the loop body's scope - not the function's
+        sbChurn()
+        assert a.kid.n == i + 10
+    }
+    assert OwnDropped == 6
+    s := OwnKidHolder()
+    s.cur = OwnKid(1 * OwnRun)
+    s.cur.kid = OwnKid(5)                       # built in s.cur's region, released with it
+    sbChurn()
+    assert s.cur.kid.n == 5 and OwnDropped == 6
+    s.cur = null
+    assert OwnDropped == 8
+}
+type OwnPair struct() {
+    a own mut OwnList&
+    b own mut OwnList&
+}
+fn ownBeside(k I64) I64 {
+    p := OwnPair()
+    p.a = OwnList(k)
+    p.b = OwnList(k + 1)
+    p.b.next = OwnList(k + 2)
+    c := p.a
+    p.a.next = take p.b.next                    # moved beside c, into what c names
+    p.b = null                                  # released beside c
+    p.a = OwnList(c.v + c.next.v)               # the value uses c, which the store then releases
+    return p.a.v
+}
+OwnBesideBaked I64 = ownBeside(3)               # K2: computed while compiling
+test "O39: moves and releases beside a borrow, a value using what its store releases - while compiling and at run time" {
+    assert OwnBesideBaked == ownBeside(3 * OwnRun) and OwnBesideBaked == 8
+    assert ownBeside(4) == 10                   # S18c: decided while compiling
+}

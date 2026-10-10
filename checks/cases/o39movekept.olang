@@ -1,0 +1,19 @@
+# check: fail error[O39]: taking 'o1.cur' moves the Node borrowed on line
+# a move into another owner local's tree while borrowed - a release through the new owner would not meet the loan
+type Node struct(n I64) {
+    n
+    name String& = "node" $n
+}
+type Holder struct() {
+    cur own mut Node&
+    other own mut Node&
+}
+fn main() ? {
+    o1 own mut Holder& = Holder()
+    o1.cur = Node(5)
+    o2 own mut Holder& = Holder()
+    c := o1.cur
+    o2.cur = take o1.cur
+    o2.cur = null
+    println(c.name)
+}

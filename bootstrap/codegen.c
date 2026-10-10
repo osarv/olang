@@ -1253,6 +1253,10 @@ static struct var* cgValueHomeVar(struct operand* op) {
 
 char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
     if (cgIsGlobalRead(base)) return cgProgramScope(ctx); //O1b: a global's referent, or its own storage
+    //O32: a borrow of an owned object - what is built through it lives in the object's region, released with it (O30),
+    //known once the borrow is read (callers resolve this after evaluating base)
+    if (base->type.scopeParam && canonicalVar(base->type.scopeParam)->isRegion)
+        return cgResolveScope(ctx, base->type.scopeParam, base->type.scopeDepth);
     //a tag belonging to a type, not this function: where the checker resolved it, else the container's (O23)
     if (base->type.scopeParam && !varIsOwnParam(base->type.scopeParam, ctx->curFunc)) {
         struct var* to;
@@ -1279,6 +1283,12 @@ char* cgResolveEffectiveScope(struct cgCtx* ctx, struct operand* base) {
     }
     struct var* home = base->type.structMAlloc ? NULL : cgValueHomeVar(base);
     if (home) return cgResolveScope(ctx, home->valueHome, home->valueHomeDepth);
+    //O16/O25a: a reference local's referent - its block, for one written with a bare "&" - where the checker says
+    if (base->type.structMAlloc && base->opType == OPERATION_READ_VAR) {
+        struct var* to;
+        int depth;
+        if (SemanticReferentScope(ctx->curFunc, base, &to, &depth)) return cgResolveScope(ctx, to, depth);
+    }
     return cgOwnAllocSlot(ctx);
 }
 
@@ -6655,6 +6665,10 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
     //cgResolveEffectiveScope - not just one hop) and use it both for building the rhs (so any of ITS OWN
     //nested bare-"&" fields/elements inherit the same scope too, see cgValueForTarget) and for the actual
     //promotion below.
+    //S4: left to right - the target's place (its base and index, as written), then the value, then the store. A
+    //compound assignment's value reads that same place (placeOf), so its base and index run once. Where the place's
+    //container lives is read once the place is: a region is known only once the borrow naming it is read (O33)
+    char* addr = cgAddr(ctx, s->target);
     char* scopeOverride = NULL;
     bool targetIsMemberOrIndex = s->target->opType == OPERATION_MEMBER || s->target->opType == OPERATION_INDEX;
     if (targetIsMemberOrIndex && cgIsReference(s->target->type)) {
@@ -6674,9 +6688,6 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
     if (cgIsGlobalRead(s->target) && (s->target->type.structMAlloc || s->target->type.arrMalloc
                                        || TypeHoldsReferences(s->target->type)))
         scopeOverride = cgProgramScope(ctx);
-    //S4: left to right - the target's place (its base and index, as written), then the value, then the store. A
-    //compound assignment's value reads that same place (placeOf), so its base and index run once
-    char* addr = cgAddr(ctx, s->target);
     char* outerPlace = s->target->cgPlace;
     s->target->cgPlace = addr;
     //T7/E12c: a reference field or element given a fresh array ("l.chunks[k] = Array<T>(n)") repoints at it - built

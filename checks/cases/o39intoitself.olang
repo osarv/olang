@@ -1,4 +1,4 @@
-# check: fail error[O39]: taking 's.top' may release the Item borrowed on line
+# check: fail error[O39]: taking 's.top' moves the Item borrowed on line
 # an owner moved into its own region: reaching the slot borrows the object, and the move lets it go (O34)
 type Item struct(v I64) {
     v

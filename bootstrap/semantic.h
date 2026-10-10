@@ -456,6 +456,9 @@ struct var {
     int regionRootParam;
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
     struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
+    struct var* regionLife;     //...the scope the slot itself lives in - its container's, an owner local's block - which the
+    int regionLifeDepth;        //   object is released by at the latest: what lasts until a join is judged by it (P2), where
+    bool regionLifeUnnamed;     //   an owner local's reach (its initializer's) may be longer
     //O33: an owner local's reach - the scope what its object refers to is known to outlive, which a slot it is moved into
     //may not outlive: its initializer's (a constructor call holding nothing outside it, null: the program's; "take x": x's)
     bool ownReachSet;
@@ -755,8 +758,6 @@ struct operand {
     bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
     bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
     bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
-    bool ownKeptReach; //O39: a "take" whose owner goes into a field or a global of the reach it came from - a move that
-                       //frees nothing sooner, where one into an owner local, or a slot that may close first, may
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.

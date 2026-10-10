@@ -4918,6 +4918,22 @@ and literals made only of such, never existing storage anywhere in it) - it is
   O33's error naming the local to read it into. Left (additive): owning parameters and results, own elements in
   `List`/`Map` (`TakeAt`, `SwapTake`, `Map.Take`), `Vec`, borrowed copies, implicit last-use moves, small region
   classes (a region is one 4 KB chunk), flow-sensitive liveness.
+- **The own first cut's soundness review, fixed (O39, O41, O32, O33, P2, O16/O30, 2026-10-10; C1/C2 the coordinator's
+  calls, the rest mine, docs/own.md section 12).** **C1**: a `take` moved an object into another owner's tree while a
+  loan on it kept the old root, so a release through the new owner freed a borrowed object - now every `take` is refused
+  while a loan on the moved object or what it holds is live (Rust's rule), `ownKeptReach` is gone, a callee's moves are
+  effects like its releases, and errors name the borrow's next use. **C2**: a task's own borrows were invisible to the
+  spawner - a **borrow effect** per function (types by root, a fixed point beside the release effect; function values
+  and unknown bodies borrow anything; `$`/`==` through Str/Eq/Hash; destructors of what it builds) becomes loans held
+  until the join, checked after the spawn, in deferred code that runs before the join waits, on later turns of a loop
+  around the spawn, and against a spawn's target places. **Found on the way, fixed**: a lambda capturing an owner local
+  (a second owner - now O32's error naming `b := o`), a borrow of an owner local in a block inside the join lent to a
+  task (a region now records where its slot lives, P2 judges it so), one error per statement, and an assignment's value
+  may use a borrow of what it releases. Precision kept: a release or move through one own slot never reaches a loan read
+  through another of the same object, so the fixed compiler refuses exactly what 42efc87 did on the old fuzz programs.
+  **P1 (pre-existing codegen)**: `a.kid = Node(5)` built in the function's scope, not where `a` lives or in a borrow's
+  region - destructors ran late (O16) or not at the region's release (O30). Fuzzer: the review's shapes, 56 findings in
+  60 all-own programs on 42efc87, none after.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

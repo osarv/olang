@@ -200,6 +200,10 @@ struct type;
     X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
     X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
     X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
+    X(ERR_OWN_MOVE_UNDER_LOAN,          "O39",   "%s moves the %t borrowed on line %d, which is used after it - a borrowed object is not moved until its borrow is done") \
+    X(ERR_OWN_RELEASE_UNDER_TASK,       "O41",   "%s may release the %t the task spawned on line %d may be using until the join - release it after the join") \
+    X(ERR_OWN_RELEASE_UNDER_TASK_ANY,   "O41",   "%s may release what the task spawned on line %d may be using until the join - it calls a function value, which may reach any owned object; release it after the join") \
+    X(ERR_OWN_CAPTURED,                 "O32",   "a lambda does not capture the owner local '%S' - capture a borrow of it, 'b := %S' outside the lambda") \
     X(ERR_OWN_TASK_RELEASE,             "O41",   "a task may not release owned objects yet, and '%S' may - release them before the spawn or after the join") \
     X(ERR_OWN_FUNC_VALUE_RELEASE,       "O40",   "%S releases owned objects, so it cannot be a function value - a function value releases nothing yet") \
     X(ERR_OWN_DESTRUCTOR_RELEASE,       "O40",   "a destructor may not release owned objects - its instance's own fields are released after it runs") \
@@ -341,6 +345,11 @@ struct type;
     X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
     X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
     X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
+    X(NOTE_OWN_MOVES_HERE,              "",      "%S moves it here") \
+    X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
+    X(NOTE_OWN_TASK_BORROWS,            "",      "the task borrows it here") \
+    X(NOTE_OWN_TASK_CALLS_VALUE,        "",      "it calls a function value here") \
+    X(NOTE_OWN_BORROW_LOCAL,            "",      "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") \
     X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
     X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \

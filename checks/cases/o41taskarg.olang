@@ -1,4 +1,4 @@
-# check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
+# check: fail error[O41]: assigning 's.cur' may release the Conn the task spawned on line
 # a task's arguments are borrowed until its join
 type Sock struct(n I64) {
     n
