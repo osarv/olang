@@ -4339,11 +4339,17 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   names the result scope, where it lives (r03). **O17b, decided (mine)**: a **handle** - a struct whose one field is a
   bare reference living with the instance, or another handle by value (`List`, `Map`, `StringBuilder`, and any such
   program type) - is lent to a call as its reference where the callee uses the parameter only through it (reads the
-  field, or hands it on to a parameter that does - a fixed point over the bodies as written); anything else (kept in a
+  field, or hands it on to a parameter that does - a fixed point over the CHECKED bodies, every read of the parameter
+  the check made accounted for, a call inside a cycle taken on trust and verified once every body is checked); anything else (kept in a
   local, stored, returned, compared, captured, walked by `for`, its field assigned, handed to a function value, an
   extern or a trait default) is judged as O17 judges any split lend. So `l := try m.Get(k); l.Push(x)` in a loop, nested
   for-in copies, a `Rule` walked recursively out of a `Map`, and a struct holding a `List` built for a receiver's map
-  compile (r07, r08, r09, r25, fuzz listalias); a task's handle argument still lives until its join (P2). **T25c
+  compile (r07, r08, r09, r25, fuzz listalias); a task's handle argument still lives until its join (P2). **Found by the
+  soundness review**: the first version read the callee's TOKENS and skipped `&name` as a scope marker - `&` is also
+  bitwise-and, so a user `BitAnd` handing back its operand stored the handle's own storage unseen (a use-after-free,
+  `o17bbitand`); a soundness decision never rests on a token scan now. **O26a also follows a view**: a local holding no
+  reference whose storage is borrowed by something flowing into the result (`s := a[1:4]; return V(s)`, `h.name = a;
+  return h`) lives in the result scope - two cases that pinned O20 for the second shape now run. **T25c
   reconciled (mine)**: `Map.Get`'s slot cursor is `mut`, as Put/Update/Remove's are - with QC's read-only copies it
   refused every Map of handles; a read-only receiver handing out a writable copy is QC's shallow limit (linalg's views),
   so `try G.Get(k)` on an immutable global Map of Lists can still push (recorded). **E16**: a known out-of-range

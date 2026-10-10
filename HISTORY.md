@@ -12846,3 +12846,25 @@ handle argument is P2's error, the `handles` fixture under `-b`, `-b -d` and `-i
 aliases, builders and counters read back after a churn; O20 (a value copied out of a reference holds what its referent
 does) - a corpus test; E16 - `e16constnotry` must fail, corpus tests for the checked form in a generic; S12b, L9a -
 corpus tests and `l9afields`/`l9keywordfield`.
+
+**The soundness review of this batch (`review/tonight4`) found one new use-after-free, fixed at the root.** O17b's first
+version decided "used only through its reference" by scanning the callee's body TOKENS, skipping any `&name` as a scope
+marker. But `&` is also bitwise-and: a handle type with a user `BitAnd` handing back its operand let a method write
+`h.c.kept = h.c.kept & h`, storing the handle copy's own storage in the map's cell - the copy (`c := try m.Get(1)` in a
+loop) died and `-d` segfaulted. A soundness decision must not rest on a token scan, so the analysis now reads the
+callee's **checked** body (`htOp`/`htStmt`): every read of the parameter is either the handle's reference field read
+out (a member operand, never an assignment target), or the parameter - or a handle it holds by value - handed whole to a
+parameter of a declared function, method or constructor that is itself "through" (the fixed point); anything else, an
+operator's operand included, says no. And the answer never rests on the walk being complete: every read of a
+handle-reference parameter the body's check makes is recorded where it is made (`OperandReadVar`, `paramReads`), and
+one the walk did not reach - left where it does not look, or built by a probe and thrown away - says no. Bodies are
+checked before their callers bind (O10c's `ensureBodyChecked`), except inside a cycle: there the lend is taken on trust
+and verified once every body is checked (`settleHandleLends`), an O17 error at the call if the answer turns out no
+(`o17bpending`, and `o17bpendingok` where it holds). The review's reproducer is `o17bbitand`, with its two controls
+(`o17bnonhandle`, `o17bnoand`). **Also from the review (optional, cheap)**: `s := a[1:4]; return V(s)` was O26 where
+`return V(a[1:4])` compiled - O26a moved a borrowable local only when a returned value read it directly; it now follows
+flows of what borrows it too (`borrowRoot` in the flow scan: a view or an array, text or struct read out of it counts
+as carrying it). That also accepts `h.name = a; return h` and the same through an inline array of references, which two
+cases (`o26afieldafter`, `o26ainlinearray`) had pinned as O20 errors: the text now lives in the result scope with `h`,
+so they became run cases read back after a churn (`-b`, `-b -d`, `-i`); text stored into a parameter's field still stays
+in its block and is O20's error (`o26aborrowparam`).

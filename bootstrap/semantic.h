@@ -351,6 +351,8 @@ struct var {
     bool slotBorrowed;  //C2d: a value local whose storage a reference was taken to (E12c) - a constructor's field local so
                         //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
+    struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
+                             //the first
     bool storeInResult; //O26a: a value local the function returns - its storage, and its references (valueHome), are in
                         //the result scope
     //O18c: a value local whose ":=" call landed by its obligations in one of this function's scope variables - where

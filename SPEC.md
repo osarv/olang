@@ -4367,7 +4367,10 @@ returned local is not followed. Only a reference, or a value holding references,
 value that can hold none - a number or a `Bool` computed from it, as an argument of a call whose result cannot hold it, a
 field or an element holding no reference, or anything declared or stored with a type holding none - is no flow of it,
 so a loop measuring each line it reads into a returned summary (`line := next(); v := measure(line); if v > s.best {
-s.best = v }`) leaves each line in the loop's block. So the recursive-descent and Pratt idioms are correct as written:
+s.best = v }`) leaves each line in the loop's block. A local holding no reference whose own storage can
+be borrowed - text, an array, a struct - flows the same way through what borrows it: a view of it, or a reference field
+given it, flowing into what is returned (`s := a[1:4]; return V(s)`, `h.name = a; return h`) puts it in the result scope
+too; stored anywhere else it stays in its block. So the recursive-descent and Pratt idioms are correct as written:
 
 ```
 fn (p mut Parser&) expr(minPrec I64) Expr& {
@@ -4491,7 +4494,9 @@ by value - `List`, `Map` and `StringBuilder` are handles (T8), and so is any suc
 (O25h), a by-value parameter of one (O4b), or one read out of a collection holds its reference where its own storage is
 not, and is lent to a call **as that reference**: where the callee uses its parameter only **through** it - reads the
 reference out of the parameter (`l.s`, the field never assigned), or hands the parameter on, as a receiver or an argument,
-to another parameter that does (a fixed point over the program's calls, read off their bodies as written) - the call binds
+to another parameter that does (a fixed point over the program's calls,
+decided from their checked bodies; a call checked while a body its answer rests on is still being checked - a cycle -
+takes it on trust, and is an error once every body is checked if the answer is no) - the call binds
 the parameter's scope variable where the reference leads, as passing the reference itself would, and the handle's own
 storage is no part of the call but to be alive through it. So the grouping idiom builds where the map's lists live:
 
@@ -4503,7 +4508,8 @@ for w in words {
 ```
 
 and a copy in an inner block, or a `List` or `Map` taken by value, is pushed onto, put into and read as the one
-collection. A callee that uses the parameter any other way - keeps it in a local, stores, returns or compares it, captures
+collection. A callee that uses the parameter any other way - keeps it in a local, stores, returns or compares it, makes it an
+operand of an operator, captures
 it in a lambda, walks it with `for`, assigns its field, or hands it where the body is not known (a function value, an
 `extern`, a trait's default) - is judged as O17 judges any lent value, by where the handle's storage is. A handle is still
 not held by reference (O17a), and a task's argument still lives until its join (P2).

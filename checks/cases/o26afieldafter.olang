@@ -1,7 +1,7 @@
-# check: fail error[O20]: the container outlives what this refers to
+# check: run
 # O26a/O13a: a value built with no constructor arguments, then given this function's own text in a field, returned by
-# value - the returned local lives in the result scope, so text that dies at the return may not be put in it (it was
-# accepted, and the caller read reused arena bytes)
+# value - the text flows into the returned local, so it lives in the result scope too and the field stays valid (it was
+# accepted with the text in the dying block, then refused with O20); read back after the arena has been churned
 type Holder struct() {
     name mut String& = null
 }
@@ -11,7 +11,18 @@ fn make() Holder {
     h.name = a
     return h
 }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 4000 {
+        b := Array<I64>(5, i)
+        x := "churn " $i
+        t += b[0] + x.Len()
+    }
+    return t
+}
 fn main() ? {
     h := make()
+    assert churn() > 0
+    assert h.name == "alpha3"
     println($h.name)
 }

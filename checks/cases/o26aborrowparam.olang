@@ -1,0 +1,15 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O26a: a local holding no reference follows a flow into what is returned only - text stored into a parameter's field
+# still lives in its block, which the parameter's referent outlives
+type Holder struct() {
+    name mut String& = null
+}
+fn put(p mut Holder&) {
+    a := "alpha" $3
+    p.name = a
+}
+fn main() ? {
+    h := Holder()
+    put(h)
+    println($h.name)
+}

@@ -1,5 +1,6 @@
-# check: fail error[O20]: the container outlives what this refers to
-# O26a/T7c: the same through an inline fixed array of references - its elements would outlive the text they name
+# check: run
+# O26a/T7c: the same through an inline fixed array of references - the text flows into the returned local and lives
+# where the result goes; read back after the arena has been churned
 type Holder struct() {
     names Array<String&, 2>
 }
@@ -9,7 +10,18 @@ fn make() Holder {
     h.names[0] = a
     return h
 }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 4000 {
+        b := Array<I64>(5, i)
+        x := "churn " $i
+        t += b[0] + x.Len()
+    }
+    return t
+}
 fn main() ? {
     h := make()
+    assert churn() > 0
+    assert h.names[0] == "alpha3"
     println($h.names[0])
 }
