@@ -12805,7 +12805,11 @@ builds through it, or a reference read out of it captured by a lambda (fuzz/repr
 `OPERATION_AS`, which both `as` and a match binding's lowering read a payload through, so the copy records no home for
 its references; `valueRefsHome` likewise walks only through `OPERATION_MEMBER`. A store written directly through the
 copy happens to be built right (another path walks through it), which is why 02d's reviewer saw it only for parameters.
-*Run 2, 300 programs with `avoid`* (the generator leaving out those four known shapes): see the CLAUDE.md entry.
+*Run 2, 300 programs with `avoid`* (seeds 1000-1299, the generator leaving out those four known shapes and the
+variant): 1,708 scenarios ran, 1,892 were refused, and nothing was found - so, as far as these shapes reach, the open
+holes are the review's four and the local-enum variant. About half of every program's scenarios are refused, nearly all
+by O25 (an inner block's node stored outward, a box made here around a longer-lived node), which is the checker doing
+its job.
 
 **In `make verify`**: a checks scenario (`scopesan`) builds a small program `-b -d -s` and links its objects with a C
 driver (checks/fixtures/scopesan/drive.c, the program's `main` renamed with objcopy) that calls the runtime directly:

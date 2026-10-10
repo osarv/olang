@@ -4348,7 +4348,8 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   scenario the checker refuses is left out. 300 programs (1,754 scenarios run, 1,846 refused): 62 findings, all the
   review's open shapes (02d 40, 02 4, 02c 4) but 14 of a new variant - a LOCAL enum's payload copied by a match binding
   or `as`, then passed on, lent or captured (fuzz/repro/scopepayloadcopy.olang: `copyRefsHome` skips non-lvalues and
-  `OperandIsLvalue` excludes `OPERATION_AS`, so the copy records no home); RUN2. **Found on the corpus**: a constructor
+  `OperandIsLvalue` excludes `OPERATION_AS`, so the copy records no home); 300 more with those shapes left out (`avoid`):
+  1,708 run, 1,892 refused, no findings. **Found on the corpus**: a constructor
   growing a field's List in a nested block builds into that block (fuzz/repro/scopectornested.olang: C2g covers only the
   top level; the binding has no depth, so `SemanticBoundScopeDepth` answers the call's block). Neither fixed here
   (semantic.c is other work's), diagnoses in the reproducers. In verify: a checks scenario drives the runtime from C
