@@ -29,13 +29,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
-**Asked 2026-10-09 23:50 CEST (from usage study 4, /home/user/review/study4):**
-- QD. Should an integer literal's own type be `I64` (so `x := 0` is an I64), as float literals became `F64` (T6a)?
-  Every length, count and position is `I64`, and `x := 0; x += a.Len()` fails today. Typed targets are unaffected (a
-  literal adapts). In effect: I32. My recommendation: yes - Go's `int`, and it matches the F64 decision.
-- QE. Should a spawned function be allowed to fail (P4 forbids it)? In effect: no - a task catches inside, or reports
-  through a channel or a spawn target. My recommendation: allow it only through the task's own clauses -
-  `spawn x = try f() catch default v` - and keep P4 otherwise (an error has nowhere to go at the join).
+**Answered 2026-10-10 08:15 CEST:**
+- QD (integer literal's own type I64): YES ("1) yes"). Being built (wt-i64lit).
+- QE (spawned functions failing): the user: "We need some way to make spawn functions fail, exactly how that would be
+  done is harder since not all variables may be fine to use anymore. Solve it." -> decision 50 below, mine.
 **Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
 - QF. Long-lived, mutated structures only ever grow: what is removed from or replaced in a List/Map/struct that lives
   for the whole program (an interpreter's frames and values, an ECS world, an editor's undo stack) stays in its scope
@@ -50,6 +47,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   created at run time - `r := Region(); x := Build&r(...); ... r.Drop()` with drop refused while anything outlives
   it) - it keeps "no GC, no free" in spirit (no per-object free; a whole region at once), and is what game engines and
   compilers do with arenas. Needs design work; not built.
+  The user, 2026-10-10 08:15 CEST: "I don't necessarily understand how this would work. Wouldn't it break the compile
+  time guarantees? Maybe if we make them owned and unreferencable? Basically a "don't borrow this it's not safe" way?
+  What is your plan?" -> PLAN GIVEN, awaiting their go: `Region<T>`, contents reachable only inside `r.With(fn(w mut
+  T&) ...)` where w's scope is opaque (lambda parameter scopes already are, O4b/T22a), so nothing outside ever points
+  in; `r.Set(...)`/`r.Compact(fn(old T&) T ...)` replace the contents and free the old arena at once (Compact forbids
+  new->old pointers: unrelated scopes, so a checked hand-written copying collector); contents may reference only the
+  program scope outside; a Set/Compact on a region inside its own With (reached another way) aborts at run time, one
+  compare per Set; the handle itself is passed freely and its arena freed when the scope it was made in closes. Not
+  built until the user says go.
 
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
@@ -324,6 +330,18 @@ rule and where it is recorded; the morning report lists them all, then they move
    method. Sound because K1 already refuses every effect that would be observable if a run-time call were skipped
    (global writes, mutable-global reads), so S18c/K2 skipping stays unobservable. The purity rule was my own reasoning
    (2026-10-08), not the user's.
+50. (mine, the user's QE "solve it") a spawned call may fail: `spawn try f(a)` / `spawn x = try f(a)` - its errors leave
+   the task and reach its join; a task's own clauses (`spawn x = try f(a) catch E default v`, or a block that may not
+   leave the task) run on its thread as a spawned lambda's body would, captures copied. The join waits for every task
+   on every exit (P1b, unchanged), then fails with the error of the EARLIEST-SPAWNED failed task (deterministic; the
+   rest dropped; siblings are not cancelled - cooperative std/cancel as today). A join that can fail is written
+   `try join { } [catch ...]`, propagating or caught like any try statement. Which variables are fine afterwards
+   (the user's worry), as R9b says for a value-position try: a spawn TARGET whose task can fail into the join is left
+   unwritten, so if the join holds one, every clause on it must provably leave - code after the join runs only when
+   every task succeeded; a join whose failing tasks bind no targets may fall through, as a sequential `try f(buf) catch
+   E { }` leaves buf partly written. Partial results: a per-task default. Memory is unaffected (every task joined,
+   stand-ins/parts folded on every exit). Evaluator/-i: tasks in spawn order to completion, then the first failure.
+   Replaces P4. To be built after decision 48 merges (it rewrites the same spawn runtime).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
