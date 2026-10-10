@@ -1,0 +1,42 @@
+# check: run
+# flags: -d -s
+# S4c: a parallel assignment's temporary going into a reference is held as that reference - built where the target's
+# referent lives, as "a.next = Node(i)" alone is - so a parameter's or a capture's field takes one (it was refused with
+# O17a and O25: held as a value, it was a copy in the statement's block that the field would borrow), and at a
+# function's top level the field no longer points into the frame
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn set(a mut Node&, i I64) { a.next, a.v = Node(i), i }
+fn setBoth(a mut Node&, b mut Node&, i I64) { a.next, b.next, a.v = Node(i), Node(i + 1), i }
+fn churn() I64 {
+    s I64 = 0
+    for k in range 200 {
+        x := Node(k)
+        s += x.v
+    }
+    return s
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    kept := List<Node&>()
+    for i in range 4 {
+        if i >= 0 {
+            set(a, i * 10)
+            kept.Push(a.next)
+        }
+        churn()
+    }
+    f := fn(i I64) { a.next, a.v = Node(i), i + 1 }
+    f(77)
+    setBoth(a, b, 5)
+    churn()
+    c mut Node& = Node(0)
+    c.next, c.v = Node(9), 9
+    d := c.next
+    c.next, c.v = Node(10), 10
+    if kept[0].v != 0 or kept[3].v != 30 or a.next.v != 5 or b.next.v != 6 or a.v != 5 { fail }
+    if d.v != 9 or c.next.v != 10 or d is c.next { fail }
+}

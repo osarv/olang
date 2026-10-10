@@ -13756,3 +13756,182 @@ rendering builds new text and holds nothing of its operand; both walkers skip re
 256` to force a crash on a deeply nested file; the prelude's own test build, which every test build checks first, needs
 about 260KB of the compiler's stack under that limit - it was already at the edge - so the limit is 1MB, and the nested
 file still crashes it.
+### A scope belongs to one thread: a closure called elsewhere builds into that thread's part of it (P2, decision 48, 2026-10-10)
+
+**Why.** Round 2 left three holes in P2 that its follow-up review reproduced, all about a closure running on a thread
+other than the one that owns a scope it captured: decision 40's static refusal ("a task may not call a function value
+held in what it is handed") was evaded by a helper calling its parameter, by a lambda over the handed struct and by the
+task's own list (`h1`, `h1b`, `h1c` - wrong elements, segfaults, TSan reports); the program's stand-in, reached through
+a scope variable a task bound at run time, was captured by a closure that outlived the join block holding its header
+(`h2`); and the environment copy a task made of a closure it handed on was allocated in the closure's home - its owner's
+scope - from the task's thread (`h4`, and `h4b` through `os.RunOnStack`). Decision 47 (every scope has an owner; an
+allocation from another thread goes to a foreign part) was built as a prototype (branch `wt-rv3fix-p2b`, 55cf0d5) and
+measured: right answers everywhere, and about five instructions per allocation through a scope parameter - binarytrees
++9.7% instructions, a scope-churn loop +13.8%, timings +6-12% - over the coordinator's 2% gate. Of the three options put
+then (accept the cost; move the check from every allocation to every closure call; keep decision 40 and close its
+evasions one by one), the coordinator chose the second, refined: the check only where a closure may build into what it
+captured, and the program's scope a part per worker.
+
+**The invariant.** A scope pointer reaches another thread in exactly three ways: a task's scope arguments (each a
+stand-in of its own, made on the spawner's thread, already), a function value's captures (a lambda's environment, or the
+instance scope a `Call` adapter holds), and the program's scope. So every scope header gains an **owner** (the thread
+that builds into it itself), **parts** and a **parent**: `{ head, dtors, tail, owner, parts, parent }`, 48 bytes. The
+owner is null until the scope first reaches another thread, which means its opener - true because each of the three ways
+claims it first: a closure's creation claims each scope it captured (`__olang_scope_escape`), a stand-in's creation
+claims its parent for the spawner (`__olang_standin`), and a fold claims its destination for the joiner. The program's
+scope and every part of it have the owner `@__olang_global_scope`; a folded stand-in has `@__olang_fwd_chunk`.
+
+**The check.** A closure whose body may build into a captured scope reads it in its entry block through
+`__olang_capture_scope` (null is the program's scope, as before): `__olang_scope_mine`, inlined, compares the owner with
+the calling thread (`@__olang_self`) and returns the scope itself on a match; otherwise `__olang_scope_mine_slow` claims
+an unowned one, gives the calling thread's own part of the program's scope, follows a folded stand-in, and for another
+thread's scope goes up the parents to the scope at the top - a block or function scope, which is what closes - and
+returns it if this thread owns it, else this thread's **part** of it (`__olang_scope_part`): a malloc'd header owned by
+the thread, made the first time and pushed with a compare-and-swap onto the top scope's list, which is only ever pushed
+onto until that scope closes, so finding one takes no lock. The closing thread folds every part in first
+(`__olang_scope_fold_parts`, out of line and handed the lists as values so the header never escapes): their destructor
+lists ahead of its own, their chunks with its own, each part's header freed - then it closes as ever, so destructors all
+run before any chunk goes back. Nothing is checked per allocation.
+
+**Where a closure "may build".** Read in two halves that must both hold. Codegen marks a captured scope when the body
+resolves it (`cgResolveScope`) for anything but reading, with three exemptions: handing it to a nested closure's
+environment (that closure asks for itself), a hidden scope argument to a callee that builds nothing anywhere, and a
+parameter's override scope where the argument builds nothing (an existing reference, a borrow - `cgArgMayBuild` mirrors
+the paths `cgBoundaryValue` would take). The prologue is written after the body (`cgCapScopesRead`, into the entry
+block's stream) so the marks are known. The callee half is `SemanticMayBuild` in the checker: a walk of the checked body
+that is coarse on purpose - any allocation anywhere, a value with no storage of its own reaching a reference (a promotion,
+an adapter, a value array copied), a local O26a stores in the result scope, a constructor field C2d stores where the
+instance lands, a task, a closure made, a destructor-bearing construction, a call through a function value or to a body
+not checked - and a greatest fixed point over calls (a function whose answer rested on one still being followed is
+found again when next asked). The coordinator suggested the may-build analysis O4b already uses for by-value parameters;
+it is permission-based and unsound for this: `fn f(r N&) I64 { return g(r, N(5)) }` with `g(a N&, b N&a)` builds
+`N(5)` into a read-only reference's scope. The lambda's own walk gates the codegen marks too, and the creation's claim:
+a lambda whose body allocates nothing at all neither asks nor claims, so a Fold, Count or Map predicate that only reads
+what it captured costs nothing anywhere.
+
+**The program's scope.** Each worker makes a part of the program's scope as it starts (`__olang_worker_loop`) and keeps
+it for every task it runs; a task's scope argument bound to the program's scope gets no stand-in (`__olang_standin`
+returns null) and the trampoline reads null as the worker's part. The coordinator asked for the part to be folded into
+the program's scope before the worker reports its task done, under a lock taken for that splice only. It is not folded
+at all, which needs no lock: the program's scope never closes and runs no destructors (O1b), so a fold would change
+nothing observable, while a splice beside the main thread's own unlocked bumps of that scope's chunk list would have
+needed one. P8's edges are untouched - what a task built is ordered before its join's end by the join itself. A
+retiring worker's part stays (what it holds is live). A capture in the program's scope stays null in the environment.
+
+**What went.** Environment copies (`__olang_env_standin`, `__olang_env_home`, `__olang_env_canon`, `%olang.envmap`)
+and the three-word header every environment opened with: a task is handed a function value as it is, so `is` needs no
+canonical form, and one closure called on two tasks gives each its own part. The task's per-spawn stand-in for the
+program's scope (`progIdx`). `__olang_scope_resolve` (the fold and the destructor registration ask
+`__olang_scope_mine`). A stand-in's merge node is `{ next, stand-in }`, the destination its parent. **Decision 40**:
+`callsFnThrough`, `fnRootsIn`, `fnEdges`, `settleFnThrough` and `ERR_SPAWN_ARG_HOLDS_FUNC`; `rv5taskfunccapture` and
+`rv5taskfuncfield` are run cases now. **RunOnStack's thread is its caller**: it takes the caller's identity
+(`%olang.stackrun` carries it), so it builds into what the caller owns directly and into the caller's parts of anything
+else - the caller is parked in `pthread_join` until it ends, so the two never build at once; its fold chain went with
+the environment copies.
+
+**Found on the way: a thread's identity cannot be an address of its own.** The first version used the address of
+`@__olang_self` (its TLS address) as the thread's identity. glibc reuses a finished thread's stack - and the TLS block
+in it - for the next one, so a worker created after another retired could take the dead worker's identity: its parts
+would be fine to reuse, but a stand-in the dead worker claimed and a later join had not yet folded would then be
+allocated into, unchecked, beside the fold. Identities are numbers from a counter now (odd, so never an address).
+
+**Measured** (callgrind, built `-a x86-64-v3`; base 48f82fb): binarytrees 16 +0.05%, a scope-churn loop 0.000%, List
+push 0.000%, `sum listfold`/`arrayfold` (a lambda capturing a number) 0.000%; Fold, Count and Map over 10M elements with a
+lambda that reads through a captured reference +0.001%, +0.000%, +0.000% - no check is emitted, verified in the IR. With a
+lambda that builds a node per element in the scope it captured: Fold +7.4% and Map +6.9% - two instructions per call
+(the owner load and compare; the load cannot leave the loop, since the allocation in it may write anything). Timings,
+native, nine interleaved runs each with the machine's load at 3-4 (noise about 3-5%): binarytrees 19 -3.2%, the churn
+loop -0.7%, List push -1.7%, reading Fold -0.1%, Count +3.1%, Map -2.1%, building Fold +0.2%, Map +4.8%. An earlier version of the
+benchmark had all modes in `main`, and the reading Count measured +4.4%: register allocation over the one huge
+function, not the lambda - split into a function per mode it is 0.000%.
+
+**Tests.** `checks/cases/rv6closuretasks` (one closure building into its capture, called on two tasks while the main
+thread builds there too), `rv6closurekept` (a closure made on a task capturing its stand-in, called after the join on
+the main thread and on two tasks at once, with destructors counted), `rv6nestedjoins`, `rv6runonstack` (on the main
+thread, on tasks, and tasks spawned inside it), `rv6taskfuncbaked` (a task calling a closure held in a struct, computed
+for a global while compiling and at run time); all built `-d -s`, and run clean under `-r` by hand. The review's `h1`,
+`h1b`, `h1c`, `h2`, `h3`, `h3b`, `h4` and `h4b` give the right answers under `-b`, `-d -s` and `-r` with no report.
+
+**Found on the way, pre-existing on master: a flaky check.** `checks.olang`'s "-t goes on past a file the compiler
+crashed on" runs the compiler under `ulimit -v 800000 && ulimit -s 256`, where it cannot reserve its own 1GB stack and
+runs on the 256KB one - meant to make the deeply nested file crash. Checking the prelude a test file compiles now takes
+about that much by itself, so the two ordinary files crashed too, now and then: master's own compiler failed 2 of 6 runs
+from a fresh build directory, this branch's 3 of 6. The check gives that run 1MB, which the nesting still overflows.
+
+**Its soundness review (2026-10-10, `/home/user/review/tonight8`): the walk missed what codegen builds where an
+expression lands.** Two halves gate a closure's prologue check - codegen's mark on a captured scope, and
+`SemanticMayBuild` - and the creation's claim rests on the walk alone. The walk saw a promotion only at a boundary whose
+source is not reference-typed. But a conditional (E28), a match value (S12b) and a `catch default` (R9a) convert each value
+to the whole expression's type on a path of their own (`cgCond` and `cgMatchValue` through `cgStoreOperand`,
+`cgTryDefaultStore`), so in `x.next = x.next if i < 0 else Node(i)` the boundary saw a `Node&` reaching a `Node&`, and
+`Node(i)` alone builds nothing. The lambda built into the raw captured scope from its task: TSan 24-32 reports on each of
+the five reproducers (the conditional, the match, the default, a callee `setNext` holding the conditional - handed the
+captured scope read-only - and a `Call` method holding it, whose adapter loaded its instance scope raw), and under `-b`
+3 wrong runs and a segfault in 50 of the callee's. The same miss reached a borrowed result returning such a conditional,
+a `:=` local, an argument and a destructured result. The walk now applies `mbBoundary` to each value of a conditional and
+a match at the expression's type, and to each default at the try's (and at its result type as the caller sees it); with
+them, a struct value's fields (a constructor's assembly), an inline array's zero fill and a declaration's per-element
+fill, which `cgAggregateLiteral`, `OPERATION_ZERO` and `cgVarDecl` convert the same way. All five reproducers run clean
+under `-r` ten times each, give the right values under `-b` (the callee's fifty times) and under `-i`.
+
+**Decided (mine): the code generator holds every body to the walk, rather than the walk being keyed on landing
+records.** The review preferred keying the walk on the checker's landing record, the fact `cgWhereBuilt` reads, so the two
+could not drift. That record exists for a constructor's instance, an enum value with a payload and an array literal - not
+for a value call's result, and `a.next = a.next if c else mk(i)`, with `mk` returning a `Node`, promotes one just the
+same; keyed on landings, the walk would have missed it. What cannot drift is codegen checking its own output: every value
+it loads from a scope the body was handed (`cgResolveScope` of a parameter's, the result's or a capture's scope variable)
+is recorded, as is a constructor's `%here`, and every allocation and destructor registration (`cgNoteBuildInto`, called at
+each of the ten sites emitting `__olang_scope_alloc*`, `__olang_scope_register_dtor` or `__olang_standin`) marks the
+handed scope it went into. As the body ends (`cgCheckMayBuild`), a build into a handed scope where `SemanticMayBuild` said
+the function builds nothing - or, in a closure, into a captured scope its prologue will not ask for - is an internal
+compiler error: the closure prologues, the claims where closures are made and every scope handed raw to a callee rest on
+the walk, so a build it did not foresee would race on another thread's arena. A call hands a callee a captured scope raw
+only where the walk says the callee builds nothing, and the callee's own check proves that, so the guarantee is
+transitive. With the walk as it was, the check stops all five reproducers ("'setNext' builds into a scope it was handed
+where the checker found it builds nothing"), and on the corpus it found a sixth miss: a constructor's frame storage over
+64KB (T7c, `KfHuge`'s 160KB field) came from `cgScopeSlotAt` at the constructor's top level, which is its instance's
+scope (C2g), so a constructor the walk says builds nothing allocated into the scope its caller handed it. Frame storage is
+no building: a constructor's comes from its own scope now, closed as it returns after its instance has been copied out,
+as a frame would be.
+
+**Found on the way, pre-existing (base 48f82fb and 45eea97 alike): a value call's result promoted in a conditional was
+built where the conditional stood.** `cgArmScope` builds a promoted value at the target's scope when one is set, else
+where `cgWhereBuilt` says - the checker's landing for a constructor, the current block for anything else. A target scope
+is set only when `cgIsFreshTemp` calls the conditional fresh, which it did for text, arrays, comprehensions and
+closures, not for a value promoted into a reference. So `a.next = a.next if i < 0 else mk(i)` in a loop built the node in
+the loop body's scope and stored it in `a`: the scope sanitizer reports the read of it once the loop has ended, and the
+same held for a match value, and for either as an argument, a borrowed result, a `:=` local or in a lambda (a `catch
+default` was built where the call's result was bound already) - found by this fix's own fixture under `-d -s`. Such a value is fresh now (`cgValueIsFresh`), so the conditional is built with its target's scope.
+
+**Found on the way, pre-existing: one default operand served every call (D8a, `repro/02`).** `defaultArgFor` put the same
+operand in every call that omitted the argument; only a plain literal was copied. Landing writes on the operand
+(`ctorLanded`, `landedTo`, a call's scope bindings), so `n Node&r = Node(7)` landed at the first call, in a scope variable
+of that caller, and a call in another function resolved that variable in its own frame - not there, so
+`cgLookupVarAddr` mangled it as a global with no module and the compiler crashed; a variable of the same name would have
+resolved, silently, to the wrong scope. A default that is no plain literal is now checked once (`paramDefaultOp`, its
+errors and its K1 judgement reported there) and built again for each call from its syntax in the declaring module, muted
+- the same expression in the same context - so each call's landing is its own.
+
+**Found on the way, pre-existing: a parallel assignment held a temporary for a reference target as a value
+(S4c, `repro/03`).** `a.next, a.v = Node(i), i` holds `Node(i)` first, so that every value is evaluated before any target
+is written - in a hidden value local, which the target then borrowed. On a parameter's or a capture's field that was
+refused: the held value's references were landed where `a` lives and its storage was the statement's block (O17a), and
+the borrow narrowed `a.next` to that block (O25). At a function's top level, where the two coincide, it compiled, and
+`a.next` pointed at the hidden local in the stack frame. A temporary going into a reference target is now held as that
+reference (`holdForRefTarget`), typed with the target's exact referent scope as `x Node&a` would be, so it is built there
+when evaluated - as the single assignment builds it - and the assignment only repoints. An existing value (a borrow), a
+target whose referent is in the program's scope or a scope not known here keeps the value hold.
+
+**Not done: a per-thread cache of a foreign thread's part.** The review measured a closure building on a task at
+113-118 ms against 73-83 ms on its owner's thread for 5M calls, the parts list scanned each time. A one-entry cache keyed
+on the scope's address is unsound as it stands: a closed scope's header is reused (a block's on every iteration, a
+stand-in's in its arena), and a hit would hand out a freed part. Sound, it needs an epoch bumped at every fold of a scope
+with parts, read on every hit; for a scan that is one or two loads unless many threads built there, it was left out.
+
+**Tests.** `checks/fixtures/capscope` (scenario `capscope`): every shape above on two tasks while the main thread builds
+into the same scope, its output checked built, interpreted (`-D N=200 -i`) and under `-d -s`, and its IR read - every
+lambda's entry asks for its captured scope (`__olang_capture_scope`), the `Call` adapter for its instance's
+(`__olang_scope_mine`). The code generator's check makes the build itself fail if the walk misses one again. Cases
+`rv8defaultshared` (defaults used by callers in several functions, a lambda and nested blocks, read back after a churn)
+and `rv8parallelparam` (a parameter's, a capture's and two parameters' fields assigned in parallel, and a top-level one
+that no longer points into the frame), both `-d -s`.

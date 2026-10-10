@@ -1,0 +1,45 @@
+# check: run
+# flags: -d -s
+# D8a: a default that is no plain literal is built again for each call, so where a temporary in it lands is that call's -
+# one operand shared by every call kept the first call's landing ("n Node&r = Node(7)" built in a scope variable of the
+# first caller's frame), and a call in another function crashed the code generator
+type Node struct(v I64) {
+    v
+}
+type Box struct(n Node&, w I64) {
+    n
+    w
+}
+fn pickd(r Node&, n Node&r = Node(7)) Node&r { return n }
+fn boxd(r Node&, b Box&r = Box(Node(5), 2)) Node&r { return b.n }
+fn listd(r Node&, xs Array<I64>&r = I64[3, 4]) I64 { return xs[1] }
+fn one(a Node&) I64 { return pickd(a).v + boxd(a).v + listd(a) }
+fn deep(b Node&, k I64) I64 {
+    s I64 = 0
+    if k > 0 {
+        for i in range k { s += pickd(b).v + boxd(b).v }
+    }
+    return s
+}
+fn churn() I64 {
+    s I64 = 0
+    for k in range 200 {
+        x := Node(k)
+        s += x.v
+    }
+    return s
+}
+fn main() ? {
+    a Node& = Node(0)
+    x := pickd(a)
+    y := boxd(a)
+    kept := List<Node&>()
+    for i in range 3 {
+        if i >= 0 { kept.Push(pickd(a)) }
+        kept.Push(boxd(a))
+    }
+    f := fn(k I64) I64 { return pickd(a).v + k }
+    churn()
+    if one(a) != 16 or deep(a, 2) != 24 or f(1) != 8 or x.v != 7 or y.v != 5 { fail }
+    if kept[4].v != 7 or kept[5].v != 5 or listd(a) != 4 { fail }
+}

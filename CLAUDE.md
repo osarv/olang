@@ -764,7 +764,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   never a call: it is evaluated on behalf of callers the declaration cannot see, so it must have a value
   and no other behaviour - no allocation, no scope to name, nothing that can fail. That restriction is
   also what lets a single checked operand, built once in the declaring module's own context, serve every
-  call site. **Named arguments were considered and rejected**, and `default` is what replaced them: they
+  call site (**no longer, 2026-10-10**: a default that is no plain literal is checked once and built again for each call,
+  since where its temporaries land is that call's - one shared operand kept the first call's landing, and a second
+  caller crashed the code generator; HISTORY.md, decision 48's review). **Named arguments were considered and rejected**, and `default` is what replaced them: they
   would make every parameter name of every exported function part of its API permanently (renaming one
   becomes a breaking change), where parameter names are currently internal. The readability they buy is
   better served here by distinct types, which the compiler verifies, than by argument names, which it
@@ -4437,22 +4439,23 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   once folded, **forwards** to it (a sentinel chunk; the allocator's slow path follows it - no fast-path cost); an
   environment copy is made where the closure lives (its first captured scope), once per spawn, and remembers its
   original, so `is`/`==` canonicalize and a function value keeps its identity; a capture in the program's scope is held
-  as null and read as the calling thread's program scope (or its task stand-in). **P2, older**: a closure a task makes
-  captured the task's stand-in and was kept past the join - closed by the same forwarding. **Decision 40 (as asked,
-  narrowed by what can be seen)**: a task, or a spawned lambda, **calling** a function value held in what it is handed
-  (a field, element or payload, through references too) is refused - read off the bodies (`callsFnThrough`, a fixed point
-  over calls once every body is checked); one only carried, stored or handed on is allowed. Read-only captures cannot be
-  allowed separately: a function type does not say what its value captured, and a read-only capture can still build
-  through a borrowed result. **S13b (new)**: a match binding lives in its clause's block, not the matching block.
-  **C2g/C2d (older)**: a constructor keeping a borrow of its by-value parameter in a reference field kept the dying
-  frame's slot - a constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with
-  "outside the body", depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the
-  instance. **O25h (older)**: a member, element or `as` of a conditional or match copies the references the way the
-  conditional does. **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling
-  a capturing lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee
-  that can build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a
-  stand-in header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task,
-  not borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
+  as null and read as the calling thread's program scope (or its task stand-in; environment copies removed by decision
+  48). **P2, older**: a closure a task makes captured the task's stand-in and was kept past the join - closed by the
+  same forwarding. **Decision 40 (as asked, narrowed by what can be seen; removed by decision 48, below)**: a task, or a
+  spawned lambda, **calling** a function value held in what it is handed (a field, element or payload, through
+  references too) is refused - read off the bodies (`callsFnThrough`, a fixed point over calls once every body is
+  checked); one only carried, stored or handed on is allowed. Read-only captures cannot be allowed separately: a
+  function type does not say what its value captured, and a read-only capture can still build through a borrowed result.
+  **S13b (new)**: a match binding lives in its clause's block, not the matching block. **C2g/C2d (older)**: a
+  constructor keeping a borrow of its by-value parameter in a reference field kept the dying frame's slot - a
+  constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with "outside the body",
+  depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the instance. **O25h
+  (older)**: a member, element or `as` of a conditional or match copies the references the way the conditional does.
+  **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling a capturing
+  lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee that can
+  build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a stand-in
+  header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task, not
+  borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
   (new): a fold into a stand-in folded already spliced into the forwarder, which no one closes - destructors lost; the
   merge now resolves its destination. And an over-rejection: a `:=` field copying a by-value parameter took the
   parameter's depth (2), so `keep P& = q` was O10; a field's local is the top level whatever it copies.
@@ -4575,6 +4578,54 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   types. **Found on the way, pre-existing**: O26a read a rendering's operand as a flow of what it renders, so `x5 = x3;
   return $(x5)` was O25's error (the fuzzer, master too) - a rendering holds nothing of what it renders; and the `tcrash`
   check's 256KB stack was already at the edge of what the prelude's test build needs (1MB now).
+- **A scope belongs to one thread; a closure called elsewhere builds into that thread's part of it (P2, decision 48,
+  2026-10-10, the coordinator's choice of option 2 with its refinement; details mine).** Decision 40's static refusal was
+  evadable (a helper, a lambda, the task's own list - `h1`, `h1b`, `h1c`) and decision 47's per-allocation owner check
+  cost ~10% on allocation-heavy code (prototype kept on `wt-rv3fix-p2b`). A scope reaches another thread only as a task's
+  scope argument (a stand-in, as before), through a function value's captures, or as the program's scope - so the check
+  sits in the prologue of a closure that may build into what it captured: every scope header has an owner (a thread
+  number; null until it first reaches another thread, i.e. its opener's), parts and a parent, and
+  `__olang_capture_scope` gives the scope itself on its owner's thread, else the calling thread's **part** of the scope at
+  the top of what it stands in for - made once per thread, linked lock-free, folded in as that scope closes (its
+  destructors ahead of the scope's own, its chunks with it). A Call adapter does the same for its instance's scope.
+  **"May build"** is codegen's mark on a captured scope resolved for anything but reading (not a nested closure's
+  capture, not a hidden argument to a callee building nothing, not a parameter scope where the argument builds nothing)
+  AND the checker's `SemanticMayBuild` - a coarse body walk (any allocation anywhere, a promotion, an O26a or C2d slot, a
+  task, a closure made, a call through a function value or to an unchecked body), a greatest fixed point over calls; the
+  permission-based may-build O4b uses is unsound for this (`g(r, N(5))` builds into a read-only `r`'s scope). Reading
+  lambdas (Fold, Count, Map predicates) emit nothing - 0.000% instructions; a lambda building a node per element pays two
+  instructions a call (+7%); binarytrees, a churn loop, List push within +0.05%. **Program scope: each worker has a part
+  of its own, made when it starts and kept for every task - never folded** (a deviation from "folded before the worker
+  reports done, under a lock": the program's scope never closes, so a fold changes nothing, and not folding needs no lock).
+  **Gone**: environment copies and the env header (a task is handed a function value as it is), the per-spawn program
+  stand-in, **decision 40** (`callsFnThrough`, `ERR_SPAWN_ARG_HOLDS_FUNC` - its two cases now run). **RunOnStack's thread is
+  its caller** (takes its identity; the caller waits). **Found on the way**: a thread identity that is an address of its
+  own (TLS) is reused by the next thread on the same stack, which would take a dead worker's unfolded stand-in claim -
+  identities are numbers from a counter.
+  **Its soundness review (tonight8) found the walk missing what codegen builds where an expression lands, fixed.** A
+  conditional's or a match's value, or a `catch default`, is converted to the whole expression's type on its own path
+  (`cgCond`, `cgMatchValue`, `cgTryDefaultStore`), so a temporary promoted there is built where the expression lands - the
+  captured scope - while the expression itself is reference-typed and the walk saw no promotion: `x.next = x.next if c else
+  Node(i)` in a closure (or in a callee, a `Call` method, a borrowed result, a `:=` local, an argument, a destructured
+  result) bumped the owner's arena from a task (TSan 24-32 reports each, wrong values and segfaults under `-b`). The walk
+  now applies its boundary test to each value at the expression's type, and to a struct value's fields, an inline
+  array's zero fill and a declaration's per-element fill. **Decided (mine): the code generator holds every body to the
+  walk.** Every value it loads from a scope the body was handed - a parameter's, the result's, a capture's, a
+  constructor's instance - is recorded, and so is each allocation and destructor registration into one; as the body
+  ends, one into a scope the walk said it never builds in (or, for a closure, into a captured scope its prologue does
+  not ask for) is an internal compiler error (`cgCheckMayBuild`). Keying the walk on the checker's landing records, the
+  review's preferred route, would have missed a value call's result (only constructor calls are landed); a check of
+  codegen's own output cannot drift from it. On the corpus it found one more: a constructor's storage over 64KB (T7c)
+  came from its instance's scope - it is its own frame's now. **Found on the way, pre-existing**: a value call's result
+  as a conditional's or a match's value promoted into its reference type was built in the block the
+  expression stood in, not where it landed - a use-after-free, single-threaded too (`a.next = a.next if c else mk(i)`,
+  the scope sanitizer's report; codegen now builds it at the target as it does fresh text); a non-literal parameter
+  default was one operand shared by every call, landed by the first, so a second caller in another function crashed
+  codegen (D8a: built again for each call); and a parallel assignment's temporary going into a reference was held as a
+  value copy the target then borrowed - refused on a parameter's or a capture's field (O17a, O25), a pointer into the
+  frame at a function's top level (S4c: it is held as that reference, built where the target's referent lives). Not
+  done: a per-thread cache of a foreign thread's part - keyed on a scope's address it needs an epoch bumped at every
+  fold to be sound (headers are reused), to save only a scan of the parts list.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

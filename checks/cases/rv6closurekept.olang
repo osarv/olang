@@ -1,0 +1,60 @@
+# check: run
+# flags: -d -s
+# P2 (decision 48): a closure made on a task, capturing the stand-in it was handed, kept past the join, then called on the
+# main thread and on two tasks at once - each thread builds into its own part of the scope the stand-in was folded into,
+# and the destructors of what they built run as that scope closes
+type R struct(id I64) {
+    id
+} destruct {
+    Dtors = Dtors + id
+}
+Dtors mut I64 = 0
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn keepR(r Node&, i I64) R&r { return R(i) }
+fn make(n Node&, fns mut List<fn(i I64) I64>&) {
+    fns.Push(fn(i I64) I64 {
+        m := mk(n, n.v + i)
+        if i % 1000 == 0 { keepR(n, 1) }
+        return m.v
+    })
+}
+fn calls(f fn(i I64) I64, base I64) I64 {
+    s I64 = 0
+    for i in range 20000 { s += f(base + i) }
+    return s
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn run() I64 {
+    n Node& = Node(1)
+    fns mut List<fn(i I64) I64>& = List<fn(i I64) I64>()
+    join {
+        spawn make(n, fns)
+    }
+    churn()
+    f := fns[0]
+    s1, s2, s3 I64
+    join {
+        spawn s1 = calls(f, 0)
+        spawn s2 = calls(f, 100000)
+        s3 = calls(f, 200000)
+    }
+    churn()
+    return s1 + s2 + s3
+}
+fn main() ? {
+    want I64 = 0
+    for i in range 20000 { want += 3 * (1 + i) + 300000 }
+    if run() != want { fail }
+    if Dtors != 60 { fail }
+}

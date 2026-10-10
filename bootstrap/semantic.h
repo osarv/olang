@@ -341,7 +341,6 @@ struct var {
     //(roNeedsWritable). Its declaration cannot say "mut" for some instantiations and not others
     bool roByArg;
     bool roToResult;
-    bool callsFnThrough; //P2: on a parameter (or a lambda's capture): its body calls a function value reached through it
     struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
     //O17: on a function, for each of its scope variables, what its body does with the region the variable names - stores
     //into a slot reached through it something not read out of that region (built, or handed in), itself or through a
@@ -432,6 +431,8 @@ struct var {
                               //callee's body first (ensureBodyChecked) and only a cycle sees a partial set
     bool bodyHadErrors;       //K3: checking this function's body reported errors, so its body is not the
                               //program's and must never be evaluated
+    char mayBuild;            //P2: SemanticMayBuild's answer - 0 not known, 1 being found, 2 no, 3 yes
+    int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
                               //value, which codegen writes out as the global's data instead of setting it
                               //at startup. NULL when it could not be.
@@ -913,6 +914,9 @@ int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15)
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticParamTransient(struct var* func, int j);
+//P2: whether func's body may build into a scope it is handed - allocate anything, or register a destructor - read off
+//the checked body, conservatively; codegen asks it of a callee a captured scope is passed to (cgCapScopesRead)
+bool SemanticMayBuild(struct var* func);
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
 bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv);
 //M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit

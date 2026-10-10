@@ -1,0 +1,45 @@
+# check: run
+# flags: -d -s
+# P2 (decision 48): os.RunOnStack - its thread builds as its caller would, the caller waiting: on the main thread into the
+# main thread's scope, on a task into that task's part of it, beside the main thread building there; and tasks spawned
+# from inside it
+import "std/os"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn relay(f fn(i I64) I64, k I64) I64 {
+    t mut List<I64>& = List<I64>()
+    for j in range k {
+        os.RunOnStack(1 << 16, fn() { t.Push(f(j)) })
+    }
+    s I64 = 0
+    for x in t { s += x }
+    return s
+}
+fn main() ? {
+    root Node& = Node(0)
+    f := fn(i I64) I64 {
+        m := mk(root, i)
+        return m.v
+    }
+    got mut List<I64>& = List<I64>()
+    os.RunOnStack(1 << 20, fn() {
+        for i in range 1000 { got.Push(f(i)) }
+        a, b I64
+        join {
+            spawn a = relay(f, 200)
+            spawn b = relay(f, 300)
+        }
+        got.Push(a + b)
+    })
+    s1 I64
+    z I64 = 0
+    join {
+        spawn s1 = relay(f, 500)
+        for i in range 50000 { z += f(i) }
+    }
+    if got.Len() != 1001 or got[999] != 999 or got[1000] != 19900 + 44850 { fail }
+    if s1 != 124750 or z != 1249975000 { fail }
+}
