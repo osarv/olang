@@ -12582,6 +12582,7 @@ struct operand* buildText(struct checkCtx* ctx, struct syntax* s) {
 
 static void reportUnknownMethod(struct operand* recv, struct token name);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok);
+static struct list placesWrittenOver(struct list targets);
 struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     int n = s->parts.len;
     struct operand* result = buildExprFromSyntax(ctx, partSntx(s, n -1)); //last part is EXPR_POSTFIX
@@ -12788,9 +12789,14 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
     one.str = StrFromCStr("1");
     //S4: the place is evaluated once - the read the new value is made from is the place the assignment computes
     struct operand* cur = placeRead(target);
+    struct list prevPlaces = ctx->assignPlaces; //S4d: as a compound assignment's (buildAssignCore)
+    struct list place = ListInit(sizeof(struct operand*));
+    ListAdd(&place, &target);
+    ctx->assignPlaces = placesWrittenOver(place);
     struct operand* next = own ? operatorCall(ctx, cur, NULL, own, tok)
                          : arith ? operatorCall(ctx, cur, OperandIntLiteral(one), arith, tok)
                                  : OperandBinary(cur, OperandIntLiteral(one), inc ? OPERATION_ADD : OPERATION_SUB, tok);
+    ctx->assignPlaces = prevPlaces;
     struct token eq = tok;
     eq.type = TOK_ASS;
     eq.str = StrFromCStr("=");
@@ -16495,13 +16501,11 @@ struct statement buildAssignStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->checkingTry = prevChecking;
     struct syntax* opNode = firstPartOfType(s, SNTX_ASSIGN_OP);
     struct token opTok = partAt(opNode, 0)->tok;
-    //G10c: a plain "=" expects the target's type
+    //G10c: a plain "=" expects the target's type. S4d: a compound one ("x += v", "x = x + v") writes its target over too
     struct list prevPlaces = ctx->assignPlaces;
-    if (opTok.type == TOK_ASS) {
-        struct list one = ListInit(sizeof(struct operand*));
-        ListAdd(&one, &target);
-        ctx->assignPlaces = placesWrittenOver(one);
-    }
+    struct list one = ListInit(sizeof(struct operand*));
+    ListAdd(&one, &target);
+    ctx->assignPlaces = placesWrittenOver(one);
     struct operand* rhs = buildExpecting(ctx, firstPartOfType(s, SNTX_EXPR), opTok.type == TOK_ASS ? &target->type : NULL);
     ctx->assignPlaces = prevPlaces;
     return buildAssignCore(ctx, target, rhs, opTok);
@@ -16675,7 +16679,14 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         struct operand* cur = placeRead(target);
         struct token binTok = opTok;
         binTok.type = compoundBinTokType(compoundOp);
+        //S4d: an operator method keeping its receiver keeps the place's old value, never the place written over
+        struct list prevPlaces = ctx->assignPlaces;
+        struct list one = ListInit(sizeof(struct operand*));
+        ListAdd(&one, &target);
+        ctx->assignPlaces = placesWrittenOver(one);
         value = binTok.type != TOK_NONE ? buildBinaryOp(ctx, cur, rhs, binTok, false) : OperandBinary(cur, rhs, compoundOp, opTok);
+        ctx->assignPlaces = prevPlaces;
+        landAtTarget(ctx, target, value); //O18a: an operator method's result lands where "x = x + v"'s would
         //"b += x" is "b = b + x", so the sum must fit b as an assignment's value does - with "x" an I32 and "b" a U8
         //the sum is an I32 (T6b) and does not
         reportTypeFit(OperandFitsType(ctx->func, value, target->type), opTok, value, target->type);
