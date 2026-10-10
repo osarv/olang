@@ -20846,6 +20846,27 @@ bool landAtTargets(struct checkCtx* ctx, struct operand* call, struct list* targ
 
 //P2: whether a scope lasts until the join that ctx's spawn belongs to - a scope variable or the program's does (each
 //outlives the body), a block only when it is the join block or one around it
+//P2: whether a value of t holds a function value - in a field, an element, a payload, through references as well
+static bool typeReachesFuncValue(struct type t, struct list* seen, int depth) {
+    if (depth > 32 || t.unknown) return false;
+    if (t.bType == BASETYPE_FUNC) return true;
+    if (t.bType == BASETYPE_ARRAY) return t.arrElem && typeReachesFuncValue(*t.arrElem, seen, depth + 1);
+    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE) return false;
+    struct type key = t;
+    key.structMAlloc = false;
+    key.refMut = false;
+    key.scopeParam = NULL;
+    key.scopeDepth = 0;
+    for (int i = 0; i < seen->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(seen, i), key)) return false;
+    ListAdd(seen, &key);
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        if (t.bType == BASETYPE_STRUCT) { if (typeReachesFuncValue(f->type, seen, depth + 1)) return true; }
+        else for (int k = 0; k < f->type.vars.len; k++)
+            if (typeReachesFuncValue(((struct var*)ListGetIdx(&f->type.vars, k))->type, seen, depth + 1)) return true;
+    }
+    return false;
+}
 static bool lastsUntilJoin(struct checkCtx* ctx, struct var* v, int d, bool unnamed) {
     if (unnamed || (v && v != SCOPE_AMBIGUOUS)) return true;
     if (v == SCOPE_AMBIGUOUS) return false;
@@ -21004,6 +21025,24 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             continue;
         }
         if (!argBindingsLastUntilJoin(ctx, arg)) Err(arg->tok, ERR_SPAWN_ARG_HOLDS_SHORT);
+        //P2: a function value handed to a task as the argument itself is stood in for (its environment copied, each
+        //scope it captured given the task's own stand-in); one reached through the argument - a field, an element, a
+        //payload, through references too - is called on the task's thread with the scopes it captured as they are, and
+        //would build into them beside the thread that owns them
+        struct list seenT = ListInit(sizeof(struct type));
+        if (arg->type.bType != BASETYPE_FUNC && typeReachesFuncValue(arg->type, &seenT, 0)) Err(arg->tok, ERR_SPAWN_ARG_HOLDS_FUNC);
+        ListDestroy(seenT);
+    }
+    //...as is a spawned lambda's capture holding one (a function value captured as itself is stood in, as an argument is)
+    if (lambdaTask && lam && lam->readVar) {
+        struct list caps = lam->readVar->lambdaCaptures;
+        for (int i = 0; i < caps.len; i++) {
+            struct var* in = ((struct lambdaCapture*)ListGetIdx(&caps, i))->inner;
+            struct list seenT = ListInit(sizeof(struct type));
+            bool holds = in->type.bType != BASETYPE_FUNC && typeReachesFuncValue(in->type, &seenT, 0);
+            ListDestroy(seenT);
+            if (holds) { Err(lam->tok, ERR_SPAWN_ARG_HOLDS_FUNC); break; }
+        }
     }
     //...and so has the function value it calls: a lambda's closure lives where its local does (D16d) - and a spawned
     //lambda's, built to last until the join, where what it captured does
