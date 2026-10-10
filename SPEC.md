@@ -918,7 +918,9 @@ its parts. A fresh value - a call's result, a literal, an instance - is writable
 below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
 written, so it is never a read-only copy (`Copy mut List<I32> = G` is an error; an immutable global may hold one). A
 **slice** or a **view** (`as Array<T, N>&`) of a read-only copy, and a loop's walk over one, read the copy: what they
-give is read-only, as indexing it is.
+give is read-only, as indexing it is. So does a walk over a reference a read-only copy holds (`for d in mods[i].deps`,
+`mods` read-only): the loop borrows it read-only, and a collection whose walk writes - a `mut` `At`, `Len`, `RunFrom` or
+`Iter` - is refused at that call.
 
 A **by-value parameter** is the callee's own copy (D9), and whether that copy must be writable is read off the
 callee's **body**: a parameter whose copy the body writes through, lends writably or stores - or passes to a callee
@@ -2648,7 +2650,8 @@ O18) to where that variable lives (O4a); `return` binds it to the calling functi
 holding a global's referent — is a compile-time error here: a result reaches that scope by being put there,
 assigning it to a global or into something reached from one (O1b), not by a scope argument. So is a variable whose
 scope is not known (O12). On a constructor call it is where
-the instance lands (C2c). Without one, the result scope follows the result (O18a). A call whose several results are
+the instance lands (C2c), and what the instance holds is judged there (C2d) - `local := Env&c(c.env)` as `local mut
+Env&c = Env(c.env)` is. Without one, the result scope follows the result (O18a). A call whose several results are
 destructured (S4b) is the same: `rec, next := mk2&rows(k)` builds the results where `rows` lives, and what each target
 holds lives there, so `rows.Push(rec)` keeps it.
 
@@ -4465,8 +4468,12 @@ here, its zero value (D13c), a result destructured into it (S4b) - when it holds
 function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`). A
 local holding references is also returned when a returned value reads it where what is built from it can be what is
 handed back - as an argument or a receiver (`return Node.Many(l.ToArray())`, `return wrap(l)`), but not through a
-method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new:
-what is built from it holds what it holds, which must live where the result does. Where the result is put is the
+method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new,
+nor as an argument of a call - of a function, of a method of a local, a parameter or a global, or of an imported
+module's function - that can keep it nowhere: not in its result, nor in its receiver or another argument, which its
+body's obligations (O10b) say (`i := g.infos[k]; return View(g.mem, g.count(i))` leaves the copy `i` in the frame):
+what is built from it holds what it holds, which must live where the result does. A local that can hold nothing and
+whose storage nothing can name - a number, a `Bool` - is never moved, whatever the result is. Where the result is put is the
 result scope for a built result, and for a borrowed one (`T&p`, `p` a reference parameter, O14) the scope `p`'s
 referent lives in, which the function builds into (O4b).
 
@@ -4701,7 +4708,14 @@ with `t` in a loop's block and `bs` outside it the call is an error, as is `rows
 - never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
 element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
 result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
-`p := pair(t); bs.Push(p.a)`, an error on the same terms. A statement
+`p := pair(t); bs.Push(p.a)`, an error on the same terms; a reference read out of one and passed on (`sum(g.params().Data)`)
+has the scope its result landed in, as `p := g.params(); sum(p.Data)` gives it. A `:=` declared from a field, an element, a
+slice or a payload of a call's result (`t := p.next().text`, `l := args[0] as V.Items`, `x := st.get(i).inner`) lands the
+call the same way, and the local has its scope - or, for a value, its references there - as through a local named for
+the result. A call whose result nothing puts anywhere - read by an operator, a rendering or a condition (`$mods[i].name`)
+- is in the block it is written in, unless its callee requires its result scope to **outlive** one an argument gives
+(exactly where the copy of an element holding writable references is, O25g): it then lands by its obligations as above,
+the one place satisfying them. A statement
 nested in another - in a catch clause's block, a
 lambda's body - discharges its own obligations at its end and leaves the enclosing statement's to its end, so
 `n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.

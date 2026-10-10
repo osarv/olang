@@ -1,0 +1,12 @@
+# check: fail error: S has no member 'flag'
+# also: compilation failed with 1 error
+# B11: an unknown member recovers as the unknown stand-in, which fits anything - it recovered as an I32, and the
+# condition said "a condition is a Bool, found I32" at the same place (oann's repro/membercascade)
+type S struct(flag Bool = false) {
+    n I64 = 0
+}
+
+fn main() ? {
+    s := S()
+    if s.flag { println("yes") }
+}

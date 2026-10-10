@@ -4722,15 +4722,8 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(prev, ERR_KEYWORD_AS_NAME, prev);
         return true;
     }
-    //"fn join(", "x I32, done I32" - a keyword where a name was wanted
-    if (isKeywordTok(found) && found.type != TOK_MUT && expected && (!strcmp(expected, TokenStrFromType(TOK_IDEN))
-                                            || (TokenAfter(found).lineNr == found.lineNr
-                                                && (TokenAfter(found).type == TOK_IDEN || TokenAfter(found).type == TOK_MUT
-                                                    || TokenAfter(found).type == TOK_ASS_INFER)))) {
-        ErrSyntax(found, ERR_KEYWORD_AS_NAME, found);
-        return true;
-    }
-    //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
+    //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block (before L9's keyword-as-name:
+    //"case X => return f(x)" is the same mistake as "=> return 1", not a name)
     if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_ABORT || found.type == TOK_RET
             || found.type == TOK_FAIL || found.type == TOK_DONE || found.type == TOK_BREAK || found.type == TOK_CONTINUE
             || found.type == TOK_ERROR)) {
@@ -4743,6 +4736,14 @@ static bool syntaxHint(struct token found, char* expected) {
         while (n > 0 && (what[n - 1] == ' ' || what[n - 1] == '\t')) n--;
         what[n] = '\0';
         ErrSyntax(found, ERR_ARROW_LEAVES, found, StrFromCStr(strdup(what)));
+        return true;
+    }
+    //"fn join(", "x I32, done I32" - a keyword where a name was wanted
+    if (isKeywordTok(found) && found.type != TOK_MUT && expected && (!strcmp(expected, TokenStrFromType(TOK_IDEN))
+                                            || (TokenAfter(found).lineNr == found.lineNr
+                                                && (TokenAfter(found).type == TOK_IDEN || TokenAfter(found).type == TOK_MUT
+                                                    || TokenAfter(found).type == TOK_ASS_INFER)))) {
+        ErrSyntax(found, ERR_KEYWORD_AS_NAME, found);
         return true;
     }
     //L18: "s := a + b" then "    + c" - a line beginning with an operator that only joins two values; the end of the

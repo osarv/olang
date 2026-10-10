@@ -13679,3 +13679,84 @@ only a callee writing through such a field into storage the `Str` itself made, w
 `checks/cases/s6strref` pins the reference and temporary shapes. SPEC's E11c now says what a `Str` makes for itself - an
 iterator or cursor included - it may change, through a callee too, and that what such a value's references reach (a
 `&p` field's included) is not its own. The evaluator needed nothing: E11c is a check, and `Str`s it accepts are K1-pure.
+
+### oann's three and study 6's checker findings: a view's function keeps nothing it cannot hand back, a field of a call's result passed on, one error for an unknown member (O26a, O18c, O20, O4b, C2d/E25, T25c, O25, S12b, T17c, B11, 2026-10-10)
+
+From oann's `repro/resultgrowth.olang`, `repro/fieldofresult.olang` and `repro/membercascade.olang`, and study 6's r04,
+r05, r07 and r10-r15 (`/home/user/review/study6`). Every relaxation below comes with a must-fail case for the shape it
+must not reach, and the corpus tests read their values back after an arena churn; `-b -s` and `-t -d -s` run clean.
+
+**resultgrowth, the serious one: unbounded memory, at the cause.** `fn (g Graph&) View(k I64) Matrix<F32> { i :=
+g.infos[k]; return linalg.View(g.mem, g.count(i)) }` kept every call's copy `i` in the graph's scope - oann's trainer
+grew by an `Info` per view per step. O26a moves a local the returned value reads where what is built from it can be
+handed back, and its token-level reading (`callAround`) gave up on every call written `x.m(` or `alias.f(`: such a call
+was taken to keep all its arguments, so `i` "flowed into" the result through `g.count(i)` - a method returning an `I64`.
+Two causes, two fixes. (1) `callAround` now resolves the callee of a dotted call (`calleeThroughDot`): a method of a
+local, a parameter or a global, reached through any chain of members and indices whose type is known here
+(`g.infos[k].size(i)`), or a function or constructor of an imported module (`linalg.View`); a receiver the token reading
+cannot type (a call's result, an operator's `At`) still keeps everything. And a dotted call lets an argument go only
+when the callee can keep it **nowhere** (`calleeMayHoldArg`): not in its result (`calleeMayKeepArg`, as before), nor in
+its receiver or another argument, which its checked body's obligations say - a parameter whose scope must outlive
+another's, or one an exact obligation ties. This mattered: a first version asking only about the result let
+`s.longest.Push(head)` and `s.counts.Update(...)` go (they return nothing), and the corpus's O10c tests caught it - the
+argument went into the receiver, which flows where its root does. A generic, unchecked or erroneous callee keeps
+everything. (2) `localLivesInResult` moved a number or a `Bool` whenever the result was a built reference
+(`refResult`): such a local can hold nothing and nothing can name its storage, so it is never moved now, whatever the
+result is (study 6's r02, `RunFrom`'s position counters in a `List` walk's borrowed result - 24 bytes a chunk a walk).
+Measured: resultgrowth's 4M views grew 64 MB; now 1620 kB resident before and 1692 kB after; the r02 walk allocates
+nothing. Pinned by a checks scenario rather than a timing: `checks/fixtures/landing/resultviews.olang` runs
+each shape (a method, another module's function, r02's window) four million times under `ulimit -v 50000`, as
+`numberflow` does.
+
+**fieldofresult: a regression, and why.** `sum(g.params().Data)`, `g G&` a parameter, became O10d after study 5's batch
+(c3994dd, ceba9cd) made a projection passed on land its call by the callee's obligations - correct - after which
+`OperandFitsType`'s O20 walk read the reference `Data` through its container, the call's value result, whose slot tag is
+empty and was taken for this function's own scope, so the parameter `sum` needed was "a block that closes first". Now a
+reference read out of a call's value result leads where that result landed (`landedCallRefsScope`, the same answer
+`RefExactScope` already gave), before the value-home branch. Sound: it is exactly what `p := g.params(); sum(p.Data)`
+gives, and that is what the call is lowered as. `o20fieldofresultstored` (the reference kept beside something longer)
+and `p2fieldofresult` (a task's argument) pin that it relaxes nothing else.
+
+**membercascade.** `OperandMember` recovered an unknown member as an `I32`, so `if s.flag {` said "S has no member
+'flag'" and then "a condition is a Bool, found I32" at the same place. It recovers as the unknown stand-in, which fits
+anything (B11's one error per cause), as an unknown name already did. This also corrects CLAUDE.md's M6a entry, which
+said the `int32` recovery was right.
+
+**Study 6.** **r04** (a `Map<String&, Value>` whose `Value` holds a Map of itself, the interpreter's environment, refused
+with a C2d note inside the prelude): an instantiation's constructor whose by-value parameter holds references only once
+the type it names is finished (`mapSlot<String&, Value>`'s value) got no O4b scope variable - its snapshot had none to
+see - so what it held was read as living in the constructor's frame. `refreshInstantiationSnapshots` now assigns the
+constructor's implicit parameter scopes after the refresh. `o4bmapvalueblock` pins that a Map value holding a loop
+body's Map is still refused. **r05** (a field or payload read straight off a call's result: `t := p.next().text`, `l :=
+args[0] as Value.Items`, `x := st.get(i).inner`, `$mods[i].name`, `for d in g.mods[i].deps` - nine hits in three
+programs): a `:=` declared from a field, element, slice or payload of a call's result now lands that call by its
+obligations as `:=` from the call does (`projLanded`), the local's references - or its scope, for a reference - where the
+call landed; and a call whose result nothing puts anywhere (read by an operator, a rendering, a condition) lands by its
+obligations only where its callee requires its result scope to outlive one an argument gives - exactly where a copy of
+an element holding writable references is (O25g) - before any of its obligations is judged (a pre-pass in
+`flushPendingDischargesFrom`); otherwise it stays in the block it is written in. Decided (mine): the part's own storage
+is still its block (`o18cprojectionborrow`), and a call whose result holds only new text has no obligation to land it
+by, so it stays the loop body's (`o18cprojectionfresh`). Writing r05's for-in shape found a **pre-existing T25c hole**:
+`for d in mods[i].deps` with `mods` a read-only copy borrowed `deps` writably - the loop's borrow kept the collection
+type's `mut`. `forInBorrowType` now takes the source and borrows read-only where the collection is reached through a
+read-only reference or copy, so a walk that writes (a `mut` `At`, `Len`, `RunFrom` or `Iter`) is refused at that call
+(`t25cforinwrites`). **r07** (`local := Env&c(c.env)` refused where `local mut Env&c = Env(c.env)` compiled): a `:=`
+from a constructor or enum case given a scope argument judged what the instance holds (C2d) against the local's block;
+E25 says the instance lands where the argument says, so it is judged there (`rv->landedTo`). `c2de25blocklocal` pins
+that holding a block's local there is still refused. **r10** (`still := List<I64>() ... w.alive = still`): O25's
+headline names the local (`ERR_REFERENCE_NARROWED_LOCAL`) and a second note offers the flat form - refill the one kept,
+`w.alive.Clear()` then push (`NOTE_REFILL_KEPT`, for a type with a `Clear`) - beside "declare it where 'w' lives", which
+the note now says keeps every one made until that scope closes. **r13**: `case X => return v` with `v` starting with a
+name said L9's "'return' is a keyword, not a name"; S12b's hint (a clause that leaves is a block) is now tried first.
+**r14** (O10c through a call naming no local): r14's `load()` already compiled on master (O26a moves the list); its
+note gap was real - `noteThroughResultSource` named only the first argument the result's references come from, and now
+names every one made in one of the function's blocks (`o10cnotethroughcall`: `parse(base, path)` names both).
+**r15**: T17c's headline proposed building the value where its storage lives, the move that cannot work for a value
+pushed into a longer-lived list; it now says to make the storage where the value is kept, which its note spells.
+Not done here (other batches' or already merged): r01, r03, r06, r08, r09, r11, r12.
+**Found, not fixed (pre-existing)**: the landing scenario's `-i handles.olang` peaks at 7.5 GB (the same on master - `-i`
+frees nothing, and the fixture churns arenas), so with other work on the machine the memory cgroup kills it and the
+scenario fails; run alone it passes. **Found and fixed (pre-existing)**: the `-t goes on past a crash` scenario ran its
+two ordinary files on a 256KB stack, which the unoptimized compiler needs about all of to check them (measured: they
+crashed one run in ten at 256KB, on master's compiler as on this one, never at 264KB) - it failed this batch's verify
+once. The scenario runs at 1MB now; deep.olang still crashes.

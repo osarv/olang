@@ -279,6 +279,11 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b numberflow.olang > out.txt 2>&1") == 0, "numberflow build", dir)
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
     try r.expect(outOf(dir) == "22\n", "numberflow output", dir)
+    #O26a: a view's function keeps no local in the structure's scope that what it returns cannot hold - a copy handed to
+    #a method or another module's function giving a number, numbers for a slice (the master compiler: out of memory)
+    try r.expect(sh(dir, "\"$OLANG\" -b resultviews.olang > out.txt 2>&1") == 0, "resultviews build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/resultviews) > out.txt 2>&1") == 0, "resultviews", dir)
+    try r.expect(outOf(dir) == "10000000 28000000\n", "resultviews output", dir)
     #O17b: handles lent as their references - built, built -d and interpreted, read back after the arena churned
     try r.expect(sh(dir, "\"$OLANG\" -b handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b -d handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0,
@@ -452,7 +457,8 @@ fn ttolerant(r mut report&) ? Failed {
 
 # B3a: each listed file is built in a process of its own, so the compiler ending on one - here a crash, forced as the
 # check below forces one, on a small stack with nesting that overflows it - ends that file's build alone, and the files
-# after it still run
+# after it still run (1MB: the unoptimized compiler checks t1 and t2 in about 256KB - at that limit they crashed one run
+# in ten - and deep.olang needs far more)
 test "-t goes on past a file the compiler crashed on" { assert passed("tcrash") }
 
 fn tcrash(r mut report&) ? Failed {
@@ -461,7 +467,7 @@ fn tcrash(r mut report&) ? Failed {
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
     try os.WriteFile($dir "/deep.olang", deep) catch { }
     # (the status is kept in a file, so the shell that saw a crash is not the one that reports it)
-    run String& = "( (ulimit -v 800000 && ulimit -s 256 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
+    run String& = "( (ulimit -v 800000 && ulimit -s 1024 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
     try r.expect(sh(dir, $run " && test $(cat rc.txt) -eq 1") == 0,
                  "-t did not fail for the crash, or crashed itself", dir)
     out := outOf(dir)

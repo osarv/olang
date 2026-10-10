@@ -1,0 +1,21 @@
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+# also: 'gone' is declared here, in a block that closes first - declare it where 'b' lives
+# B11/T17c: the headline says to make the payload's storage where the value goes - it proposed building the value where
+# the storage lives, the move that cannot work for a value pushed into a longer-lived list (study 6's r15)
+type Edit enum {
+    Insert(at I64, text String&)
+    Delete(at I64, text String&)
+}
+type Buffer struct(text String&) {
+    text
+    undos mut List<Edit>& = List<Edit>()
+}
+fn (b mut Buffer&) Delete(at I64, n I64) {
+    gone := $b.text[at:at + n]
+    b.undos.Push(Edit.Delete(at, gone))
+}
+fn main() ? {
+    b := Buffer("hello world")
+    b.Delete(0, 6)
+    println($b.undos.Len())
+}

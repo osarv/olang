@@ -1,0 +1,25 @@
+# check: fail error[P2]: this argument's storage closes before the join does
+# P2/O18c: a task's argument read off a call's value result, the call's result landing where a local of a loop body
+# inside the join lives - which closes before the join
+type V struct(Data mut Array<F64>&) {
+    Data
+}
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+}
+fn (g G&) params() V { return V(g.mem) }
+fn sum(p Array<F64>&) F64 { return p[0] }
+fn task(g G&) F64 {
+    out := Array<F64>(2)
+    join {
+        for i in range 2 {
+            local := G(2)
+            spawn out[i] = sum(local.params().Data)
+        }
+    }
+    return out[0]
+}
+fn main() ? {
+    g := G(4)
+    println($task(g))
+}

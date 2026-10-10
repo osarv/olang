@@ -1,0 +1,23 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# O18c/O20: a field of a call's value result passed on leads where that result landed - here the block a local lives
+# in, which the callee stores it beside something longer-lived: refused (the relaxation of fieldofresult must not
+# reach this)
+type V struct(Data mut Array<F64>&) {
+    Data
+}
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+    kept mut Array<F64>& = null
+}
+fn (g G&) params() V { return V(g.mem) }
+fn keep(g mut G&, p mut Array<F64>&) { g.kept = p }
+fn stash(g mut G&) {
+    for i in range 3 {
+        local := G(2)
+        keep(g, local.params().Data)
+    }
+}
+fn main() ? {
+    g := G(4)
+    stash(g)
+}
