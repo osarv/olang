@@ -539,6 +539,13 @@ because what it finds about structure feeds the refactor.
   fails O10c - 9 hits), r07 (E25 ctor scope arg C2d, its own note suggests it), r10/r13/r14/r15 diagnostics; and r03
   (a List walk keeps going after Clear/removal within its run - decide: positions re-checked per run, document).
   QF (long-lived structures only grow - region values?) asked in the ledger.
+- 05:00 CEST: oann phase 8 pushed (d1f6a2b): INT8 post-training quantization (quant.olang: per-channel weights, U8/I8
+  activations dynamic or calibrated, U8 x I8 -> I32 tiles with the dequantize/bias/ReLU epilogue fused; MNIST MLP 97.08%
+  vs 97.10% F32, CNN 97.79 vs 97.78; batch-1 3.1x faster, transformer decoding 2.1x; compute-bound shapes 0.44-0.8x
+  because LLVM 18 emits one product per lane - a four-way dot product needs a compiler-supplied op, e.g.
+  `acc.DotAdd4(a, b)`, or LLVM 19's partial.reduce.add - recorded future work), element-wise kernels back on linalg Map.
+  QUEUED for the checker batch: oann repro/lambdalend.olang (O17 refuses lending a value Matrix view to a function
+  writing it from a lambda run by linalg.ParallelRows; fine without tasks).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
