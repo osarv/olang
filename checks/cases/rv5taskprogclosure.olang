@@ -1,0 +1,34 @@
+# check: run
+# flags: -d -s
+# P2/O1b (review of rv3fix, #2): a closure made in a task capturing the program's scope keeps null for it, the calling thread's view
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+Fns mut List<fn() I64> = List<fn() I64>()
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn work() {
+    x := G
+    Fns.Push(fn() I64 {
+        x.next = Node(x.v + 41)
+        return x.next.v
+    })
+}
+fn main() ? {
+    join {
+        spawn work()
+    }
+    churn()
+    f := Fns[0]
+    if f() != 42 { fail }
+    churn()
+    if G.next.v != 42 { fail }
+}

@@ -1,0 +1,40 @@
+# check: fail error[O11, O12]: where this reference's referent lives is not known here
+# O25h/O12 (review of rv3fix, #4): a copy out of a member of a conditional takes the conditional's scope - here one not known, which nothing is built into
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn growv(b Box) { b.head.next = Node(44) }
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+type W struct() { b Box = Box() }
+fn pickw(w mut W&) mut W&w { return w }
+fn pickwv(w mut W&) W { return w }
+fn main() ? {
+    c := churn() < 0
+    w1 mut W& = W()
+    k1 := w1.b.head
+    {
+        w2 mut W& = W()
+        h := (w1 if c else w2).b
+        growv(h)
+    }
+    churn()
+    println($rd(k1))
+}

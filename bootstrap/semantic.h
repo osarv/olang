@@ -340,6 +340,7 @@ struct var {
     //(roNeedsWritable). Its declaration cannot say "mut" for some instantiations and not others
     bool roByArg;
     bool roToResult;
+    bool callsFnThrough; //P2: on a parameter (or a lambda's capture): its body calls a function value reached through it
     struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
     //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
     //reached through it something not read out of that region (built, or handed in), itself or through a callee

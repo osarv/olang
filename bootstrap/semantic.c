@@ -7812,6 +7812,11 @@ static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct va
 bool callIsLanding(struct operand* op);
 static bool argIsFreshTemp(struct operand* op);
 static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args, struct token tok);
+static void fnCallRecord(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args);
+static void fnCalleeRecord(struct checkCtx* ctx, struct operand* callee);
+static bool typeHoldsFuncValue(struct type t);
+struct fnSpawnCheck { struct var* param; struct token tok; struct errContextSaved* where; };
+static struct list fnSpawnChecks; //P2: a task's argument, or a spawned lambda's capture, holding function values
 static void effMark(struct var* f, struct token tok);
 static bool effPlaceOutside(struct checkCtx* ctx, struct operand* p);
 //...the conditional or match a member, an element or an "as" of a payload is read out of ("(w1 if c else w2).b",
@@ -10758,6 +10763,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     ensureBodyChecked(func); //O10b: its obligations, before this call is held to them
     int obligedNow = func->type.scopeObligations.len;
     effCall(ctx, op, func, args, tok); //E11c
+    fnCallRecord(ctx, op, func, args); //P2
     bindCallScopeVars(ctx, op, func, args, tok, scopeArgNodes);
     recordCall(ctx, op, func, args, tok, obligedNow); //O10c: to be held to any it gains later
     applyResultBindings(ctx, op, func, args); //O13c
@@ -13297,6 +13303,7 @@ static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* 
     fv->type = callee->type;
     struct operand* call = OperandFuncCall(ctx, fv, args, tok, ListInit(sizeof(struct syntax*)));
     call->callee = callee;
+    fnCalleeRecord(ctx, callee); //P2: what this call goes through
     return call;
 }
 
@@ -17563,7 +17570,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         if (root && !root->owner && !root->type.structMAlloc) root->lentForStores = true;
     }
     noteRegionStore(ctx, target, rhs);
-    if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar && roBodyFunc) { //T25c
+    if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar && !ErrMsgMuted()) { //T25c, P2
         if (!target->readVar->roAssigns.elemSize) target->readVar->roAssigns = ListInit(sizeof(struct operand*));
         ListAdd(&target->readVar->roAssigns, &rhs);
     }
@@ -21029,19 +21036,21 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         //scope it captured given the task's own stand-in); one reached through the argument - a field, an element, a
         //payload, through references too - is called on the task's thread with the scopes it captured as they are, and
         //would build into them beside the thread that owns them
-        struct list seenT = ListInit(sizeof(struct type));
-        if (arg->type.bType != BASETYPE_FUNC && typeReachesFuncValue(arg->type, &seenT, 0)) Err(arg->tok, ERR_SPAWN_ARG_HOLDS_FUNC);
-        ListDestroy(seenT);
+        if (typeHoldsFuncValue(arg->type) && !ErrMsgMuted()) {
+            if (!fnSpawnChecks.elemSize) fnSpawnChecks = ListInit(sizeof(struct fnSpawnCheck));
+            struct fnSpawnCheck c = { ListGetIdx(&call->readVar->type.vars, i), arg->tok, ErrMsgSaveContext() };
+            ListAdd(&fnSpawnChecks, &c);
+        }
     }
     //...as is a spawned lambda's capture holding one (a function value captured as itself is stood in, as an argument is)
     if (lambdaTask && lam && lam->readVar) {
         struct list caps = lam->readVar->lambdaCaptures;
         for (int i = 0; i < caps.len; i++) {
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&caps, i))->inner;
-            struct list seenT = ListInit(sizeof(struct type));
-            bool holds = in->type.bType != BASETYPE_FUNC && typeReachesFuncValue(in->type, &seenT, 0);
-            ListDestroy(seenT);
-            if (holds) { Err(lam->tok, ERR_SPAWN_ARG_HOLDS_FUNC); break; }
+            if (!typeHoldsFuncValue(in->type) || ErrMsgMuted()) continue;
+            if (!fnSpawnChecks.elemSize) fnSpawnChecks = ListInit(sizeof(struct fnSpawnCheck));
+            struct fnSpawnCheck c = { in, lam->tok, ErrMsgSaveContext() };
+            ListAdd(&fnSpawnChecks, &c);
         }
     }
     //...and so has the function value it calls: a lambda's closure lives where its local does (D16d) - and a spawned
@@ -21248,8 +21257,124 @@ static void checkFuncValueUses(void) {
     }
 }
 
+//P2 (decision 40): which parameters - and lambdas' captures - a body calls a function value reached through, itself or by
+//handing what holds it to a callee that does; a task handed a value holding a function value, through such a parameter,
+//would call it on its own thread with the scopes it captured as they are. Judged once every body is checked
+static struct list fnCallRecs;    //struct operand*: what a call through a function value goes through
+struct fnEdge { struct operand* arg; struct var* param; };
+static struct list fnEdges;       //an argument holding function values handed to a parameter
+static void fnRootsIn(struct operand* op, struct list* roots, struct list* seen, int depth) {
+    for (int guard = 0; op && depth < 48 && guard < 64; guard++) {
+        if (heldResult(op)) { op = heldResult(op); continue; }
+        switch (op->opType) {
+            case OPERATION_COND:
+                if (op->args.len == 3) {
+                    fnRootsIn(*(struct operand**)ListGetIdx(&op->args, 1), roots, seen, depth + 1);
+                    op = *(struct operand**)ListGetIdx(&op->args, 2);
+                    continue;
+                }
+                return;
+            case OPERATION_MATCH: {
+                struct list vs = SemanticMatchValues(op);
+                for (int i = 0; i < vs.len; i++) fnRootsIn(*(struct operand**)ListGetIdx(&vs, i), roots, seen, depth + 1);
+                return;
+            }
+            case OPERATION_SEQ:
+                if (!op->args.len) return;
+                op = *(struct operand**)ListGetIdx(&op->args, op->args.len - 1);
+                continue;
+            case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_AS:
+            case OPERATION_BOUNDS: case OPERATION_NOMINAL_CONVERT:
+                if (!op->args.len) return;
+                op = *(struct operand**)ListGetIdx(&op->args, 0);
+                continue;
+            case OPERATION_FUNCCALL: //what a call gives may be read out of any of its arguments - At, a borrowed result
+                for (int i = 0; i < op->args.len; i++) fnRootsIn(*(struct operand**)ListGetIdx(&op->args, i), roots, seen, depth + 1);
+                if (op->callee) fnRootsIn(op->callee, roots, seen, depth + 1);
+                return;
+            case OPERATION_READ_VAR: {
+                struct var* v = op->readVar;
+                if (!v || v->isGlobalVar || v->isFuncDecl || v->owner) return;
+                for (int i = 0; i < seen->len; i++) if (*(struct var**)ListGetIdx(seen, i) == v) return;
+                ListAdd(seen, &v);
+                if (v->isCapture) { ListAdd(roots, &v); return; }
+                if (v->paramCopy) { struct var* o = canonicalVar(v); ListAdd(roots, &o); return; }
+                if (v->roFrom) fnRootsIn(v->roFrom, roots, seen, depth + 1);
+                if (v->declInit) fnRootsIn(v->declInit, roots, seen, depth + 1);
+                for (int i = 0; i < v->roAssigns.len; i++)
+                    fnRootsIn(*(struct operand**)ListGetIdx(&v->roAssigns, i), roots, seen, depth + 1);
+                return;
+            }
+            default: return;
+        }
+    }
+}
+static bool fnMarkRoots(struct operand* op) {
+    struct list roots = ListInit(sizeof(struct var*));
+    struct list seen = ListInit(sizeof(struct var*));
+    fnRootsIn(op, &roots, &seen, 0);
+    bool changed = false;
+    for (int i = 0; i < roots.len; i++) {
+        struct var* r = *(struct var**)ListGetIdx(&roots, i);
+        if (!r->callsFnThrough) { r->callsFnThrough = true; changed = true; }
+    }
+    ListDestroy(roots);
+    ListDestroy(seen);
+    return changed;
+}
+static bool typeReachesFuncValue(struct type t, struct list* seen, int depth);
+static bool typeHoldsFuncValue(struct type t) {
+    if (t.bType == BASETYPE_FUNC) return false;
+    struct list seen = ListInit(sizeof(struct type));
+    bool r = typeReachesFuncValue(t, &seen, 0);
+    ListDestroy(seen);
+    return r;
+}
+//...a call: one through a function value goes through what gives it; an argument holding function values is handed on
+static void fnCallRecord(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args) {
+    if (!ctx || !ctx->hasOwnScope || ErrMsgMuted() || !func) return;
+    if (!fnCallRecs.elemSize) { fnCallRecs = ListInit(sizeof(struct operand*)); fnEdges = ListInit(sizeof(struct fnEdge)); }
+    bool throughValue = op && op->callee;
+    if (!throughValue && func->type.bType == BASETYPE_FUNC && !func->isFuncDecl && !func->isMethod && !func->isLambda) {
+        struct operand* rv = OperandReadVar(func, op ? op->tok : func->tok);
+        ListAdd(&fnCallRecs, &rv);
+        throughValue = true;
+    } else if (op && op->callee) ListAdd(&fnCallRecs, &op->callee);
+    for (int j = 0; j < args.len; j++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&args, j);
+        if (!typeHoldsFuncValue(a->type)) continue;
+        //(a callee whose body is not known here - one reached through a function value - may call what it is handed)
+        if (throughValue || j >= func->type.vars.len) { ListAdd(&fnCallRecs, &a); continue; }
+        struct fnEdge e = { a, ListGetIdx(&func->type.vars, j) };
+        ListAdd(&fnEdges, &e);
+    }
+}
+static void fnCalleeRecord(struct checkCtx* ctx, struct operand* callee) {
+    if (!ctx || !ctx->hasOwnScope || ErrMsgMuted() || !callee) return;
+    if (!fnCallRecs.elemSize) { fnCallRecs = ListInit(sizeof(struct operand*)); fnEdges = ListInit(sizeof(struct fnEdge)); }
+    ListAdd(&fnCallRecs, &callee);
+}
+static void settleFnThrough(void) {
+    for (int i = 0; i < fnCallRecs.len; i++) fnMarkRoots(*(struct operand**)ListGetIdx(&fnCallRecs, i));
+    for (bool changed = true; changed; ) {
+        changed = false;
+        for (int i = 0; i < fnEdges.len; i++) {
+            struct fnEdge* e = ListGetIdx(&fnEdges, i);
+            if (canonicalVar(e->param)->callsFnThrough || e->param->callsFnThrough) changed |= fnMarkRoots(e->arg);
+        }
+    }
+    for (int i = 0; i < fnSpawnChecks.len; i++) {
+        struct fnSpawnCheck* c = ListGetIdx(&fnSpawnChecks, i);
+        if (!(c->param->callsFnThrough || canonicalVar(c->param)->callsFnThrough)) continue;
+        ErrMsgPushSaved(c->where);
+        Err(c->tok, ERR_SPAWN_ARG_HOLDS_FUNC);
+        ErrMsgPopSaved(c->where);
+    }
+}
+
 //T25c: the arguments recorded at calls, once every body is checked - what each parameter needs is known only then
 static void settleReadOnlyArgs(void) {
+    settleFnThrough(); //P2 (decision 40)
     //what an instantiation keeps writable of a read-only reference parameter (roByArg), now every assignment is known
     roSettleResults(NULL);
     for (int i = 0; i < roDeepNeeds.len; i++) {

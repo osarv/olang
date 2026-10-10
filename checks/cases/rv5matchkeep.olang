@@ -1,0 +1,19 @@
+# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# S13/O25a (review of rv3fix, #3, pre-existing root): a value match binding kept directly in an outer reference
+type P struct(v I64) { v }
+type E enum {
+    A(p P)
+    Z
+}
+fn borrow(b P&) P&b { return b }
+fn main() ? {
+    keep P& = P(0)
+    for i in range 3 {
+        e := E.A(P(i + 10))
+        match e {
+            case E.A(y) { if i == 0 { keep = y } }
+            case _ { }
+        }
+    }
+    println($keep.v)
+}

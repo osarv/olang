@@ -1,0 +1,31 @@
+# check: run
+# flags: -d -s
+# P2 (review of rv3fix, #1): a task keeping the closure it was handed past the join - the copy is made where the closure lives and its stand-ins forward once folded; identity kept
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn id(f fn() I64) fn() I64 { return f }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 {
+        n.next = Node(n.v + 41)
+        return n.next.v
+    }
+    r fn() I64 = g
+    join {
+        spawn r = id(g)
+    }
+    churn()
+    if r() != 42 { fail }
+    churn()
+    if n.next.v != 42 or not (r is g) { fail }
+}

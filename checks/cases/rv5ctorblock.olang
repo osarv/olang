@@ -1,0 +1,22 @@
+# check: fail error[O25]: a reference never narrows
+# C2g/O2: a constructor's top level is depth 1, its blocks 2 and deeper - a local of its first block borrowed into a field pointed into the dead frame
+type P struct(v I64) { v }
+fn borrow(b P&) P&b { return b }
+fn deep(n I64) I64 {
+    a := Array<I64, 64>()
+    for i in range 64 { a[i] = -7 }
+    if n == 0 { return a[3] }
+    return deep(n - 1) + a[5]
+}
+type H struct(n I64) {
+    keep P& = P(0)
+    {
+        x := P(n)
+        keep = borrow(x)
+    }
+}
+fn main() ? {
+    h := H(42)
+    deep(50)
+    println($h.keep.v)
+}
