@@ -205,6 +205,12 @@ fn (it mut MapIter<<K>, <V>>&) advance() ? Exhausted {
     it.slot = it.slot.next
 }
 
+# the entries, one at a time, in no order to rely on. In order of their keys it is two lines - the entries listed, then
+# sorted - with no lookup that could fail:
+#
+#     es := m.Iter().ToList()
+#     es.Sort(fn(a, b) { return a.Key < b.Key })
+#     for e in es { ... e.Key ... e.Value ... }
 fn (m Map<<K>, <V>>&) Iter() MapIter<K, V> { return MapIter<K, V>(m) }
 
 # the keys, one at a time, in the order Iter() gives the entries: "for k in m.Keys()", "m.Keys().ToList()" for a List of
