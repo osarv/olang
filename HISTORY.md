@@ -12788,7 +12788,10 @@ writing it: the first `Record` sized its output from `fields.Len()` alone, one s
 written past the end) - caught by the test. A reader over a file descriptor was not written: a file is
 `os.ReadFile` then `Rows`, which lets fields borrow; a streaming reader would have to copy every field, and io.Lines
 plus a per-line `Rows` covers files with no quoted line breaks. Checked: -b and -i give identical output on the study's
-quoted file, a churned arena leaves kept fields intact, and a table parsed while compiling bakes (`csvTotalBaked`).
+quoted file, a churned arena leaves kept fields intact, and a table parsed while compiling bakes (`csvTotalBaked`). Measured on
+200,000 rows (6.3 MB, a quoted field in each): 68-76 ms, against 44-47 ms for `Lines` and `Split` (which cannot read
+quotes) and 200-380 ms for Python's `csv` module, under a load average of ~10 - each record is scanned twice, once
+to count its fields so the row is made once at its length.
 
 **`std/stats`.** Free functions generic over any number type (`F64(x)` per instantiation), computing in F64 - a sum of
 F16s is not rounded to F16 at every step - and returning F64, except `Min`/`Max`, which give an element back.
