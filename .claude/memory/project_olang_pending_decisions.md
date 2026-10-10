@@ -346,17 +346,24 @@ rule and where it is recorded; the morning report lists them all, then they move
    E { }` leaves buf partly written. Partial results: a per-task default. Memory is unaffected (every task joined,
    stand-ins/parts folded on every exit). Evaluator/-i: tasks in spawn order to completion, then the first failure.
    Replaces P4. To be built after decision 48 merges (it rewrites the same spawn runtime).
-51. (the user's regions + their early free, details mine) `Region<T>`: a value in its own arena, reached only inside
-   `r.With(fn(w mut T&) ...)` (w's scope opaque, as every lambda parameter's is, so nothing outside points in); `Set`/
-   `Compact(fn(old T&) T)` replace the contents and free the old arena at once (Compact forbids new->old pointers);
-   `r.Drop()` frees it early - the user's "null the reference": instead of making the handle unique (needs move
-   semantics olang lacks; List.At/Map.Get copy elements), every COPY of the handle reads as null after a Drop - the
-   handle is {header, generation}, Drop frees the arena and bumps the generation, With on a stale handle traps as a null
-   read does (one compare per With, never per access); the header is recycled within its scope. The handle is built
-   where it lands like any value (so `undo.Push(Region<State>(...))` puts it in undo's scope) and is scope-checked like
-   a List handle; an undropped region is freed when that scope closes (no leak, no manual free needed); a region built
-   inside another's With lives in that one's arena and dies with it (nesting from existing scopes). Drop/Set/Compact
-   on a region inside its own With traps. Contents may point outside only at program-scope data.
+51. (the user's regions + their early free, revised 08:40 CEST after the user asked to generalize to "any reference
+   (maybe just in structs) might hold a shorter lived value ... whenever that thing goes out of scope the ref is
+   nulled. This would need a new keyword. Or is this a bad idea?") `Region<T>`: a value in its own arena, reached only
+   inside `r.With(fn(w mut T&) ...)` (w's scope opaque, as every lambda parameter's is, so nothing outside points in).
+   The HANDLE is plain data - {pooled header, generation}, headers recycled and never unmapped - so it can be stored in
+   any struct, List, Map or global however long-lived. The region dies at `r.Drop()` or when the scope its constructor
+   result landed in closes (O18a: `app.dialog = Region<Dialog>(...)` lives with app, `d := Region<Dialog>(...)` in a
+   handler block dies when the handler returns), whichever is first; after that every copy of the handle compares equal
+   to `null` and `With` on it traps as a null read does (the user's "nulled" semantics, one compare per With). `Set`/
+   `Compact(fn(old T&) T)` replace the contents and free the old arena (Compact forbids new->old pointers). Threads:
+   With takes a reader count by CAS on the header; a death (Drop or scope close) while readers are inside is deferred
+   to the last reader's exit - no trap, no wait, no UAF; Drop/Set/Compact inside its own With traps. Contents may point
+   outside only at program-scope data; a region made inside another's With lives in that arena and dies with it.
+   NOT a weak modifier on arbitrary references (the user's generalization, answered as the region generalized instead):
+   nulling plain references needs the runtime to find every holder (registration on every store and every struct copy -
+   hidden per-operation cost, or a ban on copying), a value read out of such a field is a second reference the nulling
+   cannot reach, and another thread can be using the value when its scope closes. Revisit a `weak` reference with a
+   `try` read only if real code needs one regions do not cover. Queued after decision 50 (QE).
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
