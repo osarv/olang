@@ -19,11 +19,14 @@
 #include <dlfcn.h>
 #include <ffi.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
+#include <ucontext.h>
 #include "util.h"
 #include "comptime.h"
 #include "runtime.h"
 
-static void emitScopeRuntime(FILE* out);
+static void emitScopeRuntime(FILE* out, bool san);
+static void emitScopeSanRuntime(FILE* out, const char* arch);
 static void emitOsRuntime(FILE* out, const char* arch);
 static void emitStackRuntime(FILE* out, const char* arch);
 
@@ -36,7 +39,7 @@ static void emitStackRuntime(FILE* out, const char* arch);
  * would restore the SPAWNER's stack pointer onto the task's thread while the spawner itself is still
  * parked in pthread_join on that very stack - two threads on one stack, which happened to appear to work.
  * There is nowhere on a task thread to recover to, for exactly the reason P4 gives for errors. */
-void emitRuntimeDecls(FILE* out, const char* arch) {
+void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan) {
     fputs(
         "declare i32 @printf(ptr, ...)\n"
         "declare i32 @fputs(ptr, ptr)\n"
@@ -216,9 +219,10 @@ void emitRuntimeDecls(FILE* out, const char* arch) {
         "done:\n"
         "  ret void\n"
         "}\n\n", out);
-    emitScopeRuntime(out);
+    emitScopeRuntime(out, scopeSan);
     emitOsRuntime(out, arch);
     emitStackRuntime(out, arch);
+    if (scopeSan) emitScopeSanRuntime(out, arch);
 }
 
 /* the real backing for every scope (O2): a growable, chunked bump allocator. A chunk is a 64-byte header followed by
@@ -250,7 +254,7 @@ void emitRuntimeDecls(FILE* out, const char* arch) {
  * left 783MB with their parked workers, and the main thread mapped new memory for the same work. The shared pool's lock
  * is taken only on that slow path, and only when a relaxed atomic read says the shared pool holds something; nothing
  * on the paths every allocation and every scope's close take is shared or atomic. */
-static void emitScopeRuntime(FILE* out) {
+static void emitScopeRuntime(FILE* out, bool san) {
     fputs(
         //next, used, cap, the length mmap gave it (0 for one from aligned_alloc), whether it is fresh from the system and
         //zero above "used" (__olang_scope_alloc_zeroed), its class, then the pool's: prev (a class is a circular list
@@ -309,7 +313,11 @@ static void emitScopeRuntime(FILE* out) {
         //class's size - mapped from 128KB up, where glibc's malloc itself turns to mmap, and taken from aligned_alloc
         //below. Never inlined, so __olang_scope_alloc stays small enough to inline wherever a scope allocates
         "define linkonce_odr ptr @__olang_new_chunk(i64 %size) noinline {\n"
-        "entry:\n"
+        "entry:\n", out);
+    //-s: a size no chunk can have, read out of storage a closed scope gave back - the length of an array whose
+    //descriptor holds the poison (__olang_san_poison) - is said to be that, where "out of memory" would mislead
+    if (san) fputs("  call void @__olang_san_check_size(i64 %size)\n", out);
+    fputs(
         "  %small = icmp ule i64 %size, 4096\n"
         "  br i1 %small, label %search, label %sized\n"
         //the class of a size s above 4KB: with e the top bit of s - 1 and q the two bits below it plus 4 (4 to 7),
@@ -365,16 +373,22 @@ static void emitScopeRuntime(FILE* out) {
         "  %hdrsize = ptrtoint ptr getelementptr (%olang.chunk, ptr null, i32 1) to i64\n"
         "  %total0 = add i64 %hdrsize, %classsize\n"
         //D13c: a mapped chunk comes zeroed, which __olang_scope_alloc_zeroed relies on to skip clearing it again
-        "  %huge = icmp uge i64 %classsize, 131072\n"
-        "  br i1 %huge, label %map, label %heap\n"
+        "", out);
+    //-s: every chunk is mapped, whatever its size, so that a closed scope's can be protected while it is quarantined
+    //(__olang_san_quarantine) - and one the system will not map is taken from aligned_alloc after all, poisoned only
+    fputs(san ? "  br label %map\n"
+              : "  %huge = icmp uge i64 %classsize, 131072\n"
+                "  br i1 %huge, label %map, label %heap\n", out);
+    fputs(
         "map:\n"
         "  %mt1 = add i64 %total0, 4095\n"
         "  %mtotal = and i64 %mt1, -4096\n"
         //PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS (Linux)
         "  %m = call ptr @mmap(ptr null, i64 %mtotal, i32 3, i32 34, i32 -1, i64 0)\n"
         "  %mfailed = icmp eq ptr %m, inttoptr (i64 -1 to ptr)\n"
-        "  %mchunk = select i1 %mfailed, ptr null, ptr %m\n"
-        "  br label %got\n"
+        "  %mchunk = select i1 %mfailed, ptr null, ptr %m\n", out);
+    fputs(san ? "  br i1 %mfailed, label %heap, label %got\n" : "  br label %got\n", out);
+    fputs(
         "heap:\n"
         //aligned_alloc requires a size that is a multiple of the alignment
         "  %total1 = add i64 %total0, 63\n"
@@ -1503,7 +1517,17 @@ static void emitScopeRuntime(FILE* out) {
         //loop's body scope then cost two stores and two tests every pass). The tail needs no reset: it is read only
         //while the list is not empty, and set when the list next stops being empty
         "give:\n"
-        "  store ptr null, ptr %headptr\n"
+        "  store ptr null, ptr %headptr\n", out);
+    //-s: no chunk a scope gives back is reused at once - it is poisoned and held out of reach for a while
+    if (san) {
+        fputs("  call void @__olang_san_quarantine_list(ptr %head)\n"
+              "  br label %done\n"
+              "done:\n"
+              "  ret void\n"
+              "}\n\n", out);
+        return;
+    }
+    fputs(
         //one 4KB chunk, and no spare: it becomes the spare, here
         "  %hnextptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 0\n"
         "  %hnext = load ptr, ptr %hnextptr\n"
@@ -2610,6 +2634,303 @@ static void emitStackRuntime(FILE* out, const char* arch) {
         fprintf(out, "  %%s%zu = call i32 @sigaction(i32 %d, ptr %%sa, ptr null)\n", i, sigs[i]);
     }
     fputs("  ret void\n}\n\n", out);
+}
+
+/* B2f, the scope sanitizer (-s): a scope that closes gives its chunks to a quarantine rather than to the pool, so that a
+ * program reading storage after its scope closed - a use after free the static check (§8) let through - reads something
+ * unmistakable instead of whatever the next scope put there. Every chunk of a closed scope is
+ *   - poisoned: what was used of it is overwritten with SAN_POISON, a 64-bit word chosen so that every view of it is
+ *     wrong at once: as a pointer it is non-canonical (x86-64 and AArch64 alike), so following a reference read out of
+ *     poisoned storage faults on the spot; as any float it is a NaN (F64, and each half as F32, each quarter as F16 or
+ *     BF16), which a computation carries to its result; as an integer it is near the type's maximum (I64 9.2e18, I32
+ *     2.1e9, I16 32757), so a length read from it makes a loop run on into the poisoned pointer, and an allocation of
+ *     that length asks for more than any machine has (__olang_san_check_size) - never a plausible 0, 1 or -1;
+ *   - protected: every chunk is mapped under -s (__olang_new_chunk), so it is made inaccessible (PROT_NONE) for as long
+ *     as it is quarantined, and any read or write of it at all faults at once, wherever the reference came from;
+ *   - quarantined: held out of reuse, first in first out, until SAN_QUARANTINE_CHUNKS chunks or SAN_QUARANTINE_BYTES
+ *     bytes are held - only then is the oldest made accessible again and given to the pool, still poisoned where it was
+ *     used. One quarantine for the process, behind a lock: a chunk is reused by whichever thread closes the scope that
+ *     pushes it out, which the lock orders for the program and for ThreadSanitizer alike (P7).
+ * A chunk the system will not map is taken from aligned_alloc and only poisoned; a mapped chunk of more than 1MB is
+ * poisoned only in its first page and the rest of its pages given back to the system (madvise), so a quarantine of
+ * large arrays costs address space, not memory. The fault is the sanitizer's own report (__olang_san_handler): a
+ * use after a scope closed is a failed check (S18) - a test fails, a program aborts - saying so; any other fault is
+ * left to the action it replaced. Emitted only under -s: a build without it carries none of this. */
+#define SAN_POISON "9220416504501469173"      //0x7FF57FF57FF57FF5
+#define SAN_POISON_HI "2146795509"            //its upper half, 0x7FF57FF5
+#define SAN_QUARANTINE_CHUNKS 16384           //a power of two: the ring's index is masked
+#define SAN_QUARANTINE_BYTES "268435456"      //256MB - ASan's quarantine
+_Static_assert(PROT_NONE == 0 && (PROT_READ | PROT_WRITE) == 3 && MADV_DONTNEED == 4 && SA_SIGINFO == 4
+               && SI_KERNEL == 0x80, "the sanitizer's constants");
+#if defined(__x86_64__) && defined(__linux__)
+_Static_assert(offsetof(siginfo_t, si_code) == 8 && offsetof(ucontext_t, uc_mcontext.gregs) == 40
+               && REG_RIP == 16, "where a fault's code and registers are");
+#endif
+
+//a message the sanitizer's report prints, NUL-terminated, a line end before it
+static void sanMessage(FILE* out, const char* name, const char* text) {
+    fprintf(out, "@%s = linkonce_odr unnamed_addr constant [%zu x i8] c\"%s\\0A\\00\"\n", name, strlen(text) + 2, text);
+}
+
+static void emitScopeSanRuntime(FILE* out, const char* arch) {
+    const struct cgLibcLayout* L = cgLibcLayoutFor(arch);
+    fputs("declare i32 @mprotect(ptr, i64, i32)\n"
+          "declare i32 @madvise(ptr, i64, i32)\n"
+          //a quarantined chunk: the chunk, how much of it is protected (0: none, when the system refused or it is not
+          //mapped), and the bytes it counts against the bound
+          "%olang.sanq = type { ptr, i64, i64 }\n", out);
+    fprintf(out, "@__olang_san_ring = linkonce_odr global [%d x %%olang.sanq] zeroinitializer\n", SAN_QUARANTINE_CHUNKS);
+    fputs(//the oldest entry's index, how many there are, and the bytes they count
+          "@__olang_san_first = linkonce_odr global i64 0\n"
+          "@__olang_san_count = linkonce_odr global i64 0\n"
+          "@__olang_san_bytes = linkonce_odr global i64 0\n"
+          "@__olang_san_lock = linkonce_odr global [40 x i8] zeroinitializer\n", out);
+    //the action the sanitizer's handler replaced, for a fault that is not its own
+    fprintf(out, "@__olang_san_old = linkonce_odr global [%zu x i8] zeroinitializer\n", L->sigactionSize);
+    sanMessage(out, "__olang_msg_san_mem", "use after scope closed: storage a closed scope gave back was read or written");
+    sanMessage(out, "__olang_msg_san_ref", "use after scope closed: a reference read from storage a closed scope gave back "
+               "was followed");
+    sanMessage(out, "__olang_msg_san_len", "use after scope closed: an allocation of more than 2^60 bytes - a length "
+               "read from storage a closed scope gave back");
+    fputs("\n", out);
+
+    //what a closing scope gives back (__olang_scope_close): each of its chunks into the quarantine
+    fputs("define linkonce_odr void @__olang_san_quarantine_list(ptr %head) noinline {\n"
+          "entry:\n"
+          "  br label %each\n"
+          "each:\n"
+          "  %cur = phi ptr [ %head, %entry ], [ %next, %each ]\n"
+          "  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0\n"
+          "  %next = load ptr, ptr %nextptr\n"
+          "  call void @__olang_san_quarantine(ptr %cur)\n"
+          "  %atend = icmp eq ptr %next, null\n"
+          "  br i1 %atend, label %done, label %each\n"
+          "done:\n"
+          "  ret void\n"
+          "}\n\n"
+          //n bytes at p (a multiple of 8, 8-aligned) overwritten with the poison
+          "define linkonce_odr void @__olang_san_poison(ptr %p, i64 %n) {\n"
+          "entry:\n"
+          "  %words = lshr i64 %n, 3\n"
+          "  %none = icmp eq i64 %words, 0\n"
+          "  br i1 %none, label %done, label %loop\n"
+          "loop:\n"
+          "  %i = phi i64 [ 0, %entry ], [ %i1, %loop ]\n"
+          "  %q = getelementptr i64, ptr %p, i64 %i\n"
+          "  store i64 " SAN_POISON ", ptr %q\n"
+          "  %i1 = add i64 %i, 1\n"
+          "  %more = icmp ult i64 %i1, %words\n"
+          "  br i1 %more, label %loop, label %done\n"
+          "done:\n"
+          "  ret void\n"
+          "}\n\n", out);
+    fprintf(out,
+          //chunk c, which a closed scope held, poisoned, protected and put in the quarantine - after the oldest have been
+          //taken out until it fits under the bounds (all of them, for a chunk larger than the bound alone)
+          "define linkonce_odr void @__olang_san_quarantine(ptr %%c) {\n"
+          "entry:\n"
+          "  %%usedptr = getelementptr %%olang.chunk, ptr %%c, i32 0, i32 1\n"
+          "  %%used = load i64, ptr %%usedptr\n"
+          "  %%capptr = getelementptr %%olang.chunk, ptr %%c, i32 0, i32 2\n"
+          "  %%cap = load i64, ptr %%capptr\n"
+          "  %%mapptr = getelementptr %%olang.chunk, ptr %%c, i32 0, i32 3\n"
+          "  %%maplen = load i64, ptr %%mapptr\n"
+          "  %%data = getelementptr %%olang.chunk, ptr %%c, i32 1\n"
+          "  %%mapped = icmp ne i64 %%maplen, 0\n"
+          "  %%large = icmp ugt i64 %%maplen, 1048576\n"
+          "  %%discard = and i1 %%mapped, %%large\n"
+          //what was used, or of one whose pages are given back, what of it lies in its first page
+          "  %%firstpage = select i1 %%discard, i64 4032, i64 %%used\n"
+          "  %%short = icmp ult i64 %%used, %%firstpage\n"
+          "  %%pn = select i1 %%short, i64 %%used, i64 %%firstpage\n"
+          "  call void @__olang_san_poison(ptr %%data, i64 %%pn)\n"
+          "  %%whole = add i64 %%cap, 64\n"
+          "  %%held = select i1 %%discard, i64 4096, i64 %%whole\n"
+          "  br i1 %%mapped, label %%protect, label %%push\n"
+          "protect:\n"
+          "  %%pr = call i32 @mprotect(ptr %%c, i64 %%maplen, i32 0)\n"
+          "  %%prok = icmp eq i32 %%pr, 0\n"
+          "  %%plen.p = select i1 %%prok, i64 %%maplen, i64 0\n"
+          "  %%drop = and i1 %%discard, %%prok\n"
+          "  br i1 %%drop, label %%release, label %%push\n"
+          "release:\n"
+          "  %%rest = getelementptr i8, ptr %%c, i64 4096\n"
+          "  %%restlen = sub i64 %%maplen, 4096\n"
+          "  %%dr = call i32 @madvise(ptr %%rest, i64 %%restlen, i32 4)\n"
+          "  br label %%push\n"
+          "push:\n"
+          "  %%plen = phi i64 [ 0, %%entry ], [ %%plen.p, %%protect ], [ %%plen.p, %%release ]\n"
+          "  %%l0 = call i32 @pthread_mutex_lock(ptr @__olang_san_lock)\n"
+          "  br label %%room\n"
+          "room:\n"
+          "  %%count = load i64, ptr @__olang_san_count\n"
+          "  %%bytes = load i64, ptr @__olang_san_bytes\n"
+          "  %%full = icmp uge i64 %%count, %d\n"
+          "  %%after = add i64 %%bytes, %%held\n"
+          "  %%heavy = icmp ugt i64 %%after, " SAN_QUARANTINE_BYTES "\n"
+          "  %%over = or i1 %%full, %%heavy\n"
+          "  %%any = icmp ne i64 %%count, 0\n"
+          "  %%evict = and i1 %%over, %%any\n"
+          "  br i1 %%evict, label %%pop, label %%put\n"
+          //the oldest out, its entry cleared first so that the handler no longer takes a fault there for its own
+          "pop:\n"
+          "  %%first = load i64, ptr @__olang_san_first\n"
+          "  %%e = getelementptr [%d x %%olang.sanq], ptr @__olang_san_ring, i64 0, i64 %%first\n"
+          "  %%ecp = getelementptr %%olang.sanq, ptr %%e, i32 0, i32 0\n"
+          "  %%ec = load ptr, ptr %%ecp\n"
+          "  %%elp = getelementptr %%olang.sanq, ptr %%e, i32 0, i32 1\n"
+          "  %%el = load i64, ptr %%elp\n"
+          "  %%ehp = getelementptr %%olang.sanq, ptr %%e, i32 0, i32 2\n"
+          "  %%eh = load i64, ptr %%ehp\n"
+          "  store i64 0, ptr %%elp\n"
+          "  store ptr null, ptr %%ecp\n"
+          "  %%first1 = add i64 %%first, 1\n"
+          "  %%firstw = and i64 %%first1, %d\n"
+          "  store i64 %%firstw, ptr @__olang_san_first\n"
+          "  %%count1 = sub i64 %%count, 1\n"
+          "  store i64 %%count1, ptr @__olang_san_count\n"
+          "  %%bytes1 = sub i64 %%bytes, %%eh\n"
+          "  store i64 %%bytes1, ptr @__olang_san_bytes\n"
+          "  %%u0 = call i32 @pthread_mutex_unlock(ptr @__olang_san_lock)\n"
+          "  call void @__olang_san_release(ptr %%ec, i64 %%el)\n"
+          "  %%l1 = call i32 @pthread_mutex_lock(ptr @__olang_san_lock)\n"
+          "  br label %%room\n"
+          "put:\n"
+          "  %%firstp = load i64, ptr @__olang_san_first\n"
+          "  %%at0 = add i64 %%firstp, %%count\n"
+          "  %%at = and i64 %%at0, %d\n"
+          "  %%slot = getelementptr [%d x %%olang.sanq], ptr @__olang_san_ring, i64 0, i64 %%at\n"
+          "  %%scp = getelementptr %%olang.sanq, ptr %%slot, i32 0, i32 0\n"
+          "  store ptr %%c, ptr %%scp\n"
+          "  %%slp = getelementptr %%olang.sanq, ptr %%slot, i32 0, i32 1\n"
+          "  store i64 %%plen, ptr %%slp\n"
+          "  %%shp = getelementptr %%olang.sanq, ptr %%slot, i32 0, i32 2\n"
+          "  store i64 %%held, ptr %%shp\n"
+          "  %%count2 = add i64 %%count, 1\n"
+          "  store i64 %%count2, ptr @__olang_san_count\n"
+          "  store i64 %%after, ptr @__olang_san_bytes\n"
+          "  %%u1 = call i32 @pthread_mutex_unlock(ptr @__olang_san_lock)\n"
+          "  ret void\n"
+          "}\n\n"
+          //a chunk leaving the quarantine: accessible again, and to this thread's pool - or, when the system will not
+          //make it accessible, never touched again
+          "define linkonce_odr void @__olang_san_release(ptr %%c, i64 %%plen) {\n"
+          "entry:\n"
+          "  %%prot = icmp ne i64 %%plen, 0\n"
+          "  br i1 %%prot, label %%open, label %%give\n"
+          "open:\n"
+          "  %%r = call i32 @mprotect(ptr %%c, i64 %%plen, i32 3)\n"
+          "  %%ok = icmp eq i32 %%r, 0\n"
+          "  br i1 %%ok, label %%give, label %%lost\n"
+          "lost:\n"
+          "  ret void\n"
+          "give:\n"
+          "  call void @__olang_pool_give(ptr %%c)\n"
+          "  ret void\n"
+          "}\n\n",
+          SAN_QUARANTINE_CHUNKS, SAN_QUARANTINE_CHUNKS, SAN_QUARANTINE_CHUNKS - 1, SAN_QUARANTINE_CHUNKS - 1,
+          SAN_QUARANTINE_CHUNKS);
+    fputs(//a size no allocation can have - 2^60 bytes or more - asked of the allocator: a length read out of poisoned storage
+          "define linkonce_odr void @__olang_san_check_size(i64 %size) {\n"
+          "entry:\n"
+          "  %bad = icmp uge i64 %size, 1152921504606846976\n"
+          "  br i1 %bad, label %say, label %ok\n"
+          "say:\n"
+          "  call void @__olang_san_report(i32 3)\n"
+          "  br label %ok\n"
+          "ok:\n"
+          "  ret void\n"
+          "}\n\n"
+          //a use after a scope closed, found: a failed check (S18) - in a test, that test fails; otherwise the process
+          //aborts. 1: storage in quarantine was reached, 2: a poisoned reference was followed, 3: a poisoned length
+          "define linkonce_odr void @__olang_san_report(i32 %kind) {\n"
+          "entry:\n"
+          "  %is1 = icmp eq i32 %kind, 1\n"
+          "  %is2 = icmp eq i32 %kind, 2\n"
+          "  %m2 = select i1 %is2, ptr @__olang_msg_san_ref, ptr @__olang_msg_san_len\n"
+          "  %m = select i1 %is1, ptr @__olang_msg_san_mem, ptr %m2\n"
+          "  call void @__olang_check_failed(ptr %m)\n"
+          "  ret void\n"
+          "}\n\n", out);
+    fprintf(out,
+          //the handler, for SIGSEGV: a fault at an address in a chunk the quarantine holds, or at an address that is the
+          //poison (where the fault reports one: AArch64), or - x86-64, where following a non-canonical address faults
+          //with no address (SI_KERNEL) - with the poison in a general register, is a use after a scope closed. Anything
+          //else is not the sanitizer's: the action it replaced is put back, and the fault, made again on return, meets it
+          "define linkonce_odr void @__olang_san_handler(i32 %%sig, ptr %%info, ptr %%uc) {\n"
+          "entry:\n"
+          "  %%ap = getelementptr i8, ptr %%info, i64 16\n"
+          "  %%addr = load ptr, ptr %%ap\n"
+          "  %%a = ptrtoint ptr %%addr to i64\n"
+          "  br label %%scan\n"
+          "scan:\n"
+          "  %%i = phi i64 [ 0, %%entry ], [ %%i1, %%next ]\n"
+          "  %%e = getelementptr [%d x %%olang.sanq], ptr @__olang_san_ring, i64 0, i64 %%i\n"
+          "  %%cp = getelementptr %%olang.sanq, ptr %%e, i32 0, i32 0\n"
+          "  %%c = load ptr, ptr %%cp\n"
+          "  %%lp = getelementptr %%olang.sanq, ptr %%e, i32 0, i32 1\n"
+          "  %%len = load i64, ptr %%lp\n"
+          "  %%ci = ptrtoint ptr %%c to i64\n"
+          "  %%off = sub i64 %%a, %%ci\n"
+          "  %%in = icmp ult i64 %%off, %%len\n"
+          "  br i1 %%in, label %%closed, label %%next\n"
+          "next:\n"
+          "  %%i1 = add i64 %%i, 1\n"
+          "  %%more = icmp ult i64 %%i1, %d\n"
+          "  br i1 %%more, label %%scan, label %%poison\n"
+          "closed:\n"
+          "  call void @__olang_san_report(i32 1)\n"
+          "  ret void\n"
+          "poison:\n"
+          "  %%ahi = lshr i64 %%a, 32\n"
+          "  %%apois = icmp eq i64 %%ahi, " SAN_POISON_HI "\n"
+          "  br i1 %%apois, label %%followed, label %%regs\n"
+          "followed:\n"
+          "  call void @__olang_san_report(i32 2)\n"
+          "  ret void\n"
+          "regs:\n",
+          SAN_QUARANTINE_CHUNKS, SAN_QUARANTINE_CHUNKS);
+    if (!strcmp(arch, "x86_64")) {
+        //uc_mcontext.gregs, at 40 in a ucontext_t: the sixteen general registers come first, the instruction pointer
+        //after them
+        fputs("  %codep = getelementptr i8, ptr %info, i64 8\n"
+              "  %code = load i32, ptr %codep\n"
+              "  %kernel = icmp eq i32 %code, 128\n"
+              "  br i1 %kernel, label %rscan, label %notours\n"
+              "rscan:\n"
+              "  %k = phi i64 [ 0, %regs ], [ %k1, %rnext ]\n"
+              "  %ri = add i64 %k, 5\n"
+              "  %rp = getelementptr i64, ptr %uc, i64 %ri\n"
+              "  %r = load i64, ptr %rp\n"
+              "  %rhi = lshr i64 %r, 32\n"
+              "  %rpois = icmp eq i64 %rhi, " SAN_POISON_HI "\n"
+              "  br i1 %rpois, label %followed, label %rnext\n"
+              "rnext:\n"
+              "  %k1 = add i64 %k, 1\n"
+              "  %rmore = icmp ult i64 %k1, 16\n"
+              "  br i1 %rmore, label %rscan, label %notours\n", out);
+    } else {
+        fputs("  br label %notours\n", out);
+    }
+    fputs("notours:\n"
+          "  %back = call i32 @sigaction(i32 %sig, ptr @__olang_san_old, ptr null)\n"
+          "  ret void\n"
+          "}\n\n", out);
+    fprintf(out,
+          //at the start of main - a program's or a test build's: the handler installed for SIGSEGV, the action it
+          //replaces kept. SA_SIGINFO for the address and the registers, SA_NODEFER since a report in a test leaves the
+          //handler by a jump (S18), and SA_ONSTACK so that it runs on a thread's alternate stack where one is set (S2)
+          "define linkonce_odr void @__olang_san_init() {\n"
+          "entry:\n"
+          "  %%sa = alloca [%zu x i8], align 16\n"
+          "  call void @llvm.memset.p0.i64(ptr %%sa, i8 0, i64 %zu, i1 false)\n"
+          "  store ptr @__olang_san_handler, ptr %%sa\n"
+          "  %%flagsp = getelementptr i8, ptr %%sa, i64 %zu\n"
+          "  store i32 %d, ptr %%flagsp\n"
+          "  %%r = call i32 @sigaction(i32 %d, ptr %%sa, ptr @__olang_san_old)\n"
+          "  ret void\n"
+          "}\n\n",
+          L->sigactionSize, L->sigactionSize, L->saFlags, (int)(SA_SIGINFO | SA_NODEFER | SA_ONSTACK), SIGSEGV);
 }
 
 /* S3 (§11 X6): a C function called by its name, chosen while the program runs - what an interpreter needs to call the

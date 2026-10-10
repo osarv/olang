@@ -26,6 +26,10 @@ static bool gTestBuild = false;
 //optimization deliberately - the language's own line is that you get what the machine can do unless you
 //asked otherwise, so this is the exception rather than one end of a spectrum of levels.
 static bool gDebug = false;
+//B2f: "-s" builds with the scope sanitizer - storage a closed scope gave back is poisoned, protected and quarantined, so
+//a use after its scope closed is reported where it happens. A whole-build mode for the reason -r is one: it changes the
+//runtime every object carries
+static bool gScopeSan = false;
 
 //B12: the machine a build is for - what "-a" names, resolved once, before anything is analyzed. Every generated function
 //carries its CPU and features (attrs) - which is what reaches the code generator at the link, under LTO, as well as
@@ -279,12 +283,12 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) 
         h = (h ^ (unsigned)b->kind ^ ';') * 16777619u;
     }
     if (userDefs) snprintf(cfg, sizeof(cfg), ".d%08x", h);
-    char* suffix = StrFmt("%s%s%s%s", cfg,
+    char* suffix = StrFmt("%s%s%s%s%s", cfg,
              entry == CG_ENTRY_MAIN ? ".main"
                  : entry == CG_ENTRY_TESTS ? ".test"     //the root, carrying the harness
                  : gTestBuild ? ".tmod"                  //a plain module built WITH the unwind chain
                  : "",
-             gRace ? ".race" : "", gDebug ? ".debug" : "");
+             gRace ? ".race" : "", gDebug ? ".debug" : "", gScopeSan ? ".san" : "");
     //the IR is an intermediate, written afresh just before each compile, so it keeps the readable name alone
     char* irPath = StrFmt("build/%s%s.ll", base, suffix);
     char* objPath = StrFmt("build/%s.%s%s.o", base, objectHash(mod), suffix);
@@ -356,7 +360,8 @@ void buildProgram(char* file) {
         ListAdd(&objs, &objPath);
     }
 
-    char* binPath = StrFmt("build/%s%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "");
+    char* binPath = StrFmt("build/%s%s%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "",
+                           gScopeSan ? ".san" : "");
     if (linkProgram(clang, &objs, binPath) != 0) ErrFatal((struct str){0}, ERR_LINK_FAILED, binPath);
     printf("%sbuilt ./%s%s\n", ErrMsgColor(COLOR_FG_GREEN), binPath, ErrMsgColor(COLOR_RESET));
 }
@@ -406,7 +411,8 @@ static int runTestFile(char* file, char* clang) {
 
     ensureBuildDir();
     requireClangOrExplain(clang, "build");
-    char* binPath = StrFmt("build/%s_test%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "");
+    char* binPath = StrFmt("build/%s_test%s%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "",
+                           gScopeSan ? ".san" : "");
 
     //one object per module, exactly as under -b; only the root differs, carrying the test harness
     //instead of main - and it is a distinct artifact from that module's plain object, so both can be
@@ -713,7 +719,7 @@ int main(int argc, char** argv) {
 }
 
 static int compilerMain(int argc, char** argv) {
-    //"-r", "-d", "-u" and "-D" are modifiers, valid alongside any mode and in any position, so they are
+    //"-r", "-d", "-s", "-u" and "-D" are modifiers, valid alongside any mode and in any position, so they are
     //stripped out before the mode dispatch below reads argv positionally - up to the file "-i" interprets: what
     //follows it is that program's command line (B3f), passed on as written, flags included
     int outp = 1;
@@ -723,6 +729,7 @@ static int compilerMain(int argc, char** argv) {
         //M23c: the remote repositories this build reaches move to their refs' current commits, and olang.lock with them
         if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
         if (!strcmp(argv[i], "-d")) { gDebug = true; continue; }
+        if (!strcmp(argv[i], "-s")) { gScopeSan = true; CodegenSetScopeSan(true); continue; }
         //B12: the machine to build for
         if (!strcmp(argv[i], "-a")) {
             if (i + 1 >= argc) ErrUsage(ERR_TARGET_MISSING);
