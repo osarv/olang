@@ -1177,6 +1177,18 @@ static void cgNoteBuildInto(struct cgCtx* ctx, const char* scope) {
     }
 }
 
+//E11c: a handed scope passed on as a callee's scope variable sv, where the walk said this body never builds into it
+//(SemanticReliesNoBuild) - a callee that may build into sv, or one whose body is not known, builds there for it, so it
+//is marked built and cgCheckMayBuild stops on it as on an allocation made here
+static void cgNoteHandedOn(struct cgCtx* ctx, struct operand* op, struct var* func, struct var* sv, const char* sval) {
+    if (!sval || !ctx->curFunc) return;
+    for (int i = 0; i < ctx->handed.len; i++) {
+        struct cgHanded* h = ListGetIdx(&ctx->handed, i);
+        if (h->built || strcmp(h->val, sval) != 0 || !SemanticReliesNoBuild(ctx->curFunc, h->sv)) continue;
+        if (op->callee || SemanticMayBuildInto(func, sv)) h->built = true;
+    }
+}
+
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
@@ -3482,6 +3494,9 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
         if (readOnly) ctx->capReadOnly--;
+        //E11c: a scope this body was handed and the walk said it never builds into, passed on to a callee that may build
+        //into the variable it is bound to, is that body building there too - held as its own allocations are
+        if (!spawnMerges) cgNoteHandedOn(ctx, op, func, sv, sval);
         if (spawnMerges && !atHere) sval = cgSpawnSubScope(ctx, spawnMerges, sval, args->len);
         else if (spawnMerges) {
             struct cgScopeMerge alias = { hereArg, args->len, false };

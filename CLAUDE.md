@@ -4812,6 +4812,16 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   can be stored through is refused even when it only reads (`derivedhelpercount`; one prelude test counts `listItem`s
   instead of `listBag`s for it). Master's larger inlined scope close (C9a) cost N8's depth: ~30,000 levels now, checked
   at 28,000.
+  **Round 6, after the fifth review** (`/home/user/review/str5`; round 5 held everywhere else): **C1** - a call in a catch
+  default whose result scope is still landing is handed the try's result scope (codegen's `targetScopeOverride`), which in
+  a Str was where the receiver lives, and the walk never counted a landing variable as bound (a use-after-free; the
+  checked-index form pre-existing): `mbiCall` now counts one bound where its call's target may be the variable asked about,
+  for known and unknown callees. **C2** - a local O26a moves into a borrowed result's home has its slot made there, and the
+  walk counted only its initializer (an internal error): the slot is now a site. And codegen's holding check reaches
+  helpers: a scope a body was handed and relied on never building into, passed on to a callee that may build into the
+  variable it is bound to, counts as built there (`cgNoteHandedOn`) - so a miss like C1's in a helper that only passes the
+  scope on is an internal error at compile time, not a silent use-after-free. The scope fuzzer now writes Str scenarios
+  (one in four): Str bodies of the shapes the reviews attacked, rendered in loops with churns, `-s` against `-i`.
 - **A spawned call may fail; a join that can fail is `try join` (P4/P4a-P4d replace the old P4, P1, P1g, R8, R10, D10a,
   K1, 2026-10-10; decision 50, the user's QE "We need some way to make spawn functions fail ... Solve it", the shape
   approved; details mine).** `spawn try f(a)`, `spawn x = try f(a) catch E default v`, `spawn try f(a) catch E { ... }`;

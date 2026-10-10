@@ -11419,7 +11419,9 @@ static bool mbiCall(struct operand* op, bool tgt) {
     if (f && !f->type.isExtern) {
         for (int i = 0; i < f->type.scopeVars.len; i++) {
             struct var* w = *(struct var**)ListGetIdx(&f->type.scopeVars, i);
-            if (!mbiBound(op, w)) continue;
+            //(a variable still following the result is bound where the code around the call builds - the target, a catch
+            //default's try result: codegen's targetScopeOverride)
+            if (!mbiBound(op, w) && !(tgt && SemanticBindingIsLanding(op, w))) continue;
             if (!known || mayBuildInto(f, w)) return mbiSite(op);
         }
         //a constructor builds what its fields hold where its instance lands (C2g)
@@ -11428,7 +11430,8 @@ static bool mbiCall(struct operand* op, bool tgt) {
     if (!known) { //anything bound here may be built into, by code not known
         for (int i = 0; i < op->scopeBindings.len; i++) {
             struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
-            if (!b->boundUnnamed && (mbiIs(b->boundTo, b->boundDepth) || mbiIs(SemanticBoundScope(op, b->typeParam), 0)))
+            if ((tgt && b->landing)
+                    || (!b->boundUnnamed && (mbiIs(b->boundTo, b->boundDepth) || mbiIs(SemanticBoundScope(op, b->typeParam), 0))))
                 return mbiSite(op);
         }
     }
@@ -11579,6 +11582,12 @@ static bool mbiStmt(struct statement* s) {
     switch (s->sType) {
     case STATEMENT_VAR_DECL: {
         bool at = mbiDeclIs(&s->var);
+        //O26a: a local the function hands back is made in the result's home - its slot is a build there (cgVarDecl:
+        //valueHome, else the result scope), whatever its initializer builds
+        if (s->var.storeInResult && mbiF) {
+            struct var* home = s->var.valueHome ? s->var.valueHome : mbiF->type.resultScope;
+            if (home && mbiIs(home, 0)) return mbiSite(s->op);
+        }
         if (s->fillValue && s->var.type.arrElem && mbiBoundary(*s->var.type.arrElem, s->fillValue, at)) return mbiSite(s->fillValue);
         if (mbiBoundary(s->var.type, s->op, at)) return mbiSite(s->op);
         if (at && s->op && s->var.type.bType == BASETYPE_ARRAY && s->var.type.arrMalloc && !s->var.type.structMAlloc

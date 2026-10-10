@@ -14696,6 +14696,37 @@ cases for the reverted relaxations are refused cases again (`stradapter`, `strca
 `strspawnpart`, and the `transientadapter`, `spawnnobuild` and `arraycallback` fixtures as `strtransientadapter`,
 `strspawnnobuild`, `strarraycallback`).
 
+**Round 6, after the fifth review (`/home/user/review/str5`).** Round 5 held everywhere the review looked - every str4
+reproducer, the generators, about 105 targeted Str shapes, 39 PE2 shapes, the builder's unwind chain - except two
+findings, both older than it:
+- **C1** (a use-after-free; round 4's, its checked-index form pre-existing): a try's catch default is built where the
+  try's result lives, and codegen hands that scope (`targetScopeOverride`, from `cgTryDefaultStore`) to a call in the
+  default whose result scope is still landing - `b.head.next = try f(b.head) catch default g(5)` built `g`'s node in the
+  scope `$` opened for the receiver, f's result being borrowed from it; so did `Map.Get`, a checked index, a function
+  value, a spawned lambda, and a helper passing its parameter's scope to such a call. The walk asked a callee only about
+  variables `mbiBound` reported, and a landing binding is not one. `mbiCall` now counts a variable as bound when it is still
+  landing and the call's own target may be the variable asked about (`tgt`) - for a callee whose body is known and one
+  whose body is not. **The holding check reached only allocations**: in the helper case the helper allocated nothing
+  itself, it handed its parameter's scope to `g`, so its relied-on "no" was never contradicted. `cgNoteHandedOn` now marks
+  a handed scope built where the body passes it, as a callee's scope variable, to a callee that may build into that
+  variable (or whose body is not known) - checked only where the walk's "no" is relied on. With the walk fix taken out,
+  both the Str and the helper reproducer now stop with an internal error instead of running.
+- **C2** (an internal error; round 4's): O26a makes a local a function hands back in the result's home - for a borrowed
+  result, `valueHome`, the parameter's scope - and `cgVarDecl` allocates the local's own slot there, but the walk counted
+  only what its initializer built. The slot is a site where `storeInResult` holds and that home (else the result scope,
+  as `cgVarDecl` reads it) is the variable asked about.
+Both are checks (`strdefault*`, `strmovedlocal*`). **The scope fuzzer writes Strs now** - it wrote none, so it could not
+reach either: one scenario in four declares a type over a node, a List, a Map and an array of nodes whose `Str` does one
+to three of the shapes the reviews attacked (stores through conditionals, matches and catch defaults over a borrowed
+result, `Map.Get` and a checked index; building and reading callbacks; frame lambdas; tasks and spawned lambdas;
+generics; call cycles; E31b writes through a List element; a moved local) or what Str may do (read and walk, write a
+number - an effect, so the count of calls shows - build in its own blocks), in blocks, loops and deferred code, rendered
+three times alone or in a join with a churn after each, the text's hash in the checksum. About a third of the Str
+scenarios are accepted (three in five statements are what Str may do); the rest must print the same built `-d -s` and
+interpreted. Run on this compiler: 450 programs (seeds 31000-31149 and 32000-32299), 2,180 scenarios run, 3,220
+refused, no finding; on round 5's compiler (1268a8d) the same generator found 20 in 60 programs - the use-after-frees
+C1 and C2 and the internal error.
+
 ### A spawned call may fail; a join that can fail is `try join` (P4, P4a-P4d, P1, P1g, R8, R10, D10a, K1, 2026-10-10)
 
 **Where it came from.** P4 said a spawned function may not declare errors, on the grounds that an error raised on

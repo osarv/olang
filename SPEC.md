@@ -2410,8 +2410,10 @@ there) - and may require nothing of such a scope (an obligation, O10b, naming on
 `Str`; `$` hands its receiver's scope variables the scope it opens for the call, in which nothing is ever built through
 them. The same holds through whatever `Str` does with a part
 of what its receiver reaches: a function it passes the part to, a closure capturing it (D16d), a task handed it (P2), a
-function value adapting it (E31), a conditional's or a match's new value, or a catch default, placed with it (E28,
-S12b, R9a) - each is judged by what is built where that part lives, and building there is the error, at `Str`. A call
+function value adapting it (E31), a conditional's or a match's new value, or a catch default - a call in it whose result
+follows the default's included - placed with it (E28, S12b, R9a), a local a function hands back, made where its
+borrowed result lives (O26a) - each is judged by what is built where that part lives, and building there is the error,
+at `Str`. A call
 through a function value - a callback a function was handed included - is a body not known there, so it is judged to build
 wherever it binds such a scope, whatever is passed for it; a task handed a part gets a stand-in made where the part lives
 (P2), and a function value adapting a part (E31) is made there, so each is building there too.

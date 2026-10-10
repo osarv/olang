@@ -1,0 +1,38 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/R9a: a call in a catch default whose result scope is still landing takes the try's result scope - here the
+# receiver's node, f's result being borrowed from it - so the walk counts it where the default lands (C1)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(head mut Node&, k I64) {
+    head
+    k
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn nv(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+fn grow(x mut Node&) { x.next = Node(x.v + 100) }
+fn f(n mut Node&) mut Node&n ? {
+    if n.v > 0 { error }
+    return n
+}
+fn g(v I64) mut Node& { return Node(v) }
+fn (b Bag&) Str() String {
+    b.head.next = try f(b.head) catch default g(5)
+    return "b" $b.k
+}
+fn main() ? {
+    b := Bag(Node(1), 3)
+    println($b)
+    t := churn(100)
+    println($nv(b.head) " " $t)
+}
