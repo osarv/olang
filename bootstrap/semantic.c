@@ -15966,12 +15966,15 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         //borrow of it hands over (O17) - or the result scope, for one the function returns (O26a)
         //(a value array's elements too, though read as a reference - its run-time length is a {len, ptr} pair, T11)
         if ((!asRef || !op->type.structMAlloc) && v->storeInResult && v->valueHome) { *outVar = v->valueHome; return true; }
-        if (!asRef) { *outDepth = isParam ? 1 : op->type.scopeDepth; return true; } //a by-value slot is ours
+        //(a parameter's slot is the body's top level - except in a constructor, whose top level is the instance's scope
+        //while its parameters are slots of its frame: they read as an inner block, C2g)
+        int paramDepth = ctx && ctx->inCtor ? 2 : 1;
+        if (!asRef) { *outDepth = isParam ? paramDepth : op->type.scopeDepth; return true; } //a by-value slot is ours
         if (op->type.scopeUnknown) { *outVar = SCOPE_AMBIGUOUS; return true; } //O11/O12: not known here
         //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
         //storage this call keeps for its whole length: its own copy, or the caller's when it may not write it. Its scope
         //variable (O4b) is where the references it holds live (valueRefsHome), not its storage
-        if (isParam && !op->type.structMAlloc && op->type.bType == BASETYPE_ARRAY) { *outDepth = 1; return true; }
+        if (isParam && !op->type.structMAlloc && op->type.bType == BASETYPE_ARRAY) { *outDepth = paramDepth; return true; }
         if (op->type.scopeParam) {
             struct var* r = resolveEffectiveScopeVar(op, op->type.scopeParam);
             if (r == SCOPE_AMBIGUOUS) { *outVar = SCOPE_AMBIGUOUS; return true; }
@@ -15982,7 +15985,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         }
         //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
         //storage this call keeps for its whole length: its own copy, or the caller's when it may not write it
-        if (isParam && !op->type.structMAlloc) { *outDepth = 1; return true; }
+        if (isParam && !op->type.structMAlloc) { *outDepth = paramDepth; return true; }
         if (isParam) { *outVar = SCOPE_AMBIGUOUS; return true; } //a caller's scope with no variable to name it
         *outDepth = op->type.scopeDepth;
         *unnamed = op->readVar->scopeUnnamed || v->scopeUnnamed;
@@ -19482,6 +19485,12 @@ static void patBind(struct checkCtx* ctx, struct token tok, struct operand* at, 
         t.scopeParam = unnamed || t.scopeUnknown ? NULL : sv;
         t.scopeWritten = false;
         t.scopeDepth = t.scopeUnknown ? ctx->blockDepth : unnamed || sv ? 0 : sd;
+    } else {
+        //O25a/S13: a value binding is a local of its clause - its storage is the clause's, one block in from the match
+        //(the clause's body is that block), never the body's top level, which a depth of 0 would read as (normDepth)
+        t.scopeParam = NULL;
+        t.scopeWritten = false;
+        t.scopeDepth = ctx->blockDepth + 1;
     }
     struct var* v = NULL;
     if (altIdx == 0) {
@@ -22219,6 +22228,10 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
         local->paramCopy = true; //T25c
         local->mayBeInitialized = true;
         local->mut = true; //D9, as a function's: the constructor's own copy, or its own cursor
+        //C2g/O25a: a by-value parameter is a slot of the constructor's frame, which closes at its return - shorter than
+        //the instance its top level stands for, so it reads as an inner block: a borrow of it is not kept in a field
+        //("keep P& = p" pointed into the dead frame). A field punning it is a copy into the instance, unaffected
+        if (!local->type.structMAlloc && local->type.bType != BASETYPE_FUNC) local->type.scopeDepth = 2;
         ListAdd(&ctorScope.localPtrs, &local);
     }
     struct checkCtx cctx = {0};
@@ -22226,6 +22239,10 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
     cctx.scope = &ctorScope;
     cctx.func = t->ctorFunc;
     cctx.hasOwnScope = true;
+    //O2: the body's own top level is depth 1, as a function's is, so its nested blocks are 2 and deeper - at 0 the first
+    //nested block read as the top level (normDepth), which a constructor makes the instance's scope (C2g): a borrow of a
+    //local of that block could be kept in a field, pointing into the constructor's dead frame
+    cctx.blockDepth = 1;
 
     cctx.inCtor = true;
     t->ctorFunc->codeBlock = ListInit(sizeof(struct statement));
@@ -22260,10 +22277,25 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
         //D13b's element fill. The only thing a field does that a local does not is outlive the call.
         struct operand* fieldOp;
         struct operand* fillValue = NULL;
+        //C2g: a reference field written with a bare "&" holds what lives where the instance does - the constructor's top
+        //level, depth 1 - so what it is given must last that long: a borrow of a parameter's slot or of an inner block's
+        //local does not (as a field's own type, depth 0 would accept any)
+        struct type fieldAsLocal = field->type;
+        if (fieldAsLocal.structMAlloc && !fieldAsLocal.scopeParam && fieldAsLocal.scopeDepth == 0) fieldAsLocal.scopeDepth = 1;
         if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
             if (typeExprNode) {
-                reportTypeFit(OperandFitsType(cctx.func, fieldOp, field->type), fieldOp->tok, fieldOp, field->type);
+                int errsFieldFit = ErrMsgGetNErrors();
+                reportTypeFit(OperandFitsType(cctx.func, fieldOp, fieldAsLocal), fieldOp->tok, fieldOp, field->type);
+                //...and existing storage given to it, a borrowed result included, must be no shorter-lived than the
+                //instance: "keep P& = borrow(p)" with p a parameter's slot would point into the closing frame
+                struct var* kv;
+                int kd;
+                bool ku;
+                if (ErrMsgGetNErrors() == errsFieldFit && fieldAsLocal.structMAlloc && !fieldAsLocal.scopeParam
+                        && !operandIsTemporary(&cctx, fieldOp) && !fieldOp->isNullLiteral
+                        && RefExactScope(&cctx, fieldOp, true, &kv, &kd, &ku) && !kv && !ku && normDepth(kd) > 1)
+                    Err(fieldOp->tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
             } else { // ":=" - type read straight off the rhs (D15)
                 field->type = inferredDeclType(cctx.func, fieldOp);
                 //O25a/C2d: it writes no scope - the field lives where its initializer does: where a parameter's argument
@@ -22329,7 +22361,8 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
             Err(field->tok, ERR_FIELD_HAS_PARAM_NAME, field->tok);
             Note(clash->tok, NOTE_DECLARED_HERE, clash->tok);
         } else if (!isPun) {
-            struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, field->type, true);
+            struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok,
+                                             field->type.structMAlloc && !field->type.scopeParam ? fieldAsLocal : field->type, true);
             local->scopeBindings = field->scopeBindings;
             struct statement decl = (struct statement){0};
             decl.sType = STATEMENT_VAR_DECL;
