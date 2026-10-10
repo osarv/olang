@@ -14284,3 +14284,223 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     assert bs[0].P[0] == 9 and bs[1].P[0] == 9
     assert QcBaked == 42 and qcAll(k) == QcBaked and qcAll(0) == 42
 }
+
+# ---- study 5: a call's result passed on, writes through x[i], O17 per instantiation, loop copies ----
+
+# O18c (study 5, r01): a call's value result holding what its argument refers to, passed straight to another call, lives
+# where that argument does - "bs.Push(box(t))" is "b := box(t); bs.Push(b)" - so made where the list lives it is kept
+type s5Box struct(s String&) { s }
+fn s5MkBox(s String&) s5Box { return s5Box(s) }
+fn s5One(s String&) List<String&> {
+    c := List<String&>()
+    c.Push(s)
+    return c
+}
+fn s5Kept(n I64) I64 {
+    bs := List<s5Box>()
+    rows := List<List<String&>>()
+    outer := "outer"
+    for k in range n {
+        t mut String&bs = $k "-kept-text"
+        bs.Push(s5MkBox(t))
+        bs.Push(s5MkBox(outer))
+        rows.Push(s5One(t))
+        rec mut List<String&>&rows = List<String&>()
+        rec.Push($k "-in-rec")
+        rows.Push(rec.Clone())
+        sbChurn()
+    }
+    sbChurn()
+    t I64 = 0
+    for b in bs { t += b.s.Len() }
+    for r in rows { t += r[0].Len() }
+    return t * 10 + (1 if bs[2].s == "1-kept-text" and rows[3][0] == "1-in-rec" else 0)
+}
+test "O18c: a call's result passed on lives where its argument does, and is kept when that is where it is kept" {
+    assert s5Kept(sbRun * 3) == 1051
+}
+
+# E31 (study 5, r02): a write through x[i] - a field assigned, a "mut" method, a "mut &" argument, an increment - reads
+# the element through At and writes the copy back through SetAt; a collection read out of another is written back one
+# level at a time
+type s5Pt struct() {
+    X I64 = 0
+}
+type s5Acc struct() {
+    N I64 = 0
+    In s5Pt = s5Pt()
+}
+fn (a mut s5Acc&) Add() { a.N++ }
+fn (a mut s5Acc&) AddGet(k I64) I64 {
+    a.N += k
+    return a.N
+}
+fn (p mut s5Pt&) Move(dx I64) { p.X += dx }
+fn s5Bump(a mut s5Acc&) { a.N++ }
+type s5Row struct() {
+    cells Array<s5Acc, 3> = Array<s5Acc, 3>()
+}
+fn (r s5Row&) At(i I64) s5Acc { return r.cells[i] }
+fn (r mut s5Row&) SetAt(i I64, v s5Acc) { r.cells[i] = v }
+fn s5Writes(k I64) I64 {
+    l := List<s5Acc>()
+    l.Push(s5Acc())
+    l.Push(s5Acc())
+    l[0].Add()
+    l[0].N += 5 + k
+    l[1].N = 7
+    l[1].In.X = 3
+    l[1].In.Move(4)
+    s5Bump(l[0])
+    g := l[0].AddGet(2)
+    l[1].N++
+    rows := List<s5Row>()
+    rows.Push(s5Row())
+    rows[0][1].N = 9
+    rows[0][2].Add()
+    rows[0][2].In.Move(5)
+    ll := List<List<s5Acc>>()
+    ll.Push(List<s5Acc>())
+    ll[0].Push(s5Acc())
+    ll[0][0].Add()
+    ll[0][0].N += 40
+    return l[0].N * 1000000 + l[1].N * 10000 + l[1].In.X * 1000 + g * 10 + rows[0][1].N + rows[0][2].N * 100 +
+           rows[0][2].In.X * 100000000 + ll[0][0].N * 1000000000
+}
+S5WritesBaked I64 = s5Writes(0)
+test "E31: writes through x[i] go back through SetAt, evaluated while compiling as at run time" {
+    k I64 = I64(ctRuntimeZero)
+    assert s5Writes(k) == S5WritesBaked
+    assert S5WritesBaked == 41509087199
+}
+
+# E31: an element holding references written through x[i] in a loop, read back after an arena churn
+type s5Rec struct(name String&) {
+    name
+    n I64 = 0
+}
+fn s5RecWrites(n I64) I64 {
+    l := List<s5Rec>()
+    l.Push(s5Rec("a"))
+    keep := "kept-name"
+    for k in range n {
+        l[0].n += k
+        l[0].name = keep
+        sbChurn()
+    }
+    sbChurn()
+    return l[0].n * 100 + l[0].name.Len()
+}
+test "E31: an element holding references, written through x[i] in a loop" {
+    assert s5RecWrites(sbRun * 4) == 609
+}
+
+# E31/R21: under "try" the read is checked as "try x[i]" is, and the write back as "try x[i] = v"
+fn s5TryWrites() I64 {
+    l := List<s5Acc>()
+    l.Push(s5Acc())
+    r I64 = 0
+    try l[0].N = 5 catch { r += 1000 }
+    try l[3].N = 5 catch { r += 100 }
+    try l[0].N += 2 catch { r += 1000 }
+    try l[7].N++ catch { r += 10 }
+    return r + l[0].N
+}
+S5TryBaked I64 = s5TryWrites()
+test "E31/R21: try on a write through x[i] checks the read and the write back" {
+    assert s5TryWrites() == 117 and S5TryBaked == 117
+}
+
+# O17 (study 5, r03): what a function's body does with a region is its own - one instantiation of List.At handing its
+# region out does not make another one do so, whatever order the program uses them in
+fn s5Order() I64 {
+    rows := List<List<String&>>()
+    a := List<String&>()
+    a.Push("x")
+    rows.Push(a)
+    first := rows[0][0]
+    t I64 = 0
+    for r in rows { t += r[0].Len() }
+    return t + first.Len()
+}
+test "O17: a generic's instantiations each say what their own body does with a region" {
+    assert s5Order() == 2
+}
+
+# O26a (study 5, r05): a for-in element is an element of what it walks, so a local walked into a returned one lives where
+# the result is put, as "out.Push(all[i])" makes it
+fn s5Top(counts Map<String&, I64>&, k I64) List<Pair<String&, I64>> {
+    all := List<Pair<String&, I64>>()
+    for e in counts { all.Push(Pair(e.Key, e.Value)) }
+    all.Sort(fn(a, b) { return a.Second > b.Second })
+    out := List<Pair<String&, I64>>()
+    for p in all {
+        if out.Len() >= k { break }
+        out.Push(p)
+    }
+    return out
+}
+test "O26a: a for-in element pushed into a returned list" {
+    m := Map<String&, I64>()
+    m.Put("a", 3)
+    m.Put("b", 5)
+    m.Put("c", 4)
+    top := s5Top(m, 2)
+    sbChurn()
+    assert top.Len() == 2 and top[0].First == "b" and top[1].Second == 4
+}
+
+# E25 (study 5, r04): a scope argument puts a call's results where it says, destructured or not
+fn s5Mk2(n I64) (List<String&>, I64) {
+    l := List<String&>()
+    for i in range n + 1 { l.Push($i "-made") }
+    return l, n + 1
+}
+fn s5Destructured(n I64) I64 {
+    rows := List<List<String&>>()
+    for k in range n {
+        rec, next := s5Mk2&rows(k)
+        rows.Push(rec)
+        assert next == k + 1
+        sbChurn()
+    }
+    sbChurn()
+    t I64 = 0
+    for r in rows { t += r.Len() * 100 + r[r.Len() - 1].Len() }
+    return t
+}
+test "E25: a scope argument on a call whose results are destructured" {
+    assert s5Destructured(sbRun * 3) == 618
+}
+
+# D16c (study 5, r07): a lambda captures a value holding references with the scope they live in, and lives no longer
+type s5Reading struct(Sensor String&, Value F64) {
+    Sensor
+    Value
+}
+fn s5Reader(r s5Reading) fn() I64 {
+    return fn() I64 { return r.Sensor.Len() + I64(r.Value) }
+}
+fn s5Captures(n I64) F64 {
+    m := Map<String&, F64>()
+    m.Put("a", 0.0)
+    outer := s5Reading("outer-text", 2.0)
+    fs := List<fn() I64>()
+    for k in range n {
+        t := $k "-capture-text"
+        x := s5Reading(t, 1.5)
+        f := fn() I64 { return x.Sensor.Len() }
+        assert f() == t.Len()
+        fs.Push(s5Reader(outer))
+        m.Update("a", 0.0, fn(v F64) F64 { return v + x.Value + outer.Value })
+        sbChurn()
+    }
+    sbChurn()
+    t F64 = 0.0
+    for g in fs { t += F64(g()) }
+    return t + (try m.Get("a") catch default 0.0)
+}
+S5CapturesBaked F64 = s5Captures(2)
+test "D16c: a lambda capturing a value holding references" {
+    assert s5Captures(sbRun * 2) == 31.0 and S5CapturesBaked == 31.0
+}

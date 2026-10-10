@@ -1,0 +1,14 @@
+# check: fail x[i] gives a copy, written back after the call, and the call can build into what it holds
+# E31/O17: a write through x[i] goes to a copy of the element, written back by SetAt; a call that stores into what the
+# copy holds would do so in the copy's block, which the collection outlives
+type Rec struct(name String&) {
+    name
+    tags List<String&> = List<String&>()
+}
+fn (r mut Rec&) Tag(t String&) { r.tags.Push(t) }
+
+fn main() ? {
+    l := List<Rec>()
+    l.Push(Rec("a"))
+    for k in range 3 { l[0].Tag("lit") }
+}

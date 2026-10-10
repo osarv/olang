@@ -1,0 +1,15 @@
+# check: fail declares At but not SetAt - the copy At gives back is never written back
+# E31: a "mut" method called on x[i] of a type declaring At and no SetAt
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+type Ro struct() {
+    a Acc = Acc()
+}
+fn (r Ro&) At(i I64) Acc { return r.a }
+
+fn main() ? {
+    r := Ro()
+    r[0].Add()
+}

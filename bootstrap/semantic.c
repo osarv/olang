@@ -9801,6 +9801,9 @@ static void noteMakeWhereNamed(struct checkCtx* ctx, struct operand* shortArg, s
         struct var* arr = src && OperandIsLvalue(src) ? lvalueRootVar(src) : NULL;
         if (arr && arr->name.len && arr->name.ptr[0] != '$' && !made->type.structMAlloc && made->tok.owner)
             Note(made->tok, NOTE_LOOP_COPY, made->name, arr->name, arr->name);
+        //...and any other: what a call is lent of it lives in the loop's block, though its references do not (r06)
+        else if (!made->type.structMAlloc && TypeHoldsReferences(made->type) && made->tok.owner)
+            Note(made->tok, NOTE_LOOP_COPY_LENT, made->name);
         return;
     }
     if (init && init->opType == OPERATION_FUNCCALL && init->readVar && !opIsCtorCall(init)) {
@@ -9945,6 +9948,13 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         struct operand* lArg = argForScope(func, args, o->longer);
         struct operand* sArg = o->shorterViaParam ? NULL : argForScope(func, args, o->shorter);
         if (lArg && sArg) noteMakeWhere(ctx, lArg, sArg);
+        //B11: text read out of something made too briefly is passed as a copy - rendered text is built where the callee
+        //needs it (O18b), "m.Update($cols[0], ...)"
+        struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
+        struct var* with = sArg ? livesWithVar(sArg) : NULL;
+        if (lArg && with && textT && lArg->type.bType == BASETYPE_ARRAY && lArg->type.owner == textT->owner
+                && StrCmp(lArg->type.name, textT->name) && !argIsFreshTemp(lArg) && lArg->tok.owner)
+            Note(lArg->tok, NOTE_TEXT_COPY_WHERE, with->name);
     }
 }
 
@@ -16049,6 +16059,29 @@ static bool resultScopeHere(struct checkCtx* ctx) {
     return ctx->hasOwnScope && f && !ctx->inCtor && !ctx->inDefer && resultHome(f);
 }
 
+//O26a: whether what a call's result holds of its arguments lives in one of this function's blocks - its callee holds an
+//argument's scope to outlive its result scope (O10b), and that argument is a block's ("l := groups.Get(k)", groups a
+//local): such a result cannot be where the function's result is put, and moving the local there would only make that
+//an error elsewhere - where nothing would have been wrong with the local left in its block
+static bool callResultTiedToBlock(struct checkCtx* ctx, struct operand* rhs) {
+    while (heldResult(rhs)) rhs = heldResult(rhs);
+    if (rhs->opType != OPERATION_FUNCCALL || !rhs->readVar) return false;
+    struct var* f = rhs->readVar;
+    struct var* R = f->type.resultScope;
+    if (!R) return false;
+    for (int i = 0; i < f->type.scopeObligations.len; i++) {
+        struct scopeObligation* o = ListGetIdx(&f->type.scopeObligations, i);
+        if (o->shorterViaParam || canonicalVar(o->shorter) != canonicalVar(R) || canonicalVar(o->longer) == canonicalVar(R))
+            continue;
+        struct var* to;
+        int d;
+        bool un, landing;
+        if (!calleeScopeAt(ctx, rhs, f, rhs->args, o->longer, &to, &d, &un, &landing) || landing || un) continue;
+        if (!to) return true;
+    }
+    return false;
+}
+
 //O26a: a value local the function returns - on any path, or a field of it - lives where the result is put (resultHome):
 //its storage and everything built into it are there, so the value it hands back refers to nothing that dies at the
 //return. That is a value holding references whose initializer makes it (not a copy of storage that already lives
@@ -16065,7 +16098,7 @@ static bool localLivesInResult(struct checkCtx* ctx, struct str name, struct typ
     bool refResult = rt.structMAlloc && rt.scopeParam && canonicalVar(rt.scopeParam) == canonicalVar(home);
     bool holds = TypeHoldsReferences(t);
     if (!holds && !refResult) return false;
-    if (rhs && OperandNamesExistingStorage(rhs)) return false;
+    if (rhs && (OperandNamesExistingStorage(rhs) || callResultTiedToBlock(ctx, rhs))) return false;
     for (int i = ctx->blockStmtIdx + 1; i < ctx->blockStmts.len; i++) {
         struct syntax* st = *(struct syntax**)ListGetIdx(&ctx->blockStmts, i);
         if (syntaxReturnsName(st, name)) return true;
@@ -16082,7 +16115,7 @@ static bool localLivesInResult(struct checkCtx* ctx, struct str name, struct typ
 static bool refLocalLivesInResult(struct checkCtx* ctx, struct str name, struct type t, struct operand* rhs) {
     if (!resultScopeHere(ctx)) return false;
     if (!t.structMAlloc || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || t.unknown) return false;
-    if (rhs && !rhs->isNullLiteral && !operandIsTemporary(ctx, rhs)) return false;
+    if (rhs && !rhs->isNullLiteral && (!operandIsTemporary(ctx, rhs) || callResultTiedToBlock(ctx, rhs))) return false;
     return localFlowsToResult(ctx, name, t);
 }
 

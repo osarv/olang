@@ -1,0 +1,15 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# O18c: the same through a function of the program's own and a Map, its note naming the text to make elsewhere
+type Box struct(s String&) { s }
+fn box(s String&) Box { return Box(s) }
+fn keep(l mut List<Box>&, b Box) { l.Push(b) }
+
+fn main() ? {
+    bs := List<Box>()
+    m := Map<I64, Box>()
+    for k in range 4 {
+        t := $k "-text"
+        keep(bs, box(t))
+        m.Put(k, box(t))
+    }
+}
