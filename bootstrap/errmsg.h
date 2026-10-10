@@ -311,6 +311,8 @@ struct type;
     X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
     X(ERR_IMMUTABLE,                    "S6",    "%S cannot be written - only a local, a parameter or a 'mut' global can") \
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
+    X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "Str renders read-only values too, so it only reads its receiver - pass on what it holds read-only") \
+    X(ERR_STR_WRITES,                   "E11c",  "Str runs as often as '$' needs, so it must have no effect - it writes, through a reference, what was there before it ran") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_ZERO_BY_REFERENCE,           "",      "'%s' holds it by reference, whose zero value is null") \

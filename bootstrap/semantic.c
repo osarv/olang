@@ -7704,6 +7704,8 @@ static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct va
 bool callIsLanding(struct operand* op);
 static bool argIsFreshTemp(struct operand* op);
 static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args, struct token tok);
+static void effMark(struct var* f, struct token tok);
+static bool effPlaceOutside(struct checkCtx* ctx, struct operand* p);
 static bool copiesExistingRefs(struct checkCtx* ctx, struct operand* op) {
     if (!op || op->isNullLiteral) return false;
     if (heldResult(op)) return copiesExistingRefs(ctx, heldResult(op));
@@ -11058,10 +11060,18 @@ static void checkStrPurity(void) {
         struct strMethod* e = ListGetIdx(&strMethods, i);
         struct token where = e->m->tok;
         const char* why = CtWhyNotEvaluable(e->m, &where);
+        //T25c: "$" renders read-only copies too (an immutable global, a part of a read-only reference), so a by-value
+        //receiver is never one that needs a writable argument
+        struct var* recv = e->m->type.vars.len ? ListGetIdx(&e->m->type.vars, 0) : NULL;
+        if (!why && recv && !TypeIsPermRef(recv->type) && recv->roNeedsWritable) {
+            Err(e->m->tok, ERR_STR_RECEIVER_WRITABLE);
+            continue;
+        }
         //...which a write through a reference is not, while compiling - but it is one, repeated by every "$"
         if (!why && e->m->effWrites) {
-            why = "it writes what was there before it ran, through a reference";
-            where = e->m->effTok;
+            Err(e->m->tok, ERR_STR_WRITES);
+            Note(e->m->effTok, NOTE_HERE);
+            continue;
         }
         if (!why) continue;
         Err(e->m->tok, ERR_STR_HAS_EFFECT, why);
@@ -12750,6 +12760,7 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
         ListAdd(&seq->comprBody, &set);
         return seq; //S3a: no value - nothing reads one, and giving it the target's would evaluate the place again (S4)
     }
+    if (ctx->hasOwnScope && !ErrMsgMuted() && !target->type.unknown && effPlaceOutside(ctx, target)) effMark(ctx->func, tok); //E11c
     if (target->type.bType == BASETYPE_TYPEVAR) return NULL;
     //under "try" (E31) a number's increment is "x = x + 1", which the try then checks for overflow
     bool num = TypeIsNumeric(target->type);
@@ -13968,6 +13979,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         struct list atArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode);
         rejectDefaultArgs(atArgs);
         ctx->allowFallibleCall = allowedAt;
+        if (atomKind != OPERATION_ATOMIC_LOAD && ctx->hasOwnScope && !ErrMsgMuted() && effPlaceOutside(ctx, recvOp)) effMark(ctx->func, mTok); //E11c
         return OperandAtomic(ctx->func, recvOp, atArgs, atomKind, mTok);
     }
     //a field always wins - a method may not share its name (M19) - so "x.f(args)" on a field is E13b's call through
