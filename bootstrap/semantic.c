@@ -6394,7 +6394,10 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     //G23: a type variable written bare as a value - "return T"
     if (!v && currentBindings && bindingGet(currentBindings, name)) { Err(tok, ERR_TYPE_VAR_AS_VALUE, name); return NULL; }
     //B10: in a condition, a name nothing declares and nothing is near is most likely a build constant -D did not define
-    if (!v && ctx->inCondition && !suggestName(ctx->mod, name, true).len) {
+    if (!v && ctx->inCondition && !suggestName(ctx->mod, name, true).len && !importedTypeNamed(ctx->mod, name).len) {
+        void* fn = ctx->func ? (void*)ctx->func : (void*)-1;
+        if (unknownReportedIn(ctx->mod, name, fn)) return NULL; //B11: said once, where it was first met
+        if (fn != (void*)-1) noteUnknownReported(ctx->mod, name, fn);
         Err(tok, ERR_UNKNOWN_BUILD_NAME, tok, name);
         if (!condUnknownTok.str.len) condUnknownTok = tok;
         return NULL;

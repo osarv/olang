@@ -4705,7 +4705,7 @@ static bool caseValueComma(struct token found) {
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
     //L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
-    if (keywordMayNameField(found.type) && expected && !strcmp(expected, "an expression")) {
+    if (keywordMayNameField(found.type) && expected && !strcmp(expected, "an expression") && prev.type != TOK_ARROW) {
         ErrSyntax(found, ERR_KEYWORD_FIELD_READ, found);
         return true;
     }

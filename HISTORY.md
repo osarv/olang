@@ -12821,7 +12821,9 @@ compiles and fails with `OUT_OF_BOUNDS` where it runs; without `try` it stays an
 chain - not its first name - with a lambda in it) and for text followed by `(` on its line (a call of text); one error per
 unknown name per function (types per module) with an import's type suggested (`Json` -> `json.Json`), a pattern of an
 unknown enum binding unknowns, and no S8a "the same on every build" decided from an unknown (the study's json2csv went
-from 39 errors to 2); a catch block whose last statement is a value says to write `} default v` after the block,
+from 39 errors to 2 - B10's "define it with -D" for an unknown name in a condition counts as that one error too, and
+the cases that counted each repetition, `unknowncascade`, `unknownreceiver` and `unknowntypearg`, now count each name);
+a catch block whose last statement is a value says to write `} default v` after the block,
 quoting it; a clause ending in `os.Exit` (or an extern `exit`/`_exit`/`abort`) says it is an ordinary call and needs
 `unreachable` after it; P1g with a reference target for a value result names the result type to declare; T7a reached
 through a generic (`nums.Map(fn(n) String { ... })`) points at the lambda's result and says to write `String&`.
@@ -12834,7 +12836,8 @@ pun, which would be the statement), and reached only after `.`. The tokenizer re
 something other than a statement end follows on its line, and in that body it is no local: a later statement reading
 it alone is "a keyword, not a name - a field named by one is reached only after '.'". Keywords that begin a statement or
 a value (`if`, `for`, `return`, `fn`, `try`, `not`, `true`...) stay reserved everywhere, as do all of them for locals,
-parameters, functions and types - reading `done` alone must keep meaning the statement.
+parameters, functions and types - reading `done` alone must keep meaning the statement. After `=>`
+S12b's hint (a clause that leaves is a block) comes first, so `nomatch => unreachable` is not read as a field.
 
 **Adversarial tests**, per relaxation: O26a (numbers) - `o26anumberstore` must fail where the line itself is stored,
 `o26anumberstorefix` runs, the landing scenario's `numberflow` under `ulimit -v 50000`, corpus tests reading back after
