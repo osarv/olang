@@ -11081,17 +11081,17 @@ static void checkStrPurity(void) {
         struct strMethod* e = ListGetIdx(&strMethods, i);
         struct token where = e->m->tok;
         const char* why = CtWhyNotEvaluable(e->m, &where);
+        //...which a write through a reference is not, while compiling - but it is one, repeated by every "$"
+        if (!why && e->m->effWrites) {
+            Err(e->m->tok, ERR_STR_WRITES);
+            Note(e->m->effTok, NOTE_HERE);
+            continue;
+        }
         //T25c: "$" renders read-only copies too (an immutable global, a part of a read-only reference), so a by-value
         //receiver is never one that needs a writable argument
         struct var* recv = e->m->type.vars.len ? ListGetIdx(&e->m->type.vars, 0) : NULL;
         if (!why && recv && !TypeIsPermRef(recv->type) && recv->roNeedsWritable) {
             Err(e->m->tok, ERR_STR_RECEIVER_WRITABLE);
-            continue;
-        }
-        //...which a write through a reference is not, while compiling - but it is one, repeated by every "$"
-        if (!why && e->m->effWrites) {
-            Err(e->m->tok, ERR_STR_WRITES);
-            Note(e->m->effTok, NOTE_HERE);
             continue;
         }
         if (!why) continue;
