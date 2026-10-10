@@ -1,0 +1,123 @@
+# T36: every numeric primitive has its own alias tags, the narrow ones (I8 I16 U16 U32 U64 F16 BF16) as the first six
+# always had. Each array below is written through the struct holding it, as std/linalg's Map does - the loop that did
+# not vectorize while a BF16 store carried no tag - and read back; a count beside the arrays is a field of every
+# narrow type, so a field and an element of one type share a loop. Run at -O3 and at -d: the answers must agree.
+
+type Code extends U16
+
+type Narrow struct(n I64) {
+    i8s mut Array<I8>& = Array<I8>(n)
+    i16s mut Array<I16>& = Array<I16>(n)
+    u16s mut Array<U16>& = Array<U16>(n)
+    u32s mut Array<U32>& = Array<U32>(n)
+    u64s mut Array<U64>& = Array<U64>(n)
+    f16s mut Array<F16>& = Array<F16>(n)
+    bf16s mut Array<BF16>& = Array<BF16>(n)
+    codes mut Array<Code>& = Array<Code>(n)
+    c8 I8 = 0
+    c16 I16 = 0
+    cu16 U16 = 0
+    cu32 U32 = 0
+    cu64 U64 = 0
+    ch F16 = 0.0
+    cb BF16 = 0.0
+}
+
+# every element of every array written through s, a count of each type bumped beside them
+fn fill(s mut Narrow&) {
+    for i in range s.i8s.Len() {
+        s.i8s[i] = I8(i % 100) - 50
+        s.i16s[i] = I16(i) * 3 - 1000
+        s.u16s[i] = U16(i) * 7
+        s.u32s[i] = U32(i) * 100003
+        s.u64s[i] = U64(i) * 4000000007
+        s.f16s[i] = F16(i % 64) * 0.5
+        s.bf16s[i] = BF16(i % 64) * 0.25
+        s.codes[i] = Code(U16(i) + 1)
+        s.c8++
+        s.c16 += 2
+        s.cu16 += 3
+        s.cu32 += 4
+        s.cu64 += 5
+        s.ch += 1.0
+        s.cb += 1.0
+    }
+}
+
+# y = a + b, each element through the structs, as Map2 does
+fn add(y mut Narrow&, a Narrow&, b Narrow&) {
+    for i in range y.bf16s.Len() {
+        y.bf16s[i] = a.bf16s[i] + b.bf16s[i]
+        y.f16s[i] = a.f16s[i] + b.f16s[i]
+        y.i16s[i] = a.i16s[i] + b.i16s[i]
+        y.u32s[i] = a.u32s[i] + b.u32s[i]
+    }
+}
+
+# a declared number's array and its base's view of one storage: both carry U16's tags, so a write through one is seen
+# by a read through the other (T29h)
+fn viewed(v mut Array<U16>&, c mut Array<Code>&) U64 {
+    t U64 = 0
+    for i in range c.Len() {
+        c[i] = Code(9)
+        v[i] = v[i] + 1
+        t += U64(c[i])
+    }
+    return t
+}
+
+fn main() ? {
+    n I64 = 1000
+    a := Narrow(n)
+    b := Narrow(n)
+    y := Narrow(n)
+    fill(a)
+    fill(b)
+    add(y, a, b)
+    s8 I64 = 0
+    s16 I64 = 0
+    su16 U64 = 0
+    su32 U64 = 0
+    su64 U64 = 0
+    sh F64 = 0.0
+    sb F64 = 0.0
+    sc U64 = 0
+    yb F64 = 0.0
+    yh F64 = 0.0
+    y16 I64 = 0
+    yu32 U64 = 0
+    for i in range n {
+        s8 += a.i8s[i]
+        s16 += a.i16s[i]
+        su16 += a.u16s[i]
+        su32 += a.u32s[i]
+        su64 += a.u64s[i]
+        sh += a.f16s[i]
+        sb += a.bf16s[i]
+        sc += a.codes[i]
+        yb += y.bf16s[i]
+        yh += y.f16s[i]
+        y16 += y.i16s[i]
+        yu32 += y.u32s[i]
+    }
+    assert s8 == -500, $s8
+    assert s16 == 498500, $s16
+    assert su16 == 3496500, $su16
+    assert su32 == 49951498500, $su32
+    assert su64 == 1998000003496500, $su64
+    assert sh == 15510.0, $sh
+    assert sb == 7755.0, $sb
+    assert sc == 500500, $sc
+    assert yb == 15510.0, $yb
+    assert yh == 31020.0, $yh
+    assert y16 == 997000, $y16
+    assert yu32 == 99902997000, $yu32
+    assert a.c8 == -24, $a.c8
+    assert a.c16 == 2000 and a.cu16 == 3000 and a.cu32 == 4000 and a.cu64 == 5000, $a.c16 " " $a.cu16
+    assert a.ch == 1000.0, $a.ch
+    assert a.cb == 256.0, $a.cb
+    c := a.codes
+    assert viewed(c, c) == 10000
+    assert c[0] == Code(10) and c[n - 1] == Code(10), $c[0]
+    println("narrow: ok")
+}

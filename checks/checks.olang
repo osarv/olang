@@ -29,7 +29,7 @@ Workers I32 = 4
 # scenario(), with a test reporting it: one missing from either is reported as a failure, never skipped.
 Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp", "landing", "typereview", "manymods",
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
-                     "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
+                     "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
                      "target", "lazytype", "updir", "crash"]
 
@@ -231,6 +231,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "k2" { try k2(r) }
         case "bits" { try bits(r) }
         case "retslot" { try retslot(r) }
+        case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
         case "enumwords" { try enumwords(r) }
@@ -757,6 +758,26 @@ fn retslot(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/retslot/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b retslot.olang > out.txt 2>&1 && ./build/retslot") == 0, "retslot", dir)
     try r.expect(sh(dir, "grep -q '^ret.common:' build/retslot.main.ll") == 0, "no ret.common block", dir)
+}
+
+# T36: every numeric primitive has alias tags of its own - a BF16 or F16 element stored through a struct carries one, as
+# an F32's always did (untagged, the store might have changed the array's descriptor, so a loop through a struct reloaded
+# it at every element and never vectorized). Arrays of every narrow type written through a struct, and a declared
+# number's array beside its base's view of the same storage, read back the same at -O3 and at -d
+test "every numeric primitive has its own alias tags" { assert passed("tbaa") }
+
+fn tbaa(r mut report&) ? Failed {
+    dir := fresh("tbaa")
+    os.Run("cp checks/fixtures/tbaa/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b narrow.olang > out.txt 2>&1 && ./build/narrow > out.txt 2>&1") == 0, "narrow", dir)
+    try r.expect(outOf(dir) == "narrow: ok\n", "narrow output", dir)
+    ll String& = " build/narrow.main.ll"
+    try r.expect(sh(dir, "grep -q 'store bfloat [^,]*, ptr [^,]*, !tbaa'" $ll) == 0, "a BF16 store carries no tag", dir)
+    try r.expect(sh(dir, "grep -q 'store half [^,]*, ptr [^,]*, !tbaa'" $ll) == 0, "an F16 store carries no tag", dir)
+    try r.expect(sh(dir, "grep -q '!{!\"bf16\\[\\]\", !20, i64 0}'" $ll) == 0, "no BF16 element leaf", dir)
+    debug String& = "\"$OLANG\" -b -d narrow.olang > out.txt 2>&1 && ./build/narrow.debug > out.txt 2>&1"
+    try r.expect(sh(dir, debug) == 0, "narrow -d", dir)
+    try r.expect(outOf(dir) == "narrow: ok\n", "narrow -d output", dir)
 }
 
 # E31: a capitalized operator method is the operator everywhere; a lowercase one only in its own module
