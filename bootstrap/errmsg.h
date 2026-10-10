@@ -57,6 +57,7 @@ struct type;
     X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
     /* ---- characters and tokens ---- */ \
     X(ERR_UNKNOWN_CHAR,                 "L16",   "unexpected character '%c'") \
+    X(ERR_SEMICOLON,                    "L18",   "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") \
     X(ERR_NON_ASCII,                    "L1",    "non-ASCII byte '%c' - olang source is ASCII") \
     X(ERR_CARRIAGE_RETURN,              "L3",    "carriage return - save the file with LF line endings") \
     X(ERR_NUL_BYTE,                     "L1",    "NUL byte in the source - is this a text file?") \
