@@ -2342,7 +2342,9 @@ with none declared. `Str` must have no effect a program could observe: it must b
 sense of K1a, and it may **write nothing that was there before it ran** - no store, increment or atomic through a
 reference whose referent the call did not make (a parameter's, a capture's, the program's, one not known here), and
 no call that writes such storage through an argument it is given or through a function value whose body is not known
-there (settled over every call once every body is checked). A `Str` that does either is a compile-time error naming
+there (settled over every call once every body is checked). A lambda the function makes is judged as part of it: calling
+it does what its body does, a write through one of its captures counting where what the capture copies reaches such
+storage. A `Str` that does either is a compile-time error naming
 what stops it. What `Str` builds for itself - a local list, a `StringBuilder` - it may change freely. That is what lets
 a rendering call it as often as building the text needs - once to measure, once to write, or not at all when the text
 is computed while compiling - with nothing to tell the difference. And since `$` renders read-only values too (an
@@ -3207,7 +3209,8 @@ payload holds, and `Type.Case(p, ...)` matches it when each position of its payl
 naming every field. A position is one of:
 - a **name**: a fresh local bound to a copy of that field, visible to the clause's guard and body only, and
   assignable as any local is (D11) - an identifier there is always a binding, never a value read, so the form never
-  means "compare against a variable";
+  means "compare against a variable". Its storage is the clause's, as a local of the clause body is: a borrow of it does
+  not leave the clause;
 - `_`: the field, ignored;
 - a nested **pattern**, naming a case of the enum that field holds (S13d);
 - a **literal** (or a negated number), compared with that field by `==` as a value alternative is (S13d).
@@ -3491,7 +3494,17 @@ goes into its own stand-in for it, folded into the spawner's at the join. So is 
 value** a task is handed captured (D16c): a spawned lambda (D16e), or a lambda passed as an argument, builds through what
 it captured into the task's own stand-in for that reference's scope, never into the spawner's arena from the task's
 thread. `os.RunOnStack` runs its function the same way, its thread building into stand-ins folded in when the function
-returns. A value a task allocates through such a scope therefore lives
+returns. What a task makes or is handed may outlive it - a closure capturing a reference it was handed, a function value
+it returns through a spawn target or stores - so a stand-in lives as long as the scope it stands in for and, once folded,
+**forwards** to it: whatever builds through it afterwards builds in that scope, on whichever thread then owns it. The
+function value a task is handed is the same value it was (`is` holds between the two), and one spawn hands one function
+value once however many of its arguments reach it. A capture living in the program's scope is that scope as the thread
+calling the closure reaches it. A task **calls no function value held in what it is handed** - in a field, an element or
+a payload, through references too - nor does a spawned lambda through one held in what it captured: such a function
+value is called on the task's thread with the scopes it captured as they are, and would build into them beside the
+thread that owns them. Handing the function value itself as an argument stands it in. Whether a task calls one is read
+off its body, and the bodies it hands such a value to, once every body is checked. A value a task allocates through such
+a scope therefore lives
 exactly as long as that scope, and is reachable from the spawner once the block ends, while no arena is
 ever bumped by more than one thread. Destructors registered on a task thread run when the scope they were
 registered with closes, ahead of those registered before the spawn.
@@ -4240,7 +4253,8 @@ value where it dangles. Accordingly:
   handed to a by-value parameter (O4b's scope variable binds to the referent's scope), a constructor's argument or an enum
   case's payload (C2d, T17c), a match binding or an `as` of a payload held by value - the program's scope for a copy of a
   global's, and, for a conditional or a match whose values' references live in different scopes, one not known here
-  (O12) - while the local's own
+  (O12) - a member, an element or a payload read out of a conditional or a match included (`(w1 if c else w2).b`,
+  `(e1 if c else e2) as E.A`), whose references are where that value's are - while the local's own
   storage is its block, and such a value is not held by reference (O17a). That is a claim, as a reference local's scope is:
   assigning such a value from one that already lives somewhere requires the source's references to outlive the
   target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
@@ -4277,7 +4291,8 @@ of the body (O10a), and a relation between it and another scope variable is an o
 nothing is built into it (C2d's restriction on such a field): a result that would land in one, or a callee that may
 build into a parameter given one (it can write the parameter, or its borrowed result names it), reaches instead the
 scope the field was read through, which the derived scope outlives; and a temporary put where a derived scope's
-referent lives, or a scope argument naming one, is a compile-time error. At each call it
+referent lives, a scope argument naming one, or a copy out of such a field handed by value to a callee that can build
+through what it holds (the copy's references being where the field's referent is), is a compile-time error. At each call it
 is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
 parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
@@ -4730,7 +4745,10 @@ closes at its return: a field's referent, what a call through a field builds whi
 growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
 own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
-instance's scope, as at the top level.
+instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
+its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
+given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one is a copy into the instance.
+What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
 
 ```
 type Box struct(v I32) { inner Point& = Point(v, v) }   # inner lives wherever the Box does

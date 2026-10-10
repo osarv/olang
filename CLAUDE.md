@@ -4426,9 +4426,32 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   directly. Settle-time T25c errors are reported at the program's use (B11). **From the scope sanitizer, two more**: a
   constructor growing a field's List inside a nested block built into that block (C2g held only at its top level - a
   binding determined at depth 0 now means the body's top level, which in a constructor is the instance's scope); and a
-  copy of a *local* enum's payload is covered by the general O25h above. **Left**: a closure held in a struct a task
-  is given (`spawn work(h)` calling `h.f`) still builds into the scope it captured from the task's thread - fixing it
-  needs the allocator to know a scope's owner, or a P2 rule refusing such arguments.
+  copy of a *local* enum's payload is covered by the general O25h above. **Left** (closed by the next entry, decision
+  40): a closure held in a struct a task is given (`spawn work(h)` calling `h.f`) still built into the scope it captured
+  from the task's thread.
+- **A soundness review of that batch, fixed (P2, S13b, C2g, O25h, E11c, O23a/C2d, 2026-10-10).** Seven reproduced
+  findings (two new in the batch, five older). **P2, new**: the batch's environment copies were made in the join arena,
+  so a spawned call keeping a function value past the join kept freed memory, and `f is g` was false inside the task.
+  **Decided (mine, the coordinator's preferred design)**: a stand-in lives as long as the scope it stands in for and,
+  once folded, **forwards** to it (a sentinel chunk; the allocator's slow path follows it - no fast-path cost); an
+  environment copy is made where the closure lives (its first captured scope), once per spawn, and remembers its
+  original, so `is`/`==` canonicalize and a function value keeps its identity; a capture in the program's scope is held
+  as null and read as the calling thread's program scope (or its task stand-in). **P2, older**: a closure a task makes
+  captured the task's stand-in and was kept past the join - closed by the same forwarding. **Decision 40 (as asked,
+  narrowed by what can be seen)**: a task, or a spawned lambda, **calling** a function value held in what it is handed
+  (a field, element or payload, through references too) is refused - read off the bodies (`callsFnThrough`, a fixed point
+  over calls once every body is checked); one only carried, stored or handed on is allowed. Read-only captures cannot be
+  allowed separately: a function type does not say what its value captured, and a read-only capture can still build
+  through a borrowed result. **S13b (new)**: a match binding lives in its clause's block, not the matching block.
+  **C2g/C2d (older)**: a constructor keeping a borrow of its by-value parameter in a reference field kept the dying
+  frame's slot - a constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with
+  "outside the body", depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the
+  instance. **O25h (older)**: a member, element or `as` of a conditional or match copies the references the way the
+  conditional does. **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling
+  a capturing lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee
+  that can build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a
+  stand-in header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task,
+  not borrowed (identity kept by `__olang_env_canon`).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

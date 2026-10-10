@@ -13146,3 +13146,72 @@ callee that builds through it, had the callee build in the copy's block - the sa
 closed by the same general O25h (the lend, refused by O17 on this branch, is accepted and built in the right place once
 merged with study 4's O17b). Both have corpus tests and a checks run case built `-d -s`; the checks harness now finds a
 `-s` binary by its `.san` suffix, so a run case can ask for the sanitizer.
+
+### A soundness review of that batch, fixed (P2, S13b, C2g, O25h, E11c, O23a/C2d, 2026-10-10)
+
+A read-only review of the batch above (review tonight5) reproduced seven findings on its tip, two new in the batch and
+five older, each with a program under `-b -s`, `-d -s` or `-r`. All seven are fixed, and each has a checks case (built
+`-d -s` where the case runs) or a corpus test.
+
+**1. A task kept the environment copy P2 made for it (new).** The batch gave every scope a task's function value captured
+a stand-in by copying the closure's environment with the stand-ins in place - and made the copy in the join block's
+arena. A task storing the function value it was handed (a spawn target, a field of something it was given) kept that copy
+past the join, where the next scope to take the chunk wrote over it; and `f is g` inside the task compared the copy with
+the original and said false. **2. A closure made inside a task captured the stand-in (older).** A lambda a task made,
+capturing a reference the task was handed, captured the task's stand-in for that reference's scope, which the join
+folded and threw away; a closure returned through a spawn target then built into a header no one owned.
+
+The coordinator's preferred design, built: **a stand-in lives as long as the scope it stands in for, and forwards once
+folded.** `__olang_scope_merge` ends by pointing the stand-in's chunk at a sentinel (`@__olang_fwd_chunk`) and its first
+word at the scope it was folded into; the allocator meets the sentinel only on its slow path (the sentinel's chunk is
+full), follows the forwarding there (`__olang_scope_resolve`, also called by `register_dtor`), and so the fast path costs
+nothing. A stand-in for a scope parameter is made in that scope's own arena (24 bytes, kept until it closes), so whatever
+survives the join can still reach it; the program scope's stand-in stays in the join arena, because nothing captures it
+- see below. **Environment copies** are made where the closure lives (its first captured scope - `__olang_env_home`),
+once per spawn however many arguments reach the same function value (a small map, `%olang.envmap`), and remember their
+original: bit 62 of the copy's first word marks it, and the original's address sits just past the copied bytes.
+`__olang_env_canon` gives the original back, and `==`/`is` on function values compare canonical environments, so a task
+sees the function value it was handed. **A capture in the program's scope is held as null**, and a lambda's prologue
+reads a null as the calling thread's program scope - its task stand-in on a task, the real one elsewhere - so a closure
+over a global's referent never holds a stand-in at all. `join_tasks` and RunOnStack's fold skip merge nodes with no
+destination (a null capture has nothing to fold).
+
+**Decision 40, as asked and as narrowed.** The coordinator asked for "a task argument may not reach (through struct
+fields, elements, payloads) a function value capturing a writable reference; read-only captures stay allowed". A function
+type says nothing about what its value captured, so the capture's permission cannot be judged at the spawn; and a
+read-only capture can still build into its scope through a borrowed result. What is checkable instead is whether the task
+**calls** such a value: a function value called on the task's thread with the scopes it captured as they are builds into
+them beside the thread that owns them, which is the hazard - carrying it, storing it or handing it on is harmless now that
+copies forward. So `callsFnThrough` is read off each body: a call through a function value read out of a parameter's
+field, element or payload (`fnRootsIn`), or a call handing such a part to a callee that does (`fnEdges`), a fixed point
+settled once every body is checked (`settleFnThrough`, first in `settleReadOnlyArgs`). A spawn's arguments and a spawned
+lambda's captures record deferred checks (`fnSpawnChecks`), reported as `ERR_SPAWN_ARG_HOLDS_FUNC` ("pass the function
+value itself"). The first version refused any argument holding a function value; it refused a `List<fn()>` a task only
+stored (`rv5taskstore`), which is why it reads the body. E13b's calls set their callee after the call is built, so the
+callee is recorded where it is (`fnCalleeRecord`).
+
+**3. A match binding read as living at the body's top level (new acceptance).** A binding of a by-value payload got
+depth 0, which the scope checker reads as the body's top level, so the batch's O25h let a borrow of it leave the clause
+(`x mut Holder&outer = h` from inside a `case`). It lives in its clause's block now (`ctx->blockDepth + 1`). **6. A
+constructor kept a borrow of its own by-value parameter in a reference field (older).** `type H struct(p P) { r P& = p }`
+stored the address of the constructor's parameter slot, a stack use after return. The root, found on the way: a
+constructor's top level was depth 0 to the checker - the same number as "outside every body" - so a parameter's slot and a
+field read as the same scope. A constructor's top level is depth 1 now and its by-value parameters depth 2 (they are its
+frame, which ends at its return), and a reference field's value must live as long as the instance: a field is checked
+as the local it is (`fieldAsLocal`, a bare-`&` field reading as the instance's depth), and existing storage deeper than
+the top level is refused (`ERR_SCOPE_MAY_NOT_OUTLIVE`). A `:=` field's local takes that type once inference has run.
+
+**4. A copy out of a member, element or `as` of a conditional kept its references in its block (older).** O25h followed
+a conditional or match as a whole value, not one reached through one - `(a if c else b).inner` or `(e if c else f) as
+E.A`. `condUnderPath` walks the path down to a conditional first, in both `copiesExistingRefs` and `copiedRefsScope`.
+**5. A `Str` calling a capturing lambda through a local (older).** E11c's effect analysis judged a call through a local
+function value as "a function value it did not make" only when the local was a parameter; a lambda the function makes
+itself and calls through a local was not followed. Now a call edge goes to the lambda made here, its captures are judged
+through what they captured (`effCaptureOf`), and arguments reached through captures are recorded (`effCapAdd`).
+**7. A reference read through a `&p` field, copied and handed by value (older).** The batch's O23a fix refused building
+through a derived scope on the reference path only; a by-value parameter bound from such a copy built through it. Now
+`bindCallScopeVars` refuses it (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`) where the parameter's references admit stores.
+
+**Costs and limits.** A stand-in header per spawn in the bound scope, kept until that scope closes. Function values are
+still copied into a task rather than borrowed - one copy per spawn, made where the closure lives. Decision 40 refuses
+calling any held function value, read-only captures included.
