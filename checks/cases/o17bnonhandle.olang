@@ -1,0 +1,39 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17b, a control for checks/cases/o17bbitand.olang: a struct with two fields is no handle, so the lend is O17's
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() {
+    c mut Cell& = Cell()
+    pad I64 = 0
+}
+fn (a mut Box&) BitAnd(b mut Box&) mut Box&b { return b }
+fn (h mut Box&) stash() {
+    h.c.kept = h.c.kept & h
+}
+fn run(m mut Map<I64, Box>&) ? {
+    for i in range 3 {
+        b := try m.Get(1)
+        b.c.v = 100 + i
+        b.stash()
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 5000 {
+        a := Array<I64>(8, i)
+        p := Box()
+        p.c.v = i
+        t += a[0] + p.c.v
+    }
+    return t
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try run(m)
+    churn()
+    b := try m.Get(1)
+    println($b.c.kept.c.v)
+}

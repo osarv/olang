@@ -1,0 +1,22 @@
+# O26a: a number measured from each line a loop reads, kept in a returned summary that holds references, carries nothing
+# of the line into the result - so each line is reclaimed with its turn. It used to move the line into the result scope,
+# keeping every one of them: four million lines needed about 96 MB. Run under an address-space limit that is far below
+# that (study 4's r01, from a log tailer)
+type Summary struct() {
+    best I64 = 0
+    names List<String&> = List<String&>()
+}
+fn line(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
+fn measure(t String&) I64 { return t.Len() }
+fn scan(n I64) Summary {
+    s := Summary()
+    for i in range n {
+        l := line(i)
+        v := measure(l)
+        if v > s.best { s.best = v }
+    }
+    return s
+}
+fn main() ? {
+    println($scan(4000000).best)
+}

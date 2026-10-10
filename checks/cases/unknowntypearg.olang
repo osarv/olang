@@ -1,10 +1,10 @@
 # check: fail unknown type 'Itm' - did you mean 'Item'?
-# also: compilation failed with 3 errors
+# also: compilation failed with 1 error
 # never: has no member
 # never: expected List
 # never: cannot be walked
 # a generic type applied to an unknown type is unknown itself: its constructor, its methods and a loop over it say
-# nothing more
+# nothing more, and the unknown type is said once in its module (B11)
 type Item struct(n I32) { n }
 fn main() ? {
     l := List<Itm&>()

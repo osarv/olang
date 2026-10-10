@@ -1,0 +1,30 @@
+# check: run
+# L9a: a keyword that is a whole statement by itself ("done", "fail", "break"), or that begins no statement and no value
+# ("in", "type", "range", "default"), may name a field - declared with a type or ":=", reached after ".", a statement
+# "done" standing alone still ending the program, and a line ending in "s.in" ending its statement
+type Stats struct() {
+    done I64 = 0
+    fail := 2
+    type String& = "k"
+    in Bool
+    range mut List<I64>& = List<I64>()
+    break := 7
+}
+fn (s mut Stats&) finish() {
+    s.done++
+    s.range.Push(s.done)
+}
+fn main() ? {
+    s := Stats()
+    s.done = 3
+    s.finish()
+    s.in = not false
+    assert s.in
+    assert s.done == 4 and s.fail == 2 and s.type == "k" and s.break == 7 and s.range.Len() == 1
+    assert s.range[0] == 4
+    for i in range 3 {
+        if i == 1 { continue }
+        if i == 2 { break }
+    }
+    done
+}

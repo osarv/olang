@@ -1,0 +1,21 @@
+# check: run
+# O17b: the same cycle as checks/cases/o17bpending.olang, with g using the handle only through its reference - the
+# lend taken on trust holds, and the program runs
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() { c mut Cell& = Cell() }
+fn g(h mut Box&, m mut Map<I64, Box>&, n I64) ? {
+    h.c.v++
+    if n > 0 { try f(m, n - 1) }
+}
+fn f(m mut Map<I64, Box>&, n I64) ? {
+    b := try m.Get(1)
+    try g(b, m, n)
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try f(m, 3)
+}

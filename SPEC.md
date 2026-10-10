@@ -116,10 +116,18 @@ extern    default
 `true` and `false` are not keywords; they are the two spellings of `BOOL_LIT` (L11). `null` is not a
 keyword either, for the same reason: it is `NULL_LIT` (L11a).
 
-**L9a (a method's name).** A method is reached only through its receiver (M19), so where a method's name is written -
-after the receiver clause of its declaration, and after `.` where `(` follows - nothing else can stand, and any of the
-words above is a method's name there: `fn (w mut World&) spawn() I32`, `w.spawn()`, `p.fail(tok)`. Anywhere else,
-a field's name included (a constructor's fields are its locals, C2a), they stay reserved.
+**L9a (a method's or a field's name).** A method is reached only through its receiver (M19), so where a method's name is
+written - after the receiver clause of its declaration, and after `.` where `(` follows - nothing else can stand, and
+any of the words above is a method's name there: `fn (w mut World&) spawn() I32`, `w.spawn()`, `p.fail(tok)`.
+
+A field may be named by a word above that is a whole statement by itself - `done`, `fail`, `break`, `continue`,
+`abort`, `unreachable`, after which nothing can follow on its line - or that begins no statement and no value: `in`,
+`is`, `as`, `and`, `or`, `xor`, `range`, `case`, `nomatch`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
+`test`, `extern`, `default`. It is declared with its type or `:=` (`done I64 = 0`, `in Bool`, `type := Kind.A`), never
+as a pun, and is reached only after `.` (`s.done`, `s.done++`) - a word after `.` is always a member's name, and a line
+ending in one ends its statement there. In its constructor's body such a field is no name: it is set by its initializer,
+and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
+C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
 ### 1.5 Literals
 
@@ -752,7 +760,10 @@ one per line, or a single word on the declaration's own line; a comma between tw
 
 **T20.** An error type's values (words) carry no data; the full semantics of error types — the
 error-union return convention, `try`/`catch`, and the `error` statement — are specified in
-§7.
+§7. An error is raised (`error E.WORD`) and caught (`catch E.WORD`), never held: an error type is not a value's type,
+so naming one as the type of a parameter, a local, a field, a result, an element or a type argument is a compile-time
+error, and so is a word written as a value (`e != E.A`). Which word failed is told apart by catch clauses
+(`try f() catch E.A { ... } catch E.B { ... }`).
 
 ### 2.7 Function types
 
@@ -2485,8 +2496,11 @@ the same reading C gives it, and one of exactly two places in this language wher
 storage it does not own (the other is `extern fn`, §11 X1a).
 
 Where the index and the length are **both known at compile time** — a constant index into a
-compile-time-length array — an out-of-range index is a **compile-time error**. That check costs nothing at
-run time and is not affected by the above.
+compile-time-length array — an out-of-range index written without `try` is a **compile-time error**. That check
+costs nothing at run time and is not affected by the above. Under `try` (E16d) the index is the checked form, whose
+failure is defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a generic over the length
+(`fn third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }`) one instantiation may have the element and
+another not.
 
 **E16d.** `try base [ index ]` (§5.10 E15) **opts in to a bounds check**: the index is checked against
 `[0, base.Len())` and an out-of-range one produces `BuiltinError.OUT_OF_BOUNDS` (§7.7) rather than reading or
@@ -3146,7 +3160,9 @@ error. The match must give a value whatever the matched value is: over an enum o
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
 counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
-values that are all numeric literals (or such) take the widest, and values that are all written text are a `String` (T29c). Each value then fits the match's target on
+values that are all numeric literals (or such) take the widest, values that are all written text are a `String` (T29c),
+and values that are all array literals of one element type are an array of it whatever their lengths (`case 1 =>
+I64[1, 2, 3]` beside `nomatch => I64[4, 5]` is an `Array<I64>`), as in `a if c else b`. Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.
@@ -4236,7 +4252,8 @@ value where it dangles. Accordingly:
   whose references live in one of the function's own blocks is a compile-time error - a copy, an array or anything read
   out of one included - except a struct or enum built here, which is judged by what its constructor bound (O13a); a
   store of references into such a value afterwards puts them where the value's own references are, which its bindings
-  then say.
+  then say. A copy of a handle (O17b) is a second name for the one collection - its reference is where the source's is -
+  and is lent to a call as that reference.
 
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it: the program's scope is reached through a global or a call's binding, never through a local's own tag.
@@ -4359,7 +4376,8 @@ It is valid only inside a function that has a result scope; anywhere else — a 
 borrowed result, a test — it names nothing and is a compile-time error.
 
 **O26a (a returned local lives where the result goes).** A value local the function returns lives in the **result
-scope** - its own storage, and everything built into it - with nothing written: `&return` is implied. A local is
+scope** - its own storage, and everything built into it - with nothing written: `&return` is implied, and `&l` of such
+a local `l` (a scope argument, E25, or a marker, O25a) names the result scope, where it lives. A local is
 returned when, in the rest of the block declaring it, a `return` gives it (or a field read through it, `return b.items`)
 as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
@@ -4385,7 +4403,14 @@ returned). A plain copy of a value local into a value (`f := e`, `b = a`) is no 
 references where its source's are (O25h), and the source stays where it is; a reference declared from it borrows it,
 which is. The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that
 such a local lives in the caller's scope rather than in its block; a value passed to a plain function together with a
-returned local is not followed. So the recursive-descent and Pratt idioms are correct as written:
+returned local is not followed. Only a reference, or a value holding references, carries what the local refers to: a
+value that can hold none - a number or a `Bool` computed from it, as an argument of a call whose result cannot hold it, a
+field or an element holding no reference, or anything declared or stored with a type holding none - is no flow of it,
+so a loop measuring each line it reads into a returned summary (`line := next(); v := measure(line); if v > s.best {
+s.best = v }`) leaves each line in the loop's block. A local holding no reference whose own storage can
+be borrowed - text, an array, a struct - flows the same way through what borrows it: a view of it, or a reference field
+given it, flowing into what is returned (`s := a[1:4]; return V(s)`, `h.name = a; return h`) puts it in the result scope
+too; stored anywhere else it stays in its block. So the recursive-descent and Pratt idioms are correct as written:
 
 ```
 fn (p mut Parser&) expr(minPrec I64) Expr& {
@@ -4472,7 +4497,8 @@ element, O25h) and the callee can keep something it builds in the value's own sl
 to, or one referring to something that can be stored through (O25g) - what it built would be in the storage's scope under
 a value claiming the other: a compile-time error naming the fix, to declare it a reference where its references live
 (`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
-a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine.
+a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine; a handle is lent as its
+reference (O17b).
 What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
 value's slots when its body stores into the value's region a reference or a value holding references (a field, an
 element, through any depth - by an assignment, or as a spawned task's result, P1g), when it returns a reference into
@@ -4504,6 +4530,32 @@ its elements are indexed in place instead (`b[i]`), or the whole value lent to a
 reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,
 judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
 lives where the value's references do.
+
+**O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
+exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
+by value - `List`, `Map` and `StringBuilder` are handles (T8), and so is any such struct a program declares. A copy of one
+(O25h), a by-value parameter of one (O4b), or one read out of a collection holds its reference where its own storage is
+not, and is lent to a call **as that reference**: where the callee uses its parameter only **through** it - reads the
+reference out of the parameter (`l.s`, the field never assigned), or hands the parameter on, as a receiver or an argument,
+to another parameter that does (a fixed point over the program's calls,
+decided from their checked bodies; a call checked while a body its answer rests on is still being checked - a cycle -
+takes it on trust, and is an error once every body is checked if the answer is no) - the call binds
+the parameter's scope variable where the reference leads, as passing the reference itself would, and the handle's own
+storage is no part of the call but to be alive through it. So the grouping idiom builds where the map's lists live:
+
+```
+for w in words {
+    l := try m.Get(key(w))       # a copy of the map's list - the same list (T8)
+    l.Push(w)                    # lent as its reference: the chunks are built where the map's lists are
+}
+```
+
+and a copy in an inner block, or a `List` or `Map` taken by value, is pushed onto, put into and read as the one
+collection. A callee that uses the parameter any other way - keeps it in a local, stores, returns or compares it, makes it an
+operand of an operator, captures
+it in a lambda, walks it with `for`, assigns its field, or hands it where the body is not known (a function value, an
+`extern`, a trait's default) - is judged as O17 judges any lent value, by where the handle's storage is. A handle is still
+not held by reference (O17a), and a task's argument still lives until its join (P2).
 
 **O18.** *Supplying the result scope.* A scope argument (E25) binds the callee's result scope to where a
 variable of the caller lives. Without one, the result scope **follows the result** (O18a).

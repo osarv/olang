@@ -272,6 +272,16 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b valueloop.olang > out.txt 2>&1") == 0, "valueloop build", dir)
     try r.expect(sh(dir, "(ulimit -v 150000 && ./build/valueloop) > out.txt 2>&1") == 0, "valueloop", dir)
     try r.expect(outOf(dir) == "50000015000000\n", "valueloop output", dir)
+    #O26a: a number carries nothing into the result - the master compiler's build needed 96 MB here
+    try r.expect(sh(dir, "\"$OLANG\" -b numberflow.olang > out.txt 2>&1") == 0, "numberflow build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
+    try r.expect(outOf(dir) == "22\n", "numberflow output", dir)
+    #O17b: handles lent as their references - built, built -d and interpreted, read back after the arena churned
+    try r.expect(sh(dir, "\"$OLANG\" -b handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0,
+                 "handles -d", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i handles.olang > i.txt 2>&1") == 0, "handles -i", dir)
+    try r.expect(sh(dir, "cmp -s handles.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "handles output", dir)
 }
 
 # M22a: a std module and a local file with the same base name are two modules - but one module may not

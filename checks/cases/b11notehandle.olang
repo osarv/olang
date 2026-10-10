@@ -1,0 +1,16 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# also: declare it where 'm' lives: 't mut String&m = ...'
+# never: 'String&l'
+# B11/O17b: a handle copied out of a map is lent as its reference, so what it must outlive is where the map's state is -
+# "&l" would name the handle's own slot in the loop's block, which the note proposed and which did not compile; it names
+# the variable the handle was read from, which lives there (checks/cases/b11notehandlefix.olang builds the fix)
+fn main() ? {
+    m := Map<I64, List<String&>>()
+    m.Put(0, List<String&>())
+    m.Put(1, List<String&>())
+    for i in range 3 {
+        l := try m.Get(i % 2)
+        t := "x" $i
+        l.Push(t)
+    }
+}

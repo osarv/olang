@@ -1,0 +1,36 @@
+# check: run
+# O17b: a for-in's copy of a handle (a Map) lent to a callee that stores what it reads into a longer-lived map - the copy
+# is lent as its reference, so the obligation is judged where the element's state lives, not the loop's block (the
+# recorded limit checks/cases/o10cloopcopy.olang states for any other value); read back after the arena has been churned
+fn countWords(words Array<String&>&) Map<String&, I64> {
+    m := Map<String&, I64>()
+    for w in words { m.Update(w, 0, fn(n I64) I64 { return n + 1 }) }
+    return m
+}
+fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
+    for e in from { into.Put(e.Key, e.Value) }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 4000 {
+        b := Array<I64>(5, i)
+        x := "churn " $i
+        t += b[0] + x.Len()
+    }
+    return t
+}
+fn total(words Array<String&>&) I64 {
+    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())
+    parts[0] = countWords(words)
+    parts[1] = countWords(words)
+    sum := Map<String&, I64>()
+    for p in parts { merge(sum, p) }
+    assert churn() > 0
+    assert (try sum.Get("x") catch default 0) == 2 and (try sum.Get("y") catch default 0) == 1
+    return sum.Len()
+}
+fn main() ? {
+    t := total(String&["x", "y", "x"])
+    assert t == 2
+    println($t)
+}

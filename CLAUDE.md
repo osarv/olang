@@ -4360,6 +4360,47 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   plain build carries none of it, and the fuzz scenario runs two clean scope-fuzz seeds; `make scopesan` runs the whole
   suite under it. Limits: a detector, not a proof; a stack slot is out of reach; under `-r` a recursion near
   ThreadSanitizer's frame limit faults sooner with `-s`.
+- **Study 4's checker findings: numbers carry nothing, a handle is lent as its reference, notes propose what compiles
+  (O26a, O17b, O17, O25h, E16, S12b, T20, R11, P1g, T7a, E11b, B11, L9a, 2026-10-10; the coordinator's batch from study
+  4 and the fuzzer, details mine).** **O26a**: only a reference, or a value holding references, carries what a returned
+  local refers to - a number or `Bool` computed from it, a call argument whose result cannot hold it, a field or element
+  holding none, anything declared or stored with a type holding none, is no flow - so `line := mk(i); v :=
+  measure(line); if v > s.best { s.best = v }` leaves each line in the loop's block (r01, 4M lines: 98,776 KB -> 11,160
+  KB peak); a receiver of a method that can keep its argument is a flow; a borrowed result is not moved; an array,
+  struct or enum local a returned value reads (`return R(n, note)`, a view) is moved too (r06); `&l` of a moved local
+  names the result scope, where it lives (r03). **O17b, decided (mine)**: a **handle** - a struct whose one field is a
+  bare reference living with the instance, or another handle by value (`List`, `Map`, `StringBuilder`, and any such
+  program type) - is lent to a call as its reference where the callee uses the parameter only through it (reads the
+  field, or hands it on to a parameter that does - a fixed point over the CHECKED bodies, every read of the parameter
+  the check made accounted for, a call inside a cycle taken on trust and verified once every body is checked); anything else (kept in a
+  local, stored, returned, compared, captured, walked by `for`, its field assigned, handed to a function value, an
+  extern or a trait default) is judged as O17 judges any split lend. So `l := try m.Get(k); l.Push(x)` in a loop, nested
+  for-in copies, a `Rule` walked recursively out of a `Map`, and a struct holding a `List` built for a receiver's map
+  compile (r07, r08, r09, r25, fuzz listalias); a task's handle argument still lives until its join (P2). **Found by the
+  soundness review**: the first version read the callee's TOKENS and skipped `&name` as a scope marker - `&` is also
+  bitwise-and, so a user `BitAnd` handing back its operand stored the handle's own storage unseen (a use-after-free,
+  `o17bbitand`); a soundness decision never rests on a token scan now. **O26a also follows a view**: a local holding no
+  reference whose storage is borrowed by something flowing into the result (`s := a[1:4]; return V(s)`, `h.name = a;
+  return h`) lives in the result scope - two cases that pinned O20 for the second shape now run. **T25c
+  reconciled (mine)**: `Map.Get`'s slot cursor is `mut`, as Put/Update/Remove's are - with QC's read-only copies it
+  refused every Map of handles; a read-only receiver handing out a writable copy is QC's shallow limit (linalg's views),
+  so `try G.Get(k)` on an immutable global Map of Lists can still push (recorded). **E16**: a known out-of-range
+  constant index under `try` is the checked form, failing with `OUT_OF_BOUNDS` where it runs (a generic over the
+  length). **S12b**: array literals of one element type in a match value give an array of it, as E28. **T20**: an error
+  type is no value's type and an error word no value; catch clauses tell words apart. **L9a, decided (mine)**: a field
+  may be named by a keyword that is a whole statement (`done`, `fail`, `break`, `continue`, `abort`, `unreachable`) or
+  begins no statement and no value (`in`, `is`, `as`, `and`, `or`, `xor`, `range`, `case`, `nomatch`, `type`, `struct`,
+  `enum`, `trait`, `extends`, `import`, `test`, `extern`, `default`), declared with a type or `:=` (never a pun), reached
+  only after `.`; in its constructor's body it is no name. **Diagnostics (B11)**: a note proposing a declaration names
+  where it compiles - a value local is declared a reference where the other lives, a handle's references are where the
+  variable it was read from lives ("declare it where 'm' lives"), never a spelling already written; O25 says when a `:=`
+  local was moved to the result scope; E11b's hints wherever a piece follows a piece and for text called as a function;
+  one error per unknown name with an import's type suggested (`json.Json`), nothing decided from an unknown; a catch
+  block's last value says `} default v`; a clause ending in `os.Exit` says `unreachable`; P1g names the result type to
+  declare; T7a through a generic points at the lambda's result. Adversarial: each relaxation has must-fail checks (a
+  callee storing a back link or handing the handle out, a number stored with a line, a task argument) and corpus tests
+  read back after an arena churn, the landing scenario running `handles` under `-b`, `-b -d` and `-i` and `numberflow`
+  under `ulimit -v 50000`.
 - **A soundness review of the night's merges, fixed (P2, O25h, O17a, O12, E4a/E6d, T25c, E11c, S4d, O18a, B11,
   2026-10-10).** Ten findings of a read-only review, all fixed. **P2**: a spawned lambda built through what it
   captured into the spawner's arena from the task's thread (heap corruption) - every scope a task's function value

@@ -1,0 +1,7 @@
+# check: fail error[E11b]: a join piece is a text literal or a '$' rendering - write '$mark'
+# E11b: a name after a "$" piece is a join piece written without its "$" (study 4's r12)
+fn main() ? {
+    mark := "!"
+    n := 5
+    println("a " $n mark "b")
+}

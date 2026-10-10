@@ -1,6 +1,8 @@
-# check: fail error[L9]: 'done' is a keyword, not a name - choose another
-# L9: "done" beginning a line ends the statement there, so a field named "done" read as two statements
+# check: fail error[L9a]: 'done' is a keyword, not a name - a field named by one is reached only after '.'
+# L9a: a keyword may name a field - "done I64 = 0" - which is then reached after "." alone: in its constructor's body it
+# is no name, so a later field reading it by the keyword is an error saying so
 type Task struct() {
-    done mut Bool = false
+    done Bool = false
+    left := done
 }
 fn main() ? { }
