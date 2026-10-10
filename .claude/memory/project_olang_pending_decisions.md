@@ -300,6 +300,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    to refusing a task that CALLS a function value held in what it is handed (carrying/storing allowed); a constructor's
    top level is depth 1, its by-value parameters depth 2; a match binding lives in its clause's block.
 
+47. (mine, after rv3fix round 2's review h1-h4) a scope belongs to the thread that opened it; an allocation or
+   destructor registration into it from another thread is SYNCHRONIZED (one owner compare per allocation - a
+   per-construction check - and a lock in the scope header off the owner), so a closure may build into its captured
+   scope from any task; REPLACES decision 40's static refusal (evadable: helpers, lambdas, own lists). Stand-ins stay
+   the uncontended fast path. To be built as rv3fix round 3; abandon if the compare costs >2% on allocation-heavy code.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
