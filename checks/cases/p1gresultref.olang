@@ -1,0 +1,15 @@
+# check: fail error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>& - declare 'part' to give Array<I64>&
+# P1g: a task's array result goes into a reference slot (an element of Array<Array<I64>&>, T7a) - the fix is the
+# function's result, built, which the error names (study 4's r16)
+fn part(lo I64, hi I64) Array<I64> {
+    out := Array<I64>(hi - lo)
+    for i in range lo, hi { out[i - lo] = i * i }
+    return out
+}
+fn main() ? {
+    parts := Array<Array<I64>&>(2)
+    join {
+        for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
+    }
+    println($parts[0])
+}

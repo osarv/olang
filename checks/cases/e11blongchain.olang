@@ -1,0 +1,9 @@
+# check: fail error[E11b]: a join piece is a text literal or a '$' rendering - write '$(...)'
+# never: write '$cols'
+# E11b: a long piece - a chain holding a lambda - is rendered whole by parenthesizing it, never by its first name
+# (study 4's r17)
+fn main() ? {
+    cols := List<String&>()
+    cols.Push("a")
+    println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
+}

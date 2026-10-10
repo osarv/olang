@@ -1,0 +1,23 @@
+# check: run
+# O26a: a local holding no reference whose own storage a returned value borrows through a view of it - "s := a[1:4];
+# return V(s)" is "return V(a[1:4])" - lives in the result scope; read back after the arena has been churned
+type V struct(xs Array<I64>&) { xs }
+fn mk(n I64) V {
+    a := I64[1, 2, 3, 4, 5]
+    a[0] = n
+    s := a[1:4]
+    return V(s)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 4000 {
+        b := Array<I64>(5, i)
+        t += b[0]
+    }
+    return t
+}
+fn main() ? {
+    v := mk(77)
+    assert churn() > 0
+    println($v.xs.Len() " " $v.xs[0] " " $v.xs[2])
+}

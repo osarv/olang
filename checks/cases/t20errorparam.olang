@@ -1,0 +1,16 @@
+# check: fail error[T20]: E is an error type, which has no values
+# also: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause
+# never: has nothing to render
+# never: is not an enum type
+# T20: an error type is no value's type - a parameter, a local and a field of one are errors where they are written, and
+# a word written as a value is one too; the uses of such a local add nothing more (study 4's r13)
+error E {
+    A
+    B
+}
+type Holder struct(e E) { e }
+fn final(e E) Bool { return e != E.A }
+fn main() ? {
+    x E
+    println($x)
+}

@@ -1,0 +1,92 @@
+# O17b: a handle (List, Map, StringBuilder, or a struct whose only part is a reference) whose reference leads elsewhere
+# than its own storage - a copy taken out of a collection, a copy in an inner block, a by-value parameter - is lent as
+# that reference to a callee that uses it only through it. What the calls build lives where the handle's state does;
+# each result is read back after the arena has been churned
+type St struct() {
+    x I64 = 0
+}
+type H struct() { s mut St& = St() }
+fn (h mut H&) bump() { h.s.x++ }
+fn bumpAll(h mut H&, n I64) {
+    for i in range n { h.bump() }
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 3000 {
+        x := "churn " $i " " $(i * 7)
+        l := List<String&>()
+        l.Push(x)
+        t += x.Len() + l.Len()
+    }
+    return t
+}
+
+# a Map of Lists grouped in a loop - the list fetched by value each turn and pushed onto (study4's r07)
+fn group(n I64) Map<I64, List<String&>> ? {
+    m := Map<I64, List<String&>>()
+    for i in range n {
+        k := i % 3
+        if not m.Has(k) { m.Put(k, List<String&>()) }
+        l := try m.Get(k)
+        l.Push("v" $i)
+        churn()
+    }
+    return m
+}
+
+# a second name for a list in an inner block, and lists passed by value - the same collection (T8)
+fn addTo(l List<String&>, t String&) { l.Push(t) }
+fn putIn(m Map<I64, I64>, k I64) { m.Put(k, k * k) }
+fn aliases() String& ? {
+    l := List<String&>()
+    m := Map<I64, I64>()
+    for i in range 4 {
+        l2 := l
+        l2.Push($i)
+        addTo(l2, "a" $i)
+        m2 := m
+        putIn(m2, i)
+        churn()
+    }
+    out := ""
+    for t in l { out = $out $t }
+    return $out " " $m.Len() " " $(try m.Get(3))
+}
+
+# text builders kept in a map, each fetched by value and added to
+fn builders() String& ? {
+    m := Map<I64, StringBuilder>()
+    for k in range 2 { m.Put(k, StringBuilder()) }
+    for i in range 6 {
+        b := try m.Get(i % 2)
+        b.Push("<" $i ">")
+        churn()
+    }
+    return $(try m.Get(0)).ToString() $(try m.Get(1)).ToString()
+}
+
+# a handle of the program's own, fetched by value and changed through methods that use it only through its reference
+fn counters() I64 ? {
+    m := Map<I64, H>()
+    m.Put(1, H())
+    for i in range 5 {
+        c := try m.Get(1)
+        c.bump()
+        bumpAll(c, 2)
+    }
+    return (try m.Get(1)).s.x
+}
+
+fn main() ? {
+    g := try group(9)
+    churn()
+    t := ""
+    for k in range 3 {
+        for x in try g.Get(k) { t = $t $x }
+    }
+    println(t)
+    println(try aliases())
+    println(try builders())
+    println($(try counters()))
+}

@@ -12866,3 +12866,158 @@ quarantine reads whatever was put there since (the poison survives until the chu
 arena is not covered: a stack slot (a value local, a temporary under 64KB) is out of its reach. Under `-r`, a recursion
 within reach of ThreadSanitizer's own frame limit (P7) faults sooner with `-s` than without - std/os's 200,000-frame
 RunOnStack test faults under `-r -s` every time where `-r` alone fails one run in four - which no make target combines.
+### Study 4's checker findings: numbers carry nothing, a handle is lent as its reference, notes propose what compiles (O26a, O17b, O17, O25h, E16, S12b, T20, R11, P1g, T7a, E11b, B11, L9a, 2026-10-10)
+
+Study 4 wrote systems, concurrency and scripting programs and marked every workaround (`review/study4`); the fuzzer had
+found two more. This batch is the checker's half of its findings (the runtime and std half landed separately).
+
+**1. O26a's flow followed numbers (#1, r01).** A local the function returns lives in the result scope, and so does any
+local whose value *flows* into it - read off the program's text. The scan treated any mention of a local inside a
+statement that reached the returned value as a flow, so in
+
+```
+for i in range n {
+    line := mk(i)
+    v := measure(line)
+    if v > s.best { s.best = v }
+}
+return s
+```
+
+`line` was moved to the result scope because `v`, computed from it, was stored into `s`: every line read was kept for
+the life of the result - 4M iterations peaked at 98,776 KB, against 11,160 KB now (the log tailer of the study kept
+630 MB for three lines). The fix is the rule O26a always meant: only a reference, or a value holding references, carries
+what a local refers to. The scan (`flowMentionsName`, `flowPlaceCarriesNothing`, `flowWrittenTypeCarriesNothing`) now
+skips a mention inside an argument of a call whose result cannot hold it (`calleeMayKeepArg`), a member or element
+holding no reference, and anything declared or stored with a type holding none; a slice in a chain keeps its array's
+type, so a view still flows. Two refinements found by the adversarial tests: a **receiver** of a method that can keep
+its argument (`s.names.Push(line)` - the method is looked up on the receiver's own module, since the prelude's types
+are not in the caller's) is a flow; and a reference local initialized from a **borrowed** result (a call whose result
+names a parameter's scope and does not land) is not moved - its referent is the argument's. A checks scenario runs the
+measuring loop under `ulimit -v 50000` (the old compiler's build aborts there), and a must-fail case stores the line
+itself (`sneak(line, s)` pushes it into `s`), where the note's fix (`mk&s(i)`) is the run case beside it.
+
+**2. A handle is lent as its reference (O17b; #5, #6, #8, #10, fuzz listalias).** `List`, `Map` and `StringBuilder`
+became one `mut` reference to a state record (T8), so a copy of one is a second name for the one collection. O17
+judged a lent value by where its *own storage* is when the callee can store through it - right for a struct holding
+several references, wrong for a handle, whose own storage holds nothing but the reference: `l := try m.Get(k);
+l.Push(x)` in a loop was "the callee can store through it", because `l`'s slot is in the loop's block though the chunks
+Push builds go where the map's lists are. Same for nested for-in copies (r09), a `Rule` read out of a Map and walked
+recursively (r25), a struct holding a List built for a receiver's map (r08), and the fuzzer's alias of a List.
+
+**Decided (mine): a handle is a struct with exactly one field, which is a bare reference (living with the instance,
+C2d) or another handle held by value; it is lent as its reference where the callee uses the parameter only through
+it.** "Only through it" is read off the callee's body as written (`handleThroughParam`): the parameter's name appears
+only as `p.field` read (never assigned), or as a receiver or argument handed to a parameter of another function that
+itself uses it only through it - a fixed point over the program's calls, memoized for definite answers, with a
+recursion assumed through while it is being decided. Anything else - kept in a local, stored, returned, compared,
+captured by a lambda, walked by `for`, its field assigned, or handed where the body is not known (a function value, an
+`extern`, a trait's default) - is judged as O17 judges any split lend. The body is read as tokens, skipping type
+expressions and scope arguments, because the question is about what the source says the function does with its
+parameter, before any of it is checked; `T<A, B>(` calls are recognised through the type-argument brackets. At the call
+(`bindCallScopeVars`), a handle argument whose references live elsewhere than its storage binds the parameter's scope
+variable where its references lead (`valueRefsScope`), the argument is marked `handleLent` so the borrow's own lifetime
+check is not asked (its storage need only be alive through the call), and the lend is no split lend. A handle is still
+not held by reference (O17a), and a task's handle argument still lives until its join (P2), checked by a must-fail
+program.
+
+**Why body-derived and not "every handle"**: a callee may keep the handle itself - a back link (`h.s.back = h`) stores
+a reference to the handle's own storage into what it reaches, and a method returning `Box(h)` hands the handle out.
+Lending those as the reference would let the storage die under the stored link. Both are must-fail checks
+(`o17bkeeps`, `o17bkeepsother`), and a handle handed out by a callee that only reads it is a run check (`o17bhandleout`).
+The `handles` fixture (groups built through `Map.Get`, aliases, builders, counters) runs under `-b`, `-b -d` and `-i`
+with one expected output, after an arena churn.
+
+**T25c, reconciled.** The QC change merged the same day (a copy of a place reached read-only is read-only) refused every
+`Map` of handles at `Map.Get`: its loop cursor was declared `f mapSlot<K, V>&s` - read-only - so the value it returned
+was a read-only copy, an error as a by-value result. Put, Update and Remove already declared theirs `mut`; Get's now is
+too, and the receiver stays read-only. That is QC's own shallow reading (linalg's views keep read-only receivers and hand
+out writable views): a holder of a read-only Map of Lists - an immutable global - can still push onto a list it gets,
+recorded as the same limit. Closing it would need a result's permission to follow its receiver's at each call, derived
+from the body as QC derives by-value parameters' needs - left for when permission polymorphism is designed.
+
+**3. Notes propose what compiles (#3, #4, #9; r03, r04, r05).** Three notes printed a fix that was already written or
+did not compile. (a) "make it where 'out' lives: 'Join&out(...)'" for a **value** local: a scope argument moves a
+reference local's referent, never a value local's own storage, which is what is lent - a value local now gets "declare
+it where 'out' lives: 'p mut String&out = ...'". (b) `&x` of a local O26a moved meant the local's block: `resolveScopeTag`
+and `resolveScopeArg` now give the result scope for such a local, where it lives (r03), and SPEC's O26a says so. (c) "declare
+it with ':='" for a local declared with `:=` (r04): O25 now says, for a `:=` local O26a moved, that it lives where the
+result goes while its value lives elsewhere - make it here, or keep it out of the result. And (d), found writing the
+records: for a handle lent as its reference, "declare it where 'l' lives: 't mut String&l = ...'" named the handle's
+own slot - the note now follows the handle to where its references are and names the variable it was read from that
+lives there ("where 'm' lives"), or says nothing (`b11notehandle`, with the fix as `b11notehandlefix`).
+
+**4. O26a through a constructor (#7, r06).** `note := ""` assigned a join on some path and returned inside `return R(n,
+note)` was "build it in '&return'". A local holding no references was never moved; an array, struct or enum local a
+returned value *reads* (an argument of the constructor, a view) is now - its storage is what is borrowed - so the text is
+built where the result goes.
+
+**5. S12b (#12, r10).** A match whose values are array literals of one element type and different lengths was "every
+value is Array<I64, 3>, found Array<I64, 2>"; it is now an array of that element type whatever the lengths, as the
+conditional (E28) already was.
+
+**6. T20 (#13, r13).** `fn retryable(e http.HttpError) Bool` - what a Go programmer writes - was accepted and failed
+later as "'E' is not an enum type" or "'$' has nothing to render". An error type as the type of a parameter, local,
+field, result, element or type argument is now an error at the type, naming catch clauses as the way to tell words
+apart, and a word written as a value (`e != E.A`) says to raise it or catch it.
+
+**7. E16 under `try` (fuzz trygenericindex).** A constant index known out of range was E16's compile-time error even
+under `try` - which is the checked form, whose failure is defined. In a generic over the length one instantiation may
+have the element and another not (`fn third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }`), so it now
+compiles and fails with `OUT_OF_BOUNDS` where it runs; without `try` it stays an error.
+
+**8. Diagnostics (#14-#21).** E11b's hint wherever a join piece follows a piece (after a rendering too, and the whole
+chain - not its first name - with a lambda in it) and for text followed by `(` on its line (a call of text); one error per
+unknown name per function (types per module) with an import's type suggested (`Json` -> `json.Json`), a pattern of an
+unknown enum binding unknowns, and no S8a "the same on every build" decided from an unknown (the study's json2csv went
+from 39 errors to 2 - B10's "define it with -D" for an unknown name in a condition counts as that one error too, and
+the cases that counted each repetition, `unknowncascade`, `unknownreceiver` and `unknowntypearg`, now count each name);
+a catch block whose last statement is a value says to write `} default v` after the block,
+quoting it; a clause ending in `os.Exit` (or an extern `exit`/`_exit`/`abort`) says it is an ordinary call and needs
+`unreachable` after it; P1g with a reference target for a value result names the result type to declare; T7a reached
+through a generic (`nums.Map(fn(n) String { ... })`) points at the lambda's result and says to write `String&`.
+
+**9. Keywords as field names (L9a; #15, recommendation 14). Decided (mine).** `done` was the natural name of a counter
+three times in the study. A field may now be named by a keyword that is a whole statement by itself - after which
+nothing follows on its line - or that begins no statement and no value; it is declared with a type or `:=` (never a
+pun, which would be the statement), and reached only after `.`. The tokenizer reads a word after `.` as a name (so
+`s.done` ending a line ends the statement as a name does), the parser accepts such a field in a constructor's body when
+something other than a statement end follows on its line, and in that body it is no local: a later statement reading
+it alone is "a keyword, not a name - a field named by one is reached only after '.'". Keywords that begin a statement or
+a value (`if`, `for`, `return`, `fn`, `try`, `not`, `true`...) stay reserved everywhere, as do all of them for locals,
+parameters, functions and types - reading `done` alone must keep meaning the statement. After `=>`
+S12b's hint (a clause that leaves is a block) comes first, so `nomatch => unreachable` is not read as a field.
+
+**Adversarial tests**, per relaxation: O26a (numbers) - `o26anumberstore` must fail where the line itself is stored,
+`o26anumberstorefix` runs, the landing scenario's `numberflow` under `ulimit -v 50000`, corpus tests reading back after
+a churn; O17b - `o17bkeeps` and `o17bkeepsother` must fail, `o17bhandleout` and `c2dheldreturned` run, a task's
+handle argument is P2's error, the `handles` fixture under `-b`, `-b -d` and `-i`, and corpus tests for groups,
+aliases, builders and counters read back after a churn; O20 (a value copied out of a reference holds what its referent
+does) - a corpus test; E16 - `e16constnotry` must fail, corpus tests for the checked form in a generic; S12b, L9a -
+corpus tests and `l9afields`/`l9keywordfield`.
+
+**The soundness review of this batch (`review/tonight4`) found one new use-after-free, fixed at the root.** O17b's first
+version decided "used only through its reference" by scanning the callee's body TOKENS, skipping any `&name` as a scope
+marker. But `&` is also bitwise-and: a handle type with a user `BitAnd` handing back its operand let a method write
+`h.c.kept = h.c.kept & h`, storing the handle copy's own storage in the map's cell - the copy (`c := try m.Get(1)` in a
+loop) died and `-d` segfaulted. A soundness decision must not rest on a token scan, so the analysis now reads the
+callee's **checked** body (`htOp`/`htStmt`): every read of the parameter is either the handle's reference field read
+out (a member operand, never an assignment target), or the parameter - or a handle it holds by value - handed whole to a
+parameter of a declared function, method or constructor that is itself "through" (the fixed point); anything else, an
+operator's operand included, says no. And the answer never rests on the walk being complete: every read of a
+handle-reference parameter the body's check makes is recorded where it is made (`OperandReadVar`, `paramReads`), and
+one the walk did not reach - left where it does not look, or built by a probe and thrown away - says no. Bodies are
+checked before their callers bind (O10c's `ensureBodyChecked`), except inside a cycle: there the lend is taken on trust
+and verified once every body is checked (`settleHandleLends`), an O17 error at the call if the answer turns out no
+(`o17bpending`, and `o17bpendingok` where it holds). The review's reproducer is `o17bbitand`, with its two controls
+(`o17bnonhandle`, `o17bnoand`). **Also from the review (optional, cheap)**: `s := a[1:4]; return V(s)` was O26 where
+`return V(a[1:4])` compiled - O26a moved a borrowable local only when a returned value read it directly; it now follows
+flows of what borrows it too (`borrowRoot` in the flow scan: a view or an array, text or struct read out of it counts
+as carrying it). That also accepts `h.name = a; return h` and the same through an inline array of references, which two
+cases (`o26afieldafter`, `o26ainlinearray`) had pinned as O20 errors: the text now lives in the result scope with `h`,
+so they became run cases read back after a churn (`-b`, `-b -d`, `-i`); text stored into a parameter's field still stays
+in its block and is O20's error (`o26aborrowparam`).
+Reading the checked body also lifted the recorded limit `o10cloopcopy` pinned for a handle: `for p in parts { merge(sum,
+p) }` over an array of `Map`s compiles, since `merge`'s `for e in from` is `from.Iter()`, whose iterator holds only
+`of.s` (the token scan had refused every `for`) - `o17bloopcopy` runs it after a churn, and `o10cloopcopy` keeps the
+limit and its note for a struct holding a count beside its map, which is no handle.

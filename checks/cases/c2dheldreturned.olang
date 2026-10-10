@@ -1,0 +1,37 @@
+# check: run
+# O26a/C2d: a constructor keeping its argument (pushing it onto a list it holds) builds an instance a function returns
+# from text it made - the text is moved into the result scope with the local, so the instance's list refers to nothing
+# that dies at the return; read back after a churn, as is a text local assigned built text on one path (study 4's r06)
+type Words struct(text String&) {
+    items mut List<String&>& = List<String&>()
+    items.Push(text)
+}
+type R struct(Code I64, Note String&) {
+    Code
+    Note
+}
+fn fromLocal() Words {
+    t := String(Array<Char>(3, 'a'))
+    return Words(t)
+}
+fn check(n I64) R {
+    note := ""
+    if n > 3 { note = "big: " $n }
+    return R(n, note)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i " " $(i * 3)
+        t += x.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := fromLocal()
+    a := check(2)
+    b := check(7)
+    churn()
+    assert w.items.Len() == 1 and w.items[0] == "aaa"
+    assert a.Note == "" and b.Note == "big: 7" and b.Code == 7
+}

@@ -1,0 +1,21 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17b, a control for checks/cases/o17bbitand.olang: the same store written directly
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() { c mut Cell& = Cell() }
+fn (h mut Box&) stash() {
+    h.c.kept = h
+}
+fn run(m mut Map<I64, Box>&) ? {
+    for i in range 3 {
+        b := try m.Get(1)
+        b.stash()
+    }
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try run(m)
+}

@@ -1,0 +1,17 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17b: a handle is lent as its reference only to a callee using it only through it - one storing a reference to the
+# handle's own storage into what it reaches (a back link), or handing it out, is judged as any split lend is
+type St struct() {
+    x I64 = 0
+    back mut H& = null
+}
+type H struct() { s mut St& = St() }
+fn (h mut H&) backlink() { h.s.back = h }
+fn main() ? {
+    m := Map<I64, H>()
+    m.Put(1, H())
+    for i in range 3 {
+        c := try m.Get(1)
+        c.backlink()
+    }
+}

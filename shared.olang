@@ -14309,6 +14309,262 @@ test "P2: a task calls a function value read out of storage that lasts until the
     assert c[1] == 7
 }
 
+# E16/E16d: under "try" a constant index is the checked form - out of the array's range it fails with OUT_OF_BOUNDS where
+# it runs, so a generic over the length can ask for an element one instantiation has and another has not. The globals
+# are baked while compiling, the asserts decided there too, and the mutable ones read at run time
+fn e16Third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }
+E16Has := e16Third(I32[4, 5, 6])
+E16HasNot := e16Third(I32[4, 5])
+e16Short mut Array<I32, 2> = I32[1, 2]
+test "E16: try on a constant index known to be out of range compiles, and fails where it runs" {
+    assert E16Has == 6 and E16HasNot == -1
+    assert (try e16Short[5] catch default 9) == 9
+    assert (try e16Short[1] catch default 9) == 2
+    x Array<I32, 3> = I32[7, 8, 9]
+    assert e16Third(x) == 9
+}
+
+# O26a: only a reference, or a value holding references, carries what a local refers to into the result - a number
+# measured from each line read is no flow of it, so the lines stay in the loop's block and are reclaimed each turn (a
+# reader keeping the longest one keeps that one, which does flow); read back after the arena has been churned
+type o26nSummary struct() {
+    best I64 = 0
+    longest List<String&> = List<String&>()
+}
+fn o26nLine(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
+fn o26nMeasure(t String&) I64 { return t.Len() }
+fn o26nScan(n I64) o26nSummary {
+    s := o26nSummary()
+    for i in range n {
+        line := o26nLine(i)
+        v := o26nMeasure(line)
+        head := line[0:6]
+        if v > s.best {
+            s.best = v
+            s.longest.Push(head)
+        }
+    }
+    return s
+}
+test "O26a: a number computed from a local carries nothing into the result" {
+    s := o26nScan(300)
+    sbChurn()
+    assert s.best == 18 and s.longest.Len() == 3
+    assert s.longest[0] == "line 0" and s.longest[1] == "line 1" and s.longest[2] == "line 1"
+}
+
+# O26a: a local holding no references whose own storage a returned value borrows - text that starts empty and is assigned
+# built text on one path, kept by a constructor; an array a returned value views - lives in the result scope with it
+type o26bNote struct(code I64, note String&) {
+    code
+    note
+}
+type o26bView struct(xs Array<I64>&) { xs }
+fn o26bCheck(n I64) o26bNote {
+    note := ""
+    if n > 3 { note = "big: " $n }
+    return o26bNote(n, note)
+}
+fn o26bSlice(n I64) o26bView {
+    a := I64[1, 2, 3, 4]
+    a[0] = n
+    return o26bView(a[0:3])
+}
+test "O26a: a local a returned value borrows lives in the result scope" {
+    a := o26bCheck(2)
+    b := o26bCheck(9)
+    v := o26bSlice(42)
+    sbChurn()
+    assert a.note == "" and b.note == "big: 9" and b.code == 9
+    assert v.xs.Len() == 3 and v.xs[0] == 42 and v.xs[2] == 3
+}
+
+# O26a/E25: "&x" naming a local the function returns names the result scope it lives in - "mk&out(...)" and a local
+# written "String&out" build there, so text read per source lives with the list it is pushed onto (study 4's r03)
+type o26xLine struct(t String&) { t }
+fn o26xText(s String&) String& { return $s }
+fn o26xByArg(srcs Array<String&>&) List<o26xLine> {
+    out := List<o26xLine>()
+    for i in range srcs.Len() {
+        text := o26xText&out(srcs[i])
+        for line in text.Lines() { out.Push(o26xLine(line)) }
+    }
+    return out
+}
+fn o26xByType(srcs Array<String&>&) List<o26xLine> {
+    out := List<o26xLine>()
+    for i in range srcs.Len() {
+        text String&out = o26xText(srcs[i])
+        for line in text.Lines() { out.Push(o26xLine(line)) }
+    }
+    return out
+}
+test "O26a: '&x' of a returned local is the result scope" {
+    a := o26xByArg(String&["a\nbb", "c"])
+    b := o26xByType(String&["dd\ne"])
+    sbChurn()
+    assert a.Len() == 3 and a[1].t == "bb" and a[2].t == "c"
+    assert b.Len() == 2 and b[0].t == "dd"
+}
+
+# O26a: a receiver of a method whose result can hold it - "line.Split(" ")", borrowed from line - carries it, so the line
+# lives where the map whose keys are its words does (study 4's r04)
+type o26sCounts struct() {
+    counts Map<String&, I64> = Map<String&, I64>()
+}
+fn o26sLine(i I64) String& ? { return "k" $(i % 5) " tail " $i }
+fn o26sCollect(n I64) o26sCounts {
+    s := o26sCounts()
+    for i in range n {
+        line := try o26sLine(i) catch { continue }
+        fields := line.Split(" ")
+        s.counts.Update(fields[0], 0, fn(c I64) I64 { return c + 1 })
+    }
+    return s
+}
+test "O26a: a receiver a method's result holds flows into the result" {
+    s := o26sCollect(50)
+    sbChurn()
+    assert s.counts.Len() == 5 and (try s.counts.Get("k3") catch default 0) == 10
+}
+
+# O17b: a handle - List, Map, StringBuilder, or a struct of the program's whose only part is one reference - copied out of
+# a collection, copied in an inner block, or taken by value, is lent to a callee using it only through its reference as
+# that reference: the call builds where the handle's state lives. Every result read back after a churn
+type o17bSt struct() { x I64 = 0 }
+type o17bH struct() { s mut o17bSt& = o17bSt() }
+fn (h mut o17bH&) bump() { h.s.x++ }
+fn o17bBumpAll(h mut o17bH&, n I64) {
+    for i in range n { h.bump() }
+}
+fn o17bGroup(n I64) Map<I64, List<String&>> ? {
+    m := Map<I64, List<String&>>()
+    for i in range n {
+        k := i % 3
+        if not m.Has(k) { m.Put(k, List<String&>()) }
+        l := try m.Get(k)
+        l.Push("v" $i)
+        sbChurn()
+    }
+    return m
+}
+fn o17bAddTo(l List<String&>, t String&) { l.Push(t) }
+fn o17bPutIn(m Map<I64, I64>, k I64) { m.Put(k, k * k) }
+fn o17bAliases() String& ? {
+    l := List<String&>()
+    m := Map<I64, I64>()
+    for i in range 4 {
+        l2 := l
+        l2.Push($i)
+        o17bAddTo(l2, "a" $i)
+        m2 := m
+        o17bPutIn(m2, i)
+        sbChurn()
+    }
+    out := ""
+    for t in l { out = $out $t }
+    return $out " " $m.Len() " " $(try m.Get(3))
+}
+fn o17bBuilders() String& ? {
+    m := Map<I64, StringBuilder>()
+    for k in range 2 { m.Put(k, StringBuilder()) }
+    for i in range 6 {
+        b := try m.Get(i % 2)
+        b.Push("<" $i ">")
+        sbChurn()
+    }
+    return $(try m.Get(0)).ToString() $(try m.Get(1)).ToString()
+}
+fn o17bCounters() I64 ? {
+    m := Map<I64, o17bH>()
+    m.Put(1, o17bH())
+    for i in range 5 {
+        c := try m.Get(1)
+        c.bump()
+        o17bBumpAll(c, 2)
+    }
+    return (try m.Get(1)).s.x
+}
+test "O17b: a handle is lent as its reference" {
+    g := try o17bGroup(9) catch { unreachable }
+    sbChurn()
+    t := ""
+    for k in range 3 {
+        l := try g.Get(k) catch { unreachable }
+        for x in l { t = $t $x }
+    }
+    assert t == "v0v3v6v1v4v7v2v5v8"
+    assert (try o17bAliases() catch default "") == "0a01a12a23a3 4 9"
+    assert (try o17bBuilders() catch default "") == "<0><2><4><1><3><5>"
+    assert (try o17bCounters() catch default 0) == 15
+}
+
+# O20/C2d: a value read through a reference - a List the reference names - holds what lives where its referent does, so
+# a record built from it for a map of a "mut" receiver lands where the list was made (study 4's r08)
+type o20Rule struct(target String&, deps List<String&>) {
+    target
+    deps
+}
+type o20Mk struct() {
+    rules Map<String&, o20Rule> = Map<String&, o20Rule>()
+}
+fn (m mut o20Mk&) parse(text String&m) {
+    for line in text.Lines() {
+        deps mut List<String&>&m = List<String&>()
+        for d in line.Split(" ") { deps.Push(d) }
+        m.rules.Put(line, o20Rule(line, deps))
+    }
+}
+test "O20: a value copied out of a reference holds what its referent holds" {
+    m := o20Mk()
+    for i in range 20 {
+        text String&m = "t" $i " a" $i " b" $i "\nu" $i " c" $i
+        m.parse(text)
+    }
+    sbChurn()
+    total I64 = 0
+    for e in m.rules {
+        for d in e.Value.deps { total += d.Len() }
+    }
+    r := try m.rules.Get("t7 a7 b7") catch { unreachable }
+    assert total == 250 and m.rules.Len() == 40 and r.deps.Len() == 3 and r.deps[1] == "a7"
+}
+
+# S12b/E28: a match giving array literals of one element type, of different lengths, gives an array of it - as the
+# conditional does
+fn s12bPick(k I64) Array<I64> {
+    return match k {
+        case 1 => I64[1, 2, 3]
+        case 2 => I64[7]
+        nomatch => I64[4, 5]
+    }
+}
+S12bTwo := s12bPick(2)
+test "S12b: array literals of different lengths in a match value" {
+    assert s12bPick(1).Len() == 3 and s12bPick(3)[1] == 5 and S12bTwo[0] == 7
+    x := match S12bTwo.Len() {
+        case 1 => I64[9, 9]
+        nomatch => I64[0]
+    }
+    assert x.Len() == 2
+}
+
+# L9a: a keyword that is a whole statement by itself, or that begins no statement and no value, may name a field - reached
+# after "."
+type l9aStats struct() {
+    done I64 = 0
+    in Bool
+    type String& = "k"
+}
+fn (s mut l9aStats&) finish() { s.done++ }
+test "L9a: a keyword names a field" {
+    s := l9aStats()
+    s.done = 2
+    s.finish()
+    s.in = true
+    assert s.done == 3 and s.in and s.type == "k"
+}
+
 # QC/T25c: a value holding 'mut' references copied out of a place reached read-only is read-only itself
 type qcBox struct(P mut Array<I64>&) {
     P

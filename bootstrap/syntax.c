@@ -269,6 +269,22 @@ static struct token acceptFnKeyword(SyntaxCtx sc) {
 //"fn (p mut Parser&) fail(t Token)". A field is no method: its name is a constructor's local, and stays a name. A
 //keyword after "." is taken only when "(" follows it (wantCall), so "x.done" is still read as it always was
 static bool isKeywordTok(struct token t);
+//L9a: a keyword a field may be named by - one that is a whole statement by itself ("done", "fail", "break", "continue",
+//"abort", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
+//"is", "range", "type", "test", ...): a field's declaration ("done I64 = 0", "type := Kind.A") can be told from a
+//statement, and the field is reached after "." ("s.done"). A keyword beginning a statement with more after it ("if",
+//"return", "spawn"), or a value ("fn", "not", "try"), or written inside one ("else", "mut", "destruct") is not one
+static bool keywordMayNameField(enum tokenType t) {
+    switch (t) {
+        case TOK_DONE: case TOK_FAIL: case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:
+        case TOK_IN: case TOK_IS: case TOK_AS: case TOK_AND: case TOK_OR: case TOK_XOR: case TOK_RANGE: case TOK_CASE:
+        case TOK_NOMATCH: case TOK_TYPE: case TOK_STRUCT: case TOK_CHOICE: case TOK_INTERFACE: case TOK_EXTENDS:
+        case TOK_IMPORT: case TOK_TEST: case TOK_EXTERN: case TOK_DEFAULT:
+            return true;
+        default:
+            return false;
+    }
+}
 static struct token acceptMethodName(SyntaxCtx sc, bool wantCall) {
     int cur = TokenGetCursor(sc->tc);
     struct token t = TokenFeed(sc->tc);
@@ -277,7 +293,8 @@ static struct token acceptMethodName(SyntaxCtx sc, bool wantCall) {
         int after = TokenGetCursor(sc->tc);
         bool call = TokenFeed(sc->tc).type == TOK_PAREN_O;
         TokenSetCursor(sc->tc, after);
-        if (call || !wantCall) {
+        //...and after "." a keyword that may name a field is that field (L9a)
+        if (call || !wantCall || keywordMayNameField(t.type)) {
             t.type = TOK_IDEN;
             return t;
         }
@@ -901,7 +918,19 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
 struct syntax* parseCtorField(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token name = acceptTok(sc, TOK_IDEN);
-    if (name.type == TOK_NONE) return NULL;
+    bool keyword = false;
+    if (name.type == TOK_NONE) { //L9a: "done I64 = 0" - a keyword naming a field, never a pun (which would be the statement)
+        struct token k = TokenFeed(sc->tc);
+        struct token next = TokenFeed(sc->tc);
+        TokenSetCursor(sc->tc, cur);
+        if (!keywordMayNameField(k.type) || next.lineNr != k.lineNr || next.type == TOK_STMNT_END
+                || next.type == TOK_ASS || next.type == TOK_DOT || next.type == TOK_PAREN_O || next.type == TOK_COMMA)
+            return NULL;
+        TokenFeed(sc->tc);
+        name = k;
+        name.type = TOK_IDEN;
+        keyword = true;
+    }
     struct syntax* s = newNode(SNTX_CTOR_FIELD);
     addTok(s, name);
 
@@ -939,7 +968,7 @@ struct syntax* parseCtorField(SyntaxCtx sc) {
     //no type, no "=", no ":=" - a bare pun, valid only if it turns out to name one of the constructor's
     //own parameters (checked in semantic.c, which has the param list this parser doesn't). It takes its parameter's
     //type, permission included, so it has no "mut" of its own (C4)
-    if (mut.type == TOK_MUT) return parseFail(sc, cur);
+    if (mut.type == TOK_MUT || keyword) return parseFail(sc, cur);
     return s;
 }
 
@@ -4550,6 +4579,10 @@ static bool isOperandEndTok(enum tokenType t) {
     return t == TOK_IDEN || t == TOK_PAREN_C || t == TOK_SQUARE_C || t == TOK_INT_LIT || t == TOK_FLOAT_LIT
            || t == TOK_CHAR_LIT || t == TOK_BOOL_LIT || t == TOK_NULL_LIT;
 }
+//...or a member named by a keyword, "s.done" (L9a)
+static bool isOperandEnd(struct token t) {
+    return isOperandEndTok(t.type) || (isKeywordTok(t) && TokenBefore(t).type == TOK_DOT);
+}
 
 //the first token of the postfix operand ending at last - "a.b(c)[d]" from its "]" - or a NONE token where it is
 //not one (a rendering's "$" before it makes it a join piece already)
@@ -4566,7 +4599,7 @@ static struct token operandStartBefore(struct token last) {
             if (t.type == TOK_NONE) return t;
             struct token b = TokenBefore(t);
             if (b.lineNr == t.lineNr && (b.type == TOK_IDEN || b.type == TOK_PAREN_C || b.type == TOK_SQUARE_C)) { t = b; continue; }
-        } else if (isOperandEndTok(t.type)) {
+        } else if (isOperandEnd(t)) {
             struct token b = TokenBefore(t);
             if (b.type == TOK_DOT) {
                 struct token bb = TokenBefore(b);
@@ -4593,7 +4626,7 @@ static struct token operandEndAfter(struct token first) {
         }
         struct token n = TokenAfter(t);
         if (n.lineNr != t.lineNr) return t;
-        if (n.type == TOK_DOT && TokenAfter(n).type == TOK_IDEN) { t = TokenAfter(n); continue; }
+        if (n.type == TOK_DOT && (TokenAfter(n).type == TOK_IDEN || isKeywordTok(TokenAfter(n)))) { t = TokenAfter(n); continue; } //L9a
         if (n.type == TOK_PAREN_O || n.type == TOK_SQUARE_O) { t = n; continue; }
         return t;
     }
@@ -4604,9 +4637,54 @@ static struct token operandEndAfter(struct token first) {
 static bool joinPieceHint(struct token from, struct token to) {
     if (from.type == TOK_NONE || to.type == TOK_NONE || from.owner != to.owner || from.lineNr != to.lineNr) return false;
     struct str text = Str(from.str.ptr, (int)(to.str.ptr + to.str.len - from.str.ptr));
-    if (text.len <= 0 || text.len > 60) text = from.str;
+    //a long operand - a chain holding a lambda, say - is rendered whole by parenthesizing it, never by its first name
+    if (text.len <= 0 || text.len > 60) text = from.type == to.type && from.str.ptr == to.str.ptr ? from.str : StrFromCStr("(...)");
     ErrSyntax(from, ERR_JOIN_PIECE, text);
     return true;
+}
+
+//E11b: whether t ends a "$" rendering - "$n", "$a.b(c)" - a join piece another piece may follow
+static bool endsRendering(struct token t) {
+    if (!isOperandEnd(t)) return false;
+    struct token s = t;
+    for (int guard = 0; guard < 256; guard++) {
+        if (s.type == TOK_PAREN_C || s.type == TOK_SQUARE_C) {
+            enum tokenType closer = s.type, opener = s.type == TOK_PAREN_C ? TOK_PAREN_O : TOK_SQUARE_O;
+            int depth = 0;
+            for (; s.type != TOK_NONE; s = TokenBefore(s)) {
+                if (s.type == closer) depth++;
+                else if (s.type == opener && --depth == 0) break;
+            }
+            if (s.type == TOK_NONE) return false;
+            struct token b = TokenBefore(s);
+            if (b.type == TOK_STR_OF) return true;
+            if (b.lineNr == s.lineNr && (b.type == TOK_IDEN || b.type == TOK_PAREN_C || b.type == TOK_SQUARE_C)) { s = b; continue; }
+            return false;
+        }
+        struct token b = TokenBefore(s);
+        if (b.type == TOK_STR_OF) return true;
+        if (b.type == TOK_DOT) {
+            struct token bb = TokenBefore(b);
+            if (bb.type == TOK_IDEN || bb.type == TOK_PAREN_C || bb.type == TOK_SQUARE_C) { s = bb; continue; }
+        }
+        return false;
+    }
+    return false;
+}
+
+//E11b: a text literal called - "$n "," (...)" - is a piece of text with "(" after it, which can only be a value to join
+static bool textPieceCalled(struct token found) {
+    struct token from = found;
+    for (struct token t = found; t.type != TOK_NONE && t.lineNr >= found.lineNr - 1; t = TokenBefore(t)) from = t;
+    for (struct token t = from; t.type != TOK_NONE && t.lineNr <= found.lineNr; t = TokenAfter(t)) {
+        struct token n = TokenAfter(t);
+        if (t.type == TOK_STR_LIT && n.type == TOK_PAREN_O && n.lineNr == t.lineNr) {
+            ErrSyntax(n, ERR_JOIN_PIECE_CALLED);
+            return true;
+        }
+        if (n.str.ptr == found.str.ptr && n.type == found.type) break;
+    }
+    return false;
 }
 
 //S12b/D8c: "case P => a, b" - a comma after a case's value on its own line, outside every bracket: a match giving
@@ -4626,6 +4704,11 @@ static bool caseValueComma(struct token found) {
 
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
+    //L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
+    if (keywordMayNameField(found.type) && expected && !strcmp(expected, "an expression") && prev.type != TOK_ARROW) {
+        ErrSyntax(found, ERR_KEYWORD_FIELD_READ, found);
+        return true;
+    }
     if (caseValueComma(found)) {
         ErrSyntax(found, ERR_MATCH_VALUE_ONE);
         return true;
@@ -4680,11 +4763,12 @@ static bool syntaxHint(struct token found, char* expected) {
         return true;
     }
     //E11b: a value joined to text has to be rendered - "pretty(t) \"\\n\"" or "\"n=\" n"
-    if ((found.type == TOK_STR_LIT || found.type == TOK_STR_OF) && prev.lineNr == found.lineNr && isOperandEndTok(prev.type)
+    if ((found.type == TOK_STR_LIT || found.type == TOK_STR_OF) && prev.lineNr == found.lineNr && isOperandEnd(prev)
         && joinPieceHint(operandStartBefore(prev), prev)) return true;
-    if (prev.type == TOK_STR_LIT && prev.lineNr == found.lineNr
+    if ((prev.type == TOK_STR_LIT || endsRendering(prev)) && prev.lineNr == found.lineNr
         && (isOperandEndTok(found.type) || found.type == TOK_PAREN_O) && found.type != TOK_PAREN_C && found.type != TOK_SQUARE_C
         && joinPieceHint(found, operandEndAfter(found))) return true;
+    if (textPieceCalled(found)) return true;
     //"f(a, b,)" - a trailing comma ends a list only where its closing bracket begins a line (L18a)
     if ((found.type == TOK_PAREN_C || found.type == TOK_SQUARE_C) && prev.type == TOK_COMMA && prev.lineNr == found.lineNr) {
         ErrSyntax(prev, ERR_TRAILING_COMMA, found, found);

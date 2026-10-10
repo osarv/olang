@@ -1,0 +1,23 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# also: make it where 's' lives: 'mk&s(...)'
+# O26a: a number computed from a line carries nothing into the result - but a function storing the line itself into the
+# returned summary does, which flow by numbers does not see: the call is held to it (O10c), and the note's fix compiles
+type S struct() {
+    best I64 = 0
+    names List<String&> = List<String&>()
+}
+fn mk(i I64) String& { return "line " $i }
+fn sneak(t String&, s mut S&) I64 {
+    s.names.Push(t)
+    return t.Len()
+}
+fn scan(n I64) S {
+    s := S()
+    for i in range n {
+        line := mk(i)
+        v := sneak(line, s)
+        if v > s.best { s.best = v }
+    }
+    return s
+}
+fn main() ? { println($scan(3).names.Len()) }

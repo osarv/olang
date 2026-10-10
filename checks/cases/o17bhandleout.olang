@@ -1,0 +1,38 @@
+# check: run
+# O17b: a handle (Box holds one reference) copied out of a struct and lent to a method using it only through its
+# reference - the node built through the borrowed result is built where the box's state lives, read back after a churn
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) headOf() mut Node&b { return b.head }
+fn bump(src mut W&, v I64) {
+    b := src.b
+    h := b.headOf()
+    h.next = Node()
+    h.next.v = v
+    src.b = b
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        x := "churn " $i
+        n := Node()
+        n.v = i
+        t += x.Len() + n.v
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w, 41)
+    churn()
+    assert w.b.head.next.v == 41
+    println($w.b.head.next.v)
+}

@@ -1,17 +1,25 @@
 # check: fail note: 'p' is the loop's copy of an element, made in the loop's block - lend the element itself: 'parts[i]'
 # O10c/B11: a for-in's copy of an element lent to a callee that relates its scope to a longer-lived one - the copy is
 # storage of the loop's block, while the element itself lives where the array does (a recorded limit: the callee's
-# obligation cannot tell the referent's storage from what it holds)
-fn countWords(words Array<String&>&) Map<String&, I64> {
-    m := Map<String&, I64>()
-    for w in words { m.Update(w, 0, fn(n I64) I64 { return n + 1 }) }
-    return m
+# obligation cannot tell the referent's storage from what it holds). A handle (a List, a Map) is lent as its reference
+# instead (O17b, checks/cases/o17bloopcopy.olang); this struct holds a count beside its map, so it is none
+type Counts struct() {
+    m Map<String&, I64> = Map<String&, I64>()
+    n I64 = 0
 }
-fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
-    for e in from { into.Put(e.Key, e.Value) }
+fn countWords(words Array<String&>&) Counts {
+    c := Counts()
+    for w in words {
+        c.m.Update(w, 0, fn(n I64) I64 { return n + 1 })
+        c.n++
+    }
+    return c
+}
+fn merge(into mut Map<String&, I64>&, from Counts&) {
+    for e in from.m { into.Put(e.Key, e.Value) }
 }
 fn total(words Array<String&>&) I64 {
-    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())
+    parts := Array<Counts>(2, Counts())
     parts[0] = countWords(words)
     parts[1] = countWords(words)
     sum := Map<String&, I64>()

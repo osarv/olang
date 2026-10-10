@@ -1,0 +1,24 @@
+# check: fail error: unknown type 'Json' - did you mean 'json.Json'?
+# never: unknown name 'v'
+# never: unknown name 's'
+# never: no import here
+# never: error[S8a]
+# never: unknown name 'Json'
+# B11: a type written without its module's alias is one error, naming the import's type - its uses in case patterns, the
+# names those bind, and a condition testing a case of it add none (study 4's r14)
+import "std/json"
+fn kind(j Json&) String {
+    return match j {
+        case Json.Null => "null"
+        case Json.Num(v) => "number " $v
+        case Json.Str(s) => "text " $s
+        nomatch => "other"
+    }
+}
+fn nested(j json.Json&) Bool {
+    if j is Json.Arr or j is Json.Obj { return true }
+    return false
+}
+fn main() ? {
+    println($kind(json.Json.Null) " " $nested(json.Json.Null))
+}

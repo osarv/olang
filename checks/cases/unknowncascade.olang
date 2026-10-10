@@ -1,10 +1,10 @@
 # check: fail unknown name 'nope'
-# also: compilation failed with 4 errors
+# also: compilation failed with 3 errors
 # never: operands of one type
 # never: do not meet
 # never: takes a Bool
 # an unknown name stands for whatever it is used as, so each misspelling is one error - not also a mismatched
-# comparison or a non-boolean operand
+# comparison or a non-boolean operand - and a name is said unknown once in its function (B11), so 'nope' twice is one
 fn main() ? {
     s String& = "a"
     assert s == nope

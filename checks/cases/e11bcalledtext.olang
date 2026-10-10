@@ -1,0 +1,8 @@
+# check: fail error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
+# E11b: "," (...) on one line is a piece of text called, said where the "(" is (study 4's r12)
+fn main() ? {
+    n := 5
+    c := true
+    x := $n "," ("stop" if c else $n)
+    println(x)
+}

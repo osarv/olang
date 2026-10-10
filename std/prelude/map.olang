@@ -107,7 +107,7 @@ fn (m mut Map<<K>, <V>>&) Update(key K, init V, f fn(v V) V) {
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
 fn (m Map<<K>, <V>>&) Get(key K) V ? {
     s := m.s
-    for f mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f != null, f = f.next {
+    for f mut mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f != null, f = f.next {
         if f.entry.Key == key { return f.entry.Value }
     }
     error
