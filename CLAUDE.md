@@ -764,7 +764,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   never a call: it is evaluated on behalf of callers the declaration cannot see, so it must have a value
   and no other behaviour - no allocation, no scope to name, nothing that can fail. That restriction is
   also what lets a single checked operand, built once in the declaring module's own context, serve every
-  call site. **Named arguments were considered and rejected**, and `default` is what replaced them: they
+  call site (**no longer, 2026-10-10**: a default that is no plain literal is checked once and built again for each call,
+  since where its temporaries land is that call's - one shared operand kept the first call's landing, and a second
+  caller crashed the code generator; HISTORY.md, decision 48's review). **Named arguments were considered and rejected**, and `default` is what replaced them: they
   would make every parameter name of every exported function part of its API permanently (renaming one
   becomes a breaking change), where parameter names are currently internal. The readability they buy is
   better served here by distinct types, which the compiler verifies, than by argument names, which it
@@ -4578,6 +4580,30 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   its caller** (takes its identity; the caller waits). **Found on the way**: a thread identity that is an address of its
   own (TLS) is reused by the next thread on the same stack, which would take a dead worker's unfolded stand-in claim -
   identities are numbers from a counter.
+  **Its soundness review (tonight8) found the walk missing what codegen builds where an expression lands, fixed.** A
+  conditional's or a match's value, or a `catch default`, is converted to the whole expression's type on its own path
+  (`cgCond`, `cgMatchValue`, `cgTryDefaultStore`), so a temporary promoted there is built where the expression lands - the
+  captured scope - while the expression itself is reference-typed and the walk saw no promotion: `x.next = x.next if c else
+  Node(i)` in a closure (or in a callee, a `Call` method, a borrowed result, a `:=` local, an argument, a destructured
+  result) bumped the owner's arena from a task (TSan 24-32 reports each, wrong values and segfaults under `-b`). The walk
+  now applies its boundary test to each value at the expression's type, and to a struct value's fields, an inline
+  array's zero fill and a declaration's per-element fill. **Decided (mine): the code generator holds every body to the
+  walk.** Every value it loads from a scope the body was handed - a parameter's, the result's, a capture's, a
+  constructor's instance - is recorded, and so is each allocation and destructor registration into one; as the body
+  ends, one into a scope the walk said it never builds in (or, for a closure, into a captured scope its prologue does
+  not ask for) is an internal compiler error (`cgCheckMayBuild`). Keying the walk on the checker's landing records, the
+  review's preferred route, would have missed a value call's result (only constructor calls are landed); a check of
+  codegen's own output cannot drift from it. On the corpus it found one more: a constructor's storage over 64KB (T7c)
+  came from its instance's scope - it is its own frame's now. **Found on the way, pre-existing**: a value call's result
+  as a conditional's or a match's value promoted into its reference type was built in the block the
+  expression stood in, not where it landed - a use-after-free, single-threaded too (`a.next = a.next if c else mk(i)`,
+  the scope sanitizer's report; codegen now builds it at the target as it does fresh text); a non-literal parameter
+  default was one operand shared by every call, landed by the first, so a second caller in another function crashed
+  codegen (D8a: built again for each call); and a parallel assignment's temporary going into a reference was held as a
+  value copy the target then borrowed - refused on a parameter's or a capture's field (O17a, O25), a pointer into the
+  frame at a function's top level (S4c: it is held as that reference, built where the target's referent lives). Not
+  done: a per-thread cache of a foreign thread's part - keyed on a scope's address it needs an epoch bumped at every
+  fold to be sound (headers are reused), to save only a scan of the parts list.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

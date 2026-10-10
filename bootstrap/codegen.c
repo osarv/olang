@@ -197,6 +197,12 @@ struct cgCtx {
     //capReadOnly counts the resolutions in progress that only read, or hand the scope to what builds nothing there
     struct list capScopes;
     int capReadOnly;
+    //P2: every value this body loaded from a scope it was handed - a parameter's, the result's, a capture's - and whether
+    //anything was allocated into it (struct cgHanded); with hereBuilt, for a constructor's instance scope. Checked as the
+    //body ends against what the checker said of it (cgCheckMayBuild): the closure prologues and the scopes handed to
+    //callers rest on SemanticMayBuild, so an allocation it did not foresee is a compiler bug, never a silent race
+    struct list handed;
+    bool hereBuilt;
     //a function returning an aggregate returns it through one slot and one exit block, written by every return
     //site: so once the function is inlined, its result's fields reach the caller as separate values, which LLVM
     //can reason about - a merged aggregate value it cannot see into, and a loop testing a Bool from one (an
@@ -1082,6 +1088,23 @@ struct cgCapScope {
     int field;  //its field in the environment
 };
 
+struct cgHanded {
+    char* val;      //the SSA value loaded
+    struct var* sv; //the scope variable it was loaded from
+    bool built;     //something was allocated into it, or a destructor registered there
+};
+
+//P2: an allocation (or a destructor's registration) into scope, which is recorded against the handed scope it was
+//loaded from, if any - every site emitting one calls this with the scope value it emits
+static void cgNoteBuildInto(struct cgCtx* ctx, const char* scope) {
+    if (!scope || !ctx->curFunc) return;
+    if (ctx->ctorHere && strcmp(scope, ctx->ctorHere) == 0) ctx->hereBuilt = true;
+    for (int i = 0; i < ctx->handed.len; i++) {
+        struct cgHanded* h = ListGetIdx(&ctx->handed, i);
+        if (strcmp(h->val, scope) == 0) h->built = true;
+    }
+}
+
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
@@ -1094,6 +1117,8 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     char* addr = cgLookupVarAddr(ctx, scopeParam);
     char* loaded = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", loaded, addr);
+    struct cgHanded h = { loaded, scopeParam, false };
+    ListAdd(&ctx->handed, &h);
     return loaded;
 }
 
@@ -1286,6 +1311,7 @@ void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, ch
         if (!t.hasDestruct) return;
         char dtorSym[256];
         mangleFuncSym(t.destructFunc, dtorSym, sizeof(dtorSym));
+        cgNoteBuildInto(ctx, scopeVal);
         fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
         return;
     }
@@ -1406,6 +1432,7 @@ char* cgPromoteFixedToRuntimeLength(struct cgCtx* ctx, struct type dstT, struct 
     //descriptors, not the source's inline rows
     long long dstElemSize = TypeGetSize(*dstT.arrElem);
     char* bytes = cgNewTmp(ctx);
+    cgNoteBuildInto(ctx, scopeVal);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %lld)\n", bytes, scopeVal, dstElemSize * count);
     char srcStorTy[256];
     llvmType(srcT, srcStorTy, sizeof(srcStorTy)); //"[N x ElemT]"
@@ -1536,6 +1563,7 @@ static long long cgAllocAlign(struct type t) {
 
 //dst = storage of "size" bytes (an LLVM i64 expression) from the scope "scope", aligned as align says (cgAllocAlign)
 static void cgArenaAlloc(struct cgCtx* ctx, const char* dst, const char* scope, const char* size, long long align) {
+    cgNoteBuildInto(ctx, scope);
     if (align) fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc_a(ptr %s, i64 %s, i64 %lld)\n", dst, scope, size, align);
     else fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", dst, scope, size);
 }
@@ -1546,9 +1574,14 @@ static void cgArenaAllocFor(struct cgCtx* ctx, const char* dst, const char* scop
     snprintf(size, sizeof(size), "%lld", TypeGetSize(t));
     cgArenaAlloc(ctx, dst, scope, size, cgAllocAlign(t));
 }
+//(a constructor's frame storage too: its own scope, which closes as it returns, as a frame does - never the instance's,
+//which cgScopeSlotAt gives its top level, and which the constructor was handed: P2 holds what it builds there to
+//SemanticMayBuild, and frame storage is no building)
 static void cgValueSlotAs(struct cgCtx* ctx, char* slot, struct type t, const char* ty) {
     if (TypeGetSize(t) > CG_FRAME_LIMIT && ctx->ownScopeSlot) {
-        cgArenaAllocFor(ctx, slot, cgScopeSlotAt(ctx, ctx->blockDepth), t);
+        int idx = ctx->blockDepth - 2;
+        char* frame = idx >= 0 && idx < ctx->blockSlots.len ? *(char**)ListGetIdx(&ctx->blockSlots, idx) : ctx->ownScopeSlot;
+        cgArenaAllocFor(ctx, slot, frame, t);
         return;
     }
     fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", slot, ty, cgStackAlign(t));
@@ -1753,10 +1786,15 @@ static bool cgIsFreshClosure(struct operand* op) {
 //storage made by the expression itself, with nothing to borrow - built in the scope of whatever it lands in
 //(E12c): rendered or joined text, a capturing lambda's closure, "Array<T>(n)" and a comprehension (E27)
 static bool cgIsFreshTemp(struct operand* op);
-//a conditional's or a match's value v, landing in their type t, makes storage of its own: a fresh temporary, or a literal
-//promoted into t's run-time length (a copy of it, made there)
+//a conditional's or a match's value v, landing in their type t, makes storage of its own: a fresh temporary, a literal
+//promoted into t's run-time length (a copy of it, made there), or a value with no storage of its own promoted into t's
+//reference. That last one was built where the expression stood, not where it landed, unless the checker had recorded a
+//landing for it, which it does for a constructor's instance and nothing else: "a.next = a.next if c else mk(i)", mk
+//returning a Node, built the node in the loop body's scope and stored it in a's
+static bool cgIsBorrow(struct type dstT, struct type srcT, bool srcIsLvalue);
 static bool cgValueIsFresh(struct operand* v, struct type t) {
-    return cgIsFreshTemp(v) || typeNeedsRuntimeLengthPromotion(t, v->type);
+    return cgIsFreshTemp(v) || typeNeedsRuntimeLengthPromotion(t, v->type)
+           || (typeNeedsMallocPromotion(t, v->type) && !cgIsBorrow(t, v->type, OperandIsLvalue(v)));
 }
 static bool cgIsFreshTemp(struct operand* op) {
     //E28: a conditional either of whose values is one - only that value is built in the target's scope
@@ -2561,6 +2599,7 @@ char* cgCopyRuntimeLengthArray(struct cgCtx* ctx, struct type t, char* srcVal, c
         char* nBytes = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", nBytes, len, elemSize);
         char* fresh = cgNewTmp(ctx);
+        cgNoteBuildInto(ctx, scopeVal);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", fresh, scopeVal, nBytes);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", fresh, bufSlot);
         cgBr(ctx, joinLbl);
@@ -2572,6 +2611,7 @@ char* cgCopyRuntimeLengthArray(struct cgCtx* ctx, struct type t, char* srcVal, c
         char* bytes = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", bytes, len, elemSize);
         buf = cgNewTmp(ctx);
+        cgNoteBuildInto(ctx, scopeVal);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", buf, scopeVal, bytes);
     }
 
@@ -3318,6 +3358,7 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
     m.sub = cgNewTmp(ctx);
     m.argIdx = argIdx;
     m.fold = true;
+    cgNoteBuildInto(ctx, parent); //its header is made in parent
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_standin(ptr %s)\n", m.sub, parent);
     ListAdd(merges, &m);
     return m.sub;
@@ -3916,6 +3957,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     //D13c: zero-filled storage comes from the allocator's zeroed path, which skips the clearing for a large array the
     //system has just handed over (__olang_scope_alloc_zeroed)
     bool zeroed = !(op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) && !op->noZeroFill;
+    cgNoteBuildInto(ctx, scopeVal);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "", scopeVal,
             byteSize);
     //D15b: a local "Array<T>(n)" is left as the arena hands it over - chunk memory is recycled, so that is
@@ -4055,6 +4097,7 @@ char* cgComprehension(struct cgCtx* ctx, struct operand* op) {
         snprintf(lbl, sizeof(lbl), "compr.empty.%d", id);
         cgLabel(ctx, lbl);
         char* nb = cgNewTmp(ctx);
+        cgNoteBuildInto(ctx, ctx->compr[d].scope);
         fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 0)\n", nb, ctx->compr[d].scope);
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", nb, ctx->compr[d].buf);
         snprintf(lbl, sizeof(lbl), "compr.done.%d", id);
@@ -4093,6 +4136,7 @@ static void cgComprRealloc(struct cgCtx* ctx, int d, char* room) {
     char* bytes = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", bytes, room, size);
     char* nb = cgNewTmp(ctx);
+    cgNoteBuildInto(ctx, ctx->compr[d].scope);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", nb, ctx->compr[d].scope, bytes);
     char* ob = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", ob, ctx->compr[d].buf);
@@ -5087,6 +5131,7 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
     char* alloc = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", alloc, total);
     char* buf = cgNewTmp(ctx);
+    cgNoteBuildInto(ctx, scopeVal);
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", buf, scopeVal, alloc);
     char* at = "0";
     for (int i = 0; i < pieces.len; i++) {
@@ -7140,6 +7185,30 @@ static void cgCapScopesRead(struct cgCtx* ctx, struct var* func) {
     ctx->capScopes.len = 0;
 }
 
+//P2: what the body built into a scope it was handed, held to what the checker said of it. A closure's prologue asks for
+//a captured scope as this thread may build there only where both codegen marked it built and SemanticMayBuild says the
+//body may build; where a closure is made, its scopes are claimed only on SemanticMayBuild; and a callee the walk says
+//builds nothing is handed a captured scope raw. An allocation the walk did not foresee would therefore bump another
+//thread's arena unsynchronised - so it is a compiler bug, stopped here rather than emitted
+static void cgCheckMayBuild(struct cgCtx* ctx, struct var* func) {
+    bool builds = SemanticMayBuild(func);
+    bool bad = ctx->hereBuilt && !builds;
+    for (int i = 0; i < ctx->handed.len && !bad; i++) {
+        struct cgHanded* h = ListGetIdx(&ctx->handed, i);
+        if (!h->built) continue;
+        bool ok = builds;
+        for (int k = 0; ok && h->sv->isCaptureScope && k < ctx->capScopes.len; k++) {
+            struct cgCapScope* c = ListGetIdx(&ctx->capScopes, k);
+            if (StrCmp(c->sv->name, h->sv->name)) ok = c->built;
+        }
+        bad = !ok;
+    }
+    if (!bad) return;
+    fprintf(stderr, "olang: internal compiler error: '%.*s' builds into a scope it was handed where the checker found it "
+            "builds nothing (P2, SemanticMayBuild) - a bug in the compiler, not in the program\n", func->name.len, func->name.ptr);
+    exit(EXIT_FAILURE);
+}
+
 static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* func, bool shared) {
     ctx->curMod = mod;
     ctx->curFunc = func;
@@ -7179,6 +7248,8 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     //D16c: a lambda's captures, and their scopes, as the closure carries them
     ctx->capScopes.len = 0;
     ctx->capReadOnly = 0;
+    ctx->handed.len = 0;
+    ctx->hereBuilt = false;
     if (func->isLambda && func->lambdaCaptures.len) {
         char* envTy = cgClosureType(func);
         for (int i = 0; i < func->lambdaCaptures.len; i++) {
@@ -7309,6 +7380,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->retSlotUsed = false;
     ctx->resultLocal = NULL;
     fputs("}\n\n", ctx->fnOut);
+    cgCheckMayBuild(ctx, func);
     if (func->isLambda && func->lambdaCaptures.len) cgCapScopesRead(ctx, func);
     cgBodyEnd(ctx, &bb);
     ctx->curFunc = NULL;
@@ -7711,6 +7783,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     ctx.debug = debug;
     ctx.fnValues = ListInit(sizeof(struct var*));
     ctx.capScopes = ListInit(sizeof(struct cgCapScope));
+    ctx.handed = ListInit(sizeof(struct cgHanded));
     ctx.staticLits = ListInit(sizeof(struct cgStaticLit));
     cgDbgInit(&ctx, mod);
     cgEmitModuleDecls(out, mod);

@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir", "crash", "scopesan"]
+                     "target", "lazytype", "updir", "crash", "scopesan", "capscope"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -254,6 +254,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "updir" { try updir(r) }
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
+        case "capscope" { try capscope(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -1378,4 +1379,29 @@ fn crashes(r mut report&) ? Failed {
     ll := try os.ReadFile($dir "/build/nullpeek.race.ll") catch default ""
     try r.expect(ll.Contains("@__olang_crash_handler(i32 %sig) #1 {") and ll.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread")
                  and ll.Contains("attributes #1 = { null_pointer_is_valid \"target-cpu\""), "crash handler instrumented under -r", dir)
+}
+
+# P2 (decision 48): a closure that may build into a scope it captured asks for it as its call starts - this thread's part
+# of it on another thread's (__olang_capture_scope), as a Call adapter asks for its instance's (__olang_scope_mine). Each
+# shape building a temporary where a conditional, a match value or a "catch default" lands - in the lambda, in a callee it
+# calls, in a Call method, a borrowed result, a ":=" local, an argument, a destructured result, a value call's result -
+# was missed by the walk deciding it (SemanticMayBuild), so the closure asked for nothing and its tasks bumped the main
+# thread's arena (TSan: 24-32 reports each). The fixture calls them on two tasks while the main thread builds into the
+# same scope; the code generator now stops on any build the walk did not foresee, and every lambda here asks
+test "a closure that may build asks for the scopes it captured" { assert passed("capscope") }
+
+fn capscope(r mut report&) ? Failed {
+    dir := fresh("capscope")
+    os.Run("cp checks/fixtures/capscope/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b capscope.olang > out.txt 2>&1 && ./build/capscope > out.txt 2>&1") == 0, "capscope", dir)
+    try r.expect(outOf(dir) == "capscope: ok\n", "capscope output", dir)
+    ll String& = " build/capscope.main.ll"
+    asks String& = ("awk '/^define internal .*lambda[$]/ { n++; inl = 1; has = 0 } inl && /call ptr @__olang_capture_scope/ { has = 1 }"
+                    " inl && /^}/ { if (has) ok++; inl = 0 } END { exit !(n == 18 && ok == 18) }'")
+    try r.expect(sh(dir, $asks $ll) == 0, "a lambda building into its captured scope does not ask for it", dir)
+    try r.expect(sh(dir, "grep -q '__olang_scope_mine(ptr %iscope0)'" $ll) == 0, "the Call adapter does not ask for its scope", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -D N=200 -i capscope.olang > out.txt 2>&1") == 0, "capscope -i", dir)
+    try r.expect(outOf(dir) == "capscope: ok\n", "capscope -i output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d -s capscope.olang > out.txt 2>&1 && ./build/capscope.debug.san > out.txt 2>&1") == 0,
+                 "capscope -d -s", dir)
 }

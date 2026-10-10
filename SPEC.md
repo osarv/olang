@@ -502,8 +502,9 @@ as C lays out `T x[N]` in a struct. Unlike an `Array<T>` (T7a) it is held by val
 which is all a fixed-size matrix needs. `Array<T, N>&` is a reference to one: a single pointer, the length its
 type's (T11a). As a parameter it is that reference (D9a), and a lambda borrows it as it borrows any value array
 (D16c). A local's storage - a fixed array's, or a struct's holding one - larger than a stack frame should hold (64KB) is
-taken from its block's arena instead, reclaimed when the block closes as the frame's would be: a local of any size is
-declarable, and nothing else about it differs.
+taken from its block's arena instead, reclaimed when the block closes as the frame's would be (a constructor's from its
+own scope, closed as it returns, never its instance's - §9.1 C2g): a local of any size is declarable, and nothing else
+about it differs.
 
 Everything an array does, an `Array<T, N>` does - indexing, slicing (to an `Array<T>&`, E16a), `for ... in`, `$`,
 `Len()`, the prelude's methods (M19d), `extern` marshalling (X3) - and what its type knows is used while compiling:
@@ -1322,7 +1323,8 @@ as a literal argument does (G18), and a call whose instantiation it does not fit
 constant (and type) variables its declaration introduced before it - a constructor's type's own (`struct(k I64 = N *
 10)`), a function's (`F(x I64 = N + 1)`, G22): it is then each instantiation's, computed with that instantiation's
 values (G23) and checked where a call omits it. A `null` default refers to nothing, so it fits whatever scope a call
-binds its parameter to.
+binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
+it builds is built where that call builds its argument (§8 O18a).
 
 **D8b.** Defaulted parameters must be **trailing**: once one parameter declares a default, every
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
@@ -3050,7 +3052,9 @@ target written `_` discards its result. The call is evaluated once, before any t
 "," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
 `a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4, in order - its place
 evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
-the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. With `:=` each name is
+the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. A value with
+no storage of its own (§5.3 E12c) going into a reference target is built, when it is evaluated, where that target's
+referent lives - where S4 alone would build it. With `:=` each name is
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
@@ -4839,7 +4843,9 @@ but a call through a field written in one - `for i in range n { left.Push(i) }` 
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
 its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
 given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
-is a copy into the instance, which a reference field may be given.
+is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
+T7c, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
+before it closes.
 What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
 
 ```
