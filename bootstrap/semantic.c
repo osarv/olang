@@ -7814,9 +7814,29 @@ static bool argIsFreshTemp(struct operand* op);
 static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args, struct token tok);
 static void effMark(struct var* f, struct token tok);
 static bool effPlaceOutside(struct checkCtx* ctx, struct operand* p);
+//...the conditional or match a member, an element or an "as" of a payload is read out of ("(w1 if c else w2).b",
+//"(e1 if c else e2) as E.A"), whatever references the path crosses - what is read lives where that value's references
+//do (O20), so the copy's are where the conditional's are. NULL where the path is rooted at anything else
+static struct operand* condUnderPath(struct operand* op) {
+    bool stepped = false;
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (heldResult(op)) { op = heldResult(op); continue; }
+        if (stepped && ((op->opType == OPERATION_COND && op->args.len == 3) || op->opType == OPERATION_MATCH)) return op;
+        if ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || (op->opType == OPERATION_AS && op->castEnum))
+                && op->args.len && !op->isAtCall) {
+            op = *(struct operand**)ListGetIdx(&op->args, 0);
+            stepped = true;
+            continue;
+        }
+        return NULL;
+    }
+    return NULL;
+}
 static bool copiesExistingRefs(struct checkCtx* ctx, struct operand* op) {
     if (!op || op->isNullLiteral) return false;
     if (heldResult(op)) return copiesExistingRefs(ctx, heldResult(op));
+    struct operand* under = condUnderPath(op);
+    if (under) return copiesExistingRefs(ctx, under);
     if (OperandNamesExistingStorage(op)) return true;
     if (op->opType == OPERATION_COND && op->args.len == 3)
         return copiesExistingRefs(ctx, *(struct operand**)ListGetIdx(&op->args, 1))
@@ -7845,6 +7865,8 @@ static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct va
     *hu = false;
     if (!rhs) return false;
     if (heldResult(rhs)) return copiedRefsScope(ctx, heldResult(rhs), hv, hd, hu);
+    struct operand* under = condUnderPath(rhs);
+    if (under) return copiedRefsScope(ctx, under, hv, hd, hu);
     if ((rhs->opType == OPERATION_COND && rhs->args.len == 3) || rhs->opType == OPERATION_MATCH) {
         struct list vs = ListInit(sizeof(struct operand*));
         if (rhs->opType == OPERATION_COND) {
