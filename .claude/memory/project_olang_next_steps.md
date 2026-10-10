@@ -694,6 +694,20 @@ because what it finds about structure feeds the refactor.
   - O33 amended: only := holds a borrow.
   The fuzzer found 56 issues in 60 programs before the fix and 0 after. A follow-up soundness review runs
   (/home/user/wt/rvown2 @ 252c3bc -> /home/user/review/own2), attacking R1/R2 hardest. Merge only if it is clean.
+- 01:15 CEST (2026-10-11): the second own review (/home/user/review/own2) came back clean. It found no hole.
+  - Over-rejections, documented: the typed borrow local, and reassigning a := borrow.
+  - Fuzz harness: a leftover fuzz_fuzz process corrupts results through the shared build/fz tree, so check for one before
+    trusting findings. Being fixed in phase 2a.
+  Merged and pushed: master = ffd4f53.
+  Own phase 2a has started on wt-own (afe0b23). It covers what Vec<T> needs:
+  - own arrays;
+  - owning parameters and owned results (O36/O37), with a call result as a move position;
+  - owning value types with borrowed copies (QJ1);
+  - small region classes.
+  Then, each with a soundness review first: phase 2b (own elements in List/Map: TakeAt, SwapTake, Map.Take), then Vec<T>
+  in the prelude. The scanner (port M1) still waits.
+  Usage: weekly 0.41 at 01:07 CEST, about 1.5%/h with one agent against a target of about 0.6%/h. So keep one agent
+  and leave gaps.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
