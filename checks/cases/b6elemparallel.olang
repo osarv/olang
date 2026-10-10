@@ -1,0 +1,14 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O18c (the batch 6 review): ...as a target of a parallel assignment
+type Cell struct() {
+    s String& = ""
+}
+fn main() ? {
+    cells mut List<mut Cell&>& = List<mut Cell&>()
+    for i in range 3 { cells.Push(Cell()) }
+    for i in range 3 {
+        x String& = "w" $i
+        k I64 = 0
+        cells[i].s, k = x, 1
+    }
+}

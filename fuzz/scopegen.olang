@@ -11,12 +11,67 @@
 # if, a for, a bare block, a match, a deferred block, after a churn), through helper functions taking the target by
 # reference or by value, through copies out of references (from calls, parameters, fields, elements, slices, views,
 # enum payloads), through constructors and enum cases, captured by lambdas, by spawned calls and spawned lambdas, and
-# made as locals of an inner block and stored outward (which the checker must refuse). Then it churns the arena and
-# returns a checksum of everything the target reaches.
+# made as locals of an inner block and stored outward (which the checker must refuse), through conditionals and matches
+# of references from different scopes, through the element a List's At, First or Last or a Map's Get hands back, and by
+# spawned calls that fail (spawn try, try join, a task's default). Then it churns the arena and returns a checksum of
+# everything the target reaches.
+#
+# One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
+# through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
+# their own. -i runs no destructors, so such a program is checked against itself: built -d -s and built -b, the two
+# must print the same, ending "dtors 0" - every resource made has been destructed by the time main prints.
 #
 # Each scenario's text - its globals, helpers and function - starts with a line "# scenario k", so a compile-time
 # error is traced to its scenario by line and that scenario left out (Program's mask): a refused construct is safe,
 # and the rest of the program is still run.
+
+# whether the program seed has destructors (see above)
+fn HasDtors(seed U64) Bool { return seed % 4 == 3 }
+
+# the destructor-bearing types a program with destructors has
+DtorPrelude := (
+    "Made mut I64 = 0\n"
+    "Dropped mut I64 = 0\n"
+    "type Tracker struct() {\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "}\n"
+    "# builds through its field as it is destructed\n"
+    "type ResA struct(n mut Node&, k I64) {\n"
+    "    n\n"
+    "    k\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    n.next = Node(k)\n"
+    "}\n"
+    "# a task it spawns builds destructor-bearing values into the scope being closed (C9a, P2)\n"
+    "type ResB struct(n mut Node&, k I64) {\n"
+    "    n\n"
+    "    k\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    keep mut List<Tracker&>& = List<Tracker&>()\n"
+    "    kk := k\n"
+    "    join { spawn fn() { for j in range 3 { keep.Push(Tracker()) } } }\n"
+    "    t Tracker& = Tracker()\n"
+    "    n.next = Node(kk + keep.Len())\n"
+    "}\n"
+    "# a task it spawns builds through its field; a value it makes is destructed as it returns\n"
+    "type ResC struct(n mut Node&, k I64) {\n"
+    "    n\n"
+    "    k\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    h := n\n"
+    "    kk := k\n"
+    "    join { spawn fn() { h.next = Node(kk * 3) } }\n"
+    "    r ResA& = ResA(Node(kk), kk + 1)\n"
+    "}\n"
+)
 
 # leaves out the shapes of the use-after-frees known and open when this was written (the 2026-10-09 review's 02, 02b,
 # 02c, 02d: copies out of a call's reference, a reference for a by-value parameter or kept by a constructor or a
@@ -141,6 +196,23 @@ Prelude := (
     "fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
     "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
     "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
+    "# fallible: growF and mkF succeed, failF fails after building, mkFail fails\n"
+    "fn growF(a mut Node&, v I64) ? {\n"
+    "    if Run < 0 { error }\n"
+    "    a.next = Node(v)\n"
+    "}\n"
+    "fn failF(a mut Node&, v I64) ? {\n"
+    "    a.next = Node(v)\n"
+    "    if Run > 0 { error }\n"
+    "}\n"
+    "fn mkF(v I64) mut Node& ? {\n"
+    "    if Run < 0 { error }\n"
+    "    return Node(v)\n"
+    "}\n"
+    "fn mkFail(v I64) mut Node& ? {\n"
+    "    if Run > 0 { error }\n"
+    "    return Node(v)\n"
+    "}\n"
 )
 
 # the targets: what a scenario declares, and what it returns
@@ -179,6 +251,8 @@ type SG struct(seed U64) {
     n I64 = 0                          # names made in it so far
     helpers mut String& = ""           # its helper functions
     boxKind I64 = 0                    # what boxOp's box is: 0 a value, 1 a reference, 2 a copy of an enum's payload
+    dtors Bool = false                 # the program has destructor-bearing types (HasDtors)
+    global Bool = false                # the target is a global: nothing destructor-bearing is made over it
 }
 
 # xorshift64
@@ -222,6 +296,9 @@ fn (g mut SG&) newNode() String& {
 # a statement storing a new node through the node a (a writable reference)
 fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
     k := g.r(14)
+    if g.chance(35) { return g.condOp(a, ind) }
+    if g.chance(15) { return g.failOp(a, ind) }
+    if g.dtors and g.chance(30) { return g.dtorOp(a, ind) }
     v := g.val()
     if k == 1 { return $ind "grow(" $a ", " $v ")\n" }
     if k == 2 { return $ind "growDeep(" $a ", " $v ")\n" }
@@ -260,6 +337,80 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
         return $ind $q " := " $g.newNode() "\n" $ind "churn()\n" $ind $a ".next = " $q "\n"
     }
     return $ind $a ".next = " $g.newNode() "\n"
+}
+
+# a statement storing a conditional or a match of references through the node a - values from different scopes: one
+# made in a block of its own (which the checker must refuse to store outward), a new one, a or what it holds
+fn (g mut SG&) condOp(a String&, ind String&) String& {
+    k := g.r(8)
+    q := g.name("q")
+    #(a is a node place - a value local, a field, an element; pickNode(a) is a reference to it, for a value beside one)
+    if k == 0 { return $ind $a ".next = " $g.newNode() " if Run > 0 else " $a ".next\n" }
+    if k == 1 {
+        return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = " $q " if Run > 0 else " $a ".next\n" $ind "}\n"
+    }
+    if k == 2 {
+        return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = match Run { case 1 => " $q
+                " case _ => pickNode(" $a ") }\n" $ind "}\n")
+    }
+    if k == 3 { return $ind $q " mut Node& = " $g.newNode() "\n" $ind $a ".next = " $q " if Run > 0 else pickNode(" $a ")\n" }
+    if k == 4 {    # passed on: an argument whose values live in different scopes
+        return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    link(" $a ", " $q " if Run > 0 else " $a ".next)\n" $ind "}\n"
+    }
+    if k == 5 {    # declared with ':=' - it lives where a does, the new value made there - and built through
+        c := g.name("c")
+        return $ind $c " := pickNode(" $a ") if Run > 0 else " $g.newNode() "\n" $ind $c ".next = " $g.newNode() "\n"
+    }
+    if k == 6 {    # declared with a written type: where it lives is not known, so nothing is built through it
+        c := g.name("c")
+        return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $c " mut Node& = " $q " if Run > 0 else pickNode(" $a ")\n"
+                $ind "    " $c ".next = " $g.newNode() "\n" $ind "}\n")
+    }
+    return $ind $a ".next = match Run { case 1 => " $g.newNode() " case _ => " $a ".next }\n"
+}
+
+# a statement storing through the node a by spawned calls that may fail - failing, a task's default standing in for its
+# result, a join that fails. One task a join: two would race on a
+fn (g mut SG&) failOp(a String&, ind String&) String& {
+    k := g.r(5)
+    v := g.val()
+    t := g.name("t")
+    if k == 0 { return $ind "join { spawn try growF(" $a ", " $v ") catch { } }\n" }
+    if k == 1 { return $ind "try join { spawn try failF(" $a ", " $v ") } catch { }\n" }
+    if k == 2 {    # a default where the task's result lands
+        return ($ind $t " mut Node& = null\n" $ind "join { spawn " $t " = try mkFail(" $v ") catch default Node(" $g.val() ") }\n"
+                $ind $a ".next = " $t "\n")
+    }
+    if k == 3 {    # ...declared in a block of its own and stored outward
+        return ($ind "{\n" $ind "    " $t " mut Node& = null\n" $ind "    join { spawn " $t " = try mkF(" $v ") catch default Node("
+                $g.val() ") }\n" $ind "    " $a ".next = " $t "\n" $ind "}\n")
+    }
+    return $ind "try join { spawn try growF(" $a ", " $v ") } catch { }\n"
+}
+
+# a statement making a destructor-bearing resource: over the node a, which it builds through as it is destructed, or
+# in a block or a loop body of its own
+fn (g mut SG&) dtorOp(a String&, ind String&) String& {
+    k := g.r(4)
+    v := g.val()
+    rt := String&["ResA", "ResB", "ResC"][g.r(3)]
+    r := g.name("r")
+    y := g.name("y")
+    if k == 0 and not g.global {    # over the target, destructed when its scope closes
+        h := g.name("h")
+        return $ind $h " := pickNode(" $a ")\n" $ind $r " " $rt "&" $h " = " $rt "(" $h ", " $v ")\n"
+    }
+    if k == 1 {
+        i := g.name("i")
+        return ($ind "for " $i " in range 2 {\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $r " " $rt "& = " $rt "(" $y ", "
+                $i ")\n" $ind "    " $a ".next = " $y "\n" $ind "}\n")
+    }
+    if k == 2 {    # a list of resources
+        l := g.name("rl")
+        return ($ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $l " := List<" $rt "&>()\n" $ind "    " $l ".Push("
+                $rt "(" $y ", " $v "))\n" $ind "    " $l ".Push(" $rt "(" $y ", " $g.val() "))\n" $ind "}\n")
+    }
+    return $ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $r " " $rt "& = " $rt "(" $y ", " $v ")\n" $ind "    churn()\n" $ind "}\n"
 }
 
 # a statement storing a new node through the box b (a writable Box place)
@@ -321,6 +472,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
 
 # a statement storing a new node into the List l
 fn (g mut SG&) listOp(l String&, ind String&) String& {
+    if g.chance(30) { return g.listElemOp(l, ind) }
     k := g.r(9)
     v := g.val()
     if k == 1 {
@@ -348,8 +500,41 @@ fn (g mut SG&) listOp(l String&, ind String&) String& {
     return $ind $l ".Push(" $g.newNode() ")\n"
 }
 
+# a statement storing through an element of the List l its At, First or Last hands back, or into one by SetAt - a new
+# node, or one made in a block of its own (which the checker must refuse to store there)
+fn (g mut SG&) listElemOp(l String&, ind String&) String& {
+    k := g.r(8)
+    q := g.name("q")
+    if k == 0 { return $ind "if " $l ".Len() > 0 { " $l "[0].next = " $g.newNode() " }\n" }
+    if k == 1 {
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    if " $l ".Len() > 0 { " $l "[0].next = " $q " }\n" $ind "}\n"
+    }
+    if k == 2 { return $ind "if " $l ".Len() > 0 { (try " $l ".First() catch { unreachable }).next = " $g.newNode() " }\n" }
+    if k == 3 {
+        return ($ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    if " $l ".Len() > 0 { (try " $l
+                ".Last() catch { unreachable }).next = " $q " }\n" $ind "}\n")
+    }
+    if k == 4 { return $ind "if " $l ".Len() > 0 { " $l "[" $l ".Len() - 1] = " $g.newNode() " }\n" }
+    if k == 5 {    # a parallel assignment through an element
+        n := g.name("k")
+        return $ind $n " I64 = 0\n" $ind "if " $l ".Len() > 0 { " $l "[0].next, " $n " = " $g.newNode() ", 1 }\n"
+    }
+    if k == 6 {    # a conditional of values from different scopes, pushed
+        return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $l ".Push(" $q " if Run > 0 else " $g.newNode() ")\n" $ind "}\n"
+    }
+    return $ind $l ".Push(" $g.newNode() " if Run > 0 else " $g.newNode() ")\n"
+}
+
 # a statement storing a new node into the Map m
 fn (g mut SG&) mapOp(m String&, ind String&) String& {
+    if g.chance(25) {    # through the node a lookup hands back - a new one, or one made in a block of its own
+        key := g.r(30)
+        q := g.name("q")
+        put := $ind $m ".Put(" $key ", Node(" $g.val() "))\n"
+        if g.chance(50) { return $put $ind "(try " $m ".Get(" $key ") catch { unreachable }).next = " $g.newNode() "\n" }
+        return ($put $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    (try " $m ".Get(" $key
+                ") catch { unreachable }).next = " $q "\n" $ind "}\n")
+    }
     k := g.r(7)
     key := g.r(30)
     v := g.val()
@@ -487,7 +672,9 @@ fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
 fn Scenario(seed U64, k I64) String& {
     g := SG(seed * 1000003 + U64(k) + 1)
     g.k = k
+    g.dtors = HasDtors(seed)
     t := g.r(Targets)
+    g.global = t == 9
     decl String& = $Decls[t]
     check String& = $Checks[t]
     head mut String& = ""
@@ -524,6 +711,7 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     b := StringBuilder()
     b.Push("# scope fuzz seed " $seed "\n")
     b.Push(Prelude)
+    if HasDtors(seed) { b.Push(DtorPrelude) }
     for k in range n {
         if keep.Len() == 0 or keep[k] { b.Push(Scenario(seed, k)) }
     }
@@ -531,6 +719,7 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     for k in range n {
         if keep.Len() == 0 or keep[k] { b.Push("    println(\"" $k ": \" $s" $k "())\n") }
     }
+    if HasDtors(seed) { b.Push("    println(\"dtors \" $(Made - Dropped))\n") }
     b.Push("}\n")
     return b.ToString()
 }

@@ -1,0 +1,17 @@
+# check: fail error[O20]: the container outlives what this refers to
+# also: note: this is the value that does not fit
+# E28/O12 (the batch 6 review): a conditional of references from different scopes stored into a field is judged value by
+# value - "x" lives in this call's block, and the field lives where the caller's bag does. It was taken for a temporary,
+# judged against nothing, and the caller read freed text
+type Bag struct() {
+    last String& = ""
+}
+fn set(b mut Bag&, i I64) {
+    x String& = "w" $i
+    b.last = x if i == 1 else "z"
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    set(b, 1)
+    println(b.last)
+}

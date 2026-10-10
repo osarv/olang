@@ -16,6 +16,8 @@
 # The scope fuzzer (B2f) is the same driver over scopegen's programs, which stress where values live (see
 # scopegen.olang): each is built under the scope sanitizer (-d -s) and interpreted (-i), and the two outputs must be
 # the same - a value used after its scope closed reads poison or faults under -s, while -i keeps every value alive.
+# -i runs no destructors, so a program with destructor-bearing types (one in four, scopegen.HasDtors) is built -b
+# instead, which must print what -d -s does, ending "dtors 0": every resource made was destructed.
 # A scenario the compiler refuses is left out and the rest built again; what was refused is counted, not a finding.
 #
 #     fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]]   seeds START.., SCENARIOS scenarios each (12); "avoid" leaves
@@ -288,13 +290,33 @@ fn scopeSeed(seed I64, dir String&) {
     Total.AtomicAdd(n)
     st := sh(dir, "timeout 120 ./build/p.debug.san > s.txt 2> serr.txt")
     sOut := read(dir, "s.txt")
-    ist := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -i p.olang > i.txt 2> ierr.txt")
-    iOut := read(dir, "i.txt")
-    if ist != 0 {
-        scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
-        return
+    #-i runs no destructors, so a program with them is held to itself: built -b, it must print what -d -s does, and every
+    #resource made must have been destructed (the last line, "dtors 0")
+    if scopegen.HasDtors(U64(seed)) {
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b p.olang > cb.txt 2>&1") != 0 {
+            scopeFinding(dir, seed, -1, "builds -d -s but not -b", read(dir, "cb.txt"))
+            return
+        }
+        bst := sh(dir, "timeout 120 ./build/p > i.txt 2> ierr.txt")
+        bOut := read(dir, "i.txt")
+        if st == 0 and bst == 0 and sOut == bOut and sOut.Contains("\ndtors 0\n") { return }
+        if st == 0 and bst == 0 and sOut == bOut {
+            scopeFinding(dir, seed, -1, "a destructor did not run (made and destructed differ)", sOut)
+            return
+        }
+        if bst != 0 {
+            scopeFinding(dir, seed, -1, "-b run failed", read(dir, "ierr.txt"))
+            return
+        }
+    } else {
+        ist := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -i p.olang > i.txt 2> ierr.txt")
+        if ist != 0 {
+            scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
+            return
+        }
+        if st == 0 and sOut == read(dir, "i.txt") { return }
     }
-    if st == 0 and sOut == iOut { return }
+    iOut := read(dir, "i.txt")
     # the first scenario whose line differs or is missing is the one to blame; with none, the run ended early
     want := iOut.Split("\n")
     got := sOut.Split("\n")
@@ -306,7 +328,7 @@ fn scopeSeed(seed I64, dir String&) {
         detail String& = $line "\n<missing>"
         if i < got.Len() { detail = $line "\n" $got[i] }
         detail = $detail "\n" $read(dir, "serr.txt")
-        scopeFinding(dir, seed, k, "-d -s disagrees with -i (a use after a scope closed)", detail)
+        scopeFinding(dir, seed, k, "-d -s disagrees with -i (or -b) (a use after a scope closed)", detail)
         return
     }
     scopeFinding(dir, seed, -1, "-d -s run failed", read(dir, "serr.txt"))

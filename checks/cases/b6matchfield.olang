@@ -1,0 +1,14 @@
+# check: fail error[O20]: the container outlives what this refers to
+# also: note: this is the value that does not fit
+# E28/O12 (the batch 6 review): ...a match giving values, stored into a local reference's field from a loop body
+type Bag struct() {
+    last String& = ""
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    for i in range 2 {
+        x String& = "w" $i
+        b.last = match i { case 1 => x case _ => "z" }
+    }
+    println(b.last)
+}
