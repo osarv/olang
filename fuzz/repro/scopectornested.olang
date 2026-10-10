@@ -1,0 +1,23 @@
+# A constructor whose body grows a field's List (or anything a field's reference reaches) inside a nested block - a
+# loop, an if - builds into that block's scope instead of the instance's, though the instance keeps what was built:
+# C2g covers the constructor's top level only. Here each chunk Push makes past the first is built in the loop body's
+# arena and reclaimed at the end of each turn.
+#     expected: 210 (as -i prints)
+#     actual:   -d segfaults (the List's chunks hold whatever reused them); built -d -s: "use after scope closed: storage
+#               a closed scope gave back was read or written". shared.olang's two tests over c3Holder and sc3Countdown
+#               have the shape and pass by luck - both fail under -d -s ("make scopesan")
+# Found by the scope sanitizer on the corpus (make scopesan).
+# Cause (semantic.c, the argument-determined binding where a call binds its callee's scope variables, ~9283-9417): a
+# receiver that is a constructor's field local - here "left", whose scope is the instance's (%here) - binds Push's scope
+# variable with boundTo NULL and boundDepth 0, so SemanticBoundScopeDepth (~6685) answers the call's own block depth,
+# and codegen's cgBoundScopeArg -> cgScopeSlotAt passes the loop body's scope rather than cgOwnAllocSlot's %here.
+type Countdown struct(n I64) {
+    left List<I64>
+    for i in range n { left.Push(n - i) }
+}
+fn main() ? {
+    c := Countdown(20)
+    s I64 = 0
+    for v in c.left { s += v }
+    println($s)
+}
