@@ -1,0 +1,59 @@
+# O30-O42: owned objects - built into own slots, moved with take, released, borrowed - the same built, built -d -s (a use
+# after a release would be reported) and interpreted. No destructors: -i does not run them yet (B3e)
+type Item struct(v I64) {
+    v
+    label String& = "i" $v
+    next own mut Item&
+}
+type Shelf struct() {
+    top own mut Item&
+    spare own mut Item&
+}
+fn sumOf(l Item&) I64 {
+    if l == null { return 0 }
+    return l.v + sumOf(l.next)
+}
+fn (s mut Shelf&) push(v I64) {
+    old := take s.top
+    s.top = Item(v)
+    s.top.next = take old
+}
+fn (s mut Shelf&) pop() I64 {
+    if s.top == null { return -1 }
+    v := s.top.v
+    s.top = take s.top.next
+    return v
+}
+fn build(n I64) I64 {
+    head own mut Item& = null
+    for i in range n {
+        x own mut Item& = Item(i)
+        x.next = take head
+        head = take x
+    }
+    return sumOf(head)
+}
+Built I64 = build(20)
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        s := $i "-" $(i * 3)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    s := Shelf()
+    for i in range 50 { s.push(i) }
+    println($sumOf(s.top) " " $s.top.label)
+    for i in range 10 { s.pop() }
+    churn()
+    println($sumOf(s.top) " " $s.top.label " " $s.top.next.label)
+    s.spare = take s.top.next
+    c := s.top
+    s.top.next = take s.spare.next
+    println($c.v " " $sumOf(s.top) " " $s.spare.v)
+    take s.spare
+    churn()
+    println($Built " " $build(5) " " $(s.spare == null) " " $s.top.label)
+}

@@ -1,0 +1,18 @@
+# check: fail error[T25e]: 'own' on 
+# own references are to structs for now
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+type H struct() {
+    a own Array<I64>&
+}
+fn main() ? { }

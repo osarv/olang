@@ -1,0 +1,28 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# an owner moved out of a slot in an inner block refers to what lives there
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+type Pin struct(c Conn&) {
+    c
+}
+type Box struct() {
+    pin own mut Pin&
+}
+fn main() ? {
+    b := Box()
+    {
+        c := Conn(1)
+        p own mut Pin& = Pin(c)
+        b.pin = take p
+    }
+}

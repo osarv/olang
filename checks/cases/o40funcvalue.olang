@@ -1,0 +1,20 @@
+# check: fail error[O40]: 'drop' releases owned objects, so it cannot be a function value
+# a named function made a value is held to the same rule
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn drop(s mut Server&) { s.cur = null }
+fn main() ? {
+    s := Server()
+    f := drop
+    f(s)
+}

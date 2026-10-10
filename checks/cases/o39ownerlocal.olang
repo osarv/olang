@@ -1,0 +1,21 @@
+# check: fail error[O39]: assigning 'a.sock' may release the Sock borrowed on line
+# an owner local's tree is reached through it: a release below it hits a borrow below it
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn main() ? {
+    a own mut Conn& = Conn(1)
+    a.sock = Sock(2)
+    k := a.sock
+    a.sock = null
+    println($k.n)
+}

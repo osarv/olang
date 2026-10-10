@@ -1066,6 +1066,13 @@ fn agree(r mut report&) ? Failed {
                  "r17 did not end in its error, built and interpreted", dir)
     try r.expect(sh(dir, "printf 'before\\nunhandled error\\n' | cmp -s - b.txt && cmp -s b.txt i.txt") == 0, "r17 output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b share.olang > out.txt 2>&1 && ./build/share") == 0, "share", dir)
+    # O30-O42: owned objects moved, taken, released and borrowed - built, built -d -s (a use after a release would be
+    # reported), and interpreted
+    try r.expect(sh(dir, "\"$OLANG\" -b own.olang > out.txt 2>&1 && ./build/own > b.txt 2>&1") == 0, "own", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d -s own.olang > out.txt 2>&1 && ./build/own.debug.san > d.txt 2>&1") == 0,
+                 "own -d -s", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i own.olang > i.txt 2>&1") == 0, "own -i", dir)
+    try r.expect(sh(dir, "cmp -s own.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "own output", dir)
     ll String& = " build/share.main.ll"
     try r.expect(sh(dir, "grep -q '^@share_B = constant ptr @share_A.k[0-9]*$'" $ll) == 0, "share_B", dir)
     try r.expect(sh(dir, "grep -q '^@share_H.k[0-9]* = internal global .2 x i32.'" $ll) == 0, "share_H.k", dir)

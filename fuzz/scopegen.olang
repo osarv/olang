@@ -25,6 +25,11 @@
 # receiver reaches are the checksum. Str may build nothing where its receiver lives (E11c), so most such bodies are
 # refused; what the compiler accepts must print the same built -s and interpreted.
 #
+# An own scenario (§8.8) holds owned objects in a holder's own slots and gives them new owners, moves them between the
+# slots and through owner locals, releases them (null, take, a call, a block's end), and builds into an owned object's
+# region through borrows - directly, through a call, a method or a task, before and after other arguments - with some
+# borrows kept across a release, which the checker must refuse (O39).
+#
 # One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
 # through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
 # their own. -i runs no destructors, so such a program is checked against itself: built -d -s and built -b, the two
@@ -246,10 +251,38 @@ Prelude := (
     "}\n"
     "fn pickDef(n mut Node&, v I64) mut Node&n { return try borrowF(n) catch default mkNode(v) }\n"
     "fn readN(n Node&) I64 { return chain(n) }\n"
+    "# for own scenarios (§8.8): an owned object holding a node it builds into its region, and one it owns\n"
+    "type ONode struct(v I64) {\n"
+    "    v\n"
+    "    n mut Node& = Node(v)\n"
+    "    sub own mut ONode&\n"
+    "}\n"
+    "type OHold struct() {\n"
+    "    cur own mut ONode&\n"
+    "    other own mut ONode&\n"
+    "}\n"
+    "fn onode(o ONode&) I64 {\n"
+    "    if o == null { return 0 }\n"
+    "    return o.v * 7 + chain(o.n)\n"
+    "}\n"
+    "fn ohash(h OHold&) I64 {\n"
+    "    t I64 = onode(h.cur) * 31 + onode(h.other)\n"
+    "    if h.cur != null { t = t * 31 + onode(h.cur.sub) }\n"
+    "    return t\n"
+    "}\n"
+    "fn ogrow(o mut ONode&, v I64) { o.n.next = Node(v) }\n"
+    "fn (o mut ONode&) Grow(v I64) { o.n.next = mkChain(v) }\n"
+    "fn odrop(h mut OHold&) { h.other = null }\n"
+    "fn oswap(h mut OHold&) {\n"
+    "    t := take h.cur\n"
+    "    h.cur = take h.other\n"
+    "    h.other = take t\n"
+    "}\n"
+    "fn osetN(x mut Node&, o mut ONode&) { o.n = x }\n"
 )
 
 # the targets: what a scenario declares, and what it returns (the last, a Str scenario, declares its own - strScenario)
-Targets I64 = 12
+Targets I64 = 13
 Decls := String&[
     "x := Node(1)",
     "w := W(Box())",
@@ -262,6 +295,7 @@ Decls := String&[
     "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)",
     "",                                    # a global, declared before the function
     "",                                    # a node a callee built and returned
+    "h := OHold()",                        # a holder of owned objects (§8.8)
     "",                                    # a Str scenario
 ]
 Checks := String&[
@@ -276,6 +310,7 @@ Checks := String&[
     "chain(t.items[0]) * 7 + chain(t.items[1])",
     "",
     "chain(x)",
+    "ohash(h)",
     "",
 ]
 
@@ -671,7 +706,60 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
         return g.listOp($a ".nodes", ind)
     }
     if t == 6 { return g.enumOp(a, ind, d) }
+    if t == 11 { return g.ownOp(a, ind) }
     return g.twoOp(a, ind, d)
+}
+
+# a statement on the holder h of owned objects (§8.8): giving its slots new owners, moving owners between them and
+# through owner locals, releasing them (null, take, a call), building into an owned object's region through a borrow -
+# directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
+fn (g mut SG&) ownOp(h String&, ind String&) String& {
+    v := g.val()
+    k := g.r(22)
+    c := $h ".cur"
+    o := $h ".other"
+    if k == 0 { return $ind $c " = ONode(" $v ")\n" }
+    if k == 1 { return $ind $o " = ONode(" $v ")\n" }
+    if k == 2 { return $ind $c " = take " $o "\n" }
+    if k == 3 { return $ind $o " = take " $c "\n" }
+    if k == 4 { return $ind $c " = null\n" }
+    if k == 5 { return $ind "if " $c " != null { ogrow(" $c ", " $v ") }\n" }
+    if k == 6 { return $ind "if " $c " != null { " $c ".n.next = " $g.newNode() " }\n" }
+    if k == 7 { return $ind "if " $c " != null { " $c ".sub = ONode(" $v ") }\n" }
+    if k == 8 { return $ind "if " $c " != null and " $c ".sub != null { " $o " = take " $c ".sub }\n" }
+    if k == 9 { return $ind "oswap(" $h ")\n" }
+    if k == 10 { return $ind "odrop(" $h ")\n" }
+    if k == 11 { return $ind "take " $c "\n" }
+    if k == 12 {    # an owner local, released or moved at its block's end
+        x := g.name("x")
+        return $ind "{\n" $ind "    " $x " := take " $c "\n" $ind "    churn()\n" $ind "    " $o " = take " $x "\n" $ind "}\n"
+    }
+    if k == 13 {    # a borrow local, built through
+        b := g.name("b")
+        return $ind $b " := " $c "\n" $ind "if " $b " != null { grow(" $b ".n, " $v ") }\n"
+    }
+    if k == 14 {    # a borrow used after a release (O39: refused)
+        b := g.name("b")
+        return $ind $b " := " $c "\n" $ind $c " = null\n" $ind "if " $b " != null { grow(" $b ".n, " $v ") }\n"
+    }
+    if k == 15 {    # a lambda reading through the holder
+        f := g.name("f")
+        return $ind $f " := fn() I64 { return onode(" $c ") }\n" $ind $o " = ONode(" $f "())\n"
+    }
+    if k == 16 { return $ind "if " $o " != null { join { spawn ogrow(" $o ", " $v ") } }\n" }
+    if k == 17 {    # an owner local made here, built into, moved into a slot
+        y := g.name("y")
+        return ($ind $y " own mut ONode& = ONode(" $v ")\n" $ind $y ".n.next = Node(" $v ")\n" $ind "churn()\n" $ind $c " = take "
+                $y "\n")
+    }
+    if k == 18 { return $ind "if " $c " != null { " $c ".sub = take " $o " }\n" }
+    if k == 19 { return $ind "if " $c " != null { " $c ".Grow(" $v ") }\n" }
+    if k == 20 {    # a value built for a region a local borrow names
+        b := g.name("b")
+        return $ind $b " := " $c "\n" $ind "if " $b " != null { osetN(Node(" $v "), " $b ") }\n"
+    }
+    if g.chance(50) { return $ind "if " $c " != null and " $c ".sub != null { ogrow(" $c ".sub, " $v ") }\n" }
+    return $ind "if " $c " != null { osetN(Node(" $v "), " $c ") }\n"    # built before its region is read (O33: refused)
 }
 
 # ---- Str scenarios ----
@@ -844,7 +932,8 @@ fn Scenario(seed U64, k I64) String& {
                 $k "() }\n")
         decl = "x := mk" $k "b()"
     }
-    if t == 11 { return "# scenario " $k "\n" $g.strScenario(k) }
+    if t == 11 { a = "h" }
+    if t == Targets - 1 { return "# scenario " $k "\n" $g.strScenario(k) }
     body := g.stmts(kind, a, 2, "    ")
     return ("# scenario " $k "\n" $head $g.helpers "fn s" $k "() I64 {\n    " $decl "\n" $body "    churn()\n    return " $check
             "\n}\n")

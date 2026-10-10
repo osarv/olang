@@ -212,6 +212,7 @@ struct cgCtx {
     //capReadOnly counts the resolutions in progress that only read, or hand the scope to what builds nothing there
     struct list capScopes;
     int capReadOnly;
+    struct var* regionHit; //O32: the region a scope just resolved was, if it was one (cgCallTargetAndArgs)
     //P2: every value this body loaded from a scope it was handed - a parameter's, the result's, a capture's - and whether
     //anything was allocated into it (struct cgHanded); with hereBuilt, for a constructor's instance scope. Checked as the
     //body ends against what the checker said of it (cgCheckMayBuild): the closure prologues and the scopes handed to
@@ -1201,6 +1202,7 @@ char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
             if (StrCmp(c->sv->name, scopeParam->name)) c->built = true;
         }
     }
+    if (scopeParam->isRegion) ctx->regionHit = scopeParam;
     char* addr = scopeParam->isRegion ? cgRegionSlot(ctx, scopeParam) : cgLookupVarAddr(ctx, scopeParam); //O32
     char* loaded = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", loaded, addr);
@@ -3474,9 +3476,11 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
 //from the wrong registers, and a spawned call through a computed function value crashed the compiler.
 //`spawnMerges`, for a task, receives one sub-arena per scope the task allocates into (P2): the arguments are still
 //evaluated here, in the spawner, where they are built into the real scopes.
+struct cgRegionArg { int idx; struct var* region; bool task; bool result; };
 static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct list* args, struct list* spawnMerges,
                                  char* outSlot) {
     struct var* func = op->readVar;
+    struct list regionArgs = ListInit(sizeof(struct cgRegionArg));
     char* closure = NULL;
     char* target;
     if (outSlot) cgArgAdd(args, "ptr", outSlot); //a result through memory (cgRetViaMemory) - its storage comes first
@@ -3506,10 +3510,24 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         bool atHere = ctor && sv->isImplicitScope && SemanticBindingIsLanding(op, sv);
         bool readOnly = !spawnMerges && !op->callee && !SemanticMayBuild(func);
         if (readOnly) ctx->capReadOnly++;
+        ctx->regionHit = NULL;
         char* sval = atHere ? hereArg
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
         if (readOnly) ctx->capReadOnly--;
+        //O32: a region's slot is written as the borrow that names it is read - an argument of this very call, read below
+        //- so its scope is read again once the arguments are (regionArgs)
+        if (ctx->regionHit && !atHere) {
+            struct cgRegionArg ra = { args->len, ctx->regionHit, spawnMerges != NULL, false };
+            struct var* rsv0 = func->type.resultScope ? func->type.resultScope
+                               : func->type.hasRetType ? func->type.retType->scopeParam : NULL;
+            ra.result = !spawnMerges && rsv0 && canonicalVar(sv) == canonicalVar(rsv0);
+            if (spawnMerges && rsv0 && canonicalVar(sv) == canonicalVar(rsv0)) op->cgTaskResultArg = args->len + 1;
+            ListAdd(&regionArgs, &ra);
+            ctx->regionHit = NULL;
+            cgArgAdd(args, "ptr", sval);
+            continue;
+        }
         //E11c: a scope this body was handed and the walk said it never builds into, passed on to a callee that may build
         //into the variable it is bound to, is that body building there too - held as its own allocations are
         if (!spawnMerges) cgNoteHandedOn(ctx, op, func, sv, sval);
@@ -3576,6 +3594,15 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         llvmType(paramT, aty, sizeof(aty));
         cgArgAdd(args, aty, av);
     }
+    for (int i = 0; i < regionArgs.len; i++) { //O32: the regions the arguments' borrows have now recorded
+        struct cgRegionArg* ra = ListGetIdx(&regionArgs, i);
+        char* v = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", v, cgRegionSlot(ctx, ra->region));
+        if (ra->task) v = cgSpawnSubScope(ctx, spawnMerges, v, ra->idx);
+        if (ra->result) op->cgResultScope = v;
+        ((struct cgArg*)ListGetIdx(args, ra->idx))->val = v;
+    }
+    ListDestroy(regionArgs);
     return target;
 }
 
@@ -7183,7 +7210,12 @@ static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
         }
         case STATEMENT_VAR_DECL: cgVarDecl(ctx, s); return;
         case STATEMENT_ASSIGN: cgAssign(ctx, s); return;
-        case STATEMENT_EXPR: cgValue(ctx, s->op); return;
+        case STATEMENT_EXPR: {
+            char* v = cgValue(ctx, s->op);
+            if (s->op->opType == OPERATION_TAKE && s->op->ownDiscard) //O35: an owner no slot receives
+                fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", v);
+            return;
+        }
         case STATEMENT_IF: cgIf(ctx, s); return;
         case STATEMENT_FOR: cgFor(ctx, s); return;
         case STATEMENT_DO: cgDo(ctx, s); return;

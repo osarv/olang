@@ -1,0 +1,22 @@
+# check: fail error[O40]: a destructor may not release owned objects
+# releasing one object may not release others through a destructor
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+type Holder struct(s mut Server&) {
+    s
+} destruct { s.cur = null }
+fn main() ? {
+    s := Server()
+    h := Holder(s)
+    println($h.s.cur.fd)
+}

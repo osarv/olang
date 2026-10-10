@@ -1,0 +1,26 @@
+# check: fail error[O39]: calling 'viaPeer' may release the Conn borrowed on line
+# a release through a plain reference field may reach anything of its type
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+type Peer struct(s mut Server&) {
+    s
+}
+fn viaPeer(p mut Peer&) { p.s.cur = null }
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    p := Peer(s)
+    c := s.cur
+    viaPeer(p)
+    println(c.name)
+}

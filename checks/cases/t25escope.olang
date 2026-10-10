@@ -1,0 +1,18 @@
+# check: fail error[T25e]: an own reference lives in its own region, not where a variable does
+# an own reference names no scope
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn main() ? {
+    s := Server()
+    c own Conn&s = Conn(1)
+}

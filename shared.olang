@@ -16729,3 +16729,140 @@ test "P4a/D16d: a task's default may hold a lambda capturing only values" {
     sbChurn()
     assert b.f(1) == 42
 }
+
+# ---- own references (§8.8, O30-O42, E34): an object in a region of its own, freed when its owner lets go ----
+OwnDropped mut I64 = 0
+OwnRun mut I64 = 1                              # a run-time value, so nothing below is decided while compiling
+type OwnSock struct(n I64) {
+    n
+} destruct { OwnDropped++ }
+type OwnConn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut OwnSock&
+} destruct { OwnDropped++ }
+type OwnServer struct() {
+    cur own mut OwnConn&
+    other own mut OwnConn&
+}
+fn (c mut OwnConn&) close() { c.sock = null }   # releases below c only (O39)
+fn ownDrop(s mut OwnServer&) { s.cur = null }
+test "O35: an own slot releases what it held when it is given another owner, null, or moved out of and let go" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(3)
+    s.cur = OwnConn(4)                          # the first Conn released
+    assert OwnDropped == 1
+    s.other = take s.cur                        # moved: nothing released, s.cur left null
+    assert s.cur == null and OwnDropped == 1 and s.other.fd == 4
+    {
+        x := take s.other                       # an owner local, released at its block's end
+        assert x.fd == 4 and x.name == "c4"
+    }
+    assert OwnDropped == 2 and s.other == null
+    s.cur = OwnConn(5)
+    s.cur.sock = OwnSock(1)
+    s.cur = null                                # the Conn and the Sock it owned
+    assert OwnDropped == 4
+    s.cur = OwnConn(6 * OwnRun)
+    ownDrop(s)
+    assert OwnDropped == 5 and s.cur == null
+}
+test "O35: an instance's own fields are released when its scope closes, after its destructor" {
+    OwnDropped = 0
+    {
+        t := OwnServer()
+        t.cur = OwnConn(1)
+        t.cur.sock = OwnSock(2)
+        t.other = OwnConn(3)
+    }
+    assert OwnDropped == 3
+}
+test "O30/O33: an owned object and what it builds live in its region - read back after the arena churns" {
+    OwnDropped = 0
+    s := OwnServer()
+    for i in range 100 {
+        s.cur = OwnConn(i * OwnRun)
+        sbChurn()
+    }
+    c := s.cur
+    sbChurn()
+    assert c.name == "c99" and OwnDropped == 99
+}
+test "O38/O39: a borrow is in use until its last use - a release after it, or below what it names, is allowed" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(7 * OwnRun)
+    s.cur.sock = OwnSock(1)
+    c := s.cur
+    n := c.fd                                   # a number holds nothing
+    s.cur.close()                               # releases a Sock while a Conn is borrowed
+    assert c.name == "c7"
+    s.cur = null                                # c is not used after this
+    assert n == 7 and OwnDropped == 2
+}
+type OwnList struct(v I64) {
+    v
+    next own mut OwnList&
+}
+fn ownSumOf(l OwnList&) I64 {
+    if l == null { return 0 }
+    return l.v + ownSumOf(l.next)
+}
+fn ownSum(n I64) I64 {
+    head own mut OwnList& = null                # an owner local - the program's reach: holding nothing, it moves anywhere
+    for i in range n {
+        n2 own mut OwnList& = OwnList(i)
+        n2.next = take head
+        head = take n2
+    }
+    head.next.v = head.next.v + 100
+    a own mut OwnList& = OwnList(1)
+    a.next = OwnList(2)
+    k := a.next
+    head.next = take head.next.next             # a release below head while a loan below a is in use (O39: two trees)
+    return ownSumOf(head) + k.v
+}
+OwnSumBaked I64 = ownSum(10)                    # K2: computed while compiling
+test "O34/E34: owners moved with take, a list built through owner locals - while compiling and at run time" {
+    assert ownSum(4) == 6                       # S18c: decided while compiling
+    assert OwnSumBaked == ownSum(10 * OwnRun) and OwnSumBaked == 39
+}
+test "O35/S3: 'take' standing as a statement releases what it takes" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(2 * OwnRun)
+    s.cur.sock = OwnSock(1)
+    take s.cur
+    assert OwnDropped == 2 and s.cur == null
+}
+type OwnNode struct(v I64) {
+    v
+    next mut OwnNode& = null
+}
+type OwnHold struct(v I64) {
+    v
+    n mut OwnNode& = OwnNode(v)
+}
+type OwnHolder struct() {
+    cur own mut OwnHold&
+}
+fn ownGrow(h mut OwnHold&, v I64) { h.n.next = OwnNode(v) }
+fn (h mut OwnHold&) grow2(v I64) { h.n.next.next = OwnNode(v) }
+fn ownSetN(x mut OwnNode&, h mut OwnHold&) { h.n = x }
+test "O32/O33: a call builds into the region of a borrow it is handed - its scope known once the argument is read" {
+    s := OwnHolder()
+    s.cur = OwnHold(1 * OwnRun)
+    {
+        ownGrow(s.cur, 2)                       # the region is the argument's: read after the arguments are
+        s.cur.grow2(3)
+        sbChurn()
+    }
+    sbChurn()
+    assert s.cur.n.next.v == 2 and s.cur.n.next.next.v == 3
+    o := s.cur
+    ownSetN(OwnNode(4), o)                      # a value built first, for a region already read
+    join { spawn ownGrow(s.cur, 5) }            # a task builds into the region through a stand-in (P2)
+    sbChurn()
+    assert s.cur.n.v == 4 and s.cur.n.next.v == 5
+}

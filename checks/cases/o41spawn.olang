@@ -1,0 +1,20 @@
+# check: fail error[O41]: a task may not release owned objects yet, and 'drop' may
+# a task releasing may free what the spawner still uses
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn drop(s mut Server&) { s.cur = null }
+fn main() ? {
+    s := Server()
+    s.cur = Conn(3)
+    join { spawn drop(s) }
+}

@@ -5471,7 +5471,7 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
         shown.refMut = false;
         if (!TypeIsPermRef(t) && t.bType != BASETYPE_TYPEVAR) {
             shown.structMAlloc = false;
-            Err(ot, ERR_OWN_ON_VALUE, &shown);
+            Err(ot, ERR_OWN_ON_VALUE, &shown, &shown);
         } else if (t.bType != BASETYPE_STRUCT || t.isTuple) {
             shown.scopeParam = NULL;
             shown.scopeWritten = false;
@@ -8554,6 +8554,8 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
+    else if (fit == TYPE_FIT_MISMATCH && op->opType == OPERATION_TAKE && op->type.refOwn && !want.refOwn)
+        Err(op->tok, ERR_OWN_OWNER_USE); //O34: an owner goes into an own slot, never into a plain reference
     else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
     else if (fit == TYPE_FIT_NUMBER) { Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want); noteLiteralOwnType(op, want); }
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
@@ -19293,7 +19295,25 @@ static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type s
         checkCtorHereFits(ctx, val, R, 0, val->tok);
         return;
     }
+    if (val->opType == OPERATION_COND || val->opType == OPERATION_MATCH) { Err(val->tok, ERR_OWN_IN_COND); return; }
     Err(val->tok, ERR_OWN_NOT_AN_OWNER, val->isTried ? "may fail" : opIsCtorCall(val) ? "builds another type" : "is not one");
+}
+
+//two places written alike - one variable, then the same fields
+static bool ownSamePlace(struct operand* a, struct operand* b, int depth) {
+    if (!a || !b || depth > 64 || a->opType != b->opType) return false;
+    if (a->opType == OPERATION_READ_VAR) return a->readVar && b->readVar && canonicalVar(a->readVar) == canonicalVar(b->readVar);
+    if (a->opType != OPERATION_MEMBER || !a->args.len || !b->args.len || !StrCmp(a->memberName, b->memberName)) return false;
+    return ownSamePlace(*(struct operand**)ListGetIdx(&a->args, 0), *(struct operand**)ListGetIdx(&b->args, 0), depth + 1);
+}
+
+//whether the place target is inside what place holds - reached from it through fields
+static bool ownPlaceWithin(struct operand* target, struct operand* place) {
+    for (int guard = 0; target && target->opType == OPERATION_MEMBER && target->args.len && guard < 64; guard++) {
+        target = *(struct operand**)ListGetIdx(&target->args, 0);
+        if (ownSamePlace(target, place, 0)) return true;
+    }
+    return false;
 }
 
 //O34/O35: "slot = owner" - the owner moved in, the one the slot held released (codegen); "slot = null" releases it
@@ -19306,7 +19326,18 @@ static struct statement buildOwnAssign(struct checkCtx* ctx, struct operand* tar
     snprintf(opText, sizeof(opText), "%.*s", opTok.str.len < 7 ? opTok.str.len : 7, opTok.str.ptr);
     if (compound) Err(opTok, ERR_OWN_COMPOUND, opText);
     else if (!OperandIsMutableLvalue(target)) reportWriteBlocked(opTok, target);
-    else ownMoveInto(ctx, rhs, target->type, R->regionReach, R->regionReachDepth, R->regionReachUnnamed);
+    else {
+        ownMoveInto(ctx, rhs, target->type, R->regionReach, R->regionReachDepth, R->regionReachUnnamed);
+        //O39: moved into a field or a global as long-lived as where it was - not into an owner local, released at its
+        //block's end - it is freed no sooner than it would have been: no release to check
+        struct var* S = rhs->opType == OPERATION_TAKE ? rhs->ownRegion : NULL;
+        bool local = target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->owner;
+        //(an owner moved into its own region is not: reaching the slot borrows the object, and the move releases it)
+        bool within = S && rhs->args.len && ownPlaceWithin(target, *(struct operand**)ListGetIdx(&rhs->args, 0));
+        if (S && !local && !within && S->regionReach == R->regionReach && S->regionReachUnnamed == R->regionReachUnnamed
+                && (S->regionReachUnnamed || S->regionReach || S->regionReachDepth == R->regionReachDepth))
+            rhs->ownKeptReach = true;
+    }
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_ASSIGN;
     stmt.target = target;
@@ -20518,8 +20549,9 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
+    if (op->opType == OPERATION_TAKE) op->ownDiscard = true; //S3/O35: "take p" alone - the owner taken is released
     //...text on a line of its own most often meant to continue the join on the line before (E11b)
-    if (!exprCanStandAsStatement(op) && !op->type.unknown) {
+    if (!exprCanStandAsStatement(op) && !op->type.unknown && op->opType != OPERATION_TAKE) {
         if (s == ctx->clauseLastStmt) { //R11: a value ending a catch clause's block is meant as the clause's value
             struct list toks = ListInit(sizeof(struct token));
             syntaxTokensInto(e, &toks);
@@ -26389,14 +26421,33 @@ static bool ownReportedAt(struct token tok) {
 //owner local or below a parameter (what was moved into it was let go of there, by "take", checked then), and a release
 //below a parameter none read below an owner local. A value made here is nobody's yet. What was reached otherwise - a
 //global, a capture, a plain reference, which may point anywhere a reference may - meets everything
+//two reads of one own slot - the same variable, then the same own fields: each read is a region of its own to §8 (O33),
+//and both name the one object the slot holds (a release in between, letting one of them go, is checked where it happens)
+static bool ownSamePath(struct operand* a, struct operand* b, int depth) {
+    if (!a || !b || depth > 64) return false;
+    if (a == b) return true;
+    if (a->opType != b->opType) return false;
+    if (a->opType == OPERATION_READ_VAR)
+        return a->readVar && b->readVar && canonicalVar(a->readVar) == canonicalVar(b->readVar);
+    if (a->opType != OPERATION_MEMBER || !a->args.len || !b->args.len || !StrCmp(a->memberName, b->memberName)) return false;
+    struct operand* ab = *(struct operand**)ListGetIdx(&a->args, 0);
+    struct operand* bb = *(struct operand**)ListGetIdx(&b->args, 0);
+    struct var* ra = ownRegionOf(ab);
+    struct var* rb = ownRegionOf(bb);
+    if (ra && rb) return ra == rb || ownSamePath(ra->regionSlot, rb->regionSlot, depth + 1);
+    return !ra && !rb && ab->opType == OPERATION_READ_VAR && ownSamePath(ab, bb, depth + 1);
+}
+
 static bool ownLoanHits(struct ownLoan* l, struct list* types, struct list* chain, int root, struct var* local) {
     int lr = l->R->regionRoot;
     if (root == OWN_ROOT_LOCAL && (!local || (lr == OWN_ROOT_LOCAL && local != l->R->regionRootLocal) || lr == OWN_ROOT_PARAM))
         return false;
     if (root == OWN_ROOT_PARAM && lr == OWN_ROOT_LOCAL) return false;
     if (!l->R->regionType || !ownTypeIn(types, l->R->regionType)) return false;
-    for (int i = 0; i < chain->len; i++)
-        if (*(struct var**)ListGetIdx(chain, i) == l->R) return false;
+    for (int i = 0; i < chain->len; i++) {
+        struct var* C = *(struct var**)ListGetIdx(chain, i);
+        if (C == l->R || ownSamePath(C->regionSlot, l->R->regionSlot, 0)) return false;
+    }
     return true;
 }
 
@@ -26500,8 +26551,49 @@ static void ownExprBlockWalk(struct list* block) {
     ow.encl.len = had;
 }
 
+//O33: a region is known from the borrow that names it as that borrow is read - an argument's value built into the
+//region an argument after it reads would be built before the region is known
+static bool ownOpContains(struct operand* root, struct operand* x) {
+    if (!root) return false;
+    if (root == x) return true;
+    for (int i = 0; i < root->args.len; i++)
+        if (ownOpContains(*(struct operand**)ListGetIdx(&root->args, i), x)) return true;
+    for (int i = 0; i < root->chainOperands.len; i++)
+        if (ownOpContains(*(struct operand**)ListGetIdx(&root->chainOperands, i), x)) return true;
+    return ownOpContains(root->callee, x);
+}
+static void ownArgOrder(struct operand* op) {
+    struct var* func = op->readVar;
+    if (!func || func->type.isExtern || op->callee) return;
+    for (int i = 0; i < op->args.len && i < func->type.vars.len; i++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
+        if (!pt.scopeParam || OperandNamesExistingStorage(a)) continue;
+        struct var* R = SemanticBoundScope(op, pt.scopeParam);
+        if (!R || !R->isRegion || !R->regionSlot) continue;
+        for (int j = i + 1; j < op->args.len; j++) {
+            if (!ownOpContains(*(struct operand**)ListGetIdx(&op->args, j), R->regionSlot)) continue;
+            const char* t = ownPlaceText(R->regionSlot);
+            if (!ownReportedAt(a->tok)) Err(a->tok, ERR_OWN_BUILT_BEFORE_BORROW, t, t);
+            break;
+        }
+    }
+}
+
 static void ownOpWalk(struct operand* op) {
     if (!op) return;
+    if (ow.check && op->opType == OPERATION_FUNCCALL) ownArgOrder(op);
+    //O34/E34: an owner taken goes into an own slot, or is let go of as a statement (O35) - anywhere else nothing would
+    //own it. A conditional or a match giving an owner is not supported yet
+    if (ow.check && op->opType == OPERATION_TAKE && !op->ownMoved && !op->ownDiscard && !ownReportedAt(op->tok))
+        Err(op->tok, ERR_OWN_OWNER_USE);
+    if (ow.check && (op->opType == OPERATION_COND || op->opType == OPERATION_MATCH)) {
+        struct list vs = op->opType == OPERATION_MATCH ? SemanticMatchValues(op) : op->args;
+        for (int i = 0; i < vs.len; i++) {
+            struct operand* v = *(struct operand**)ListGetIdx(&vs, i);
+            if (v && v->opType == OPERATION_TAKE && !ownReportedAt(v->tok)) Err(v->tok, ERR_OWN_IN_COND);
+        }
+    }
     for (int i = 0; i < op->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&op->args, i));
     for (int i = 0; i < op->chainOperands.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&op->chainOperands, i));
     ownOpWalk(op->callee);
@@ -26512,7 +26604,7 @@ static void ownOpWalk(struct operand* op) {
         ownOpWalk(c->dflt);
     }
     if (op->opType == OPERATION_FUNCCALL) ownCallRelease(op);
-    else if (op->opType == OPERATION_TAKE && op->args.len) {
+    else if (op->opType == OPERATION_TAKE && op->args.len && !op->ownKeptReach) {
         struct operand* place = *(struct operand**)ListGetIdx(&op->args, 0);
         ownSlotRelease(place, op->tok, ownWhat("taking '%s'", ownPlaceText(place)));
     }
@@ -26590,8 +26682,15 @@ static void ownStmtWalk(struct statement* s) {
         if (s->target)
             for (int i = 0; i < s->target->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->target->args, i));
         ownOpWalk(s->op);
-        if (s->target && s->target->type.refOwn && !s->target->ownOrig)
+        if (s->target && s->target->type.refOwn && !s->target->ownOrig) {
+            //the old owner is let go of once the new one is stored - what the value borrowed was used before then, and the
+            //value is an owner, holding no borrow (C2d)
+            struct list all = ow.cur;
+            ow.cur = ListInit(sizeof(struct ownLoan));
+            if (ow.check) ownLoansIn(s->target, &ow.cur, false, true);
             ownSlotRelease(s->target, s->target->tok, ownWhat("assigning '%s'", ownPlaceText(s->target)));
+            ow.cur = all;
+        }
         if (ow.check && s->target) ownHoldMore(s->target, &ow.cur);
         break;
     case STATEMENT_IF: {

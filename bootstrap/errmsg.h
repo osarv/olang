@@ -186,10 +186,11 @@ struct type;
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
     X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so it is held only by reference: write %t&") \
-    X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference to a struct, as 'own Conn&', and %t is none") \
+    X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
     X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - an own reference is to a struct, as 'own Conn&'") \
     X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
     X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type - here it is not supported yet") \
+    X(ERR_OWN_BUILT_BEFORE_BORROW,      "O33",   "this value would be built where the object of '%s' lives, which a later argument reads - read it first, 'o := %s'") \
     X(ERR_OWN_TAKE_NEEDED,              "O34",   "moving out of '%s' would leave it empty - write 'take %s'") \
     X(ERR_OWN_NOT_AN_OWNER,             "O34",   "an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this %s") \
     X(ERR_OWN_REACH,                    "O34",   "the owner refers to what lives shorter than the slot it is moved into - move it where that lives") \
@@ -197,7 +198,6 @@ struct type;
     X(ERR_OWN_OWNER_USE,                "O34",   "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field or an own global") \
     X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
     X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
-    X(ERR_TAKE_NOT_PLACE,               "E34",   "'take' moves out of a place holding an owner - a field, a local or a global declared 'own'") \
     X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
     X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
     X(ERR_OWN_TASK_RELEASE,             "O41",   "a task may not release owned objects yet, and '%S' may - release them before the spawn or after the join") \

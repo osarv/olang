@@ -1,0 +1,16 @@
+# check: fail error[T25e]: 'own' is written on a field's, a local's or a global's type - here it is not supported yet
+# own parameters are not supported yet
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn f(c own Conn&) { }
+fn main() ? { }
