@@ -684,6 +684,7 @@ because what it finds about structure feeds the refactor.
     borrow effect dual to OwnEffects, whose loans are held to the join.
   Also: a pre-existing destructor leak on field assignment (P1), and two safe over-rejections. Sent back to the own
   agent (afe0b23) on wt-own. A follow-up soundness review runs before the merge.
+  The user, 23:35 CEST: the port's scanner (M1) waits - start it once own merges, beside own phase 2, not now.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
