@@ -603,6 +603,13 @@ because what it finds about structure feeds the refactor.
   it; an unsettled callee keeps its argument. This round is unreviewed: include it in the next review with rv9fix's C9a
   and the parallel global. The user (13:25 CEST): slow down early in the week, 1-2 agents. Next: decision 50 (failing
   spawns), then `own` + `take` + liveness-checked local borrows, then Vec<T> as the default growable array.
+- 14:10 CEST: str1's second review (/home/user/review/str2) found no silent use-after-free. It did find five build sites
+  missed by the `noBuild` receiver rule's hand-kept list (a segfault in a callee, an ICE in Str), a lambda's null
+  capture read as the program scope (a leak), and P2 destructing twice. Also: builder growth in a for condition, and
+  helper/iterator over-rejections. Sent back (round 3): merge master, then express `noBuild` through decision 48's
+  `SemanticMayBuild` walk and `cgCheckMayBuild`, one predicate for both. The reviewer's structural point, for the port:
+  "where is this built" must be ONE predicate that the checker and codegen share. Running: str1 (round 3), decision 50
+  (wt-spawnerr).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
