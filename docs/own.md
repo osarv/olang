@@ -1,6 +1,6 @@
 # Owned references: `own`, `take`, loans - design and implementation plan
 
-Status: designed 2026-10-10, not implemented. The normative rules are in `SPEC.md`: §8.8 (O30-O42), T25e, E34, and
+Status: designed 2026-10-10; a first cut (section 11) built the same day. The normative rules are in `SPEC.md`: §8.8 (O30-O42), T25e, E34, and
 the rules marked *(§8.8, not yet implemented)* - L9, T2, T8, E1, E31b, S3, C11, M19d (own elements, `TakeAt`,
 `SwapTake`, `Map.Take`, `Vec`), K1, K2. This note is the plan for building them in the C compiler (`bootstrap/`) before
 the port starts, and the record of the details decided on the way. Read it with §8.8 open.
@@ -551,3 +551,69 @@ Left for later (additive):
 - `own` in a function type's parameter (a consuming callback);
 - own enum payloads;
 - skipping drop nodes where every path moves the local.
+
+## 11. What was built: the first cut (2026-10-10)
+
+The cut is the part of the plan the rest stands on, with nothing half-wired: `own` on a reference to a struct type as
+a field's, a local's or a global's type, `take` of such a slot, regions at run time, the borrow check (O38-O39) with
+its effects, and K2. SPEC.md's §8.8 note and the rules marked there say what is not built; this section says what was
+decided while building, against the plan above.
+
+**Built**
+- Lexer, parser and types (steps 1-2): `own`/`take` keywords, `refOwn` on `struct type`, T25e's errors - every
+  position but a field's, a local's or a global's type, and every referent but a struct, is "not supported yet".
+- Reads, moves, `take` (step 3): a slot read anywhere but a move position is a borrow with a region scope variable of
+  its own (`isRegion`); `take` moves; a move position takes `null`, a constructor call made there, or `take`.
+- Regions at run time (step 5, without the small classes): `__olang_own_new` makes a region per object (one 4 KB
+  chunk), the header word before the object; `__olang_own_free` releases; an owning struct's own fields are released
+  when its scope closes through a drop node registered at construction, so a test's unwinding (P1d) releases them too.
+- The borrow check (steps 6-7): effects per function, a least fixed point over every body; loans of locals live to
+  their last use, conservatively; tasks, deferred code, closures, loops.
+- O40/O41 (step 8), in their strict form; K2 (step 9); the evaluator (K1) treats a release as nothing.
+- Tests: shared.olang's own section (read back after churns, release counts, a list built through owner locals - baked
+  and run), 35 checks cases, an agree fixture built, built `-d -s` and interpreted, and own scenarios in the scope
+  fuzzer.
+
+**Decided while building**
+1. An owning struct is held only by reference (`ERR_OWNING_TYPE_BY_VALUE`, O31): with no borrowed copies yet, a value
+   copy of one would be a second owner.
+2. An owner local's reach comes from its initializer - the program's scope for `null`, nothing, or a constructor call
+   given only numbers, literals, written text, `null` and such calls (`ownCtorPlain`); its block's for another value
+   made there; the source's for `take p` - and an owner moved into it later must reach as far (O34's error).
+3. Roots: a loan records whether its slot was reached from an owner local (which one), a parameter, or anything else.
+   A release through an owner local reaches only loans rooted there and unrooted ones; a value made where it is
+   released reaches none; a release through anything else reaches every loan of its types. Conservative where the spec
+   lets a variable's root and the shared root never meet.
+4. A release reaches no loan on an object inside the released one's own chain below it (the loan's region in the
+   release's chain), nor one on the very slot path it assigns - so `head.next = take head.next.next` and
+   `s.cur.close()` releasing a `Sock` under a borrowed `Conn` are allowed.
+5. An assignment's release is checked against the loans live past the statement and those of its target's place; the
+   value is computed before the store (S4), so loans used only in computing it are over.
+6. `take p` moved into a field or a global of the same reach, not into its own region, is a move and releases
+   nothing (`ownKeptReach`); into an owner local it is a move too. A `take` nothing receives - a statement - releases
+   at the statement's end.
+7. `take` anywhere but a move position or a statement, and a conditional or a match giving an owner, are O34 errors
+   (`ERR_OWN_OWNER_USE`, `ERR_OWN_IN_COND`) - not yet move positions.
+8. O40 strict: a function made a value, a `Call` adapter's `Call`, a destructor, and `Str`/`Eq`/`Hash` (which `$`,
+   `==` and a `Map` call by themselves) release nothing at all. O41 strict: a spawned call releases nothing.
+9. A global reaching an own reference is never baked (K2, `ownReachesOwn`).
+10. **A region is known only once the borrow naming it is read**, and a call's hidden scope arguments were resolved
+    before its arguments: `ogrow(h.cur, 4)` handed `ogrow` a null scope (a segfault), or in a loop the previous
+    iteration's region (a use after free). Found by the own scenarios of the scope fuzzer. Codegen now reads a
+    region's scope again after the arguments (`regionArgs`), a task's stand-in made from that; and a value built for
+    an argument in the region a *later* argument reads - `setN(Node(9), s.cur)` - is O33's error, naming the local
+    to read the borrow into first (`ERR_OWN_BUILT_BEFORE_BORROW`). Hoisting the read would be unsound: an argument
+    between could release the slot.
+
+**Fuzzed**: own scenarios (a holder with two own slots; new owners, moves, owner locals, `null`, `take`, calls,
+methods, tasks building into regions, borrows kept across a release, values built before their region is read) are
+one in twelve of the scope fuzzer's. Run all-own: the compiler before decision 10's codegen fix gives 24 findings in 60
+programs; with it, none - and none in 300 more all-own programs (2,561 scenarios run, 1,039 refused) or 200 of the
+usual mix (981 run, 1,419 refused).
+
+**Left** (each additive): owning parameters and owned results (O36, O37); own elements and `List`/`Map` holding owners,
+`TakeAt`, `SwapTake`, `Map.Take`; `Vec`; owning value types and borrowed copies; implicit last-use moves of owner
+locals; conditionals, matches, array literals, spawn targets and catch defaults as move positions; O40/O41's releases
+through parameters; the evaluator marking a released object dead; small region classes (a region is one 4 KB chunk);
+a flow-sensitive liveness (loans live along paths, not per block).
+

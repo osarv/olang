@@ -11,7 +11,7 @@ and how to judge a new feature - is `PRINCIPLES.md`, imported here:
 Error handling is modeled on Zig (explicit error sets/unions, no exceptions). Longer-term direction:
 Rust-like compile-time memory/security guarantees (underway - see the ownership-scopes entry in
 Settled decisions below; scope-containment is checked at compile time, a general borrow checker is
-not).
+not; owned references, §8.8, have a check of their own that nothing in use is freed).
 
 This file is a living design record, kept terse on purpose - it is not a spec (see `SPEC.md` for the
 normative, current-state language reference) and not the full story either (see `HISTORY.md`
@@ -4898,6 +4898,26 @@ and literals made only of such, never existing storage anywhere in it) - it is
   program in four, checked against `-b` since `-i` runs none, ending `dtors 0`), and failing spawns; the old compiler
   gives 24 findings on 40 seeds, this one none (and none on 300 more).
 
+- **Owned references: `own`, `take`, loans - designed, and a first cut built (§8.8 O30-O42, T25e, E34, K2,
+  2026-10-10; the user's design and answers - objects freed at will that never leave their owner, `take`, the name
+  `own`, local borrows checked by liveness (ledger QF-QI); details mine, docs/own.md).** `own mut Conn&` owns an object living in a **region** of its own, released the moment its
+  owner lets go - its slot given another owner or `null`, an owner local ending, `take` standing alone, at the latest
+  its container's scope closing; there is no `free`. `take p` moves an owner out of a slot. A slot read anywhere but a
+  move position is a **borrow** (the type without `own`, in the object's region, outliving nothing, so §8.4 keeps it in
+  locals, calls and the region), and each read is a **loan**: the compiler refuses a release, direct or through a call
+  (what each body may release, a fixed point over every body), while a loan on the object is live - live to its last
+  use, judged by type and root (an owner local's loans meet only its own releases). Only freeing is checked, never
+  aliasing or mutation, at compile time only. **The first cut**: `own` on a reference to a struct as a field's, a
+  local's or a global's type (anything else is T25e's "not supported yet"); an owning struct held only by reference
+  (no borrowed copies yet); an owner local's reach from its initializer; `take` only into a move position or as a
+  statement; O40/O41 strict - function values, destructors, `Str`/`Eq`/`Hash` and spawned calls release nothing; a
+  global reaching an owner never baked (K2); the evaluator gives a release no meaning, which O39 leaves no program to
+  observe. **Found by the scope fuzzer's own scenarios**: a call's hidden scope argument for a region was read before
+  the argument whose borrow names it (`ogrow(h.cur, 4)`: a null scope, or in a loop the last iteration's freed region)
+  - codegen now reads it after the arguments, and a value built for an argument in a region a later argument reads is
+  O33's error naming the local to read it into. Left (additive): owning parameters and results, own elements in
+  `List`/`Map` (`TakeAt`, `SwapTake`, `Map.Take`), `Vec`, borrowed copies, implicit last-use moves, small region
+  classes (a region is one 4 KB chunk), flow-sensitive liveness.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
