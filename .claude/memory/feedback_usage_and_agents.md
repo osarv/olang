@@ -85,3 +85,9 @@ weekly point - so running flat out at the five-hour limit (20%/h) is ~5.3% of th
 left and 15h to go, that cap binds: the most usable is the cap held continuously. So: keep the five-hour window
 landing at ~100% right at each of its resets (more agents early in a window, trimmed as it nears the limit), keep
 working through the night with a send_later armed just after each reset, and recompute the ratio as readings come in.
+
+**Measured 2026-10-10 (first day of the week Oct 10-17, five-hour resets at 10:00 CEST):** weekly went 0.07 -> 0.12
+between 08:33 and 09:35 CEST with 4-5 agents running, which is ~1% of the week per agent-hour. The weekly target with
+70% uptime over 164 h is ~0.8%/h. So early in this week the weekly window binds, not the five-hour one: average about
+one agent at a time, start new work only as running agents finish, prefer reviews and small fixes, and speed up later
+in the week if usage is under the line.
