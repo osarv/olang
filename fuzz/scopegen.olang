@@ -1,0 +1,536 @@
+# fuzz/scopegen - writes random, well-formed programs that stress where values live (§8), for the scope sanitizer's
+# fuzzer ("fuzz scope", fuzz.olang). The compile-time evaluator is not their subject: every value is computed at run
+# time, read after an arena churn, and printed, and a program the compiler accepts must print the same built with the
+# scope sanitizer (-d -s, B2f) and interpreted (-i, which keeps every value alive). A use after a scope closed - storage
+# the static check (§8.4) let a value outlive - faults or reads poison under -s, so it shows as a difference.
+#
+# A program is a list of independent SCENARIOS. Scenario k is a function s<k>() I64 holding a TARGET - storage that
+# outlives what the scenario does to it: a node, a struct holding a box, a List, a Map, an array of references, a
+# struct of Lists, an enum, a List returned through two calls, a struct with an inline array, a global, a node built
+# and returned by a callee - and a tree of statements storing new values into it: built in nested blocks and loops (an
+# if, a for, a bare block, a match, a deferred block, after a churn), through helper functions taking the target by
+# reference or by value, through copies out of references (from calls, parameters, fields, elements, slices, views,
+# enum payloads), through constructors and enum cases, captured by lambdas, by spawned calls and spawned lambdas, and
+# made as locals of an inner block and stored outward (which the checker must refuse). Then it churns the arena and
+# returns a checksum of everything the target reaches.
+#
+# Each scenario's text - its globals, helpers and function - starts with a line "# scenario k", so a compile-time
+# error is traced to its scenario by line and that scenario left out (Program's mask): a refused construct is safe,
+# and the rest of the program is still run.
+
+# leaves out the shapes of the use-after-frees known and open when this was written (the 2026-10-09 review's 02, 02b,
+# 02c, 02d: copies out of a call's reference, a reference for a by-value parameter or kept by a constructor or a
+# payload, and copies of an enum's payload passed on), so that a run finds what is not known yet; set by "fuzz scope ...
+# avoid". Built without it, a program is the whole of what the generator writes
+AvoidKnown mut Bool = false
+
+# the types and helpers every program has
+Prelude := (
+    "extern fn getpid() I32\n"
+    "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
+    "type Node struct(v I64) {\n"
+    "    v\n"
+    "    next mut Node& = null\n"
+    "}\n"
+    "type Box struct() {\n"
+    "    head mut Node& = Node(1)\n"
+    "    tag I64 = 0\n"
+    "}\n"
+    "type W struct(b Box) { b }\n"
+    "type H struct(b Box) { b }\n"
+    "type E enum {\n"
+    "    A(b Box)\n"
+    "    N(n mut Node&)\n"
+    "    Z\n"
+    "}\n"
+    "type Bag struct() {\n"
+    "    nodes List<mut Node&>\n"
+    "    boxes List<Box>\n"
+    "}\n"
+    "type Two struct() {\n"
+    "    items Array<mut Node&, 2>\n"
+    "}\n"
+    "# allocates and gives back: whatever reuses a closed scope's storage writes -7 and text over it\n"
+    "fn churn() I64 {\n"
+    "    t I64 = 0\n"
+    "    for i in range 200 {\n"
+    "        a := Array<I64>(64, -7)\n"
+    "        t += a[3]\n"
+    "        s := $i $i $i \"-\" $(i * 7)\n"
+    "        t += s.Len()\n"
+    "    }\n"
+    "    return t + I64(getpid() * 0)\n"
+    "}\n"
+    "# a chain's values, 40 nodes at most\n"
+    "fn chain(n Node&) I64 {\n"
+    "    t I64 = 0\n"
+    "    c := n\n"
+    "    for k in range 40 {\n"
+    "        if c == null { break }\n"
+    "        t = t * 31 + c.v\n"
+    "        c = c.next\n"
+    "    }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumList(l List<mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for n in l { t = t * 7 + chain(n) }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumArr(a Array<mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for n in a { t = t * 7 + chain(n) }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumMap(m Map<I64, mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for k in range 40 {\n"
+    "        n := try m.Get(k) catch default null\n"
+    "        t = t * 7 + chain(n)\n"
+    "    }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumBoxes(l List<Box>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for b in l { t = t * 7 + chain(b.head) }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumE(e E&) I64 {\n"
+    "    if e is E.A {\n"
+    "        b := e as E.A\n"
+    "        return chain(b.head)\n"
+    "    }\n"
+    "    if e is E.N { return chain(e as E.N) }\n"
+    "    return 0\n"
+    "}\n"
+    "fn mkNode(v I64) mut Node& { return Node(v) }\n"
+    "fn mkChain(v I64) mut Node& {\n"
+    "    n := Node(v)\n"
+    "    n.next = Node(v + 1)\n"
+    "    return n\n"
+    "}\n"
+    "fn via(v I64) mut Node& { return mkChain(v) }\n"
+    "fn mkLambda(v I64) mut Node& {\n"
+    "    f := fn(x I64) mut Node& { return Node(x) }\n"
+    "    return f(v)\n"
+    "}\n"
+    "fn nodeOf(e E) mut Node&e { return e as E.N }\n"
+    "fn pickNode(x mut Node&) mut Node&x { return x }\n"
+    "fn pickBox(x mut Box&) mut Box&x { return x }\n"
+    "fn build(b Box) { b.head.next = Node(42) }\n"
+    "fn byAs(e E) {\n"
+    "    b := e as E.A\n"
+    "    b.head.next = Node(43)\n"
+    "}\n"
+    "fn link(a mut Node&, b mut Node&a) { a.next = b }\n"
+    "fn grow(a mut Node&, v I64) { a.next = Node(v) }\n"
+    "fn growDeep(a mut Node&, v I64) {\n"
+    "    if v > 0 {\n"
+    "        for i in range 2 {\n"
+    "            a.next = Node(v + i)\n"
+    "            churn()\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+    "fn mkList(v I64) List<mut Node&> {\n"
+    "    l := List<mut Node&>()\n"
+    "    for i in range 3 { l.Push(Node(v + i)) }\n"
+    "    return l\n"
+    "}\n"
+    "fn mkList2(v I64) List<mut Node&> { return mkList(v) }\n"
+    "fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
+    "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
+    "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
+)
+
+# the targets: what a scenario declares, and what it returns
+Targets I64 = 11
+Decls := String&[
+    "x := Node(1)",
+    "w := W(Box())",
+    "l := List<mut Node&>()\n    l.Push(Node(1))",
+    "m := Map<I64, mut Node&>()",
+    "a := Array<mut Node&>(4)\n    a[0] = Node(1)",
+    "bag := Bag()\n    bag.boxes.Push(Box())",
+    "e := E.A(Box())",
+    "l := mkList2(1)",
+    "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)",
+    "",                                    # a global, declared before the function
+    "",                                    # a node a callee built and returned
+]
+Checks := String&[
+    "chain(x)",
+    "chain(w.b.head)",
+    "sumList(l)",
+    "sumMap(m)",
+    "sumArr(a)",
+    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes)",
+    "sumE(e)",
+    "sumList(l)",
+    "chain(t.items[0]) * 7 + chain(t.items[1])",
+    "",
+    "chain(x)",
+]
+
+type SG struct(seed U64) {
+    s U64 = (seed * 6364136223846793005 + 1442695040888963407) | 1
+    v I64 = 1                          # the last value a node was made with
+    k I64 = 0                          # the scenario being made
+    n I64 = 0                          # names made in it so far
+    helpers mut String& = ""           # its helper functions
+    boxKind I64 = 0                    # what boxOp's box is: 0 a value, 1 a reference, 2 a copy of an enum's payload
+}
+
+# xorshift64
+fn (g mut SG&) next() U64 {
+    g.s = g.s ^ (g.s << 13)
+    g.s = g.s ^ (g.s >> 7)
+    g.s = g.s ^ (g.s << 17)
+    return g.s
+}
+
+fn (g mut SG&) r(n I64) I64 { return I64(g.next() % U64(n)) }
+fn (g mut SG&) chance(pct I64) Bool { return g.r(100) < pct }
+
+# a value no node has been made with yet in this scenario
+fn (g mut SG&) val() I64 {
+    g.v += 1 + g.r(5)
+    return g.v
+}
+
+# a name not used before in this scenario
+fn (g mut SG&) name(p String&) String& {
+    g.n += 1
+    return $p $g.k "_" $g.n
+}
+
+fn (g mut SG&) addHelper(text String&) { g.helpers = $g.helpers $text }
+
+# a new node: built by a constructor, by a call returning one it built - directly, through a local, through two calls,
+# through a lambda - or read out of an enum case's payload
+fn (g mut SG&) newNode() String& {
+    v := g.val()
+    k := g.r(9)
+    if k == 0 { return "mkNode(" $v ")" }
+    if k == 1 { return "mkChain(" $v ")" }
+    if k == 2 { return "via(" $v ")" }
+    if k == 3 { return "mkLambda(" $v ")" }
+    if k == 4 { return "nodeOf(E.N(Node(" $v ")))" }
+    return "Node(" $v ")"
+}
+
+# a statement storing a new node through the node a (a writable reference)
+fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
+    k := g.r(14)
+    v := g.val()
+    if k == 1 { return $ind "grow(" $a ", " $v ")\n" }
+    if k == 2 { return $ind "growDeep(" $a ", " $v ")\n" }
+    if k == 3 { return $ind "link(" $a ", " $g.newNode() ")\n" }
+    if k == 4 {    # made in a block of its own and stored outward: refused unless it lives where a does
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $a ".next = " $q "\n" $ind "}\n"
+    }
+    if k == 5 {    # a lambda capturing a reference to the node builds through it
+        h := g.name("h")
+        f := g.name("f")
+        return $ind $h " := " $a "\n" $ind $f " := fn(v I64) { " $h ".next = Node(v) }\n" $ind $f "(" $v ")\n"
+    }
+    if k == 6 { return $ind "join { spawn grow(" $a ", " $v ") }\n" }
+    if k == 7 {    # a spawned lambda building through a reference it captured
+        h := g.name("h")
+        return $ind $h " := " $a "\n" $ind "join { spawn fn() { " $h ".next = Node(" $v ") } }\n"
+    }
+    if k == 8 and d > 0 {    # a helper taking the node by reference
+        f := g.name("opNode")
+        body := g.stmts(0, "p", d - 1, "    ")
+        g.addHelper("fn " $f "(p mut Node&) {\n" $body "}\n")
+        return $ind $f "(" $a ")\n"
+    }
+    if k == 9 {    # a reference handed back by a call
+        h := g.name("h")
+        return $ind $h " := pickNode(" $a ")\n" $ind $h ".next = " $g.newNode() "\n"
+    }
+    if k == 10 { return $ind $a ".next = " $g.newNode() "\n" $ind $a ".next.next = " $g.newNode() "\n" }
+    if k == 11 {    # a box made here, holding the node
+        b := g.name("b")
+        return $ind $b " := Box()\n" $ind $b ".head = " $a "\n" $ind $b ".head.next = " $g.newNode() "\n"
+    }
+    if k == 12 {    # a node made where a churn runs between its making and its storing
+        q := g.name("q")
+        return $ind $q " := " $g.newNode() "\n" $ind "churn()\n" $ind $a ".next = " $q "\n"
+    }
+    return $ind $a ".next = " $g.newNode() "\n"
+}
+
+# a statement storing a new node through the box b (a writable Box place)
+fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
+    k := g.r(13)
+    if AvoidKnown {
+        if g.boxKind == 2 or k == 3 or k == 7 { k = 0 }
+        if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11) { k = 0 }
+    }
+    if k == 1 {    # a copy of the box: its references are the box's
+        c := g.name("c")
+        return $ind $c " Box = " $b "\n" $ind $c ".head.next = " $g.newNode() "\n"
+    }
+    if k == 2 {
+        c := g.name("c")
+        return $ind $c " := " $b "\n" $ind $c ".head.next = " $g.newNode() "\n"
+    }
+    if k == 3 {    # a copy out of a reference a call hands back
+        c := g.name("c")
+        return $ind $c " Box = pickBox(" $b ")\n" $ind $c ".head.next = " $g.newNode() "\n"
+    }
+    if k == 4 { return $ind "build(" $b ")\n" }
+    if k == 5 {    # a copy kept by a constructor
+        h := g.name("h")
+        return $ind $h " := H(" $b ")\n" $ind $h ".b.head.next = " $g.newNode() "\n"
+    }
+    if k == 6 {    # a copy kept by an enum case, matched out
+        e := g.name("e")
+        y := g.name("y")
+        return ($ind $e " := E.A(" $b ")\n" $ind "match " $e " {\n" $ind "    case E.A(" $y ") { " $y ".head.next = "
+                $g.newNode() " }\n" $ind "    case _ { }\n" $ind "}\n")
+    }
+    if k == 7 { return $ind "byAs(E.A(" $b "))\n" }
+    if k == 8 {    # a payload taken out by "as"
+        x := g.name("x")
+        return $ind $x " := E.A(" $b ") as E.A\n" $ind $x ".head.next = " $g.newNode() "\n"
+    }
+    if k == 9 { return g.nodeOp($b ".head", ind, d) }
+    if k == 10 and d > 0 {    # a helper taking the box by reference
+        f := g.name("opBox")
+        was := g.boxKind
+        g.boxKind = 1
+        body := g.stmts(1, "y", d - 1, "    ")
+        g.boxKind = was
+        g.addHelper("fn " $f "(y mut Box&) {\n" $body "}\n")
+        return $ind $f "(" $b ")\n"
+    }
+    if k == 11 and d > 0 {    # a helper taking the box by value: its references are still the caller's
+        f := g.name("opVal")
+        was := g.boxKind
+        g.boxKind = 0
+        body := g.stmts(1, "y", d - 1, "    ")
+        g.boxKind = was
+        g.addHelper("fn " $f "(y Box) {\n" $body "}\n")
+        return $ind $f "(" $b ")\n"
+    }
+    return $ind $b ".head.next = " $g.newNode() "\n"
+}
+
+# a statement storing a new node into the List l
+fn (g mut SG&) listOp(l String&, ind String&) String& {
+    k := g.r(9)
+    v := g.val()
+    if k == 1 {
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $l ".Push(" $q ")\n" $ind "}\n"
+    }
+    if k == 2 {
+        i := g.name("i")
+        return $ind "for " $i " in range 3 { " $l ".Push(Node(" $v " + " $i ")) }\n"
+    }
+    if k == 3 { return $ind "pushNode(" $l ", " $v ")\n" }
+    if k == 4 {
+        f := g.name("f")
+        return $ind $f " := fn(v I64) mut Node& { return Node(v) }\n" $ind $l ".Push(" $f "(" $v "))\n"
+    }
+    if k == 5 { return $ind "join { spawn pushNode(" $l ", " $v ") }\n" }
+    if k == 6 {    # building through the elements a walk hands out
+        n := g.name("n")
+        return $ind "for " $n " in " $l " { " $n ".next = " $g.newNode() " }\n"
+    }
+    if k == 7 {    # a node made here, a churn, then pushed
+        q := g.name("q")
+        return $ind $q " := " $g.newNode() "\n" $ind "churn()\n" $ind $l ".Push(" $q ")\n"
+    }
+    return $ind $l ".Push(" $g.newNode() ")\n"
+}
+
+# a statement storing a new node into the Map m
+fn (g mut SG&) mapOp(m String&, ind String&) String& {
+    k := g.r(7)
+    key := g.r(30)
+    v := g.val()
+    if k == 1 {
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $m ".Put(" $key ", " $q ")\n" $ind "}\n"
+    }
+    if k == 2 {
+        i := g.name("i")
+        return $ind "for " $i " in range 3 { " $m ".Put(" $key " + " $i ", Node(" $v ")) }\n"
+    }
+    if k == 3 { return $ind "putNode(" $m ", " $key ", " $v ")\n" }
+    if k == 4 {    # building through the entries a walk hands out
+        e := g.name("e")
+        return $ind "for " $e " in " $m " { " $e ".Value.next = " $g.newNode() " }\n"
+    }
+    if k == 5 {    # a node a lookup hands back, built through
+        n := g.name("n")
+        return ($ind $n " := try " $m ".Get(" $key ") catch default null\n" $ind "if " $n " != null { " $n
+                ".next = " $g.newNode() " }\n")
+    }
+    return $ind $m ".Put(" $key ", " $g.newNode() ")\n"
+}
+
+# a statement storing a new node into the array a
+fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
+    k := g.r(8)
+    at := g.r(4)
+    v := g.val()
+    if k == 1 {
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $a "[" $at "] = " $q "\n" $ind "}\n"
+    }
+    if k == 2 {
+        i := g.name("i")
+        return $ind "for " $i " in range 4 { " $a "[" $i "] = Node(" $v " + " $i ") }\n"
+    }
+    if k == 3 { return $ind "setNode(" $a ", " $at ", " $v ")\n" }
+    if k == 4 {    # a slice of the array, stored through
+        s := g.name("s")
+        return $ind $s " := " $a "[0:2]\n" $ind $s "[1] = " $g.newNode() "\n"
+    }
+    if k == 5 {    # building through the elements a walk hands out
+        n := g.name("n")
+        return $ind "for " $n " in " $a " { if " $n " != null { " $n ".next = " $g.newNode() " } }\n"
+    }
+    if k == 6 { return g.nodeOp($a "[0]", ind, d) }
+    return $ind $a "[" $at "] = " $g.newNode() "\n"
+}
+
+# a statement storing through the struct t holding an inline array of two nodes
+fn (g mut SG&) twoOp(t String&, ind String&, d I64) String& {
+    k := g.r(6)
+    if k == 1 {    # a slice of the inline array
+        s := g.name("s")
+        return $ind $s " := " $t ".items[0:2]\n" $ind $s "[1].next = " $g.newNode() "\n"
+    }
+    if k == 2 {    # a view of it
+        s := g.name("s")
+        return $ind $s " := " $t ".items as Array<mut Node&, 2>&\n" $ind $s "[0].next = " $g.newNode() "\n"
+    }
+    if k == 3 {    # a copy of the struct: its references are the struct's
+        c := g.name("c")
+        return $ind $c " := " $t "\n" $ind $c ".items[1].next = " $g.newNode() "\n"
+    }
+    if k == 4 { return g.nodeOp($t ".items[1]", ind, d) }
+    return g.nodeOp($t ".items[0]", ind, d)
+}
+
+# a statement storing into the enum e (holding a box)
+fn (g mut SG&) enumOp(e String&, ind String&, d I64) String& {
+    k := g.r(3)
+    if k == 1 and not AvoidKnown { return $ind "byAs(" $e ")\n" }
+    y := g.name("y")
+    was := g.boxKind
+    g.boxKind = 2
+    op := g.boxOp(y, $ind "        ", d)
+    g.boxKind = was
+    return $ind "match " $e " {\n" $ind "    case E.A(" $y ") {\n" $op $ind "    }\n" $ind "    case _ { }\n" $ind "}\n"
+}
+
+# a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
+fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
+    if t == 0 { return g.nodeOp(a, ind, d) }
+    if t == 1 {
+        if g.chance(60) { return g.boxOp(a, ind, d) }
+        return g.nodeOp($a ".head", ind, d)
+    }
+    if t == 2 { return g.listOp(a, ind) }
+    if t == 3 { return g.mapOp(a, ind) }
+    if t == 4 { return g.arrOp(a, ind, d) }
+    if t == 5 {
+        k := g.r(4)
+        if k == 0 { return $ind $a ".boxes.Push(Box())\n" }
+        if k == 1 {    # a copy of an element of a List of boxes: its references are the element's
+            c := g.name("c")
+            return $ind $c " := " $a ".boxes[0]\n" $ind $c ".head.next = " $g.newNode() "\n"
+        }
+        return g.listOp($a ".nodes", ind)
+    }
+    if t == 6 { return g.enumOp(a, ind, d) }
+    return g.twoOp(a, ind, d)
+}
+
+# n statements around what t declares (as a), wrapped in blocks d deep at most
+fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
+    out mut String& = ""
+    for c in range 1 + g.r(3) {
+        if d > 0 and g.chance(45) {
+            inner := $ind "    "
+            w := g.r(8)
+            body := g.stmts(t, a, d - 1, inner)
+            if w == 0 { out = $out $ind "if Run > 0 {\n" $body $ind "}\n" }
+            else if w == 1 {
+                i := g.name("i")
+                out = $out $ind "for " $i " in range Run * 2 {\n" $body $ind "}\n"
+            }
+            else if w == 2 { out = $out $ind "{\n" $body $ind "}\n" }
+            else if w == 3 { out = $out $ind "if Run > 0 {\n" $inner "churn()\n" $body $ind "}\n" }
+            else if w == 4 { out = $out $ind "match Run {\n" $inner "case 1 {\n" $body $inner "}\n" $inner "case _ { }\n" $ind "}\n" }
+            else if w == 5 { out = $out $ind "if Run < 0 { } else {\n" $body $ind "}\n" }
+            else if w == 6 { out = $out $ind "{\n" $inner "defer {\n" $body $inner "}\n" $inner "churn()\n" $ind "}\n" }
+            else {         # a loop whose body churns after storing, so a stale store is read back at once
+                i := g.name("i")
+                out = $out $ind "for " $i " in range 3 {\n" $body $inner "churn()\n" $ind "}\n"
+            }
+        } else {
+            out = $out $g.leaf(t, a, ind, d)
+        }
+    }
+    return out
+}
+
+# scenario k of the program seed: its globals, helpers and function s<k>, after a line "# scenario k"
+fn Scenario(seed U64, k I64) String& {
+    g := SG(seed * 1000003 + U64(k) + 1)
+    g.k = k
+    t := g.r(Targets)
+    decl String& = $Decls[t]
+    check String& = $Checks[t]
+    head mut String& = ""
+    kind I64 = t
+    a String& = "x"
+    if t == 1 { a = "w.b" }
+    if t == 2 or t == 7 { a = "l" }
+    if t == 3 { a = "m" }
+    if t == 4 { a = "a" }
+    if t == 5 { a = "bag" }
+    if t == 6 { a = "e" }
+    if t == 7 { kind = 2 }
+    if t == 8 { a = "t" }
+    if t == 9 {    # a global node, written through by a function
+        kind = 0
+        a = "G" $k
+        head = $a " mut Node& = Node(1)\n"
+        check = "chain(" $a ")"
+    }
+    if t == 10 {    # a node built and stored through in a callee, returned through another
+        kind = 0
+        body := g.stmts(0, "x", 2, "    ")
+        head = ("fn mk" $k "() mut Node& {\n    x := Node(1)\n" $body "    return x\n}\n" "fn mk" $k "b() mut Node& { return mk"
+                $k "() }\n")
+        decl = "x := mk" $k "b()"
+    }
+    body := g.stmts(kind, a, 2, "    ")
+    return ("# scenario " $k "\n" $head $g.helpers "fn s" $k "() I64 {\n    " $decl "\n" $body "    churn()\n    return " $check
+            "\n}\n")
+}
+
+# the program seed: n scenarios, those with keep[k] false left out (all kept when keep is empty)
+fn Program(seed U64, n I64, keep Array<Bool>&) String& {
+    b := StringBuilder()
+    b.Push("# scope fuzz seed " $seed "\n")
+    b.Push(Prelude)
+    for k in range n {
+        if keep.Len() == 0 or keep[k] { b.Push(Scenario(seed, k)) }
+    }
+    b.Push("fn main() ? {\n")
+    for k in range n {
+        if keep.Len() == 0 or keep[k] { b.Push("    println(\"" $k ": \" $s" $k "())\n") }
+    }
+    b.Push("}\n")
+    return b.ToString()
+}

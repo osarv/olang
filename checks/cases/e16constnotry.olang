@@ -1,0 +1,10 @@
+# check: fail error[E16]: index 5 is outside the array's 2 elements
+# never: index 7
+# E16: a constant index known to be out of a fixed-length array's range is a compile-time error where it is written
+# without "try" - and none under it (E16d), where the checked form fails with OUT_OF_BOUNDS at run time
+fn main() ? {
+    z Array<I32, 2> = I32[1, 2]
+    a := try z[7] catch default 0
+    b := z[5]
+    println($a $b)
+}

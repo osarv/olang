@@ -27,7 +27,7 @@ struct type;
     X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are -b, -c, -t, -i and -e") \
     X(ERR_MODE_ONE_FILE,                "B1",    "%s takes exactly one file") \
     X(ERR_MODE_NEEDS_FILE,              "B1",    "%s needs a file") \
-    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -u -a -D") \
+    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -s -u -a -D") \
     X(ERR_TARGET_MISSING,               "B12",   "-a needs a target after it, as '-a x86-64-v3'") \
     X(ERR_TARGET_UNKNOWN,               "B12",   "unknown target '%s' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") \
     X(ERR_TARGET_UNSUPPORTED,           "B12",   "olang does not build for '%s' - it builds for x86_64 and aarch64 Linux with the GNU C library") \
@@ -82,6 +82,7 @@ struct type;
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
     X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
     X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \
+    X(ERR_KEYWORD_FIELD_READ,           "L9a",   "%n is a keyword, not a name - a field named by one is reached only after '.', never by the name alone") \
     X(ERR_DESTRUCT_IN_BODY,             "C7",    "'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'") \
     X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
     X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
@@ -176,6 +177,7 @@ struct type;
     X(ERR_ARRAY_TOO_MANY_ARGS,          "T7",    "Array takes an element type and at most a length, found %d arguments") \
     X(ERR_NAMED_SCOPE_ON_ELEMENT,       "T24",   "a nested reference lives in its container's scope - write a bare '&' here") \
     X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a, T7c", "an array inside an array or a struct is held by reference - write %t&, or a length, Array<T, N>, to hold it in place") \
+    X(ERR_LAMBDA_RESULT_HELD,           "T7a",   "this result binds %S to %t, which the call holds in an array, where an array is held by reference - write the result as %t&") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
     X(ERR_TYPE_VAR_WRITTEN_AGAIN,       "G8b",   "%S was introduced already - write it '%S', not '<%S>'") \
     X(ERR_TYPE_VAR_BEFORE_INTRO,        "G8b",   "%n is introduced later in this signature - its first use is written '<%S>'") \
@@ -281,6 +283,7 @@ struct type;
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
     X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \
+    X(ERR_REFERENCE_NARROWED_RETURNED,  "O25, O26a", "this local flows into what the function returns, so it lives where the result goes - and its value lives elsewhere: make it here, or keep it out of the result") \
     X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '%S&' - only a struct, an enum or an array can") \
     X(ERR_TYPE_ARGS_NOT_INFERABLE,      "G9",    "the type arguments of %S cannot be inferred from these arguments") \
     X(ERR_CTOR_TYPE_ARGS_NOT_INFERABLE, "G10c",  "the type arguments of %S cannot be inferred from these arguments - write them: %S<...>(...)") \
@@ -382,14 +385,18 @@ struct type;
     X(ERR_DEFAULT_IN_STATEMENT,         "R11",   "a try written as a statement gives no value, so it takes no default") \
     X(ERR_DEFAULT_DEAD,                 "R11",   "this clause's block always leaves, so its default is never the value - remove it") \
     X(ERR_CATCH_MUST_LEAVE,             "R11",   "a clause here leaves, or gives the value with 'default v'") \
+    X(ERR_CATCH_EXIT_NOT_LEAVE,         "R11, B5b", "a call that ends the program is not a leave - write 'unreachable' after it") \
+    X(ERR_CLAUSE_LAST_VALUE,            "R11",   "a block's last value is not the clause's value - write '} default %S' after the block") \
     X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
     X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
     /* ---- literals and constructions ---- */ \
     X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - an array of arrays holds references: Array<I32>&[r0, r1]") \
-    X(ERR_ARRAY_OF_ERRORS,              "",      "%t has no values to put in an array") \
+    X(ERR_ARRAY_OF_ERRORS,              "T20",   "%t has no values to put in an array") \
+    X(ERR_ERROR_TYPE_AS_VALUE,          "T20",   "%t is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch %t.WORD { }')") \
     X(ERR_COMPREHENSION_REFERENCES,     "E27",   "a comprehension's elements may not be or hold references yet - build the array with a loop") \
     X(ERR_NOT_AN_ENUM,                  "E22",   "%n is not an enum type, so it has no values 'T.Case'") \
+    X(ERR_ERROR_WORD_AS_VALUE,          "T20",   "'%S' is an error word, not a value - raise it with 'error %S', tell it apart with a catch clause") \
     X(ERR_TAKES_NO_ARGS,                "E14",   "%n takes no arguments") \
     X(ERR_METHOD_AMBIGUOUS,             "M22",   "two imported modules declare %n for this type - import only the one meant") \
     X(ERR_DEFAULT_AMBIGUOUS,            "M19e",  "two traits %t satisfies both declare a default %n - the call cannot choose") \
@@ -475,6 +482,7 @@ struct type;
     X(ERR_SPAWN_FUNC_TOO_SHORT,         "P2, D16e", "this function value closes before the join does - make it outside, or spawn the lambda itself") \
     X(ERR_SPAWN_RESULT_VOID,            "P1g",   "this call returns nothing to bind - drop the target") \
     X(ERR_SPAWN_RESULT_TYPE,            "P1g",   "a spawn target has exactly the call's type %t, found %t - convert after the join") \
+    X(ERR_SPAWN_RESULT_AS_REF,          "P1g",   "a spawn target has exactly the call's type %t, found %t - declare '%S' to give %t, built where its result lands") \
     X(ERR_SPAWN_RESULT_TOO_SHORT,       "P1g",   "this target closes before the join does - declare it at the join's level or wider") \
     X(ERR_SPAWN_RESULTS_DISAGREE,       "P1g",   "these targets live in different scopes, and the results are built in one") \
     /* ---- lambdas ---- */ \

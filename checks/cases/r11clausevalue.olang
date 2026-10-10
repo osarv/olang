@@ -1,0 +1,18 @@
+# check: fail error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
+# also: write '} default 0' after the block
+# never: a clause here leaves
+# never: error[S3]
+# R11: a catch clause in value position whose block ends in a value, as Rust or Kotlin write it, is one error saying to
+# give the value with "default" (study 4's r20)
+fn half(n I64) I64 ? {
+    if n % 2 != 0 { error }
+    return n / 2
+}
+fn main() ? {
+    a := try half(3) catch {
+        eprintln("odd")
+        -1
+    }
+    b := try half(5) catch { 0 }
+    println($a " " $b)
+}

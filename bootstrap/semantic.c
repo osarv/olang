@@ -401,9 +401,44 @@ static struct str suggestName(struct semaModule* mod, struct str name, bool with
     return best;
 }
 
+//B11: one error per unknown name - the names a module has been told are unknown, this attempt (B9c), and the module
+//- a type's for the whole module (fn NULL), a value's for the function it is written in
+struct unknownSeen { struct semaModule* mod; struct str name; void* fn; };
+static struct list unknownSeen;
+static void* unknownFn; //the function whose body the name being reported is in, for a value's name
+static bool unknownReportedIn(struct semaModule* mod, struct str name, void* fn) {
+    for (int i = 0; i < unknownSeen.len; i++) {
+        struct unknownSeen* u = ListGetIdx(&unknownSeen, i);
+        if (u->mod == mod && StrCmp(u->name, name) && (!u->fn || u->fn == fn)) return true;
+    }
+    return false;
+}
+static bool unknownReported(struct semaModule* mod, struct str name) { return unknownReportedIn(mod, name, NULL); }
+static void noteUnknownReported(struct semaModule* mod, struct str name, void* fn) {
+    if (ErrMsgMuted() || unknownReportedIn(mod, name, fn)) return; //a probe's report is never seen
+    struct unknownSeen u = { mod, name, fn };
+    ListAdd(&unknownSeen, &u);
+}
+//M10/B11: a type an import exports under the name written alone - "Json" for "json.Json" - as the name to write
+static struct str importedTypeNamed(struct semaModule* mod, struct str name) {
+    for (int i = 0; mod && i < mod->imports.len; i++) {
+        struct semaImport* im = ListGetIdx(&mod->imports, i);
+        if (!im->mod || !isPublic(name)) continue;
+        struct type* t = TypeGetList(&im->mod->types, name);
+        if (t) return StrFromCStr(StrFmt("%.*s.%.*s", im->alias.len, im->alias.ptr, name.len, name.ptr));
+    }
+    return (struct str){0};
+}
+
 //"unknown type 'Int32' - did you mean 'I32'?", or plainly "unknown type 'x'": plain takes the token, meant the token
 //and the suggestion
 static void reportUnknownName(struct semaModule* mod, struct token tok, enum diag plain, enum diag meant, bool withVars) {
+    void* fn = plain == ERR_UNKNOWN_TYPE ? NULL : unknownFn;
+    if (plain != ERR_UNKNOWN_TYPE && !fn) fn = (void*)-1; //outside a function: said where it is met
+    if (unknownReportedIn(mod, strFromTok(tok), fn)) return; //B11: said once, where it was first met
+    if (fn != (void*)-1) noteUnknownReported(mod, strFromTok(tok), fn);
+    struct str imported = importedTypeNamed(mod, strFromTok(tok));
+    if (imported.len) { Err(tok, meant, tok, imported); return; }
     struct str best = suggestName(mod, strFromTok(tok), withVars);
     //the name is a type's, met where a value is wanted - "Res&(3)": no nearer name to suggest than itself
     if (best.len && StrCmp(best, strFromTok(tok)) && (typeNamed(mod, best) || isBuiltinTypeName(best))) {
@@ -1318,8 +1353,10 @@ struct semaModule* findImport(struct semaModule* mod, struct str alias) {
 //reported the specific error (UNKNOWN_NAMESPACE/IMPORT_IS_PRIVATE/CYCLIC_IMPORT_REEXPORT).
 //M10, B11: a name used as an import that is none - when it is the first of a chain and std has a module of that name
 //("math.Min" with no import of std/math), the import to write
-static void reportUnknownImport(struct token tok, bool first) {
+static bool unknownReported(struct semaModule* mod, struct str name);
+static void reportUnknownImport(struct semaModule* mod, struct token tok, bool first) {
     struct str name = strFromTok(tok);
+    if (unknownReported(mod, name)) return; //B11: an unknown name, said once where it was first met
     char path[4096];
     bool plain = name.len > 0 && name.len < 200;
     for (int i = 0; plain && i < name.len; i++) plain = isalnum((unsigned char)name.ptr[i]) || name.ptr[i] == '_';
@@ -1338,7 +1375,7 @@ struct semaModule* resolveAliasChain(struct semaModule* mod, struct list idens, 
         struct token aliasTok = *(struct token*)ListGetIdx(&idens, i);
         struct str aliasName = strFromTok(aliasTok);
         struct semaModule* next = findImport(current, aliasName);
-        if (!next) { reportUnknownImport(aliasTok, i == 0); return NULL; }
+        if (!next) { reportUnknownImport(mod, aliasTok, i == 0); return NULL; }
         if (i > 0 && !isPublic(aliasName)) { Err(aliasTok, ERR_IMPORT_IS_PRIVATE, aliasTok); return NULL; }
         for (int j = 0; j < visited.len; j++) {
             if (*(struct semaModule**)ListGetIdx(&visited, j) == next) {
@@ -1793,6 +1830,9 @@ struct var* resolveScopeTag(struct syntax* markerNode, struct list* scopeVars) {
     struct var* named = scopeTagVariable(name);
     if (named) {
         scopeTagByVariable = true;
+        //O26a: a value local the function returns lives in the result scope, so "&x" names that
+        if (!named->type.structMAlloc && canonicalVar(named)->storeInResult && canonicalVar(named)->valueHome)
+            return canonicalVar(named)->valueHome;
         scopeTagDepth = named->type.scopeParam ? 0 : named->type.scopeDepth;
         return named->type.scopeParam;
     }
@@ -5305,6 +5345,16 @@ static bool typeExprHasMut(struct syntax* typeExprNode) {
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
     struct type t = resolveTypeExprShape(mod, typeExprNode, scopeParams);
+    //T20: an error type names no value - it is raised and caught, so a parameter, local, field, result, element or type
+    //argument of one could never be given anything. Said here, where it is written; afterwards it fits anything
+    if (t.bType == BASETYPE_ERROR && !t.unknown) {
+        struct type shown = t;
+        shown.structMAlloc = false;
+        shown.scopeParam = NULL;
+        shown.refMut = false;
+        Err(firstTokAnywhere(typeExprNode), ERR_ERROR_TYPE_AS_VALUE, &shown, &shown);
+        t.unknown = true;
+    }
     if (typeExprHasMut(typeExprNode)) {
         //a type variable may be bound to a reference, which it then makes writable (G8a)
         if (TypeIsPermRef(t) || t.bType == BASETYPE_TYPEVAR) t.refMut = true;
@@ -6211,6 +6261,8 @@ struct checkCtx {
                        //even though only the former also sets func (see the field above); false for a
                        //global initializer, which has no enclosing scope at all
     struct syntax* incDecRoot; //S3a: the one expression an increment may be - a statement's whole expression
+    struct syntax* clauseLastStmt; //R11: the last statement of a catch clause's block in value position - a value left
+                                   //there is said to be no clause's value (one error, with the default to write)
     bool buildingTarget; //E31: building an assignment's target - "x[i]" there may name only SetAt
     bool checkingTry; //E31: building what a "try" checks (not a written call's arguments, not a nested try) - an
                       //operator, index or slice on a declared type calls its Try form here
@@ -6342,12 +6394,20 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     //G23: a type variable written bare as a value - "return T"
     if (!v && currentBindings && bindingGet(currentBindings, name)) { Err(tok, ERR_TYPE_VAR_AS_VALUE, name); return NULL; }
     //B10: in a condition, a name nothing declares and nothing is near is most likely a build constant -D did not define
-    if (!v && ctx->inCondition && !suggestName(ctx->mod, name, true).len) {
+    if (!v && ctx->inCondition && !suggestName(ctx->mod, name, true).len && !importedTypeNamed(ctx->mod, name).len) {
+        void* fn = ctx->func ? (void*)ctx->func : (void*)-1;
+        if (unknownReportedIn(ctx->mod, name, fn)) return NULL; //B11: said once, where it was first met
+        if (fn != (void*)-1) noteUnknownReported(ctx->mod, name, fn);
         Err(tok, ERR_UNKNOWN_BUILD_NAME, tok, name);
         if (!condUnknownTok.str.len) condUnknownTok = tok;
         return NULL;
     }
-    if (!v) { reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); return NULL; }
+    if (!v) {
+        unknownFn = ctx->func;
+        reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true);
+        unknownFn = NULL;
+        return NULL;
+    }
     return v;
 }
 
@@ -6401,7 +6461,11 @@ struct var* resolveCallTarget(struct checkCtx* ctx, struct syntax* nameNode, str
             }
         }
         if (moduleHasMethodNamed(ctx->mod, name)) Err(tok, ERR_METHOD_CALLED_AS_FUNCTION, tok, name);
-        else reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_FUNCTION, ERR_UNKNOWN_FUNCTION_MEANT, true);
+        else {
+            unknownFn = ctx->func;
+            reportUnknownName(ctx->mod, tok, ERR_UNKNOWN_FUNCTION, ERR_UNKNOWN_FUNCTION_MEANT, true);
+            unknownFn = NULL;
+        }
         return NULL;
     }
 
@@ -7403,6 +7467,7 @@ bool valueRefsAdmitStores(struct type t);
 static bool splitBorrowJudgedElsewhere = false;
 enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct type target) {
     if (!target.structMAlloc || op->type.structMAlloc || !OperandIsLvalue(op)) return TYPE_FIT_OK;
+    if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
     bool isGlobal = false;
@@ -7656,11 +7721,40 @@ bool SemanticValueRefsHome(struct operand* op, struct var** to, int* depth, bool
 //O4b/O25h: where the references a value holds live - where its ":=" call or its parameter's scope put them (valueRefsHome),
 //else where it lives itself (its block, its container's scope, the program's for a global's). False when it has no
 //storage of its own to read that off (a temporary)
+//whether a value of type t holds, in its own storage (fields and elements by value, at any depth), a reference field
+//written "&p" - one whose referent is where the instance's construction bound p (C2d), not where the instance is
+static bool typeHasNamedScopeField(struct type t, int depth) {
+    if (depth > 16 || t.bType == BASETYPE_TYPEVAR) return true;
+    if (t.bType == BASETYPE_ARRAY) return t.arrElem && !t.arrElem->structMAlloc && typeHasNamedScopeField(*t.arrElem, depth + 1);
+    if (t.bType == BASETYPE_CHOICE) {
+        for (int i = 0; i < t.vars.len; i++) {
+            struct var* c = ListGetIdx(&t.vars, i);
+            for (int k = 0; k < c->type.vars.len; k++) {
+                struct type pt = ((struct var*)ListGetIdx(&c->type.vars, k))->type;
+                if (!pt.structMAlloc && typeHasNamedScopeField(pt, depth + 1)) return true;
+            }
+        }
+        return false;
+    }
+    if (t.bType != BASETYPE_STRUCT) return false;
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        if (f->type.structMAlloc) {
+            if (f->type.scopeParam && !canonicalVar(f->type.scopeParam)->isInstanceScope) return true;
+        } else if (typeHasNamedScopeField(f->type, depth + 1)) return true;
+    }
+    return false;
+}
 static bool valueRefsScope(struct checkCtx* ctx, struct operand* op, struct var** v, int* d, bool* u) {
     *v = NULL;
     *d = 0;
     *u = false;
     if (valueRefsHome(op, v, d, u)) return true;
+    //O20: a value read through a reference ("p" copied out of a "List<T>&") holds what lives where its referent does -
+    //not where the reference's own slot is: every reference it holds in a field of its own (a bare one, C2d) lives there.
+    //A field written "&p" refers where its instance's binding says, which this does not know - the slot, as before
+    if (op->type.structMAlloc && TypeHoldsReferences(op->type) && !typeHasNamedScopeField(op->type, 0))
+        return RefExactScope(ctx, op, true, v, d, u);
     return RefExactScope(ctx, op, false, v, d, u);
 }
 
@@ -8327,12 +8421,22 @@ static bool typeCarriesScopes(struct type t) {
     return t.structMAlloc || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || TypeHoldsReferences(t);
 }
 
+static struct var* handleField(struct type t);
 struct operand* OperandReadVar(struct var* v, struct token tok) {
     struct operand* op = operandNew(tok, OPERATION_READ_VAR, v->type);
     //D16: a function value is reference-shaped - it names what its captures live in - while a declaration's own
     //type is its signature
     if (v->isFuncDecl) op->type.structMAlloc = true;
     op->readVar = v;
+    //O17b: a parameter's every read, so the analysis of what its body does with it never rests on reaching them all
+    if (v->paramCopy && v->origin && v->type.structMAlloc && handleField(v->type)) {
+        struct var* c = canonicalVar(v);
+        if (!c->paramReads) {
+            c->paramReads = malloc(sizeof(struct list));
+            *c->paramReads = ListInit(sizeof(struct operand*));
+        }
+        ListAdd(c->paramReads, &op);
+    }
     //propagated one hop at declaration time - see buildVarDeclStmnt
     if (typeCarriesScopes(op->type)) op->scopeBindings = v->scopeBindings;
     return op;
@@ -8524,6 +8628,9 @@ struct var* resolveScopeArg(struct checkCtx* ctx, struct syntax* scopeArgNode, b
             return NULL;
         }
         if (v->type.scopeParam) return v->type.scopeParam;
+        //O26a: a value local the function returns lives in the result scope - "f&x(...)" builds there
+        if (!v->type.structMAlloc && canonicalVar(v)->storeInResult && canonicalVar(v)->valueHome)
+            return canonicalVar(v)->valueHome;
         *depth = normDepth(v->type.scopeDepth);
         return NULL;
     }
@@ -9181,6 +9288,246 @@ static bool ownSlotsAdmitStores(struct type v, int depth) {
     return false;
 }
 
+//O17b: a handle - a struct whose only part is one reference, held in its one field, or one other handle held by value
+//("List", "Map", "StringBuilder"): a value whose only state is a reference. NULL for any other type; else that field
+static struct var* handleField(struct type t) {
+    if (t.bType != BASETYPE_STRUCT || t.unknown || t.vars.len != 1) return NULL;
+    struct var* f = ListGetIdx(&t.vars, 0);
+    if (f->type.structMAlloc) {
+        //a field written "&p" refers where the instance's construction bound p (C2d), not where the handle's state is
+        if (f->type.scopeParam && !canonicalVar(f->type.scopeParam)->isInstanceScope) return NULL;
+        return f->type.bType == BASETYPE_FUNC ? NULL : f;
+    }
+    return handleField(f->type) ? f : NULL;
+}
+//whether a and b are one handle type, as a generic's pattern ("List<<T>>") and its instantiation ("List<I64>") are
+static bool sameHandleType(struct type a, struct type b) {
+    struct type* oa = a.genericOrigin ? a.genericOrigin : &a;
+    struct type* ob = b.genericOrigin ? b.genericOrigin : &b;
+    return a.bType == BASETYPE_STRUCT && b.bType == BASETYPE_STRUCT && oa->owner == ob->owner && StrCmp(oa->name, ob->name);
+}
+//O17b: whether a call's parameter idx - a reference to a handle - is used by the callee's CHECKED body only THROUGH the
+//handle: its reference read out (`l.s`, never assigned), or the parameter (or a handle it holds by value) handed on, as a
+//receiver or an argument, to another such parameter - a fixed point over the program's calls. Any other use of it -
+//an operand of an operator, an argument for anything else, an initializer, a returned or stored value, a lambda's
+//capture, a "for", a catch default, "as", "is", an assignment to it or to its own storage - and a callee whose body is
+//not known (an extern, a function value, a lambda, a trait's default, a body with errors) say no. Every read of the
+//parameter the body's check made is recorded where it was made (OperandReadVar): one the walk below does not reach
+//(left in a part of the tree it does not look at, or thrown away by a probe) says no too, so the answer never rests
+//on the walk being complete. Such a callee holds no reference to the handle's own storage past the call, so where
+//that storage is says nothing about what it does: lending the handle is lending its reference
+struct handleMemo { struct var* func; int idx; bool through; };
+static struct list handleMemos;
+struct handleVisit { struct var* func; int idx; };
+//a call whose answer rested on a body not checked yet (a cycle through the call being checked) - verified once every
+//body is (settleHandleLends), an error where it turns out no
+struct handlePending { struct var* func; int idx; struct token tok; };
+static struct list handlePendings;
+struct htScan { struct var* p; struct list* visiting; bool* assumed; bool* unknown; bool bad; struct list seen; };
+static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown);
+static void htStmt(struct htScan* sc, struct statement* s);
+static void htBlock(struct htScan* sc, struct list* block) {
+    for (int i = 0; i < block->len && !sc->bad; i++) htStmt(sc, ListGetIdx(block, i));
+}
+//op is the parameter, or a handle it holds by value reached with no reference followed ("l", "l.inner"); *cur its type
+static bool htPath(struct htScan* sc, struct operand* op, struct type* cur) {
+    if (op->opType == OPERATION_READ_VAR) {
+        if (!op->readVar || canonicalVar(op->readVar) != sc->p) return false;
+        *cur = sc->p->type;
+        cur->structMAlloc = false;
+        return true;
+    }
+    if (op->opType != OPERATION_MEMBER || op->args.len != 1 || op->isAtCall) return false;
+    struct type bt;
+    if (!htPath(sc, *(struct operand**)ListGetIdx(&op->args, 0), &bt)) return false;
+    struct var* f = handleField(bt);
+    if (!f || f->type.structMAlloc || !StrCmp(op->memberName, f->name)) return false;
+    *cur = f->type;
+    return true;
+}
+//...whose reads of the parameter are then a use made through it
+static void htConsume(struct htScan* sc, struct operand* op) {
+    while (op->opType == OPERATION_MEMBER) op = *(struct operand**)ListGetIdx(&op->args, 0);
+    ListAdd(&sc->seen, &op);
+}
+//the place op names is the handle's own storage - the parameter, or what lies in it with no reference followed
+static bool htOwnStorage(struct htScan* sc, struct operand* op) {
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (op->opType == OPERATION_READ_VAR) return op->readVar && canonicalVar(op->readVar) == sc->p;
+        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX && op->opType != OPERATION_SLICE)
+                || !op->args.len)
+            return false;
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->opType == OPERATION_READ_VAR) return b->readVar && canonicalVar(b->readVar) == sc->p;
+        if (b->type.structMAlloc) return false; //past a reference: the storage it leads to
+        op = b;
+    }
+    return true;
+}
+static void htOp(struct htScan* sc, struct operand* op) {
+    if (!op || sc->bad) return;
+    struct type cur;
+    switch (op->opType) {
+        case OPERATION_READ_VAR:
+            if (op->readVar && canonicalVar(op->readVar) == sc->p) { sc->bad = true; return; } //the handle as a value
+            break;
+        case OPERATION_MEMBER: {
+            //the handle's reference read out of it
+            struct operand* b = op->args.len == 1 ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+            struct var* f;
+            if (b && !op->isAtCall && htPath(sc, b, &cur) && (f = handleField(cur)) && f->type.structMAlloc
+                    && StrCmp(op->memberName, f->name)) {
+                htConsume(sc, b);
+                return;
+            }
+            break;
+        }
+        case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC: case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
+        case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD: case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
+            if (op->args.len && htOwnStorage(sc, *(struct operand**)ListGetIdx(&op->args, 0))) { sc->bad = true; return; }
+            break;
+        case OPERATION_FUNCCALL: {
+            //the handle handed on to a parameter that uses it only through it - a declared function, method or
+            //constructor, called by name
+            struct var* f = op->callee ? NULL : op->readVar;
+            bool known = f && f->type.bType == BASETYPE_FUNC && !f->type.isExtern && !f->isLambda && (f->isFuncDecl
+                         || f->isMethod || op->isCtorCall) && !(f->isGlobalVar);
+            for (int i = 0; i < op->args.len && !sc->bad; i++) {
+                struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+                if (known && i < f->type.vars.len && htPath(sc, a, &cur)) {
+                    struct type q = ((struct var*)ListGetIdx(&f->type.vars, i))->type;
+                    if (q.structMAlloc && sameHandleType(q, cur) && handleThroughAt(f, i, sc->visiting, sc->assumed, sc->unknown)) {
+                        htConsume(sc, a);
+                        continue;
+                    }
+                    sc->bad = true;
+                    return;
+                }
+                htOp(sc, a);
+            }
+            htOp(sc, op->callee);
+            for (int c = 0; c < op->catchClauses.len && !sc->bad; c++) {
+                struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+                htBlock(sc, &cc->block);
+                htOp(sc, cc->dflt);
+            }
+            return;
+        }
+        default: break;
+    }
+    for (int i = 0; i < op->args.len && !sc->bad; i++) htOp(sc, *(struct operand**)ListGetIdx(&op->args, i));
+    for (int i = 0; i < op->chainOperands.len && !sc->bad; i++) htOp(sc, *(struct operand**)ListGetIdx(&op->chainOperands, i));
+    htOp(sc, op->placeOf);
+    htOp(sc, op->callee);
+    htBlock(sc, &op->comprBody);
+    for (int c = 0; c < op->catchClauses.len && !sc->bad; c++) {
+        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+        htBlock(sc, &cc->block);
+        htOp(sc, cc->dflt);
+    }
+}
+static void htStmt(struct htScan* sc, struct statement* s) {
+    if (sc->bad) return;
+    if (s->sType == STATEMENT_ASSIGN && s->target && htOwnStorage(sc, s->target)) { sc->bad = true; return; }
+    for (int i = 0; i < s->spawnTargets.len; i++) {
+        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+        if (t && htOwnStorage(sc, t)) { sc->bad = true; return; }
+        htOp(sc, t);
+    }
+    htOp(sc, s->target);
+    htOp(sc, s->op);
+    htOp(sc, s->fillValue);
+    htOp(sc, s->assertMsg);
+    htOp(sc, s->forInit);
+    if (s->forPost) htStmt(sc, s->forPost);
+    htBlock(sc, &s->block);
+    if (s->elseStmnt) htStmt(sc, s->elseStmnt);
+    for (int i = 0; i < s->caseAlts.len && !sc->bad; i++) {
+        struct caseAlt* alt = ListGetIdx(&s->caseAlts, i);
+        htOp(sc, alt->test);
+        for (int b = 0; b < alt->binds.len; b++) htOp(sc, ((struct caseBind*)ListGetIdx(&alt->binds, b))->from);
+    }
+    htOp(sc, s->caseGuard);
+    htBlock(sc, &s->matchHold);
+    htBlock(sc, &s->matchCases);
+    htBlock(sc, &s->nomatchBlock);
+    htOp(sc, s->nomatchValue);
+    for (int c = 0; c < s->catchClauses.len && !sc->bad; c++) {
+        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+        htBlock(sc, &cc->block);
+        htOp(sc, cc->dflt);
+    }
+}
+static bool handleThroughParam(struct var* func, int idx, struct token tok) {
+    struct list visiting = ListInit(sizeof(struct handleVisit));
+    bool assumed = false, unknown = false;
+    bool r = handleThroughAt(func, idx, &visiting, &assumed, &unknown);
+    ListDestroy(visiting);
+    if (r && unknown && !ErrMsgMuted()) {
+        struct handlePending h = { func, idx, tok };
+        ListAdd(&handlePendings, &h);
+    }
+    return r;
+}
+static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown) {
+    if (!func || func->type.bType != BASETYPE_FUNC || func->type.isExtern || func->isLambda || idx < 0
+            || idx >= func->type.vars.len)
+        return false;
+    struct var* key = canonicalVar(func);
+    for (int i = 0; i < handleMemos.len; i++) {
+        struct handleMemo* m = ListGetIdx(&handleMemos, i);
+        if (m->func == key && m->idx == idx) return m->through;
+    }
+    for (int i = 0; i < visiting->len; i++) { //a cycle: assumed to hold - what is decided under it is not kept
+        struct handleVisit* v = ListGetIdx(visiting, i);
+        if (v->func == key && v->idx == idx) { *assumed = true; return true; }
+    }
+    struct var* p = ListGetIdx(&func->type.vars, idx);
+    if (!p->type.structMAlloc || !handleField(p->type)) return false;
+    //the checked body: a constructor's is built with its type
+    struct type* ct = func->type.hasRetType ? func->type.retType : NULL;
+    bool isCtor = ct && ct->bType == BASETYPE_STRUCT && ct->ctorFunc && canonicalVar(ct->ctorFunc) == key;
+    if (isCtor ? ct->ctorBodyState != 2 : func->bodyState != 2) { *unknown = true; return true; } //checked later
+    if (func->bodyHadErrors || func->bodyIncomplete) return false;
+    struct var* pk = canonicalVar(p);
+    struct handleVisit me = { key, idx };
+    ListAdd(visiting, &me);
+    bool assumedHere = false, unknownHere = false;
+    struct htScan sc = { pk, visiting, &assumedHere, &unknownHere, false, ListInit(sizeof(struct operand*)) };
+    htBlock(&sc, isCtor ? &ct->ctorFunc->codeBlock : &func->codeBlock);
+    //every read of the parameter the check made is one the walk found used through the handle
+    for (int i = 0; pk->paramReads && i < pk->paramReads->len && !sc.bad; i++) {
+        struct operand* r = *(struct operand**)ListGetIdx(pk->paramReads, i);
+        bool found = false;
+        for (int k = 0; k < sc.seen.len && !found; k++) found = *(struct operand**)ListGetIdx(&sc.seen, k) == r;
+        if (!found) sc.bad = true;
+    }
+    bool through = !sc.bad;
+    ListDestroy(sc.seen);
+    visiting->len--;
+    if (assumedHere) *assumed = true;
+    if (unknownHere) *unknown = true;
+    //a "no" never rests on an assumption; a "yes" does where a cycle was assumed to hold, and is kept only once the
+    //cycle's own start has decided - and never where a body it reached was not checked yet
+    if (!through || (!unknownHere && (!assumedHere || visiting->len == 0))) {
+        struct handleMemo m = { key, idx, through };
+        ListAdd(&handleMemos, &m);
+    }
+    return through;
+}
+//O17b: a lend decided before a body it rested on was checked (a cycle) holds only if the answer is still yes now that
+//every body is - else the handle's own storage was lent for what keeps it
+static void settleHandleLends(void) {
+    for (int i = 0; i < handlePendings.len; i++) {
+        struct handlePending* h = ListGetIdx(&handlePendings, i);
+        struct list visiting = ListInit(sizeof(struct handleVisit));
+        bool assumed = false, unknown = false;
+        bool r = handleThroughAt(h->func, h->idx, &visiting, &assumed, &unknown);
+        ListDestroy(visiting);
+        if (!r || unknown) Err(h->tok, ERR_BORROW_SPLIT_SCOPES);
+    }
+}
+
 //D9: whether a callee may write what its parameter pv holds, and so build into the scope its references live in -
 //through a reference, as the reference's type permits (T25b); a by-value parameter is the callee's own copy, written
 //where its body writes it (D9b): known once that body is checked, assumed while it is not (a cycle, a function value)
@@ -9423,13 +9770,35 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             bool argUnnamed = false;
             if (ctx && ctx->hasOwnScope && !RefExactScope(ctx, arg, !borrowed, &argScope, &argDepth, &argUnnamed) && borrowed)
                 continue;
+            //O17b: a handle (List, Map, StringBuilder - a value whose only state is a reference) whose reference leads
+            //elsewhere than its own storage - a copy, a by-value parameter - is lent as that reference: to a callee that
+            //uses its parameter only through it, the variable is bound where the reference leads, as passing the reference
+            //itself would bind it, and the handle's own storage is no part of the call
+            bool handleLent = false;
+            if (borrowed && pt.structMAlloc && handleField(arg->type) && argScope != SCOPE_AMBIGUOUS) {
+                struct var* hv;
+                int hd;
+                bool hu;
+                if (valueRefsScope(ctx, arg, &hv, &hd, &hu) && hv != SCOPE_AMBIGUOUS && !argUnnamed
+                        && (hu || !sameExactScope(hv, hd, argScope, argDepth))
+                        && (hu || scopeOutlives(ctx->func, hv, normDepth(hd), argScope, normDepth(argDepth)))
+                        && handleThroughParam(func, j, arg->tok)) {
+                    argScope = hu ? NULL : hv;
+                    argDepth = hu ? 0 : hd;
+                    argUnnamed = hu;
+                    handleLent = true;
+                    arg->handleLent = true;
+                    struct var* root = lvalueRootVar(arg);
+                    if (root && !root->owner) root->lentForStores = true;
+                }
+            }
             //O17/O25h: a borrowed value's storage is where the callee's variable is bound - but a value whose references
             //live elsewhere (built by a scope argument, a copy of an element) would have what the callee builds and stores
             //through it put in that storage's scope, and its own claim broken. Only where nothing can be stored through
             //the parameter is that one scope enough
             //(T25c: a read-only copy lent writably is refused as that, where the argument is fitted - not twice)
             bool roLent = pt.refMut && TypeHoldsWritableRefs(arg->type) && roValueRoot(arg, NULL, 0);
-            if (borrowed && !arg->type.structMAlloc && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt)
+            if (!handleLent && borrowed && !arg->type.structMAlloc && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt)
                     && ownSlotsAdmitStores(arg->type, 0) && !roLent) {
                 struct var* hv;
                 int hd;
@@ -9742,10 +10111,49 @@ static struct var* livesWithVar(struct operand* op) {
 //B11: what to change where an argument lives too briefly for another one it must live with (O25e) or outlive (O10c): it is
 //made in a block of this function that closes first, so say where it is made and how to make it where the other lives
 static void noteMakeWhereNamed(struct checkCtx* ctx, struct operand* shortArg, struct var* with, struct str withName);
+static void noteMakeWhereScope(struct checkCtx* ctx, struct operand* shortArg, struct var* dst);
+//...a variable a value was made from, read whole in its initializer, whose storage is the block at depth d
+static struct var* nameLivingAt(struct operand* op, int d, int depth) {
+    if (!op || depth > 8) return NULL;
+    if (op->opType == OPERATION_READ_VAR) {
+        struct var* r = op->readVar;
+        if (!r || r->owner || r->isFuncDecl || !r->name.len || r->name.ptr[0] == '$') return NULL;
+        bool isGlobal = false;
+        int sd = 0;
+        struct var* sv = lvalueStorageScope(op, &isGlobal, &sd);
+        return !isGlobal && !sv && sd == d ? r : NULL;
+    }
+    for (int i = 0; i < op->args.len; i++) {
+        struct var* r = nameLivingAt(*(struct operand**)ListGetIdx(&op->args, i), d, depth + 1);
+        if (r) return r;
+    }
+    return NULL;
+}
 static void noteMakeWhere(struct checkCtx* ctx, struct operand* shortArg, struct operand* longArg) {
     if (!ctx || !ctx->hasOwnScope || !shortArg || !longArg) return;
     struct var* with = livesWithVar(longArg);
-    if (with) noteMakeWhereNamed(ctx, shortArg, with, canonicalVar(with)->name);
+    if (!with) return;
+    //a value whose references live where its own storage does not - a handle lent as its reference (O17b), a split value
+    //(O17a) - is not where "&with" says: name where its references are, or say nothing a declaration could not follow
+    struct var* hv = NULL;
+    int hd = 0;
+    bool hu = false;
+    if (!longArg->type.structMAlloc && (longArg->handleLent ? valueRefsScope(ctx, longArg, &hv, &hd, &hu)
+                                                             : splitValueHome(longArg, &hv, &hd, &hu))) {
+        if (hu || hv == SCOPE_AMBIGUOUS) return;
+        if (!hv) { //a block of this function: a variable it was made from that lives there ("l := try m.Get(k)": m)
+            struct var* n = nameLivingAt(canonicalVar(with)->declInit, hd, 0);
+            if (n) noteMakeWhereNamed(ctx, shortArg, n, n->name);
+            return;
+        }
+        hv = canonicalVar(hv);
+        if (hv->isImplicitScope || (ctx->func && ctx->func->type.resultScope && hv == canonicalVar(ctx->func->type.resultScope)))
+            noteMakeWhereScope(ctx, shortArg, hv);
+        else if (hv->name.len && hv->name.ptr[0] != '$' && !hv->owner && !hv->isFuncDecl)
+            noteMakeWhereNamed(ctx, shortArg, hv, hv->name);
+        return;
+    }
+    noteMakeWhereNamed(ctx, shortArg, with, canonicalVar(with)->name);
 }
 //B11/C2d: the same, where what the argument must live with is where a scope lands - a parameter's (its implicit scope
 //"&p"), or the result's ("return")
@@ -9813,10 +10221,15 @@ static void noteMakeWhereNamed(struct checkCtx* ctx, struct operand* shortArg, s
         if (noteThroughResultSource(ctx, init, with, withName)) return;
         //an operator's or a method's call has no "f(...)" written to put the marker on
         if (init->isAtCall || f->isMethod) return;
-        struct str callee = init->readVar->name;
-        for (int i = 0; i < callee.len; i++) if (callee.ptr[i] == '$') { callee.len = i; break; } //G16: as written
-        Note(made->tok, NOTE_MAKE_WHERE, made->name, withName, callee, withName);
-        return;
+        //a scope argument builds the call's result where it says - which moves a reference local's referent, but never
+        //a value local's own storage, which is what is lent or stored ("p := Join&out(...)" is still p's block): a value
+        //is declared a reference where the other lives instead, below
+        if (made->type.structMAlloc) {
+            struct str callee = init->readVar->name;
+            for (int i = 0; i < callee.len; i++) if (callee.ptr[i] == '$') { callee.len = i; break; } //G16: as written
+            Note(made->tok, NOTE_MAKE_WHERE, made->name, withName, callee, withName);
+            return;
+        }
     }
     //a value is borrowed where it stands, so declaring it a reference makes its storage where the reference lives
     if (!made->type.structMAlloc && !TypeHoldsReferences(made->type) && made->type.bType != BASETYPE_ARRAY
@@ -9995,6 +10408,31 @@ static void ensureBodyChecked(struct var* func);
 //writes - unified with the parameter's own function type, so a variable only those reach is bound by them; a type that
 //does not agree binds nothing (FinalizeLambda reports it)
 struct pendingLambda { struct syntax* node; struct checkCtx ctx; };
+static void syntaxTokensInto(struct syntax* n, struct list* out);
+//T7a: whether a generic's body holds its type variable v in an array or a struct - names it bare as a type argument
+//("Array<U>(n)", "Pair<U, V>"), where an array value bound to v would be an array held by value inside another
+static bool syntaxHoldsVarAsTypeArg(struct syntax* n, struct str v) {
+    if (n->type == SNTX_TYPE_ARGS) {
+        for (int i = 0; i < n->parts.len; i++) {
+            struct syntaxPart* p = ListGetIdx(&n->parts, i);
+            if (p->isToken) continue;
+            struct list toks = ListInit(sizeof(struct token));
+            syntaxTokensInto(p->sntx, &toks);
+            bool bare = toks.len == 1 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN
+                        && StrCmp(strFromTok(*(struct token*)ListGetIdx(&toks, 0)), v);
+            ListDestroy(toks);
+            if (bare) return true;
+        }
+    }
+    for (int i = 0; i < n->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&n->parts, i);
+        if (!p->isToken && syntaxHoldsVarAsTypeArg(p->sntx, v)) return true;
+    }
+    return false;
+}
+static bool genericHoldsVarInAggregate(struct var* f, struct str v) {
+    return f->bodySyntax && syntaxHoldsVarAsTypeArg(f->bodySyntax, v);
+}
 static void unifyLambdaWritten(struct operand* arg, struct type paramT, struct list* bindings) {
     struct pendingLambda* pl = arg->pendingLambda;
     if (!pl || paramT.bType != BASETYPE_FUNC) return;
@@ -10115,6 +10553,14 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
             struct type* bound = bindingGet(&bindings, c->name);
             if (bound && c->varConstraint && TypeIsGeneric(*c->varConstraint)) unifyThroughMethods(*c->varConstraint, *bound, &bindings);
         }
+        //T7a: each lambda's written result, before it is checked (below)
+        struct list lambdaRets = ListInit(sizeof(struct syntax*));
+        for (int i = 0; i < args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+            struct syntax* sig = arg->pendingLambda ? firstPartOfType(((struct pendingLambda*)arg->pendingLambda)->node, SNTX_FUNC_SIG) : NULL;
+            struct syntax* retNode = sig ? firstPartOfType(sig, SNTX_RET_TYPE) : NULL;
+            ListAdd(&lambdaRets, &retNode);
+        }
         //D16a: a lambda takes what the other arguments fixed - its parameters' types - and its result then binds
         //what only it reaches
         for (int i = 0; ok && i < args.len; i++) {
@@ -10134,6 +10580,23 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                 Err(tok, ERR_REF_TYPEVAR_NOT_AGGREGATE, bt, pt.name);
                 ok = false;
             }
+        }
+        //T7a: a lambda's written result binding a variable the generic holds in an array or a struct - "nums.Map(fn(n I64)
+        //String { ... })" puts a String value in an Array<U> - is said at the lambda's result, where the fix is, rather
+        //than inside the generic's body, and the call is not instantiated
+        for (int i = 0; ok && i < args.len; i++) {
+            struct type paramT = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+            struct syntax* retNode = *(struct syntax**)ListGetIdx(&lambdaRets, i);
+            if (!retNode || paramT.bType != BASETYPE_FUNC || !paramT.hasRetType) continue;
+            struct type prt = *paramT.retType;
+            struct type* bt = prt.bType == BASETYPE_TYPEVAR && !prt.structMAlloc ? bindingGet(&bindings, prt.name) : NULL;
+            if (!bt || bt->bType != BASETYPE_ARRAY || bt->structMAlloc || !bt->arrMalloc || bt->unknown) continue;
+            if (!genericHoldsVarInAggregate(func, prt.name)) continue;
+            Err(firstTokAnywhere(retNode), ERR_LAMBDA_RESULT_HELD, prt.name, bt, bt);
+            struct operand* bad = operandNew(tok, OPERATION_FUNCCALL, unknownTypeStandIn());
+            bad->readVar = func;
+            bad->args = args;
+            return bad;
         }
         //G19: what the constraints bind, and whether each holds - reported here, at the call
         if (ok && !checkTypeConstraints(&func->type.typeConstraints, &bindings, tok)) {
@@ -10507,7 +10970,13 @@ struct operand* OperandNumericConversion(struct type target, struct operand* arg
     return op;
 }
 
+static struct operand* operandIndexAt(struct operand* base, struct operand* index, struct token tok, bool underTry);
 struct operand* OperandIndex(struct operand* base, struct operand* index, struct token tok) {
+    return operandIndexAt(base, index, tok, false);
+}
+//underTry: the index is what a "try" being built checks (checkingTry) - E16d's bounds check, which fails with
+//OUT_OF_BOUNDS at run time, so a constant known to be out of range is no compile-time error there
+static struct operand* operandIndexAt(struct operand* base, struct operand* index, struct token tok, bool underTry) {
     if (base->type.bType != BASETYPE_ARRAY) {
         //an unknown base was reported where it was written. Either way the index keeps its operands, so what walks an
         //lvalue's chain (its mutability, its scope) finds them and nothing reads past the end of an empty list
@@ -10527,8 +10996,8 @@ struct operand* OperandIndex(struct operand* base, struct operand* index, struct
     //E16: an index is not checked at run time, but where the index and the length are BOTH compile-time
     //known there is nothing to defer - an out-of-range constant is an error at the point it is written
     //rather than undefined behaviour when it is reached. Free, and it covers every literal index into a
-    //fixed-size array.
-    if (index->isLiteral && !base->type.arrMalloc && base->type.arrLen && !base->type.unknown) {
+    //fixed-size array. Under "try" the index is checked (E16d) and its failure is defined, so it is left to run time
+    if (!underTry && index->isLiteral && !base->type.arrMalloc && base->type.arrLen && !base->type.unknown) {
         long long n = base->type.arrLen->intLiteralVal;
         if (index->intLiteralVal < 0 || index->intLiteralVal >= n) {
             Err(index->tok, ERR_INDEX_OUT_OF_RANGE, index->intLiteralVal, n);
@@ -11000,7 +11469,7 @@ struct operand* OperandUnary(struct operand* in, enum operation opType, struct t
         case OPERATION_STR_OF: {
             struct operand* op = operandNew(tok, OPERATION_STR_OF, textValueType());
             ListAdd(&op->args, &in);
-            if (!strOfRenderable(in->type)) {
+            if (!in->type.unknown && !strOfRenderable(in->type)) { //an unknown type was reported where it was written
                 Err(tok, ERR_STR_OF_NOTHING);
             }
             struct list seen = ListInit(sizeof(struct type));
@@ -12702,7 +13171,7 @@ static struct operand* buildIsSame(struct checkCtx* ctx, struct syntax* s) {
     struct token kw = firstTokOfType(s, TOK_IS);
     struct operand* a = buildExprFromSyntax(ctx, partSntx(s, 0));
     struct operand* b = buildExprFromSyntax(ctx, partSntx(s, s->parts.len - 1));
-    if (a->type.unknown || b->type.unknown) return OperandBoolLiteral(kw); //reported where it was written
+    if (a->type.unknown || b->type.unknown) return unknownPlaceholder(kw); //reported where it was written - nothing to decide
     bool idA = a->isNullLiteral || a->type.structMAlloc || a->type.bType == BASETYPE_FUNC;
     bool idB = b->isNullLiteral || b->type.structMAlloc || b->type.bType == BASETYPE_FUNC;
     if (!idA || !idB || (a->isNullLiteral && b->isNullLiteral)) {
@@ -12791,7 +13260,8 @@ struct operand* buildIsAs(struct checkCtx* ctx, struct syntax* s) {
         int tag = xt.unknown ? -1 : resolveCaseOf(ctx, idens, xt, ERR_AS_NEEDS_CASE, ERR_NO_SUCH_CASE);
         if (tag >= 0) { op->castTag = tag; c = ListGetIdx(&xt.vars, tag); }
         if (!c) {
-            if (isAs) op->type = unknownTypeStandIn();
+            op->type = unknownTypeStandIn(); //reported: nothing is read, or decided, from it
+            if (!isAs) op->type.bType = BASETYPE_BOOL;
             return op;
         }
         op->castEnum = true;
@@ -13013,7 +13483,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
                 if (result->type.bType != BASETYPE_ARRAY && notOperatorError(result->type, storeInto ? "SetAt" : "At", sq,
                                                                               storeInto ? "'x[i] = v'" : "'x[i]'"))
                     result = unknownPlaceholder(sq);
-                else result = OperandIndex(result, idx, sq);
+                else result = operandIndexAt(result, idx, sq, ctx->checkingTry);
             }
             ctx->checkingTry = prevCheckingInc;
         } else if (p->sntx->type == SNTX_EXPR_SLICE) {
@@ -13338,6 +13808,7 @@ static bool catchMatchCovered(struct list* seen, struct catchMatch* m) {
 //falls through to after the statement, and a default has nothing to give its value to. Whatever no clause
 //names propagates, exactly as from a plain try - with or without defaults - so the only way to handle every
 //error is to say so, with an item-less "catch".
+static bool clauseValueReported; //R11: the value ending the clause being built was reported as such (ERR_CLAUSE_LAST_VALUE)
 static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct operand* callOp, struct list* errors,
                               bool valuePos, struct type* rt, struct token tok, struct list* out) {
     *out = ListInit(sizeof(struct catchClause));
@@ -13364,17 +13835,37 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
             for (int i = 0; i < cc.matches.len; i++) ListAdd(&seen, ListGetIdx(&cc.matches, i));
         }
         struct syntax* blk = firstPartOfType(cn, SNTX_BLOCK);
+        bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
+        bool valueLeft = false; //R11: "catch { log(); -1 }" - the block's last line is a value, which a clause never gives
         if (blk) {
             cc.hasBlock = true;
+            struct syntax* prevLast = ctx->clauseLastStmt;
+            bool prevReported = clauseValueReported;
+            struct list bs = allPartsOfType(blk, SNTX_STMNT);
+            struct syntax* last = bs.len ? *(struct syntax**)ListGetIdx(&bs, bs.len - 1) : NULL;
+            ctx->clauseLastStmt = valuePos && !hasDefault && last && last->parts.len ? partSntx(last, 0) : NULL;
+            clauseValueReported = false;
             cc.block = buildBlock(ctx, blk);
+            valueLeft = clauseValueReported;
+            ctx->clauseLastStmt = prevLast;
+            clauseValueReported = prevReported;
         }
-        bool hasDefault = hasTokOfType(cn, TOK_DEFAULT);
         if (!valuePos) {
             if (hasDefault) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_IN_STATEMENT);
         } else {
             bool leaves = blk && blockLeavesValue(&cc.block);
             if (hasDefault && leaves) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_DEAD);
-            if (!hasDefault && !leaves) Err(cc.tok, ERR_CATCH_MUST_LEAVE);
+            if (!hasDefault && !leaves && !valueLeft) {
+                //B5b: "os.Exit(2)" ends the program, but as an ordinary call - D10a cannot see it leave
+                struct statement* lastSt = cc.block.len ? ListGetIdx(&cc.block, cc.block.len - 1) : NULL;
+                struct var* lf = lastSt && lastSt->sType == STATEMENT_EXPR && lastSt->op && lastSt->op->opType == OPERATION_FUNCCALL
+                                 ? lastSt->op->readVar : NULL;
+                bool exits = lf && (StrCmp(lf->name, StrFromCStr("Exit"))
+                                    || (lf->type.isExtern && (StrCmp(lf->name, StrFromCStr("exit"))
+                                                              || StrCmp(lf->name, StrFromCStr("_exit"))
+                                                              || StrCmp(lf->name, StrFromCStr("abort")))));
+                Err(exits ? lastSt->op->tok : cc.tok, exits ? ERR_CATCH_EXIT_NOT_LEAVE : ERR_CATCH_MUST_LEAVE);
+            }
             if (hasDefault && !leaves) {
                 if (!rt) {
                     Err(cc.tok, ERR_DEFAULT_NO_VALUE);
@@ -13767,7 +14258,14 @@ struct operand* buildChoiceValueExpr(struct checkCtx* ctx, struct syntax* s) {
     }
     resolveTypeDecl(t);
     if (t->bType != BASETYPE_CHOICE) {
-        Err(typeTok, ERR_NOT_AN_ENUM, typeTok);
+        //T20: an error type's word is raised and caught, never a value
+        if (t->bType == BASETYPE_ERROR) {
+            char* w = MallocOrCrash(typeTok.str.len + wordTok.str.len + 2);
+            snprintf(w, typeTok.str.len + wordTok.str.len + 2, "%.*s.%.*s", typeTok.str.len, typeTok.str.ptr, wordTok.str.len,
+                     wordTok.str.ptr);
+            Err(typeTok, ERR_ERROR_WORD_AS_VALUE, StrFromCStr(w), StrFromCStr(w));
+        }
+        else Err(typeTok, ERR_NOT_AN_ENUM, typeTok);
         return unknownPlaceholder(wordTok);
     }
     return OperandChoiceValue(ctx, *t, wordTok, firstPartOfType(s, SNTX_EXPR_ARGS),
@@ -15138,7 +15636,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         //a value local's own storage is its block, wherever its references were built (valueHome) - which is what a
         //borrow of it hands over (O17) - or the result scope, for one the function returns (O26a)
         //(a value array's elements too, though read as a reference - its run-time length is a {len, ptr} pair, T11)
-        if ((!asRef || !op->type.structMAlloc) && v->storeInResult && ctx && ctx->func) { *outVar = v->valueHome; return true; }
+        if ((!asRef || !op->type.structMAlloc) && v->storeInResult && v->valueHome) { *outVar = v->valueHome; return true; }
         if (!asRef) { *outDepth = isParam ? 1 : op->type.scopeDepth; return true; } //a by-value slot is ours
         if (op->type.scopeUnknown) { *outVar = SCOPE_AMBIGUOUS; return true; } //O11/O12: not known here
         //a by-value parameter of a run-time-length array type - only a generic's, instantiated with one (D9a) - holds
@@ -15187,6 +15685,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
 //cursor declared in an inner block over an outer structure ("for c mut N& = a, ...") is exactly as scoped
 //as what it walks. Returns whether it adopted; a temporary, null or no initializer adopts nothing and is
 //allocated where the declaration is. A written "&name" is not overridden - it must already be exact.
+static bool inferredInResult; //O26a: the ":=" local being declared was put in the result scope (B11's wording)
 static bool adoptInitializerScope(struct checkCtx* ctx, struct type* declType, struct operand* rhs, bool* unnamed) {
     *unnamed = false;
     declType->scopeUnknown = false;
@@ -15206,7 +15705,8 @@ static bool adoptInitializerScope(struct checkCtx* ctx, struct type* declType, s
             return false;
         }
         if (un || !sameExactScope(canonicalVar(declType->scopeParam), dd, sv, sd)) {
-            Err(rhs->tok, ERR_REFERENCE_NARROWED);
+            //B11: a ":=" local O26a put in the result scope - no ':=' to suggest, it is one
+            Err(rhs->tok, inferredInResult ? ERR_REFERENCE_NARROWED_RETURNED : ERR_REFERENCE_NARROWED);
         }
         return false;
     }
@@ -15686,7 +16186,9 @@ static bool varInResultScope(struct checkCtx* ctx, struct var* v) {
 //caller's scope rather than its block. A continuation is the rest of a block after a statement, and of every block
 //around it up to the declaring one: where an assignment's target is still to be returned.
 struct flowCont { struct list* stmts; int idx; struct flowCont* outer; };
-struct flowScan { struct checkCtx* ctx; struct list seen; struct str root; struct type rootType; };
+//borrowRoot: the local being decided holds no reference, but its own storage can be borrowed (O26a's borrowable value) -
+//a view of it, an array or a struct read out of it by value, carries that storage
+struct flowScan { struct checkCtx* ctx; struct list seen; struct str root; struct type rootType; bool borrowRoot; };
 static bool exprGivesName(struct syntax* e, struct str name);
 static bool exprIsNameChain(struct syntax* e, struct str name);
 //whether a written type ends in a reference marker ("Node&", "Node&x", "mut List<I32>&")
@@ -15721,6 +16223,134 @@ static bool flowNameIsValue(struct flowScan* fs, struct str name) {
     if (StrCmp(name, fs->root)) return !fs->rootType.structMAlloc;
     struct var* v = scopeFindLocalByCtx(fs->ctx, name);
     return v && !v->type.structMAlloc;
+}
+//whether a value of type t can carry a reference at all - a number, a Bool, a struct of them cannot, so nothing a local
+//refers to reaches the result through one (principle 1: what is built only to be measured stays in its block)
+static bool flowTypeCarries(struct type t) {
+    return t.unknown || t.structMAlloc || TypeHoldsReferences(t) || TypeIsGeneric(t) || t.bType == BASETYPE_FUNC
+           || t.bType == BASETYPE_TYPEVAR || structContainsBareScopeField(t);
+}
+//the type a chain of members and indices (toks[from, to)) reaches from a value of type t - "x.a[i].b" - false where it
+//cannot be told here (a method, an operator's At, a member no type declares)
+static bool flowChainType(struct type t, struct list* toks, int from, int to, struct type* out) {
+    for (int k = from; k < to; ) {
+        enum tokenType tt = ((struct token*)ListGetIdx(toks, k))->type;
+        if (tt == TOK_DOT && k + 1 < to && ((struct token*)ListGetIdx(toks, k + 1))->type == TOK_IDEN) {
+            if (t.bType != BASETYPE_STRUCT || t.unknown) return false;
+            struct var* f = VarGetList(&t.vars, strFromTok(*(struct token*)ListGetIdx(toks, k + 1)));
+            if (!f) return false;
+            t = f->type;
+            k += 2;
+        } else if (tt == TOK_SQUARE_O) {
+            if (t.bType != BASETYPE_ARRAY || !t.arrElem) return false;
+            int depth = 0;
+            bool slice = false; //"x[lo:hi]" is a view of the array, not an element of it
+            for (; k < to; k++) {
+                enum tokenType u = ((struct token*)ListGetIdx(toks, k))->type;
+                if (u == TOK_SQUARE_O || u == TOK_PAREN_O || u == TOK_CURLY_O) depth++;
+                else if ((u == TOK_SQUARE_C || u == TOK_PAREN_C || u == TOK_CURLY_C) && --depth == 0) { k++; break; }
+                else if (u == TOK_COLON && depth == 1) slice = true;
+            }
+            if (depth != 0) return false;
+            if (!slice) t = *t.arrElem;
+        } else return false;
+    }
+    *out = t;
+    return true;
+}
+//the type of the local named, where it is known while the flow is read - the one being decided, or one declared before it
+static bool flowNameType(struct flowScan* fs, struct str name, struct type* out) {
+    if (StrCmp(name, fs->root)) { *out = fs->rootType; return true; }
+    struct var* v = scopeFindLocalByCtx(fs->ctx, name);
+    if (!v) return false;
+    *out = v->type;
+    return true;
+}
+static struct var* callAround(struct checkCtx* ctx, struct list* toks, int i, int* idx);
+static bool calleeMayKeepArg(struct var* m, int idx);
+//O26a: whether expression e uses the local named as a whole value (syntaxMentionsName) where the value e gives can carry
+//what the local refers to: never as an argument of a call whose result cannot hold it (calleeMayKeepArg - "v :=
+//measure(line)" with measure giving an I64), nor through a field or an element holding no reference ("line.count").
+//A number or a Bool computed from a local is no flow of it: only a reference, or a value holding references, read out
+//of the local can take what it refers to into the result
+static bool flowMentionsName(struct flowScan* fs, struct syntax* e, struct str name, bool skipFirst) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(e, &toks);
+    struct type nt;
+    bool known = flowNameType(fs, name, &nt);
+    bool found = false;
+    for (int i = skipFirst ? 1 : 0; i < toks.len && !found; i++) {
+        struct token* t = ListGetIdx(&toks, i);
+        if (t->type != TOK_IDEN || !StrCmp(strFromTok(*t), name)) continue;
+        if (i > 0 && !tokStartsWhole(((struct token*)ListGetIdx(&toks, i - 1))->type)) continue;
+        int j = i + 1; //past ".m" members and "[...]" indices
+        for (;;) {
+            if (j + 1 < toks.len && ((struct token*)ListGetIdx(&toks, j))->type == TOK_DOT
+                    && ((struct token*)ListGetIdx(&toks, j + 1))->type == TOK_IDEN) {
+                j += 2;
+                continue;
+            }
+            if (j < toks.len && ((struct token*)ListGetIdx(&toks, j))->type == TOK_SQUARE_O) {
+                int depth = 0;
+                for (; j < toks.len; j++) {
+                    enum tokenType tt = ((struct token*)ListGetIdx(&toks, j))->type;
+                    if (tt == TOK_SQUARE_O) depth++;
+                    else if (tt == TOK_SQUARE_C && --depth == 0) { j++; break; }
+                }
+                continue;
+            }
+            break;
+        }
+        //a receiver of a method whose result can hold it - "line.Split(" ")", borrowed from line - carries it as an
+        //argument would (calleeMayKeepArg); one whose result cannot ("line.Len()") does not
+        if (known && j >= 2 && j < toks.len && ((struct token*)ListGetIdx(&toks, j))->type == TOK_PAREN_O
+                && ((struct token*)ListGetIdx(&toks, j - 2))->type == TOK_DOT) {
+            struct type rt;
+            if (flowChainType(nt, &toks, i + 1, j - 2, &rt) && !rt.unknown) {
+                struct type recv = rt;
+                recv.structMAlloc = false;
+                struct var* m = VarGetMethod(recv.owner, strFromTok(*(struct token*)ListGetIdx(&toks, j - 1)), recv);
+                if (m && m->type.bType == BASETYPE_FUNC && calleeMayKeepArg(m, 0)) { found = true; break; }
+            }
+            continue;
+        }
+        if (!(j >= toks.len || tokEndsWhole(((struct token*)ListGetIdx(&toks, j))->type))) continue;
+        struct type ct;
+        if (known && flowChainType(nt, &toks, i + 1, j, &ct) && !flowTypeCarries(ct)
+                && !(fs->borrowRoot && StrCmp(name, fs->root) && (ct.bType == BASETYPE_ARRAY || ct.bType == BASETYPE_STRUCT
+                                                                   || ct.bType == BASETYPE_CHOICE)))
+            continue; //a number read out of it
+        int idx = -1;
+        struct var* callee = callAround(fs->ctx, &toks, i, &idx);
+        if (callee && !calleeMayKeepArg(callee, idx)) continue; //handed to a call that keeps none of it
+        found = true;
+    }
+    ListDestroy(toks);
+    return found;
+}
+//whether a place written "x.a[i].b" (x a local declared before the one being decided, or that one) holds no reference -
+//a number put there carries nothing into the result
+static bool flowPlaceCarriesNothing(struct flowScan* fs, struct syntax* tgt, struct str root) {
+    struct type rt;
+    if (!flowNameType(fs, root, &rt)) return false;
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(tgt, &toks);
+    struct type ct;
+    bool r = toks.len > 0 && flowChainType(rt, &toks, 1, toks.len, &ct) && !flowTypeCarries(ct);
+    ListDestroy(toks);
+    return r;
+}
+//whether a type written for a declaration holds no reference - a primitive or a declared type named alone ("v I64")
+static bool flowWrittenTypeCarriesNothing(struct flowScan* fs, struct syntax* te) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(te, &toks);
+    bool alone = toks.len == 1 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN;
+    ListDestroy(toks);
+    if (!alone) return false;
+    ErrMsgMuteStart();
+    struct type t = resolveTypeExpr(fs->ctx->mod, te, NULL);
+    ErrMsgMuteEnd();
+    return !t.unknown && !flowTypeCarries(t);
 }
 //whether e is a plain copy of the local named into a value target - "f := e", "b = a" - which keeps its references
 //where its source's are (O25h): it is no flow of the source, whose storage stays where it is (the guard for copies of
@@ -15769,16 +16399,18 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             struct syntax* tgt = firstPartOfType(n, SNTX_EXPR_POSTFIX);
             struct syntax* e = firstPartOfType(n, SNTX_EXPR);
             struct str T;
-            if (!e || !tgt || !syntaxMentionsName(e, name, false) || !syntaxRootName(tgt, &T)) return false;
+            if (!e || !tgt || !flowMentionsName(fs, e, name, false) || !syntaxRootName(tgt, &T)) return false;
             //a whole value local assigned is a copy; a field or an element of one is a slot of it, which may hold a reference
             if (exprIsNameChain(tgt, T) && flowIsCopy(fs, e, name, flowNameIsValue(fs, T))) return false;
+            if (flowPlaceCarriesNothing(fs, tgt, T)) return false; //a number put in a field holding no reference
             return flowTarget(fs, T, after);
         }
         case SNTX_VAR_DECL: {
             struct syntax* e = firstPartOfType(n, SNTX_EXPR);
-            if (!e || !syntaxMentionsName(e, name, false)) return false;
+            if (!e || !flowMentionsName(fs, e, name, false)) return false;
             //":=" declares what its initializer is, a written type what it writes - a reference when it ends in a marker
             struct syntax* te = firstPartOfType(n, SNTX_TYPE_EXPR);
+            if (te && flowWrittenTypeCarriesNothing(fs, te)) return false; //a number declared from it
             bool valueTarget = te ? !syntaxEndsWithMarker(te) : flowNameIsValue(fs, name);
             if (flowIsCopy(fs, e, name, valueTarget)) return false;
             return flowExplore(fs, strFromTok(firstTokOfType(n, TOK_IDEN)), after);
@@ -15786,7 +16418,7 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
         case SNTX_STMNT_DESTRUCT: {
             struct list values = allPartsOfType(n, SNTX_EXPR);
             bool mentioned = false;
-            for (int i = 0; i < values.len && !mentioned; i++) mentioned = syntaxMentionsName(*(struct syntax**)ListGetIdx(&values, i), name, false);
+            for (int i = 0; i < values.len && !mentioned; i++) mentioned = flowMentionsName(fs, *(struct syntax**)ListGetIdx(&values, i), name, false);
             ListDestroy(values);
             if (!mentioned) return false;
             bool declare = hasTokOfType(n, TOK_ASS_INFER);
@@ -15803,7 +16435,7 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
         case SNTX_STMNT_EXPR: {
             struct syntax* e = n->parts.len ? partSntx(n, 0) : NULL;
             struct str T;
-            if (e && syntaxRootName(e, &T) && !StrCmp(T, name) && syntaxMentionsName(e, name, true) && flowTarget(fs, T, after))
+            if (e && syntaxRootName(e, &T) && !StrCmp(T, name) && flowMentionsName(fs, e, name, true) && flowTarget(fs, T, after))
                 return true;
             break;
         }
@@ -16045,8 +16677,8 @@ static bool flowScanList(struct flowScan* fs, struct list* stmts, int from, stru
     return false;
 }
 
-static bool localFlowsToResult(struct checkCtx* ctx, struct str name, struct type t) {
-    struct flowScan fs = { ctx, ListInit(sizeof(struct str)), name, t };
+static bool localFlowsToResult(struct checkCtx* ctx, struct str name, struct type t, bool borrowRoot) {
+    struct flowScan fs = { ctx, ListInit(sizeof(struct str)), name, t, borrowRoot };
     struct flowCont k = { &ctx->blockStmts, ctx->blockStmtIdx + 1, NULL };
     bool r = flowExplore(&fs, name, &k);
     ListDestroy(fs.seen);
@@ -16097,14 +16729,18 @@ static bool localLivesInResult(struct checkCtx* ctx, struct str name, struct typ
     struct type rt = *f->type.retType;
     bool refResult = rt.structMAlloc && rt.scopeParam && canonicalVar(rt.scopeParam) == canonicalVar(home);
     bool holds = TypeHoldsReferences(t);
-    if (!holds && !refResult) return false;
+    //...and a value whose own storage a reference can name - text, an array, a struct - that a returned value borrows:
+    //"note := ""; if c { note = "big: " $n }; return R(n, note)" hands back R's reference to note itself
+    bool borrowable = t.bType == BASETYPE_ARRAY || t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE;
+    if (!holds && !refResult && !borrowable) return false;
     if (rhs && (OperandNamesExistingStorage(rhs) || callResultTiedToBlock(ctx, rhs))) return false;
     for (int i = ctx->blockStmtIdx + 1; i < ctx->blockStmts.len; i++) {
         struct syntax* st = *(struct syntax**)ListGetIdx(&ctx->blockStmts, i);
-        if (syntaxReturnsName(st, name)) return true;
-        if (holds && syntaxReturnReadsName(ctx, st, name, t)) return true;
+        if ((holds || refResult) && syntaxReturnsName(st, name)) return true;
+        if ((holds || borrowable) && syntaxReturnReadsName(ctx, st, name, t)) return true;
     }
-    return localFlowsToResult(ctx, name, t);
+    //...as does one a view of it flows into: "s := a[1:4]; return V(s)" is "return V(a[1:4])"
+    return localFlowsToResult(ctx, name, t, !holds && !refResult);
 }
 
 //O26a: a reference local the function returns - or one flowing into what it returns, a parser's right operand built
@@ -16116,7 +16752,9 @@ static bool refLocalLivesInResult(struct checkCtx* ctx, struct str name, struct 
     if (!resultScopeHere(ctx)) return false;
     if (!t.structMAlloc || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || t.unknown) return false;
     if (rhs && !rhs->isNullLiteral && (!operandIsTemporary(ctx, rhs) || callResultTiedToBlock(ctx, rhs))) return false;
-    return localFlowsToResult(ctx, name, t);
+    //a call's result borrowed from an argument ("line.Split(" ")", "&t") lives where that argument does - nothing to move
+    if (rhs && rhs->opType == OPERATION_FUNCCALL && rhs->type.scopeParam && !callIsLanding(rhs)) return false;
+    return localFlowsToResult(ctx, name, t, false);
 }
 
 //O25a: a local's type says where it lives - a bare "&" is its block - and an initializer never changes that.
@@ -16157,6 +16795,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* rhs;
     struct operand* fillValue = NULL;
     bool landedByOblig = false;
+    inferredInResult = false;
     bool inResult = false; //O26a: a value the function returns, living where its result is put
     bool roInheritDecl = false; //T25b: its permission is its initializer's
     if (!exprNode) {
@@ -16211,6 +16850,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
             inResult = localLivesInResult(ctx, strFromTok(nameTok), declType, rhs); //O26a: it lands in the result scope
             if (!inResult && refLocalLivesInResult(ctx, strFromTok(nameTok), declType, rhs)) {
                 declType.scopeParam = resultHome(ctx->func); //O26a: a reference local as "&return"
+                inferredInResult = true;
                 if (callIsLanding(rhs)) landCall(rhs, declType.scopeParam, 0);
             } else if (!inResult) landedByOblig = landDeclByObligations(ctx, rhs); //O18c
         }
@@ -16234,6 +16874,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!homeChecked && (fillValue || !adoptInitializerScope(ctx, &declType, rhs, &unnamedScope))
             && !declType.scopeWritten)
         declType.scopeDepth = ctx->blockDepth;
+    inferredInResult = false;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, mut);
     v->scopeUnnamed = unnamedScope;
     v->permByType = permByType;
@@ -17058,7 +17699,19 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = prevRoot;
     //...text on a line of its own most often meant to continue the join on the line before (E11b)
     if (!exprCanStandAsStatement(op) && !op->type.unknown) {
-        if (OperandIsWrittenText(op)) Err(op->tok, ERR_JOIN_NEXT_LINE);
+        if (s == ctx->clauseLastStmt) { //R11: a value ending a catch clause's block is meant as the clause's value
+            struct list toks = ListInit(sizeof(struct token));
+            syntaxTokensInto(e, &toks);
+            struct str text = StrFromCStr("v");
+            if (toks.len) {
+                struct token a = *(struct token*)ListGetIdx(&toks, 0);
+                struct token b = *(struct token*)ListGetIdx(&toks, toks.len - 1);
+                int n = (int)(b.str.ptr + b.str.len - a.str.ptr);
+                if (a.owner == b.owner && a.lineNr == b.lineNr && n > 0 && n <= 40) text = Str(a.str.ptr, n);
+            }
+            Err(op->tok, ERR_CLAUSE_LAST_VALUE, text);
+            clauseValueReported = true;
+        } else if (OperandIsWrittenText(op)) Err(op->tok, ERR_JOIN_NEXT_LINE);
         else Err(op->tok, ERR_NOT_A_STATEMENT);
     }
     struct statement stmt = (struct statement){0};
@@ -17325,6 +17978,7 @@ static struct list* bodyStmts(int id) {
 }
 
 //the checked condition of a queued local if, recorded where it is checked - in its own function's scope
+static bool operandHasUnknown(struct operand* op, int depth);
 static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct operand* op) {
     struct pendingCond* p = SyntaxPendingFor(condNode);
     if (!p || !p->local) return;
@@ -17334,6 +17988,7 @@ static void noteLocalCond(struct checkCtx* ctx, struct syntax* condNode, struct 
     for (int i = 0; currentBindings && i < currentBindings->len; i++) {
         if (((struct typeBinding*)ListGetIdx(currentBindings, i))->type.bType == BASETYPE_CONST) op = NULL;
     }
+    if (operandHasUnknown(op, 0)) op = NULL; //B11: nothing is decided from an unknown name, reported or not
     p->op = op;
     p->bodyId = ctx->bodyId;
 }
@@ -17514,6 +18169,16 @@ static struct statement buildDecidedIf(struct checkCtx* ctx, struct syntax* s, b
     return stmt;
 }
 
+//B11: whether an operand reads something unknown - a name reported where it was first met (one error per unknown name,
+//so its later uses add none) - which nothing may be decided from
+static bool operandHasUnknown(struct operand* op, int depth) {
+    if (!op) return false;
+    if (op->type.unknown) return true;
+    if (depth > 64) return false;
+    for (int i = 0; i < op->args.len; i++) if (operandHasUnknown(*(struct operand**)ListGetIdx(&op->args, i), depth + 1)) return true;
+    return false;
+}
+
 struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     int errs = ErrMsgGetNErrors();
     bool outerCond = ctx->inCondition;
@@ -17521,6 +18186,7 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* cond = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
     ctx->inCondition = outerCond;
     if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+    if (operandHasUnknown(cond, 0)) errs = -1; //decided from nothing it could read
     if (ErrMsgGetNErrors() == errs) {
         int decided = constCondValue(cond, firstPartOfType(s, SNTX_EXPR));
         if (decided >= 0) return buildDecidedIf(ctx, s, decided, cond->tok);
@@ -17534,7 +18200,7 @@ struct statement buildIfStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool dependsOnBuild = false;
     if (firstPartOfType(s, SNTX_COND_DEAD)) {
         Err(cond->tok, ERR_CONDITION_CONSTANT); //found fixed by compile-time evaluation (S8b)
-    } else if (OperandIsBool(cond) && condIsConstant(cond, &dependsOnBuild, 0) && !dependsOnBuild) {
+    } else if (OperandIsBool(cond) && errs >= 0 && condIsConstant(cond, &dependsOnBuild, 0) && !dependsOnBuild) {
         Err(cond->tok, ERR_CONDITION_CONSTANT);
     }
 
@@ -18840,6 +19506,47 @@ static bool caseIsCatchAll(struct syntax* c) {
     return false;
 }
 
+//B11: whether a case's value alternative is shaped as a pattern of an enum - "Name.Case" or "Name.Case(x, y)" - whose
+//first name is nothing known here (no local, global, import or type): *head is that name
+static bool unknownPatternHead(struct checkCtx* ctx, struct syntax* alt, struct token* head) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(alt, &toks);
+    bool shaped = toks.len >= 3 && ((struct token*)ListGetIdx(&toks, 0))->type == TOK_IDEN
+                  && ((struct token*)ListGetIdx(&toks, 1))->type == TOK_DOT && ((struct token*)ListGetIdx(&toks, 2))->type == TOK_IDEN;
+    for (int i = 3; shaped && i < toks.len; i++) { //the rest: more ".Name", then one "(...)" closing the alternative
+        enum tokenType tt = ((struct token*)ListGetIdx(&toks, i))->type;
+        if (tt == TOK_DOT && i + 1 < toks.len && ((struct token*)ListGetIdx(&toks, i + 1))->type == TOK_IDEN) { i++; continue; }
+        shaped = tt == TOK_PAREN_O && ((struct token*)ListGetIdx(&toks, toks.len - 1))->type == TOK_PAREN_C;
+        break;
+    }
+    if (shaped) *head = *(struct token*)ListGetIdx(&toks, 0);
+    ListDestroy(toks);
+    if (!shaped) return false;
+    struct str name = strFromTok(*head);
+    if (lookupVarQuiet(ctx, *head) || typeNamed(ctx->mod, name) || isBuiltinTypeName(name)) return false;
+    for (int i = 0; i < ctx->mod->imports.len; i++) {
+        if (StrCmp(((struct semaImport*)ListGetIdx(&ctx->mod->imports, i))->alias, name)) return false;
+    }
+    return true;
+}
+//...and the names inside its parentheses, declared as bindings of a type not known: "v" in "case Json.Num(v)"
+static void declarePatternNamesUnknown(struct checkCtx* ctx, struct syntax* alt) {
+    struct list toks = ListInit(sizeof(struct token));
+    syntaxTokensInto(alt, &toks);
+    int depth = 0;
+    for (int i = 0; i < toks.len; i++) {
+        struct token* t = ListGetIdx(&toks, i);
+        if (t->type == TOK_PAREN_O) depth++;
+        else if (t->type == TOK_PAREN_C) depth--;
+        else if (depth > 0 && t->type == TOK_IDEN && !StrCmp(strFromTok(*t), StrFromCStr("_"))
+                 && (i == 0 || ((struct token*)ListGetIdx(&toks, i - 1))->type != TOK_DOT)
+                 && (i + 1 >= toks.len || ((struct token*)ListGetIdx(&toks, i + 1))->type != TOK_DOT)
+                 && !lookupVarQuiet(ctx, *t) && !scopeFindLocal(ctx->scope, strFromTok(*t)))
+            scopeDeclare(NULL, ctx->scope, strFromTok(*t), *t, unknownTypeStandIn(), true);
+    }
+    ListDestroy(toks);
+}
+
 //S13-S13f: "case alt {, alt} [if guard] body". The clause's bindings live in a scope of its own, visible to the
 //guard and the body and nowhere else
 struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct operand* subject, bool asValue) {
@@ -18871,7 +19578,9 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
         } else if (caseAltLoneName(part->sntx, &lone) && !lookupVarQuiet(ctx, lone)) {
             //S13f: a lone unknown name was most likely meant to take the value - which "_" and a guard do. It is declared
             //as though it had, so a guard reading it is not a second error for the same cause
+            unknownFn = ctx->func;
             reportUnknownName(ctx->mod, lone, ERR_CASE_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true); //a near name: a typo
+            unknownFn = NULL;
             scopeDeclare(NULL, ctx->scope, strFromTok(lone), lone, subject ? subject->type : unknownTypeStandIn(), false);
         } else if (caseAltLoneName(part->sntx, &lone) && subject && subject->opType == OPERATION_READ_VAR && subject->readVar
                    && !subject->readVar->owner && scopeFindUse(ctx->scope, strFromTok(lone), lone) == subject->readVar) {
@@ -18879,6 +19588,16 @@ struct statement buildCaseStmnt(struct checkCtx* ctx, struct syntax* s, struct o
         } else if (part->sntx->type == SNTX_CASE_PATTERN) {
             buildPatternAt(ctx, part->sntx, subject ? patPath(subject) : NULL,
                            subject ? subject->type : unknownTypeStandIn(), &stmt, &alt, altIdx, &bound, &alt.test);
+        } else if ((subject && subject->type.unknown) || unknownPatternHead(ctx, part->sntx, &lone)) {
+            //B11: a pattern of an enum whose name is unknown - "case Json.Num(v)" for json.Json - or over a value whose
+            //type is: the unknown name is reported once, where it is first met, and the names inside are declared as
+            //what they would bind, so the clause's uses of them are no further errors
+            if (!(subject && subject->type.unknown)) {
+                unknownFn = ctx->func;
+                reportUnknownName(ctx->mod, lone, ERR_UNKNOWN_NAME, ERR_UNKNOWN_NAME_MEANT, true);
+                unknownFn = NULL;
+            }
+            declarePatternNamesUnknown(ctx, part->sntx);
         } else {
             struct operand* val = buildExprFromSyntax(ctx, part->sntx);
             if (subject && !caseValueFits(ctx, val, subject->type)) Err(val->tok, ERR_CASE_VALUE_TYPE, &subject->type, &val->type);
@@ -19105,6 +19824,19 @@ static struct type matchValueType(struct checkCtx* ctx, struct list* vals) {
         struct operand* v = *(struct operand**)ListGetIdx(vals, i);
         if (!(operandAdaptsAsLiteral(v) && TypeIsNumeric(v->type))) numLits = false;
     }
+    //E28: array literals of one element type are arrays of it, whatever their lengths - the length is no part of an
+    //array's type (T7), so they give an Array<T>
+    bool arrLits = vals->len > 1;
+    for (int i = 0; arrLits && i < vals->len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(vals, i);
+        arrLits = v->isLiteral && v->type.bType == BASETYPE_ARRAY && !v->type.structMAlloc && v->type.arrElem
+                  && anchor->type.bType == BASETYPE_ARRAY && anchor->type.arrElem && TypeIsSame(*v->type.arrElem, *anchor->type.arrElem);
+    }
+    if (arrLits && !allText) {
+        t = anchor->type;
+        t.arrMalloc = true;
+        t.arrLen = NULL;
+    }
     for (int i = 0; numLits && i < vals->len; i++) { //only literals: the widest, as two literals in "a if c else b"
         struct type vt = (*(struct operand**)ListGetIdx(vals, i))->type;
         if (numericTypeRank(vt) > numericTypeRank(t)) t = vt;
@@ -19123,7 +19855,7 @@ static struct type matchValueType(struct checkCtx* ctx, struct list* vals) {
         FinalizeLambda(v, &t);
         if (v->type.unknown || t.unknown || TypeIsSame(v->type, t)) continue;
         if (t.structMAlloc && valueBuiltHere(v) && typeConvertsBetweenValueAndReference(v->type, t)) continue;
-        if ((condAdapts(v) || numLits || allText) && OperandFitsType(ctx->func, v, t) == TYPE_FIT_OK) continue;
+        if ((condAdapts(v) || numLits || allText || arrLits) && OperandFitsType(ctx->func, v, t) == TYPE_FIT_OK) continue;
         Err(v->tok, ERR_MATCH_VALUE_TYPES, &t, &v->type);
         bad = true;
     }
@@ -20073,7 +20805,21 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
             struct operand* t = *(struct operand**)ListGetIdx(&stmt.spawnTargets, i);
             if (!t) continue;
             struct type want = rt.isTuple ? (*(struct var*)ListGetIdx(&rt.vars, i)).type : rt;
-            if (!TypeIsSame(t->type, want)) { Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type); fits = false; }
+            if (!TypeIsSame(t->type, want)) {
+                //a reference slot for a value result - an array element held by reference (T7a): the call can build
+                //its result there instead, which its signature says ("Array<I64>&")
+                struct type asRef = want;
+                asRef.structMAlloc = true;
+                if (!want.structMAlloc && t->type.structMAlloc && typeConvertsBetweenValueAndReference(want, t->type)
+                        && !rt.isTuple && TypeIsSame(asRef, t->type)) {
+                    struct type shown = t->type;
+                    shown.scopeParam = NULL;
+                    struct str fname = call->readVar->name;
+                    for (int k = 0; k < fname.len; k++) if (fname.ptr[k] == '$') { fname.len = k; break; } //G16: as written
+                    Err(t->tok, ERR_SPAWN_RESULT_AS_REF, &want, &t->type, fname, &shown);
+                } else Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type);
+                fits = false;
+            }
             if (!OperandIsMutableLvalue(t)) fits = false;
             struct var* troot = lvalueRootVar(t);
             if (troot && !troot->owner && !t->type.scopeParam && t->type.scopeDepth > ctx->joinDepth) {
@@ -21964,6 +22710,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     pendingDischarges = ListInit(sizeof(struct pendingDischarge)); //O18a
     callRecs = ListInit(sizeof(struct callRec)); //O10c
     regionEdges = ListInit(sizeof(struct regionEdge)); //O17
+    handleMemos = ListInit(sizeof(struct handleMemo)); //O17b
+    handlePendings = ListInit(sizeof(struct handlePending));
     lendChecks = ListInit(sizeof(struct lendCheck));
     roArgChecks = ListInit(sizeof(struct roArgCheck)); //T25c
     roCallAdapters = ListInit(sizeof(struct roFuncValue));
@@ -22077,6 +22825,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     }
     dischargeLateObligations(); //O10c: every body's obligations are known now
     settleRegions(); //O17: and what each stores where
+    settleHandleLends(); //O17b: and the handles lent while a body they rested on was being checked
     settleReadOnlyArgs(); //T25c: and which by-value parameters need a writable argument
     checkFuncValueUses(); //T22a: and final
     checkLiteralShifts(); //E4a/E8a: every literal-only expression that adapts has been folded now
@@ -22314,6 +23063,7 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
     for (int attempt = 0; ; attempt++) {
         SyntaxClearPendingConditions();
         ErrMsgBufferStart();
+        unknownSeen = ListInit(sizeof(struct unknownSeen)); //B11: what this attempt has said
         int constBefore = constArgDecisions.len;
         struct semaModule* root = analyzeOnce(fileName, requireMain);
         //G21: a constant argument computed this attempt changes the types written with it, so the program is checked again

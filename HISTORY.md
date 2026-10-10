@@ -12717,6 +12717,311 @@ runner.olang, `-c -r` of worker.olang, and `-c` of every checks case and fixture
 and every diagnostic those builds printed: identical after the move and the split, after the cleanup, and from the
 `-O2` stage 0. `make verify` passes.
 
+### Every numeric primitive has its own alias tags (T36, 2026-10-10)
+
+Found in oann (`repro/narrowtbaa.olang`) while measuring mixed precision: a GELU pass over a 1024 x 512 BF16 matrix
+through `std/linalg`'s `Map` took 22 ns an element, 1.5 with the rows taken into locals, where F32 took the same either
+way; `nn.SyncParams`, rounding the F32 masters into the BF16 arena, tripled an MNIST step's optimizer time. LLVM's remark
+said "cannot identify array bounds", and the IR said why: T36's tags had been written for "the six primitives" of the
+day (Bool, Byte, Int32, Int64, Float32, Float64), and the numeric rename (T4) added I8, I16, U16, U32, U64, F16 and BF16
+without giving them any. Their element stores were untagged, so to LLVM a `store bfloat` through `dst.Data[i]` might
+have changed the `{ i64, ptr }` descriptor it came from - the descriptor was loaded again at every element and the loop
+never vectorized. The very bug T36 was first written to fix, back for seven types.
+
+**The fix**: `cgTbaa` is a table now (`cgTbaaLeaves`), one row per tagged scalar with its field and element tags, and
+`emitTbaaTypeTree` writes both leaves of every row - the seven new types as siblings under the same root, each with a
+field family and an element family as the first six have. Bool and the first six keep their metadata numbers. Nothing
+else changed: every access already asked `cgTbaa`, so the new types are tagged on exactly the paths the old ones were -
+`cgStoreInto`, the loads, `++`/`--`, an array fill, a comprehension's push, deep equality.
+
+**Soundness, checked rather than assumed** - two types whose storage can be reached through each other must share a
+tag. (1) A declared type over a number (`type Char extends U8`, `type Meters I32`) keeps its base's `bType`, so it has its
+base's tag, which is what T29h's view of an `Array<Char>` as an `Array<U8>` needs; every array conversion and flow
+(T29a's `Name(x)`, T29h's base view, E32b's `as Array<T, N>&`) compares element `bType`s, so no view reaches one
+primitive's storage as another's - in particular `U8` and `I8`, or `F16`, `BF16` and `U16`, which share an LLVM shape,
+are never views of each other. (2) E33's `Bits`/`FromBits`, the BF16 widening by an integer shift and the inline F32 ->
+BF16 narrowing all move values, never storage. (3) An enum payload is the one place two types share bytes: it is built in
+a fresh slot (`cgChoiceValue` - an untagged zero store, the tag, the case's fields, then one untagged aggregate load) and
+stored as one untagged aggregate, and never assigned field by field (O25g), so a tagged read of one case's field cannot
+move past a store of another's - the argument does not depend on the field types, and a corpus test now alternates F16,
+I16, BF16 and U32 cases over one payload. (4) Atomics, the runtime's own IR, `memcpy` and every foreign call (X3) stay
+untagged. The source comment's claim that payloads were "excluded rather than reasoned about" was stale (the earlier
+entry in this file corrected it in prose, not in the code); it now gives the argument.
+
+**Measured** (the oann repro and a version adding F16, I16 and U32, `-b`, interleaved, the machine loaded): through the
+struct, BF16 2.1-5.1 -> 0.30-0.78 ns an element, F16 1.7-2.5 -> 0.28-0.42, I16 0.95-1.5 -> 0.25-0.66, U32 1.0-1.6 ->
+0.55-1.0, each now level with its local loop (BF16 0.28-0.37, U32 0.55-1.0, memory-bound like F32's 0.5-1.1).
+
+**Tests**: two corpus tests in shared.olang (narrow enum cases over one payload's bytes; F16, BF16, I16 and U32 arrays
+written through a struct, a narrow count bumped beside them), and a checks scenario (`tbaa`) building
+`checks/fixtures/tbaa/narrow.olang` - every narrow type's array written through a struct, and a `Code extends U16` array
+written beside its `Array<U16>` view of the same storage - at `-O3` and at `-d` with the same answers, reading off the IR
+that a BF16 and an F16 store carry a tag and that the BF16 element leaf exists (it fails on the previous compiler).
+### The scope sanitizer (`-s`) and a fuzzer for where values live (B2f, 2026-10-10)
+
+**Why.** Three read-only reviews on the night of 2026-10-09 each found use-after-frees the static check (§8.4) let
+through, most of them older than the night, and every one was found by a person reading the checker and then writing
+a program that churned the arena and read a wrong number back. Nothing ran over the corpus that could have found them,
+because the obvious tool is blind here: valgrind and ASan see `malloc`/`free`, and a closed scope does neither - its
+chunks go back to the pool, the next scope takes them, and a stale read reads memory that is live again. So the question
+was what the allocator itself has to do for a stale read to be unmistakable.
+
+**What a scope close does under `-s`** (bootstrap/runtime.c, `emitScopeSanRuntime`):
+1. *Poison* what the chunk handed out with one 64-bit word, `0x7FF57FF57FF57FF5`, chosen so every reading of it is wrong
+   at once: a NaN as an F64, as each half read as an F32 and as each quarter read as an F16 or BF16; an integer near its
+   type's maximum (I64 9.2e18, I32 2.1e9, I16 32757), so a length or an index read out of it is absurd; and a
+   non-canonical address on x86-64 (and AArch64), so a reference read out of poisoned storage faults the moment it is
+   followed, with nothing mapped there by accident.
+2. *Protect* the chunk: `mprotect(PROT_NONE)`, so any read or write faults on the spot - the poison matters only for
+   what was read before the close, or where protecting fails. Every chunk is `mmap`ed under `-s` (normally only those of
+   128KB and more are), page-aligned so it can be protected on its own; a chunk over 1MB keeps one poisoned page and
+   gives the rest back with `MADV_DONTNEED` after it is protected, so a large closed array costs no memory.
+3. *Hold it back* in one FIFO quarantine for the whole process - a ring of 16,384 chunks or 256MB, under a mutex - and
+   only when it overflows give the oldest back (`PROT_READ|PROT_WRITE`, then the ordinary pool, O8b). The tasks' scopes
+   need nothing of their own: a task's sub-arena is spliced into its parent at the join (P2) and closed with it.
+
+A SIGSEGV handler (SA_SIGINFO, on the alternate stack where the thread has one, installed first thing in `main`) tells
+the sanitizer's faults from any other: the faulting address inside a quarantined chunk; or a general-protection fault
+(x86-64 reports a non-canonical address as SI_KERNEL with no address) with the poison word in one of the general
+registers, read out of the `ucontext`; and separately, before any fault, `__olang_new_chunk` treats a request of 2^60
+bytes or more as a length read from poison. Each is reported through `__olang_check_failed` with its own line -
+`use after scope closed: storage a closed scope gave back was read or written`, `... a reference read from storage a
+closed scope gave back was followed`, `... an allocation of more than 2^60 bytes - a length read from storage a closed
+scope gave back` - so it is a failed check in every respect (S18): a test fails and the rest run, and outside a test the
+process aborts with 134. Any other fault restores the action that was there before and returns, so it ends the program
+as it would have. `os.OnCrash` installs its own SIGSEGV action later than the sanitizer; under `-s` that action is copied
+into the sanitizer's fallback instead of replacing the sanitizer, so a program's crash message still appears for a
+crash that is not a use after free (and, as for a failed check, after the sanitizer's report too, since OnCrash also
+handles SIGABRT). The handler is left uninstrumented under `-r`, as the crash handler is (it can block on TSan's lock).
+
+**Why a flag of its own, and not "always under `-d`".** Measured on the bench programs (`-b` against `-b -s`, medians of
+two): binarytrees at depth 18 0.55s -> 3.9s and 18MB -> 146MB, and text (5M renderings, each loop turn one block scope
+that allocates) 0.5s -> 41s - two `mprotect` calls per scope close that allocated, which strace confirms is almost all of
+it (383,650 `mprotect` for 200,000 turns). `-d` is for a debugger and should not cost that unasked, and `-s` is as useful
+at `-O3` (`-b -s`), whose inlining and layout are what a fault in production would have: every reproducer below stops
+under both. One character, as B1 has it: `-s`, for scope. A sanitized object is its own artifact (`.san`, B4) - the
+fifth time the staleness trap applies - and the runtime's IR without `-s` is byte for byte what it was (runner.olang's
+nineteen `.ll` files compared), so it costs nothing to a build that does not ask for it.
+
+**Validation.** The night's third review left five use-after-free reproducers open (/home/user/review/tonight3/repro:
+02 a copy out of a call's returned reference, 02b a reference passed for a by-value parameter, 02c a reference kept by a
+constructor's or a payload's by-value field, 02d a copy of a payload out of an enum parameter, 03 a slice of a split
+value). Each prints a wrong number built `-d` (`-7`, the churn's fill) and stops under `-d -s` and `-b -s` with
+`use after scope closed`, where `-i` (which never reclaims) prints the right one. Its 01, a race between tasks bumping
+one arena, faults under `-s` as without it (heap corruption, not a stale read); 04-10 are not memory errors and are
+unchanged. The fixed reproducers of the first two reviews (/home/user/review/tonight, tonight2) run clean. The whole
+`make test` suite under `-t -s` passes - except two tests in shared.olang, which have a real use-after-free (below) and
+pass without `-s` by luck - and the concurrent files (std/chan, std/cancel, worker, std/prelude/tests/list) are also
+clean under `-t -r -s`: ThreadSanitizer sees the quarantine's mutex and reports nothing.
+
+**Found by running the corpus under it** (fuzz/repro/scopectornested.olang, not fixed - semantic.c was other agents'
+that night): a constructor that grows a field's List inside a nested block - `for i in range n { left.Push(i) }` -
+builds into that block's scope. C2g made a constructor's top level allocate into the instance; a call in a nested block
+binds its receiver's scope variable with no depth (the field local's scope is the instance's), so
+`SemanticBoundScopeDepth` answers the call's own block and codegen passes the loop body's arena. Each chunk Push makes
+there is reclaimed at the end of the turn. shared.olang's tests over `c3Holder` and `sc3Countdown` have the shape.
+
+**The scope fuzzer** (fuzz/scopegen.olang; `fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]]`, `make scopefuzz`). The
+differential fuzzer (K1) generates arithmetic; this one generates *where values live*. A program is a fixed prelude of
+types (a Node with a `mut` next, a Box holding one, wrappers, an enum with a Box payload, a struct of Lists, a struct
+with an inline `Array<mut Node&, 2>`) and helpers, plus independent scenarios: each declares a target - a node, a box in
+a struct, a List, a Map, an array of references, a List returned through two calls, a global, a node built and
+returned by a callee - and grows a random tree of statements storing new nodes into it: in nested `if`/`for`/`match`/
+bare/`defer` blocks with churns between, through helpers taking the target by reference and by value, through copies
+out of references, fields, elements, slices, views and payloads, through constructors and enum cases, captured by
+lambdas, from spawned calls and spawned lambdas, and made as locals of an inner block and stored outward (which must be
+refused). It ends with a churn and a checksum of everything the target reaches. Built `-b -d -s` and interpreted with
+`-i`, the two outputs must be equal. A scenario the checker refuses is left out and the program built again - each
+scenario's text starts with a `# scenario k` line, so an error's line names its scenario - and refusals are counted,
+not reported. A finding keeps the program and a one-scenario program in build/fz/scope/SEED. A line-deleting reducer
+(kept in the scratchpad, not in the repository: Python) then shrank each to a few lines.
+
+*Run 1, 300 programs* (seeds 100-399, 12 scenarios each): 1,754 scenarios ran, 1,846 were refused, 62 findings - all
+known shapes but one: 40 the review's 02d (the prelude's `byAs`, a by-value enum parameter's payload copied and built
+through, sits in most enum scenarios), 4 its 02, 4 its 02c, and 14 a variant of 02d nobody had written: the enum is a
+*local*, its payload copied by a match binding or `as` in an inner block and then passed by value, lent to a callee that
+builds through it, or a reference read out of it captured by a lambda (fuzz/repro/scopepayloadcopy.olang). Its cause is
+02d's: `copyRefsHome` (O25h) returns when its source is not an lvalue, and `OperandIsLvalue` does not count
+`OPERATION_AS`, which both `as` and a match binding's lowering read a payload through, so the copy records no home for
+its references; `valueRefsHome` likewise walks only through `OPERATION_MEMBER`. A store written directly through the
+copy happens to be built right (another path walks through it), which is why 02d's reviewer saw it only for parameters.
+*Run 2, 300 programs with `avoid`* (seeds 1000-1299, the generator leaving out those four known shapes and the
+variant): 1,708 scenarios ran, 1,892 were refused, and nothing was found - so, as far as these shapes reach, the open
+holes are the review's four and the local-enum variant. About half of every program's scenarios are refused, nearly all
+by O25 (an inner block's node stored outward, a box made here around a longer-lived node), which is the checker doing
+its job.
+
+**In `make verify`**: a checks scenario (`scopesan`) builds a small program `-b -d -s` and links its objects with a C
+driver (checks/fixtures/scopesan/drive.c, the program's `main` renamed with objcopy) that calls the runtime directly:
+storage read and written after the close, a large chunk, a poison reference followed, a poison length allocated - each
+stopping with its message and 134 - a fault that is not the sanitizer's ending as it would (139), the same with an
+OnCrash message, and 40,000 closed scopes (more than are held back) with the newest still caught; then two
+arena-churning prelude test files under `-t -d -s`, and grep that a plain build's IR carries none of it. The `fuzz`
+scenario runs two scope-fuzz seeds that are clean today. `make scopesan` runs the whole suite under it - not in verify,
+since shared.olang alone takes a minute and a half under it and its two tests fail until the constructor finding is
+fixed.
+
+**Limits, stated.** It is a detector, not a proof: it sees the uses a run made, and a use of storage that has left the
+quarantine reads whatever was put there since (the poison survives until the chunk is reused). Storage made outside the
+arena is not covered: a stack slot (a value local, a temporary under 64KB) is out of its reach. Under `-r`, a recursion
+within reach of ThreadSanitizer's own frame limit (P7) faults sooner with `-s` than without - std/os's 200,000-frame
+RunOnStack test faults under `-r -s` every time where `-r` alone fails one run in four - which no make target combines.
+### Study 4's checker findings: numbers carry nothing, a handle is lent as its reference, notes propose what compiles (O26a, O17b, O17, O25h, E16, S12b, T20, R11, P1g, T7a, E11b, B11, L9a, 2026-10-10)
+
+Study 4 wrote systems, concurrency and scripting programs and marked every workaround (`review/study4`); the fuzzer had
+found two more. This batch is the checker's half of its findings (the runtime and std half landed separately).
+
+**1. O26a's flow followed numbers (#1, r01).** A local the function returns lives in the result scope, and so does any
+local whose value *flows* into it - read off the program's text. The scan treated any mention of a local inside a
+statement that reached the returned value as a flow, so in
+
+```
+for i in range n {
+    line := mk(i)
+    v := measure(line)
+    if v > s.best { s.best = v }
+}
+return s
+```
+
+`line` was moved to the result scope because `v`, computed from it, was stored into `s`: every line read was kept for
+the life of the result - 4M iterations peaked at 98,776 KB, against 11,160 KB now (the log tailer of the study kept
+630 MB for three lines). The fix is the rule O26a always meant: only a reference, or a value holding references, carries
+what a local refers to. The scan (`flowMentionsName`, `flowPlaceCarriesNothing`, `flowWrittenTypeCarriesNothing`) now
+skips a mention inside an argument of a call whose result cannot hold it (`calleeMayKeepArg`), a member or element
+holding no reference, and anything declared or stored with a type holding none; a slice in a chain keeps its array's
+type, so a view still flows. Two refinements found by the adversarial tests: a **receiver** of a method that can keep
+its argument (`s.names.Push(line)` - the method is looked up on the receiver's own module, since the prelude's types
+are not in the caller's) is a flow; and a reference local initialized from a **borrowed** result (a call whose result
+names a parameter's scope and does not land) is not moved - its referent is the argument's. A checks scenario runs the
+measuring loop under `ulimit -v 50000` (the old compiler's build aborts there), and a must-fail case stores the line
+itself (`sneak(line, s)` pushes it into `s`), where the note's fix (`mk&s(i)`) is the run case beside it.
+
+**2. A handle is lent as its reference (O17b; #5, #6, #8, #10, fuzz listalias).** `List`, `Map` and `StringBuilder`
+became one `mut` reference to a state record (T8), so a copy of one is a second name for the one collection. O17
+judged a lent value by where its *own storage* is when the callee can store through it - right for a struct holding
+several references, wrong for a handle, whose own storage holds nothing but the reference: `l := try m.Get(k);
+l.Push(x)` in a loop was "the callee can store through it", because `l`'s slot is in the loop's block though the chunks
+Push builds go where the map's lists are. Same for nested for-in copies (r09), a `Rule` read out of a Map and walked
+recursively (r25), a struct holding a List built for a receiver's map (r08), and the fuzzer's alias of a List.
+
+**Decided (mine): a handle is a struct with exactly one field, which is a bare reference (living with the instance,
+C2d) or another handle held by value; it is lent as its reference where the callee uses the parameter only through
+it.** "Only through it" is read off the callee's body as written (`handleThroughParam`): the parameter's name appears
+only as `p.field` read (never assigned), or as a receiver or argument handed to a parameter of another function that
+itself uses it only through it - a fixed point over the program's calls, memoized for definite answers, with a
+recursion assumed through while it is being decided. Anything else - kept in a local, stored, returned, compared,
+captured by a lambda, walked by `for`, its field assigned, or handed where the body is not known (a function value, an
+`extern`, a trait's default) - is judged as O17 judges any split lend. The body is read as tokens, skipping type
+expressions and scope arguments, because the question is about what the source says the function does with its
+parameter, before any of it is checked; `T<A, B>(` calls are recognised through the type-argument brackets. At the call
+(`bindCallScopeVars`), a handle argument whose references live elsewhere than its storage binds the parameter's scope
+variable where its references lead (`valueRefsScope`), the argument is marked `handleLent` so the borrow's own lifetime
+check is not asked (its storage need only be alive through the call), and the lend is no split lend. A handle is still
+not held by reference (O17a), and a task's handle argument still lives until its join (P2), checked by a must-fail
+program.
+
+**Why body-derived and not "every handle"**: a callee may keep the handle itself - a back link (`h.s.back = h`) stores
+a reference to the handle's own storage into what it reaches, and a method returning `Box(h)` hands the handle out.
+Lending those as the reference would let the storage die under the stored link. Both are must-fail checks
+(`o17bkeeps`, `o17bkeepsother`), and a handle handed out by a callee that only reads it is a run check (`o17bhandleout`).
+The `handles` fixture (groups built through `Map.Get`, aliases, builders, counters) runs under `-b`, `-b -d` and `-i`
+with one expected output, after an arena churn.
+
+**T25c, reconciled.** The QC change merged the same day (a copy of a place reached read-only is read-only) refused every
+`Map` of handles at `Map.Get`: its loop cursor was declared `f mapSlot<K, V>&s` - read-only - so the value it returned
+was a read-only copy, an error as a by-value result. Put, Update and Remove already declared theirs `mut`; Get's now is
+too, and the receiver stays read-only. That is QC's own shallow reading (linalg's views keep read-only receivers and hand
+out writable views): a holder of a read-only Map of Lists - an immutable global - can still push onto a list it gets,
+recorded as the same limit. Closing it would need a result's permission to follow its receiver's at each call, derived
+from the body as QC derives by-value parameters' needs - left for when permission polymorphism is designed.
+
+**3. Notes propose what compiles (#3, #4, #9; r03, r04, r05).** Three notes printed a fix that was already written or
+did not compile. (a) "make it where 'out' lives: 'Join&out(...)'" for a **value** local: a scope argument moves a
+reference local's referent, never a value local's own storage, which is what is lent - a value local now gets "declare
+it where 'out' lives: 'p mut String&out = ...'". (b) `&x` of a local O26a moved meant the local's block: `resolveScopeTag`
+and `resolveScopeArg` now give the result scope for such a local, where it lives (r03), and SPEC's O26a says so. (c) "declare
+it with ':='" for a local declared with `:=` (r04): O25 now says, for a `:=` local O26a moved, that it lives where the
+result goes while its value lives elsewhere - make it here, or keep it out of the result. And (d), found writing the
+records: for a handle lent as its reference, "declare it where 'l' lives: 't mut String&l = ...'" named the handle's
+own slot - the note now follows the handle to where its references are and names the variable it was read from that
+lives there ("where 'm' lives"), or says nothing (`b11notehandle`, with the fix as `b11notehandlefix`).
+
+**4. O26a through a constructor (#7, r06).** `note := ""` assigned a join on some path and returned inside `return R(n,
+note)` was "build it in '&return'". A local holding no references was never moved; an array, struct or enum local a
+returned value *reads* (an argument of the constructor, a view) is now - its storage is what is borrowed - so the text is
+built where the result goes.
+
+**5. S12b (#12, r10).** A match whose values are array literals of one element type and different lengths was "every
+value is Array<I64, 3>, found Array<I64, 2>"; it is now an array of that element type whatever the lengths, as the
+conditional (E28) already was.
+
+**6. T20 (#13, r13).** `fn retryable(e http.HttpError) Bool` - what a Go programmer writes - was accepted and failed
+later as "'E' is not an enum type" or "'$' has nothing to render". An error type as the type of a parameter, local,
+field, result, element or type argument is now an error at the type, naming catch clauses as the way to tell words
+apart, and a word written as a value (`e != E.A`) says to raise it or catch it.
+
+**7. E16 under `try` (fuzz trygenericindex).** A constant index known out of range was E16's compile-time error even
+under `try` - which is the checked form, whose failure is defined. In a generic over the length one instantiation may
+have the element and another not (`fn third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }`), so it now
+compiles and fails with `OUT_OF_BOUNDS` where it runs; without `try` it stays an error.
+
+**8. Diagnostics (#14-#21).** E11b's hint wherever a join piece follows a piece (after a rendering too, and the whole
+chain - not its first name - with a lambda in it) and for text followed by `(` on its line (a call of text); one error per
+unknown name per function (types per module) with an import's type suggested (`Json` -> `json.Json`), a pattern of an
+unknown enum binding unknowns, and no S8a "the same on every build" decided from an unknown (the study's json2csv went
+from 39 errors to 2 - B10's "define it with -D" for an unknown name in a condition counts as that one error too, and
+the cases that counted each repetition, `unknowncascade`, `unknownreceiver` and `unknowntypearg`, now count each name);
+a catch block whose last statement is a value says to write `} default v` after the block,
+quoting it; a clause ending in `os.Exit` (or an extern `exit`/`_exit`/`abort`) says it is an ordinary call and needs
+`unreachable` after it; P1g with a reference target for a value result names the result type to declare; T7a reached
+through a generic (`nums.Map(fn(n) String { ... })`) points at the lambda's result and says to write `String&`.
+
+**9. Keywords as field names (L9a; #15, recommendation 14). Decided (mine).** `done` was the natural name of a counter
+three times in the study. A field may now be named by a keyword that is a whole statement by itself - after which
+nothing follows on its line - or that begins no statement and no value; it is declared with a type or `:=` (never a
+pun, which would be the statement), and reached only after `.`. The tokenizer reads a word after `.` as a name (so
+`s.done` ending a line ends the statement as a name does), the parser accepts such a field in a constructor's body when
+something other than a statement end follows on its line, and in that body it is no local: a later statement reading
+it alone is "a keyword, not a name - a field named by one is reached only after '.'". Keywords that begin a statement or
+a value (`if`, `for`, `return`, `fn`, `try`, `not`, `true`...) stay reserved everywhere, as do all of them for locals,
+parameters, functions and types - reading `done` alone must keep meaning the statement. After `=>`
+S12b's hint (a clause that leaves is a block) comes first, so `nomatch => unreachable` is not read as a field.
+
+**Adversarial tests**, per relaxation: O26a (numbers) - `o26anumberstore` must fail where the line itself is stored,
+`o26anumberstorefix` runs, the landing scenario's `numberflow` under `ulimit -v 50000`, corpus tests reading back after
+a churn; O17b - `o17bkeeps` and `o17bkeepsother` must fail, `o17bhandleout` and `c2dheldreturned` run, a task's
+handle argument is P2's error, the `handles` fixture under `-b`, `-b -d` and `-i`, and corpus tests for groups,
+aliases, builders and counters read back after a churn; O20 (a value copied out of a reference holds what its referent
+does) - a corpus test; E16 - `e16constnotry` must fail, corpus tests for the checked form in a generic; S12b, L9a -
+corpus tests and `l9afields`/`l9keywordfield`.
+
+**The soundness review of this batch (`review/tonight4`) found one new use-after-free, fixed at the root.** O17b's first
+version decided "used only through its reference" by scanning the callee's body TOKENS, skipping any `&name` as a scope
+marker. But `&` is also bitwise-and: a handle type with a user `BitAnd` handing back its operand let a method write
+`h.c.kept = h.c.kept & h`, storing the handle copy's own storage in the map's cell - the copy (`c := try m.Get(1)` in a
+loop) died and `-d` segfaulted. A soundness decision must not rest on a token scan, so the analysis now reads the
+callee's **checked** body (`htOp`/`htStmt`): every read of the parameter is either the handle's reference field read
+out (a member operand, never an assignment target), or the parameter - or a handle it holds by value - handed whole to a
+parameter of a declared function, method or constructor that is itself "through" (the fixed point); anything else, an
+operator's operand included, says no. And the answer never rests on the walk being complete: every read of a
+handle-reference parameter the body's check makes is recorded where it is made (`OperandReadVar`, `paramReads`), and
+one the walk did not reach - left where it does not look, or built by a probe and thrown away - says no. Bodies are
+checked before their callers bind (O10c's `ensureBodyChecked`), except inside a cycle: there the lend is taken on trust
+and verified once every body is checked (`settleHandleLends`), an O17 error at the call if the answer turns out no
+(`o17bpending`, and `o17bpendingok` where it holds). The review's reproducer is `o17bbitand`, with its two controls
+(`o17bnonhandle`, `o17bnoand`). **Also from the review (optional, cheap)**: `s := a[1:4]; return V(s)` was O26 where
+`return V(a[1:4])` compiled - O26a moved a borrowable local only when a returned value read it directly; it now follows
+flows of what borrows it too (`borrowRoot` in the flow scan: a view or an array, text or struct read out of it counts
+as carrying it). That also accepts `h.name = a; return h` and the same through an inline array of references, which two
+cases (`o26afieldafter`, `o26ainlinearray`) had pinned as O20 errors: the text now lives in the result scope with `h`,
+so they became run cases read back after a churn (`-b`, `-b -d`, `-i`); text stored into a parameter's field still stays
+in its block and is O20's error (`o26aborrowparam`).
+Reading the checked body also lifted the recorded limit `o10cloopcopy` pinned for a handle: `for p in parts { merge(sum,
+p) }` over an array of `Map`s compiles, since `merge`'s `for e in from` is `from.Iter()`, whose iterator holds only
+`of.s` (the token scan had refused every `for`) - `o17bloopcopy` runs it after a churn, and `o10cloopcopy` keeps the
+limit and its note for a struct holding a count beside its map, which is no handle.
+
 ### From study 5: a call's result passed on, writes through `x[i]`, O17 per instantiation, loop copies (O18c, E31b, O17, O26a, E25, D16c, L18, B11, 2026-10-10)
 
 Study 5 (/home/user/review/study5) wrote twelve data-science scripts the way a newcomer would and marked every

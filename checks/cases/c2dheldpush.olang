@@ -1,15 +1,17 @@
 # check: fail error[O26]: this value refers to this function's own storage
 # C2d: a constructor that keeps its argument - here by pushing it onto a list it holds - binds the instance to it, so an
-# instance built from a local may not be returned past that local (one that only reads it may, c2d holds nothing)
+# instance built from a local may not be returned past that local (one that only reads it may, c2d holds nothing). The
+# text is a view of a local array (T29a), which stays in its block; text made by the declaration itself is moved into the
+# result scope instead (O26a, checks/cases/c2dheldreturned.olang)
 type Words struct(text String&) {
     items mut List<String&>& = List<String&>()
     items.Push(text)
 }
 fn fromLocal() Words {
-    t := String(Array<Char>(3, 'a'))
+    buf := Array<Char>(3, 'a')
+    t := String(buf)
     return Words(t)
 }
 fn main() ? {
     w := fromLocal()
-    println($w.items.Len())
 }

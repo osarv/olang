@@ -1,0 +1,16 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17b: a callee keeping the handle itself in something else it is given, or returning it, uses the handle's own storage
+# - which may die first - so the handle is lent as its storage, and refused
+type St struct() { x I64 = 0 }
+type H struct() { s mut St& = St() }
+type Keeper struct() { h mut H& = null }
+fn (h mut H&) me() mut H&h { return h }
+fn main() ? {
+    m := Map<I64, H>()
+    m.Put(1, H())
+    for i in range 3 {
+        c := try m.Get(1)
+        r := c.me()
+        r.s.x++
+    }
+}

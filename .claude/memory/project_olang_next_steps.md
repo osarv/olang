@@ -509,6 +509,12 @@ because what it finds about structure feeds the refactor.
   only through its reference" by a token scan that skips `& h`, binary BitAnd) - s4sem told to decide it from the
   checked body. Started: study5 (data science/numeric, /home/user/wt/s5c @ 35175f1 -> /home/user/review/study5) and
   wt-tbaa (TBAA tags for every numeric type, oann repro/narrowtbaa). Running: s4sem, rv3fix, scopesan, study5, tbaa.
+- 02:55 CEST: study5 done (/home/user/review/study5, r01-r20): r01 a pre-existing UAF (a call's built result passed
+  straight into another call loses its obligation: `bs.Push(box(t))`, Clone of a loop-built List), r02 a silent lost
+  write (`l[0].Add()` on an At copy). Started wt-s5scope (r01, r02 write-back, r03 order-dependent O17, r04-r07
+  relaxations with adversarial tests, diagnostics r11-r18) - SOUNDNESS REVIEW before merging - and wt-s5std (std/csv,
+  std/stats, O(n log n) Array.Sort, List.Truncate). QUEUED: r10 `T(x)` through a type variable (G8b says unsupported;
+  make it work per instantiation), r09 -i memory (the port's M8). Usage 00:48 UTC: five-hour 0.50, weekly 0.85.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

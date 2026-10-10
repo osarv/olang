@@ -661,7 +661,9 @@ void tokenizeTokensFromChars(TokenCtx tc) {
         //L18b: such an "if" begins a statement - it never continues a conditional on the line before
         if (tok.type == TOK_IF && tc->sawNewline && !insideBrackets(tc)) ListAdd(&tc->lineIfs, &tok.str.ptr);
         trackBracket(tc, tok.type);
-        tc->lastTokType = tok.type;
+        //L9a: a word after "." is a member's name, keyword or not - "s.in" at a line's end ends the statement there
+        bool memberWord = tc->lastTokType == TOK_DOT && tok.str.len > 0 && isLetter(tok.str.ptr[0]);
+        tc->lastTokType = memberWord ? TOK_IDEN : tok.type;
         tc->lastTokEnd = tok.str.ptr + tok.str.len;
         tc->lastTokLine = tok.lineNr;
         ListAdd(&tc->tokens, &tok);
