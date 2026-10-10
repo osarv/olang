@@ -62,17 +62,27 @@ design. Do what you want") - nothing to decide until a GUI is written.
   decision 51 below. Queued after decision 50 (QE).
 
 **Asked 2026-10-10 08:55 CEST:**
-- QG. `owned` references (the user's design, replacing the Region<T>+With spelling): `items List<owned Msg&>`, an
-  object built into an owned slot gets its own small arena (a region per object), is used in place directly, freed by
-  `x.Free()` or with its holder's scope, can never leave (a plain reference taken from it is block-scoped, never stored
-  or returned; leaving is a copy). Without Rust's borrow checker two run-time facts need covering: (a) freed-then-used -
-  every owned reference to a freed object reads as null (a generation stamp: ONE COMPARE PER USE of an owned reference,
-  the price of a visible null check, paid only where `owned` is written); (b) freed-while-in-use - refused at compile
-  time: a call handed an owned object may not free an owned object of that type (read off bodies, a fixed point), and a
-  join block that hands a task an owned object may not free one of that type before the join. The question: is the
-  per-use compare acceptable? Alternative: true uniqueness (no copies, only moves, freeing nulls the one slot, zero
-  cost) - needs move semantics, a new concept every container would have to be rewritten for. My recommendation: the
-  compare. In effect: nothing built; failing spawns (decision 50) go first.
+- QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
+  - An object built into an owned slot lives in a small region of its own. Its parts live there too.
+  - It is used in place.
+  - It is freed when its slot is removed, overwritten or set to `null`, and at latest when the container's scope closes.
+  - A reference read out of it (`c := try conns.Get(id)`) is a BORROW. Its scope outlives nothing, so the existing
+    section-8 rules already stop it being stored anywhere outside the object.
+  - What Rust's borrow checker does is done here only for owned objects, at compile time, with zero run-time cost.
+    The compiler refuses a free that may happen while a borrow is in use:
+    - locals: by liveness within the function;
+    - calls: by a "may free an owned T reachable from this parameter/global" fact read off bodies (a fixed point, as
+      O17's);
+    - tasks: by the join rule.
+  - Considered and REJECTED: generation stamps, a compare on every use. They would still need the same effect rule for
+    plain borrows passed to calls, and they leave a cross-thread check-then-use race.
+  - Containers move elements with an explicit `take` (the source is left null). The prelude's List/Map are made
+    move-aware once.
+  - Questions put to the user:
+    1. compile-time checks (Rust-like errors, only where `owned` is written) - recommended yes;
+    2. may an owned object also leave by MOVING out (`Pop` hands it to the caller, who then owns it), besides copying -
+       recommended yes, explicit `take` rather than Rust's implicit moves (`x = y` keeps meaning `x == y`).
+  - In effect: nothing built. The decision-48 fix and failing spawns (decision 50) go first.
 
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
