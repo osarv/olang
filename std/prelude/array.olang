@@ -194,19 +194,44 @@ fn (a Array<<T>>&) ToList() List<T>& {
     return out
 }
 
-# sorts the array in place so that less(a[i], a[i - 1]) holds nowhere - stable, so elements less does not
-# order keep their order. It allocates nothing - elements only ever swap places, so it sorts an array of
-# references exactly as it sorts numbers: insertion-sorted blocks, merged by rotation (Go's sort.Stable)
+# sorts the array in place so that less(a[i], a[i - 1]) holds nowhere - stable, so elements less does not order keep
+# their order. A merge sort, O(n log n): runs of 24 (sortRun) insertion-sorted, then merged pairwise, each merge copying
+# the shorter of its two runs into a scratch array and merging it back - so it allocates n / 2 elements, in its own
+# scope, reclaimed as it returns.
+# That scratch holds elements only where they hold no references - a number, a Bool or a Char - since an element
+# holding references, copied into storage of the call's own, would have them live in the call's scope (G11) and could
+# not be stored back into the array's. Any other element type is sorted in blocks of 12,288 (sortBlock) through
+# positions - the merge sort orders the block's positions, I64s compared by the elements they name, and the elements are
+# then moved where it puts them, one cycle of the permutation at a time, while the block is in the cache - and the
+# blocks are merged in place by rotation (SymMerge, Go's sort.Stable), so it allocates only a block's positions and
+# costs O(n log n log(n / 12288)): a few times the plain merge on a million elements
 fn (a mut Array<<T>>&) Sort(less fn(x T, y T) Bool) {
+    if a.Len() < 2 { return }
+    match T {
+        case I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64, Bool, Char { sortMergeBuffered(a, less) }
+        nomatch { sortByPositions(a, less) }
+    }
+}
+
+# Sort for elements a scratch array cannot hold
+fn sortByPositions(a mut Array<<T>>&, less fn(x T, y T) Bool) {
     n I64 = a.Len()
-    block I64 = 20
+    if n <= sortRun {                        # one run: insertion-sorted where it is, nothing allocated
+        sortInsertion(a, 0, n, less)
+        return
+    }
+    pos := Array<I64>(sortBlock if n > sortBlock else n)
     lo I64 = 0
     for lo < n {
-        hi I64 = lo + block
+        hi I64 = lo + sortBlock
         if hi > n { hi = n }
-        sortInsertion(a, lo, hi, less)
+        p := pos[:hi - lo]
+        for k in range hi - lo { p[k] = lo + k }
+        sortMergeBuffered(p, fn(i I64, j I64) Bool { return less(a[i], a[j]) })
+        sortPermute(a, lo, p)
         lo = hi
     }
+    block I64 = sortBlock
     for block < n {
         lo = 0
         for lo + block < n {
@@ -219,20 +244,143 @@ fn (a mut Array<<T>>&) Sort(less fn(x T, y T) Bool) {
     }
 }
 
+# the merge sort itself, over elements a scratch array of the call's own may hold (Sort)
+fn sortMergeBuffered(a mut Array<<T>>&, less fn(x T, y T) Bool) {
+    n I64 = a.Len()
+    run I64 = sortRun
+    lo I64 = 0
+    for lo < n {
+        hi I64 = lo + run
+        if hi > n { hi = n }
+        sortInsertion(a, lo, hi, less)
+        lo = hi
+    }
+    if n <= run { return }
+    scratch := Array<T>((n + 1) / 2, a[0])     # filled with an element, which needs no zero value of T (D13c)
+    lo = 0                                   # each block's merges first, while it is in the cache, then the blocks'
+    for lo < n {
+        hi I64 = lo + sortBlock
+        if hi > n { hi = n }
+        sortMergeRuns(a, scratch, lo, hi, run, less)
+        lo = hi
+    }
+    sortMergeRuns(a, scratch, 0, n, sortBlock, less)
+}
+
+# merges the sorted runs of a[from:to], each "run" long but the last, pairwise into runs twice as long until one is left
+fn sortMergeRuns(a mut Array<<T>>&, scratch mut Array<T>&, from I64, to I64, run I64, less fn(x T, y T) Bool) {
+    for run < to - from {
+        lo I64 = from
+        for lo + run < to {
+            m I64 = lo + run
+            hi I64 = m + run
+            if hi > to { hi = to }
+            if less(a[m], a[m - 1]) {        # already in order when the right run's first is not less than the left's last
+                if m - lo <= hi - m {
+                    sortMergeForward(a, scratch, lo, m, hi, less)
+                } else {
+                    sortMergeBackward(a, scratch, lo, m, hi, less)
+                }
+            }
+            lo = hi
+        }
+        run = run * 2
+    }
+}
+
+# merges the sorted runs a[lo:m] and a[m:hi], the left one the shorter: it is copied into scratch and merged back from
+# the front, the right run's element taken only when strictly less - so equal ones keep their order
+fn sortMergeForward(a mut Array<<T>>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+    nl I64 = m - lo
+    for k in range nl { scratch[k] = a[lo + k] }
+    i I64 = 0
+    j I64 = m
+    k I64 = lo
+    for i < nl and j < hi {
+        if less(a[j], scratch[i]) {
+            a[k] = a[j]
+            j++
+        } else {
+            a[k] = scratch[i]
+            i++
+        }
+        k++
+    }
+    for i < nl {                             # what is left of the right run is in place already
+        a[k] = scratch[i]
+        i++
+        k++
+    }
+}
+
+# the same with the right run the shorter: it is copied into scratch and merged back from the end, the left run's
+# element taken only when the right one is strictly less than it
+fn sortMergeBackward(a mut Array<<T>>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+    nr I64 = hi - m
+    for k in range nr { scratch[k] = a[m + k] }
+    i I64 = m - 1
+    j I64 = nr - 1
+    k I64 = hi - 1
+    for i >= lo and j >= 0 {
+        if less(scratch[j], a[i]) {
+            a[k] = a[i]
+            i--
+        } else {
+            a[k] = scratch[j]
+            j--
+        }
+        k--
+    }
+    for j >= 0 {                             # what is left of the left run is in place already
+        a[k] = scratch[j]
+        j--
+        k--
+    }
+}
+
+# the length of the runs Sort insertion-sorts before it merges, and of the blocks whose runs it merges before merging
+# the blocks - sortRun times a power of two, so the runs tile each block
+sortRun I64 = 24
+sortBlock I64 = sortRun << 9
+
+# sorts a[lo:hi] by insertion: each element shifted down past those it is less than
+fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x T, y T) Bool) {
+    for i in range lo + 1, hi {
+        x := a[i]
+        j I64 = i
+        for j > lo and less(x, a[j - 1]) {
+            a[j] = a[j - 1]
+            j--
+        }
+        a[j] = x
+    }
+}
+
+# moves each element of a[lo:lo + pos.Len()] to the place pos gives it - after it, a[lo + k] is what a[pos[k]] was -
+# following each cycle of the permutation from its start, so every element is moved once and one is held aside per
+# cycle. pos is used up
+fn sortPermute(a mut Array<<T>>&, lo I64, pos mut Array<I64>&) {
+    for start in range pos.Len() {
+        if pos[start] == lo + start { continue }
+        held := a[lo + start]
+        j I64 = start
+        for {
+            from := pos[j]
+            pos[j] = lo + j
+            if from == lo + start {
+                a[lo + j] = held
+                break
+            }
+            a[lo + j] = a[from]
+            j = from - lo
+        }
+    }
+}
+
 fn sortSwap(a mut Array<<T>>&, i I64, j I64) {
     t := a[i]
     a[i] = a[j]
     a[j] = t
-}
-
-fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x T, y T) Bool) {
-    for i in range lo + 1, hi {
-        j I64 = i
-        for j > lo and less(a[j], a[j - 1]) {
-            sortSwap(a, j, j - 1)
-            j--
-        }
-    }
 }
 
 # merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)
