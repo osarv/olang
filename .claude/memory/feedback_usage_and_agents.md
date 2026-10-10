@@ -91,3 +91,5 @@ between 08:33 and 09:35 CEST with 4-5 agents running, which is ~1% of the week p
 70% uptime over 164 h is ~0.8%/h. So early in this week the weekly window binds, not the five-hour one: average about
 one agent at a time, start new work only as running agents finish, prefer reviews and small fixes, and speed up later
 in the week if usage is under the line.
+The user confirmed it the same day (13:25 CEST): "we don't have to burn the entire budget the first 25 hours. You can
+lax it down a bit." So early in a week, run one or two agents, not four or five.
