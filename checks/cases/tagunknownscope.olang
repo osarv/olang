@@ -1,0 +1,16 @@
+# check: fail error[O12]: where 'l' lives is not known here, so nothing is declared to live there
+# O12: a local of two references from different scopes lives where neither is known, so no declaration may say it lives
+# there (a new node built for 'x' would have been built where neither lives)
+type Node struct(v I64) {
+    v
+}
+fn main() ? {
+    a Node& = Node(1)
+    k := a.v == 1
+    {
+        b Node& = Node(2)
+        l := a if k else b
+        x Node&l = Node(3)
+        println($x.v " " $l.v)
+    }
+}

@@ -1,0 +1,20 @@
+# E11b/E11c: a join reaching a Str in deferred code run by a return from a nested block
+type Bag struct(n I64) {
+    n
+}
+fn (b Bag&) Str() String { return "Bag-" $b.n "-0123456789012345678901234567890123456789012345678901234567890123456789" }
+G mut I64 = 0
+fn f(b Bag&, k I64) I64 {
+    defer { s := $b " " $k
+        G = G + s.Len() }
+    {
+        x := Array<I64>(4, k)
+        if x[0] == k { return 5 }
+    }
+    return 0
+}
+fn main() ? {
+    t I64 = 0
+    for i in range 500 { t += f(Bag(i), i) }
+    println($t)
+}

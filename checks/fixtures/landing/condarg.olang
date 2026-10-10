@@ -1,0 +1,27 @@
+# O18a/E28: a conditional of a call still landing and a new value, passed to a call keeping nothing, is built where that
+# call stands - the loop body - not in the function's own scope until it returns (139MB here before)
+type Node struct(k I64) {
+    k
+    pad Array<I64, 16>
+}
+fn idr(x Node&) Node&x { return x }
+fn takeR(r Node&) I64 { return r.k }
+fn work() I64 {
+    c := true
+    t I64 = 0
+    for i in range 1000000 {
+        t += takeR(idr(Node(i)) if c else Node(16))
+    }
+    return t
+}
+fn work2() I64 {
+    t I64 = 0
+    for i in range 1000000 {
+        t += takeR(idr(Node(i)))
+    }
+    return t
+}
+fn main() ? {
+    t := work()
+    println($t)
+}

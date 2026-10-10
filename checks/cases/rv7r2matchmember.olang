@@ -1,0 +1,28 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - the same through a match value: once per "$"
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&, other mut Mid&) {
+    m
+    other
+}
+fn poke(p mut In&) { p.k++ }
+fn (b Bag&) Str() String {
+    loc mut Mid& = Mid()
+    poke((match b.other.inner.k {
+        case 0 => b.m
+        nomatch => loc
+    }).inner)
+    return "b"
+}
+fn main() ? {
+    b := Bag(Mid(), Mid())
+    assert b.m.inner.k == 0
+    assert $b == "b"
+    assert b.m.inner.k == 1
+    assert $b $b == "bb" and b.m.inner.k == 3
+}

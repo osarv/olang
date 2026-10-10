@@ -1,0 +1,16 @@
+# E11c/D16c: a Str making a capturing lambda for Any - the receiver's scope is a real one, which the closure's escape
+# reads
+type Item struct(id I64) {
+    id
+    tags List<String&> = List<String&>()
+}
+fn (it Item&) Str() String {
+    hit := it.tags.Iter().Any(fn(t String&) Bool { return t == $it.id })
+    return $it.id " " $hit
+}
+fn main() ? {
+    it := Item(7)
+    it.tags.Push("a")
+    it.tags.Push("7")
+    println($it)
+}

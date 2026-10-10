@@ -1,0 +1,21 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/P2: a task whose call builds into the scope it is handed gets a stand-in for it, made in that scope - where the
+# receiver's node lives, so it is refused
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn grow(n Node&) I64 {
+    m Node&n = Node(n.v + 1, null)
+    return m.v
+}
+fn hjoin(n Node&) I64 {
+    x I64 = 0
+    join { spawn x = grow(n) }
+    return x
+}
+fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
+fn main() ? { println($Bag(Node(6, null))) }

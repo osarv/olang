@@ -1,0 +1,18 @@
+# E11b: a join reaching a Str in a loop's condition - a temporary of the block the loop stands in, so its text stays until
+# that block closes, once per iteration - leaves only its text there: the builder grows in a scope of its own, closed once
+# the text is copied where the join lands (grown in that block, what it outgrew stayed beside the text: 64 bytes, then
+# 1000, then 2000 for 1001 bytes of text, four times the memory)
+type Big struct(n I64) {
+    n
+}
+fn (b Big&) Str() String {
+    sb := StringBuilder()
+    for i in range 100 { sb.Push("0123456789") }
+    return sb.ToString()
+}
+fn main() ? {
+    b := Big(1)
+    i I64 = 0
+    for ($b " " $i).Len() > 0 and i < 50000 { i++ }
+    println($i)
+}

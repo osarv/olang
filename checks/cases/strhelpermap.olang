@@ -1,0 +1,26 @@
+# check: run
+# flags: -s
+# E11c/O18c: a helper walking a Map handed the receiver's map ('for e in m', 'm.Keys()') builds nothing where it
+# lives - its iterators are its own (E11c): it runs, as the same loops in Str's body do
+fn total(m Map<String&, I64>&) I64 {
+    t I64 = 0
+    for e in m { t += e.Value }
+    return t
+}
+fn keys(m Map<String&, I64>&) String {
+    sb := StringBuilder()
+    for k in m.Keys() { sb.Push(k) }
+    return sb.ToString()
+}
+type Reg struct() {
+    m Map<String&, I64> = Map<String&, I64>()
+}
+fn (r Reg&) Str() String {
+    return $total(r.m) " " $keys(r.m)
+}
+fn main() ? {
+    r := Reg()
+    r.m.Put("a", 1)
+    r.m.Put("b", 2)
+    println($r)
+}

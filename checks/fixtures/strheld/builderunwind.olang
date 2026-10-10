@@ -1,0 +1,22 @@
+# C6: a rendering whose builder first outgrows its room inside a render helper, then a failing check later in the same
+# test - the builder's unwind node is pushed where the builder is made, so the unwind walks live frames only
+type Bag struct(k I64) {
+    k
+}
+Flag mut I64 = 0
+fn (b Bag&) Str() String { return "bag-" $b.k " with a fairly long rendering that goes well past sixty-four bytes of room" }
+fn noise(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return Flag }
+    return noise(d - 1) + a[3] - d
+}
+test "renders then fails" {
+    s := $Bag(1)
+    assert s.Len() > 64
+    t := noise(50)
+    assert t != 0, "expected failure"
+}
+test "after" {
+    s := $Bag(2)
+    assert s.Len() > 64
+}

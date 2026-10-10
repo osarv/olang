@@ -1,0 +1,17 @@
+# E11c/E31: the same inside a helper handed the part
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 {
+    s := $c.v "x"
+    return s.Len()
+}
+fn hh(c Ctr&) I64 {
+    g fn() I64 = c
+    return g()
+}
+type Bag struct(c Ctr&) {
+    c
+}
+fn (b Bag&) Str() String { return "b" $hh(b.c) }
+fn main() ? { println($Bag(Ctr(5))) }

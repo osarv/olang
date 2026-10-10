@@ -1,0 +1,24 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - a cursor from a conditional, written through directly:
+# once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Cur struct(of Bag&) {
+    c mut Cell&of = of.c
+}
+fn mk(b Bag&) Cur { return Cur(b) }
+fn (b Bag&) Str() String {
+    k := b.c.v
+    cur := Cur(b) if k >= 0 else mk(b)
+    cur.c.v++
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

@@ -1,0 +1,23 @@
+# check: run
+# flags: -s
+# P2/P4a: a task's catch default is built in the call's result scope - a stand-in, as every scope a task is handed is -
+# so sixteen tasks' defaults never share an arena (C4)
+type Node struct(v I64) {
+    v
+}
+error Odd { NO }
+fn f(i I64) mut Node& ? Odd {
+    if i >= 0 { error Odd.NO }
+    return null
+}
+fn main() ? {
+    total I64 = 0
+    for r in range 400 {
+        out := Array<mut Node&>(16, null)
+        join {
+            for i in range 16 { spawn out[i] = try f(i) catch default Node(i + r) }
+        }
+        for i in range 16 { total += out[i].v }
+    }
+    assert total == 1324800, $total
+}

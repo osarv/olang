@@ -1,0 +1,13 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E31: a Call adapter made of a receiver part lives where the part does, which Str may not build in - even for a
+# callee keeping nothing of it (no frame adapter: such a callee may hand it to a function value that keeps it, C8)
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 { return c.v }
+fn apply(f fn() I64) I64 { return f() }
+type Bag struct(c Ctr&) {
+    c
+}
+fn (b Bag&) Str() String { return "b" $apply(b.c) }
+fn main() ? { println($Bag(Ctr(5))) }

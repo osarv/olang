@@ -187,6 +187,8 @@ struct cgCtx {
     char* ownUnwindNode;
     bool emitUnwind;
     bool floatText; //E11a: a float is rendered - the object carries @__olang_fmt_float (emitFloatTextRuntime)
+    bool textBuilt; //E11c: a rendering is built in one pass - the object carries @__olang_sb_* (emitTextBuilderRuntime)
+    bool rdBuild;   //E11c: the rendering helper being emitted builds into %rd.sb in one pass, not measure-then-write
     //every "alloca" goes here rather than where it is written, so all of them land in the function's
     //ENTRY block. An alloca inside a loop body allocates a fresh slot per iteration and the stack grows
     //without bound - O2 records exactly this trap for scope headers, which were hoisted for that reason;
@@ -201,6 +203,10 @@ struct cgCtx {
     //the value itself, instead of each independently defaulting to ctx->ownScopeSlot - see the report.
     //NULL when nothing is currently being promoted (the common case - most values never touch this).
     char* targetScopeOverride;
+    //C11/O16: the constructor call whose instance the caller is about to copy into fresh storage and register itself
+    //(cgPromote, a promotion through cgStoreInto) - any other instance of a type declaring a destructor is registered
+    //where cgFuncCall builds it
+    struct operand* promotedOp;
     //P2: the scopes the lambda being emitted captured (struct cgCapScope), each marked once the body resolves it for
     //anything but reading - its prologue then asks for it as this thread may build into it (__olang_capture_scope).
     //capReadOnly counts the resolutions in progress that only read, or hand the scope to what builds nothing there
@@ -249,6 +255,7 @@ struct cgCtx {
     struct operand* tdOp;
     char* tdSlot;
     char tdJoin[32];
+    bool tdPromoted; //C11/O16: the try whose slot this is is being promoted - a default's own instance is promoted with it
 };
 
 //a module's own stable symbol prefix: its file's base name, directory and ".olang" extension stripped,
@@ -1170,6 +1177,18 @@ static void cgNoteBuildInto(struct cgCtx* ctx, const char* scope) {
     }
 }
 
+//E11c: a handed scope passed on as a callee's scope variable sv, where the walk said this body never builds into it
+//(SemanticReliesNoBuild) - a callee that may build into sv, or one whose body is not known, builds there for it, so it
+//is marked built and cgCheckMayBuild stops on it as on an allocation made here
+static void cgNoteHandedOn(struct cgCtx* ctx, struct operand* op, struct var* func, struct var* sv, const char* sval) {
+    if (!sval || !ctx->curFunc) return;
+    for (int i = 0; i < ctx->handed.len; i++) {
+        struct cgHanded* h = ListGetIdx(&ctx->handed, i);
+        if (h->built || strcmp(h->val, sval) != 0 || !SemanticReliesNoBuild(ctx->curFunc, h->sv)) continue;
+        if (op->callee || SemanticMayBuildInto(func, sv)) h->built = true;
+    }
+}
+
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
@@ -2028,7 +2047,9 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
     char* scopeVal = scopeOverride ? scopeOverride : cgResolveScope(ctx, dstT.scopeParam, dstT.scopeDepth);
     char* prev = ctx->targetScopeOverride;
     ctx->targetScopeOverride = scopeVal;
+    if (typeNeedsMallocPromotion(dstT, op->type)) ctx->promotedOp = op; //cgStoreInto promotes and registers it
     char* v = cgValue(ctx, op);
+    ctx->promotedOp = NULL;
     ctx->targetScopeOverride = prev;
     return v;
 }
@@ -2047,7 +2068,9 @@ static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
     cgArenaAllocFor(ctx, heap, scopeVal, op->type);
     char* prev = ctx->targetScopeOverride;
     ctx->targetScopeOverride = scopeVal;
+    ctx->promotedOp = op;
     char* v = cgValue(ctx, op);
+    ctx->promotedOp = NULL;
     ctx->targetScopeOverride = prev;
     if (cgViaMemory(op->type)) {
         fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
@@ -3471,6 +3494,9 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
         if (readOnly) ctx->capReadOnly--;
+        //E11c: a scope this body was handed and the walk said it never builds into, passed on to a callee that may build
+        //into the variable it is bound to, is that body building there too - held as its own allocations are
+        if (!spawnMerges) cgNoteHandedOn(ctx, op, func, sv, sval);
         if (spawnMerges && !atHere) sval = cgSpawnSubScope(ctx, spawnMerges, sval, args->len);
         else if (spawnMerges) {
             struct cgScopeMerge alias = { hereArg, args->len, false };
@@ -3537,7 +3563,28 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
     return target;
 }
 
+static char* cgFuncCallValue(struct cgCtx* ctx, struct operand* op);
+//C11/O16: an instance of a type declaring a destructor that no promotion takes - a constructor call standing as a
+//statement, read through ("Wrap(x).a.v") or rendered ("$Wrap(x)") - is still one constructor call, so it is built in
+//storage of its own where its constructor put it (%here) and registered there, its destructor running once when that
+//scope closes. A promotion copies the instance into the storage it is promoted into and registers that instead
 char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
+    bool promoted = ctx->promotedOp == op;
+    if (promoted) ctx->promotedOp = NULL;
+    char* v = cgFuncCallValue(ctx, op);
+    struct var* func = op->readVar;
+    if (promoted || !cgIsCtor(func) || op->type.bType != BASETYPE_STRUCT || op->type.structMAlloc || !op->type.hasDestruct)
+        return v;
+    char* scopeVal = cgCtorHereArg(ctx, op);
+    char* heap = cgNewTmp(ctx);
+    cgArenaAllocFor(ctx, heap, scopeVal, op->type);
+    fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", heap, v,
+            TypeGetSize(op->type));
+    cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
+    return heap;
+}
+
+static char* cgFuncCallValue(struct cgCtx* ctx, struct operand* op) {
     struct var* func = op->readVar;
     if (func->type.isExtern) return cgExternFuncCall(ctx, op);
     //a big result (cgRetViaMemory) is written straight into storage of this call's own, which is then its value
@@ -4064,7 +4111,23 @@ static char* cgArmScope(struct cgCtx* ctx, struct operand* v, struct type result
 
 //E28: "a if c else b" - the chosen value, converted to the conditional's type on its own path, through one slot.
 //A value built here (text, an array) is built in the target's scope, which reaches the branch as the override.
+//C11/O16: a conditional or match value being promoted is one instance, whichever arm builds it - so the arm is promoted
+//with it (a constructor call there is not registered where it is built) and the promotion's registration is its only one
+static void cgStoreArm(struct cgCtx* ctx, struct type t, struct operand* v, char* slot, bool promoted) {
+    //T25d: constant text reaching a read-only conditional or match is the constant itself - nothing copied, nothing built
+    char* st = cgStaticLiteral(ctx, v, t);
+    if (st) {
+        fprintf(ctx->fnOut, "  store { i64, ptr } %s, ptr %s\n", st, slot);
+        return;
+    }
+    if (promoted) ctx->promotedOp = v;
+    cgStoreOperand(ctx, t, v, slot, cgArmScope(ctx, v, t), false, false);
+    ctx->promotedOp = NULL;
+}
+
 char* cgCond(struct cgCtx* ctx, struct operand* op) {
+    bool promoted = ctx->promotedOp == op;
+    if (promoted) ctx->promotedOp = NULL;
     struct operand* c = *(struct operand**)ListGetIdx(&op->args, 0);
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
@@ -4080,7 +4143,7 @@ char* cgCond(struct cgCtx* ctx, struct operand* op) {
     for (int b = 1; b <= 2; b++) {
         cgLabel(ctx, b == 1 ? thenLbl : elseLbl);
         struct operand* v = *(struct operand**)ListGetIdx(&op->args, b);
-        cgStoreOperand(ctx, op->type, v, slot, cgArmScope(ctx, v, op->type), false, false);
+        cgStoreArm(ctx, op->type, v, slot, promoted);
         cgBr(ctx, endLbl);
     }
     cgLabel(ctx, endLbl);
@@ -4526,6 +4589,7 @@ char* cgSliceValue(struct cgCtx* ctx, struct operand* op) {
 #define RD_MAX_DEPTH 8 //E11a: references followed along one path before the rest is written as "..."
 
 static char* cgRenderFn(struct cgCtx* ctx, struct type t);
+static char* cgRenderBuildFn(struct cgCtx* ctx, struct type t);
 
 static void rdSpellTypeB(struct type t, struct cgBuf* b);
 static bool rdForDiag;              //spelling a type for a diagnostic (DiagSpellType) rather than for a rendering
@@ -4741,8 +4805,12 @@ void DiagSpellType(struct type t, char* buf, size_t n) {
 }
 
 
-//appends src[0..len) at the cursor (%rd.n) of the helper being emitted
+//appends src[0..len) at the cursor (%rd.n) of the helper being emitted - or, building in one pass, to %rd.sb
 static void rdPut(struct cgCtx* ctx, char* src, char* len) {
+    if (ctx->rdBuild) {
+        fprintf(ctx->fnOut, "  call void @__olang_sb_put(ptr %%rd.sb, ptr %s, i64 %s)\n", src, len);
+        return;
+    }
     char* at = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load i64, ptr %%rd.n\n", at);
     fprintf(ctx->fnOut, "  call void @__olang_rd_put(ptr %%rd.dst, i64 %s, ptr %s, i64 %s)\n", at, src, len);
@@ -4778,6 +4846,16 @@ static void rdAdvance(struct cgCtx* ctx, char* at, char* k) {
 
 //E11a: nested text, quoted and escaped by the runtime (a byte in '', a byte array in "")
 static void rdPutQuoted(struct cgCtx* ctx, char* src, char* count, int quote) {
+    if (ctx->rdBuild) { //measured, room made at the end of %rd.sb, written there
+        char* k = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i64 @__olang_rd_quote(ptr null, i64 0, ptr %s, i64 %s, i8 %d)\n", k, src, count, quote);
+        char* p = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_sb_room(ptr %%rd.sb, i64 %s)\n", p, k);
+        char* k2 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i64 @__olang_rd_quote(ptr %s, i64 0, ptr %s, i64 %s, i8 %d)\n", k2, p, src, count, quote);
+        fprintf(ctx->fnOut, "  call void @__olang_sb_add(ptr %%rd.sb, i64 %s)\n", k);
+        return;
+    }
     char* at = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load i64, ptr %%rd.n\n", at);
     char* k = cgNewTmp(ctx);
@@ -4804,10 +4882,18 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     else if (isFloat) fprintf(ctx->fnOut, "  %s = fpext %s %s to double\n", wide, ty, v);
     else if (TypeGetSize(t) == 8) fprintf(ctx->fnOut, "  %s = add i64 %s, 0\n", wide, v);
     else fprintf(ctx->fnOut, "  %s = %s %s %s to i64\n", wide, TypeIsUnsigned(t) ? "zext" : "sext", ty, v);
-    char* at;
-    char* p = rdHere(ctx, &at);
-    char* cap = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = select i1 %%rd.measure, i64 0, i64 64\n", cap);
+    char* at = NULL;
+    char* p;
+    char* cap;
+    if (ctx->rdBuild) { //room for the longest a number takes, at the end of %rd.sb
+        p = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_sb_room(ptr %%rd.sb, i64 64)\n", p);
+        cap = "64";
+    } else {
+        p = rdHere(ctx, &at);
+        cap = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = select i1 %%rd.measure, i64 0, i64 64\n", cap);
+    }
     char* k = cgNewTmp(ctx);
     if (isFloat) {
         enum floatKind fk = t.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : t.bType == BASETYPE_F16 ? FLOAT_KIND_F16
@@ -4817,23 +4903,64 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
     } else {
         fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s)\n", k, u64 ? "u64" : "i64", p, wide);
     }
-    rdAdvance(ctx, at, k);
+    if (ctx->rdBuild) fprintf(ctx->fnOut, "  call void @__olang_sb_add(ptr %%rd.sb, i64 %s)\n", k);
+    else rdAdvance(ctx, at, k);
 }
 
-//E11c: the text the type's own Str gives for the value at addr. Str has no effect (the checker saw to that), so it
-//is simply called again for the writing pass. What it builds lives in a scope of its own, closed once copied.
+//a scope of an expression's own, opened in the code being emitted and closed by cgScratchScopeClose before the expression is
+//done with - while a test runs it is on the unwind chain (P1d), so a "done", "fail" or failed check before the close still
+//reclaims it (and runs what was registered in it)
+static char* cgScratchScopeOpen(struct cgCtx* ctx, char** nodeOut, char** prevTopOut) {
+    char* scope = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", scope);
+    fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", scope);
+    *nodeOut = NULL;
+    *prevTopOut = NULL;
+    if (!ctx->emitUnwind) return scope;
+    char* node = cgNewTmp(ctx); //{prev, scope, join head}, as a block's node
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.unwind\n", node);
+    char* prevTop = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr @__olang_unwind_top\n", prevTop);
+    char* f0 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", f0, node);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", prevTop, f0);
+    char* f1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 1\n", f1, node);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", scope, f1);
+    char* f2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 2\n", f2, node);
+    fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", f2);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", node);
+    *nodeOut = node;
+    *prevTopOut = prevTop;
+    return scope;
+}
+static void cgScratchScopeClose(struct cgCtx* ctx, char* scope, char* node, char* prevTop) {
+    fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", scope);
+    if (node) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", prevTop);
+}
+
+//E11c: the text the type's own Str gives for the value at addr - called once, where the rendering reaches it, which is
+//only ever while one is built in one pass (a rendering reaching a Str always is). Its result lives in a scope of its
+//own, closed once the text is copied; while a test runs that scope is on the unwind chain (P1d), so a "done", "fail" or
+//failed check inside Str still runs what it registered. Where the receiver lives is not known in Str's body (O12), so
+//nothing is built there - the checker's walk (SemanticMayBuildInto) found nothing, and codegen holds every body to that
+//(cgCheckMayBuild) - and the receiver's scope variables are handed that same scope: a real one, which a closure's or an
+//adapter's escape and a lambda's prologue may read (decision 48), with nothing ever built in it through them
 static void rdPutStr(struct cgCtx* ctx, struct var* m, char* addr) {
+    if (!ctx->rdBuild) ErrorBugFound();
     char sym[256];
     mangleFuncSym(m, sym, sizeof(sym));
     struct var* recv = ListGetIdx(&m->type.vars, 0);
     char recvTy[256], retTy[256];
     llvmType(recv->type, recvTy, sizeof(recvTy));
     llvmFuncRetType(m->type, retTy, sizeof(retTy));
-    char* scope = cgNewTmp(ctx);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", scope);
-    fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", scope);
+    char* scope = NULL;
+    char* node = NULL;
+    char* prevTop = NULL;
     char args[2048] = "";
     for (int k = 0; k < m->type.scopeVars.len; k++) {
+        if (!scope) scope = cgScratchScopeOpen(ctx, &node, &prevTop);
         char piece[64];
         snprintf(piece, sizeof(piece), "%sptr %s", k ? ", " : "", scope);
         strncat(args, piece, sizeof(args) - strlen(args) - 1);
@@ -4860,7 +4987,7 @@ static void rdPutStr(struct cgCtx* ctx, struct var* m, char* addr) {
     fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", len, r);
     fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", src, r);
     rdPut(ctx, src, len);
-    fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", scope);
+    if (scope) cgScratchScopeClose(ctx, scope, node, prevTop);
 }
 
 //renders the value of type t at addr into the helper being emitted: a primitive inline, anything else
@@ -4883,6 +5010,23 @@ static void rdPutValue(struct cgCtx* ctx, struct type t, char* addr, char* depth
         if (TypeRendersAsChar(t)) { rdPutQuoted(ctx, addr, "1", '\''); return; } //nested: 'c' (T29h, E11a)
 
         if (TypeIsNumeric(t)) { rdPutNumber(ctx, t, addr); return; }
+    }
+    if (ctx->rdBuild) { //a part reaching a Str builds in one pass too; any other is measured and written at the end
+        if (SemanticRendersStr(t)) {
+            fprintf(ctx->fnOut, "  call void %s(ptr %%rd.sb, ptr %s, i32 %s)\n", cgRenderBuildFn(ctx, t), addr, depth);
+            return;
+        }
+        char* fn = cgRenderFn(ctx, t);
+        char* k = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i64 %s(ptr null, ptr %s, i32 %s)\n", k, fn, addr, depth);
+        char* k1 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", k1, k); //a number's writer may put a NUL just past itself
+        char* p = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_sb_room(ptr %%rd.sb, i64 %s)\n", p, k1);
+        char* ignored = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i64 %s(ptr %s, ptr %s, i32 %s)\n", ignored, fn, p, addr, depth);
+        fprintf(ctx->fnOut, "  call void @__olang_sb_add(ptr %%rd.sb, i64 %s)\n", k);
+        return;
     }
     char* fn = cgRenderFn(ctx, t);
     char* at;
@@ -5028,14 +5172,24 @@ static void rdBody(struct cgCtx* ctx, struct type t) {
             bool payload = ChoiceHasPayload(t);
             char ty[256];
             llvmType(t, ty, sizeof(ty));
+            //E11c: a payload that renders through a Str is read from a copy of the whole value, taken before any of it
+            //is rendered - a Str may store a value of another case where this one is, and the payload's bytes would
+            //then be read as fields they are not
+            char* val = "%rd.val";
+            if (ctx->rdBuild && payload) {
+                val = cgNewTmp(ctx);
+                fprintf(cgAllocaOut(ctx), "  %s = alloca %s, align %lld\n", val, ty, cgStackAlign(t));
+                fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %%rd.val, i64 %lld, i1 false)\n", val,
+                        TypeGetSize(t));
+            }
             char* tag = cgNewTmp(ctx);
             char* payAddr = NULL;
             if (payload) {
                 char* tp = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%rd.val, i32 0, i32 0\n", tp, ty);
+                fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 0\n", tp, ty, val);
                 fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", tag, tp);
                 payAddr = cgNewTmp(ctx);
-                fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%rd.val, i32 0, i32 1\n", payAddr, ty);
+                fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 1\n", payAddr, ty, val);
             } else {
                 char* t32 = cgNewTmp(ctx);
                 fprintf(ctx->fnOut, "  %s = load i32, ptr %%rd.val\n", t32);
@@ -5094,12 +5248,14 @@ static char* cgRenderFn(struct cgCtx* ctx, struct type t) {
 
     FILE* savedOut = ctx->fnOut;
     bool savedTerm = ctx->terminated;
+    bool savedBuild = ctx->rdBuild;
     char* buf;
     size_t sz;
     FILE* body = open_memstream(&buf, &sz);
     if (!body) ErrorBugFound();
     ctx->fnOut = body;
     ctx->terminated = false;
+    ctx->rdBuild = false;
     fprintf(body, "define linkonce_odr i64 %s(ptr %%rd.dst, ptr %%rd.val, i32 %%rd.depth) {\nentry:\n", sym);
     struct cgBodyBuf bb;
     cgBodyBegin(ctx, &bb);
@@ -5111,6 +5267,7 @@ static char* cgRenderFn(struct cgCtx* ctx, struct type t) {
     cgBodyEnd(ctx, &bb);
     ctx->fnOut = savedOut;
     ctx->terminated = savedTerm;
+    ctx->rdBuild = savedBuild;
     fflush(body);
     fwrite(buf, 1, sz, ctx->out);
     fclose(body);
@@ -5118,8 +5275,48 @@ static char* cgRenderFn(struct cgCtx* ctx, struct type t) {
     return sym;
 }
 
-//one piece of a join, measured: either a descriptor to copy or a value to render through its helper
-struct textPiece { char* desc; char* fn; char* addr; char* len; };
+//E11c: (once per object) the helper rendering a value of t that reaches a Str, in one pass and in order, onto the
+//growing text at %rd.sb (the runtime's @__olang_sb_*): a Str runs part way through, and may change what a second pass
+//would read - so nothing is read twice, and each Str is called exactly once, where the rendering reaches it
+static char* cgRenderBuildFn(struct cgCtx* ctx, struct type t) {
+    struct cgBuf key = {0};
+    rdKey(t, &key);
+    struct cgBuf symB = {0};
+    cgBufAdd(&symB, "@olang.rdb.%s", cgBufStr(&key));
+    free(key.p);
+    char* sym = cgBufStr(&symB);
+    if (cgSymAlreadyEmitted(ctx, sym)) return sym;
+    ctx->textBuilt = true;
+
+    FILE* savedOut = ctx->fnOut;
+    bool savedTerm = ctx->terminated;
+    bool savedBuild = ctx->rdBuild;
+    char* buf;
+    size_t sz;
+    FILE* body = open_memstream(&buf, &sz);
+    if (!body) ErrorBugFound();
+    ctx->fnOut = body;
+    ctx->terminated = false;
+    ctx->rdBuild = true;
+    fprintf(body, "define linkonce_odr void %s(ptr %%rd.sb, ptr %%rd.val, i32 %%rd.depth) {\nentry:\n", sym);
+    struct cgBodyBuf bb;
+    cgBodyBegin(ctx, &bb);
+    rdBody(ctx, t);
+    fprintf(ctx->fnOut, "  ret void\n}\n\n");
+    cgBodyEnd(ctx, &bb);
+    ctx->fnOut = savedOut;
+    ctx->terminated = savedTerm;
+    ctx->rdBuild = savedBuild;
+    fflush(body);
+    fwrite(buf, 1, sz, ctx->out);
+    fclose(body);
+    free(buf);
+    return sym;
+}
+
+//one piece of a join, its operand evaluated: a descriptor to copy, or a value to render through its helper (a
+//rendering reaching a Str through its one-pass helper, build)
+struct textPiece { char* desc; char* fn; char* build; char* addr; char* len; };
 
 //the address of op's value, spilling a value held in a register
 static char* cgValueAddr(struct cgCtx* ctx, struct operand* op) {
@@ -5142,21 +5339,46 @@ static void cgTextParts(struct cgCtx* ctx, struct operand* op, struct list* out)
     ListAdd(out, &op);
 }
 
-//E11a/E11b: "$x" alone or a join of text pieces - every piece measured, one allocation, each written in
-//place. At the top level a byte is its character and a byte array its bytes (text is shown as itself);
-//everything else renders through its helper, where nested text is quoted.
-static char* cgText(struct cgCtx* ctx, struct operand* op) {
-    struct list parts = ListInit(sizeof(struct operand*));
-    cgTextParts(ctx, op, &parts);
-    char* scopeVal = cgWhereBuilt(ctx, op);
-    struct type textT = op->type;
-    struct list pieces = ListInit(sizeof(struct textPiece));
-    char* total = "0";
-    for (int i = 0; i < parts.len; i++) {
-        struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
-        struct textPiece tp = {0};
+//E11a: whether evaluating op may run the program's own code - a call, the statements an operand carries, a write -
+//which could change a struct an earlier piece of a join renders (cgTextOperands)
+static bool cgRunsCode(struct operand* op) {
+    if (!op) return false;
+    switch (op->opType) {
+        case OPERATION_NONE: case OPERATION_READ_VAR: case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_LEN:
+        case OPERATION_COND: case OPERATION_CMP_CHAIN: case OPERATION_SLICE: case OPERATION_IS: case OPERATION_AS:
+        case OPERATION_BOUNDS: case OPERATION_BITCAST: case OPERATION_NUMERIC_CONVERT: case OPERATION_NOMINAL_CONVERT:
+        case OPERATION_ZERO: case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_ATOMIC_LOAD:
+        case OPERATION_NOT: case OPERATION_BTWSE_INV: case OPERATION_MINUS:
+        case OPERATION_MOD: case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL: case OPERATION_DIV:
+        case OPERATION_LST: case OPERATION_LSE: case OPERATION_GRT: case OPERATION_GRE: case OPERATION_EQ: case OPERATION_NEQ:
+        case OPERATION_AND: case OPERATION_OR: case OPERATION_XOR: case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR:
+            break;
+        default:
+            return true;
+    }
+    if (op->catchClauses.len || cgRunsCode(op->callee)) return true;
+    for (int i = 0; i < op->args.len; i++) if (cgRunsCode(*(struct operand**)ListGetIdx(&op->args, i))) return true;
+    for (int i = 0; i < op->chainOperands.len; i++) if (cgRunsCode(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
+    return false;
+}
+
+//E11a/E11b: a join's operands, evaluated left to right - each to its value, as any expression's is - before any piece
+//is rendered. An array is held by reference (T7b) and a reference names an instance, so what those hold is read when
+//the piece renders; a struct held in storage is copied where code that could change it runs before it renders - a
+//later piece's operand, or a Str rendering any piece - so a value is what it was when its operand was evaluated
+static void cgTextOperands(struct cgCtx* ctx, struct type textT, struct list* parts, bool viaStr, struct list* pieces) {
+    int lastRuns = -1;
+    for (int i = 0; i < parts->len; i++) {
+        struct operand* p = *(struct operand**)ListGetIdx(parts, i);
         struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
-        bool viaStr = in && SemanticStrOf(in->type); //E11c: rendered by the type's own Str, at the top level too
+        if (cgRunsCode(in)) lastRuns = i;
+    }
+    for (int i = 0; i < parts->len; i++) {
+        struct operand* p = *(struct operand**)ListGetIdx(parts, i);
+        struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
+        bool ownStr = in && SemanticStrOf(in->type); //E11c: rendered by the type's own Str, at the top level too
+        struct textPiece tp = {0};
         if (!in) { //a literal
             tp.desc = cgBorrowValue(ctx, textT, p->type, cgValue(ctx, p));
         } else if (in->type.bType == BASETYPE_FUNC && in->opType == OPERATION_READ_VAR && in->readVar
@@ -5170,28 +5392,147 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %d, 0\n", d1, (int)strlen(text));
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, g);
-        } else if (TypeRendersAsChar(in->type) && !viaStr) {
+        } else if (TypeRendersAsChar(in->type) && !ownStr) {
             char* addr = cgValueAddr(ctx, in);
             char* d1 = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 1, 0\n", d1);
             tp.desc = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", tp.desc, d1, addr);
-        } else if (in->type.bType == BASETYPE_ARRAY && TypeIsChar(*in->type.arrElem) && !viaStr) {
+        } else if (in->type.bType == BASETYPE_ARRAY && TypeIsChar(*in->type.arrElem) && !ownStr) {
             tp.desc = cgBorrowValue(ctx, textT, in->type, cgValue(ctx, in));
         } else {
-            tp.fn = cgRenderFn(ctx, in->type);
             tp.addr = cgValueAddr(ctx, in);
-            tp.len = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = call i64 %s(ptr null, ptr %s, i32 0)\n", tp.len, tp.fn, tp.addr);
+            if (in->type.bType == BASETYPE_STRUCT && !in->type.structMAlloc && (viaStr || i < lastRuns)) {
+                char ty[256];
+                llvmType(in->type, ty, sizeof(ty));
+                char* copy = cgValueSlot(ctx, in->type, ty);
+                fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", copy,
+                        tp.addr, TypeGetSize(in->type));
+                tp.addr = copy;
+            }
+            if (SemanticRendersStr(in->type)) tp.build = cgRenderBuildFn(ctx, in->type);
+            else tp.fn = cgRenderFn(ctx, in->type);
         }
         if (tp.desc) {
             tp.len = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", tp.len, tp.desc);
         }
+        ListAdd(pieces, &tp);
+    }
+}
+
+//E11c: the room a rendering reaching a Str starts in, beside its builder - only a function rendering one has it. A
+//rendering recursing through a Str (a list's Str rendering the rest of the list) holds what it has written so far across
+//the call, and in the arena that would be a chunk a level (87MB for 20,000 levels, against 9MB)
+#define CG_TEXT_FIRST_ROOM 64
+
+//E11a/E11c: the pieces of a join one of which reaches a Str, rendered in one pass, in order - a Str may change what a
+//later piece reads, so each piece is measured and written where it stands - onto one growing text (the runtime's
+//@__olang_sb_*: a room of its own first, then a scope of the builder's own, made only if it outgrows the room), then
+//copied into one allocation where the join lands, and the builder's scope closed. What the text outgrew is reclaimed
+//there and then: grown in the block the join stands in, it stayed there until the block closed - in a loop's condition,
+//once per iteration - and a header for it in every frame cost a recursion through a Str a quarter of its depth
+static char* cgTextBuilt(struct cgCtx* ctx, struct operand* op, struct list* pieces) {
+    char* scopeVal = cgWhereBuilt(ctx, op);
+    ctx->textBuilt = true;
+    char* sb = cgNewTmp(ctx);
+    char* room = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca { ptr, i64, i64, ptr, ptr }\n", sb);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca [%d x i8]\n", room, CG_TEXT_FIRST_ROOM);
+    char* t1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr, ptr } { ptr undef, i64 0, i64 %d, ptr null, ptr null }, "
+            "ptr %s, 0\n", t1, CG_TEXT_FIRST_ROOM, room);
+    //while a test runs, the builder's scope is on the unwind chain (P1d) from where the builder is made until its text is
+    //copied out - pushed here, in order with every node around it, so a rendering's helpers push and pop theirs above it.
+    //Its header is then in this frame too (a recursion in a test build keeps it; elsewhere it is made on the first growth,
+    //@__olang_sb_scratch, so a frame whose text fits its room keeps none)
+    char* node = NULL;
+    char* prevTop = NULL;
+    char* t2 = t1;
+    if (ctx->emitUnwind) {
+        char* hdr = cgScratchScopeOpen(ctx, &node, &prevTop);
+        char* t3 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr, ptr } %s, ptr %s, 3\n", t3, t1, hdr);
+        t2 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr, ptr } %s, ptr %s, 4\n", t2, t3, node);
+    }
+    fprintf(ctx->fnOut, "  store { ptr, i64, i64, ptr, ptr } %s, ptr %s\n", t2, sb);
+    for (int i = 0; i < pieces->len; i++) {
+        struct textPiece* tp = ListGetIdx(pieces, i);
+        if (tp->desc) {
+            char* src = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", src, tp->desc);
+            fprintf(ctx->fnOut, "  call void @__olang_sb_put(ptr %s, ptr %s, i64 %s)\n", sb, src, tp->len);
+        } else if (tp->build) {
+            fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr %s, i32 0)\n", tp->build, sb, tp->addr);
+        } else {
+            char* k = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = call i64 %s(ptr null, ptr %s, i32 0)\n", k, tp->fn, tp->addr);
+            char* k1 = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = add i64 %s, 1\n", k1, k);
+            char* dst = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = call ptr @__olang_sb_room(ptr %s, i64 %s)\n", dst, sb, k1);
+            char* ignored = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = call i64 %s(ptr %s, ptr %s, i32 0)\n", ignored, tp->fn, dst, tp->addr);
+            fprintf(ctx->fnOut, "  call void @__olang_sb_add(ptr %s, i64 %s)\n", sb, k);
+        }
+    }
+    char* lp = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, i64, i64, ptr }, ptr %s, i32 0, i32 1\n", lp, sb);
+    char* total = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", total, lp);
+    char* data = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", data, sb);
+    char* copy = cgNewTmp(ctx);
+    cgNoteBuildInto(ctx, scopeVal);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", copy, scopeVal, total);
+    fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %s, i1 false)\n", copy, data, total);
+    fprintf(ctx->fnOut, "  call void @__olang_sb_done(ptr %s)\n", sb);
+    if (node) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", prevTop);
+    char* a1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", a1, total);
+    char* a2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", a2, a1, copy);
+    return a2;
+}
+
+//E11a/E11b: "$x" alone or a join of text pieces - every operand evaluated (cgTextOperands), then every piece
+//measured, one allocation, and each written in place. At the top level a byte is its character and a byte array its
+//bytes (text is shown as itself); everything else renders through its helper, where nested text is quoted. Built in
+//one pass instead where a piece reaches a Str (cgTextBuilt), since a Str runs between measuring and writing
+static char* cgText(struct cgCtx* ctx, struct operand* op) {
+    struct list parts = ListInit(sizeof(struct operand*));
+    cgTextParts(ctx, op, &parts);
+    bool viaStr = false;
+    for (int i = 0; i < parts.len; i++) {
+        struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
+        struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
+        if (in && SemanticRendersStr(in->type)) viaStr = true;
+    }
+    //E11a: what a piece builds to render is read once and dropped, so it is built where the join stands - never where
+    //the text lands, which may outlive what that value holds (the checker judged it here)
+    char* prevTarget = ctx->targetScopeOverride;
+    ctx->targetScopeOverride = NULL;
+    struct list pieces = ListInit(sizeof(struct textPiece));
+    cgTextOperands(ctx, op->type, &parts, viaStr, &pieces);
+    ctx->targetScopeOverride = prevTarget;
+    ListDestroy(parts);
+    if (viaStr) {
+        char* r = cgTextBuilt(ctx, op, &pieces);
+        ListDestroy(pieces);
+        return r;
+    }
+    char* scopeVal = cgWhereBuilt(ctx, op);
+    char* total = "0";
+    for (int i = 0; i < pieces.len; i++) {
+        struct textPiece* tp = ListGetIdx(&pieces, i);
+        if (!tp->len) {
+            tp->len = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = call i64 %s(ptr null, ptr %s, i32 0)\n", tp->len, tp->fn, tp->addr);
+        }
         char* t = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = add i64 %s, %s\n", t, total, tp.len);
+        fprintf(ctx->fnOut, "  %s = add i64 %s, %s\n", t, total, tp->len);
         total = t;
-        ListAdd(&pieces, &tp);
     }
     //one spare byte: a number's snprintf writes a NUL just past itself, which lands here for the last piece
     char* alloc = cgNewTmp(ctx);
@@ -5218,7 +5559,6 @@ static char* cgText(struct cgCtx* ctx, struct operand* op) {
         at = nx;
     }
     ListDestroy(pieces);
-    ListDestroy(parts);
     char* a1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", a1, total);
     char* a2 = cgNewTmp(ctx);
@@ -5250,6 +5590,8 @@ static struct type cgTrySlotType(struct cgCtx* ctx, struct operand* op, struct t
 static char* cgTryDefaultValue(struct cgCtx* ctx, struct operand* op) {
     struct operand* savedOp = ctx->tdOp;
     char* savedSlot = ctx->tdSlot;
+    bool savedPromoted = ctx->tdPromoted;
+    ctx->tdPromoted = ctx->promotedOp == op; //(the call itself consumes the mark, cgFuncCall)
     char savedJoin[32];
     memcpy(savedJoin, ctx->tdJoin, sizeof(savedJoin));
     char ty[256];
@@ -5269,6 +5611,7 @@ static char* cgTryDefaultValue(struct cgCtx* ctx, struct operand* op) {
     cgLabel(ctx, join);
     ctx->tdOp = savedOp;
     ctx->tdSlot = savedSlot;
+    ctx->tdPromoted = savedPromoted;
     memcpy(ctx->tdJoin, savedJoin, sizeof(savedJoin));
     return cgLoadOrAddr(ctx, op->type, slot, false);
 }
@@ -5286,7 +5629,11 @@ static void cgTryDefaultStore(struct cgCtx* ctx, struct operand* op, struct oper
     struct type dt = cgTrySlotType(ctx, op, op->tryDefaultType, &where);
     char* prevTarget = ctx->targetScopeOverride;
     if (where) ctx->targetScopeOverride = where; //a value holding references keeps them there too
+    //C11/O16: the try being promoted is one instance whichever path gives it - a default's constructor call is promoted
+    //with the try, as a conditional's arm is (cgStoreArm), not registered where it is built as well
+    if (ctx->tdPromoted) ctx->promotedOp = dflt;
     char* dv = cgValueForTarget(ctx, dflt, dt, where);
+    ctx->promotedOp = NULL;
     ctx->targetScopeOverride = prevTarget;
     cgStoreInto(ctx, dt, dflt->type, dv, slot, where, false, OperandIsLvalue(dflt), false);
     cgBr(ctx, join);
@@ -6292,8 +6639,8 @@ void cgDo(struct cgCtx* ctx, struct statement* s) {
 //only the order: the value held, then per case each alternative's test - the first to hold fills the clause's
 //bindings its own way - then the guard, then the block. An alternative or guard that fails falls to the next case.
 void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable);
-static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT);
-void cgMatch(struct cgCtx* ctx, struct statement* s) { cgMatchInto(ctx, s, NULL, (struct type){0}); }
+static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT, bool promoted);
+void cgMatch(struct cgCtx* ctx, struct statement* s) { cgMatchInto(ctx, s, NULL, (struct type){0}, false); }
 
 //S12b: a match used as a value - each value case stores its value, converted to the match's type on its own path,
 //into one slot, as a conditional's do (E28); a case whose block leaves stores nothing
@@ -6301,16 +6648,13 @@ char* cgMatchValue(struct cgCtx* ctx, struct operand* op) {
     char ty[256];
     llvmType(op->type, ty, sizeof(ty));
     char* slot = cgValueSlot(ctx, op->type, ty);
-    cgMatchInto(ctx, ListGetIdx(&op->comprBody, 0), slot, op->type);
+    bool promoted = ctx->promotedOp == op; //C11/O16: cgStoreArm
+    if (promoted) ctx->promotedOp = NULL;
+    cgMatchInto(ctx, ListGetIdx(&op->comprBody, 0), slot, op->type, promoted);
     return cgLoadOrAddr(ctx, op->type, slot, false);
 }
 
-//one value case's value into the slot
-static void cgMatchStore(struct cgCtx* ctx, struct operand* v, char* slot, struct type resultT) {
-    cgStoreOperand(ctx, resultT, v, slot, cgArmScope(ctx, v, resultT), false, false);
-}
-
-static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT) {
+static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, struct type resultT, bool promoted) {
     cgPushScope(ctx); //the held value's local, if any
     for (int i = 0; i < s->matchHold.len; i++) cgStatement(ctx, ListGetIdx(&s->matchHold, i));
     int id = ctx->lblCtr++;
@@ -6364,14 +6708,14 @@ static void cgMatchInto(struct cgCtx* ctx, struct statement* s, char* slot, stru
             ctx->terminated = true;
         } else cgBr(ctx, bodyLbl);
         cgLabel(ctx, bodyLbl);
-        if (slot && c->op) cgMatchStore(ctx, c->op, slot, resultT);
+        if (slot && c->op) cgStoreArm(ctx, resultT, c->op, slot, promoted);
         else cgBlock(ctx, &c->block);
         cgPopScope(ctx);
         cgBr(ctx, endLbl);
         cgLabel(ctx, nextLbl);
     }
     if (s->hasNomatch) {
-        if (slot && s->nomatchValue) cgMatchStore(ctx, s->nomatchValue, slot, resultT);
+        if (slot && s->nomatchValue) cgStoreArm(ctx, resultT, s->nomatchValue, slot, promoted);
         else cgBlock(ctx, &s->nomatchBlock);
     } else if (slot) cgAbortLike(ctx, s, true); //S12b: every case is covered, so this is not reached - checked, not assumed
     cgBr(ctx, endLbl);
@@ -7433,6 +7777,16 @@ static void cgCapScopesRead(struct cgCtx* ctx, struct var* func) {
 //a callee the walk says builds nothing is handed a captured scope raw. An allocation the walk did not foresee would
 //therefore bump another thread's arena unsynchronised - so it is a compiler bug, stopped here rather than emitted
 static void cgCheckMayBuild(struct cgCtx* ctx, struct var* func) {
+    //E11c/O12: a scope variable the walk found this body never builds into, which a Str's acceptance rests on - "$"
+    //hands a Str's receiver's variables no scope, and so does everything they are bound to
+    for (int i = 0; i < ctx->handed.len; i++) {
+        struct cgHanded* h = ListGetIdx(&ctx->handed, i);
+        if (!h->built || !SemanticReliesNoBuild(func, h->sv)) continue;
+        fprintf(stderr, "olang: internal compiler error: '%.*s' builds where '%.*s' lives, which the checker's walk (E11c, "
+                "SemanticMayBuildInto) found it never does - a bug in the compiler, not in the program\n",
+                func->name.len, func->name.ptr, h->sv->name.len, h->sv->name.ptr);
+        exit(EXIT_FAILURE);
+    }
     if (SemanticMayBuild(func)) return;
     bool bad = ctx->hereBuilt;
     for (int i = 0; i < ctx->handed.len && !bad; i++) bad = ((struct cgHanded*)ListGetIdx(&ctx->handed, i))->built;
@@ -8042,6 +8396,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     }
     cgEmitFuncValues(&ctx);
     if (ctx.floatText) emitFloatTextRuntime(out);
+    if (ctx.textBuilt) emitTextBuilderRuntime(out);
 
     fflush(fnOut);
     fwrite(fnBuf, 1, fnSize, out);

@@ -220,7 +220,7 @@ struct type;
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
     X(ERR_STR_SHAPE,                    "E11c",  "Str gives a String") \
-    X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s only reads - neither its receiver nor a parameter may be 'mut'") \
+    X(ERR_EQ_STR_WRITES,                "E10a, E11c", "%s takes what it is given read-only - neither its receiver nor a parameter may be 'mut'") \
     X(ERR_PROTOCOL_BOTH_SPELLINGS,      "M6b",   "%t declares %s twice, public and private - keep one: %s, or %s for its own module only") \
     X(ERR_PROTOCOL_PRIVATE,             "M6b",   "%n needs %t's %S, which is private to its module - declare it %s to use it here") \
     X(ERR_OVERRIDE_SIGNATURE,           "M19e",  "%S does not have the signature of the default it overrides - match it, or choose another name") \
@@ -272,6 +272,7 @@ struct type;
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
     X(ERR_BUILD_INTO_UNKNOWN_SCOPE,     "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") \
     X(ERR_STORE_INTO_UNKNOWN_SCOPE,     "O12",   "where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope") \
+    X(ERR_TAG_UNKNOWN_SCOPE,            "O12",   "where %n lives is not known here, so nothing is declared to live there - read it through %n, or declare the local with ':='") \
     X(ERR_BUILD_THROUGH_UNKNOWN_SCOPE,  "C2d",   "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") \
     X(ERR_SCOPE_ARG_UNKNOWN,            "E25",   "%n is no local or parameter here - a scope argument names where the result is built") \
     X(ERR_RETURN_TYPE_MISMATCH,         "D8",    "this function returns %t, found %t") \
@@ -316,10 +317,11 @@ struct type;
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
     X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
     X(ERR_IMMUTABLE,                    "S6",    "%S cannot be written - only a local, a parameter or a 'mut' global can") \
-    X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
-    X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "Str renders read-only values too, so it only reads its receiver - pass on what it holds read-only") \
-    X(ERR_STR_WRITES,                   "E11c",  "Str runs as often as '$' needs, so it must have no effect - it writes, through a reference, what was there before it ran") \
+    X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
+    X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
+    X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_ZERO_BY_REFERENCE,           "",      "'%s' holds it by reference, whose zero value is null") \
     X(NOTE_ZERO_REFERENCE_HAS_ONE,      "",      "a reference has one, null - hold %t as '%t&' where this use names it") \
@@ -511,6 +513,7 @@ struct type;
     X(ERR_FUNC_VALUE_OBLIGATIONS,       "T22a",  "'%S' relates its arguments' scopes, which a call through a function value cannot check - call it directly") \
     X(ERR_LAMBDA_VALUE_OBLIGATIONS,     "T22a",  "this lambda keeps '%S' beyond the call, which a call through a function value cannot check - keep a copy instead") \
     X(ERR_LAMBDA_VALUE_RELATES,         "T22a",  "this lambda relates its arguments' scopes, which a call through a function value cannot check") \
+    X(ERR_CALL_VALUE_OBLIGATIONS,       "T22a, E31", "%t's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name") \
     X(ERR_LAMBDA_RESULT_UNINFERABLE,    "D16b",  "this value gives the lambda no result type - write one") \
     X(ERR_LAMBDA_ARITY,                 "D16a",  "%t takes %d parameter%s, and this lambda %d") \
     X(ERR_LAMBDA_SIGNATURE,             "D16a",  "this lambda's signature disagrees with %t - leave that part out, or make them agree") \
@@ -564,6 +567,8 @@ enum diag {
 
 //an error about the token at
 void Err(struct token at, enum diag d, ...);
+//the same, unless an error of kind d was already reported on that line - one cause several checks meet
+void ErrOncePerLine(struct token at, enum diag d, ...);
 //the same, counted as a syntax error too - which may have hidden a declaration, so a missing one is not reported
 void ErrSyntax(struct token at, enum diag d, ...);
 //an error about the whole of a file

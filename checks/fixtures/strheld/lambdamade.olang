@@ -1,0 +1,14 @@
+# E11c/D16c: a Str making a capturing lambda it never calls
+type Bag struct(k I64) {
+    k
+}
+fn (b Bag&) Str() String {
+    f := fn() I64 {
+        s := $b.k
+        return s.Len()
+    }
+    return "bag " $b.k
+}
+fn main() ? {
+    println($Bag(3))
+}

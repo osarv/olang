@@ -1,0 +1,7 @@
+Map<String&, Char>{"q\"": '\'', "a, false)": 'x'}
+Map<K, List<I64>>{K(1, "one"): List<I64>[3]}
+Map<I64, S>{4: S<5>}
+Map<E, Array<I64, 2>>{E.B("t"): I64[1, 2]}
+Map<I64, Map<I64, String&>>{2: Map<I64, String&>{1: "x"}}
+Map<Bool, F64>{true: 0.1}
+Map<I64, Pair<String&, Char>>{7: Pair("p", 'c')}

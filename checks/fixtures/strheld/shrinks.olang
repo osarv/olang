@@ -1,0 +1,27 @@
+# E11b/E11c: later operands clearing and popping a List and clearing a Map before the earlier pieces render
+fn shrink(l mut List<String&>&) I64 {
+    l.Clear()
+    l.Push("z")
+    return 0
+}
+fn clr(m mut Map<String&, List<I64>>&) I64 {
+    m.Clear()
+    return 1
+}
+fn pop(l mut List<I64>&) I64 { return try l.Pop() catch default -1 }
+fn joins() String {
+    l := List<String&>()
+    for i in range 20 { l.Push("item" $i) }
+    m := Map<String&, List<I64>>()
+    v := List<I64>()
+    for i in range 30 { v.Push(i) }
+    m.Put("k", v)
+    a := v.ToArray()
+    return $l " " $m " " $v " " $a " " $shrink(l) $clr(m) $pop(v) $pop(v) " " $l " " $m " " $v
+}
+Baked String& = joins()
+fn main() ? {
+    s := joins()
+    println(s)
+    assert Baked == s
+}

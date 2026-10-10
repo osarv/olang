@@ -58,10 +58,6 @@ typedef struct operand* (*CtLocalFixer)(struct var* local, void* ctx);
 bool CtEvaluateIn(struct operand* op, struct type want, struct ctVal** out, struct token* whyTok, const char** why,
                   bool* usedBuild, CtLocalFixer fixer, void* fixerCtx);
 
-//K3: why a call of func can never be evaluated at compile time - the first operation, in its body or in
-//anything it reaches, that no evaluation can perform, at *where - or NULL when nothing stops it
-const char* CtWhyNotEvaluable(struct var* func, struct token* where);
-
 //B5a: each module's globals in the order they are initialized - after the globals each reads, directly or through what
 //it calls, declaration order breaking ties - kept on the module (globalOrder); a cycle among them is an error
 void CtOrderGlobals(void);

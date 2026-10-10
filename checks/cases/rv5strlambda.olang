@@ -1,5 +1,6 @@
-# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect
-# E11c (review of rv3fix, #5): a Str calling a lambda it made, which writes through a capture reaching storage that was there before
+# check: run
+# E11c (review of rv3fix, #5): a Str calling a lambda it made, which writes through a capture reaching the value being
+# rendered - once per "$"
 type C struct() { n I64 = 0 }
 type B struct(c mut C&) { c }
 fn (a B&) Str() String {
@@ -12,5 +13,6 @@ fn main() ? {
     c mut C& = C()
     b := B(c)
     s := $b
-    println($s " " $c.n)
+    assert $s " " $c.n == "b 1"
+    assert $b $b == "bb" and c.n == 3
 }

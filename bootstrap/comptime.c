@@ -1265,13 +1265,6 @@ static const char* ctGlobalWhy(struct var* v, struct token* tok) {
     return sc.why;
 }
 
-const char* CtWhyNotEvaluable(struct var* func, struct token* where) {
-    struct token t = (struct token){0};
-    const char* why = ctFuncWhy(func, &t);
-    if (where) *where = t;
-    return why;
-}
-
 // ---- B5a: the order a module's globals are initialized in ----
 //
 //A global's initializer runs after the initializers of the globals it reads - directly, or through a function it
@@ -1833,9 +1826,13 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
             ctTextStr(b, spelled);
             free(spelled);
             ctTextStr(b, "[");
-            for (int i = 0; i < v->n; i++) {
+            //E11c: its length and storage as they are where the rendering reaches it - as the generated code reads the
+            //pair once - whatever a Str an element renders through assigns there later
+            int n = v->n;
+            struct ctVal** elems = v->elems;
+            for (int i = 0; i < n; i++) {
                 if (i) ctTextStr(b, ", ");
-                if (!ctRenderValue(st, b, v->elems[i], elem, depth, tok)) return false;
+                if (!ctRenderValue(st, b, elems[i], elem, depth, tok)) return false;
             }
             ctTextStr(b, "]");
             return true;
@@ -1847,6 +1844,8 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
             ctTextStr(b, ")");
             return true;
         case BASETYPE_CHOICE: {
+            //E11c: a payload rendering through a Str is read from a copy of the whole value, as the generated code reads it
+            if (ChoiceHasPayload(t) && SemanticRendersStr(t)) v = ctCopy(v);
             struct var* c = ListGetIdx(&t.vars, (int)v->i);
             char word[600];
             snprintf(word, sizeof(word), "%s%s%.*s", name, name[0] ? "." : "", c->name.len, c->name.ptr);
@@ -1873,11 +1872,14 @@ static bool ctRenderBody(struct ctState* st, struct ctText* b, struct ctVal* v, 
 
 //rdPutValue's rules: a primitive inline - a nested byte quoted, a number as snprintf writes it - anything else
 //through its body
-//E11c: the text a type's own Str gives for v - called as the run time calls it, receiver as its parameter wants it
+//E11c: the text a type's own Str gives for v - called once, where the rendering reaches it, as the run time calls it,
+//receiver as its parameter wants it
 static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, struct ctVal* v, struct token tok) {
-    struct token whyTok;
-    const char* why = ctFuncWhy(m, &whyTok);
-    if (why) { ctFail(st, whyTok, why); return false; }
+    if (!ctRun) { //K3: as any call - a Str that can never be evaluated is refused before any of it runs
+        struct token whyTok;
+        const char* why = ctFuncWhy(m, &whyTok);
+        if (why) { ctFail(st, whyTok, why); return false; }
+    }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
         ctFail(st, tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
         return false;
@@ -1937,24 +1939,56 @@ static void ctTextParts(struct operand* op, struct list* out) {
     ListAdd(out, &op);
 }
 
-//"$x" or a join: every piece in order - a literal's bytes, a byte as its character, text as itself, a function
-//named directly as its name and signature, anything else rendered (cgText's top-level rules)
+//E11a/E11b: what a join's piece holds once its operand is evaluated, as the generated code holds it (cgTextOperands) - a
+//struct or anything held by value as it is then; an array its length and storage then, its elements read when the piece
+//renders; a fixed-length array and what a reference names read when it renders
+static struct ctVal* ctPieceValue(struct ctVal* v, struct type t) {
+    if (t.bType == BASETYPE_ARRAY && (t.arrMalloc || t.structMAlloc)) {
+        if (v->kind == CT_NULL || (v->kind == CT_REF && ctArrayRefNull(v))) return v;
+        struct ctVal* a = ctDeref(v);
+        struct ctVal* c = ctNew(a->kind, a->type);
+        *c = *a; //the same elements
+        return c;
+    }
+    if (t.bType == BASETYPE_ARRAY) return v; //Array<T, N>: the storage it lies in
+    if (ctIsRef(t)) {
+        if (v->kind != CT_REF) return v;
+        struct ctVal* c = ctNew(CT_REF, v->type);
+        *c = *v; //the instance it names now
+        return c;
+    }
+    return ctCopy(ctDeref(v));
+}
+
+//"$x" or a join: every operand evaluated, left to right, then every piece rendered in order - a literal's bytes, a byte
+//as its character, text as itself, a function named directly as its name and signature, anything else rendered
+//(cgText's top-level rules)
 static struct ctVal* ctText(struct ctState* st, struct operand* op) {
     struct list parts = ListInit(sizeof(struct operand*));
     ctTextParts(op, &parts);
+    struct ctVal** vals = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(parts.len ? parts.len : 1));
+    for (int i = 0; i < parts.len; i++) {
+        struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
+        struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
+        vals[i] = NULL;
+        if (in && in->type.bType == BASETYPE_FUNC && in->opType == OPERATION_READ_VAR && in->readVar && in->readVar->isFuncDecl && !in->readVar->isLambda)
+            continue;
+        struct ctVal* v = ctEval(st, in ? in : p);
+        if (!v) { free(vals); ListDestroy(parts); return NULL; }
+        vals[i] = ctPieceValue(v, in ? in->type : p->type);
+    }
     struct ctText b = {0};
     for (int i = 0; i < parts.len; i++) {
         struct operand* p = *(struct operand**)ListGetIdx(&parts, i);
         struct operand* in = p->opType == OPERATION_STR_OF ? *(struct operand**)ListGetIdx(&p->args, 0) : NULL;
-        if (in && in->type.bType == BASETYPE_FUNC && in->opType == OPERATION_READ_VAR && in->readVar && in->readVar->isFuncDecl && !in->readVar->isLambda) {
+        struct ctVal* v = vals[i];
+        if (!v) {
             char sig[1200];
             RdSpellSig(in->type, sig, sizeof(sig));
             ctTextPut(&b, in->readVar->name.ptr, (size_t)in->readVar->name.len);
             ctTextStr(&b, sig);
             continue;
         }
-        struct ctVal* v = ctEval(st, in ? in : p);
-        if (!v) return NULL;
         struct type t = in ? in->type : p->type;
         bool viaStr = in && SemanticStrOf(t); //E11c: the type's own Str, at the top level too
         if (!in || (t.bType == BASETYPE_ARRAY && TypeIsChar(*t.arrElem) && !viaStr)) {
@@ -1965,9 +1999,13 @@ static struct ctVal* ctText(struct ctState* st, struct operand* op) {
             char c = (char)ctDeref(v)->i;
             ctTextPut(&b, &c, 1);
         } else if (!ctRenderValue(st, &b, v, t, 0, p->tok)) {
+            free(vals);
+            ListDestroy(parts);
             return NULL;
         }
     }
+    free(vals);
+    ListDestroy(parts);
     struct ctVal* a = ctNew(CT_AGG, op->type);
     a->n = (int)b.n;
     a->elems = MallocOrCrash(sizeof(struct ctVal*) * (b.n ? b.n : 1));
@@ -2069,7 +2107,8 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_COND: { //E28: only the chosen value is evaluated
             struct ctVal* c = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!c) return NULL;
-            return ctFit(st, *(struct operand**)ListGetIdx(&op->args, ctDeref(c)->i ? 1 : 2), op->type);
+            //T25d: a literal of constant text reaching a read-only conditional is its site's one instance, as at a call
+            return ctFitBoundary(st, *(struct operand**)ListGetIdx(&op->args, ctDeref(c)->i ? 1 : 2), op->type);
         }
         case OPERATION_CMP_CHAIN: { //E30: each comparison in turn, the shared operand evaluated once
             struct ctVal* prev = NULL;
@@ -2472,13 +2511,13 @@ static void ctRunMatch(struct ctState* st, struct statement* s, struct ctVal** o
             hit = ctDeref(g)->i != 0;
         }
         if (!hit) { st->locals->len = mark; continue; }
-        if (c->op && out) *out = ctFit(st, c->op, want);
+        if (c->op && out) *out = ctFitBoundary(st, c->op, want); //T25d, as a conditional
         else ctExecBlock(st, &c->block);
         st->locals->len = outer;
         return;
     }
     if (st->flow == CF_NORMAL && s->hasNomatch) {
-        if (s->nomatchValue && out) *out = ctFit(st, s->nomatchValue, want);
+        if (s->nomatchValue && out) *out = ctFitBoundary(st, s->nomatchValue, want);
         else ctExecBlock(st, &s->nomatchBlock);
     } else if (st->flow == CF_NORMAL && out) { //S12b: covered by every case, so not reached - checked, as cgMatch checks it
         if (ctRun) ctRunAbortAt(s, "reached unreachable code", NULL);

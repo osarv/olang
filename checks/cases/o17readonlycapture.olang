@@ -1,0 +1,35 @@
+# check: fail error[O17]
+# O17/D16c: a lambda storing through a read-only capture's writable field stores into the region it was lent - so a copy
+# whose references live elsewhere than its storage may not be lent to the method making it (read back as -7)
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct(n I64) {
+    head mut Node& = Node(n, null)
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) grow() {
+    f := fn() { b.head.next = Node(7, null) }
+    f()
+}
+fn bump(src mut W&) {
+    b := src.b
+    b.grow()
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box(3))
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

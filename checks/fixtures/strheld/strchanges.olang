@@ -1,0 +1,28 @@
+# E11b/E11c: a Str changing what later pieces hold
+type In struct(n I64) {
+    n
+}
+type Y struct(inner In, arr mut Array<I64>&) {
+    inner
+    arr
+}
+type X struct(r mut Y&) {
+    r
+}
+fn (x X&) Str() String {
+    x.r.inner.n = x.r.inner.n + 1
+    x.r.arr[0] = x.r.arr[0] + 1
+    return "X"
+}
+fn joins() String {
+    y mut Y& = Y(In(5), I64[1, 2])
+    x := X(y)
+    v := y.arr
+    return $x " " $y.inner " " $y.inner.n " " $y " " $v " " $x " " $y.arr[0] " " $y.arr
+}
+Baked String& = joins()
+fn main() ? {
+    println(joins())
+    println(Baked)
+    assert Baked == joins()
+}

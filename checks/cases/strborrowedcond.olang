@@ -1,0 +1,34 @@
+# check: run
+# flags: -s
+# E11c/T25d: a Str whose result borrows from its receiver gives a conditional of the receiver's text and a literal - the
+# literal is the constant itself, built nowhere, so nothing is built where the receiver lives
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type Bag struct(head mut Node&, name String&, k I64) {
+    head
+    name
+    k
+}
+fn (b Bag&) Str() String&b {
+    return b.name if b.k == 0 else "lit"
+}
+fn main() ? {
+    b := Bag(Node(4, null), "bag", 1)
+    s := $b
+    b0 := Bag(Node(4, null), "bag", 0)
+    s0 := $b0
+    churn()
+    assert s == "lit" and s0 == "bag", "the rendered text, read back after churning"
+}

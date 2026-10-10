@@ -1,0 +1,24 @@
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# C2d/O23a: a reference read through a "&p" field - copied into a local, or a for-in element - captured by a lambda that
+# builds through it, handed to a callee: refused as the direct form is
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type View struct(ns Array<mut Node&>&) {
+    at Array<mut Node&>&ns = ns
+}
+fn run(f fn()) { f() }
+fn visit(w View&) {
+    x := w.at[0]
+    run(fn() { x.next = Node(x.v + 100) })
+}
+fn visit2(w View&) {
+    for x in w.at { run(fn() { x.next = Node(x.v + 200) }) }
+}
+fn main() ? {
+    a := Array<mut Node&>(1, Node(3))
+    visit(View(a))
+    visit2(View(a))
+    println($a[0].next.v)
+}

@@ -1,0 +1,42 @@
+# E11b/E11c: Map.Str through a helper: text, char, struct, enum and fixed-array keys and values, nested Maps
+type K struct(a I64, b String&) {
+    a
+    b
+}
+fn (k K&) Hash() I64 { return k.a }
+fn (k K&) Eq(o K&) Bool { return k.a == o.a }
+type S struct(n I64) {
+    n
+}
+fn (s S&) Str() String { return "S<" $s.n ">" }
+type E enum {
+    A(x I64)
+    B(t String&)
+}
+fn mk() String {
+    m1 := Map<String&, Char>()
+    m1.Put("a, false)", 'x')
+    m1.Put("q\"", '\'')
+    m2 := Map<K, List<I64>>()
+    l := List<I64>()
+    l.Push(3)
+    m2.Put(K(1, "one"), l)
+    m3 := Map<I64, S>()
+    m3.Put(4, S(5))
+    m4 := Map<E, Array<I64, 2>>()
+    m4.Put(E.B("t"), I64[1, 2])
+    m5 := Map<I64, Map<I64, String&>>()
+    inner := Map<I64, String&>()
+    inner.Put(1, "x")
+    m5.Put(2, inner)
+    m6 := Map<Bool, F64>()
+    m6.Put(true, 0.1)
+    m7 := Map<I64, Pair<String&, Char>>()
+    m7.Put(7, Pair("p", 'c'))
+    return $m1 "\n" $m2 "\n" $m3 "\n" $m4 "\n" $m5 "\n" $m6 "\n" $m7
+}
+Baked String& = mk()
+fn main() ? {
+    println(mk())
+    assert Baked == mk()
+}

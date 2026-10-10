@@ -65,7 +65,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - Decision 50 (failing spawns, the design as given) - APPROVED; BUILT 9802fc3 (P4-P4d, `try join`), merged 40fb1c5.
 - QG question 2: owned objects may also move out with an explicit `take` - YES. QG question 1 was answered earlier by
   the user's own no-borrowing refinement (compile-time, strict start).
-- Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted.
+- Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted; MERGED 2fdb262 after six rounds.
 **Asked 2026-10-10 12:20 CEST (the user: "Given the new borrowing rules, it is now possible to create the dynamic
 length Vec<T> again right?"):**
 - QH. Yes, once `owned` exists. `Vec<T>` is library code: its buffer is an owned array, growth makes the next buffer,
@@ -116,6 +116,15 @@ length Vec<T> again right?"):**
 central parts to the language that will be useful for the compiler" -> `own`, `take`, the liveness-checked local
 borrows and Vec<T> (the default growable array) are built in the C compiler BEFORE the port starts, so the port can be
 written with them. Order: decision 49 merges, then `own` (spec first), then Vec, then the port.
+
+**Asked 2026-10-10 20:00 CEST (from the own spec, wt-own fdc5848, docs/own.md):**
+- QJ1. `b := a` means different things for the two growable types: on a `Vec` it is a borrowed copy (b cannot push;
+  `take a` moves, `a.Clone()` copies), on a `List` it is a second name for the same list (a handle). Recommended:
+  keep it - a handle `Vec` would make every `Vec` of one element type conflict with every other in the borrow check.
+- QJ2. A callback cannot free an own object through what it captures or a global (O40): an event-handler lambda that
+  closes a connection takes the server as a parameter. Recommended: accept for now - otherwise every call through a
+  function value (Fold, Map, Any) conflicts with every live borrow.
+In effect: both as recommended; implementation waits for decision 49 to merge.
 
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.

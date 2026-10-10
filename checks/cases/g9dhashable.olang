@@ -1,0 +1,11 @@
+# check: fail error[G19, E10b]: Res& does not satisfy the constraint Hashable on T
+# G9d/C11: a destructor temporary binds a reference - a Hashable constraint holds only where the type declares Hash
+type Res struct(k I64) {
+    k
+} destruct { println("d" $k) }
+fn same(a <T>, b T) Bool { return a == b }
+fn hashOf(x <T Hashable<T>>) I64 { return x.Hash() }
+fn main() ? {
+    println($same(Res(1), Res(1)))
+    println($(hashOf(Res(2)) != 0))
+}

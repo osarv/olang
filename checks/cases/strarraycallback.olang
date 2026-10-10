@@ -1,0 +1,11 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c: an array callback over references the receiver reaches - the higher-order function's call through its callback
+# binds the receiver's scope, and a body not known (a function value) is taken to build there (o6, an over-rejection)
+type Bag struct(words Array<String&>&) {
+    words
+}
+fn (b Bag&) Str() String {
+    long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
+    return "n" $long
+}
+fn main() ? { println($Bag(String&["ab", "c"])) }

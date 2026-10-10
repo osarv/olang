@@ -1,0 +1,12 @@
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# C2d/O23a, an over-rejection kept for now: an iterator helper hands its callback elements read through the iterator's
+# "&p" field - a scope derived from the iterator's - and a callback, a body not known there, may build through an element
+# something can be stored through; refused at the program's use even where the callback only reads
+type Bag struct() {
+    items List<I64>& = List<I64>()
+}
+fn main() ? {
+    bags := List<Bag&>()
+    bags.Push(Bag())
+    println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
+}

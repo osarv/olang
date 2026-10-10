@@ -344,6 +344,8 @@ struct var {
     struct operand* roFrom; //T25c: ...a local read-only exactly when this is: a for-in element (the collection walked), a
                             //match binding (the place it reads)
     bool paramCopy;       //T25c: a parameter's own copy in its function's body (canonicalVar is the signature's)
+    bool valueEscapes;    //D16c: read as a value anywhere (OperandReadVar), captured, or spawned - anything but called
+    bool capturedFnParam; //D16c: a function-typed parameter a lambda captured - it may keep it beyond the call
     bool roNeedsWritable; //T25c: a signature's by-value parameter holding writable references whose copy the body writes
                           //through, lends writably or stores where it can be written - no read-only value may be passed
     //T25c: a read-only reference parameter of a generic's instantiation, on its signature and its copy in the body - a
@@ -360,19 +362,6 @@ struct var {
     //body. regionFlagsOf is the function the list belongs to - a var copied whole starts a list of its own
     struct list regionFlags;
     struct var* regionFlagsOf;
-    //E11c: on a function, that it may write storage that was there before it was called - through a reference whose
-    //scope is a parameter's, a capture's, the program's or one not known here, a global's own, or by calling what does
-    //with such an argument, or through a function value it did not make. effTok: where it was first found
-    bool effWrites;
-    struct token effTok;
-    //E11c: the reference parameters (bit j, the first 64) whose referent's own storage it writes - a field, an element,
-    //reached from the parameter with no further reference - itself or through a callee it hands the parameter on to. An
-    //effect of a caller only where what that caller hands in is itself storage that was there before it ran: a borrow of
-    //its own local (an iterator it made) is written, never what the local's references reach. effShallowTok: the first
-    unsigned long long effShallow;
-    struct token effShallowTok;
-    struct list effCaps; //E11c: on a lambda, the captures it writes through (struct var*) - an effect of whoever made it
-                         //exactly where what the capture copies reaches storage that was there before that function ran
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program
@@ -389,6 +378,8 @@ struct var {
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
                              //the first
+    bool renderStr; //E11c/O12: a method "$" may call (a Str) - its receiver's scope variables are noBuild in its body
+    bool noBuild;   //E11c/O12: a Str's receiver's scope variable - "$" hands it no scope, so nothing is built or stored there
     bool storeInResult; //O26a: a value local the function returns - its storage, and its references (valueHome), are in
                         //the result scope
     //O18c: a value local whose ":=" call landed by its obligations in one of this function's scope variables - where
@@ -435,6 +426,7 @@ struct var {
     struct var* capturedFrom; //D16c: ...the variable it copies (B11: a diagnostic about its permission names that one)
     bool isBorrowedCapture;   //D16c: ...a read-only borrow of a captured value array
     bool isCaptureScope;      //D16: the scope variable of a captured reference, bound when the lambda is made
+    struct var* capturesOf;   //O17/D16c: on the callee binding a lambda's captures where it is made, that lambda
     struct var* lambdaHost;   //D16: the function the lambda is written in, NULL in a test or a global initializer
     bool lambdaInTest;        //D16: written in a test block, so emitted with the test harness
     struct semaModule* lambdaObject; //D8a: a parameter default's lambda, made for calls in this module's code - the
@@ -817,6 +809,7 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m);
 //E31: a type's Call method, and whether it matches a function type exactly
 struct var* SemanticCallOf(struct type t);
 struct var* SemanticStrOf(struct type t); //E11c: the Str "$" renders a value of type t through, or NULL
+bool SemanticRendersStr(struct type t); //E11c: whether a rendering of t calls a Str - its own, or a part's
 bool SemanticCallMatches(struct type t, struct type fnType);
 //S12b: the values a match used as one can give, in order
 struct list SemanticMatchValues(struct operand* op);
@@ -946,6 +939,8 @@ bool SemanticParamTransient(struct var* func, int j);
 //P2: whether func's body may build into a scope it is handed - allocate anything, or register a destructor - read off
 //the checked body, conservatively; codegen asks it of a callee a captured scope is passed to (cgCapScopesRead)
 bool SemanticMayBuild(struct var* func);
+bool SemanticMayBuildInto(struct var* func, struct var* v); //E11c/O12: the walk above, asked of one scope variable
+bool SemanticReliesNoBuild(struct var* func, struct var* v);
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
 bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv);
 //M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit

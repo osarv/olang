@@ -1,0 +1,27 @@
+# E11b/E11c: joins reaching a Str left by continue and by a propagated error leave nothing behind
+type Big struct(n I64) {
+    n
+}
+fn (b Big&) Str() String {
+    sb := StringBuilder()
+    for i in range 30 { sb.Push("0123456789") }
+    return sb.ToString()
+}
+fn g(i I64) I64 ? {
+    if i % 2 == 0 { error }
+    return i
+}
+fn h(b Big&, i I64) I64 ? {
+    s := $b " " $(try g(i)) " " $b
+    return s.Len()
+}
+fn main() ? {
+    b := Big(1)
+    t I64 = 0
+    for i in range 20000 {
+        s := $b $(try g(i) catch { continue })
+        t += s.Len()
+        t += try h(b, i) catch default 0
+    }
+    println($t)
+}

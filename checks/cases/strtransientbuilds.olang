@@ -1,0 +1,29 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/D16c: a lambda passed to a callee that keeps nothing of it lives in the frame, but what its body builds where its
+# capture lives is still asked
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn apply(f fn() I64) I64 { return f() }
+fn peek(n Node&) I64 {
+    return apply(fn() I64 {
+        s := $n.v "x"
+        return s.Len()
+    })
+}
+fn peek2(n Node&) I64 {
+    return apply(fn() I64 {
+        m Node&n = Node(n.v + 1)
+        return m.v
+    })
+}
+type Bag2 struct(head Node&) {
+    head
+}
+fn (b Bag&) Str() String { return "b" $peek(b.head) }
+
+fn (b Bag2&) Str() String { return "b" $peek2(b.head) }
+fn main() ? { println($Bag(Node(4)) $Bag2(Node(4))) }

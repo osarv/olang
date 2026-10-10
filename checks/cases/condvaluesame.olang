@@ -1,0 +1,37 @@
+# check: run
+# flags: -s
+# O12/E28: a reference read out of a conditional of values whose references live in one scope lives there, so a callee
+# may build through it (condvaluefield is the same with two scopes, refused)
+type In struct() {
+    k I64 = 0
+    l List<I64> = List<I64>()
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn w(p mut In&) {
+    p.k++
+    p.l.Push(p.k * 10)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    o := Bag(Mid())
+    i := Bag(Mid())
+    for j in range 20 {
+        w((i if j % 2 == 0 else o).m.inner)
+        churn()
+    }
+    assert o.m.inner.k == 10 and o.m.inner.l.Len() == 10 and o.m.inner.l[9] == 100 and i.m.inner.l[9] == 100
+}

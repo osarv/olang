@@ -1,0 +1,26 @@
+# check: fail error[E11c, O12]
+# E11c/O12: the same through a read-only local a lambda captures ('w Wr&b')
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+type Wr struct(h mut Node&) {
+    h
+}
+fn (b Bag&) Str() String {
+    w Wr&b = Wr(b.head)
+    f := fn() { w.h.next = Node(5, null) }
+    f()
+    return "b"
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    keep := List<Node&>()
+    for i in range 2000 { keep.Push(Node(-7, null)) }
+    println(s)
+    println($b.head.next.v)
+}

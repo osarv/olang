@@ -1,0 +1,29 @@
+# check: fail error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check
+# T22a/E31: a Call adapter keeping a function value it is handed, reached through a helper (C8)
+type Node struct(v I64) {
+    v
+}
+type Keeper struct() {
+    kept fn() I64 = null
+}
+fn (k mut Keeper&) Call(x fn() I64) { k.kept = x }
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 { return c.v + 1 }
+fn keepVia(s fn(x fn() I64), g fn() I64) { s(g) }
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn fill(c Ctr&, kp mut Keeper&) {
+    keepVia(kp, c)
+}
+fn main() ? {
+    c := Ctr(10)
+    kp := Keeper()
+    fill(c, kp)
+    t := churn(300)
+    println($kp.kept() " " $t)
+}

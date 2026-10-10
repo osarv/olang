@@ -1,0 +1,38 @@
+# check: run
+# O20/E12c: a value field reached through a "mut" reference field with no scope of its own lives where that field's
+# container does - "b.m.inner" with m a bare field of b's referent is in b's scope, so it may be lent to a callee
+# writing it, and one building into it builds there (it was taken for this function's own, O10d)
+type In struct() {
+    k I64 = 0
+    l List<I64> = List<I64>()
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn w(p mut In&) {
+    p.k++
+    p.l.Push(p.k * 10)
+}
+fn f(b Bag&) {
+    w(b.m.inner)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Mid())
+    for i in range 20 { f(b) }
+    churn()
+    assert b.m.inner.k == 20 and b.m.inner.l.Len() == 20 and b.m.inner.l[19] == 200
+    assert $b.m.inner.l.ToArray()[:3] == "I64[10, 20, 30]"
+}

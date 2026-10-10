@@ -16,6 +16,15 @@
 # spawned calls that fail (spawn try, try join, a task's default). Then it churns the arena and returns a checksum of
 # everything the target reaches.
 #
+# A Str scenario (one scenario in four) declares a type whose Str's body does what the reviews of decision 49 attacked,
+# over the parts of its receiver - a node, a List, a Map and an array of nodes: stores through conditionals, matches and
+# catch defaults (a borrowed result, a Map's Get, a checked index), callbacks building or reading, lambdas, tasks and
+# spawned lambdas, generics, call cycles, writes through a List's element (E31b), a local moved into a borrowed result's
+# home (O26a), as well as what Str may do - read and walk its receiver, write numbers through it, build in its own blocks.
+# The value is rendered in a loop, alone and in joins, with a churn after each rendering, and the text's hash and what the
+# receiver reaches are the checksum. Str may build nothing where its receiver lives (E11c), so most such bodies are
+# refused; what the compiler accepts must print the same built -s and interpreted.
+#
 # One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
 # through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
 # their own. -i runs no destructors, so such a program is checked against itself: built -d -s and built -b, the two
@@ -213,10 +222,34 @@ Prelude := (
     "    if Run > 0 { error }\n"
     "    return Node(v)\n"
     "}\n"
+    "# for Str scenarios: a borrowed result that fails, callbacks, a generic, call cycles, a local moved into a borrowed result's home\n"
+    "fn borrowF(n mut Node&) mut Node&n ? {\n"
+    "    if Run > 0 { error }\n"
+    "    return n\n"
+    "}\n"
+    "fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }\n"
+    "fn applyR(n Node&, f fn(x Node&) I64) I64 { return f(n) }\n"
+    "fn idT(x <T>) T { return x }\n"
+    "fn cycA(n Node&, c I64) I64 {\n"
+    "    if c > 0 { return cycB(n, c - 1) }\n"
+    "    return n.v\n"
+    "}\n"
+    "fn cycB(n Node&, c I64) I64 { return cycA(n, c) + 1 }\n"
+    "fn cycGrow(n mut Node&, c I64) {\n"
+    "    if c > 0 { cycGrow2(n, c - 1) } else { n.next = Node(c + 7) }\n"
+    "}\n"
+    "fn cycGrow2(n mut Node&, c I64) { cycGrow(n, c) }\n"
+    "type P2 struct(n mut Node&) { n }\n"
+    "fn moveH(n mut Node&) mut Node&n {\n"
+    "    p := P2(n)\n"
+    "    return p.n\n"
+    "}\n"
+    "fn pickDef(n mut Node&, v I64) mut Node&n { return try borrowF(n) catch default mkNode(v) }\n"
+    "fn readN(n Node&) I64 { return chain(n) }\n"
 )
 
-# the targets: what a scenario declares, and what it returns
-Targets I64 = 11
+# the targets: what a scenario declares, and what it returns (the last, a Str scenario, declares its own - strScenario)
+Targets I64 = 12
 Decls := String&[
     "x := Node(1)",
     "w := W(Box())",
@@ -229,6 +262,7 @@ Decls := String&[
     "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)",
     "",                                    # a global, declared before the function
     "",                                    # a node a callee built and returned
+    "",                                    # a Str scenario
 ]
 Checks := String&[
     "chain(x)",
@@ -242,6 +276,7 @@ Checks := String&[
     "chain(t.items[0]) * 7 + chain(t.items[1])",
     "",
     "chain(x)",
+    "",
 ]
 
 type SG struct(seed U64) {
@@ -639,6 +674,114 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
     return g.twoOp(a, ind, d)
 }
 
+# ---- Str scenarios ----
+
+# a statement of a Str's body over its receiver r: what Str may do (three times in five) - read and walk what the
+# receiver reaches, through the same constructs - or one of the shapes the reviews of decision 49 attacked, which builds
+# where the receiver lives and so is refused; acc is the body's own running number
+fn (g mut SG&) strOp(ind String&) String& {
+    v := g.val()
+    q := g.name("q")
+    if g.chance(60) {
+        k := g.r(17)
+        if k == 0 { return $ind "acc += chain(r.n)\n" }
+        if k == 1 { return $ind "r.n.v = r.n.v + 1\n" }                       # an effect: once per rendering
+        if k == 2 {    # a lambda in this frame, reading what the receiver reaches
+            return $ind $q " := fn() I64 { return r.n.v + " $v " }\n" $ind "acc += " $q "()\n"
+        }
+        if k == 3 {    # a lambda building in its own blocks
+            f := g.name("f")
+            return ($ind $f " := fn() I64 {\n" $ind "    " $q " := Node(r.n.v)\n" $ind "    " $q ".next = Node(" $v ")\n" $ind
+                    "    return chain(" $q ")\n" $ind "}\n" $ind "acc += " $f "()\n")
+        }
+        if k == 4 { return $ind "acc += idT(r.n).v + idT(r.n.v)\n" }
+        if k == 5 { return $ind "acc += cycA(r.n, 3)\n" }
+        if k == 6 { return $ind "if r.l.Len() > 0 { acc += r.l[0].v }\n" }
+        if k == 7 {    # what Str builds in its own blocks
+            tl := g.name("tl")
+            return ($ind $q " := Node(" $v ")\n" $ind $q ".next = Node(r.n.v)\n" $ind $tl " := List<I64>()\n" $ind $tl ".Push(chain("
+                    $q "))\n" $ind "acc += " $tl "[0]\n")
+        }
+        if k == 8 { return $ind $q " := $r.n.v \"x\" $chain(r.n)\n" $ind "acc += " $q ".Len()\n" }
+        if k == 9 { return $ind "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n" }
+        if k == 10 {    # a conditional of references, read
+            return $ind $q " := r.n if Run > 0 else r.l[0]\n" $ind "if " $q " != null { acc += " $q ".v }\n"
+        }
+        if k == 11 {    # a catch default that is existing storage, read
+            return $ind $q " := try r.m.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n"
+        }
+        if k == 12 { return $ind $q " := try r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
+        if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n.next\n" $ind "if " $q " != null { acc += " $q ".v }\n" }
+        if k == 14 {    # walks
+            y := g.name("y")
+            e := g.name("e")
+            return $ind "for " $y " in r.l { acc += " $y ".v }\n" $ind "for " $e " in r.m { acc += " $e ".Value.v }\n"
+        }
+        if k == 15 { return $ind "acc += match Run { case 1 => r.n.v case _ => " $v " }\n" }
+        return $ind "if r.l.Len() > 0 { r.l[0].v = r.l[0].v + " $v " }\n"    # a number written through an element
+    }
+    k := g.r(18)
+    if k == 0 { return $ind "r.n.next = mkNode(" $v ") if Run > 0 else r.n.next\n" }
+    if k == 1 { return $ind "r.n.next = match Run { case 1 => mkNode(" $v ") case _ => r.n.next }\n" }
+    if k == 2 { return $ind "r.n.next = try borrowF(r.n) catch default mkNode(" $v ")\n" }
+    if k == 3 { return $ind "r.n.next = try r.m.Get(3) catch default mkNode(" $v ")\n" }
+    if k == 4 { return $ind "r.n.next = try r.a[Run * 9] catch default mkNode(" $v ")\n" }
+    if k == 5 { return $ind "applyN(r.n, fn(x mut Node&) { x.next = Node(" $v ") })\n" }
+    if k == 6 { return $ind "acc += applyR(r.n, fn(x Node&) I64 { return x.v })\n" }
+    if k == 7 {
+        y := g.name("y")
+        return $ind $y " I64 = 0\n" $ind "join { spawn " $y " = readN(r.n) }\n" $ind "acc += " $y "\n"
+    }
+    if k == 8 { return $ind "join { spawn grow(r.n, " $v ") }\n" }
+    if k == 9 {
+        h := g.name("h")
+        return $ind $h " := r.n\n" $ind "join { spawn fn() { " $h ".next = Node(" $v ") } }\n"
+    }
+    if k == 10 { return $ind "idT(r.n).next = Node(" $v ")\n" }
+    if k == 11 { return $ind "cycGrow(r.n, 2)\n" }
+    if k == 12 { return $ind "if r.l.Len() > 0 { r.l[0].next = Node(" $v ") }\n" }
+    if k == 13 { return $ind "acc += moveH(r.n).v\n" }
+    if k == 14 { return $ind "r.n.next = pickDef(r.n, " $v ")\n" }
+    if k == 15 { return $ind "r.l.Push(Node(" $v "))\n" }
+    if k == 16 { return $ind "r.m.Put(" $v ", Node(" $v "))\n" }
+    return $ind $q " := Node(" $v ")\n" $ind "r.n.next = " $q "\n"
+}
+
+# a Str's body: a few statements, some in a block, a loop or deferred code
+fn (g mut SG&) strBody(ind String&, d I64) String& {
+    out mut String& = ""
+    for c in range 1 + g.r(2) {
+        if d > 0 and g.chance(35) {
+            w := g.r(4)
+            body := g.strBody($ind "    ", d - 1)
+            if w == 0 { out = $out $ind "if Run > 0 {\n" $body $ind "}\n" }
+            else if w == 1 {
+                i := g.name("i")
+                out = $out $ind "for " $i " in range 2 {\n" $body $ind "}\n"
+            }
+            else if w == 2 { out = $out $ind "defer {\n" $body $ind "}\n" }
+            else { out = $out $ind "{\n" $body $ind "}\n" }
+        } else {
+            out = $out $g.strOp(ind)
+        }
+    }
+    return out
+}
+
+# a Str scenario: a type whose Str does strBody over its receiver, rendered in a loop with a churn after each rendering
+fn (g mut SG&) strScenario(k I64) String& {
+    t := "R" $k
+    body := g.strBody("    ", 2)
+    rd := String&["$r", "\"<\" $r \">\"", "$r $r", "$r.n.v $r"][g.r(4)]
+    return ("type " $t " struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n"
+            "    a\n}\n" "fn (r " $t "&) Str() String {\n    acc I64 = 0\n" $body "    return \"r\" $acc \":\" $chain(r.n)\n}\n"
+            "fn s" $k "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := List<mut Node&>()\n    l.Push(Node(3))\n"
+            "    m := Map<I64, mut Node&>()\n    m.Put(3, Node(4))\n    a := Array<mut Node&>(4)\n    a[0] = Node(5)\n"
+            "    r := " $t "(x, l, m, a)\n    h I64 = 0\n    for i in range 3 {\n        s := " $rd "\n"
+            "        h = h * 31 + s.Hash()\n        churn()\n    }\n    churn()\n"
+            "    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)\n}\n")
+}
+
 # n statements around what t declares (as a), wrapped in blocks d deep at most
 fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
     out mut String& = ""
@@ -673,7 +816,7 @@ fn Scenario(seed U64, k I64) String& {
     g := SG(seed * 1000003 + U64(k) + 1)
     g.k = k
     g.dtors = HasDtors(seed)
-    t := g.r(Targets)
+    t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
     g.global = t == 9
     decl String& = $Decls[t]
     check String& = $Checks[t]
@@ -701,6 +844,7 @@ fn Scenario(seed U64, k I64) String& {
                 $k "() }\n")
         decl = "x := mk" $k "b()"
     }
+    if t == 11 { return "# scenario " $k "\n" $g.strScenario(k) }
     body := g.stmts(kind, a, 2, "    ")
     return ("# scenario " $k "\n" $head $g.helpers "fn s" $k "() I64 {\n    " $decl "\n" $body "    churn()\n    return " $check
             "\n}\n")

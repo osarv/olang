@@ -808,6 +808,8 @@ outlive its result scope - and to be exactly it where something can be stored th
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
 such a type may require that much and no more: `l.Iter().Fold(l[0], fn(best, w) { return w if w.Len() > best.Len() else
 best })` keeps the longest element.
+A value adapted to a function type through its `Call` (E31) is a function value of that `Call`: one whose `Call` carries
+an obligation - keeps an argument beyond the call - is not adapted, as such a function is not used as a value.
 
 ### 2.8 Scopes
 
@@ -955,8 +957,8 @@ This is permission in the type checker only: it changes no value and no run time
 unaffected by it.
 
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
-compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element)
-is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
+compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element, or a
+conditional's or a match's value whose type is a read-only reference, E28/S12b) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
 plain data an immutable global holds is read-only data the same way. Any other target - a value, which is
 storage of its own, or a writable reference - gets a copy of its own. Which happens is not observable except as speed, and as identity:
 each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
@@ -1441,22 +1443,26 @@ A lambda's parameters and locals may not reuse the name of a variable it could c
 reference is built where it lands, as any temporary is (E12c). One capturing references - or values holding them
 (D16c) - lives where they do:
 in their one scope, or - when they live in several - in the innermost block among them, or else the block it is
-made in; one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
+made in; one capturing what a `Str`'s receiver reaches, where nothing is built (E11c), lives in the block it is made in;
+one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
 instead, each scope it captures from required to outlive that - an obligation of the function (O10b) where it is
 another of its scope variables, as returning a parameter's function value is (O14a). Every rule for a reference (§8)
 then decides where it may be stored, passed and returned, so it can never be called after something it captured is gone. A function named as a value captures nothing and fits
 anywhere. Nothing is written through a function value itself, so it need only outlive where it is put: the
 exactness O25 requires of a reference does not apply to one. Where the lambda lives is unobservable beyond that, so an
 implementation may keep one made as an argument for a callee that can keep nothing of it - no obligation of the
-callee names that parameter's scope, its result does not, and no other parameter shares it - in the caller's frame,
-where its captures are seen through: a function value it captured is then known at the call through it.
+callee names that parameter's scope, its result does not, no other parameter shares it, no lambda captures it, and every
+read of it as a value is an argument of a direct call to a named function keeping nothing of that parameter (a call
+through a function value, which records no obligation, may keep what it is handed) - in the caller's frame, where its
+captures are seen through: a function value it captured is then known at the call through it.
 
 **D16e (spawning a lambda).** `spawn fn() { ... }` starts a task running the lambda's body (§6.8 P1). The lambda
 takes no parameters; its captures are made when the `spawn` runs, so a loop spawning one per iteration hands
 each task its own copy of the loop's variables. A lambda called where it is spawned, `spawn fn(k I64) { ... }(10)`, is
 the same task with arguments: its captures are made when the `spawn` runs and it lives as the uncalled form does.
 Either way the lambda lives until the join (P2): where D16d would put it in the block it is made in because what it
-captured lives in several scopes, it is built in the join block when each of those lasts until the join.
+captured lives in several scopes, or where a `Str`'s receiver lives, it is built in the join block when each of those
+lasts until the join.
 
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
@@ -2360,7 +2366,10 @@ one is wanted (T29c) — holding its operand's textual rendering. It
 is a **value** and a **temporary**: it has no storage of its own to borrow, so it is built in the scope of
 whatever it flows into (E12c) — the current block for a local it initializes, the target's scope for a
 reference it is assigned to or returned as. It binds as the other prefix operators do, tighter than any
-binary operator, so `$a.b` renders `a.b`.
+binary operator, so `$a.b` renders `a.b`. Its operand is evaluated where the `$` stands: a value built only to be
+rendered (`$Wrap(x)`) is built in the block the `$` is in and held to every rule there (C2d, O25c), never where the
+text lands, which may outlive what that value holds. An instance of a type declaring a destructor built so is
+destructed once, when that block closes (O16).
 
 A type may say how it renders by declaring **`Str`** (E11c); every other value has exactly one rendering, fixed by
 its type: the value written the way it would be in source:
@@ -2423,30 +2432,53 @@ renders is a function there, it is a compile-time error that says to write the v
 
 String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd"`, joined before anything
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
-text **value** (T29c) and a temporary, exactly as `$` is (E11a): every piece is measured, one allocation of the
-total is made in the scope the result flows into, and each piece is written into it once, so the cost is
-linear in the result however many pieces there are. A `:=` declaration takes its type from a join or a
-`$` rendering (D15), since both are text by construction.
+text **value** (T29c) and a temporary, exactly as `$` is (E11a). Its pieces' operands are evaluated left to right,
+each to its value as any expression's is - a number, a `Bool`, a `Char`, a struct, an enum or a function value as it is
+then, a reference as the instance it names, an array as the array it names (T7b) - and only then are the pieces
+rendered, left to right, each once; one allocation of the total is made in the scope the result flows into, so the cost
+is linear in the result however many pieces there are. So a later operand changing what an earlier piece holds shows
+in that piece only through what a reference or an array names: in `$g $bump()`, a `bump` writing `g`'s elements
+shows in `g`'s piece if `g` is an array, and does not if `g` is a struct value. A `:=` declaration takes its type from a
+join or a `$` rendering (D15), since both are text by construction.
 
 **E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
 (M6b): then `$` on it, or on a value rendering it as a part, is an error anywhere else. No parameters, result `String`,
 no errors, and a receiver that is not `mut`. Any other method named `Str` or `str` taking no parameters is a
 compile-time error; one taking parameters is an ordinary method (E31), and `$` renders the type's values as it would
-with none declared. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
-sense of K1a, and it may **write nothing that was there before it ran** - no store, increment or atomic through a
-reference whose referent the call did not make (a parameter's, a capture's, the program's, one not known here), and
-no call that writes such storage through an argument it is given or through a function value whose body is not known
-there (settled over every call once every body is checked). A lambda the function makes is judged as part of it: calling
-it does what its body does, a write through one of its captures counting where what the capture copies reaches such
-storage. A `Str` that does either is a compile-time error naming
-what stops it. What `Str` builds for itself - a local list, a `StringBuilder`, an iterator or cursor over the value it
-renders (a `for` over a `Map` makes one) - it may change freely, through a callee it hands it to as well; what such a
-value's references reach is not its own, so a write through them is the effect above (a reference in a field written
-`&p` counts as reaching storage that was there: where it refers is its instance's binding, not known there, O23a).
-That is what lets a rendering call it as often as building the text needs - once to measure, once to write, or not at
-all when the text is computed while compiling - with nothing to tell the difference. And since `$` renders read-only
-values too (an immutable global, a part of a read-only reference, T25c), a by-value receiver of `Str` is one that takes
-a read-only copy: one whose body lends what it holds writably, or keeps it, is a compile-time error.
+with none declared. Otherwise `Str` is an ordinary method: it may write what it reaches, a global, through an `extern`.
+
+`$` calls it **exactly once per rendering** of a value of its type, where the rendering reaches that value, in
+**rendering order**: a join's pieces left to right, after every operand of the join is evaluated (E11b), a value's parts
+depth first - fields in declaration order, an
+array's elements in index order, an enum's payload fields, what a reference names - and a `List`'s elements, a
+`Map`'s keys and values and a `StringBuilder`'s text as their own `Str` renders them, each once. What a rendering reads,
+it reads where it reaches it, so a `Str` changing the value being rendered changes what is rendered after it and
+nothing before - except that an array's length and storage are read where its rendering starts, and an enum is read
+whole (its case and payload) before any of its payload is rendered, so a `Str` giving the array new storage, or putting
+another case where the enum is, leaves the rest of that rendering on what was read. Text computed while compiling
+(K2, S18c) calls it exactly as the running program would; and since an evaluation that would be observable if it were
+skipped at run time is refused (K1 - a global written, a mutable global read, an `extern` called), a `Str` with such an
+effect leaves its rendering to run time.
+
+`$` does not know where a part it renders lives, so where `Str`'s receiver - and anything it reaches - lives is not
+known in `Str`'s body (O12): `Str` may read and walk all of it, and build what it uses in its own blocks or in its
+result's scope (one `$` opens for the call and closes once the text is copied), but may **build or store nothing**
+where its receiver reaches - no new value built into such a scope, nothing it built or was handed stored into what the
+receiver reaches (O17's region; a reference or a value holding references read out of that region being all it may put
+there) - and may require nothing of such a scope (an obligation, O10b, naming one). Each is a compile-time error at
+`Str`; `$` hands its receiver's scope variables the scope it opens for the call, in which nothing is ever built through
+them. The same holds through whatever `Str` does with a part
+of what its receiver reaches: a function it passes the part to, a closure capturing it (D16d), a task handed it (P2), a
+function value adapting it (E31), a conditional's or a match's new value, or a catch default - a call in it whose result
+follows the default's included - placed with it (E28, S12b, R9a), a local a function hands back, made where its
+borrowed result lives (O26a) - each is judged by what is built where that part lives, and building there is the error,
+at `Str`. A call
+through a function value - a callback a function was handed included - is a body not known there, so it is judged to build
+wherever it binds such a scope, whatever is passed for it; a task handed a part gets a stand-in made where the part lives
+(P2), and a function value adapting a part (E31) is made there, so each is building there too.
+And since `$` renders read-only values too (an immutable global, a part of a read-only reference, T25c), a by-value
+receiver of `Str` is one that takes a read-only copy: one whose body lends what it holds writably, or keeps it, is a
+compile-time error.
 
 ### 5.3 Assignability ("fits")
 
@@ -4449,7 +4481,11 @@ through which something can be stored (O25g) or which a borrowed result names (t
 scope argument (E25) may not name it. Nothing new is built into a place holding such a reference by value either - a
 value local copied from a conditional or a match whose values' references live in different scopes, say: what is
 assigned there is a value whose references already live somewhere, never a temporary, since a temporary would be built
-in one scope and kept where the place's references really are.
+in one scope and kept where the place's references really are. A conditional or a `match` gives such a reference when
+the values it can give live - or, for values held by value, hold their references - in different scopes, or in one not
+traced: `w((i if k else o).m.inner)` with `i` and `o` from different blocks lends a value whose scope is not known
+(a value built for the conditional lands with it, and decides nothing). A declaration naming such a local's scope as
+where it lives (`x T&l`) is a compile-time error: nothing is declared to live where that is not known.
 
 **O20.** A bare reference slot reached **through** a reference-shaped container — a field or element of a
 value that is itself `&`-marked — lives in the **container's** scope (O5), not in the scope of the function
@@ -4552,11 +4588,13 @@ container is a **parameter** `p` of the function, the binding was made by whoeve
 it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
 for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
 of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that
-nothing is built into it (C2d's restriction on such a field): a result that would land in one, or a callee that may
-build into a parameter given one (it can write the parameter, or its borrowed result names it), reaches instead the
-scope the field was read through, which the derived scope outlives; and a temporary put where a derived scope's
-referent lives, a scope argument naming one, or a copy out of such a field handed by value to a callee that can build
-through what it holds (the copy's references being where the field's referent is), is a compile-time error. At each call it
+nothing is built into it (C2d's restriction on such a field): a temporary put where a derived scope's referent lives, a
+result that would land there, a scope argument naming one, a reference living in one - read through the field, or a copy
+of that reference in a local, a `for ... in` element or a lambda's capture - passed for a parameter of a callee that may
+build into it (something can be stored through the parameter and the callee may write it, or its borrowed result names
+it, or its body builds there), or a copy out of such a field handed by value to a callee that can build through what it
+holds (the copy's references being where the field's referent is), is a compile-time error: what the callee built would
+be in the scope the field was read through, which the referent outlives. At each call it
 is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
 parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
@@ -4798,7 +4836,9 @@ element, through any depth - by an assignment, or as a spawned task's result, P1
 that region that can be stored through (the caller could then build through it), or when it passes the region on to a
 call that does either - a fixed point over the program's calls, every call taking part whether the callee's body was
 checked before it or after, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is
-not known keeps everything. What a body does is the **function's own**: each instantiation of a generic (G16) is
+not known keeps everything. A lambda is known where it is made, its body checked there: making one whose body stores
+into what a writable capture reaches is such a store, into the region it captured from, wherever it is later called -
+and one that only reads through its captures, or writes numbers, is none (D16c). What a body does is the **function's own**: each instantiation of a generic (G16) is
 answered from its own body, so `List<String&>.At` handing nothing out is not made to hand its region out by
 `List<List<String&>>.At` doing so, whatever order the program uses them in. Only what is read out of the region by following a reference from the parameter brings in
 nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the
@@ -4953,7 +4993,9 @@ therefore one-per-construction: a value that reaches a variable, field, or array
 copied from an already-constructed instance is the same instance, registers nothing further, and is
 destructed exactly once (C10). No storage location is registered on its own account, and no
 never-constructed storage is registered at all — in particular, a zero-filled aggregate (D13)
-contains no instances and causes no destructor to run.
+contains no instances and causes no destructor to run. A constructor call no reference takes - one standing as a
+statement, read through (`Wrap(x).a.v`), rendered (`$Wrap(x)`) - is an instance all the same: it is registered with
+the scope it was built in (where its constructor's instance landed, C2d) and destructed once when that closes.
 
 ### 8.8 Owned references
 
@@ -5219,8 +5261,9 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
   each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
-  temporary stored into the field or anything reached through it, or the field passed for a parameter the callee
-  may build into, is a compile-time error there;
+  temporary stored into the field or anything reached through it, or the field - or a copy of what it refers to, in a
+  local, a `for ... in` element or a capture - passed for a parameter the callee may build into, is a compile-time
+  error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
   `T` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);
@@ -6048,6 +6091,22 @@ that application's variables through the methods that make it satisfy the trait 
 parameter types and result are matched against those of the method the type supplies under the same name. So a
 `ListIter<I32>` bound to `I` binds `T` to `I32`. Whether the type then satisfies the trait the bindings give is the
 constraint's check (G19).
+
+**G9d.** A value of a struct type declaring a destructor (C11) that reaches a bare type-variable parameter binds the
+variable to a reference to its type, writable as any built value is (T25c) - never to the value type. C11 holds no
+value of such a type anywhere else, so the argument is a temporary: it is promoted into the parameter (E12), built where
+the parameter's scope says (O18b), and its destructor registered there, once (O16). `fn id(x <T>) T` called as
+`id(Res(1))` is `id` at `mut Res&`. A generic constructor binds it read-only, as it binds every reference (G10c), so
+`Box(Res(1))` is a `Box<Res&>`.
+
+Two references of one type that differ only in permission, bound to one variable by two arguments, meet at the
+read-only one whichever comes first (T25c) - as two numbers meet at the wider (T6b) - so `pick(Res(1), r)` and
+`pick(r, Res(1))`, with `r` a read-only `Res&`, are both `pick` at `Res&`. A variable a method's receiver bound is the
+receiver's type and is not met (G9b).
+
+Since `T` is then a reference, the generic's code is a reference's, as C11 makes it for the type everywhere: `==` on two
+`T`s is identity unless the type declares `Eq` (E10), and no `Hash` is supplied for it (E10b), so a `Hashable`
+constraint on `T` holds only where the type declares one (G19).
 
 **G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<I32>`
 and `Vec<I64>` are different types (T27); two instantiations are the same type exactly when the

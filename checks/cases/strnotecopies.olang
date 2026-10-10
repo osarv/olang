@@ -1,0 +1,19 @@
+# check: fail keep copies of what it reads instead of references
+# B11/E11c: the note for a list in a Str that cannot hold references to the receiver's nodes does not suggest declaring it
+# where they live, which a Str cannot do
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    l := List<mut Node&>()
+    for n := b.head, n != null, n = n.next { l.Push(n) }
+    return $l.Len() " " $l[0].v
+}
+fn main() ? {
+    b := Bag(Node(1, Node(2, null)))
+    println($b)
+}

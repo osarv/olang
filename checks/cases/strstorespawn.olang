@@ -1,0 +1,28 @@
+# check: fail error[E11c, O12]
+# E11c/O12: the same through a spawned lambda
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    join { spawn fn() { b.head.next = Node(5, null) } }
+    return "b"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    churn()
+    println(s)
+    println($b.head.next.v)
+}

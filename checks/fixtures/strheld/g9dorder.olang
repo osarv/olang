@@ -1,0 +1,16 @@
+# G9d/T25c: a temporary and a read-only reference meet at read-only in either order
+type Res struct(k I64) {
+    k
+} destruct { println("d" $k) }
+fn pick(a <T>, b T, c Bool) T { return a if c else b }
+fn addA(x <T>, l mut List<T>&) { l.Push(x) }
+fn addB(l mut List<<T>>&, x T) { l.Push(x) }
+fn ro(r Res&) I64 { return pick(r, Res(2), true).k }
+fn ro2(r Res&) I64 { return pick(Res(2), r, false).k }
+fn main() ? {
+    r := Res(1)
+    println($ro(r) " " $ro2(r))
+    l := List<Res&>()
+    addB(l, Res(3))
+    addA(Res(4), l)
+}

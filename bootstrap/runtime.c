@@ -1892,6 +1892,110 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "}\n\n", out);
 }
 
+//E11c: a rendering built in one pass - text that grows as it is written, { ptr data, i64 len, i64 cap, ptr scope,
+//ptr node }: data starts in a small room beside the builder and, once it outgrows that, grows in a scope of the builder's
+//own - made on that first growth, so a frame that never outgrows its room keeps no header (@__olang_sb_scratch), and
+//closed when the text is copied out (@__olang_sb_done). While a test runs the scope is the frame's, made with the
+//builder and pushed on the unwind chain where the builder is made (node: its unwind node, null outside a test build), so
+//a test left part way through a rendering reclaims its chunks, and the chain stays in the order frames are in. Written
+//only into an object that builds one (a rendering that reaches a Str)
+void emitTextBuilderRuntime(FILE* out) {
+    fputs(
+        //room for need more bytes past what it holds - the place they go: inline where it fits, else grown
+        "define linkonce_odr ptr @__olang_sb_room(ptr %sb, i64 %need) alwaysinline {\n"
+        "entry:\n"
+        "  %lenp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 1\n"
+        "  %capp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 2\n"
+        "  %len = load i64, ptr %lenp\n"
+        "  %cap = load i64, ptr %capp\n"
+        "  %want = add i64 %len, %need\n"
+        "  %fits = icmp ule i64 %want, %cap\n"
+        "  br i1 %fits, label %ok, label %grow\n"
+        "ok:\n"
+        "  %data = load ptr, ptr %sb\n"
+        "  %p = getelementptr i8, ptr %data, i64 %len\n"
+        "  ret ptr %p\n"
+        "grow:\n"
+        "  %g = call ptr @__olang_sb_grow(ptr %sb, i64 %need)\n"
+        "  ret ptr %g\n"
+        "}\n\n"
+        //...grown: in the arena of the builder's scope, at least doubling, so building n bytes copies fewer than 2n and
+        //leaves fewer than 2n behind there
+        "define linkonce_odr ptr @__olang_sb_grow(ptr %sb, i64 %need) noinline {\n"
+        "entry:\n"
+        "  %lenp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 1\n"
+        "  %capp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 2\n"
+        "  %len = load i64, ptr %lenp\n"
+        "  %cap = load i64, ptr %capp\n"
+        "  %data = load ptr, ptr %sb\n"
+        "  %want = add i64 %len, %need\n"
+        "  %dbl = shl i64 %cap, 1\n"
+        "  %more = icmp ugt i64 %dbl, %want\n"
+        "  %nc = select i1 %more, i64 %dbl, i64 %want\n"
+        "  %scopep = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 3\n"
+        "  %scope0 = load ptr, ptr %scopep\n"
+        "  %none = icmp eq ptr %scope0, null\n"
+        "  br i1 %none, label %mk, label %have\n"
+        "mk:\n"
+        "  %made = call ptr @__olang_sb_scratch(ptr %scopep)\n"
+        "  br label %have\n"
+        "have:\n"
+        "  %scope = phi ptr [ %scope0, %entry ], [ %made, %mk ]\n"
+        "  %nd = call ptr @__olang_scope_alloc(ptr %scope, i64 %nc)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %nd, ptr %data, i64 %len, i1 false)\n"
+        "  store ptr %nd, ptr %sb\n"
+        "  store i64 %nc, ptr %capp\n"
+        "  %p = getelementptr i8, ptr %nd, i64 %len\n"
+        "  ret ptr %p\n"
+        "}\n\n"
+        //the builder's own scope, on its first growth outside a test build (in one the frame's is made with the builder)
+        "define linkonce_odr ptr @__olang_sb_scratch(ptr %scopep) noinline {\n"
+        "entry:\n"
+        "  %h = call ptr @malloc(i64 48)\n"
+        "  call void @__olang_alloc_check(ptr %h)\n"
+        "  store %olang.scope zeroinitializer, ptr %h\n"
+        "  store ptr %h, ptr %scopep\n"
+        "  ret ptr %h\n"
+        "}\n\n"
+        //the text copied out: the builder's own scope, if it has one, closed - and freed, made by @__olang_sb_scratch
+        //(the frame's, in a test build, is popped off the unwind chain where the builder was made)
+        "define linkonce_odr void @__olang_sb_done(ptr %sb) {\n"
+        "entry:\n"
+        "  %scopep = getelementptr { ptr, i64, i64, ptr, ptr }, ptr %sb, i32 0, i32 3\n"
+        "  %h = load ptr, ptr %scopep\n"
+        "  %none = icmp eq ptr %h, null\n"
+        "  br i1 %none, label %done, label %close\n"
+        "close:\n"
+        "  call void @__olang_scope_close(ptr %h)\n"
+        "  %nodep = getelementptr { ptr, i64, i64, ptr, ptr }, ptr %sb, i32 0, i32 4\n"
+        "  %node = load ptr, ptr %nodep\n"
+        "  %inframe = icmp ne ptr %node, null\n"
+        "  br i1 %inframe, label %done, label %free\n"
+        "free:\n"
+        "  call void @free(ptr %h)\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n"
+        //k more bytes written where @__olang_sb_room said
+        "define linkonce_odr void @__olang_sb_add(ptr %sb, i64 %k) {\n"
+        "entry:\n"
+        "  %lenp = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 1\n"
+        "  %len = load i64, ptr %lenp\n"
+        "  %l2 = add i64 %len, %k\n"
+        "  store i64 %l2, ptr %lenp\n"
+        "  ret void\n"
+        "}\n\n"
+        //n bytes from src appended
+        "define linkonce_odr void @__olang_sb_put(ptr %sb, ptr %src, i64 %n) {\n"
+        "entry:\n"
+        "  %p = call ptr @__olang_sb_room(ptr %sb, i64 %n)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %p, ptr %src, i64 %n, i1 false)\n"
+        "  call void @__olang_sb_add(ptr %sb, i64 %n)\n"
+        "  ret void\n"
+        "}\n\n", out);
+}
+
 //E11a: a float's text (@__olang_fmt_float and what it needs, the powers of ten among them) - written only into an object
 //that renders a float, since the powers alone are 11KB of data no other object reads
 void emitFloatTextRuntime(FILE* out) {

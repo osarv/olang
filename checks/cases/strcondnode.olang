@@ -1,0 +1,37 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: a conditional and a match of the receiver's node and a new node (E28, S12b): refused
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type Bag struct(head mut Node&, name String&, k I64) {
+    head
+    name
+    k
+}
+fn (b Bag&) Str() String {
+    x := b.head if b.k == 0 else Node(1, null)
+    y := match b.k {
+        case 0 => b.head
+        nomatch => Node(2, null)
+    }
+    return $x.v " " $y.v
+}
+fn main() ? {
+    b := Bag(Node(4, null), "bag", 1)
+    for i in range 3 {
+        s := $b
+        churn()
+        println(s)
+    }
+}

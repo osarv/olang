@@ -1,0 +1,21 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/D16c: a capturing lambda handed to a callee keeping nothing of it makes, in its own body, a closure living
+# where its capture does - the receiver's - which the walk of that body sees (the transient flag is the call's, C5)
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn apply(f fn() I64) I64 { return f() }
+fn (b Bag&) Str() String {
+    n := apply(fn() I64 {
+        h := fn() I64 { return b.head.v }
+        t := h is h
+        return h() if t else 0
+    })
+    return "b" $n
+}
+fn main() ? {
+    println($Bag(Node(4)))
+}

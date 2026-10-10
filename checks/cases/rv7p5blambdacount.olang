@@ -1,0 +1,21 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - a lambda counting through the receiver, called by Count
+# once per element: once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn (b Bag&) Str() String {
+    n := I64[1, 2].Count(fn(x I64) Bool {
+        b.c.v++
+        return true
+    })
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b2"
+    assert $b == "b4" and b.c.v == 4
+}

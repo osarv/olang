@@ -1,0 +1,19 @@
+# E11c/E31: a Str adapting a receiver part with a Call into a local function value
+type Ctr struct() {
+    v I64 = 3
+}
+fn (c Ctr&) Call() I64 {
+    s := $c.v "x"
+    return s.Len()
+}
+type Bag struct(c mut Ctr&) {
+    c
+}
+fn (b Bag&) Str() String {
+    g fn() I64 = b.c
+    return "b" $g()
+}
+fn main() ? {
+    b := Bag(Ctr())
+    println($b)
+}

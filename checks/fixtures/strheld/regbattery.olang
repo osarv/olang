@@ -1,0 +1,163 @@
+# C11/O16: 26 shapes of destructor temporaries, each block balanced
+Made mut I64 = 0
+Gone mut I64 = 0
+Twice mut I64 = 0
+type Res struct(k I64) {
+    k
+    gone Bool = false
+    Made++
+} destruct {
+    if gone { Twice++ }
+    gone = true
+    Gone++
+}
+error E { X }
+type FRes struct(k I64) ? E {
+    k
+    gone Bool = false
+    if k < 0 { error E.X }
+    Made++
+} destruct {
+    if gone { Twice++ }
+    gone = true
+    Gone++
+}
+fn id(x <T>) T { return x }
+fn pick(a <T>, b T, c Bool) T { return a if c else b }
+fn first(a <T>, b <U>) T { return a }
+type Box<T> struct(x T) {
+    x
+}
+fn takeR(r Res&) I64 { return r.k }
+fn mkR(k I64) Res& ? E {
+    if k < 0 { error E.X }
+    return Res(k)
+}
+fn mkV(k I64) Res& ? E {
+    if k < 0 { error E.X }
+    return Res(k)
+}
+fn retCond(c Bool) Res& { return Res(1) if c else Res(2) }
+fn retMatch(k I64) Res& {
+    return match k {
+        case 1 => Res(1)
+        nomatch => Res(2)
+    }
+}
+fn task(r mut Res&) { r.k++ }
+fn mk(k I64) Res& { return Res(k) }
+fn main() ? {
+    c := true
+    {
+        a := try mkR(1) catch default Res(2)
+    }
+    println("0: " $(Made - Gone))
+    {
+        a2 := try mkR(-1) catch default Res(3)
+    }
+    println("1: " $(Made - Gone))
+    {
+        b FRes& = try FRes(1) catch { unreachable }
+    }
+    println("2: " $(Made - Gone))
+    {
+        b2 := try FRes(4) catch { unreachable }
+    }
+    println("3: " $(Made - Gone))
+    {
+        b3 := id(try FRes(5) catch { unreachable })
+    }
+    println("4: " $(Made - Gone))
+    {
+        d := id(id(Res(5)))
+    }
+    println("5: " $(Made - Gone))
+    {
+        e := pick(Res(6), Res(7), c)
+    }
+    println("6: " $(Made - Gone))
+    {
+        f := first(Res(8), Res(9))
+    }
+    println("7: " $(Made - Gone))
+    {
+        g := Box(Res(10))
+    }
+    println("8: " $(Made - Gone))
+    {
+        h := Pair(Res(11), 3)
+    }
+    println("9: " $(Made - Gone))
+    {
+        i := Res(12) if c else (Res(13) if c else Res(14))
+    }
+    println("10: " $(Made - Gone))
+    {
+        j := takeR(id(Res(15)) if c else Res(16))
+    }
+    println("11: " $(Made - Gone))
+    {
+        k := retCond(c)
+    }
+    println("12: " $(Made - Gone))
+    {
+        l := retMatch(1)
+    }
+    println("13: " $(Made - Gone))
+    {
+        m := Map<I64, Res&>()
+        m.Put(1, Res(17))
+        m.Put(2, id(Res(18)))
+    }
+    println("14: " $(Made - Gone))
+    {
+        n := Res&[Res(19), id(Res(20))]
+    }
+    println("15: " $(Made - Gone))
+    {
+        o := Array<Res&>(3, Res(21))
+    }
+    println("16: " $(Made - Gone))
+    {
+        r := List<Res&>()
+        r.Push(Res(22) if c else Res(23))
+    }
+    println("17: " $(Made - Gone))
+    {
+        join {
+            spawn task(Res(24))
+            spawn task(id(Res(25)))
+        }
+    }
+    println("18: " $(Made - Gone))
+    {
+        s Res& = Res(0)
+        join { spawn s = mk(26) }
+    }
+    println("19: " $(Made - Gone))
+    {
+        t := id(try mkR(-1) catch default Res(2))
+    }
+    println("20: " $(Made - Gone))
+    {
+        u := (try mkR(-5) catch default Res(9)) if c else Res(10)
+    }
+    println("21: " $(Made - Gone))
+    {
+        u2 := try mkV(-5) catch default Res(9)
+    }
+    println("22: " $(Made - Gone))
+    {
+        v := $id(Res(30))
+    }
+    println("23: " $(Made - Gone))
+    {
+        w := id(Res(31)).k
+    }
+    println("24: " $(Made - Gone))
+    {
+        x := takeR(Pair(Res(32), 1).First)
+    }
+    println("25: " $(Made - Gone))
+    println("made " $Made " gone " $Gone " twice " $Twice)
+}

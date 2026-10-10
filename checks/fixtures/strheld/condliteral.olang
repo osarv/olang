@@ -1,0 +1,12 @@
+# T25d: constant text as a read-only conditional's value is the constant itself
+type Bag struct(name String&) {
+    name
+}
+fn (b Bag&) Str() String {
+    name := b.name if b.name.Len() > 0 else "anon"
+    return $name
+}
+fn main() ? {
+    println($Bag(""))
+    println($Bag("x"))
+}

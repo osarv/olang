@@ -1,0 +1,26 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# O17/D16c: a lambda made where it is called is judged by its body, as a declared callee is - this one stores a new array
+# into what its capture reaches, so the function making it stores into that region, and a copy whose references live
+# elsewhere than its own storage may not be lent to it (o17copylent.olang, through a lambda)
+type Box struct(n I64) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) size() I64 { return b.Data.Len() }
+fn (b mut Box&) regrow(v I64) {
+    f := fn() { b.Data = Array<I64>(8, v) }
+    f()
+}
+fn bump(src mut W&) {
+    b := src.b
+    assert b.size() == 3
+    b.regrow(7)
+    src.b = b
+}
+fn main() ? {
+    w := W(Box(3))
+    bump(w)
+    assert w.b.Data[0] == 7
+}

@@ -1,0 +1,28 @@
+# E11b/E11c: later operands reassigning global arrays, a struct and an enum
+G mut Array<I64> = I64[1, 2]
+H mut Array<I64> = I64[1, 2]
+type T struct(n I64) {
+    n
+}
+E mut T = T(1)
+type Ch enum {
+    A(x I64)
+    B(s String&)
+}
+C mut Ch = Ch.A(1)
+fn growG() I64 {
+    G = I64[9, 9, 9, 9, 9]
+    return 0
+}
+fn sameH() I64 {
+    H = I64[7, 7]
+    return 0
+}
+fn bump() I64 {
+    E.n = 5
+    C = Ch.B("long text here")
+    return 0
+}
+fn main() ? {
+    println($G " " $H " " $E " " $C " " $growG() $sameH() $bump() " " $G " " $H " " $E " " $C)
+}

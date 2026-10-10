@@ -1,0 +1,23 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - the same through an array of cursor references: once
+# per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Cur struct(of Bag&) {
+    c mut Cell&of = of.c
+}
+fn pokeA(a mut Array<mut Cur&>&) { a[0].c.v++ }
+fn (b Bag&) Str() String {
+    arr := Array<mut Cur&>(1, Cur(b))
+    pokeA(arr)
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}

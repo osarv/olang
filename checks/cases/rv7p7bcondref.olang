@@ -1,0 +1,20 @@
+# check: run
+# E11c: "$" calls a Str once per rendering, whatever it writes - a conditional of references handed to a helper writing
+# it: once per "$"
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn bump(p mut Cell&) { p.v++ }
+fn (b Bag&) Str() String {
+    loc mut Cell& = Cell()
+    bump(b.c if b.c.v >= 0 else loc)
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    assert $b == "b1"
+    assert $b == "b2" and b.c.v == 2
+}
