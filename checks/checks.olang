@@ -51,7 +51,7 @@ Outcomes Array<String&>& = runAll()
 fn runAll() Array<String&>& {
     n I64 = Scenarios.Len() + Cases.Len()
     outcomes mut Array<String&>&return = Array<String&>(n)
-    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(n))
+    queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
     for k in range Scenarios.Len() { chan.Send(queue, k) }
     join {

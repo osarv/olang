@@ -14771,6 +14771,56 @@ test "E11c: a Str building only for itself renders the same however often it run
     assert $p == "nm123" and Rv3PtText == "nm123" and rv3PtText(I64(ctRuntimeZero)) == Rv3PtText
 }
 
+# E11c: a Str may walk with an iterator it made - a Map's entries, or a cursor of its own holding a writable reference
+# into the value, stepped through helpers that hand it, or a field of it, on - since a step writes only the cursor;
+# a step writing what the cursor reaches is an effect still (checks/cases/s6strdeep.olang). While compiling as at run time
+type s6Cell struct() {
+    v I64 = 0
+}
+type s6Bag struct(m Map<String&, I64>, c mut s6Cell&) {
+    m
+    c
+}
+type s6Pos struct() {
+    k I64 = 0
+}
+type s6Cur struct(of s6Bag&) {
+    c mut s6Cell&of = of.c
+    n I64 = 0
+    at s6Pos = s6Pos()
+}
+fn s6Adv(q mut s6Pos&) { q.k++ }
+fn s6Step(p mut s6Cur&) {
+    p.n++
+    s6Adv(p.at)
+}
+fn s6Step2(p mut s6Cur&) { s6Step(p) }
+fn (b s6Bag&) Str() String {
+    sb := StringBuilder()
+    for e in b.m {
+        sb.Push(e.Key)
+        sb.Push("=" $e.Value " ")
+    }
+    cur := s6Cur(b)
+    s6Step2(cur)
+    s6Step2(cur)
+    sb.Push($cur.n $cur.at.k $cur.c.v)
+    return sb.ToString()
+}
+fn s6WalkText(k I64) String {
+    m := Map<String&, I64>()
+    m.Put("k", 3 + k)
+    return $s6Bag(m, s6Cell())
+}
+S6WalkText := s6WalkText(0)
+test "E11c: a Str walks with an iterator it made, whose steps write only the iterator" {
+    m := Map<String&, I64>()
+    m.Put("k", 3)
+    b := s6Bag(m, s6Cell())
+    assert $b == "k=3 220" and S6WalkText == "k=3 220" and s6WalkText(I64(ctRuntimeZero)) == S6WalkText
+    assert $b == $b and b.c.v == 0
+}
+
 # T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, Clone, ToList
 # and Filter over collections of Lists work on writable ones (the copies they give are writable, and the lists inside
 # are the same lists), and on a read-only one read what they give

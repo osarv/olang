@@ -391,3 +391,40 @@ test "a Map walked in order of its keys: its entries listed, then sorted" {
     for e in es { b.Push($e.Key "=" $e.Value " ") }
     assert b.ToString() == "apple=2 fig=3 kiwi=1 pear=1 "
 }
+
+# E11c: "$" renders a Map as its entries, "key: value" in braces after its type, each key and value as it renders inside
+# any other value - in the order a walk gives them
+fn mapRendered() String {
+    b := StringBuilder()
+    b.Push($Map<String&, I64>() " ")
+    m := Map<String&, I64>()
+    m.Put("a\"b", 1)
+    b.Push($m " ")
+    c := Map<Char, List<Char>>()
+    l := List<Char>()
+    l.Push('\n')
+    c.Put('x', l)
+    b.Push($c " ")
+    n := Map<I64, Map<I64, Bool>>()
+    n.Put(7, Map<I64, Bool>())
+    b.Push($n)
+    return b.ToString()
+}
+mapRenderedBaked := mapRendered()
+
+test "$ renders a Map's entries, not its buckets" {
+    r := mapRendered()
+    assert r == ("Map<String&, I64>{} Map<String&, I64>{\"a\\\"b\": 1} Map<Char, List<Char>>{'x': List<Char>['\\n']} "
+        "Map<I64, Map<I64, Bool>>{7: Map<I64, Bool>{}}")
+    assert mapRenderedBaked == r                        # the evaluator renders as the run time does
+    m := Map<I64, String&>()
+    for i in range 20 { m.Put(i * 7, $i) }
+    expect := StringBuilder()
+    expect.Push("Map<I64, String&>{")
+    for e in m {                                        # in the order a walk gives
+        if expect.Len() > 18 { expect.Push(", ") }
+        expect.Push($e.Key ": \"" $e.Value "\"")
+    }
+    expect.Push("}")
+    assert $m == expect.ToString()
+}

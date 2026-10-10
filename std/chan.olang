@@ -52,7 +52,7 @@ extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 # through a channel that outlives the loop sending it stays there until the channel's scope closes (O8c), however
 # long ago it was received. A program streaming text indefinitely sends something that holds none (an index, a number)
 # or gives each batch a channel of its own, in a block that ends.
-type Chan<T> struct(cap I32) {
+type Chan<T> struct(cap I64) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
         # (C2d), which is what a run-time-sized field needs.
     data mut Array<T>& = Array<T>(1 if cap == 0 else cap)
@@ -445,4 +445,15 @@ fn waitClosed(c mut Chan<I32>&, tok cancel.Token&, seen mut sumBox&, got mut sum
         seen.v.AtomicAdd(1)
     }
     got.v = 1
+}
+
+# a capacity is a count, an I64 as every length and count is: one computed from a length goes in as it is
+test "a channel's capacity is an I64" {
+    items := I64[4, 5, 6]
+    c mut Chan<I64>& = Chan<I64>(items.Len())
+    Init(c)
+    for x in items { Send(c, x) }
+    total I64 = 0
+    for i in range items.Len() { total += try Recv(c) catch ChanError { unreachable } }
+    assert total == 15
 }

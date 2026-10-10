@@ -1,0 +1,34 @@
+# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect - it writes, through a reference
+# E11c: a cursor Str builds - held by a reference, or a temporary - is its own, but what its "&p" field refers to is not:
+# a helper writing through that field writes the value being rendered
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Cur struct(of Bag&) {
+    c mut Cell&of = of.c
+}
+fn poke(p mut Cur&) { p.c.v++ }
+type B1 struct(b Bag&) {
+    b
+}
+fn (s B1&) Str() String {
+    x mut Cur& = Cur(s.b)
+    poke(x)
+    return "x"
+}
+type B2 struct(b Bag&) {
+    b
+}
+fn (s B2&) Str() String {
+    poke(Cur(s.b))
+    return "y"
+}
+fn main() ? {
+    b := Bag(Cell())
+    one := B1(b)
+    two := B2(b)
+    println($one $two $b.c.v)
+}

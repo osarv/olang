@@ -305,6 +305,13 @@ rule and where it is recorded; the morning report lists them all, then they move
    per-construction check - and a lock in the scope header off the owner), so a closure may build into its captured
    scope from any task; REPLACES decision 40's static refusal (evadable: helpers, lambdas, own lists). Stand-ins stay
    the uncontended fast path. To be built as rv3fix round 3; abandon if the compare costs >2% on allocation-heavy code.
+48. (mine, replacing 47 after measuring it: the owner check cost +9.7% instructions on binarytrees and +13.8% on a
+   scope-churn loop - over the 2% gate, prototype kept on wt-rv3fix-p2b 55cf0d5) the cross-thread check moves from every
+   allocation to the closure call: a lambda's prologue compares the captured scopes its body may build into (O4b's
+   may-build analysis, directly or through callees) with the calling thread and uses a per-thread stand-in on a
+   mismatch; read-only captures and named functions pay nothing; each worker gets one lazily made stand-in for the
+   program scope, folded before its task is reported done. Gate 2% (bench Fold/Count/Map with capturing lambdas
+   included). Option 3 (keep 40's static refusal and close evasions one by one) rejected as evadable by design.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

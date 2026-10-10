@@ -13548,3 +13548,134 @@ the program's; E31b and S4 now say so. **G4**: the O10c note on `names[0][0] = t
 elements of a global List of Lists) is left as recorded above. Check cases `s5nestedhandle`, `s5nestedhandlemap`,
 `s5handlerepoint`, `s5handlerepointfn`, `s5handlenote`, `s6nestedhandlerun` (under `-s`), and the corpus test
 `s5NestedHandles` (baked, read back after a churn).
+### Study 6's std findings: collections that render as their contents, short Lists made cheap, IndexOf/Remove/SwapRemove, a channel sized by an I64 (E11c, S9f, E31, E10a, 2026-10-10)
+
+From study 6 (`/home/user/review/study6`, four larger programs with long-lived, interlinked state): r11, r12 and two of
+its "smaller" items. Details mine.
+
+**`Str` for `List`, `Map` and `StringBuilder` (r12).** `$l` printed the List's private record -
+`List(listState(Array<I64>&[I64[1, 2, 1, 1, 1, 1, 1, 1], null, null, null], 1, 1, ...))` - the spare slots of a
+chunk (D13c fills a new chunk with the pushed element) shown as if they were elements, and an interpreter's
+`Value.Arr(List<Value>)` printed 60 lines of it. Each now declares `Str` (E11c). **Decided**: a List renders as an
+array of its elements renders, with the List named in front - `List<I64>[1, 2, 3]`, `List<String&>["a", "b"]`,
+`List<I64>[]` - rather than Python's bare `[1, 2, 3]` (which `std/linalg`'s Matrix uses, numpy's form): an array already
+prints its element type first (`I64[1, 2, 3]`, the user's call), so a List keeps that shape and is told apart from an
+array of the same elements, and a List inside a List shows both levels. A Map renders as its entries in the order a
+walk gives them, `key: value` in braces after its type - `Map<String&, I64>{"a": 1}`, `Map<I64, Bool>{}` - Go's
+composite-literal shape and the brace every language prints a mapping with; it is not sorted (keys need not be
+ordered). A StringBuilder renders as the text it holds, as `ToString` gives it, unquoted also inside another value (a
+`Str`'s result is written unchanged, E11c). Elements, keys and values render as they do inside any other value: text
+quoted and escaped, a `Char` as a character literal, a value whose type declares `Str` through it.
+**How, with `$` the only renderer std has**: a List renders run by run from its own storage - `$` of each `RunFrom`
+slice gives `T[items]`, and the items are spliced - so nothing is copied but the text; the element type's spelling is
+`$Array<T>(0)` less its `[]`. A `List<Char>` is written element by element (an array of `Char` renders as text, E11a).
+A Map's entry renders as `MapEntry(key, value)`; where the key ends is read off `$MapEntry<K, Bool>(key, false)`,
+the same key beside a value of known length. **Two first versions failed the scope checker, and why matters**: copying
+elements out (`l.ToArray()`, or keys and values pushed into local Lists) is O10c's error for an element type that
+can be stored through - a `Map<Char, List<Char>>`'s values must live exactly where the map does, so a local copy
+cannot hold them (the r10 limit) - and building the copy where the map lives would leak one per rendering into its
+scope. Rendering in place needs neither. Checked across element types (numbers, `Bool`, `F64`, `Char`, text, structs,
+`Pair`, references, `mut` references to structs with `mut` reference fields, recursive enums, function values, array
+references, fixed arrays, nested Lists and Maps, StringBuilders): every one compiles, and `-b` and `-i` print the same.
+Two renderings are the compiler's own and come through as they are: a fixed-array element type is spelled by its
+innermost element (`List<I64>[[0, 0, 0]]` for `List<Array<I64, 3>>`, as `$` writes an array of fixed arrays), and a
+declared type over `Char` renders as a number (`List<Letter>[97]`) - E11a says a declared type over a primitive
+renders as the type it is over, so that one is a compiler bug, recorded, not fixed here. Baked globals (K2) render
+exactly as the run time does (tests compare them); `-t -d -s` is clean.
+
+**Short Lists (r11).** Walking a 3-element List cost 15-17 ns against C's 3 (2M walks: for-in 30-35 ms, indexed
+29-30, C 6), and callgrind put `List.RunFrom` at 17% and `listState.grow` at 13% of the ECS simulation's instructions.
+Read in the optimized IR: `RunFrom` found the chunk by `highBit` (six selects) even for position 0, and - r02, the
+compiler's O26a moving number locals into a borrowed result's scope - allocated its three `I64` locals in the arena on
+every call (into the walking loop's block here, taking and returning a chunk each walk; into a long-lived list's scope
+in r02's shape, a leak); `At` paid `highBit` per element; and the first `Push` of every List made two allocations - an
+array of four chunk references and the first chunk - in an out-of-line `grow`. **Now**: the first chunk is held on its
+own (`listState.first`), made by the first Push, and the array of chunks only with the second, so a list that never
+outgrows 8 elements is one allocation; `At`/`SetAt` below 8 read `first` directly; `RunFrom` of a list in one chunk is
+`first[at:used]`, and the general case is a helper taking only parameters (`runIn(k, at)`), which O26a does not move -
+so `RunFrom` allocates nothing whatever r02's fix does. Everything walking the chunks goes through `chunk(k)` (0 is
+`first`); `ListIter` reads `first if k == 0 else chunks[k]` directly, since a method call through its `&of` field is
+O23/O11's "binding not known through this path". Measured (callgrind instructions, AVX2 build; times interleaved,
+native): a 3-element walk 195 -> 66 instructions (for-in), 178 -> 63 (indexed); building a 3-element List and reading it
+207 -> 123; r11's own program 30 / 29 -> 11 / 12 ms (C 6); 2M builds 44-53 -> 28-32 ms; study 6's ECS simulation
+1.27-1.40 -> 1.15-1.20 s, the same output. Long Lists unchanged: `bench/sum` push 1M 14,722,441 -> 14,722,313
+instructions, a walk 3,134,428 -> 3,123,535, `Iter().Fold` 3,114,072 -> 3,116,108; timed 20M pushes 269-291 -> 262-293
+ms. What is left of the gap to C is the compiler's: a 24-byte scope header cleared and closed per loop turn, and the
+outer `lists[r & 63]` taking the bit-position path past the first chunk. **It turned a silent use-after-free into a crash**: shared.olang's
+C2d/C2g test (`c3Holder`, a constructor pushing onto its field's List inside a `for`) has the shape of the scope
+sanitizer's `fuzz/repro/scopectornested.olang` - the chunks a nested block's Push makes are built in that block and
+reclaimed at its end - and passed by luck; with the array of chunks now made by the second chunk, inside the loop, the
+reclaimed storage is the chunk array itself, and the test segfaults. The fix is the compiler's (wt-rv3fix's C2g: a
+constructor's nested blocks build into the instance), with which the test passes, `-d -s` included.
+
+**`List.IndexOf(x)`, `Remove(x)`, `SwapRemove(i)`** (detaching an item from its carrier's list was a hand loop and a
+`RemoveAt`). By `==` (E10a). **Decided**: `IndexOf` fails with the default error on a miss, as `Find` and `FindIndex` do
+(errors are errors); `Remove(x)` says whether there was one - a `Bool`, as `Map.Remove` does, so a caller detaching
+what it knows is there writes `l.Remove(x)` with nothing to catch, and one that cares reads the answer; it is not a
+value beside a flag, the flag is the answer. `SwapRemove(i)` gives the element and puts the last in its place, one move
+whatever the length (Rust's `swap_remove`), the order not kept; a position out of range is an `assert`, as
+`RemoveAt`'s is. Tested across chunk boundaries (the tail moving back a chunk), on text, and evaluated while compiling.
+
+**`chan.Chan<T>(cap I64)`**: the capacity was an `I32` while every length and count is an `I64`, so
+`Chan<I64>(n)` was T6b's error (mk). `checks.olang` and the fuzzer dropped their `I32(n)`.
+
+## Merging wt-s6std onto rv3fix round 2: `List.Clone`, and E11c made precise and sound (E11c, O23a, 2026-10-10)
+
+wt-s6std (collections render as their contents, short Lists, `IndexOf`/`Remove`/`SwapRemove`) was verified on its own
+base and merged onto master e6b8d75, which carries rv3fix round 2. The merged tip failed `make verify` in three places:
+`std/prelude/tests/list.olang`, runner, shared and worker ended by SIGSEGV (plainly and under `-t -d -s`), the check
+case `rv3copyrun` segfaulted, and `std/prelude/map.olang`'s `Str` was refused by E11c ("it writes, through a
+reference, what was there before it ran", the note at `for e in m`). The compiler was the merged master's; only std
+had changed.
+
+**The segfaults were one seam of the merge.** rv3fix's T25c work (its item 10) rewrote `List.Clone` to copy the chunks
+directly - `s.chunks[k]` - instead of through `RunFrom`'s read-only runs; s6std made chunk 0 a field of its own
+(`listState.first`) and the array of chunks something made only with the second chunk, routing every other reader
+through `chunk(k)`. Git merged the two textually, so a list within its first chunk - every List of up to 8 elements -
+had a null `chunks` that `Clone` read through: gdb put the fault in `List$I64.Clone$I64`, called from the test's
+`listCopies`, and runner, shared and worker clone short lists too; `rv3copyrun` clones a `List<List<I64>>` of one.
+Under `-s` it was the same null read, not a use after a scope closed. `Clone` walks `s.chunk(k)` now; a grep finds no
+other direct reader of `chunks` outside `grow` and the indexing paths past chunk 0. A test clones Lists of every
+length around the first chunk's edge and the next two (0, 1, 7, 8, 9, 23-25, 56, 57), grows clone and original apart,
+and compares a global the evaluator bakes with the same computation at run time.
+
+**`Map.Str` was refused by an E11c that was too coarse.** `for e in m` walks a `MapIter` the `Str` made, calling `Next`
+and `advance`, which write only the iterator's own fields (`given`, `slot`, `bucket`). E11c's analysis marked a
+function as writing "what was there before it ran" for any write through a reference whose scope was not its own - a
+parameter's included - and passed the mark to each caller whose argument for a writable-through parameter reached such
+storage. The iterator holds references into the map (`slot mut mapSlot&of`), so lending it reached the map, and
+`Next`'s write of `it.slot` - the iterator, which `Str` had just made - was charged to `Str` as a write of the map.
+s6std's `Map.Str` was the first `Str` to walk an iterator; rv3fix's E11c (writes through references, a fixed point over
+calls) was what made such writes count.
+
+**Decided (mine): writes of a parameter's referent's own storage are kept apart.** A write whose place reaches its first
+reference at a reference parameter read directly - `it.slot`, `it.n`, an element of an inline array field - writes
+that parameter's referent and nothing it points to; it is recorded per parameter (`effShallowRecs`, then the bit
+`effShallow` on the function) rather than as an effect. Edges carry what a call hands on (`effEdgeKind`): an argument
+whose own storage was there before the caller ran (a reference to such storage, a lvalue in it) turns the callee's
+writes of that parameter into the caller's effect (`EFF_EDGE_SHALLOW_TO_ALL`); an argument that is the caller's own
+reference parameter, or a value lent from that parameter's own storage (an inline field of it), turns them into the
+caller's own writes of that parameter (`EFF_EDGE_SHALLOW`), so a chain of helpers handing a cursor or its parts on stays
+precise; and an argument the caller made - a local, a temporary - takes only the
+callee's other writes (`EFF_EDGE_ALL`). A parameter repointed anywhere in its function (`roAssigns`, known once the body
+is checked) names other storage, so its writes are general - not reachable today (the checker refuses repointing a
+parameter at what a `&p` field of it refers to, O23a), and kept as the fallback. A `Str`'s own writes of its receiver
+stay effects (`checkStrPurity` reads both). Everything else is as precise as before: a write deeper than the
+parameter's own storage, through a local copied from it, through a slice or a capture, is general. So `Map.Str`, and any
+`Str` stepping a cursor of its own through helpers (`shared.olang`'s E11c test, baked while compiling), compile, while
+a cursor step writing through the cursor (`checks/cases/s6strdeep`) and a helper chain handed a reference the rendered
+value holds (`s6strchain`) are refused.
+
+**Found on the way, pre-existing: E11c missed writes through `&p` fields.** Writing `s6strdeep` first found a hole the
+merged compiler, and the one before it, both built: `cur := Cur(b); poke(cur)`, `Cur` holding `c mut Cell&of = of.c`
+and `poke` writing `p.c.v++`, changed the value being rendered - the old compiler printed the counter incremented once
+per `$`. The argument check asked where a value's references live (`copiedRefsScope`), and for a field written `&p`
+that is answered by the slot - the `Str`'s own block - since where such a field refers is its instance's binding
+(O23a), not known there; a reference argument whose own scope was the `Str`'s (`x mut Cur& = Cur(b)`) or a temporary
+(`poke(Cur(b))`) was taken to reach nothing at all. Now an argument whose type holds writable references through `&p`
+fields counts as reaching storage that was there (`effHoldsUnknownRefs`), which adds an `EFF_EDGE_ALL` edge: the callee's
+writes of the cursor itself still cost nothing, its writes through the cursor's references are effects. It over-rejects
+only a callee writing through such a field into storage the `Str` itself made, which nothing in the corpus or std does.
+`checks/cases/s6strref` pins the reference and temporary shapes. SPEC's E11c now says what a `Str` makes for itself - an
+iterator or cursor included - it may change, through a callee too, and that what such a value's references reach (a
+`&p` field's included) is not its own. The evaluator needed nothing: E11c is a check, and `Str`s it accepts are K1-pure.
