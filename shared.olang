@@ -2304,6 +2304,85 @@ test "T36: an array literal's elements read back through indexing" {
     assert b[1].y == 7
 }
 
+# T36: the narrow numbers (I8 I16 U16 U32 U64 F16 BF16) carry tags of their own as well, each a leaf beside the six
+# the language started with. So an enum whose cases put an F16, an I16, a BF16 and a U32 in the same payload bytes is
+# pinned as Either is above, and arrays of them written through a struct - the shape std/linalg's Map has, which did
+# not vectorize while a BF16 store was untagged - read back what was written.
+type NarrowCase enum {
+    Half(h F16)
+    Short(s I16)
+    Brain(b BF16)
+    Word(w U32)
+}
+
+fn narrowCaseValue(e NarrowCase) I64 {
+    match e {
+        case NarrowCase.Half(h) { return I64(h.Bits()) }
+        case NarrowCase.Short(s) { return I64(s) }
+        case NarrowCase.Brain(b) { return I64(b.Bits()) + 100000 }
+        case NarrowCase.Word(w) { return I64(w) }
+    }
+}
+
+test "T36: narrow enum cases over the same payload bytes read back correctly" {
+    total I64 = 0
+    for i in range 1000 {
+        e NarrowCase = NarrowCase.Half(F16(i % 64))
+        total += narrowCaseValue(e)
+        e = NarrowCase.Short(I16(i) - 500)
+        total += narrowCaseValue(e)
+        e = NarrowCase.Brain(BF16(i % 64))
+        total += narrowCaseValue(e)
+        e = NarrowCase.Word(U32(i) * 70001)
+        total += narrowCaseValue(e)
+    }
+    assert total == 35101734824
+}
+
+type NarrowHold struct(n I64) {
+    hs mut Array<F16>& = Array<F16>(n)
+    bs mut Array<BF16>& = Array<BF16>(n)
+    ss mut Array<I16>& = Array<I16>(n)
+    ws mut Array<U32>& = Array<U32>(n)
+    count U32 = 0
+}
+
+# every element stored through d, read through a, a count of a narrow type bumped beside them
+fn narrowDouble(d mut NarrowHold&, a NarrowHold&) {
+    for i in range d.hs.Len() {
+        d.hs[i] = a.hs[i] * 2.0
+        d.bs[i] = a.bs[i] * 2.0
+        d.ss[i] = a.ss[i] * 2
+        d.ws[i] = a.ws[i] * 2
+        d.count++
+    }
+}
+
+test "T36: narrow arrays written through a struct read back what was written" {
+    a := NarrowHold(500)
+    for i in range 500 {
+        a.hs[i] = F16(i % 32)
+        a.bs[i] = BF16(i % 32)
+        a.ss[i] = I16(i) - 250
+        a.ws[i] = U32(i) * 1000
+    }
+    d := NarrowHold(500)
+    narrowDouble(d, a)
+    sh F64 = 0.0
+    sb F64 = 0.0
+    ss I64 = 0
+    sw U64 = 0
+    for i in range 500 {
+        sh += d.hs[i]
+        sb += d.bs[i]
+        ss += d.ss[i]
+        sw += d.ws[i]
+    }
+    assert sh == 15260.0 and sb == 15260.0
+    assert ss == -500 and sw == 249500000
+    assert d.count == 500
+}
+
 # O2d: a call's scope variable, when an ARGUMENT determines it (O17), refers to the block that argument's
 # referent lives in - not to the block the call happens to be written in. Codegen used the innermost open
 # block, so a call inside an "if" whose scope came from a local declared outside it allocated into the
