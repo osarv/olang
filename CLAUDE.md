@@ -2404,7 +2404,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   be captured (D9a) - `name String& = "bob"` can.
   **Stage 3 built: what lambdas are for.** Prelude `std/prelude/array.olang` gives every array `Any`, `All`,
   `FindIndex`, `Count`, `Map`, `Filter`, `Fold` and `Sort` (stable, allocating nothing - Go's insertion blocks
-  merged by rotation, because a scratch array of references-holding-references cannot be in the right scope);
+  merged by rotation, because a scratch array of references-holding-references cannot be in the right scope; a merge
+  sort with a scratch since 2026-10-10, the std-for-data-scripts entry);
   `List` gets `Any`/`All`/`Count`/`Fold`/`Map`/`Filter`. `spawn fn() { ... }` (D16e) runs a lambda's body as a task,
   its closure held in the join block's scope, each spawn copying its captures - and P2 now covers the function
   value a task calls through, which a closure made inside the join's loop failed (it lived in the iteration's
@@ -4328,6 +4329,26 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   `-O2`, its IR identical as well) and, once `compiler/` holds the olang compiler, will walk `bootstrap/CHAIN` (empty
   today) and build stages 1-3 to a fixed point - a TODO in the makefile. From the port's start `bootstrap/` takes fixes
   only (QB).
+- **std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10; study 5's r08 and
+  r19, details mine).** **`std/csv`**: `for row in try csv.Rows(text, sep = ',')` gives each record as an
+  `Array<String&>` built where the loop puts it; RFC 4180 strictly - quoted fields with separators, line breaks and
+  doubled quotes, CRLF, no line break needed at the end, an empty line one empty field - and `CsvError` `BARE_QUOTE`,
+  `TEXT_AFTER_QUOTE`, `UNCLOSED_QUOTE` (Go's strict reader, not Python's lenient one); a field written as it reads is a
+  slice of the text, one with a doubled quote new text; `rows.Line` says where (a `for` walks a copy, so a caller wanting
+  it calls `Next` itself); `csv.Record(fields, sep)` writes one line, quoting only what must be (Python's minimal), `"\n"`
+  for no fields; a file is `os.ReadFile` then `Rows`. **`std/stats`**: `Sum`, `Mean`, `Variance`/`StdDev` (sample,
+  n - 1) and `PopulationVariance`/`PopulationStdDev`, `Median`, `Percentile(a, p)` (numpy's linear interpolation,
+  bit-identical, by quickselect on a copy) and `Percentiles(a, ps)` (one sort), `Min`/`Max` (an element, NaN
+  propagating), `Histogram(a, edges)` (numpy's bins, last edge closed) and `Edges(lo, hi, bins)`; any number type, F64
+  inside; pairwise sums (numpy's, 8 accumulators: faster than a plain loop, Kahan 4x slower), corrected two-pass
+  variance; `StatsError.TOO_FEW` for no values (or one, for a sample variance), a percentile outside 0..100 an assert.
+  **`Array.Sort`** is a merge sort with a scratch half its length for numbers, `Bool` and `Char` (chosen by `match T`);
+  any other element type is sorted through positions in blocks of 12,288 then merged by rotation, since a scratch of
+  reference-holding elements would put them in the call's scope (G11) - F64 1M 0.52-0.60 -> 0.10-0.18 s (C++
+  stable_sort 0.10-0.11), records holding text 0.59-0.64 -> 0.37-0.45 (C++ 0.21-0.24). **`List.Truncate(n)`** keeps the
+  first n (none removed when it holds fewer, Rust's); a Map in key order is `m.Iter().ToList()` then `Sort` (documented,
+  not added). No prelude conversion helper for `T(x)` through a type variable (r10): the fix is `T(x)` itself, a
+  checker change, and a helper would be one more spelling to retire then.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

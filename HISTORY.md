@@ -12716,3 +12716,92 @@ of every `make test` file (the root's harness object and every imported module's
 runner.olang, `-c -r` of worker.olang, and `-c` of every checks case and fixture, bench and fuzz program - 743 IR files
 and every diagnostic those builds printed: identical after the move and the split, after the cleanup, and from the
 `-O2` stage 0. `make verify` passes.
+
+### std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10)
+
+Usage study 5 (`/home/user/review/study5`, numeric and data-science scripts) found three programs writing the same
+helpers by hand - a quoted-CSV state machine (csvparse, the program that also met r01/r03/r04), and mean/variance/
+percentile/histogram code in csvstats, hist, report and series (r19) - and `Array.Sort` at 2.5x C's `qsort` (r08). The
+details below are mine.
+
+**`std/csv`.** The pattern is io.Lines' and String.Lines': `for row in try csv.Rows(text) { ... } catch csv.CsvError`.
+Each row is an `Array<String&>` built where the loop puts it - the body's scope, reclaimed per turn - counted first and
+made once at its length. A field the text holds as it reads (unquoted, or quoted with no doubled quote inside) is a
+slice of the text; only a field whose `""` must become `"` is new text, built where the row is. That is what the scope
+rules make natural: the row lands where its caller puts it (O18a), a slice of the text outlives it, and new text built
+with it lives as long. Keeping a field past its turn is `kept.Push($row[i])`; `kept.Push(row[i])` also compiles - the
+checker lands the row where the field is kept (O18c) - which is correct, at the cost of that memory living there.
+Strict, as RFC 4180 and Go's reader are: a quote in an unquoted field is `BARE_QUOTE`, text after a closing quote
+`TEXT_AFTER_QUOTE`, a quote never closed `UNCLOSED_QUOTE` - never read some way of the reader's choosing (Python reads
+`a"b` as text; errors are errors). Decided on the edges: "\r\n" and "\n" end a record, a carriage return just before
+the end of the text goes too (as String.Lines), a lone one inside a field is text; an empty line is a record of one
+empty field (RFC's grammar - Go skips empty lines, which loses rows of a one-column file); the last record needs no
+line break; ragged rows are the caller's to check (`row.Len()`). Where an error is: errors carry no data, so the
+reader keeps `Line` (the line its last record starts on, quoted line breaks counted). A `for` walks a copy of the
+iterator it is given - measured, the loop's hidden iterator does not write back - so a caller wanting `Line` calls
+`Next` itself (`row := try rows.Next() catch Exhausted { break } catch csv.CsvError { ... rows.Line ... }`); the doc says
+so. Writing: `csv.Record(fields, sep)` gives one line with its "\n", built at its length once, quoting a field only
+when it holds the separator, a quote or a line break (Python's QUOTE_MINIMAL; Go also quotes a leading space, which RFC
+4180 does not need); no fields at all is "\n" - CSV has no record of none, so it reads back as one empty field. Found
+writing it: the first `Record` sized its output from `fields.Len()` alone, one short for zero fields (the line break
+written past the end) - caught by the test. A reader over a file descriptor was not written: a file is
+`os.ReadFile` then `Rows`, which lets fields borrow; a streaming reader would have to copy every field, and io.Lines
+plus a per-line `Rows` covers files with no quoted line breaks. Checked: -b and -i give identical output on the study's
+quoted file, a churned arena leaves kept fields intact, and a table parsed while compiling bakes (`csvTotalBaked`).
+
+**`std/stats`.** Free functions generic over any number type (`F64(x)` per instantiation), computing in F64 - a sum of
+F16s is not rounded to F16 at every step - and returning F64, except `Min`/`Max`, which give an element back.
+`Variance`/`StdDev` are the sample ones (n - 1, Bessel: numpy's `ddof=1`, Python's `statistics.variance`) and
+`PopulationVariance`/`PopulationStdDev` the others - the longer name for the less common question, so the default
+estimate is the short one. Too few values is `StatsError.TOO_FEW` (one word: no values, or one for a sample variance -
+Python's StatisticsError says the same of both); a percentile outside 0..100 is an assert, a mistake in the program as
+an out-of-range `RemoveAt` is. A NaN among the values gives NaN, as numpy and IEEE do - `Min`/`Max` through
+`math.Min`/`Max`, which propagate it. **Sums are pairwise** (numpy's `pairwise_sum`: blocks of up to 128 in eight
+interleaved accumulators, halves added), and measured on 10M F64 under a load average of ~10: plain loop 16-20 ms,
+pairwise 12-15 ms, Kahan 61-65 ms - the eight independent chains keep the adder busy where one chain waits on each
+add, so the more accurate sum is also the faster one, and Kahan was not used. A first measurement showed pairwise at
+1 ms: LLVM had hoisted the pure call out of the timing loop; writing an element each round fixed the benchmark.
+**Variance is two passes**, the corrected form (sum of squared deviations from the mean, less the square of the summed
+deviations over n), so `[1e9 + 4, 1e9 + 7, 1e9 + 13, 1e9 + 16]` gives exactly 30 where a one-pass sum of squares
+loses every digit. **`Percentile` is numpy's default linear interpolation**, with numpy's own lerp (from `b`'s end when
+past the middle), found by quickselect on a copy (median of three, Hoare's partition, the next rank the least value
+above it) - O(n) on average rather than a sort; `Percentiles(a, ps)` sorts once for several. Against numpy 2.5 on
+normal samples of 1 to 4,097 values and nine percentiles each: every percentile bit-identical, means and variances
+within 1e-9 relative; -i prints the same. `Histogram(a, edges)` is numpy's: k + 1 increasing edges, bin i half-open
+except the last, which holds its right edge, values outside and NaNs in none, the bin found by halving; `Edges(lo, hi,
+bins)` is linspace with the last edge exactly `hi`. Baked while compiling (`statsBakedValue`), and equal to the run
+time's.
+
+**`Array.Sort`, O(n log n).** It was Go's `sort.Stable` - insertion-sorted blocks of 20 merged in place by rotation,
+O(n log^2 n) - because a scratch array holding elements that hold references would put those references in the
+call's own scope (G11: an array's element references live in the array's scope), and nothing read back from it could
+be stored into the caller's array. Checked rather than assumed: a scratch of `T` in the call's scope is O25h/O20's
+error for `String&` and for a struct holding one, and so is a value copy of a slice of the array (its elements read
+back at the copy's scope). Allocating the scratch where the array lives would be accepted, and would leave n / 2
+elements in the caller's scope at every call until it closes - a leak in a loop, so not that. So the element type
+decides, per instantiation, by `match T`: **numbers, `Bool` and `Char`** get a merge sort with a scratch of half the
+length - runs of 24 insertion-sorted, merged pairwise, each merge copying the shorter run into the scratch and merging
+from the front (left shorter) or the back (right shorter), skipped when the two runs are already in order, the
+merges of each 12,288-element block done before the blocks' (cache). **Every other type** - structs, enums, references,
+text - is sorted in blocks of 12,288 through positions (the same merge sort orders the block's `I64` positions,
+comparing the elements they name, then the elements are moved into place one cycle of the permutation at a time),
+and the blocks are merged by the old rotation (SymMerge): O(n log n log(n / 12288)), a block's positions its only
+allocation. Sorting all of such an array through positions was tried first and was slower than the rotation it
+replaced (1.09-1.25 s against 0.57 s on a million 24-byte records): every comparison reads two elements at random
+positions; within a cache-sized block that costs nothing. The first merge also overran its scratch: a left run grows
+past n / 2 at the last level - copying the shorter run, which never exceeds n / 2, is what makes half the length
+enough. Measured interleaved, old and new prelude built by one compiler (`OLANG_STD`), load average ~12: 1M F64
+0.52-0.60 -> 0.10-0.18 s, 1M I64 0.47-0.54 -> 0.08-0.11, 1M records (`F64` key and a `String&`) 0.59-0.64 -> 0.37-0.45,
+200k texts 0.15-0.19 -> 0.09-0.12; C++ `std::stable_sort` on the same machine: F64 0.10-0.11 (qsort 0.18-0.24), the
+records 0.21-0.24, the texts 0.09-0.19. Stable on both paths (a test sorts by a key with many ties at lengths around
+every boundary - 23, 24, 25, 12,287, 12,288, 12,289), evaluated while compiling (`sortBakedSumBaked`), and agreeing
+with -i. List.Sort, which copies out and back, gets the same speed.
+
+**`List.Truncate(n)`** keeps the first n elements - nothing when the list holds n or fewer (Rust's `Vec::truncate`, so
+`l.Sort(f); l.Truncate(k)` is the top k whatever the length) - by setting the tail where element n - 1 lives, as `At`
+finds it; the chunks it empties are kept for the next Pushes, as Pop's are. A `Take(k)` was not added: an array's is
+the slice `a[:k]`, a List's `c := l.Clone(); c.Truncate(k)`. **A sorted walk of a Map** is two lines,
+`es := m.Iter().ToList(); es.Sort(fn(a, b) { return a.Key < b.Key })` - no `Get` that could fail (the study first wrote
+`Keys().ToList()` then `Get`, whose default error cannot sit beside named ones in `main`'s signature, r20) - documented
+on `Map.Iter`, tested, not added. **No conversion helper for `T(x)`** through a type variable (r10, `linalg.Cast` in the
+study): the fix is the conversion itself, a checker change, and a prelude helper would be one more spelling to retire.
