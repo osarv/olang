@@ -350,6 +350,7 @@ struct var {
     int valueHomeDepth;
     bool slotBorrowed;  //C2d: a value local whose storage a reference was taken to (E12c) - a constructor's field local so
                         //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
+    bool atElemCopy; //E31: the hidden local an element "x[i]" is read into to be written through, then written back
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     bool storeInResult; //O26a: a value local the function returns - its storage, and its references (valueHome), are in
                         //the result scope
@@ -676,6 +677,8 @@ struct operand {
     bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
+    bool isWriteBack;           //E31: an OPERATION_SEQ standing for a call writing through "x[i]" - the element read
+                                //through At, the call, the element written back through SetAt
     bool isOperatorCall;        //E31: a call the compiler made for an operator, an index or a slice - "try" reaches
                                 //through it to what is inside, as it does through a built-in operation (R20)
     bool isTryStmt;             //E31: an OPERATION_SEQ standing for "try x[i] = v" - its clauses are a statement's,

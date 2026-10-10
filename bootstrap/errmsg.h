@@ -361,6 +361,9 @@ struct type;
     X(ERR_SLICE_NEEDS_LEN,              "E31",   "a slice with no end runs to Len(), and %t has none") \
     X(ERR_AT_UNDECLARED,                "E31",   "%t declares SetAt but not At, which reading x[i] calls") \
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
+    X(ERR_WRITE_THROUGH_AT_NO_SETAT,    "E31",   "this writes through x[i] on %t, which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") \
+    X(ERR_WRITE_THROUGH_AT_BUILDS,      "E31, O17", "x[i] gives a copy, written back after the call, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')") \
+    X(ERR_WRITE_THROUGH_AT_FORM,        "E31",   "a write through x[i] is written back only by a call that cannot fail and gives one value - write t := x[i], then x[i] = t") \
     X(ERR_DEFAULT_ARG_NOT_ALLOWED,      "E14a",  "'default' stands only for a parameter's declared default, in a call") \
     X(ERR_DEFER_ERROR_ESCAPES,          "S19b",  "an error may not leave deferred code - catch it here") \
     X(ERR_TRY_NOWHERE_TO_GO,            "R13",   "an error tried here has nowhere to go - catch every one it can be") \
