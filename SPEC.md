@@ -2782,9 +2782,16 @@ storage) meet at the reference type, the new value built where the conditional l
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
 `:=` declares its type (D15). A conditional of references lives where the values it can give share a scope (§8 O25a) -
-`null` fits any, and a new value is built there - so `x := p.one() if c else p.two()` lives where both do and
-`x := p.leaf() if b else null` where `p.leaf()` does; values in different scopes share none, and such a conditional is
-then held where it is declared, as a reference's block is. A `match` giving values (S12b) is held the same way.
+`null` fits any, and a new value is built there (text written in place being constant data or a copy made there) - so
+`x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. Values
+that already live in different scopes share none: where such a conditional lives is **not known here** (§8 O12) - it is
+no temporary, so nothing is built for it and it is shown to outlive nothing. Declared - with `:=` or a bare `&` - it is
+held where it is declared, as a reference's block is (every value it can give is visible there, so outlives it), and read
+there, never built into or stored through. Stored into a field or an element, each value that already lives somewhere
+is judged as though it were stored alone, so `b.last = x if c else "z"` is refused when `x` does not live as long as
+`b`'s referent, and accepted when every value does; anywhere else a known scope is needed - an argument determining a
+scope variable (O25e), an array literal's element (O25c), a global (O1b), a local's exact scope (O25) - it is refused.
+A `match` giving values (S12b) is held the same way.
 
 ### 5.13 Membership
 
@@ -3746,7 +3753,8 @@ clause through are compile-time errors. `abort`, `unreachable`, `done` and `fail
   per target, as a destructuring's `try` takes one per result: `spawn q, r = try divmod(a, b) catch default 0, 0` - or
   its block provably ends the process. A default is stored into the targets as the call's result would be, so it fits
   the call's result type, and one holding references is built where the call's result lands (P1g, §8 O18a): it builds
-  all it holds - `null`, text written in the program, a temporary such as a constructor call - and never names
+  all it holds - `null`, text written in the program, a temporary such as a constructor call, a lambda capturing no
+  reference (built where it lands, D16d) or capturing nothing (static, as a named function is) - and never names
   existing storage, whose scope a task cannot match against the targets'.
 
 **P4b.** What no clause of a task takes **reaches its join**. The error ends the task, leaving its targets as they
@@ -4138,7 +4146,9 @@ Whatever a global's initializer builds is built there, so a global may hold a re
 lives as long as the program; and what a call builds into a scope variable a global's referent determined (a
 result borrowed from it, O13) is built there too. So is a temporary a function assigns to a global, or into a field
 or element reached from one - a global's referent and everything it holds live in the program's scope - and anything
-already living somewhere that is stored there must live there too: a global's, or something built there. Storing
+already living somewhere that is stored there must live there too: a global's, or something built there - and a
+value copied into a global value holds what lives there when its references do: a parallel assignment's value, built
+there and held before it is stored (`GV, k = VH(Node(i)), k`, S4c), as `GV = VH(Node(i))` is. Storing
 anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
 or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
 determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
@@ -4372,7 +4382,8 @@ sibling arguments in a way that cannot be told apart — is treated as **definit
 anything, rejected the same way an unverifiable tag is (O11) but for a distinct reason worth telling apart:
 this one was actually traced, and found to disagree, rather than simply never resolved at all. Where such a
 reference is read rather than assigned - through alternatives of a `match` binding one name from different scopes
-(S13c), or through anything else whose scope was not traced - **where it lives is not known**: it may be read,
+(S13c), a conditional or a `match` value whose values already live in different scopes (E28), or through anything else
+whose scope was not traced - **where it lives is not known**: it may be read,
 walked and compared, but it never equals an exact scope (O25), never determines a scope variable of a parameter
 through which something can be stored (O25g) or which a borrowed result names (the callee could build there), and a
 scope argument (E25) may not name it. Nothing new is built into a place holding such a reference by value either - a
@@ -4859,7 +4870,11 @@ call the same way, on the same terms, and the local has its scope - or, for a va
 the result. A call whose result nothing puts anywhere - read by an operator, a rendering or a condition (`$mods[i].name`)
 - is in the block it is written in, unless its callee requires its result scope to **outlive** one an argument gives
 (exactly where the copy of an element holding writable references is, O25g): it then lands by its obligations as above,
-the one place satisfying them. A statement
+the one place satisfying them. A **store** whose target is read through such a call's result - a field or an element of
+what it gives, `cells[i].s = x`, `(try m.Get(k)).s = x`, `rows[i][0] = x`, a target of a parallel assignment or a
+destructuring among them - is judged where that result lands: the call lands there first, before the store or its value
+is judged, and never anywhere else - so `x` must live as long as the element does, which lives where the collection is
+(O20), and a value built for the store is built there (O18a). A statement
 nested in another - in a catch clause's block, a
 lambda's body - discharges its own obligations at its end and leaves the enclosing statement's to its end, so
 `n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.
@@ -5075,7 +5090,11 @@ allocates at its top level is allocated in the scope being closed, where the ins
 every destructor of it has run and is then reclaimed whole. So a destructor may build through its instance's fields
 what they hold (`n.next = Node(k)`, `n` a field living with the instance): the next destructor of that scope reads it.
 A value with a destructor that a destructor builds there is destructed as that destructor returns, before the scope's
-next one, as one in a function's own scope would be. Its nested blocks keep scopes of their own (O2).
+next one, as one in a function's own scope would be - and so is one a task it spawns builds there (P2): the scope is
+the task's to build into as any scope a closure captured is, and what the task built is reclaimed with the rest. Its
+nested blocks keep scopes of their own (O2). Each destructor is taken off its scope's list before it runs, so a check
+failing inside one while a test runs (S18) ends that destructor alone: the test's unwind closes the scope, and the
+scope's destructors not yet run still run, each once (C10).
 
 **C10.** A destructor never runs for a struct type that declares no `destruct` block, never runs more
 than once for the same instance, and never runs for storage no constructor call ever produced an

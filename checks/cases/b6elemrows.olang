@@ -1,0 +1,10 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O18c (the batch 6 review): ...storing into an element of the array an element of a List refers to
+fn main() ? {
+    rows := List<mut Array<String&>&>()
+    for i in range 3 { rows.Push(Array<String&>(2)) }
+    for i in range 3 {
+        x String& = "w" $i
+        rows[i][0] = x
+    }
+}

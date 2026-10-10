@@ -1,0 +1,63 @@
+# check: run
+# flags: -d -s
+# C9a/P2 (the batch 6 review): a destructor's task builds into the scope being closed, in a part of it made while the
+# destructor runs - folded in as the destructor returns, so what the task built is destructed and reclaimed with the
+# scope. It was left linked to a closed header: no Tracker was ever destructed
+Count mut I64 = 0
+Log mut I64 = 0
+type Tracker struct(k I64) {
+    k
+} destruct {
+    Count = Count + 1
+}
+type Node struct(v I64) {
+    v
+}
+type Res struct(k I64) {
+    k
+} destruct {
+    kk := k
+    keep mut List<Tracker&>& = List<Tracker&>()
+    nodes mut List<Node&>& = List<Node&>()
+    join {
+        spawn fn() {
+            for j in range 50 {
+                keep.Push(Tracker(kk * 100 + j))
+                nodes.Push(Node(j))
+            }
+        }
+    }
+    t I64 = 0
+    for n in nodes { t = t + n.v }
+    if t != 1225 { fail }
+}
+type Box struct(v I64) {
+    node mut Node& = Node(v)
+    keep mut List<Held&>& = List<Held&>()
+}
+type Held struct(n Node&) {
+    n
+} destruct {
+    Log = Log + n.v
+}
+type Res2 struct(k I64) {
+    k
+} destruct {
+    b mut Box& = Box(k * 1000 + 7)
+    join {
+        spawn fn() { b.keep.Push(Held(b.node)) }
+    }
+}
+fn once(i I64) {
+    r Res& = Res(i)
+}
+fn main() ? {
+    for i in range 4 {
+        once(i)
+        if Count != (i + 1) * 50 { fail }
+    }
+    for i in range 4 {
+        r Res2& = Res2(i + 1)
+    }
+    if Log != 10028 { fail }
+}

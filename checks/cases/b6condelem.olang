@@ -1,0 +1,11 @@
+# check: fail error[O25c]: the array outlives what this element refers to
+# E28/O12/O25c (the batch 6 review): ...an element of an array literal kept outside the loop
+fn main() ? {
+    outer String& = "outer"
+    keep Array<String&>& = String&[""]
+    for i in range 2 {
+        x String& = "w" $i
+        keep = String&[x if i == 1 else outer]
+    }
+    println(keep[0])
+}

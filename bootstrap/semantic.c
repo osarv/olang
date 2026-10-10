@@ -9693,6 +9693,28 @@ static bool landDeclWhereFree(struct checkCtx* ctx, struct operand* rhs, struct 
     return landDeclByObligations(ctx, rhs);
 }
 
+//O18c: a store whose target is read through a call's result still landing - "cells[i].s = x", "(try m.Get(k)).s = x",
+//"rows[i][0] = x": a field or an element of what the call gives - is judged where that result is. The end of the
+//statement lands such a call by its obligations where they need its result scope to outlive one an argument gives (an
+//element that can be stored through, O25g: where the collection is), so it is landed there now, before anything about
+//the store is asked; and it is never landed again (storeRelied) - a store judged against one scope is never kept in
+//another. A call nothing lands stays a temporary built in the statement's block, which every value the statement can
+//name outlives
+static void storeLandsContainer(struct checkCtx* ctx, struct operand* target) {
+    if (!ctx->hasOwnScope) return;
+    struct operand* c = projectionBase(target);
+    while (c && (heldResult(c) || projectionBase(c))) c = heldResult(c) ? heldResult(c) : projectionBase(c);
+    if (!c || c->opType != OPERATION_FUNCCALL || !c->readVar) return;
+    struct var* R = c->readVar->type.resultScope;
+    if (R && bindingIsLanding(c, R)) {
+        for (int i = 0; i < c->readVar->type.scopeObligations.len; i++) {
+            struct scopeObligation* o = ListGetIdx(&c->readVar->type.scopeObligations, i);
+            if (!o->shorterViaParam && canonicalVar(o->longer) == canonicalVar(R)) { landDeclByObligations(ctx, c); break; }
+        }
+    }
+    c->storeRelied = true;
+}
+
 //O18c: a collection a for-in walks lands as ":=" from it does - and so does the call a field, an element or a slice of
 //it is read out of ("for x in l[0].tags"), whose result is what the loop then borrows
 static void landWalkedByObligations(struct checkCtx* ctx, struct operand* src) {
@@ -10304,6 +10326,10 @@ static bool landedCallRefsScope(struct checkCtx* ctx, struct operand* op, struct
     return false;
 }
 
+static bool condOfRefs(struct operand* op) {
+    if (heldResult(op)) return condOfRefs(heldResult(op));
+    return (op->opType == OPERATION_COND && op->args.len == 3) || op->opType == OPERATION_MATCH;
+}
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                        struct token tok, struct list scopeArgNodes) {
     bool instanceArg = scopeArgNodes.len > 0 && firstScopeVarIndex(func) < 0;
@@ -11869,9 +11895,11 @@ static void flushPendingDischargesFrom(int from) {
     //is in the block it is written in, unless its callee needs its result scope to outlive one an argument gave: a copy
     //of an element holding writable references (O25g), which is exactly where the collection's are. It lands by its
     //obligations then, as ":=" from it does - the one place satisfying them - before any of its obligations is judged
+    //(never one a store's target was read through: the store was judged where that result was, and it stays there -
+    //storeLandsContainer landed it first where this would have)
     for (int i = from; i < pendingDischarges.len; i++) {
         struct pendingDischarge* pd = ListGetIdx(&pendingDischarges, i);
-        if (pd->dflt || pd->hereDepth >= 0) continue;
+        if (pd->dflt || pd->hereDepth >= 0 || pd->op->storeRelied) continue;
         struct scopeObligation* o = ListGetIdx(&pd->func->type.scopeObligations, pd->obligation);
         struct var* R = pd->func->type.resultScope;
         if (R && !o->shorterViaParam && canonicalVar(o->longer) == canonicalVar(R) && bindingIsLanding(pd->op, R))
@@ -13744,10 +13772,12 @@ static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* re
     struct list* prev = prebuiltMethodArgs;
     prebuiltMethodArgs = &args;
     bool reported = false;
-    //a Try form is fallible, and only ever called for what a "try" checks (E31)
+    //a Try form is fallible, and only ever called for what a "try" checks (E31) - and Call, the one plain form that may
+    //fail (E31a: it stands for a function), wherever the call it stands for may: "try c(4)", "spawn try c(3)"
     bool prevAllow = ctx->allowFallibleCall;
-    ctx->allowFallibleCall = (name[0] == 'T' || name[0] == 't') && name[1] == 'r' && name[2] == 'y'
-                             && name[3] >= 'A' && name[3] <= 'Z';
+    bool callForm = (name[0] == 'C' || name[0] == 'c') && !strcmp(name + 1, "all");
+    ctx->allowFallibleCall = ((name[0] == 'T' || name[0] == 't') && name[1] == 'r' && name[2] == 'y'
+                              && name[3] >= 'A' && name[3] <= 'Z') || (callForm && prevAllow);
     struct operand* call = buildMethodCall(ctx, recv, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
     ctx->allowFallibleCall = prevAllow;
     prebuiltMethodArgs = prev;
@@ -16242,6 +16272,13 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         //exported one reached through its import aliases ("sh.Units.Len()"). M20 again keeps these apart: an
         //alias is never also a global's name in the module that wrote the import
         int recvStart = 1;
+        //...or, in a destruct{} body, one of the instance's own fields read bare (C10) - "l.Push(k)" is "self.l.Push(k)",
+        //as a bare "l" reads it (a real local of the name still comes first)
+        if (!recvVar && nameIdens.len >= 2 && ctx->destructSelfVar && ctx->destructSelfVar->type.bType == BASETYPE_STRUCT
+                && VarGetList(&ctx->destructSelfVar->type.vars, strFromTok(recvTok))) {
+            recvVar = ctx->destructSelfVar;
+            recvStart = 0;
+        }
         if (!recvVar && nameIdens.len >= 2) {
             struct var* g = VarGetList(&ctx->mod->vars, strFromTok(recvTok));
             if (!g) g = buildConstVar(strFromTok(recvTok));
@@ -16500,6 +16537,7 @@ static int destructCounter;
 //first. "t1, t2 := v1, v2" declares each name from its value, in order.
 static struct list placesWrittenOver(struct list targets);
 static void landAtTarget(struct checkCtx* ctx, struct operand* target, struct operand* rhs);
+static void storeLandsContainer(struct checkCtx* ctx, struct operand* target);
 static struct var* holdInHidden(struct checkCtx* ctx, struct operand* x, struct token tok, const char* tag,
                                 struct list* out);
 void checkCtorHereFits(struct checkCtx* ctx, struct operand* val, struct var* dstVar, int dstDepth, struct token tok);
@@ -16524,7 +16562,7 @@ static struct var* holdForRefTarget(struct checkCtx* ctx, struct operand* v, str
         ld = 0;
     }
     char* nm = MallocOrCrash(32);
-    snprintf(nm, 32, "$par%d", ++destructCounter);
+    snprintf(nm, 32, "$par%d", ++hiddenCounter); //one counter with holdInHidden's "$par" - two meet (S4c)
     struct token ht = tok;
     ht.type = TOK_IDEN;
     ht.str = StrFromCStr(nm);
@@ -16571,6 +16609,7 @@ static void buildParallel(struct checkCtx* ctx, struct list targets, struct list
         struct token nameTok;
         struct operand* top = NULL;
         if (!(destructTargetName(t, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) top = buildExprFromSyntax(ctx, t);
+        if (top) storeLandsContainer(ctx, top); //O18c: before a value lands at it (below)
         ListAdd(&tops, &top);
     }
     struct list prevPlaces = ctx->assignPlaces;
@@ -16582,6 +16621,14 @@ static void buildParallel(struct checkCtx* ctx, struct list targets, struct list
         //enum case built from values or an array literal reads them, and is held as anything else is - built, where it
         //is built at all, where its target is (O18a), as an assignment's value is
         struct operand* top = *(struct operand**)ListGetIdx(&tops, i);
+        //T29c: written text is a String where one is wanted - held, it is no longer written text, so it is made one first
+        struct type* textT = top && OperandIsWrittenText(v) ? SemanticBuiltinType(StrFromCStr("String")) : NULL;
+        if (textT) {
+            struct type tv = *textT;
+            struct type tt = top->type;
+            tv.structMAlloc = tt.structMAlloc = false;
+            if (TypeIsSame(tt, tv)) v = OperandNominalConversion(tv, v, v->tok);
+        }
         if (top) landAtTarget(ctx, top, v);
         if (!((v->isLiteral && !v->args.len) || v->isNullLiteral)) {
             struct var* hv = top ? holdForRefTarget(ctx, v, top, opTok, out) : NULL;
@@ -16621,6 +16668,7 @@ static void buildDestruct(struct checkCtx* ctx, struct syntax* s, struct list* o
         struct token nameTok;
         struct operand* top = NULL;
         if (!(destructTargetName(t, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) top = buildExprFromSyntax(ctx, t);
+        if (top) storeLandsContainer(ctx, top); //O18c: before the call lands at its targets (below)
         ListAdd(&tops, &top);
     }
     //O26a: a new local the function returns lives in the result scope - and so, the call's result landing in one scope,
@@ -17434,10 +17482,11 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
     if (op->isNullLiteral) return false;
     if (heldResult(op)) return RefExactScope(ctx, heldResult(op), asRef, outVar, outDepth, unnamed);
     //E28/S12b: a conditional or a match of references lives where the values it can give share - a null fitting any, and
-    //a value built for it being built there (it lands with the conditional, O18a). Values living in different scopes, or
-    //one whose scope is not traced, share none: it lives in a scope not known here (O12) - read and walked, never built
-    //into or stored through. Taken as nothing at all ("false"), it was a temporary: "l := a if k else b" declared l in
-    //its block, and "l.next = N(9)" built the node there and hung it off a or b
+    //a value built for it being built there (it lands with the conditional, O18a), text written in place being constant
+    //data or a copy built there too (T25d). Values that already live in different scopes, or one whose scope is not
+    //traced, share none: where it lives is not known here (O12) - it is no temporary, so nothing is built for it, and it
+    //is shown to outlive nothing. Taken as nothing at all ("false"), it was a temporary: "l := a if k else b" declared l
+    //in its block, and "l.next = N(9)" built the node there and hung it off a or b
     if (asRef && ((op->opType == OPERATION_COND && op->args.len == 3) || op->opType == OPERATION_MATCH)) {
         struct list vs = ListInit(sizeof(struct operand*));
         if (op->opType == OPERATION_COND) {
@@ -17448,16 +17497,23 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         for (int i = 0; i < vs.len; i++) {
             struct operand* x = *(struct operand**)ListGetIdx(&vs, i);
             if (x->isNullLiteral || callIsLanding(x) || argIsFreshTemp(x)) continue;
-            if (!x->type.structMAlloc && !OperandIsLvalue(x)) continue; //a new value of the referent type, built there too
             struct var* xv;
             int xd;
             bool xu;
-            if (!RefExactScope(ctx, x, true, &xv, &xd, &xu)) {
+            if (!x->type.structMAlloc && !OperandIsLvalue(x)) {
+                //a new value of the referent type is made where the conditional lands - and, landed already (a declaration
+                //lands it where it is declared), lives there; text written in place is constant data or a copy made there
+                if (!x->ctorLanded) continue;
+                xu = x->landedInProgram;
+                xv = xu ? NULL : x->landedTo;
+                xd = xv ? 0 : x->landedDepth;
+            } else if (!RefExactScope(ctx, x, true, &xv, &xd, &xu)) {
                 *outVar = SCOPE_AMBIGUOUS;
                 *outDepth = 0;
                 *unnamed = false;
                 return true;
             }
+            if (xv == SCOPE_AMBIGUOUS && !xu) { *outVar = SCOPE_AMBIGUOUS; *outDepth = 0; *unnamed = false; return true; }
             if (!any) {
                 *outVar = xv;
                 *outDepth = xd;
@@ -17614,6 +17670,14 @@ static bool adoptInitializerScope(struct checkCtx* ctx, struct type* declType, s
     if (!RefExactScope(ctx, rhs, asRef, &sv, &sd, &un)) return false;
     if (declType->scopeParam || declType->scopeWritten) {
         int dd = declType->scopeWritten ? declType->scopeDepth : 0;
+        //E28/O12: a conditional or a match of references living in different scopes is held where it is declared, as a
+        //reference's block is - every value it can give is visible here, so outlives this block - and where it lives is
+        //not known here: it is read at the block, never built into or stored through (O12)
+        if (sv == SCOPE_AMBIGUOUS && !un && asRef && condOfRefs(rhs) && !declType->scopeParam && declType->bType != BASETYPE_FUNC
+                && normDepth(dd) == normDepth(ctx->blockDepth)) {
+            declType->scopeUnknown = true;
+            return false;
+        }
         //D16c: nothing is ever written THROUGH a function value, so it need only outlive where it is put
         if (declType->bType == BASETYPE_FUNC) {
             if (!un && !scopeCanFlowInto(ctx->func, sv, normDepth(sd), canonicalVar(declType->scopeParam), normDepth(dd)))
@@ -19588,6 +19652,23 @@ static void noteRegionStore(struct checkCtx* ctx, struct operand* target, struct
     }
 }
 
+//O12/E28: the values a conditional or a match of references can give, each its own (a nested one's values in turn)
+struct existingVal { struct operand* op; struct var* v; int d; bool u; };
+static void condArmsInto(struct operand* op, struct list* out) {
+    if (heldResult(op)) { condArmsInto(heldResult(op), out); return; }
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        condArmsInto(*(struct operand**)ListGetIdx(&op->args, 1), out);
+        condArmsInto(*(struct operand**)ListGetIdx(&op->args, 2), out);
+        return;
+    }
+    if (op->opType == OPERATION_MATCH) {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) condArmsInto(*(struct operand**)ListGetIdx(&vs, i), out);
+        return;
+    }
+    ListAdd(out, &op);
+}
+
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
     if (target->isAtCall) {
         //an element of an element - "rows[i][j] = v" - is stored into the copy "rows[i]" gives, written back as a field
@@ -19624,6 +19705,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     //E31: a field of "x[i]" is assigned in the element read out, written back through SetAt
     struct operand* atRoot = atWriteRoot(target);
     if (atRoot && atRoot != target) return buildAtFieldAssign(ctx, target, rhs, opTok);
+    storeLandsContainer(ctx, target); //O18c: where the result the target is read through lands, before it is asked
     //D16a: a lambda is checked against what it is assigned to - before anything asks where it lives (D16d)
     if (rhs->pendingLambda && !target->type.unknown) FinalizeLambda(rhs, &target->type);
     if (rhs->type.isTuple) Err(rhs->tok, ERR_TUPLE_NOT_A_VALUE);
@@ -19698,8 +19780,17 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         //O1b: a global, and everything reached from it, lives in the program's scope - which nothing a function holds
         //outlives, so what is stored there is built there (a temporary - a lambda capturing only values too, D16d) or
         //already lives there
+        //(a value stored into a global is a copy: what it holds is what must live there - a value whose references are
+        //in the program's scope already, as a parallel assignment's value is, held after it was built there (S4c), is)
+        bool refsInProgram = false;
+        if (intoGlobal && !target->type.structMAlloc && !rhs->type.structMAlloc && OperandIsLvalue(rhs)) {
+            struct var* pv;
+            int pd;
+            bool pu = false;
+            refsInProgram = valueRefsHome(rhs, &pv, &pd, &pu) && pu;
+        }
         if (intoGlobal && ctx->hasOwnScope && !rhs->isNullLiteral && (rhs->type.structMAlloc || OperandIsLvalue(rhs))
-                && !argIsFreshTemp(rhs) && !storageInProgram(rhs))
+                && !argIsFreshTemp(rhs) && !storageInProgram(rhs) && !refsInProgram)
             Err(rhs->tok, ERR_GLOBAL_HOLDS_SHORTER);
         //O22: the target's tag may still be a scope variable of the TYPE it is a field of - resolution
         //found no binding because the container arrived as a parameter and was built somewhere else. This
@@ -19757,13 +19848,33 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         bool ru = false;
         bool rhsExisting = ctx->hasOwnScope && (rhsAsRef || OperandIsLvalue(rhs))
                            && RefExactScope(ctx, rhs, rhsAsRef, &rv, &rd, &ru);
-        if (ctx->hasOwnScope && !rhsExisting && !rhs->isNullLiteral
+        //O12/E28: a conditional or a match of references whose values live in different scopes lives where no one scope
+        //says (RefExactScope: not known here) - but each value that is existing storage is stored as it would be alone,
+        //so the store is judged against each and refused unless every one fits (E28). A value built for it is built
+        //where it lands (landAtTarget), as any temporary is
+        struct list existingVals = ListInit(sizeof(struct existingVal));
+        bool fromArms = rhsExisting && rhsAsRef && condOfRefs(rhs);
+        if (rhsExisting && !fromArms) {
+            struct existingVal e = { rhs, rv, rd, ru };
+            ListAdd(&existingVals, &e);
+        } else if (rhsExisting) {
+            struct list arms = ListInit(sizeof(struct operand*));
+            condArmsInto(rhs, &arms);
+            for (int i = 0; i < arms.len; i++) {
+                struct operand* a = *(struct operand**)ListGetIdx(&arms, i);
+                if (a->isNullLiteral || operandIsTemporary(ctx, a)) continue;
+                struct existingVal e = { a, NULL, 0, false };
+                RefExactScope(ctx, a, a->type.structMAlloc, &e.v, &e.d, &e.u);
+                ListAdd(&existingVals, &e);
+            }
+        }
+        if (ctx->hasOwnScope && !existingVals.len && !rhs->isNullLiteral
                 && (target->type.structMAlloc || TypeHoldsReferences(target->type)) && scopeViaFallback(target))
             Err(opTok, ERR_BUILD_THROUGH_UNKNOWN_SCOPE);
         //O23/O11: a field written "&p" of an instance reached through something its construction binding is not known
         //through - an element, a field of another instance - reads at its container's scope, an underestimate; storing
         //existing storage there could falsify the binding every reader of that instance relies on
-        if (ctx->hasOwnScope && rhsExisting && target->opType == OPERATION_MEMBER && target->type.scopeParam) {
+        if (ctx->hasOwnScope && existingVals.len && target->opType == OPERATION_MEMBER && target->type.scopeParam) {
             struct scopeBinding* tb = callBinding(target, target->type.scopeParam);
             if (tb && tb->containerFallback
                     && !(tb->boundTo && tb->boundTo != SCOPE_AMBIGUOUS && canonicalVar(tb->boundTo)->derivedFrom))
@@ -19777,10 +19888,19 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
             int td;
             bool tu;
             bool inSlot = target->opType == OPERATION_MEMBER || target->opType == OPERATION_INDEX;
-            if (RefExactScope(ctx, target, true, &tv, &td, &tu) && rhsExisting && !tu) {
+            bool targetKnown = RefExactScope(ctx, target, true, &tv, &td, &tu) && !tu;
+            for (int ev = 0; targetKnown && ev < existingVals.len; ev++) {
+                struct existingVal* e = ListGetIdx(&existingVals, ev);
+                struct operand* rhs = e->op; //(this value, judged as though stored alone)
+                rv = e->v;
+                rd = e->d;
+                ru = e->u;
+                int errsVal = ErrMsgGetNErrors();
                 bool mustMatch = target->type.bType != BASETYPE_FUNC //D16c: a function value need only outlive
                                  && (!inSlot || RefNarrowingMatters(target->type));
-                if (mustMatch) {
+                if (rv == SCOPE_AMBIGUOUS && !ru) { //not known here (O12): shown to outlive nothing
+                    Err(opTok, mustMatch ? ERR_REFERENCE_NARROWED : ERR_STORED_REF_OUTLIVED);
+                } else if (mustMatch) {
                     //two different scope variables of this function: the scopes must be one, which the body
                     //cannot decide - so it is an obligation both ways, and each caller binds them equal
                     bool bothOwnVars = !ru && tv && rv && tv != SCOPE_AMBIGUOUS && rv != SCOPE_AMBIGUOUS
@@ -19803,6 +19923,10 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
                     //(a referent in the program's scope - a global's, constant data, T25d - outlives every slot)
                     Err(opTok, ERR_STORED_REF_OUTLIVED);
                     noteSliceOfTemporary(rhs);
+                }
+                if (ErrMsgGetNErrors() != errsVal) { //one error a store, at the first value that does not fit
+                    if (fromArms) Note(e->op->tok, NOTE_COND_VALUE);
+                    break;
                 }
             }
         }
@@ -23044,7 +23168,8 @@ static bool argBindingsLastUntilJoin(struct checkCtx* ctx, struct operand* op) {
         struct var* sv;
         int sd;
         bool su;
-        if ((asRef || (OperandNamesExistingStorage(a) && TypeHoldsReferences(a->type))) && !operandIsTemporary(ctx, a)) {
+        if ((asRef || (OperandNamesExistingStorage(a) && TypeHoldsReferences(a->type))) && !operandIsTemporary(ctx, a)
+                && !condOfRefs(a)) { //(a nested conditional's values, each on its own - below)
             if (RefExactScope(ctx, a, a->type.structMAlloc, &sv, &sd, &su) && !lastsUntilJoin(ctx, sv, sd, su)) return false;
             continue;
         }
@@ -23103,6 +23228,10 @@ static struct operand* taskDefaultHolds(struct checkCtx* ctx, struct operand* d)
     if (!d || d->isNullLiteral || !typeCarriesScopes(d->type)) return NULL;
     if (d->isLiteral && d->tok.type == TOK_STR_LIT && !d->args.len) return NULL;
     if (d->opType == OPERATION_STR_OF || d->opType == OPERATION_CONCAT) return NULL; //new text, copied from its pieces
+    //D16d: a lambda capturing no reference is built where it lands - and one capturing nothing, or a named function, is
+    //static; one capturing references lives where they do, which is existing storage
+    if (d->opType == OPERATION_READ_VAR && d->readVar && d->readVar->isFuncDecl && (argIsFreshTemp(d) || storageInProgram(d)))
+        return NULL;
     bool built = opIsCtorCall(d) || opIsEnumCtor(d) || opIsArrayLiteral(d) || d->opType == OPERATION_SIZED_ARRAY_ALLOC
                  || (d->opType == OPERATION_FUNCCALL && operandIsTemporary(ctx, d));
     if (!built) return d;
@@ -23445,6 +23574,9 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         bool storage = asRef || (OperandNamesExistingStorage(arg) && (refParam || TypeHoldsReferences(arg->type)));
         //a value copied into the task holds its references where they live; a value borrowed, its own storage
         bool found = !asRef && !refParam ? valueRefsScope(ctx, arg, &sv, &sd, &su) : RefExactScope(ctx, arg, asRef, &sv, &sd, &su);
+        //(a conditional or a match of references from different scopes lives where no one scope says - each of its
+        //values lasts until the join or not, on its own: argBindingsLastUntilJoin, below)
+        if (found && sv == SCOPE_AMBIGUOUS && !su && asRef && condOfRefs(arg)) found = false;
         if (storage && !operandIsTemporary(ctx, arg) && found && !lastsUntilJoin(ctx, sv, sd, su)) {
             Err(arg->tok, (asRef || refParam) && arg->type.bType != BASETYPE_FUNC ? ERR_SPAWN_ARG_TOO_SHORT : ERR_SPAWN_ARG_HOLDS_SHORT);
             continue;
@@ -23466,7 +23598,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct var* sv;
         int sd;
         bool su;
-        bool tooShort = operandIsTemporary(ctx, ce) ? !argBindingsLastUntilJoin(ctx, ce)
+        bool tooShort = operandIsTemporary(ctx, ce) || condOfRefs(ce) ? !argBindingsLastUntilJoin(ctx, ce)
                         : RefExactScope(ctx, ce, true, &sv, &sd, &su) && !lastsUntilJoin(ctx, sv, sd, su);
         if (tooShort) Err(ce->tok, ERR_SPAWN_FUNC_TOO_SHORT);
     }

@@ -16463,3 +16463,269 @@ test "P4b: a test ending early waits for a failing task and drops its error" {
         done
     } catch peErr { unreachable }
 }
+
+# ---- the batch 6 review (2026-10-10): stores through a collection's element, conditionals of references, a
+# destructor's tasks, and five over-rejections ----
+
+b6Run mut I64 = 1
+
+type b6Cell struct() {
+    s String& = ""
+}
+
+# O18c: a store whose target is read through a call's result is judged where that result lands - an element of the list,
+# where the list lives - so a value built for it is built there, and one living there is stored; one living shorter is
+# refused (checks/cases/b6elemfield*). Read back after a churn
+test "O18c/O20: a store through an element At, Get, First or Last hands back is judged where the collection lives" {
+    cells mut List<mut b6Cell&>& = List<mut b6Cell&>()
+    for i in range 3 { cells.Push(b6Cell()) }
+    outer String& = "outer" $b6Run
+    for i in range 3 {
+        cells[i].s = "w" $i "-" $(i * 7)
+        sbChurn()
+    }
+    sbChurn()
+    assert cells[0].s == "w0-0" and cells[1].s == "w1-7" and cells[2].s == "w2-14"
+    k I64 = 0
+    for i in range 3 {
+        (try cells.First() catch { unreachable }).s = "f" $i
+        (try cells.Last() catch { unreachable }).s, k = "l" $i, k + i
+        sbChurn()
+    }
+    cells[1].s = outer
+    sbChurn()
+    assert cells[0].s == "f2" and cells[2].s == "l2" and k == 3 and cells[1].s == "outer1"
+    m := Map<I64, mut b6Cell&>()
+    for i in range 3 { m.Put(i, b6Cell()) }
+    for i in range 3 {
+        (try m.Get(i) catch { unreachable }).s = "m" $i $i
+        sbChurn()
+    }
+    sbChurn()
+    assert (try m.Get(2) catch { unreachable }).s == "m22"
+    rows := List<mut Array<String&>&>()
+    for i in range 2 { rows.Push(Array<String&>(2)) }
+    for i in range 2 {
+        rows[i][0] = "r" $i
+        rows[i][1] = outer
+        sbChurn()
+    }
+    sbChurn()
+    assert rows[1][0] == "r1" and rows[0][1] == "outer1"
+}
+
+# O12/E28: a conditional or a match of references whose values live in different scopes lives where no one scope says;
+# stored into a field, each value is judged as though stored alone - accepted where every one fits (a refused store is
+# in checks/cases/b6cond*). Declared, it is held where it is declared and read there
+type b6Bag struct() {
+    last String& = ""
+}
+B6Text String& = "global"
+test "E28/O12: a conditional of references from different scopes, each value fitting the store" {
+    b mut b6Bag& = b6Bag()
+    outer String& = "outer" $b6Run
+    for i in range 3 {
+        b.last = outer if i == 1 else "z"
+        sbChurn()
+    }
+    assert b.last == "z"
+    b.last = B6Text if b6Run > 0 else outer
+    sbChurn()
+    assert b.last == "global"
+    b.last = match b6Run { case 1 => outer case _ => B6Text }
+    sbChurn()
+    assert b.last == "outer1"
+    for i in range 2 {
+        x String& = "x" $i
+        q String& = x if i == 0 else outer
+        assert q.Len() == 2 or q == "outer1"
+    }
+}
+
+# C9a/P2: what a task a destructor spawns builds into the scope being closed is folded into it as the destructor
+# returns - its destructors run then, before the scope's next one, and its storage is reclaimed with the scope's
+B6Count mut I64 = 0
+type b6Tracker struct(k I64) {
+    k
+} destruct {
+    B6Count = B6Count + 1
+}
+type b6Res struct(k I64) {
+    k
+} destruct {
+    kk := k
+    keep mut List<b6Tracker&>& = List<b6Tracker&>()
+    join {
+        spawn fn() {
+            for j in range 10 { keep.Push(b6Tracker(kk * 100 + j)) }
+        }
+    }
+    if keep.Len() != 10 { fail }
+}
+fn b6Once(i I64) {
+    r b6Res& = b6Res(i)
+}
+test "C9a/P2: what a destructor's task builds is destructed with the scope being closed" {
+    before := B6Count
+    for i in range 4 {
+        b6Once(i)
+        sbChurn()
+    }
+    assert B6Count - before == 40
+}
+
+# C9a/S18: a destructor ending its test early leaves the scope's other destructors to the test's unwind, which runs them -
+# each once. The second test reads what the first left
+B6Log mut I64 = 0
+type b6Step struct(k I64) {
+    k
+} destruct {
+    B6Log = B6Log * 10 + k
+    if k == 2 { done }
+}
+fn b6Steps() {
+    s1 b6Step& = b6Step(1)
+    s2 b6Step& = b6Step(2)
+    s3 b6Step& = b6Step(3)
+}
+test "C9a/S18: a destructor that ends its test - the scope's other destructors still run" {
+    b6Steps()
+    unreachable
+}
+test "C9a/S18: ...each of them once" {
+    assert B6Log == 321
+}
+
+# C10: a method called on a field read bare in a destructor - "l.Push(k)" - is called on the instance's field, as a bare
+# read of it reads it
+B6Sum mut I64 = 0
+type b6Keeper struct(k I64) {
+    k
+    l mut List<I64>& = List<I64>()
+} destruct {
+    l.Push(k)
+    l.Push(k * 2)
+    B6Sum = B6Sum + l.Len() + l[1]
+}
+test "C10: a destructor calls a method on a field it reads bare" {
+    before := B6Sum
+    for i in range 3 {
+        r b6Keeper& = b6Keeper(i)
+    }
+    assert B6Sum - before == 3 * 2 + (0 + 2 + 4)
+}
+
+# S4c: the hidden locals of several parallel assignments in one function are told apart
+type b6PNode struct(v I64) {
+    v
+}
+fn b6PMake(i I64) b6PNode& { return b6PNode(i) }
+fn b6Pars() I64 {
+    k I64 = 0
+    a mut b6PNode& = b6PNode(0)
+    a, k = b6PMake(2), k + 1
+    a, k = b6PMake(3), k + 1
+    s String& = ""
+    s, k = "t" $k, k + 1
+    return a.v * 100 + k * 10 + s.Len()
+}
+B6ParsBaked := b6Pars()
+test "S4c: several parallel assignments in one function, while compiling too" {
+    assert B6ParsBaked == 332 and b6Pars() == 332
+}
+test "S4c: several parallel assignments in one function" {
+    k I64 = 0
+    a mut b6PNode& = b6PNode(0)
+    l mut List<I64>& = List<I64>()
+    l, k = List<I64>(), 1
+    a, k = b6PMake(2), k + 1
+    a, k = b6PMake(3), k + 1
+    a, k = b6PMake(4), k + 1
+    s String& = ""
+    s, k = "t" $k, k + 1
+    assert a.v == 4 and k == 5 and s == "t4" and l.Len() == 0
+}
+
+# E31/E31a: a type's Call that can fail is called with "try", as the function it stands for would be - spawned too
+error b6CallErr {
+    HIT
+}
+type b6Ctr struct(k I64) {
+    k
+}
+fn (c b6Ctr&) Call(n I64) I64 ? b6CallErr {
+    if n == c.k { error b6CallErr.HIT }
+    return n * 2
+}
+fn b6CallBoth() I64 {
+    c b6Ctr& = b6Ctr(3)
+    return (try c(4) catch default 0) * 10 + (try c(3) catch b6CallErr default -1)
+}
+B6CallBaked := b6CallBoth()                     # K2: baked while compiling, as the run time computes it
+test "E31a: try on a fallible Call" {
+    assert B6CallBaked == 79 and b6CallBoth() == 79
+    assert b6CallBoth() == 79                   # S18c: decided while compiling
+    c b6Ctr& = b6Ctr(3)
+    assert (try c(4) catch default 0) == 8 and (try c(3) catch b6CallErr default -1) == -1
+    z I64 = 0
+    join { spawn z = try c(5) catch default -1 }
+    w I64 = 0
+    try join {
+        spawn try c(3)
+    } catch b6CallErr { w = 1 }
+    assert z == 10 and w == 1
+}
+
+# O1b/S4c: a parallel assignment of a whole value global holding references - the value built in the program's scope,
+# held, then stored - as "GV = VH(Node(i))" is
+type b6VNode struct(v I64) {
+    v
+}
+type b6VH struct(n b6VNode&) {
+    n
+}
+B6GV mut b6VH = b6VH(b6VNode(0))
+fn b6SetGV(i I64) I64 {
+    k I64 = 0
+    B6GV, k = b6VH(b6VNode(i)), i
+    return k
+}
+test "O1b/S4c: a parallel assignment builds a whole global value's references where the global lives" {
+    k := b6SetGV(7)
+    sbChurn()
+    assert k == 7 and B6GV.n.v == 7
+}
+
+# P4a/D16d: a task's default holding a lambda that captures only a number - the lambda is built where it lands, as any
+# temporary holding nothing that lives elsewhere
+error b6TaskErr {
+    NEG
+}
+type b6FBox struct(f fn(x I64) I64) {
+    f
+}
+fn b6GetF(n I64) b6FBox ? b6TaskErr {
+    if n < 0 { error b6TaskErr.NEG }
+    return b6FBox(fn(x I64) I64 { return x * 2 })
+}
+fn b6TaskDefault(n I64) I64 {
+    b b6FBox = b6FBox(fn(x I64) I64 { return x })
+    join {
+        k I64 = 41
+        spawn b = try b6GetF(n) catch default b6FBox(fn(x I64) I64 { return x + k })
+    }
+    return b.f(1)
+}
+B6TaskBaked := b6TaskDefault(-1)                # K1 runs a join's tasks in spawn order
+test "P4a/D16d: a task's default holding a lambda, while compiling and at run time" {
+    assert B6TaskBaked == 42 and b6TaskDefault(-b6Run) == 42 and b6TaskDefault(b6Run) == 2
+}
+test "P4a/D16d: a task's default may hold a lambda capturing only values" {
+    b b6FBox = b6FBox(fn(x I64) I64 { return x })
+    join {
+        k I64 = 41
+        spawn b = try b6GetF(-b6Run) catch default b6FBox(fn(x I64) I64 { return x + k })
+    }
+    sbChurn()
+    assert b.f(1) == 42
+}

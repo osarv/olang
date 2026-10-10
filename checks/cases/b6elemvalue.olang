@@ -1,0 +1,18 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# O18c (the batch 6 review): ...a value holding a loop body's text stored into an element's field - the value is kept
+# where the list lives, which its text does not
+type W struct(s String&) {
+    s
+}
+type Cell struct() {
+    w W = W("")
+}
+fn main() ? {
+    cells := List<mut Cell&>()
+    for i in range 3 { cells.Push(Cell()) }
+    for i in range 3 {
+        x String& = "w" $i
+        wv := W(x)
+        cells[i].w = wv
+    }
+}

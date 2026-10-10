@@ -93,3 +93,7 @@ one agent at a time, start new work only as running agents finish, prefer review
 in the week if usage is under the line.
 The user confirmed it the same day (13:25 CEST): "we don't have to burn the entire budget the first 25 hours. You can
 lax it down a bit." So early in a week, run one or two agents, not four or five.
+At 15:40 CEST the same day the weekly window read 0.27 with status "allowed_warning", after about 10 hours. The day
+used a quarter of the week, mostly on review-and-fix rounds of 2-3 agents. What is left (73% over ~158 h) allows less
+than one agent on average. So until about Monday: one agent at a time, gaps between, and reviews only for scope
+relaxations.

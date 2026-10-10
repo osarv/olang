@@ -1,0 +1,16 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O18c (the batch 6 review): a store through the element a List's At hands back - "cells[i].s = x" - is judged where
+# the list lives, which x, a loop body's text, does not. It was judged while At's result was still landing, then the call
+# was landed at the list's scope and the store never judged again: a use after free
+type Cell struct() {
+    s String& = ""
+}
+fn main() ? {
+    cells mut List<mut Cell&>& = List<mut Cell&>()
+    for i in range 3 { cells.Push(Cell()) }
+    for i in range 3 {
+        x String& = "w" $i
+        cells[i].s = x
+    }
+    println(cells[0].s)
+}

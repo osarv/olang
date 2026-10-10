@@ -14721,3 +14721,122 @@ through failing joins (`PeBaked*`) and asserts it decides beside the same calls 
 in `RecvUntil` fails into a `try join`, or takes its own default. 17 must-fail cases (`checks/cases/p4*`), and the
 `spawnerr` scenario: one program built, built `-d -s` and interpreted, the three outputs (and the unhandled error ending
 it) the same and as wanted. `-r` on the corpus section, the scenario's program and std/chan, by hand: no report.
+
+### The batch 6 review, fixed: a store through a landing element, conditionals of references, a destructor's tasks (O18c, O12/E28, O25e, C9a/P2, S18, C10, S4c, E31a, O1b, P4a, 2026-10-10)
+
+A read-only review of three merges - checker batch 5's second round, tonight9's fixes and decision 50 - reproduced two new
+holes and one old one, plus six small over-rejections (`/home/user/review/batch6`). All are fixed, each with a test.
+
+**1. A store through an element still landing (O18c), new in checker batch 5.** `cells[i].s = x`, `cells` a
+`List<mut Cell&>` and `x` a loop body's text, compiled and read freed text after the loop: `-b` printed `churn()`'s text,
+`-b -d -s` stopped with "use after scope closed", `-i` printed the right words. The same through `(try m.Get(i)).s = x`,
+`(try cells.First()).s = x`, `cells[i].s, k = x, 1`, a program's own generic `At` giving its `T`, `rows[i][0] = x` with
+rows a `List<mut Array<String&>&>`, and `cells[i].w = wv` with `wv` a value holding the text. The cause: `At` gives `T`,
+which became a reference, so its result scope is landing (O14b) when the assignment is checked; `RefExactScope` of a
+member of a landing call says "a temporary" (false); so the O25/O20 checks of the store never ran. Then the O18c pre-pass
+the first round of batch 5 added to `flushPendingDischargesFrom` - "a call whose result nothing put anywhere lands by
+its obligations" - tested only that the call was still landing, so it landed this one too, at the list's scope, which
+satisfied `At`'s exact obligation; nothing judged the store again. 04f4a4d had refused the store with O10c at the `[`.
+
+Two ways to make it sound. *Leave the call unlanded* (skip it in the pre-pass): its obligations are then discharged
+with the result scope at the block, `At`'s exactness fails, and every such store is O10c - including `cells[i].s =
+"lit"` and storing text that lives where the list does. Sound, and it refuses what is correct. *Land it first*: the
+store lands the call it is read through (`storeLandsContainer`) by exactly the test the pre-pass uses - an obligation
+needing the result scope to outlive one an argument gives - before anything about the store is asked, so the store is
+judged against the scope the result really lands in, and marks the call (`storeRelied`) so the pre-pass never moves it.
+Chosen: it is the same landing the statement's end would make, done before the judgement that relies on it, so the two
+can never disagree; and a temporary stored there is now built where the list lives (`landAtTarget` sees the target's
+real scope), which the old order only got right by the accident of the pre-pass. A call nothing would land stays a
+temporary of the statement's block, which every value the statement can name outlives. The parallel assignment and the
+destructuring land their targets' containers as the targets are built, before the values land at them (`buildParallel`
+held its values before `buildAssignCore` ran). Found while writing the test, pre-existing: written text in a parallel
+assignment, held in a hidden local, lost being written text, so `s, k = "a" $i, 1` into a `String` was E12; it is made a
+`String` before it is held.
+
+**3. A conditional of references from different scopes (O12/E28), pre-existing since E28.** `b.last = x if i == 1 else
+"z"`, `x` a block's text, compiled on every compiler tried; `03` wrote a parameter's field and the caller read freed
+text. `RefExactScope` gave a conditional whose values live in different scopes no scope at all - "values living in
+different scopes share none: nothing is adopted" - the answer it gives a temporary, so `buildAssignCore`'s `rhsExisting`
+was false and the store skipped O25/O20. (A text literal arm made even `x if c else "z"` such a conditional: its arm is
+not a reference, and the loop returned false at once.) The review listed locals, elements, globals, arguments and returns
+as refusing it already; checking that "for the same reason" found the argument was not one of them: `keep(b, x if c else
+outer)`, with `keep(b mut Bag&, s String&b)` storing `s`, compiled and read freed text too - the conditional, taken for a
+temporary, bound the parameter's scope variable to the conditional's type's depth, which happened to agree with `b`.
+Array literals and fills holding such a conditional (`keep = String&[x if c else outer]`) were the same hole.
+
+**Decided**: such a value is not a temporary, its scope is **not known here** - `RefExactScope` now answers
+`SCOPE_AMBIGUOUS`, O12's own answer for a match binding from different scopes. That alone makes every place needing one
+known scope refuse it, for one reason: an argument determining a scope variable (O25e), an array element (O25c), a
+global (O1b), a local's exact scope (O25). Two places are made precise instead of strict. A **store into a field or an
+element** judges each value that already lives somewhere as though it were stored alone - E28 already said "each value
+must fit there on its own" - so `b.last = G if c else outer` is accepted where both outlive `b`'s referent, and a note
+points at the value that does not fit. A **declaration** with `:=` or a bare `&` holds it where it is declared (E28's
+other sentence, "held where it is declared, as a reference's block is"), read at its block with O12's restrictions -
+nothing built into it, nothing stored through it. That keeps `q SfNode& = match i { case 0 => n nomatch => SfNode(7) }`
+(a corpus test) accepted for the right reason: `SfNode(7)` landed in `q`'s block, `n` lives outside it. The first
+version broke that test: it skipped every value-typed arm, so `SfNode(7)` was skipped, the conditional lived where `n`
+did, and the typed local narrowed it. A new value that has already landed (`ctorLanded`) is now counted where it landed;
+one still to land, and written text, are skipped, being built where the conditional lands. Building through such a local
+(`q mut Nd& = n if c else Nd(7); q.next = Nd(9)`) is O12's error now; before, it built in `q`'s block and stored into
+`n`. Per-arm judging was tried for arguments too, and dropped: two arms determine one scope variable, so they must agree
+as two arguments must, which per-arm judging reduces to anyway - while `println(x if c else outer)`, a parameter only
+read, would have been refused, where "not known here" lets a read-only parameter take it.
+
+**2. A destructor's task leaked (C9a/P2), new in tonight9.** A destructor that spawns a lambda building into what it
+captured - `keep.Push(Tracker(...))`, `keep` a list made at the destructor's top level, which C9a makes the closing scope
+S - asks `__olang_capture_scope(S)` on the task's thread, which (decision 48) makes and links a part of S. But
+`__olang_scope_close` read S's parts once, at its entry, before the destructor walk: a part made during the walk was left
+linked to a header closed and forgotten - no Tracker was destructed (`0 0 0 0` where 04f4a4d gave `50 100 150 200`), and
+its chunks were never given back. **Decided**: after each destructor returns, the close looks at S's parts again and
+folds any it finds, their destructors ahead of the ones the destructor registered itself - the order the parts at entry
+have against the scope's own, and the order a destructor's own builds already had (they run as it returns). The other
+way, refusing to make a part of a closing scope, would have made a destructor's task unable to build where its
+destructor can, for no reason the program can see. The task's join has finished before the destructor returns, so the
+plain read is ordered (TSan agrees: `-r` reports nothing).
+
+**8. A destructor's failed check in a test (S18/C9/C10), pre-existing.** The close took S's destructor list into a
+register (storing null to the header) and walked it; a check failing inside one while a test ran longjmped out of the
+walk, and the test's unwind - which closes S again, the scope still being on the chain - found an empty list: the rest
+never ran (`Log` 32, not 321). The walk now takes each node off the header's list before calling it, so the list always
+holds exactly what is left: the unwind's close runs the rest, the failed one is not run again (C10). The new loop is also
+simpler - registration by a running destructor puts nodes at the head, in front of what is left, which is the C9a order
+the old splice code built by hand. The fast path (no destructors) is one load and one compare, one store fewer than before.
+
+**The small ones.** *C10*: `l.Push(k)` in a destructor, `l` a field read bare, was "M10: 'l' is no import here" - the
+method-call path looked the receiver up as a local, a global or an import, never as the instance's field; it now reads
+a bare field there as a bare read does (a real local still first). *S4c*: `holdForRefTarget` named its hidden local
+`$par` from `destructCounter` and `holdInHidden` from `hiddenCounter`, so the two met ("'$par6' is declared twice", and
+in a bigger program a nonsense type error after it); one counter now. *E31a*: `try c(4)`, `c`'s type declaring a fallible
+`Call`, said "this call can fail - write 'try'": `operatorCallArgs` sets which fallible call is allowed to the Try forms
+alone, dropping the `try`'s permission for `Call`, the one plain form that may fail; it passes through now, so `spawn try
+c(3)` works too. *O1b*: `GV, k = VH(Node(i)), k`, a whole global value holding references, was refused while `GV =
+VH(Node(i))` compiled - the value was built in the program's scope (tonight9's S4c landing) and held in a local whose
+references the hold recorded as the program's, but O1b asked where the local's own storage is; a value copied into a
+global is judged by where its references live. *P4a*: a task default holding a lambda that captures only a number was
+"names existing storage" - D16d builds such a lambda where it lands, and one capturing nothing is static; both are
+accepted, one capturing references still is not.
+
+**The scope fuzzer** (`fuzz/scopegen.olang`) generated none of the four shapes the review needed, so it could not have
+found 1, 2 or 3. It now writes: conditionals and matches of references from different scopes - stored into fields,
+passed on, declared with `:=` and with a written type and built through, pushed; element and field stores through what
+a List's `At`, `First` and `Last` and a Map's `Get` hand back, a SetAt, a parallel target through an element; failing
+spawns (`spawn try` with a statement clause, `try join`, a task default standing in for a result, in a block of its
+own and stored outward); and, in one program in four (`HasDtors`), destructor-bearing resources whose destructors count
+themselves, build through their fields, spawn tasks building destructor-bearing values into the scope being closed, and
+build one of their own - made over the target, in loops, in blocks, in a list. `-i` runs no destructors, so such a
+program is built `-b` beside `-d -s`: the two must print the same, ending `dtors 0` (made minus destructed). Validated
+against the review's base: on seeds 1-40 the 6af6a4e compiler gives 24 findings - uses after scope closed through
+elements and conditionals, `-b` crashes, a destructor not run - and this one none; a further 300 programs (seeds 100-399,
+1,387 scenarios run, 2,213 refused) found nothing. The refusal rate rose from about half to about three in five: most
+new shapes are ones the checker must refuse (a value from an inner block stored or passed outward), and one refusal
+leaves its whole scenario out.
+
+**Tests.** shared.olang's batch 6 section: element field stores through At, First, Last, Get and a list of arrays with
+new text and with text living where the list does, read back after a churn; a conditional and a match of references
+each fitting a field store; a destructor's task's trackers counted; a destructor ending its test with `done` and the next
+test reading that the scope's other destructors still ran, once; a method on a field read bare in a destructor; several
+parallel assignments in one function (baked while compiling as well); `try` on a fallible `Call`, spawned and joined
+(baked, and an assert decided while compiling); a parallel assignment of a whole global value; a task default holding a
+value-capturing lambda (baked through K1's sequential join). All pass under `-t -d -s` and `-t -r`. Must-fail cases:
+`checks/cases/b6elem*` (seven shapes of finding 1), `b6condfield`, `b6matchfield` (with the note), `b6condarg`,
+`b6condelem`, `b6condtyped`; and `b6dtortask` runs finding 2's two programs under `-d -s`, failing on the old compiler.

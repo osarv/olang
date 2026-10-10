@@ -1,0 +1,17 @@
+# check: fail error[O25e]: these arguments live in different scopes
+# E28/O12/O25e (the batch 6 review): a conditional whose values live in different scopes, passed for a parameter whose scope
+# variable another argument determines - where it lives is not known here, so it determines nothing. It was taken for a
+# temporary, and the callee stored the loop body's text into the caller's bag
+type Bag struct() {
+    last String& = ""
+}
+fn keep(b mut Bag&, s String&b) { b.last = s }
+fn main() ? {
+    b mut Bag& = Bag()
+    outer String& = "outer"
+    for i in range 2 {
+        x String& = "w" $i
+        keep(b, x if i == 1 else outer)
+    }
+    println(b.last)
+}
