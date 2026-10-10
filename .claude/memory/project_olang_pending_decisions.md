@@ -252,6 +252,13 @@ rule and where it is recorded; the morning report lists them all, then they move
    value that captures a writable reference (it could build into that scope off-thread); read-only captures stay
    allowed. Chosen over a per-allocation owner check (a run-time cost on every allocation). To be built next batch.
 
+41. (wt-s5scope, E31b/O18c/O26a/E25/D16c/O17) decision 33 built: a write through `x[i]` reads the element where the
+   place is evaluated and writes it back by SetAt, one level at a time for nested collections; a fallible or
+   multi-result call is not written back (an error saying how); a call that builds into the element's copy is refused
+   (no hidden per-write allocation). r01 fixed at the root (a landed call result sets the by-value parameter's scope);
+   O17's region facts belong to each function, not the shared scope variable; a lambda capturing a value holding
+   references gets an implicit scope (D16c); destructured results keep a scope argument's placement (E25).
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
