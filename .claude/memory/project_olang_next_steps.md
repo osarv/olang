@@ -591,6 +591,12 @@ because what it finds about structure feeds the refactor.
   across modules, and `$` of an empty fixed slice rendering `null` in the evaluator. All go to wt-rv9fix (master
   04f4a4d). chk5 (771a922) is done and under soundness review (/home/user/wt/rv10 -> /home/user/review/chk5). str1 is
   on round 2. Decision 50 waits for capacity: this week's pace is about one agent at a time.
+- 12:00 CEST: rv9fix merged and pushed (8f085c4 via 0bf3921, full verify on the same code). Fixed: tonight9's false
+  ICE (the catch default marks its captured scope), D8a defaults rebuilt in their own declaration's context (a pending
+  lambda carries its context too), slices and views in a constructor marked borrowed, and a slice of a value
+  temporary stored past its block now refused (E16a). C9a: a destructor's top level is the scope being closed, which
+  the runtime passes in. Also: one lambda per default per calling module; the evaluator's empty fixed slice; the
+  parallel global target. C9a and the parallel global form were not reviewed - include them in the next review.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
