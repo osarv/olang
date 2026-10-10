@@ -13143,4 +13143,6 @@ the instance's scope in a constructor and the function's own elsewhere - never s
 shared.olang's tests over `c3Holder` and `sc3Countdown` had the shape and passed by luck. And a copy of a *local* enum's
 payload (a match binding, `y := e as E.A`) passed by value, captured through a reference read out of it, or lent to a
 callee that builds through it, had the callee build in the copy's block - the same root as finding 2's fourth shape,
-closed by the same general O25h (the lend is refused, O17). Both have corpus tests and a checks case.
+closed by the same general O25h (the lend, refused by O17 on this branch, is accepted and built in the right place once
+merged with study 4's O17b). Both have corpus tests and a checks run case built `-d -s`; the checks harness now finds a
+`-s` binary by its `.san` suffix, so a run case can ask for the sanitizer.

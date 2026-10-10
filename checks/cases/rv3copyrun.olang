@@ -1,5 +1,5 @@
 # check: run
-# flags: -d
+# flags: -d -s
 # O25h/S4d/T25c unoptimized: a copy out of a reference builds where the referent's references live, a compound assignment
 # keeps the place's old value and lands at the place, and a generic's read-only parameter gives writable copies of a
 # writable argument - each read back after an arena churn (at -O3 in shared.olang's rv3 tests)
