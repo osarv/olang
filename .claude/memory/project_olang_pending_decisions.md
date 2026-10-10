@@ -312,6 +312,12 @@ rule and where it is recorded; the morning report lists them all, then they move
    mismatch; read-only captures and named functions pay nothing; each worker gets one lazily made stand-in for the
    program scope, folded before its task is reported done. Gate 2% (bench Fold/Count/Map with capturing lambdas
    included). Option 3 (keep 40's static refusal and close evasions one by one) rejected as evadable by design.
+49. (mine, under the revisit rule, from review tonight7: 3 new + ~12 older E11c holes, baked globals disagreeing with
+   the run time, and over-rejection of `r.l.Iter().Fold(...)` in a Str) `$` calls a declared Str EXACTLY ONCE per
+   rendering, in rendering order, and E11c's no-effect requirement (and its effect analysis) goes: Str is an ordinary
+   method. Sound because K1 already refuses every effect that would be observable if a run-time call were skipped
+   (global writes, mutable-global reads), so S18c/K2 skipping stays unobservable. The purity rule was my own reasoning
+   (2026-10-08), not the user's.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
