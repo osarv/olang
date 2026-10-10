@@ -522,6 +522,14 @@ because what it finds about structure feeds the refactor.
   comparison, r10 `T(x)` through a type variable, and a detail to decide: a for-in over a local iterator walks a hidden
   copy, so the iterator never advances for its caller (Python advances it; s5std documented it) - candidate: walk an
   iterator lvalue in place.
+- 04:40 CEST: rv3fix merged + verified locally as branch wt-rv3merged (983df9e) - NOT pushed: its soundness review
+  (/home/user/review/tonight5) found 7 (2 new: a task keeps a stood-in closure env; a match binding's depth 0 read as the
+  top level; 5 pre-existing) - handed back to the rv3fix agent with decision 40 (P2 closures held in task arguments).
+  s5scope's review (/home/user/review/tonight6) found 9 (E31b write-back: heap corruption through `v[0].Shrink(v)`, a
+  global index read twice, lost writes; a new UAF from callResultTiedToBlock; F5 pre-existing projection of a call
+  result) - decision 42 narrows E31b to field stores; the s5scope agent is merging wt-rv3merged and fixing. Merge order:
+  whichever of rv3fix/s5scope finishes second merges the other's branch; push only after both reviews' findings are
+  fixed. Running: rv3fix (fixes), s5scope (fixes), oann-p8 (int8), study6.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
