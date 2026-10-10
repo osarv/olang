@@ -1,0 +1,19 @@
+# check: fail error[P4a]: a task's default is built where its result lands, and this names existing storage - build the value here, or give null
+# P4a: a default holding references is built where the call's result lands, so it builds all it holds
+error E {
+    BAD
+}
+type Node struct(v I64) {
+    v
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.BAD }
+    return Node(n)
+}
+fn main() ? {
+    fallback Node& = Node(0)
+    r Node& = null
+    join {
+        spawn r = try mk(-1) catch default fallback
+    }
+}

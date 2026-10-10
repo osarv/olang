@@ -14184,3 +14184,93 @@ default from another module and from a lambda. Checks: `rv9slicetemp`, `rv9slice
 `rv9slicetempctor` must fail, naming the error and the note; `rv9ctorview`, `rv9dtorbuild`, `rv9parallelglobal` run under `-d -s`; `capscope`
 gained the review's three ICE shapes. A scope fuzz (seed 4242, 60 programs) and a differential one (seed 3153, where
 finding 7 was found, 30 programs) found nothing.
+
+### A spawned call may fail; a join that can fail is `try join` (P4, P4a-P4d, P1, P1g, R8, R10, D10a, K1, 2026-10-10)
+
+**Where it came from.** P4 said a spawned function may not declare errors, on the grounds that an error raised on
+another thread has nowhere to go: the join carried no value and the spawner had left the call site. It held for as long
+as tasks were mostly numeric fan-out, and stopped holding as real programs reached them - a task waiting in
+`chan.RecvUntil` can be cancelled, a parser run per file can fail, an I/O task can fail - and every one of them was
+written as a wrapper storing a code into an out-parameter (`std/chan`'s `waitFor` stores -1 or -2 into a box), which is
+the value-beside-a-flag pattern "errors are errors" exists to remove. The user, asked (QE, 2026-10-08): "We need some way
+to make spawn functions fail, exactly how that would be done is harder since not all variables may be fine to use
+anymore. Solve it." Decision 50 laid out the shape - `spawn try`, the task's own clauses on its thread, the earliest
+failure the join's, `try join`, targets left unwritten - and the user approved it.
+
+**The design, rule by rule.** P4 is the spelling: a fallible spawned call takes `try`, as a fallible call does anywhere
+(R8), and a `try` before one that cannot fail is an error. P4a puts the task's clauses on the task: a clause is code of
+the task, run on its thread when the call fails with an error it takes, before the task finishes - so it can give the
+targets a value (a per-task default, the way partial results are had) or count failures through a writable reference it
+captured, and it may not leave the task, since the task is a function of its own and nothing is around a clause to
+leave to. P4b is what the join does: it still waits for every task (P1b, untouched), then fails with the failure of the
+task spawned earliest, every other dropped and no sibling stopped - deterministic, which matters more than which error
+wins, and cancelling siblings stays the cooperative job of `std/cancel`. P4c makes the join a thing tried: `try join {
+} catch ...` is R10's statement with the join where the call is, its error set what its tasks let through. P4d answers
+the user's worry about which variables are fine afterwards: a failed task's targets are left unwritten, so where a join
+holds such a target every clause of its `try join` must leave - the code after the join is reached only when the targets
+were written - while a join whose failing tasks bind nothing may fall through, as a sequential `try f(buf) catch E { }`
+leaves `buf` as far as `f` wrote it.
+
+**Details decided while building (mine).**
+- *The clause syntax is a try expression's*: clauses after the call, `catch [items] [block] [default v]`, so nothing new
+  is spelled. With targets the clauses are in value position (R9a), where a clause gives a default or leaves - and since
+  a clause cannot leave its task, leaving can only mean ending the process (`abort`, `unreachable`, `done`, `fail`, which
+  end it from a task's thread). Without targets they are a statement's: a block, no default.
+- *Several targets take one default per target*, as a destructuring's `try` takes one per result: `spawn q, r = try
+  divmod(a, b) catch default 0, 0`. The parser reads several defaults where the `try` is the whole value after a
+  multi-target spawn's `=`, exactly where it reads them for a destructuring.
+- *A default holding references builds all it holds* - `null`, text written in the program, a temporary. It is built
+  where the call's result lands (the clause's lambda is handed the task's stand-in for the call's result scope), which
+  is the target's scope; existing storage would have to be shown to be in exactly that scope, which the task's lambda
+  cannot see. Reported as such (`ERR_TASK_DEFAULT_EXISTING`), not as the O14 error the lambda's return would give.
+- *A join fails on every way out but an error already leaving.* The first version failed only at the block's end, and
+  that broke P4d at once: `for { try join { spawn x = try f() ... break } catch E { continue } }` would leave the loop by
+  the break with `x` unwritten and read after the loop. So a failure replaces whatever way the block was being left -
+  falling off its end, a `return` (its value discarded, as an error raised there would), a `break` or `continue` (not
+  taken) - and the `try join`'s clause, or the propagation, takes over from there; this is also what an error raised at
+  that point would have done. An error already leaving the block (raised by its own code or propagated through it) keeps
+  leaving, the tasks' errors dropped: the function is failing either way, and only one error can be reported.
+- *The join's errors are its tasks' only*; an error raised by the block's own statements leaves as from any block - it
+  is not something the join adds.
+- *Coverage at the declared-type level* (R14): a task catching `E.A` itself and letting `E.B` through puts `E` whole in
+  the join's set, so the join's clauses treat every word of `E` as possible, as a caller treats a callee declaring `E`.
+- `catch` after a `join` without `try` is parsed, so the checker can say what is missing; a clause `catch E { }` makes no
+  lambda at all; a fallible task written without `try` still adds its errors to the join's set, so one missing word is one
+  error rather than two.
+- *D10a counts a join*: it leaves when its block leaves and every clause of its `try join` does (what no clause takes
+  propagates). Before, a join never counted, so a function ending in `join { ...; return x }` was a missing return.
+
+**How it is built.** The task's call is exactly the call it was - arguments evaluated in the spawner by the ordinary
+lowering, P2's checks, landing - so nothing about where things live changed. Each clause is a lambda built by the checker
+from the clause's block and a synthesized `return` of its defaults (`buildRetStmnt` was split so `buildRetValues` takes
+built operands), checked as task code (`inTaskClause` rejects `return`, `error`, an escaping `try`, a loop jump),
+captured as a spawned lambda is, and held in a hidden local in the spawn's `if true` wrapper whose closure lives until the
+join (`spawnHoldLambda`, the existing spawned-lambda code made a helper). Codegen captures each clause's code and
+environment in the task env beside the destinations; the trampoline calls the task, and on a nonzero code dispatches by
+the callee's own ordinals, calls the clause, stores what it gives as the call's result would be stored
+(`cgTaskStoreResults`), and returns what no clause took re-encoded under the join's list (`cgReencodeInto`, the
+propagation's select chain). The worker stores the trampoline's result into the task node's new error word under the
+task lock, before the done flag, so the join's acquire of that lock orders the read (P8) and ThreadSanitizer sees the
+same edge (checked: `-r` reports nothing). `__olang_join_tasks` returns the earliest failure: the task list is newest
+first, so the last failure the walk meets. A fallible join's block end stores that code for the join's handler, emitted
+after the block at the join's own level, which runs the `try join`'s clauses or propagates; `cgLeaveBlocks` sends every
+other way out of the block to the same handler once the tasks are waited for and the scope closed (`cgLeaveJoin`),
+unless an error is leaving (`leavingWithError`, cleared inside deferred code so a join there fails as anywhere). A join
+that cannot fail shadows one further out at its depth, which matters only for a join in deferred code. The evaluator
+binds each clause where the spawn is (its closure read from the hidden local), runs it at the join on the task's
+failure, keeps the first failure, and after the last task fails the join with it - the same replacement of a return or
+loop jump - so a baked global and a decided `assert` agree with the run time, and `-i` with both.
+
+**Found on the way (pre-existing, P1g).** `spawn s = render(n)`, `render` returning a `String` value, stored the result's
+`{length, storage}` into `s` as built - and it was built in a stand-in of the JOIN block's scope, since nothing landed a
+value array's result at its target (an assignment copies into the target's own buffer, and a task has no frame to copy
+in), so `s` read freed memory after the join: the scope sanitizer stopped it, on master too. Such a result is now landed
+where the target's own storage is (`spawnTargetTakesStorage`, for one target and for several).
+
+**Tests.** shared.olang's P4 section: tasks failing in loops and orders, joins caught and propagated, every way out
+replaced, deferred code, defaults (several targets; text, a node, a `List` and `null` read back after an arena churn),
+nested joins and failing lambdas, the default error both ways, D10a, an early `done` - with globals the evaluator bakes
+through failing joins (`PeBaked*`) and asserts it decides beside the same calls at run time. std/chan: a task cancelled
+in `RecvUntil` fails into a `try join`, or takes its own default. 17 must-fail cases (`checks/cases/p4*`), and the
+`spawnerr` scenario: one program built, built `-d -s` and interpreted, the three outputs (and the unhandled error ending
+it) the same and as wanted. `-r` on the corpus section, the scenario's program and std/chan, by hand: no report.

@@ -114,6 +114,10 @@ void CodegenSetScopeSan(bool on) { cgScopeSan = on; }
 struct cgDbgFile { struct str name; int id; int sp; }; //sp set on an entry recording a subprogram's own file
 
 struct cgStaticLit { struct operand* op; char* name; };
+//P4b/P4c: a join that can fail, while its block is being emitted: its task-list head (which identifies it in
+//blockJoins), the label of its failure handler and the slot the error code is passed to it in
+struct cgJoinFail { char* head; char* lbl; char* slot; };
+
 struct cgCtx {
     struct list fnValues; //D16: struct var* - named functions used as values, each needing a static closure
     //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
@@ -165,6 +169,11 @@ struct cgCtx {
     //to wait for its tasks before the arena they may still be holding is reclaimed, exactly as the
     //fall-through path does; that is what this lets the unwinders see.
     struct list blockJoins;
+    //P4b/P4c: the joins being emitted that can fail (struct cgJoinFail), innermost last - a way out of one, once its
+    //tasks are waited for, goes to its failure handler when one failed. Not while an error is already leaving the
+    //blocks (leavingWithError): that error leaves as it would, and the tasks' are dropped
+    struct list joinFails;
+    bool leavingWithError;
     //S19: the deferred code registered in the blocks currently open, innermost last (struct cgDefer)
     struct list defers;
     int dbgStmtLine, dbgStmtFile; //B2e: the statement being emitted, to locate what follows deferred code again
@@ -619,7 +628,10 @@ static void cgEmitDeferred(struct cgCtx* ctx, struct cgDefer d) {
     ctx->defers = ListInit(sizeof(struct cgDefer));
     ctx->targetScopeOverride = NULL;
     ctx->tdOp = NULL;
+    bool leaving = ctx->leavingWithError; //P4b: a join inside the deferred code fails as anywhere else
+    ctx->leavingWithError = false;
     cgBlock(ctx, &d.s->block);
+    ctx->leavingWithError = leaving;
     if (ctx->terminated) cgDeadLabel(ctx); //it ended the test or the process (S19c)
     ListDestroy(ctx->defers);
     ctx->defers = defers;
@@ -658,6 +670,38 @@ static void cgRunDefersAt(struct cgCtx* ctx, int depth, int from) {
 //would: its deferred code run (the block's last statements), its tasks waited for (P1b - the block's end), its
 //destructors and arena released. The body's own level (depth 1) has no entry in blockSlots - its scope is the
 //caller's to close - but its deferred code runs here.
+static char* cgUnwindBelow(struct cgCtx* ctx, int i);
+//P4c: the join whose task-list head is jh, when it can fail and is being emitted
+static struct cgJoinFail* cgJoinFailOf(struct cgCtx* ctx, char* jh) {
+    for (int k = ctx->joinFails.len - 1; jh && k >= 0; k--) {
+        struct cgJoinFail* f = ListGetIdx(&ctx->joinFails, k);
+        if (f->head == jh) return f->lbl ? f : NULL; //a join that cannot fail shadows one further out at its depth
+    }
+    return NULL;
+}
+
+//P4b: a join block left - its tasks waited for (the code returned: the earliest failure, 0 for none) and its scope
+//closed, slot i of blockSlots. When the join can fail, a failure goes to its handler (cgJoin) in place of the way out
+//being taken, which goes on only when every task succeeded; an error already leaving goes on regardless
+static void cgLeaveJoin(struct cgCtx* ctx, char* jh, char* slot, int i) {
+    struct cgJoinFail* f = ctx->leavingWithError ? NULL : cgJoinFailOf(ctx, jh);
+    char* c = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call i64 @__olang_join_tasks(ptr %s)\n", c, jh);
+    if (slot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", slot);
+    if (!f) return;
+    char* e = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = trunc i64 %s to i32\n  store i32 %s, ptr %s\n", e, c, e, f->slot);
+    char* failed = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ne i64 %s, 0\n", failed, c);
+    int id = ctx->lblCtr++;
+    fprintf(ctx->fnOut, "  br i1 %s, label %%joinleave.fail.%d, label %%joinleave.ok.%d\n", failed, id, id);
+    fprintf(ctx->fnOut, "joinleave.fail.%d:\n", id);
+    //back at the join's own level: everything inside it is closed, what is around it still open
+    if (ctx->ownUnwindNode && slot) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", cgUnwindBelow(ctx, i));
+    fprintf(ctx->fnOut, "  br label %%%s\n", f->lbl);
+    fprintf(ctx->fnOut, "joinleave.ok.%d:\n", id);
+}
+
 static void cgLeaveBlocks(struct cgCtx* ctx, int toDepth) {
     int top = ctx->blockDepth;
     if (ctx->blockSlots.len + 1 > top) top = ctx->blockSlots.len + 1;
@@ -666,9 +710,19 @@ static void cgLeaveBlocks(struct cgCtx* ctx, int toDepth) {
         bool hasSlot = i >= 0 && i < ctx->blockSlots.len;
         cgRunDefersAt(ctx, d, 0);
         char* jh = hasSlot ? *(char**)ListGetIdx(&ctx->blockJoins, i) : NULL;
-        if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
-        if (hasSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
+        char* slot = hasSlot ? *(char**)ListGetIdx(&ctx->blockSlots, i) : NULL;
+        if (jh) cgLeaveJoin(ctx, jh, slot, i);
+        else if (hasSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", slot);
     }
+}
+
+//P4b: an error leaving the function - a join it passes waits for its tasks, and their errors are dropped
+void cgCloseOwnScope(struct cgCtx* ctx);
+static void cgCloseOwnScopeWithError(struct cgCtx* ctx) {
+    bool prev = ctx->leavingWithError;
+    ctx->leavingWithError = true;
+    cgCloseOwnScope(ctx);
+    ctx->leavingWithError = prev;
 }
 
 void cgCloseOwnScope(struct cgCtx* ctx) {
@@ -974,7 +1028,7 @@ static void cgRetErrorCode(struct cgCtx* ctx, const char* code) {
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     //R17: through a bare "?" function, any error leaves as that function's own default error
     if (cgFuncIsBareFallible(ctx->curFunc->type)) {
-        cgCloseOwnScope(ctx);
+        cgCloseOwnScopeWithError(ctx);
         cgRetErrorCode(ctx, "65536"); //(1 << 16) | 0: the default error, its one word
         ctx->terminated = true;
         return;
@@ -1007,7 +1061,7 @@ void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
     char* newCode = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = or i32 %s, %s\n", newCode, shifted, wordPart);
 
-    cgCloseOwnScope(ctx);
+    cgCloseOwnScopeWithError(ctx);
     cgRetErrorCode(ctx, newCode);
     ctx->terminated = true;
 }
@@ -3426,6 +3480,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         struct var* rsv = func->type.resultScope ? func->type.resultScope
                           : func->type.hasRetType ? func->type.retType->scopeParam : NULL;
         if (!spawnMerges && rsv && canonicalVar(sv) == canonicalVar(rsv)) op->cgResultScope = sval;
+        if (spawnMerges && rsv && canonicalVar(sv) == canonicalVar(rsv)) op->cgTaskResultArg = args->len + 1;
         cgArgAdd(args, "ptr", sval);
     }
     for (int i = 0; i < op->args.len; i++) {
@@ -4252,7 +4307,7 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
         //R9b: a clause took the error - its default stands in for the result
     } else if (op->isTried) {
         long long code = errorCode(ctx->curFunc->type, *builtin, wordOrd);
-        cgCloseOwnScope(ctx);
+        cgCloseOwnScopeWithError(ctx);
         char codeText[32];
         snprintf(codeText, sizeof(codeText), "%lld", code);
         cgRetErrorCode(ctx, codeText);
@@ -5305,7 +5360,7 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
         if (unwound) {
             for (int i = ctx->blockSlots.len - 1; i >= op->cgSlots; i--) {
                 char* jh = *(char**)ListGetIdx(&ctx->blockJoins, i);
-                if (jh) fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", jh);
+                if (jh) fprintf(ctx->fnOut, "  call i64 @__olang_join_tasks(ptr %s)\n", jh);
                 fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", *(char**)ListGetIdx(&ctx->blockSlots, i));
             }
             if (ctx->ownUnwindNode) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", cgUnwindBelow(ctx, op->cgSlots));
@@ -5503,7 +5558,90 @@ void cgStatement(struct cgCtx* ctx, struct statement* s);
 //in the spawner, and captured in the env - the task stores through it when its call returns. Taking it
 //here rather than on the task is what makes "spawn results[i] = f(i)" in a loop mean slot i: the index is
 //evaluated at the spawn, not whenever the task happens to run.
-void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, struct list* dstOps) {
+//P1g/P4a: stores a task's result - its call's, or a clause's default - into the destinations the trampoline loaded as
+//%a<i> (dstIdx, -1 for a "_"): val is the value, or with viaMem the address of the slot it was returned through.
+//Names made here start with pfx, so several sets can sit in one trampoline
+static void cgTaskStoreResults(FILE* out, struct type rt, const char* val, bool viaMem, int nDst, int* dstIdx,
+                               const char* pfx) {
+    char rty[256];
+    llvmType(rt, rty, sizeof(rty));
+    for (int d = 0; d < nDst; d++) {
+        if (dstIdx[d] < 0) continue;
+        if (viaMem) {
+            if (!rt.isTuple) {
+                fprintf(out, "  call void @llvm.memcpy.p0.p0.i64(ptr %%a%d, ptr %s, i64 %lld, i1 false)\n", dstIdx[d], val,
+                        TypeGetSize(rt));
+                continue;
+            }
+            struct type et = (*(struct var*)ListGetIdx(&rt.vars, d)).type;
+            fprintf(out, "  %%%sp.%d = getelementptr %s, ptr %s, i32 0, i32 %d\n", pfx, d, rty, val, d);
+            fprintf(out, "  call void @llvm.memcpy.p0.p0.i64(ptr %%a%d, ptr %%%sp.%d, i64 %lld, i1 false)\n",
+                    dstIdx[d], pfx, d, TypeGetSize(et));
+        } else if (rt.isTuple) {
+            char elTy[256];
+            llvmType((*(struct var*)ListGetIdx(&rt.vars, d)).type, elTy, sizeof(elTy));
+            fprintf(out, "  %%%s.%d = extractvalue %s %s, %d\n  store %s %%%s.%d, ptr %%a%d\n", pfx, d, rty, val, d, elTy,
+                    pfx, d, dstIdx[d]);
+        } else if (nDst == 1) {
+            fprintf(out, "  store %s %s, ptr %%a%d\n", rty, val, dstIdx[d]);
+        }
+    }
+}
+
+//P4a: calls clause c of a task - its lambda, through the code and environment captured at the spawn - and stores what
+//it gives into the destinations. A default is built where the call's result is (resScope: the scope the task was handed
+//for it), or in this thread's part of the program's scope when the call had none
+static void cgTaskCallClause(FILE* out, struct catchClause* cc, const char* ccode, const char* cenv, const char* resScope,
+                             int nDst, int* dstIdx, int c) {
+    struct type ft = cc->taskFn->type;
+    bool vm = ft.hasRetType && cgRetViaMemory(ft);
+    struct cgBuf a = {0};
+    if (vm) cgBufAdd(&a, "ptr %%k%dslot, ", c);
+    cgBufAdd(&a, "ptr %s", cenv);
+    for (int i = 0; i < ft.scopeVars.len; i++) {
+        if ((*(struct var**)ListGetIdx(&ft.scopeVars, i))->isCaptureScope) continue;
+        if (resScope) cgBufAdd(&a, ", ptr %s", resScope);
+        else {
+            fprintf(out, "  %%k%dg%d = load ptr, ptr @__olang_prog_scope\n", c, i);
+            cgBufAdd(&a, ", ptr %%k%dg%d", c, i);
+        }
+    }
+    if (!ft.hasRetType || vm) {
+        fprintf(out, "  call void %s(%s)\n", ccode, cgBufStr(&a));
+    } else {
+        char rty[256];
+        llvmType(*ft.retType, rty, sizeof(rty));
+        fprintf(out, "  %%k%d = call %s %s(%s)\n", c, rty, ccode, cgBufStr(&a));
+    }
+    if (!cc->givesValue) return;
+    char val[32], pfx[32];
+    snprintf(val, sizeof(val), vm ? "%%k%dslot" : "%%k%d", c);
+    snprintf(pfx, sizeof(pfx), "k%d", c);
+    cgTaskStoreResults(out, *ft.retType, val, vm, nDst, dstIdx, pfx);
+}
+
+//R6/P4b: an error code under one error list (from), re-encoded under another (to) - the same error type's ordinal in
+//to, its word unchanged - emitted to out with names starting with pfx; returns the new code's name. A type to does not
+//list maps to 0, which a caller only reaches for an error it took already
+static char* cgReencodeInto(FILE* out, const char* code, struct list* from, struct list* to, const char* pfx) {
+    fprintf(out, "  %%%s.ord = lshr i32 %s, 16\n", pfx, code);
+    char* acc = "0";
+    for (int i = 0; i < from->len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(from, i);
+        int toOrd = 0;
+        for (int j = 0; to && j < to->len && !toOrd; j++) if (TypeIsSame(*e, **(struct type**)ListGetIdx(to, j))) toOrd = j + 1;
+        fprintf(out, "  %%%s.is%d = icmp eq i32 %%%s.ord, %d\n", pfx, i, pfx, i + 1);
+        fprintf(out, "  %%%s.sel%d = select i1 %%%s.is%d, i32 %d, i32 %s\n", pfx, i, pfx, i, toOrd, acc);
+        acc = StrFmt("%%%s.sel%d", pfx, i);
+    }
+    fprintf(out, "  %%%s.word = and i32 %s, 65535\n  %%%s.hi = shl i32 %s, 16\n  %%%s.code = or i32 %%%s.hi, %%%s.word\n",
+            pfx, code, pfx, acc, pfx, pfx, pfx);
+    return StrFmt("%%%s.code", pfx);
+}
+
+void cgSpawnTask(struct cgCtx* ctx, struct statement* s, struct list* merges) {
+    struct operand* op = s->op;
+    struct list* dstOps = &s->spawnTargets;
     struct var* func = op->readVar;
     int id = ctx->lblCtr++;
     char* joinScope = cgScopeSlotAt(ctx, ctx->joinDepth);
@@ -5531,6 +5669,20 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
         dstIdx[d] = args.len;
         cgArgAdd(&args, "ptr", dstAddr[d]);
     }
+    //P4a: each clause's code - a closure made where the spawn is (its hidden local), called on the task's thread when
+    //the clause takes the call's error: its code and its environment, captured beside the destinations
+    int nClauses = s->catchClauses.len;
+    int* clauseIdx = MallocOrCrash(sizeof(int) * (size_t)(nClauses + 1));
+    for (int c = 0; c < nClauses; c++) {
+        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+        clauseIdx[c] = -1;
+        if (!cc->taskFn) continue;
+        char* cenv;
+        char* ccode = cgNamedTarget(ctx, cc->taskFn, &cenv);
+        clauseIdx[c] = args.len;
+        cgArgAdd(&args, "ptr", ccode);
+        cgArgAdd(&args, "ptr", cenv);
+    }
     struct cgBuf envB = {0};
     cgBufAdd(&envB, "{ ptr");
     for (int i = 0; i < args.len; i++) cgBufAdd(&envB, ", %s", ((struct cgArg*)ListGetIdx(&args, i))->ty);
@@ -5552,7 +5704,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     //P1: the task node lives in the join block's arena and carries the thread handle plus whatever
     //sub-scopes have to be folded back. Pushed onto the join's list, which the block walks at its end.
     char* node = cgNewTmp(ctx);
-    cgArenaAlloc(ctx, node, joinScope, "24", 8);
+    cgArenaAlloc(ctx, node, joinScope, "32", 8); //%olang.task: next, done, merges, error (P4b)
     char* mergeHead = MallocOrCrash(8);
     strcpy(mergeHead, "null");
     for (int i = 0; i < merges->len; i++) {
@@ -5595,70 +5747,101 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     fprintf(ctx->out, "  %%fn = load ptr, ptr %%fnslot\n");
     struct cgBuf callArgs = {0};
     bool viaMem = cgRetViaMemory(func->type);
+    bool fallible = func->type.errors.len > 0;
+    char rty[256] = "";
+    if (func->type.hasRetType) llvmType(*func->type.retType, rty, sizeof(rty));
     if (viaMem) { //a big result lands in the task's own frame, then goes where the destinations say
-        char rty[256];
-        llvmType(*func->type.retType, rty, sizeof(rty));
         fprintf(ctx->out, "  %%rslot = alloca %s, align %lld\n", rty, cgStackAlign(*func->type.retType));
         cgBufAdd(&callArgs, "ptr %%rslot");
     }
+    for (int c = 0; c < nClauses; c++) { //P4a: a clause's value through memory lands in a slot of this frame's
+        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+        if (!cc->taskFn || !cc->givesValue || !cgRetViaMemory(cc->taskFn->type)) continue;
+        char cty[256];
+        llvmType(*cc->taskFn->type.retType, cty, sizeof(cty));
+        fprintf(ctx->out, "  %%k%dslot = alloca %s, align %lld\n", c, cty, cgStackAlign(*cc->taskFn->type.retType));
+    }
+    char** argVal = MallocOrCrash(sizeof(char*) * (size_t)(args.len + 1));
     for (int i = 0; i < args.len; i++) {
         char* ty = ((struct cgArg*)ListGetIdx(&args, i))->ty;
         fprintf(ctx->out, "  %%s%d = getelementptr %s, ptr %%env, i32 0, i32 %d\n", i, envTy, i +1);
         fprintf(ctx->out, "  %%a%d = load %s, ptr %%s%d\n", i, ty, i);
-        if (i >= nArgs) continue; //a destination is captured, never passed to the call
+        argVal[i] = StrFmt("%%a%d", i);
+        if (i >= nArgs) continue; //a destination or a clause is captured, never passed to the call
         bool standin = false;
         for (int k = 0; k < merges->len && !standin; k++) standin = ((struct cgScopeMerge*)ListGetIdx(merges, k))->argIdx == i;
         if (standin) { //O1b/P2: no stand-in is the program's scope - as this worker reaches it (__olang_standin)
             fprintf(ctx->out, "  %%n%d = icmp eq ptr %%a%d, null\n  %%g%d = load ptr, ptr @__olang_prog_scope\n"
                               "  %%a%d.s = select i1 %%n%d, ptr %%g%d, ptr %%a%d\n", i, i, i, i, i, i, i);
+            argVal[i] = StrFmt("%%a%d.s", i);
             cgBufAdd(&callArgs, "%sptr %%a%d.s", callArgs.len ? ", " : "", i);
             continue;
         }
         cgBufAdd(&callArgs, "%s%s %%a%d", callArgs.len ? ", " : "", ty, i);
     }
+    //P4: a call that can fail returns its error code - beside its result, or alone with none or one through memory
+    char wrapTy[256];
+    llvmFuncRetType(func->type, wrapTy, sizeof(wrapTy));
+    const char* code = NULL;
     if (viaMem) {
-        fprintf(ctx->out, "  call void %%fn(%s)\n", cgBufStr(&callArgs));
-        struct type rt = *func->type.retType;
-        char rty[256];
-        llvmType(rt, rty, sizeof(rty));
-        for (int d = 0; d < nDst; d++) {
-            if (dstIdx[d] < 0) continue;
-            if (!rt.isTuple) {
-                fprintf(ctx->out, "  call void @llvm.memcpy.p0.p0.i64(ptr %%a%d, ptr %%rslot, i64 %lld, i1 false)\n",
-                        dstIdx[d], TypeGetSize(rt));
-                continue;
-            }
-            struct type et = (*(struct var*)ListGetIdx(&rt.vars, d)).type;
-            fprintf(ctx->out, "  %%rp.%d = getelementptr %s, ptr %%rslot, i32 0, i32 %d\n", d, rty, d);
-            fprintf(ctx->out, "  call void @llvm.memcpy.p0.p0.i64(ptr %%a%d, ptr %%rp.%d, i64 %lld, i1 false)\n",
-                    dstIdx[d], d, TypeGetSize(et));
-        }
+        fprintf(ctx->out, "  %s call %s %%fn(%s)\n", fallible ? "%code =" : "", fallible ? "i32" : "void", cgBufStr(&callArgs));
+        if (fallible) code = "%code";
     } else if (func->type.hasRetType) {
-        char retTy[256];
-        llvmType(*func->type.retType, retTy, sizeof(retTy));
-        fprintf(ctx->out, "  %%r = call %s %%fn(%s)\n", retTy, cgBufStr(&callArgs));
-        //P1g: the result lands in the spawner's storage the instant the call returns. A plain store is
-        //all this can be - the types were required to agree exactly (SPAWN_RESULT_TYPE) precisely
-        //because there is no caller frame here to run a conversion or a promotion in.
-        if (func->type.retType->isTuple) {
-            for (int d = 0; d < nDst; d++) {
-                if (dstIdx[d] < 0) continue;
-                char elTy[256];
-                llvmType((*(struct var*)ListGetIdx(&func->type.retType->vars, d)).type, elTy, sizeof(elTy));
-                fprintf(ctx->out, "  %%r.%d = extractvalue %s %%r, %d\n  store %s %%r.%d, ptr %%a%d\n",
-                        d, retTy, d, elTy, d, dstIdx[d]);
-            }
-        } else if (nDst == 1 && dstIdx[0] >= 0) {
-            fprintf(ctx->out, "  store %s %%r, ptr %%a%d\n", retTy, dstIdx[0]);
+        fprintf(ctx->out, "  %%%s = call %s %%fn(%s)\n", fallible ? "w" : "r", wrapTy, cgBufStr(&callArgs));
+        if (fallible) {
+            fprintf(ctx->out, "  %%code = extractvalue %s %%w, 0\n  %%r = extractvalue %s %%w, 1\n", wrapTy, wrapTy);
+            code = "%code";
         }
     } else {
-        fprintf(ctx->out, "  call void %%fn(%s)\n", cgBufStr(&callArgs));
+        fprintf(ctx->out, "  %s call %s %%fn(%s)\n", fallible ? "%code =" : "", fallible ? "i32" : "void", cgBufStr(&callArgs));
+        if (fallible) code = "%code";
+    }
+    if (code) fprintf(ctx->out, "  %%failed = icmp ne i32 %%code, 0\n  br i1 %%failed, label %%err, label %%ok\nok:\n");
+    //P1g: the result lands in the spawner's storage the instant the call returns. A plain store is all this can be -
+    //the types were required to agree exactly (SPAWN_RESULT_TYPE) precisely because there is no caller frame here to
+    //run a conversion or a promotion in
+    if (func->type.hasRetType) cgTaskStoreResults(ctx->out, *func->type.retType, viaMem ? "%rslot" : "%r", viaMem, nDst, dstIdx, "r");
+    fputs("  ret ptr null\n", ctx->out);
+    if (code) {
+        //P4a: the task's own clauses, in order - the first taking the error runs on this thread, and its default, when it
+        //gives one, is what the targets get. P4b: what none takes is the task's failure, carried to the join as the
+        //join's code for it (the trampoline's result, which the worker stores with the done flag)
+        fputs("err:\n  %ord = lshr i32 %code, 16\n", ctx->out);
+        bool all = false;
+        for (int c = 0; c < nClauses && !all; c++) {
+            struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
+            if (cc->catchAll) {
+                all = true;
+                fprintf(ctx->out, "  br label %%clause.%d\n", c);
+            } else {
+                fprintf(ctx->out, "  %%m%d.0 = icmp eq i1 0, 1\n", c);
+                int k = 0;
+                for (int i = 0; i < cc->matches.len; i++) {
+                    struct catchMatch* cm = ListGetIdx(&cc->matches, i);
+                    int ord = errorTypeOrdinal(func->type, cm->errType);
+                    if (cm->hasWord) fprintf(ctx->out, "  %%c%d.%d = icmp eq i32 %%code, %lld\n", c, i, ((long long)ord << 16) | cm->wordOrdinal);
+                    else fprintf(ctx->out, "  %%c%d.%d = icmp eq i32 %%ord, %d\n", c, i, ord);
+                    fprintf(ctx->out, "  %%m%d.%d = or i1 %%m%d.%d, %%c%d.%d\n", c, k + 1, c, k, c, i);
+                    k++;
+                }
+                fprintf(ctx->out, "  br i1 %%m%d.%d, label %%clause.%d, label %%next.%d\n", c, k, c, c);
+            }
+            fprintf(ctx->out, "clause.%d:\n", c);
+            if (clauseIdx[c] >= 0) cgTaskCallClause(ctx->out, cc, argVal[clauseIdx[c]], argVal[clauseIdx[c] + 1],
+                                                    op->cgTaskResultArg ? argVal[op->cgTaskResultArg - 1] : NULL, nDst, dstIdx, c);
+            fputs("  ret ptr null\n", ctx->out);
+            if (!cc->catchAll) fprintf(ctx->out, "next.%d:\n", c);
+        }
+        if (!all) {
+            char* jc = cgReencodeInto(ctx->out, "%code", &func->type.errors, s->joinErrors, "je");
+            fprintf(ctx->out, "  %%jc64 = zext i32 %s to i64\n  %%jcp = inttoptr i64 %%jc64 to ptr\n  ret ptr %%jcp\n", jc);
+        }
     }
     //P2a used to drain this thread's chunk pool here, because the thread was about to exit and take the
     //pool with it. A worker does not exit (P1e), so the pool stays and the next task to run on this
     //worker reuses it - the leak P2a fixed is gone by construction rather than by cleanup, and the
     //retained memory is bounded by the number of workers instead of the number of tasks.
-    fprintf(ctx->out, "  ret ptr null\n}\n\n");
+    fputs("}\n\n", ctx->out); //every path above returned
 }
 
 //P1: one task. Its bookkeeping - the env, any sub-scopes, the node holding the thread handle - all comes
@@ -5667,13 +5850,16 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
 void cgSpawn(struct cgCtx* ctx, struct statement* s) {
     if (!s->op || !ctx->joinTaskHead) return; //rejected in the checker (P1)
     struct list merges = ListInit(sizeof(struct cgScopeMerge));
-    cgSpawnTask(ctx, s->op, &merges, &s->spawnTargets);
+    cgSpawnTask(ctx, s, &merges);
 }
 
 //P1: "join { ... }" - an ordinary block whose end waits for every task spawned directly inside it. The
 //head lives in an entry-block alloca per depth, so a join nested in a loop re-arms rather than growing
 //the stack; cgBlockJoining emits the wait before the block's own arena is reclaimed.
 static void cgEnsureBlockSlot(struct cgCtx* ctx, int idx);
+//P4c: "try join" - every way out of the block that waited for a failed task comes to its handler, emitted after it at
+//the join's own level: the code is the earliest failure's, under the join's error list, and the statement's clauses
+//take it (R10), continuing after the statement, or it propagates
 void cgJoin(struct cgCtx* ctx, struct statement* s) {
     char* prevHead = ctx->joinTaskHead;
     int prevDepth = ctx->joinDepth;
@@ -5681,11 +5867,43 @@ void cgJoin(struct cgCtx* ctx, struct statement* s) {
     if (idx >= 0 && ctx->ownScopeSlot) cgEnsureBlockSlot(ctx, idx);
     char* head = (idx >= 0 && idx < ctx->joinPool.len) ? *(char**)ListGetIdx(&ctx->joinPool, idx) : NULL;
     if (head) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", head);
+    bool fallible = head && s->tried && s->joinErrors && s->joinErrors->len;
+    struct cgJoinFail jf = {0};
+    int id = ctx->lblCtr++;
+    jf.head = head; //one for every join, so that one which cannot fail shadows another at its depth (deferred code)
+    if (fallible) {
+        jf.lbl = StrFmt("join.fail.%d", id);
+        jf.slot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca i32\n", jf.slot);
+    }
+    ListAdd(&ctx->joinFails, &jf);
+    int joinFailsAt = ctx->joinFails.len - 1;
     ctx->joinTaskHead = head;
     ctx->joinDepth = ctx->blockDepth + 1;
     cgBlockJoining(ctx, &s->block, head);
     ctx->joinTaskHead = prevHead;
     ctx->joinDepth = prevDepth;
+    ctx->joinFails.len = joinFailsAt;
+    if (!fallible) return;
+    char* endLbl = StrFmt("join.end.%d", id);
+    if (!ctx->terminated) { //its end, which cgBlockJoining left the code of in the slot
+        char* c = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load i32, ptr %s\n", c, jf.slot);
+        char* failed = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = icmp ne i32 %s, 0\n  br i1 %s, label %%%s, label %%%s\n", failed, c, failed, jf.lbl, endLbl);
+        ctx->terminated = true;
+    }
+    cgLabel(ctx, jf.lbl);
+    char* code = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i32, ptr %s\n", code, jf.slot);
+    struct type jt = (struct type){0};
+    jt.errors = *s->joinErrors;
+    struct operand at = (struct operand){0};
+    if (!s->catchClauses.len || cgCatchDispatch(ctx, &at, &s->catchClauses, code, &jt, endLbl)) {
+        if (ctx->curFunc) cgPropagateError(ctx, jt, code);
+        else { fputs("  unreachable\n", ctx->fnOut); ctx->terminated = true; } //a test catches everything (R13)
+    }
+    cgLabel(ctx, endLbl);
 }
 
 //O2: one scope header, task-list head and unwind node per block nesting depth, alloca'd in the ENTRY block as the
@@ -5763,7 +5981,13 @@ void cgBlockJoining(struct cgCtx* ctx, struct list* block, char* joinHead) {
     //P1: the join happens before this block's arena is reclaimed - a task may still hold storage from it,
     //and its sub-scopes are folded back here too
     if (joinHead && !ctx->terminated) {
-        fprintf(ctx->fnOut, "  call void @__olang_join_tasks(ptr %s)\n", joinHead);
+        char* c = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i64 @__olang_join_tasks(ptr %s)\n", c, joinHead);
+        struct cgJoinFail* jf = cgJoinFailOf(ctx, joinHead);
+        if (jf) { //P4b: the earliest failure, for cgJoin to look at once the block is closed
+            char* e = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = trunc i64 %s to i32\n  store i32 %s, ptr %s\n", e, c, e, jf->slot);
+        }
     }
     if (slot) {
         //a block that ended in a return already closed this on its way out (cgCloseOwnScope)
@@ -6393,7 +6617,7 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
 //(cgFuncCall's fallible path, currently a hard failure, same as a failed assert()).
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
-    cgCloseOwnScope(ctx);
+    cgCloseOwnScopeWithError(ctx);
     char codeText[32];
     snprintf(codeText, sizeof(codeText), "%lld", code);
     cgRetErrorCode(ctx, codeText);
@@ -7796,6 +8020,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     ctx.emitUnwind = unwind;
     ctx.scopePool = ListInit(sizeof(char*));
     ctx.joinPool = ListInit(sizeof(char*));
+    ctx.joinFails = ListInit(sizeof(struct cgJoinFail));
     ctx.loops = ListInit(sizeof(struct cgLoop));
     ctx.defers = ListInit(sizeof(struct cgDefer));
 

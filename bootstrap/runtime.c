@@ -38,7 +38,8 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san);
  * rather than longjmping. A recovery point belongs to the stack that set it up, and a longjmp from a task
  * would restore the SPAWNER's stack pointer onto the task's thread while the spawner itself is still
  * parked in pthread_join on that very stack - two threads on one stack, which happened to appear to work.
- * There is nowhere on a task thread to recover to, for exactly the reason P4 gives for errors. */
+ * There is nowhere on a task thread to recover to (P6) - unlike an error, which a task hands to its join as a value
+ * (P4b), a failed check is a jump, and a jump has to land on the stack it was set up on. */
 void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan) {
     fputs(
         "declare i32 @printf(ptr, ...)\n"
@@ -271,7 +272,7 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //lifetime the bookkeeping needs, since the join happens before that scope is reclaimed. An alloca
         //would not do: a join block inside a loop would grow the stack by a node per task.
         "%olang.unwind = type { ptr, ptr, ptr }\n" //prev frame's node, this block's scope, its join head
-        "%olang.task = type { ptr, i64, ptr }\n"   //next, done flag, merge list
+        "%olang.task = type { ptr, i64, ptr, i64 }\n"   //next, done flag, merge list, error code (P4b: 0 when none)
         //P1e: a cached worker thread. It owns the mutex/condvar it parks on, so waiting for one task
         //never blocks another. glibc's PTHREAD_MUTEX_INITIALIZER is all-zero, which is what lets the
         //free-list lock below be a plain zeroinitializer; a worker's own pair is explicitly init'd.
@@ -1253,7 +1254,10 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  call i32 @pthread_mutex_unlock(ptr %m)\n"
         //S2: a crash in the task is reported as on any thread, a stack overflow included - once OnCrash has run
         "  call void @__olang_alt_stack()\n"
-        "  call ptr %fn(ptr %env)\n"
+        //P4b: what the task's trampoline returns is the error it lets through to its join (0: none), stored with the
+        //done flag below, under the lock that orders it for the joiner (P8)
+        "  %rv = call ptr %fn(ptr %env)\n"
+        "  %rc = ptrtoint ptr %rv to i64\n"
         //O8b: a worker about to park keeps at most a batch of its pool (1MB), the rest going where every thread can take
         //it - before the task is reported finished, so that what the task gave back is there for whoever its join lets
         //go on. Not a worker about to retire (P1f), which gives its pool back to the system instead: the load that made
@@ -1268,6 +1272,8 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //the task is finished the moment its call returns - report that first, so a joiner can proceed
         "done:\n"
         "  call i32 @pthread_mutex_lock(ptr @__olang_task_lock)\n"
+        "  %ep = getelementptr %olang.task, ptr %tk, i32 0, i32 3\n"
+        "  store i64 %rc, ptr %ep\n"
         "  %dp = getelementptr %olang.task, ptr %tk, i32 0, i32 1\n"
         "  store i64 1, ptr %dp\n"
         "  call i32 @pthread_cond_broadcast(ptr @__olang_task_cv)\n"
@@ -1376,7 +1382,9 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  call i32 @pthread_mutex_unlock(ptr @__olang_task_lock)\n"
         "  ret void\n"
         "}\n\n"
-        "define linkonce_odr void @__olang_join_tasks(ptr %headslot) {\n"
+        //P4b: returns the error of the task spawned earliest among those that failed, 0 when none did. The list is
+        //newest first, so the last failure the walk meets is that one
+        "define linkonce_odr i64 @__olang_join_tasks(ptr %headslot) {\n"
         "entry:\n"
         "  %head = load ptr, ptr %headslot\n"
         "  store ptr null, ptr %headslot\n"
@@ -1384,7 +1392,12 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  br i1 %nonone, label %done, label %task\n"
         "task:\n"
         "  %cur = phi ptr [ %head, %entry ], [ %tnext, %aftermerge ]\n"
+        "  %acc = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]\n"
         "  call void @__olang_task_wait(ptr %cur)\n"
+        "  %errp = getelementptr %olang.task, ptr %cur, i32 0, i32 3\n"
+        "  %err = load i64, ptr %errp\n"
+        "  %failed = icmp ne i64 %err, 0\n"
+        "  %acc1 = select i1 %failed, i64 %err, i64 %acc\n"
         "  %mheadptr = getelementptr %olang.task, ptr %cur, i32 0, i32 2\n"
         "  %mhead = load ptr, ptr %mheadptr\n"
         "  %nomerge = icmp eq ptr %mhead, null\n"
@@ -1404,7 +1417,8 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %tatend = icmp eq ptr %tnext, null\n"
         "  br i1 %tatend, label %done, label %task\n"
         "done:\n"
-        "  ret void\n"
+        "  %res = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]\n"
+        "  ret i64 %res\n"
         "}\n\n", out);
     fputs(
         //P2: a scope belongs to the thread that builds into it (its owner word). Every scope another thread can reach reaches
@@ -1653,7 +1667,7 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %nojoin = icmp eq ptr %j, null\n"
         "  br i1 %nojoin, label %closeit, label %joinit\n"
         "joinit:\n"
-        "  call void @__olang_join_tasks(ptr %j)\n"
+        "  call i64 @__olang_join_tasks(ptr %j)\n"
         "  br label %closeit\n"
         "closeit:\n"
         "  %sslot = getelementptr %olang.unwind, ptr %cur, i32 0, i32 1\n"

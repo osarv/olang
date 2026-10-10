@@ -1,0 +1,16 @@
+# check: fail error[P4a]: this clause takes an error the targets would get no value for - end it with 'default v', or end the process
+# P4a: with targets a clause is in value position - it gives the targets' values, or ends the process
+error E {
+    BAD
+}
+fn sq(n I32) I32 ? E {
+    if n < 0 { error E.BAD }
+    return n * n
+}
+fn main() ? {
+    r I32 = 0
+    hits mut Array<I32>& = Array<I32>(1)
+    join {
+        spawn r = try sq(-1) catch E { hits[0].AtomicAdd(1) }
+    }
+}

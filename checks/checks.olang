@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir", "crash", "scopesan", "capscope"]
+                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "spawnerr"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -255,6 +255,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
         case "capscope" { try capscope(r) }
+        case "spawnerr" { try spawnerr(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -996,6 +997,22 @@ fn typereview(r mut report&) ? Failed {
     try oneError(r, dir, "privmethod", "error[M6]: method")
     try oneError(r, dir, "privtype", "error[M6]: type")
     try oneError(r, dir, "lambdaalias", "is an import's alias in this module")
+}
+
+# P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land
+# where results do - the same built, built -d -s (where a use after a scope closed stops the program) and under -i, which
+# runs a join's tasks in sequence; and an error no clause takes leaves main as an unhandled error in all three
+test "failing tasks agree built, sanitized and interpreted" { assert passed("spawnerr") }
+
+fn spawnerr(r mut report&) ? Failed {
+    dir := fresh("spawnerr")
+    os.Run("cp checks/fixtures/spawnerr/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b tasks.olang > out.txt 2>&1") == 0, "tasks", dir)
+    try r.expect(sh(dir, "./build/tasks > b.txt 2>&1") == 1, "tasks did not end in its error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d -s tasks.olang > out.txt 2>&1") == 0, "tasks -d -s", dir)
+    try r.expect(sh(dir, "./build/tasks.debug.san > d.txt 2>&1") == 1, "tasks -d -s did not end in its error", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > i.txt 2>&1") == 1, "tasks -i did not end in its error", dir)
+    try r.expect(sh(dir, "cmp -s tasks.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "tasks output", dir)
 }
 
 # K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at

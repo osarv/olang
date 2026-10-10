@@ -933,7 +933,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   is a `byte[40]` and a `pthread_cond_t` a `byte[48]`, which X3 marshals to exactly the pointer pthread
   wants. Those sizes are glibc/x86-64 and a wrong one is silent corruption - the honest cost of having no
   way to name a foreign struct, and the strongest argument yet for extern gaining one.
-  A spawned function **may not declare errors** (P4): an error raised on another thread has nowhere to
+  (Superseded 2026-10-10 by decision 50, the entry "A spawned call may fail" near the end:) A spawned function **may
+  not declare errors** (P4): an error raised on another thread has nowhere to
   propagate, since the join carries no value and the spawner has left the call site. Runtime-wise a task is
   an OS thread (`pthread_create`/`pthread_join`, 1:1 rather than M:N) driven by a per-task trampoline that
   unpacks an env struct. That env, the task node and the merge records are all bump-allocated **from the
@@ -4702,6 +4703,47 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   program said `I16[]`. **S4c/O1b**: a parallel assignment's temporary for a global's reference field is held, and built,
   in the program's scope, as `G.next = Node(i)` builds it - it was refused. Not done: a parallel target through a `&p`
   field is refused with O17a/O25 where the single form says C2d - correct, worded worse.
+- **A spawned call may fail; a join that can fail is `try join` (P4/P4a-P4d replace the old P4, P1, P1g, R8, R10, D10a,
+  K1, 2026-10-10; decision 50, the user's QE "We need some way to make spawn functions fail ... Solve it", the shape
+  approved; details mine).** `spawn try f(a)`, `spawn x = try f(a) catch E default v`, `spawn try f(a) catch E { ... }`;
+  a fallible task without `try`, or `try` on one that cannot fail, is an error, as for any call (R8). **The clauses run
+  on the task's thread** (P4a): each is a lambda made where the spawn is, capturing as a spawned lambda does (D16c, P2),
+  called by the trampoline when the call fails with what it takes; it may not leave the task (no return, error, escaping
+  try, or loop jump out of it - `abort`, `unreachable`, `done`, `fail` end the process and may). **What no clause takes
+  reaches the join** (P4b): carried as the task's code, stored with its done flag under the lock that orders it (P8,
+  TSan-clean), the join waits for every task and then fails with the earliest-SPAWNED failure, the rest dropped, no
+  sibling stopped. **`try join { } [catch ...]`** (P4c) is R10's statement form with the join as what it tries; its error
+  set is what its tasks let through, judged at the declared-type level (R14); a join that can fail without `try`, and
+  `try join` on one that cannot, are errors. **P4d**: a target whose task fails is left unwritten, so a join holding one
+  has only clauses that leave. **Decided (mine)**: the clause syntax is a try-expression's (R9b/R11), clauses after the
+  call; several targets take one default per target, as a destructuring's try (`spawn q, r = try divmod(a, b) catch
+  default 0, 0`); with targets a clause gives a default or ends the process (R9a's rule, where leaving the task can only
+  mean that); a task's default holding references must build all it holds (`null`, text, constructor calls, enum cases
+and literals made only of such, never existing storage anywhere in it) - it is
+  built where the call's result lands (the clause lambda gets the task's result-scope stand-in), and existing storage
+  could not be matched to the targets' scope; **a join fails on every way out but an error already leaving** - its
+  failure replaces falling off the end, a `return` (value discarded), a `break` or `continue` (not taken) - which keeps
+  P4d's promise for code after a loop or a caller reading a target, while the block's own error wins when both happen;
+  the join's errors are its tasks' only, never its block's own statements'; `catch` clauses after a join without `try`
+  are parsed so the checker can say what is missing; a clause `catch E { }` makes no lambda at all (the error is simply
+  taken); D10a counts a join that leaves (its block leaves and every clause of its `try join` does). **How it is
+  built**: the task call is unchanged (arguments, P2, landing); each clause is a hidden local holding its lambda, made in
+  the spawn's `if true` wrapper as a spawned lambda's is, its code and environment captured in the task env; the
+  trampoline dispatches on the code with the callee's ordinals, stores a clause's value as the call's, and returns what
+  is left re-encoded under the join's list (`cgReencodeInto`); `%olang.task` gained the error word and
+  `__olang_join_tasks` returns the earliest (the list is newest first, so the last failure the walk meets);
+  `cgLeaveBlocks` diverts a way out of a failed fallible join to the join's handler (`cgLeaveJoin`) unless an error is
+  leaving (`leavingWithError`); the evaluator binds each clause where the spawn is, runs it at the join on the task's
+  failure, keeps the first failure and fails the join with it (baked globals and decided asserts agree with the run
+  time, `-i` too). **Found and fixed on the way, pre-existing (P1g)**: `spawn s = f()` with `f` returning a value
+  `String` (any run-time-length array value) stored the result's `{length, storage}` as built - in a stand-in of the
+  JOIN block's scope, reclaimed at its end - so `s` read freed memory (the scope sanitizer caught it; master too): such
+  a result is now landed where the target's own storage is (`spawnTargetTakesStorage`). Tests: shared.olang's P4
+  section (evaluated while compiling and at run time, earliest wins, clauses, several targets, defaults holding
+  references read after a churn, return/break/continue replaced, deferred code, nested joins and lambdas, the default
+  error, D10a, an early `done`), std/chan's cancelled `RecvUntil`, 17 `checks/cases/p4*`, and the `spawnerr` scenario
+  comparing `-b`, `-b -d -s` and `-i` on one program (and its unhandled error); `-r` run by hand, clean.
+
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
