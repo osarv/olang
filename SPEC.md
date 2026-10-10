@@ -239,7 +239,9 @@ if the next non-whitespace input is a newline or a comment (L4), the tokenizer s
 implicit end-of-statement token before continuing - except inside brackets (L18a). This token has no literal spelling; it exists
 only in the token stream produced by the tokenizer, and appears in the grammar as `STMNT_END`
 wherever a rule below requires it. It stands at the end of the line it ends - just past that line's last token - and
-a diagnostic about one names that line, as "end of line".
+a diagnostic about one names that line, as "end of line". There is no `;`: one written as C writes it is a compile-time
+error, which - after one of the tokens above, outside brackets - also ends the statement, so what follows it on the line
+is read as the next statement and not reported again.
 
 **L18a (brackets).** Inside parentheses or square brackets a newline ends nothing: L18 synthesizes no end-of-statement
 while the innermost bracket open at that point is a `(` or a `[`. A `{` opened inside them - a lambda's body, a `match`
@@ -912,8 +914,11 @@ parameter (below). A read-only copy:
 
 A **written type declares a writable value**, so `x List<I64> = G` from a read-only `G` is an error: `x := G` is the
 read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is made by the type (`G.Clone()`) or from
-its parts. A fresh value - a call's result, a literal, an instance - is writable as always, and so is a copy of
-anything reached writably.
+its parts. A fresh value - a call's result, a literal, an instance - is writable as always (save the call results
+below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
+written, so it is never a read-only copy (`Copy mut List<I32> = G` is an error; an immutable global may hold one). A
+**slice** or a **view** (`as Array<T, N>&`) of a read-only copy, and a loop's walk over one, read the copy: what they
+give is read-only, as indexing it is.
 
 A **by-value parameter** is the callee's own copy (D9), and whether that copy must be writable is read off the
 callee's **body**: a parameter whose copy the body writes through, lends writably or stores - or passes to a callee
@@ -922,6 +927,18 @@ read-only copy to it is an error at the call; any other accepts either. A functi
 function, a lambda (D16), a type's `Call` (E31) - may have no such parameter, since a call through a function value
 cannot see whose body it reaches. A constructor is a callee like any other: a field punning a parameter keeps it, so
 the argument must be writable.
+
+A **generic's read-only reference parameter** (`fn (l List<T>&) At(i I64) T`) reaches values that hold writable
+references in some instantiations and not in others, and its declaration cannot say `mut` for some only. In an
+instantiation, what is copied out of what such a parameter reaches - through any number of references and of locals
+(by every value assigned to them), and through calls handing back what their own such parameters reach - is as
+read-only as the **argument** a call gives it: a by-value **result** copied out of it is a read-only copy at a call
+whose argument is reached read-only, and writable where the argument is (so `ls[0]` on a read-only
+`List<List<I32>>&` is a read-only copy, as `for x in ls` gives, and `Map.Get` on a read-only map likewise); and where the
+body **keeps** such a copy writable - stores it where it can be written (`Clone`, `ToArray`, `ToList`, `Filter`), lends
+it writably, or passes it to a callee that does - the parameter takes only a writable argument, an error at a call
+passing a read-only one. Settled once every body is checked; where the element type holds no writable reference,
+nothing of this applies.
 
 This is permission in the type checker only: it changes no value and no run time, and the evaluator (K1) is
 unaffected by it.
@@ -1381,12 +1398,16 @@ own type:
 - a value **array** - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
   the lambda holds a read-only reference to the variable's own storage, sees later writes to it, and lives no
   longer than it (D16d);
-- a value holding references cannot be captured; a reference to it is captured instead.
+- a value **holding references** is copied too, read-only, with the scope its references live in - as a by-value
+  parameter holding references has one (O4b) - carried with the copy: the references in the copy still name what
+  they named, and the lambda lives no longer than that (D16d). Only reading it is ever possible, so nothing is built
+  through it: `x := Reading(name, 1.5); m.Update(k, 0.0, fn(v F64) F64 { return v + x.Value })`.
 
 A lambda's parameters and locals may not reuse the name of a variable it could capture.
 
 **D16d (where a lambda lives).** A lambda's value is a reference to what it captured (T21). One capturing no
-reference is built where it lands, as any temporary is (E12c). One capturing references lives where they do:
+reference is built where it lands, as any temporary is (E12c). One capturing references - or values holding them
+(D16c) - lives where they do:
 in their one scope, or - when they live in several - in the innermost block among them, or else the block it is
 made in; one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
 instead, each scope it captures from required to outlive that - an obligation of the function (O10b) where it is
@@ -2113,7 +2134,8 @@ would be a cost the code does not show. Division is the exception, by E6a.
 **E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
 (T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value, or a conditional of
 literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
-float) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
+float; for a conditional, the widest of its values' own types, each value - a literal-only expression, a shift among
+them, computed exactly as E4a computes it - then adapting to that type) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
 type's. So with `b` a `U8`, `b + 300` is an `I32` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
 `I32`, `0x7FF0000000000001 * one` is an `I64`; with `g` an `F32`, `g + 1e300` is an `F64`. Where the other operand's
 type does not flow into the literal's own type - `u - (-1)` with `u` a `U32`, since a `U32` flows only into an `I64`;
@@ -2329,9 +2351,17 @@ linear in the result however many pieces there are. A `:=` declaration takes its
 no errors, and a receiver that is not `mut`. Any other method named `Str` or `str` taking no parameters is a
 compile-time error; one taking parameters is an ordinary method (E31), and `$` renders the type's values as it would
 with none declared. `Str` must have no effect a program could observe: it must be evaluable at compile time in the
-sense of K1a, and a `Str` that is not is a compile-time error naming what stops it. That is what lets a rendering
-call it as often as building the text needs - once to measure, once to write, or not at all when the text is
-computed while compiling - with nothing to tell the difference.
+sense of K1a, and it may **write nothing that was there before it ran** - no store, increment or atomic through a
+reference whose referent the call did not make (a parameter's, a capture's, the program's, one not known here), and
+no call that writes such storage through an argument it is given or through a function value whose body is not known
+there (settled over every call once every body is checked). A lambda the function makes is judged as part of it: calling
+it does what its body does, a write through one of its captures counting where what the capture copies reaches such
+storage. A `Str` that does either is a compile-time error naming
+what stops it. What `Str` builds for itself - a local list, a `StringBuilder` - it may change freely. That is what lets
+a rendering call it as often as building the text needs - once to measure, once to write, or not at all when the text
+is computed while compiling - with nothing to tell the difference. And since `$` renders read-only values too (an
+immutable global, a part of a read-only reference, T25c), a by-value receiver of `Str` is one that takes a read-only
+copy: one whose body lends what it holds writably, or keeps it, is a compile-time error.
 
 ### 5.3 Assignability ("fits")
 
@@ -2607,7 +2637,9 @@ O18) to where that variable lives (O4a); `return` binds it to the calling functi
 holding a global's referent — is a compile-time error here: a result reaches that scope by being put there,
 assigning it to a global or into something reached from one (O1b), not by a scope argument. So is a variable whose
 scope is not known (O12). On a constructor call it is where
-the instance lands (C2c). Without one, the result scope follows the result (O18a).
+the instance lands (C2c). Without one, the result scope follows the result (O18a). A call whose several results are
+destructured (S4b) is the same: `rec, next := mk2&rows(k)` builds the results where `rows` lives, and what each target
+holds lives there, so `rows.Push(rec)` keeps it.
 
 The `&` must be **adjacent** to what precedes it and the `IDEN` adjacent to the `&` — no whitespace or
 comment anywhere in the run, and all on one line. Without that requirement `f&a(x)` could not be
@@ -2749,6 +2781,42 @@ The same name with a **lowercase first letter** (`plus`, `at`, ...) is the opera
 module (M6b): there the operator calls it, and anywhere else the operator is an error naming it. A type declaring an
 operator by both names is an error. None of them may declare errors except `Call`, which stands for a function
 and is called `try f(x)` when it can fail.
+
+**E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element. A **store** through
+it - a field (or an inline element) of it assigned, `x[i].f = v` or `x[i].f op= v`; an increment `x[i].f++`; an
+element of it assigned, `x[i][j] = v` - is a **read-modify-write** with nothing run between the read and the write:
+first the place is held - `x` as a place and each index evaluated once, left to right; then the value is evaluated (a
+compound assignment's operand, held); only then is the element read through `At` into a hidden local as `t := x[i]`
+would read it, the store made into that local, and the local written back through `SetAt` (`x[i] = t`). A collection
+read out of another (`l[i][j].f = v`, `rows[0][1] = v`) is read and written back the same way one level out, after the
+inner write-back. A write through a reference read out of `x[i]` is not a write into the element and is unchanged (it
+goes where the reference points). Under `try` (R21) the read is checked as `try x[i]` is and the write-back as
+`try x[i] = v`. A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
+compile-time error naming `SetAt`. The element is read and written after the value is computed (S4), so a value that
+shrinks the collection leaves the held index out of range when the access runs - the program's out-of-range index
+(E16e), unchecked unless the store is written under `try`.
+
+**A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
+an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])`, where the element is
+not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
+so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
+`x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
+read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call.
+
+**A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
+by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked
+body) a call on `x[i]`, on a field of it, an element of one read out of another, or on any call's value result giving
+one - `users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden
+local, lent as its reference: what the callee builds is built where the handle's state lives, and nothing is written
+back. A store into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner
+collection's `SetAt` on such a copy. A callee that uses the handle otherwise - assigning its own field (`b.s =
+State()`), keeping it - would write the copy, and is E31b's error as for any element. Spawned, such a copy would be
+held in the spawner's block, which closes (or is made again by the next turn of a loop) before the join, and is a
+compile-time error: the task is a function taking the collection that calls `x[i].M(...)` itself. What a copy's
+references hold is checked as for any such copy (O17): a store that lends the copy to a call that can build into what
+the element holds (an element type's `SetAt` pushing onto a `List` field of the copy) would build where the copy is,
+and is an error saying to hold the elements by reference or to make the copy where the collection lives (`t mut T&l =
+l[i]`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an error.
 
 **E31a (checked forms).** An operation that can fail has a **checked form**, a method of its own named with `Try`:
 `TryAt`, `TrySetAt`, `TrySlice`, `TryPlus`, `TryMinus`, `TryMul`, `TryDiv`, `TryRem`, `TryMatMul`, `TryNeg`,
@@ -2926,7 +2994,10 @@ anything else on the left of an assignment operator is a compile-time error.
 An assignment is evaluated **left to right**: first the target's **place** - the subexpressions of `lvalue` as
 written, its base before its index, outermost base first - then `expr`, then the store. So in `a[next()] = next() * 10`
 the index is the first call and the value the second, and a value whose evaluation changes what the target's base
-refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1).
+refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1). Where the
+place is an element reached through `At`/`SetAt` (E31, E31b) the element itself is read and written only after the
+value is computed: an index held while it was in range is the program's index when the access runs, so a value that
+shrinks the collection makes it an out-of-range index (E16e) - checked only under `try`.
 
 **S4d.** A **value** place - one an assignment writes over where it is (T11b), not a reference, which `=` repoints
 (S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
@@ -2935,9 +3006,13 @@ compared - reached with no reference followed), takes the place's **old value**:
 where a temporary in that position would be (O18a), and the borrow names the copy. It applies where what the value
 builds can keep the borrow - an enum case's payload, a constructor field holding the argument (C2d), an array literal's
 element, the result of a call whose body can hand the argument back in it (O14c, O10b) - so `x = E.Neg(x)` is the
-negation of the old `x`, `n = Node(n)` puts the old node behind the new one, and no assignment makes a value hold its
-own storage. The same holds for the targets of a parallel assignment (S4c) and of a spawn (P1g). A reference written in
-the value is the program's own: with `r` a reference to `x`, `x = E.Neg(r)` makes the cycle it says.
+negation of the old `x`, `n = Node(n)` puts the old node behind the new one, and no assignment makes a value hold the
+storage it **names**. A compound assignment and an increment are the assignments S5 and E31 define them as, so the same
+holds for them: `x += E.Lit(2)` through a `Plus` keeping its receiver adds to the old `x`, and so does `x++` through `Inc`
+or `Plus`. The same holds for the targets of a parallel assignment (S4c) and of a spawn (P1g). The place is told by the
+names written, never by where references lead: storage reached through a reference - `r` a reference to `x` in
+`x = E.Neg(r)`, or `q.a` where `q` and `p` name one instance in `p.a = E.Neg(q.a)` - is the program's own, and makes the
+cycle it says.
 
 **S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
@@ -3187,7 +3262,8 @@ payload holds, and `Type.Case(p, ...)` matches it when each position of its payl
 naming every field. A position is one of:
 - a **name**: a fresh local bound to a copy of that field, visible to the clause's guard and body only, and
   assignable as any local is (D11) - an identifier there is always a binding, never a value read, so the form never
-  means "compare against a variable";
+  means "compare against a variable". Its storage is the clause's, as a local of the clause body is: a borrow of it does
+  not leave the clause;
 - `_`: the field, ignored;
 - a nested **pattern**, naming a case of the enum that field holds (S13d);
 - a **literal** (or a negated number), compared with that field by `==` as a value alternative is (S13d).
@@ -3467,7 +3543,22 @@ allocates into a private arena of its own standing in for that scope, and the sp
 into the scope it stands for after the join - the scope the call bound that variable to, exactly as for an ordinary
 call (§8 O17, O18a), never the join block merely because the spawn is written in it. The program's scope (§8 O1b) is
 such a scope for every task: whatever a task builds there - a result borrowed from a global, a value assigned to one -
-goes into its own stand-in for it, folded into the spawner's at the join. A value a task allocates through such a scope therefore lives
+goes into its own stand-in for it, folded into the spawner's at the join. So is the scope of every reference a **function
+value** a task is handed captured (D16c): a spawned lambda (D16e), or a lambda passed as an argument, builds through what
+it captured into the task's own stand-in for that reference's scope, never into the spawner's arena from the task's
+thread. `os.RunOnStack` runs its function the same way, its thread building into stand-ins folded in when the function
+returns. What a task makes or is handed may outlive it - a closure capturing a reference it was handed, a function value
+it returns through a spawn target or stores - so a stand-in lives as long as the scope it stands in for and, once folded,
+**forwards** to it: whatever builds through it afterwards builds in that scope, on whichever thread then owns it, and a
+later task's stand-in whose parent is such a stand-in is folded into the scope it forwards to. The
+function value a task is handed is the same value it was (`is` holds between the two), and one spawn hands one function
+value once however many of its arguments reach it. A capture living in the program's scope is that scope as the thread
+calling the closure reaches it. A task **calls no function value held in what it is handed** - in a field, an element or
+a payload, through references too - nor does a spawned lambda through one held in what it captured: such a function
+value is called on the task's thread with the scopes it captured as they are, and would build into them beside the
+thread that owns them. Handing the function value itself as an argument stands it in. Whether a task calls one is read
+off its body, and the bodies it hands such a value to, once every body is checked. A value a task allocates through such
+a scope therefore lives
 exactly as long as that scope, and is reachable from the spawner once the block ends, while no arena is
 ever bumped by more than one thread. Destructors registered on a task thread run when the scope they were
 registered with closes, ahead of those registered before the spawn.
@@ -4145,7 +4236,10 @@ reference is read rather than assigned - through alternatives of a `match` bindi
 (S13c), or through anything else whose scope was not traced - **where it lives is not known**: it may be read,
 walked and compared, but it never equals an exact scope (O25), never determines a scope variable of a parameter
 through which something can be stored (O25g) or which a borrowed result names (the callee could build there), and a
-scope argument (E25) may not name it.
+scope argument (E25) may not name it. Nothing new is built into a place holding such a reference by value either - a
+value local copied from a conditional or a match whose values' references live in different scopes, say: what is
+assigned there is a value whose references already live somewhere, never a temporary, since a temporary would be built
+in one scope and kept where the place's references really are.
 
 **O20.** A bare reference slot reached **through** a reference-shaped container — a field or element of a
 value that is itself `&`-marked — lives in the **container's** scope (O5), not in the scope of the function
@@ -4208,7 +4302,13 @@ value where it dangles. Accordingly:
   references are where its initializer put them - its own block for a result or an instance built there (O18a), where
   its initializer's are when it is a copy of one that already lives somewhere, whether the declaration writes its type
   or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), where the referent is for a
-  copy out of a reference (`d Box = r`, O20), the program's scope for a copy of a global's - while the local's own
+  copy out of a reference (`d Box = r`, O20) - whatever expression gives the reference: a call's borrowed result, a
+  method's, a `try`, a conditional or a match of references, an assignment's value, a loop's initializer, a reference
+  handed to a by-value parameter (O4b's scope variable binds to the referent's scope), a constructor's argument or an enum
+  case's payload (C2d, T17c), a match binding or an `as` of a payload held by value - the program's scope for a copy of a
+  global's, and, for a conditional or a match whose values' references live in different scopes, one not known here
+  (O12) - a member, an element or a payload read out of a conditional or a match included (`(w1 if c else w2).b`,
+  `(e1 if c else e2) as E.A`), whose references are where that value's are - while the local's own
   storage is its block, and such a value is not held by reference (O17a). That is a claim, as a reference local's scope is:
   assigning such a value from one that already lives somewhere requires the source's references to outlive the
   target's - a copy's being where its claim says - and to be exactly in its scope where something can be stored through
@@ -4245,7 +4345,8 @@ of the body (O10a), and a relation between it and another scope variable is an o
 nothing is built into it (C2d's restriction on such a field): a result that would land in one, or a callee that may
 build into a parameter given one (it can write the parameter, or its borrowed result names it), reaches instead the
 scope the field was read through, which the derived scope outlives; and a temporary put where a derived scope's
-referent lives, or a scope argument naming one, is a compile-time error. At each call it
+referent lives, a scope argument naming one, or a copy out of such a field handed by value to a callee that can build
+through what it holds (the copy's references being where the field's referent is), is a compile-time error. At each call it
 is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
 parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
@@ -4378,7 +4479,16 @@ so a loop measuring each line it reads into a returned summary (`line := next();
 s.best = v }`) leaves each line in the loop's block. A local holding no reference whose own storage can
 be borrowed - text, an array, a struct - flows the same way through what borrows it: a view of it, or a reference field
 given it, flowing into what is returned (`s := a[1:4]; return V(s)`, `h.name = a; return h`) puts it in the result scope
-too; stored anywhere else it stays in its block. So the recursive-descent and Pratt idioms are correct as written:
+too; stored anywhere else it stays in its block. A `for ... in` over it is followed: the loop's element is an element of
+what it walks, read out, so where the body puts the element is where the collection's elements go - `for p in all {
+out.Push(p) }` with `out` returned is `out.Push(all[i])` - unless the element can hold no reference (a character of
+text), which carries nothing of it. A local declared from a call whose result holds what an
+argument living in a block of this function refers to (the callee holds that argument's scope to outlive its result
+scope, O10b - `l := groups.Get(k)`, `groups` a local) is not moved by such a flow: its result cannot live where the function's does,
+and the move would only make an error of what is correct in the block. Returned **directly** - `return l`, or as a
+value the return reads it into - it is moved all the same, and the callee's obligation then makes the call an error
+(O10c): `l := try groups.Get(k); return l`, `groups` a local, would hand back the local map's state. So the recursive-descent and Pratt idioms are
+correct as written:
 
 ```
 fn (p mut Parser&) expr(minPrec I64) Expr& {
@@ -4473,7 +4583,9 @@ element, through any depth - by an assignment, or as a spawned task's result, P1
 that region that can be stored through (the caller could then build through it), or when it passes the region on to a
 call that does either - a fixed point over the program's calls, every call taking part whether the callee's body was
 checked before it or after, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is
-not known keeps everything. Only what is read out of the region by following a reference from the parameter brings in
+not known keeps everything. What a body does is the **function's own**: each instantiation of a generic (G16) is
+answered from its own body, so `List<String&>.At` handing nothing out is not made to hand its region out by
+`List<List<String&>>.At` doing so, whatever order the program uses them in. Only what is read out of the region by following a reference from the parameter brings in
 nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the
 storage it is - its inline fields and elements, a view of them (`b`, `b.data`) - are the lent value, which may live
 elsewhere than its references, so storing one of them into the region is a store like any other. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
@@ -4491,7 +4603,10 @@ reference parameter (whose instance keeps it, which counts as handing the region
 where something can be stored through what the value holds (O25g, by its type), read-only or not: a reference to a value
 takes everything reached through it to live where the value does (O20), so building through `br.head.next` would build
 in the copy's block and hang the result off the source's node. The value itself is written through instead
-(`b.head.next = Node()` builds where `b`'s references live, O25h). `for x in b.items` over such a value walks it through a
+(`b.head.next = Node()` builds where `b`'s references live, O25h). Nor is such a value **sliced** (E16a) or **viewed**
+(`as Array<T, N>&`, E32b) where something can be stored through it: a slice is a reference to its storage, and is held,
+returned and passed as any reference is, so it would carry the storage's scope away from where the references live -
+its elements are indexed in place instead (`b[i]`), or the whole value lent to a call. `for x in b.items` over such a value walks it through a
 reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,
 judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
 lives where the value's references do.
@@ -4567,7 +4682,16 @@ not in the loop body. A value local so declared keeps its references where its r
 out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
 `for ... in`, lands the same way before anything else is bound - `adj[a].Push(v)` and `for x in adj[a]` are
-`inner := adj[a]` followed by the call or the loop. A statement nested in another - in a catch clause's block, a
+`inner := adj[a]` followed by the call or the loop - and so does a call whose result a field, an element or a slice is
+read out of: `for x in l[0].tags` lands `l[0]` as `t := l[0]` would. A **value** result so landed holds what its
+callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
+landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
+with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(rec.Clone())` for a loop's list `rec`
+- never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
+element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
+result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
+`p := pair(t); bs.Push(p.a)`, an error on the same terms. A statement
+nested in another - in a catch clause's block, a
 lambda's body - discharges its own obligations at its end and leaves the enclosing statement's to its end, so
 `n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.
 
@@ -4693,7 +4817,13 @@ whose body is being checked when its call is (a call inside its own body) binds 
 (C2a), so what its body allocates at its top level is allocated where the instance lands (C2c), never in a scope that
 closes at its return: a field's referent, what a call through a field builds while the constructor runs (`items.Push(6)`
 growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
-own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2).
+own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
+but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
+instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
+its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
+given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
+is a copy into the instance, which a reference field may be given.
+What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
 
 ```
 type Box struct(v I32) { inner Point& = Point(v, v) }   # inner lives wherever the Box does

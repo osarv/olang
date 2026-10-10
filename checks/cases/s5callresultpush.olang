@@ -1,0 +1,14 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# O18c: a call's value result holding what its argument refers to, passed straight to another call, lives where that
+# argument does - here the loop's block, which the list outlives ("b := box(t); bs.Push(b)" is the same error)
+type Box struct(s String&) { s }
+fn box(s String&) Box { return Box(s) }
+
+fn main() ? {
+    bs := List<Box>()
+    for k in range 4 {
+        t := $k "-text"
+        bs.Push(box(t))
+    }
+    for b in bs { println(b.s) }
+}

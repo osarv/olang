@@ -1,0 +1,7 @@
+# check: fail error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written
+# T25c: Filter copies the elements it keeps into a new array, writable
+fn f(ro Array<List<I64>>&) I64 {
+    return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
+}
+fn main() ? {
+}

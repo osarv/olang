@@ -1,0 +1,11 @@
+# check: fail error[P2]: this task calls a function value held in what it is handed
+# P2 (decision 40): likewise a spawned lambda capturing a value that holds one
+type H struct(f fn(i I64)) { f }
+fn main() ? {
+    a mut List<I64>& = List<I64>()
+    ha H& = H(fn(i I64) { a.Push(i) })
+    join {
+        spawn fn() { for i in range 10 { ha.f(i) } }
+    }
+    println($a.Len())
+}

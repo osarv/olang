@@ -1,0 +1,15 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a "mut" method on a field of x[i], and on an element of an element, is a call on the copy too
+type Pt struct() {
+    X I64 = 0
+}
+fn (p mut Pt&) Move(dx I64) { p.X += dx }
+type Acc struct() {
+    In Pt = Pt()
+}
+
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l[0].In.Move(4)
+}

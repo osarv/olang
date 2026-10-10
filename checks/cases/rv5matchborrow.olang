@@ -1,0 +1,19 @@
+# check: fail error[O25]: a reference never narrows
+# S13/O25a (review of rv3fix, #3): a value match binding is a local of its clause - a borrow of it does not leave the clause
+type P struct(v I64) { v }
+type E enum {
+    A(p P)
+    Z
+}
+fn borrow(b P&) P&b { return b }
+fn main() ? {
+    keep P& = P(0)
+    for i in range 3 {
+        e := E.A(P(i + 10))
+        match e {
+            case E.A(y) { if i == 0 { keep = borrow(y) } }
+            case _ { }
+        }
+    }
+    println($keep.v)
+}

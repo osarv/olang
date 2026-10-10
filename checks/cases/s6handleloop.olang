@@ -1,0 +1,41 @@
+# check: run
+# flags: -s
+# E31b/O17b (study 6, r01): a call on a handle element in a loop - a List in a List, a List field of a struct element,
+# the List a Map gives - and a store into an element of one, builds where the handle's state lives, not in the loop
+# body's arena; read back after a churn
+type Box struct(v I64) {
+    v
+    items mut List<I64>& = List<I64>()
+}
+
+fn main() ? {
+    users := List<List<I64>>()
+    boxes := List<Box>()
+    m := Map<I64, List<I64>>()
+    for i in range 5 {
+        users.Push(List<I64>())
+        boxes.Push(Box(i))
+        m.Put(i, List<I64>())
+    }
+    for i in range 5 {
+        for j in range 20 {
+            users[i].Push(i * 10 + j)
+            boxes[i].items.Push(i * 100 + j)
+            (try m.Get(i)).Push(i * 1000 + j)
+        }
+    }
+    names := List<List<String&>>()
+    for i in range 5 {
+        names.Push(List<String&>())
+        names[i].Push("init")
+    }
+    kept := "kept-text-of-moderate-length"
+    for i in range 5 {
+        names[i][0] = kept
+        users[i][0] += 1
+    }
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    assert names[4][0] == kept and users[3][0] == 31
+    assert users[3].Len() == 20 and users[3][19] == 49 and boxes[3].items[19] == 319 and (try m.Get(3))[19] == 3019
+}

@@ -1,0 +1,20 @@
+# check: run
+# flags: -s
+# E31b/P2: the spawned form of "users[i].Push(v)" is a function taking the collection, one task per inner list - what
+# it builds is built where the inner lists' state lives, so it is there after the join and an arena churn
+fn pushTo(users mut List<List<I64>>&, i I64) {
+    for j in range 20 { users[i].Push(i * 100 + j) }
+}
+
+fn main() ? {
+    users := List<List<I64>>()
+    for i in range 4 { users.Push(List<I64>()) }
+    join {
+        for i in range 4 { spawn pushTo(users, i) }
+    }
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    t I64 = 0
+    for u in users { t += u.Len() }
+    assert t == 80
+}

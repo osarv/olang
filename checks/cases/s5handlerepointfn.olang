@@ -1,0 +1,15 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b/O17b (G2): the same through a function taking the handle by a writable reference, declared after its caller
+type State struct() {
+    n I64 = 0
+}
+type Bag struct() {
+    s mut State& = State()
+}
+
+fn main() ? {
+    bags := List<Bag>()
+    bags.Push(Bag())
+    resetFn(bags[0])
+}
+fn resetFn(b mut Bag&) { b.s = State() }

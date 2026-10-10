@@ -512,6 +512,8 @@ static bool canStartToken(TokenCtx tc) {
     return false;
 }
 
+static bool insideBrackets(TokenCtx tc);
+bool stmntEndTriggerType(enum tokenType type);
 //matches the longest literal operator/punctuation rule starting at the char just fed
 enum tokenType tokenizeOperator(TokenCtx tc) {
     int startIdx = tc->charIdx -1;
@@ -535,6 +537,12 @@ enum tokenType tokenizeOperator(TokenCtx tc) {
             if (!tc->reportedCR) ErrSyntax(charSpan(tc, startIdx, 1), ERR_CARRIAGE_RETURN);
             tc->reportedCR = true;
             return TOK_NONE;
+        }
+        //L18: a ';' written as C writes it - said as that, and where a statement could end it ends one, so the statement
+        //after it on the line is read as the next one rather than reported again
+        if (c == ';') {
+            ErrSyntax(charSpan(tc, startIdx, 1), ERR_SEMICOLON);
+            return !insideBrackets(tc) && stmntEndTriggerType(tc->lastTokType) ? TOK_STMNT_END : TOK_NONE;
         }
         while (!atEnd(tc) && !canStartToken(tc) && peekChar(tc, 0) != '\r') feedChar(tc);
         struct token run = charSpan(tc, startIdx, tc->charIdx - startIdx);

@@ -1,0 +1,14 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# E31b/O17b (G1): the same through the List a Map gives - "(try mm.Get(0))[0].Push(t)" - and through a plain function
+fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }
+
+fn main() ? {
+    mm := Map<I64, List<List<String&>>>()
+    mm.Put(0, List<List<String&>>())
+    (try mm.Get(0)).Push(List<String&>())
+    for k in range 3 {
+        t := $k "-loop-text"
+        (try mm.Get(0))[0].Push(t)
+        pushFn((try mm.Get(0))[0], t)
+    }
+}

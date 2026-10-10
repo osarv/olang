@@ -1,0 +1,18 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# O25h/C2d: a reference handed to a constructor's by-value parameter is a copy of what it names, its references where the
+# referent's are - so an instance built in this block from it would hold them past where they live (it built through them
+# here, in the callee's own block)
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type H struct(b Box) { b }
+fn viaCtor(r mut Box&) {
+    h := H(r)
+    h.b.head.next = Node()
+}
+fn main() ? {
+}

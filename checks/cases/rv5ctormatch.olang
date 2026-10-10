@@ -1,0 +1,26 @@
+# check: fail error[O25]: a reference never narrows
+# C2g/O2 (review of rv3fix, #3): in a constructor, a match binding is no longer read as the instance's scope - its first nested block was depth 1, read as the top level
+type P struct(v I64) { v }
+type E enum {
+    A(p P)
+    Z
+}
+fn borrow(b P&) P&b { return b }
+fn deep(n I64) I64 {
+    a := Array<I64, 64>()
+    for i in range 64 { a[i] = -7 }
+    if n == 0 { return a[3] }
+    return deep(n - 1) + a[5]
+}
+type H struct(e E) {
+    keep P& = P(0)
+    match e {
+        case E.A(y) { keep = borrow(y) }
+        case _ { }
+    }
+}
+fn main() ? {
+    h := H(E.A(P(42)))
+    deep(50)
+    println($h.keep.v)
+}

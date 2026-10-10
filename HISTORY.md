@@ -13022,6 +13022,213 @@ p) }` over an array of `Map`s compiles, since `merge`'s `for e in from` is `from
 `of.s` (the token scan had refused every `for`) - `o17bloopcopy` runs it after a churn, and `o10cloopcopy` keeps the
 limit and its note for a struct holding a count beside its map, which is no handle.
 
+### A soundness review of the night's merges, fixed (P2, O25h, O17a, O12, E4a/E6d, T25c, E11c, S4d, O18a, B11, 2026-10-10)
+
+A read-only review of rvfix, rv2fix and qc reproduced ten findings, each with a program reading memory back after an
+arena churn or comparing `-b`, `-d` and `-i` (valgrind sees none of them: a dead block's chunk goes back to the pool,
+not to malloc). All are fixed, with corpus tests in shared.olang (the `rv3` section, each baked while compiling and
+compared with the run time), must-fail programs in checks/cases (`rv3*.olang`) and two `-d` run cases.
+
+1. **A spawned lambda built into the spawner's arena from the task's thread** (pre-existing). P2 gave a spawned *call*
+   a stand-in for every scope variable it was handed, but `spawn fn() { ... a.Push(N(i)) ... }` reached `a`'s scope
+   through its closure, whose environment held the spawner's block scope - four tasks bumped one arena: segfaults, or
+   thousands of overwritten elements; `-r` reported races in `listState.grow`. The fix is in the runtime, where the
+   closure is: an environment now starts with a header - how many scope pointers it holds, how many function values,
+   its size - followed by the scopes, then the captured function values, then the other captures
+   (`cgEnvScopeField`/`cgEnvValueField`), and `__olang_env_standin` copies an environment into the join block's arena
+   with a fresh sub-scope for each scope pointer (recursively for captured function values), chaining each onto the
+   spawn's merge list, which `__olang_join_tasks` folds into the scope it stands for after the join. A spawn records
+   the environment's chain in a slot of its own, since a lambda's scope count is not known where the spawn's static
+   merge list is built. `os.RunOnStack` stands in the same way, folding when its thread is joined. `E31`'s Call adapter
+   environment took the header too. The review's other shapes - a closure made inside a task capturing a spawner's
+   reference, RunOnStack inside tasks - are clean under `-r` now. **Left, found while testing**: a closure *held in a
+   struct* a task is given (`spawn work(h)`, `work` calling `h.f(i)`) still builds into its captured scope from the
+   task's thread - the environment is reached only inside the task, through storage that cannot be copied at the spawn.
+   Closing it needs either the allocator to know which thread owns a scope (a compare per allocation, and a stand-in
+   made on a mismatch) or a P2 rule refusing a task argument that holds a function value; neither was built here.
+
+2. **A copy out of a reference was placed right only from an lvalue reference** (pre-existing, four shapes). O25h
+   says a value copied out of a reference keeps its references where the referent's are, and `copyRefsHome` honoured it
+   only for `d Box = r`. A call's borrowed result (`d Box = pick(r)`, also a method's, under `try`), a conditional or a
+   match of references, a loop's initializer and an assignment's value all left the copy's references in its block, so
+   building through `d.head.next` built there and the caller read freed memory. One predicate now says whether a value
+   copies existing references (`copiesExistingRefs`: a value lvalue, a slice, an `as` of a payload, anything
+   reference-shaped naming existing storage, a conditional or match any of whose values does) and one says where they
+   are (`copiedRefsScope`: a reference's exact scope, a value's refs home, and for a conditional or match the scope its
+   values share or, where they differ, one not known here). Every O25h site reads them: declarations, assignments, a
+   by-value argument binding its parameter's scope variable (O4b - `build(r)` with `fn build(b Box)` bound it as for a
+   temporary, passing the callee's own scope), a constructor's or an enum case's argument (C2d/T17c now hold the instance
+   to it, so `H(r)` and `E.A(r)` building in this block are errors), a match binding or an `as` of a payload held by
+   value (the payload's refs home; differing alternatives give one not known here). **O12** gained the consequence: a
+   value place whose references are in a scope not known here takes no temporary - only something that already lives
+   somewhere (`ERR_STORE_INTO_UNKNOWN_SCOPE`).
+
+3. **A slice or a view of a split value** (pre-existing; O17a incomplete). `b := src.b; s := b.items[0:2]` borrowed the
+   copy's inline array as a reference whose elements read at the copy's storage scope, so `s[0].next = Node()` built in
+   the block. Decided: refused where something can be stored through it (O25g by the type) - the elements are indexed
+   in place instead, which O25h already gets right. `as Array<T, N>&` is the same operation (E32b) and is refused alike.
+
+4. **A conditional of literals hid an undefined shift** (regression from rvfix). `OperandBinary` took a conditional of
+   literals as fitting without folding it and then marked everything under it folded away, so E8a never saw
+   `1 << 40` inside `b + (1 if c else (1 << 40))`: `-b` printed 4, `-d` 3, `-i` stopped; and `0 if c else (2000000000 +
+   2000000000)` wrapped in `I32`. Now each value is folded exactly as E4a folds one (`condOfLiteralsFold`, nested
+   conditionals included), the widest of their own types is taken, every value adapts to it, and only values actually
+   folded are marked. Both shapes give the exact answer in every mode.
+
+5. **T25c and mutable globals.** `M mut List<I32> = G` shared G's record, so `M.Push(9)` changed an immutable global's
+   list. A mutable global's initializer is stored where it can be written: `roStoreCheck` with
+   `ERR_READ_ONLY_COPY_GLOBAL`, which names the fix (`G.Clone()`, or drop the `mut`).
+
+6. **A read-only copy's references came back writable through a slice, a view or a loop.** `roRefOf` followed an
+   element read through a reference as shallow, so `x.arr[0:2][0].v += 1`, the view and `for e in x.arr` wrote through
+   a read-only copy of a global. A reference made from a value - a slice, a view, a for-in's hidden borrow, a local
+   declared from one - now reads that value (`roViewedValue`): what it gives is read-only where the value is, and a
+   by-value parameter writing through its loop's elements needs a writable argument (`look(G)` is an error).
+
+7. **`Str` writing through a reference** (pre-existing). E11c's purity was K1a evaluability, which refuses a global
+   write but not a write through a reference, so a `Str` bumping a counter it reached through its receiver ran twice
+   per `$` at run time and once under `-i`. A function now records whether it writes storage that was there before it
+   ran (`effWrites`): an assignment, an increment or an atomic whose place is reached through a reference not in this
+   call's own storage (a parameter's scope, a capture's, the program's, one not known here) or is a global; a call
+   passing such storage to a parameter the callee may write through (a writable reference, or one reaching writable
+   references), settled as a fixed point over call edges once every body is checked; and a call through a function
+   value whose body is not known there (a lambda made in the function is judged by its own body). A `Str` with that
+   effect is an error with a note at the write (`ERR_STR_WRITES`); a `Str` building a local list or a `StringBuilder` is
+   fine - the corpus test bakes one while compiling. The T25c half: a by-value receiver of `Str` that needs a writable
+   argument is an error too (`ERR_STR_RECEIVER_WRITABLE`), since `$` renders read-only copies.
+
+8. **S4d missed compound assignments and increments** (rv2fix). Only a plain `=` collected the places it writes over,
+   so `x += E.Lit(2)` with a `Plus` keeping its receiver built a value holding `x` itself. `buildAssignStmnt` collects the
+   place for every operator, and `buildAssignCore`'s compound branch and `buildIncDec` set it around the operator call,
+   so `copyOldBorrows` copies the old value. **Found on the way, pre-existing**: the compound branch never landed the
+   operator's result at the target (O18a's assignment row - the plain branch did), so `y += E.Lit(i)` in a loop built
+   the new value in the loop body's arena and stored it in `y`, outside: wrong answers after a churn. It lands now.
+
+9. **S4d through an alias** (low). The place is told by the names written; `p.a = E.Neg(q.a)` with `q` and `p` one
+   instance is the program's cycle. The spec now promises only "no value holds the storage it names".
+
+10. **The prelude's generic code over collections of handles** (qc). With elements holding writable references - a
+   `List`, a `Map`, any handle - `Map.Get`, `List.Clone`, `Array.ToList` and `Array.Filter` no longer compiled, while
+   `ls[0].Push(9)` through `At` on a read-only `List<List<I32>>&` was accepted (a call's result was fresh) where `for x in
+   ls` gives read-only copies: one element, three answers. Neither "make the receivers `mut`" (refusing a read-only
+   `List<I64>.Clone()`) nor "elements read through `At` are fresh" works, because a generic's declaration cannot say
+   `mut` for some instantiations and not others. **Decided (mine)**: in an instantiation, a read-only reference
+   parameter is as read-only as its argument (`roByArg`, set on the signature by `instantiateFunc`). Copies out of what
+   it reaches are judged by **deep provenance** (`roDeepParams`): following a value back through members, elements,
+   slices and payloads, through references too, through locals by their initializer and every value later assigned to
+   them (`roAssigns`), and through calls that hand back what their own such parameters reach. A by-value **result**
+   copied out of one makes that parameter `roToResult`, settled at the end of the instantiation's body so callers find
+   it: at a call, the result is a read-only copy exactly where that argument is read-only (`roValueOf`'s call case), so
+   `ls[0].Push(9)` on a read-only list is refused with a note at `ls`, and `Map.Get` on a read-only map gives a read-only
+   value. A copy **kept writable** - stored, lent writably, passed to a callee that keeps it - makes the parameter need a
+   writable argument, checked at each call (`ERR_READ_ONLY_REF_KEPT`) once every body is checked, through the existing
+   fixed point. A read-only borrowed result an instantiation hands back from such a parameter (`RunFrom`'s run) and a
+   loop's hidden borrow follow their source. Two prelude edits: `Map.Get`'s cursor is `f mut mapSlot` (the buckets hold
+   writable slots; the read-only local made every value a definite read-only copy), and `Clone` copies the chunks
+   directly rather than through `RunFrom`'s read-only runs, which a declared read-only local makes definitely read-only.
+   **B11**: errors settled after the instantiations' bodies are checked keep the instantiation context they were found
+   in (`ErrMsgSaveContext`), so `PushAll`'s and `grow`'s errors are reported at the program's call. The corpus, std and
+   checks needed no change beyond those two prelude functions.
+   **Recorded limit**: an iterator a read-only collection hands out (`ro.Iter()`, and so `for e in m` over a read-only
+   `Map`) still gives writable copies: it holds a writable reference to the state by shallow permission, and making its
+   elements read-only would make every iteration of a writable collection read-only too.
+
+**Two more from the scope sanitizer** (found while this batch was open, the sanitizer reporting "use after scope
+closed"). A constructor growing a field's `List` inside a nested block - `for i in range n { left.Push(n - i) }` - built
+each chunk in the loop body's arena, though the instance kept it: C2g makes a constructor's top level the instance's
+scope, but the call's binding recorded the field local's depth as 0 (a constructor's top level is depth 0 to the
+checker), and `SemanticBoundScopeDepth` read a determined binding at depth 0 as "the block the call is written in". It
+means the body's top level now (as `normDepth` already reads it in the checker), which codegen's `cgOwnAllocSlot` makes
+the instance's scope in a constructor and the function's own elsewhere - never shorter than what the checker proved.
+shared.olang's tests over `c3Holder` and `sc3Countdown` had the shape and passed by luck. And a copy of a *local* enum's
+payload (a match binding, `y := e as E.A`) passed by value, captured through a reference read out of it, or lent to a
+callee that builds through it, had the callee build in the copy's block - the same root as finding 2's fourth shape,
+closed by the same general O25h (the lend, refused by O17 on this branch, is accepted and built in the right place once
+merged with study 4's O17b). Both have corpus tests and a checks run case built `-d -s`; the checks harness now finds a
+`-s` binary by its `.san` suffix, so a run case can ask for the sanitizer.
+
+### A soundness review of that batch, fixed (P2, S13b, C2g, O25h, E11c, O23a/C2d, 2026-10-10)
+
+A read-only review of the batch above (review tonight5) reproduced seven findings on its tip, two new in the batch and
+five older, each with a program under `-b -s`, `-d -s` or `-r`. All seven are fixed, and each has a checks case (built
+`-d -s` where the case runs) or a corpus test.
+
+**1. A task kept the environment copy P2 made for it (new).** The batch gave every scope a task's function value captured
+a stand-in by copying the closure's environment with the stand-ins in place - and made the copy in the join block's
+arena. A task storing the function value it was handed (a spawn target, a field of something it was given) kept that copy
+past the join, where the next scope to take the chunk wrote over it; and `f is g` inside the task compared the copy with
+the original and said false. **2. A closure made inside a task captured the stand-in (older).** A lambda a task made,
+capturing a reference the task was handed, captured the task's stand-in for that reference's scope, which the join
+folded and threw away; a closure returned through a spawn target then built into a header no one owned.
+
+The coordinator's preferred design, built: **a stand-in lives as long as the scope it stands in for, and forwards once
+folded.** `__olang_scope_merge` ends by pointing the stand-in's chunk at a sentinel (`@__olang_fwd_chunk`) and its first
+word at the scope it was folded into; the allocator meets the sentinel only on its slow path (the sentinel's chunk is
+full), follows the forwarding there (`__olang_scope_resolve`, also called by `register_dtor`), and so the fast path costs
+nothing. A stand-in for a scope parameter is made in that scope's own arena (24 bytes, kept until it closes), so whatever
+survives the join can still reach it; the program scope's stand-in stays in the join arena, because nothing captures it
+- see below. **Environment copies** are made where the closure lives (its first captured scope - `__olang_env_home`),
+once per spawn however many arguments reach the same function value (a small map, `%olang.envmap`), and remember their
+original: bit 62 of the copy's first word marks it, and the original's address sits just past the copied bytes.
+`__olang_env_canon` gives the original back, and `==`/`is` on function values compare canonical environments, so a task
+sees the function value it was handed. **A capture in the program's scope is held as null**, and a lambda's prologue
+reads a null as the calling thread's program scope - its task stand-in on a task, the real one elsewhere - so a closure
+over a global's referent never holds a stand-in at all. `join_tasks` and RunOnStack's fold skip merge nodes with no
+destination (a null capture has nothing to fold).
+
+**Decision 40, as asked and as narrowed.** The coordinator asked for "a task argument may not reach (through struct
+fields, elements, payloads) a function value capturing a writable reference; read-only captures stay allowed". A function
+type says nothing about what its value captured, so the capture's permission cannot be judged at the spawn; and a
+read-only capture can still build into its scope through a borrowed result. What is checkable instead is whether the task
+**calls** such a value: a function value called on the task's thread with the scopes it captured as they are builds into
+them beside the thread that owns them, which is the hazard - carrying it, storing it or handing it on is harmless now that
+copies forward. So `callsFnThrough` is read off each body: a call through a function value read out of a parameter's
+field, element or payload (`fnRootsIn`), or a call handing such a part to a callee that does (`fnEdges`), a fixed point
+settled once every body is checked (`settleFnThrough`, first in `settleReadOnlyArgs`). A spawn's arguments and a spawned
+lambda's captures record deferred checks (`fnSpawnChecks`), reported as `ERR_SPAWN_ARG_HOLDS_FUNC` ("pass the function
+value itself"). The first version refused any argument holding a function value; it refused a `List<fn()>` a task only
+stored (`rv5taskstore`), which is why it reads the body. E13b's calls set their callee after the call is built, so the
+callee is recorded where it is (`fnCalleeRecord`).
+
+**3. A match binding read as living at the body's top level (new acceptance).** A binding of a by-value payload got
+depth 0, which the scope checker reads as the body's top level, so the batch's O25h let a borrow of it leave the clause
+(`x mut Holder&outer = h` from inside a `case`). It lives in its clause's block now (`ctx->blockDepth + 1`). **6. A
+constructor kept a borrow of its own by-value parameter in a reference field (older).** `type H struct(p P) { r P& = p }`
+stored the address of the constructor's parameter slot, a stack use after return. The root, found on the way: a
+constructor's top level was depth 0 to the checker - the same number as "outside every body" - so a parameter's slot and a
+field read as the same scope. A constructor's top level is depth 1 now and its by-value parameters depth 2 (they are its
+frame, which ends at its return), and a reference field's value must live as long as the instance: a field is checked
+as the local it is (`fieldAsLocal`, a bare-`&` field reading as the instance's depth), and existing storage deeper than
+the top level is refused (`ERR_SCOPE_MAY_NOT_OUTLIVE`). A `:=` field's local takes that type once inference has run.
+
+**4. A copy out of a member, element or `as` of a conditional kept its references in its block (older).** O25h followed
+a conditional or match as a whole value, not one reached through one - `(a if c else b).inner` or `(e if c else f) as
+E.A`. `condUnderPath` walks the path down to a conditional first, in both `copiesExistingRefs` and `copiedRefsScope`.
+**5. A `Str` calling a capturing lambda through a local (older).** E11c's effect analysis judged a call through a local
+function value as "a function value it did not make" only when the local was a parameter; a lambda the function makes
+itself and calls through a local was not followed. Now a call edge goes to the lambda made here, its captures are judged
+through what they captured (`effCaptureOf`), and arguments reached through captures are recorded (`effCapAdd`).
+**7. A reference read through a `&p` field, copied and handed by value (older).** The batch's O23a fix refused building
+through a derived scope on the reference path only; a by-value parameter bound from such a copy built through it. Now
+`bindCallScopeVars` refuses it (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`) where the parameter's references admit stores.
+
+**Costs and limits.** A stand-in header per spawn in the bound scope, kept until that scope closes. Function values are
+still copied into a task rather than borrowed - one copy per spawn, made where the closure lives. Decision 40 refuses
+calling any held function value, read-only captures included.
+
+**A follow-up review of that tip** confirmed the seven and found, besides three holes left for the next round (decision
+40 evaded through a helper calling its parameter, a lambda or a list the task made; the program scope's stand-in reached
+through a scope variable bound at run time; a handed-on closure copied into its owner's scope from the task's thread),
+one regression of this batch's own: `__olang_scope_merge` did not resolve its destination. A closure a first task handed
+back holds that task's stand-in, folded and forwarding; a second task handed it gets a stand-in whose parent is the
+forwarder, and the join spliced its chunks and destructor nodes into the forwarder itself - a header no one closes, which
+then stopped forwarding, so what the main thread built through the closure afterwards landed there too: destructors lost
+(the review's program printed one of three). The merge resolves its destination first; nothing else writes into a
+forwarder (the allocator's slow path and `register_dtor` already resolve). `rv5foldforward` and `rv5foldforwardstack`
+(through `os.RunOnStack`) fail without it. And one over-rejection: a `:=` field copying a by-value parameter took the
+parameter's depth with its type (2, the frame), so a reference field given it was O10; a field's local is the
+constructor's top level whatever its initializer was, as an ordinary local's is its block (`rv5ctorfieldcopy`).
+
 ### std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10)
 
 Usage study 5 (`/home/user/review/study5`, numeric and data-science scripts) found three programs writing the same
@@ -13156,3 +13363,188 @@ result typing do the same, so a fix records the base type and walks it in all of
 
 Tests: a section at the end of shared.olang - each rendering computed by a function baked into a global (K2) and the
 same call at run time from a mutable global, under `-t`, `-t -d -s` and failing on the previous compiler with S18c.
+
+### From study 5: a call's result passed on, writes through `x[i]`, O17 per instantiation, loop copies (O18c, E31b, O17, O26a, E25, D16c, L18, B11, 2026-10-10)
+
+Study 5 (/home/user/review/study5) wrote twelve data-science scripts the way a newcomer would and marked every
+workaround; this batch takes its scope and syntax findings.
+
+**r01, a use-after-free, pre-existing.** `bs.Push(box(t))` - `box` giving a struct holding its parameter's text, `t` a
+loop body's local - compiled and every row read the last turn's text; a helper returning a local List holding its
+parameter segfaulted, and `rows.Push(rec.Clone())` of a loop's list did both. `b := box(t); bs.Push(b)` was correctly
+rejected. The difference, traced: O18c lands a call's result passed on as an argument where its callee's obligations say
+(box's "the argument's scope outlives the result scope" puts it in `t`'s block), and the comment there said the result
+"then determines the parameter's scope as any existing storage does" - which held for a reference parameter (the call's
+reference result has a scope RefExactScope reads) but not for a by-value parameter holding references (O4b), whose
+determination skipped anything that is not existing storage. So Push's scope variable was left to land by Push's own
+obligations, at the list, and the box - its references in the loop body - was stored there unchecked. A landed call's
+value result now determines the parameter where its result scope landed (`landedCallRefsScope`, through held results,
+nominal conversions and value projections), and every variant is the error the local spelling gives. The note now
+follows the result to the argument it holds (`noteThroughResultSource`), so the error says to declare `t` where `bs`
+lives - which compiles and runs right, as does declaring `rec` where `rows` lives.
+
+**r02, a silent lost write, and the E31b decision.** `l[0].Add()` with a `mut` receiver, or `bump(l[0])` with a `mut &`
+parameter, wrote a copy (At's result) where `l[0].N = 5` was already an error and an Array element is written in place.
+Decided (the coordinator's call, Swift's get/set model): writes through `x[i]` on a type with At and SetAt read-modify-
+write it, as `x[i] += v` already did. Lowered in the checker (`atReadForWrite`): x held as a place, each index held unless
+a literal or a variable, the element held as `t := x[i]` holds it (so its references are where the collection's are,
+O18c - holding it as a plain hidden value put them in the block and SetAt then refused it), the write or call made on
+the hidden local, SetAt writing it back after; a collection read out of another is lowered one level out by the same
+function, so `rows[0][1].N = 9` and `ll[0][0].Add()` compose. Hooked at three places: an assignment's target rooted at
+an At call (`buildAtFieldAssign`), a method call's receiver and a call's writable-reference arguments
+(`atWriteBackArgs`, before OperandFuncCall, wrapping the call in an OPERATION_SEQ whose statements run before and after
+it - its value, if any, held in a hidden local), and `x[i].f++` (buildIncDec). Decided (mine): the element is read where
+the place is evaluated; an earlier argument that makes a call is held first so arguments stay in order; a fallible or
+several-result call is not written back (an error saying how to write it); a type with At and no SetAt is an error
+naming SetAt; under `try` the read goes through buildIndexCall (TryAt, or At after a check against Len) and the write
+through buildSetAt's TrySetAt or derived check - `try l[3].N = 5` read out of range unchecked in the first version, and
+`try l[7].N++` did not parse as a place (the index was built under the try and so derived; it is a place now, as `try
+x[i]++` was). The evaluator needed nothing: everything is ordinary checked code, and a corpus global bakes through all
+of it. **What it cannot do**: a call that builds into what the element holds - a method pushing onto a List field of
+it - builds where its receiver's storage is (the copy's block), while the copy claims the collection's; O17 refuses that
+split lend, now worded for the copy. Binding the receiver to the collection's scope instead would let a callee store a
+reference to the receiver itself somewhere longer-lived; making the copy in the collection's arena would cost an
+allocation per write that the code does not show. So the error names holding the elements by reference or copying it
+where the collection lives (`t mut T&l = l[i]`), both written.
+
+**Found on the way, pre-existing: a set-aside At call still owed its obligations.** The target `x[i]` of `x[i] = v` was
+built as an At call, then replaced by SetAt - but its pending discharges stayed, and were checked at the statement's
+end with its result scope never landed (taken as the call's own block). For an element type holding writable references
+(At's result scope must equal the list's, O25g) that was an O10c error on `t := l[0]; l[0] = t` in any loop, and it hit
+every write-back too. `forgetCall` drops what a set-aside call owes (pending discharges and its late-obligation record).
+
+**r03: O17's region facts were on the wrong object.** Walking a `List<List<String&>>` and reading `r[0]` compiled until
+an earlier statement read `rows[0][0]`. `regionStored`/`regionHandedOut` (whether a body stores into or hands out the
+region a scope variable names) were fields of the scope variable - and an instantiation's scope variables are the
+generic's (instantiateFunc copies the pointers), so `List<List<String&>>.At`, which hands its region out (it returns a
+List value holding writable references), marked the variable `List<String&>.At` shares. Only ever over-rejecting (a
+union over instantiations), so never unsound - but order-dependent. The facts are a list on the function now
+(`regionFlags`, keyed by the canonical function, restarted when a var is copied whole).
+
+**r05: a for-in element flows.** O26a's flow reading followed `out.Push(all[i])` into the returned `out` but not
+`for p in all { out.Push(p) }`. A `for ... in` over the local now explores the element through the loop's body. That
+exposed a pre-existing over-rejection the indexed spelling also had (`b.Push(l[0])` beside a returned builder): a local
+declared from a call whose result holds a block's storage - `l := groups.Get(k)`, `groups` a local Map - was moved into
+the result scope as "built here" (an O14b result scope makes the call look like a temporary), and the move made its
+own error. Such a local is never moved now (`callResultTiedToBlock`); the corpus's `sbRegroup` is the case. After
+merging master the first full verify caught one more: `filepath.Join` walks its parts and copies each one's characters
+into the text it returns (`for ch in p { joined[w] = ch }`), and following the element made its parameters flow into
+the result - an obligation on every caller (`b11notevalue` lost its note, and `Join(t, "b")` with `t` a loop's text
+became an error). An element that can hold no reference carries nothing, as master's s4sem had just said of numbers
+computed from a local: where the walked local's type is known (the local being decided, a declared one, or an element
+already explored), an element type holding no reference ends the flow there.
+
+**r04, r07.** A destructured call's results took no notice of a scope argument: the hidden local holding them had no
+home for its references, so they read as the statement's block - it now takes the call's (`rec, next := mk2&rows(k)`).
+A lambda could not capture a value holding references at all (D16c said a copy "loses its references' scopes"); it
+captures it now as a by-value parameter holding references is passed, with an implicit scope of its own bound where
+the lambda is made and carried in the closure, which codegen and the evaluator already did for a reference capture -
+and the lambda lives where those references do (D16d), so pushing one outward from the loop its value was made in is
+the ordinary error. r06 (a `&`-receiver method on a for-in copy) stays a limit: the receiver's scope is the copy's
+storage, an underestimate of where its references are, and binding it to where they are is unsound for a callee keeping
+the receiver itself; the error now carries a note saying to take that parameter by value or build from its fields.
+
+**Diagnostics.** A `;` is one error that ends the statement (it used to be L16 and then L9 on the next statement); an O10c
+error whose argument at fault is text read out of something made too briefly says to pass a copy, `$cols[0]`, which is
+built where the callee needs it (r13). Not done: r12 (a literal adapting into a declared operator parameter - decided
+to be an error, not built), r11, r14-r17.
+
+**Merging the third review's batch (rv3fix) opened one shape, closed here.** rv3fix made a binding determined at depth
+0 mean the body's top level (SemanticBoundScopeDepth) where it had meant the call's own block. A reference read out of
+a call's value result - `ss.Push(box(t).s)` - resolved to exactly such a depth-0 nothing (the member carries no binding
+of the call's), which had happened to be held to the loop's block and was now taken for the function's top level: the
+text, reclaimed each turn, was kept (the scope sanitizer reported it). RefExactScope now reads such a reference where the
+call's result scope landed by its obligations (`landedCallRefsScope`), as `b := box(t); ss.Push(b.s)` reads it from `b`.
+
+Tests: corpus tests for each (read back after an arena churn, the write-backs and the captures also baked into globals),
+check cases for each refusal (`s5*`, `l18semicolon`), and `listfieldwrite` changed to the new rule (a write through
+`x[i]` on a type without SetAt).
+
+**Decision 33 narrowed (decision 42), from a soundness review of this batch (/home/user/review/tonight6).** The
+write-back as first built was sound only where no code of the program's ran between reading the element and writing it
+back, and a call is exactly such code. The review reproduced it: a `mut` method on `l[i]` that also writes `l` another
+way had that write overwritten by the stale copy (F3); `bump(l[i], l)` likewise, and a reference to the element taken
+inside the call named the copy, not the element (F7); the element was read before the value or the call's other
+arguments ran, so a value that wrote the collection was lost too (F2), and a base or an index was evaluated twice when
+it was not a plain variable (F2b); a write through an index out of range read garbage before SetAt could check it (F1);
+a global initializer skipped the write-back entirely (F6); and a spawned call said "'spawn' takes a call" (F8). The
+coordinator's decision: keep the write-back for STORES - a field or an element of `x[i]` assigned, incremented or
+compound-assigned - with the order fixed: the place held (base and every index evaluated once, left to right), then the
+value (held where it makes a call), and only then the element read, the store into the copy and the write-back, nothing
+between them; and make a writable call on `x[i]` - a `mut` receiver, a `mut &` argument, spawned or not - a
+compile-time error naming `t := x[i]; t.M(); x[i] = t` or holding the elements by reference. The rewrite: one routine
+(`atReadForWrite`) holds the place into one list, declares the element read into another and the write-back into a
+third, and `buildAtFieldAssign` orders them holds, value, reads, store, write-backs; an element of an element
+(`rows[i][j] = v`) takes the same route, its root the outer At call. A field of `x[i]` lent to a call is part of the
+copy too - it is an assignable place, so the check asks for the At root whatever OperandIsLvalue says (`l[0].In.Move(4)`
+first gave T25c instead). The corpus test of the old rule was rewritten to the explicit form with the same values, baked
+and run.
+
+**A handle is not a copy in the hazardous sense (study 6's amendment).** Study 6 (/home/user/review/study6) showed that
+`users[i].Push(x)` (a List in a List), `boxes[i].items.Push(x)` and `(try m.Get(k)).Push(x)` - the adjacency list every
+graph program has - must keep compiling, and that on master each was a use-after-free in a loop: the callee's scope
+variable was bound to where the copy of the handle landed, the loop's block, so the inner list's new chunk was built
+there while linked into state that lives where the outer list does (r01). A handle's every copy shares its state, so a
+call on one writes the state through its reference and there is nothing to write back. Such a call now holds the copy in
+a hidden local declared as `h := x[i]` declares it - its reference where the collection's elements live (O25h) - and
+lends it as its reference (O17b), so the callee builds where the state is. Spawned, the hidden local would sit in the
+spawner's block, which closes, or is made again by the next turn of a loop, before the join - on master that compiled
+and was a use-after-free too. Decided (mine): it is an error naming the written form, a function that takes the
+collection and calls `x[i].Push(v)` itself (a check runs that form under the sanitizer). Study 6's r06 (`l[i] = v`
+refused where `l.SetAt(i, v)` compiles) compiles: `forgetCall` already drops the At call set aside for the target.
+Writing the tests found the store form of r01 still open: `names[i][0] = t`, `t` a loop's text, built and kept the
+text past the loop, because the inner list's SetAt was called on `names[i]` as a temporary, never lent as its
+reference. It now takes the method call's path - the copy held and lent - with one wrinkle: the read `names[i]` built
+for the target had already been passed to the target's At and landed with it, so holding it as it was found nothing
+for its obligations to land; it is read again (`atReadAgain`), still free to land, and the original set aside. An
+element of an element that is no handle (`rows[i][j] = v`) is a store through `rows[i]` like a field's, written back.
+
+**F4, a use-after-free the batch had opened.** `callResultTiedToBlock` kept a local declared from a call whose result
+holds a local's storage in its block, so that a flow through it would not move it into the result scope only to make an
+error. But a local RETURNED directly was then judged by nothing: `l := try groups.Get(1); return l` with `groups` a
+local Map handed back the map's state (and `x := try ll.Last()`, and `try m.Get(0) catch default ...`). A local the
+function returns directly is moved as before, so the callee's obligation makes the call the error it was; the tie only
+withholds indirect flows. `x := ll[0]; return x` still compiles and runs right: `ll` is moved with it.
+
+**F5, pre-existing: a projection of a call's value result passed on.** r01's fix reached `bs.Push(box(t))` but not
+`bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` or `bs.Push(wrap(pair(t).a))`: a field read counts as a copy of existing
+storage, and asking where that storage's references are failed for a call - so the parameter was left unbound and
+nothing judged it. Where the copy's source is a call's result landed by its obligations, the projection now determines
+the parameter there, as `p := pair(t); bs.Push(p.a)` does. With `t` outside the loop all three compile and run right
+(a corpus test, baked as well). **F9**: `m[$k "..."] += 100` on a user type whose SetAt keeps its key holds the rendered
+key in a hidden local for both At and SetAt, in the statement's block - O10c, and the note said "write '$' before it"
+of what already was a rendering; it now says the index is held there for the read and the write and to make it where
+the collection lives first (`k String&m = ...`, which compiles).
+
+Tests: `s5Writes` rewritten to the explicit form (same values, baked), corpus tests for the store order
+(`s5PlaceFirst`, an index and a value counting calls), handle calls on elements and on a Map's result in a loop
+(`s5Handles`, baked and read back after a churn), and passed-on projections (`s5Projections`); check cases for the call
+errors (`s5atbuilds`, `s5atnosetat` changed, `s5e31bargs`, `s5e31bfield`, `s5e31bspawn`), the spawned handle call
+(`s5spawnhandle`, and `s5spawnhandlerun` for its written form under `-s`), study 6's r01 under `-s` (`s6handleloop`,
+stores included, and `s6handlestore` for the loop's text refused),
+F4 (`s5mapgetreturn`), F5 (`s5projection`, `s5projectionelem`) and F9's note (`s5heldindexnote`). Still a limit, as on
+master: a by-value handle field of an element, `boxes[i].items.Push(x)` with `items List<I64>`, is O10c, as is
+`h := boxes[i].items` - a field read straight off a call's result (study 6's r05).
+
+**A follow-up review of a10397c (/home/user/review/tonight6, "Follow-up") closed F1-F9 and found four more.** **G1, a
+use-after-free of the shape the batch claimed (pre-existing on master too)**: a call on a handle element read out of
+another handle element - `users[0][0].Push(t)`, `pushFn(users[0][0], t)`, `(try mm.Get(0))[0].Push(t)`, `t` a loop's
+text - built: the call path held `users[0][0]` in a hidden local, but its collection `users[0]` was a call result
+already passed on (to the outer At, which landed it), so the hidden copy's references read as the statement's block and
+Push bound there. The call path now reads the element again as the store path does (`atReadAgain`), holding every level
+- an At read of a collection that is itself read out of another, and any other call's result holding a handle
+(`(try mm.Get(0))`) - and a hidden declaration of a call whose result already landed keeps its references where it
+landed, as the same `:=` would have. All three are O10c now, as one level always was. **G2, a lost write**: a program's
+own handle type with a `mut` method assigning the handle's field (`bags[0].Reset()` doing `b.s = State()`) ran on the
+hidden copy, and the reset was lost (inside a loop it happened to be O17's split-lend error instead). The coordinator's
+decision: the handle exemption holds only where the callee uses the handle only through its reference - s4sem's O17b
+reading of the checked body (`handleThroughParam`), asked of the function the call reaches (an instantiation, so after
+the call is built: `atHandleThrough`), and once every body is checked for one checked only later - otherwise it is
+E31b's error as for an element that is no handle. List, Map and StringBuilder methods all qualify. **G3**: `v[0].E =
+shrink(v)`, whose value empties the collection, reads and writes back at an index that is out of range by then - the
+coordinator's decision: E16e's unchecked index, since the access runs after the value as S4 orders it, and the index is
+the program's; E31b and S4 now say so. **G4**: the O10c note on `names[0][0] = t` named the compiler's hidden local
+(`'$handle2'`); notes name the collection the copy was read out of (`'names'`). G5 (a by-value List field of an element,
+elements of a global List of Lists) is left as recorded above. Check cases `s5nestedhandle`, `s5nestedhandlemap`,
+`s5handlerepoint`, `s5handlerepointfn`, `s5handlenote`, `s6nestedhandlerun` (under `-s`), and the corpus test
+`s5NestedHandles` (baked, read back after a churn).

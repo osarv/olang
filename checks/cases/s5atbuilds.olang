@@ -1,0 +1,15 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a "mut" method called on x[i] - an element that is no handle - would write a copy of it, while the method can
+# reach the collection another way; the copy is written out ("t := l[i]; t.M(); l[i] = t") or the elements held by
+# reference
+type Rec struct(name String&) {
+    name
+    tags List<String&> = List<String&>()
+}
+fn (r mut Rec&) Tag(t String&) { r.tags.Push(t) }
+
+fn main() ? {
+    l := List<Rec>()
+    l.Push(Rec("a"))
+    for k in range 3 { l[0].Tag("lit") }
+}

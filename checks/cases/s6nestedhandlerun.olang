@@ -1,0 +1,23 @@
+# check: run
+# flags: -s
+# E31b/O17b (G1): calls on a handle element of a handle element, and on an element of the List a Map gives, build
+# where the innermost list's state lives - read back after a churn under the scope sanitizer
+fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }
+
+fn main() ? {
+    users := List<List<List<String&>>>()
+    users.Push(List<List<String&>>())
+    users[0].Push(List<String&>())
+    mm := Map<I64, List<List<String&>>>()
+    mm.Put(0, List<List<String&>>())
+    (try mm.Get(0)).Push(List<String&>())
+    for k in range 20 {
+        users[0][0].Push($k "-rendered-where-the-list-lives")
+        pushFn(users[0][0], "lit")
+        (try mm.Get(0))[0].Push($k "-map-text")
+    }
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    assert users[0][0].Len() == 40 and users[0][0][38] == "19-rendered-where-the-list-lives"
+    assert (try mm.Get(0))[0][19] == "19-map-text"
+}

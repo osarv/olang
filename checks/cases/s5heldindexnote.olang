@@ -1,0 +1,22 @@
+# check: fail the index is held here, for both the read and the write, in a block that closes first
+# B11 (the review of study 5's fixes, F9): "m[$k ...] += v" holds the rendered key for At and SetAt in its block - the
+# note says so, not "write '$' before it", which the key already is
+type TMap struct() {
+    keys List<String&> = List<String&>()
+    vals List<I64> = List<I64>()
+}
+fn (m TMap&) At(k String&) I64 {
+    for i in range m.keys.Len() {
+        if m.keys[i] == k { return m.vals[i] }
+    }
+    return -1
+}
+fn (m mut TMap&) SetAt(k String&, v I64) {
+    m.keys.Push(k)
+    m.vals.Push(v)
+}
+
+fn main() ? {
+    m := TMap()
+    for k in range 3 { m[$k "-key"] += 100 }
+}

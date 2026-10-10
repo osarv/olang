@@ -1,0 +1,16 @@
+# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect
+# E11c (review of rv3fix, #5): a Str calling a lambda it made, which writes through a capture reaching storage that was there before
+type C struct() { n I64 = 0 }
+type B struct(c mut C&) { c }
+fn (a B&) Str() String {
+    k := a.c
+    f := fn() { k.n = k.n + 1 }
+    f()
+    return "b"
+}
+fn main() ? {
+    c mut C& = C()
+    b := B(c)
+    s := $b
+    println($s " " $c.n)
+}

@@ -1,0 +1,11 @@
+# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# C2g (review of rv3fix, #6): a constructor's by-value parameter is a slot of its frame - a reference field does not keep a borrow of it
+type P struct(v I64) { v }
+type H struct(p P) {
+    keep P& = p
+}
+fn main() ? {
+    h := H(P(42))
+    h2 := H(P(7))
+    println($h.keep.v " " $h2.keep.v)
+}

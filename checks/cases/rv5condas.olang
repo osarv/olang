@@ -1,0 +1,37 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# O25h/O17 (review of rv3fix, #4): a payload copied out of a conditional of enums is lent to a callee that builds through it
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn growv(b Box) { b.head.next = Node(44) }
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+fn main() ? {
+    c := churn() < 0
+    e1 := E.A(Box())
+    k1 := (e1 as E.A).head
+    {
+        e2 := E.A(Box())
+        y := (e1 if c else e2) as E.A
+        grow(y)
+    }
+    churn()
+    println($rd(k1))
+}

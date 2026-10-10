@@ -1,0 +1,17 @@
+# check: run
+# flags: -d -s
+# P2 (review of rv3fix, #1): one spawn's two arguments naming one closure name one copy, and the copy is the closure (is)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn same2(f fn() I64, g fn() I64) Bool { return f is g }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 { return n.v }
+    r Bool = false
+    join {
+        spawn r = same2(g, g)
+    }
+    if not same2(g, g) or not r { fail }
+}

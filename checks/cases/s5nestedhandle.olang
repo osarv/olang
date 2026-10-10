@@ -1,0 +1,13 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# E31b/O17b (the follow-up review of study 5's fixes, G1): a call on a handle element read out of another handle element
+# - "users[0][0].Push(t)" - holds and lends every level, so what Push keeps lives where the inner list's state does,
+# which a loop's text does not
+fn main() ? {
+    users := List<List<List<String&>>>()
+    users.Push(List<List<String&>>())
+    users[0].Push(List<String&>())
+    for k in range 3 {
+        t := $k "-loop-text"
+        users[0][0].Push(t)
+    }
+}

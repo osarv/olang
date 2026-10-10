@@ -1,0 +1,16 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# O18c: a helper's List holding its parameter, pushed outward from the loop the text is made in
+fn one(s String&) List<String&> {
+    c := List<String&>()
+    c.Push(s)
+    return c
+}
+
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 4 {
+        t := $k "-text"
+        rows.Push(one(t))
+    }
+    for r in rows { println(r[0]) }
+}
