@@ -1055,8 +1055,8 @@ operator's method (E31). An array type's own operations - indexing, slicing, `Le
 its value is, and belong to it with or without `extends`.
 
 **T29h (`Char`).** The prelude declares `type Char extends U8`: one byte of text - a UTF-8 code unit, not a Unicode
-character - and the type of a character literal. It renders as the character it is (E11a) where a `U8` renders as
-a number, has `U8`'s arithmetic (`'a' + 1` is `'b'`, T29f) and flows into `U8` and on (T6b), and has `IsDigit`,
+character - and the type of a character literal. It renders as the character it is (E11a), as does a declared type
+over it, where a `U8` renders as a number, has `U8`'s arithmetic (`'a' + 1` is `'b'`, T29f) and flows into `U8` and on (T6b), and has `IsDigit`,
 `IsLower`, `IsUpper`, `IsLetter`, `IsSpace`, `ToUpper` and `ToLower` (ASCII). Unicode is a library's.
 
 An array whose element type is a declared number with **no constructor** flows into an array of that number (E12) -
@@ -2278,20 +2278,25 @@ its type: the value written the way it would be in source:
   (E33a).
 - `Char` (T29h) — at the top level, the **character** it denotes, one byte long. Inside another value, that
   character written as a character literal: `'c'`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\'` escaped (L11).
-- an array of `Char` (a `String` included), in any of its shapes — at the top level, its characters unchanged
+- an array of `Char` itself (a `String` included), in any of its shapes — at the top level, its characters unchanged
   (copied: the result is a new value, never a second name for the operand's storage). Inside another value, its bytes written as
   a string literal: `"text"`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\"` escaped. Any other byte is
   written as itself.
-- any other array — its element type as written, then its items: `I32[1, 2, 3]`, `Point&[Point(1, 2)]`,
-  `I32[]` when empty.
+- any other array — its element type as an array literal writes it (E19), then its items: `I32[1, 2, 3]`,
+  `Point&[Point(1, 2)]`, `I32[]` when empty. The element type is written whole - an array of arrays writes each
+  element as an array of its own, `Array<I64, 3>[I64[1, 2, 3], I64[4, 5, 6]]` (E21) - with every inner level's `mut`
+  (T25b), `List<mut Node&>[...]`, but not the element's own, which a literal's elements take from where the literal
+  goes: an `Array<mut Node&>` renders `Node&[...]`. An array of a declared type over `Char` is such an array:
+  `Letter['a', 'b']`.
 - a struct — its declared name, then its fields in declaration order in parentheses: `Point(1, -2)`.
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
 - a declared type over a primitive or an array — as the type it is declared over (a `type Meters I32`
-  renders as a number).
+  renders as a number, a `type Letter Char` - `extends` or not - as a character).
 - a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value
   alike, written unchanged (never quoted).
-- a function — its signature, `(params) results ? errors`, preceded by its name when the operand names a
+- a function — its signature, `(params) results ? errors`, every type written as source writes it, permissions
+  included (`(l mut List<mut Node&>&) mut Node&`), preceded by its name when the operand names a
   declared function directly (`add(a I32, b I32) I32`) and by `fn` for a function value, whose name is
   not known where the `$` is written (`fn(a I32, b I32) I32`). A null function value is `null`.
 - a reference — `null` when it is null, otherwise its referent. References are followed at most **8**

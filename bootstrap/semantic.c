@@ -1537,6 +1537,10 @@ struct type SemanticCharType(void) {
 bool TypeIsChar(struct type t) {
     return t.bType == BASETYPE_BYTE && t.owner && StrCmp(t.name, StrFromCStr("Char")) && isPreludeModule(t.owner);
 }
+//E11a: a declared type renders as the type it is declared over, so one over Char is a character too
+bool TypeRendersAsChar(struct type t) {
+    return t.bType == BASETYPE_BYTE && (TypeIsChar(t) || t.overChar);
+}
 
 //T29c: text written in the program - a string literal, a "$" rendering or a join - is a String wherever one
 //is wanted. It is a temporary with no type worth defending, as a literal is (T29a), and it is text by
@@ -5647,6 +5651,7 @@ static void resolveTypeDeclIn(struct type* t) {
             resolved.typeArgs = ListInit(sizeof(struct type));
         }
         *t = resolved;
+        if (TypeIsChar(resolved)) t->overChar = true; //E11a (one over such a type keeps the flag it copied)
         t->name = name;
         t->tok = tok;
         t->owner = ownerSave;
