@@ -15701,3 +15701,254 @@ test "S4c: a parallel assignment builds a global reference field's temporary whe
     obChurn()
     assert k == 5 and Rv9Head.next.v == 5 and Rv9Head.next.next.v == 9
 }
+
+# O26a: a copy of an element handed to a method keeps nothing of it in the result unless that method's result or its
+# receiver can hold it - a view whose length a method measures leaves the copy in the frame (oann's repro/resultgrowth,
+# measured under an address-space limit by checks' landing scenario); one a method hands back, or stores into a receiver
+# the function returns, lives where the result goes. Read back after the arena churned, and once while compiling
+type c5Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type c5Wrap struct(r c5Info&) { r }
+type c5Store struct() {
+    infos mut List<c5Info>& = List<c5Info>()
+}
+fn (g c5Store&) count(i c5Info&) I64 { return i.Len }
+fn (g c5Store&) pick(i c5Info&) c5Info&i { return i }
+fn (g c5Store&) measured(k I64) c5Info {
+    i := g.infos[k]
+    return c5Info(i.Offset, g.count(i))
+}
+fn (g c5Store&) picked(k I64) c5Wrap {
+    i := g.infos[k]
+    return c5Wrap(g.pick(i))
+}
+type c5Holder struct() {
+    ref c5Info& = null
+}
+fn (h mut c5Holder&) keep(i c5Info&) { h.ref = i }
+fn c5Build(x I64) c5Holder {
+    h := c5Holder()
+    i := c5Info(x, x + 1)
+    h.keep(i)
+    return h
+}
+fn c5Window(a Array<I64>&, at I64) Array<I64>&a {
+    from I64 = at + 1
+    to I64 = from + 2
+    return a[from:to]
+}
+fn c5Views(n I64, churn fn() I64) I64 {
+    g := c5Store()
+    g.infos.Push(c5Info(n, n + 4))
+    t I64 = 0
+    for k in range 3 { t += g.measured(0).Len }
+    w := g.picked(0)
+    h := c5Build(n * 10)
+    a := Array<I64>(10, 3)
+    a[n + 1] = 40
+    v := c5Window(a, n)
+    churn()
+    return t + w.r.Offset + w.r.Len + h.ref.Offset + h.ref.Len + v[0] + v.Len()
+}
+C5ViewsBaked I64 = c5Views(2, fn() I64 { return 0 })
+test "O26a: a copy handed to a method lives where the result goes only where the method can keep it" {
+    assert c5Views(sbRun + 1, sbChurn) == 18 + 2 + 6 + 20 + 21 + 40 + 2
+    assert C5ViewsBaked == 109
+}
+
+# O18c/O20: a field of a call's value result passed straight on, the structure reached by a reference parameter - the
+# result landed where the structure lives, so its field does (oann's repro/fieldofresult: O10d, "this function's own
+# scope"); a result built fresh lands where the callee keeps it, and a task reads one until its join
+type c5V struct(Data mut Array<F64>&) {
+    Data
+}
+type c5G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+    kept mut Array<F64>& = null
+}
+fn (g c5G&) params() c5V { return c5V(g.mem) }
+fn (g c5G&) fresh(n I64) c5V { return c5V(Array<F64>(n, 2.5)) }
+fn c5Keep(g mut c5G&, p mut Array<F64>&) { g.kept = p }
+fn c5Sum(p Array<F64>&) F64 {
+    s F64 = 0.0
+    for x in p { s += x }
+    return s
+}
+fn c5Total(g c5G&) F64 { return c5Sum(g.params().Data) }
+fn c5Stash(g mut c5G&) {
+    for i in range 3 { c5Keep(g, g.fresh(i + 1).Data) }
+}
+fn c5Tasks(g c5G&) F64 {
+    out := Array<F64>(2)
+    join {
+        spawn out[0] = c5Sum(g.params().Data)
+        spawn out[1] = c5Sum(g.fresh(4).Data)
+    }
+    return out[0] + out[1]
+}
+test "O18c/O20: a field of a call's value result passed on, through a reference parameter" {
+    g := c5G(4)
+    g.mem[0] = 1.5 * F64(sbRun)
+    c5Stash(g)
+    sbChurn()
+    assert c5Total(g) == 1.5
+    assert c5Sum(g.kept) == 7.5
+    assert c5Tasks(g) == 11.5
+}
+
+# O18c: a field or a payload read off a call's result - "p.next().text", "args[0] as Value.Items", "$mods[i].name",
+# "for d in mods[i].deps" - lands as ':=' from the call does, by the callee's obligations, so it lives where the
+# collection's elements do; a for-in over a reference a read-only copy holds walks it read-only (study 6's r05)
+type c5Token struct(kind I32, text String&) {
+    kind
+    text
+}
+type c5Parser struct(toks List<c5Token>&) {
+    toks
+    at I64 = 0
+}
+fn (p mut c5Parser&) next() c5Token {
+    t := p.toks[p.at]
+    p.at++
+    return t
+}
+fn (p mut c5Parser&) names() Array<String&>& {
+    names := List<String&>()
+    for p.at < p.toks.Len() { names.Push(p.next().text) }
+    return names.ToArray()
+}
+type c5Value enum {
+    Nil
+    Items(l mut List<c5Value&>&)
+}
+fn c5PushItem(args List<c5Value&>&) {
+    l := args[0] as c5Value.Items
+    l.Push(args[1])
+}
+type c5Module struct(name String&) {
+    name
+    deps mut List<String&>& = List<String&>()
+}
+fn c5Report(mods List<c5Module>&, i I64) String {
+    b := StringBuilder()
+    b.Push($mods[i].name)
+    for d in mods[i].deps { b.Push(" " $d) }
+    return b.ToString()
+}
+type c5In struct(s String&) { s }
+type c5Out struct(inner c5In) { inner }
+type c5Shelf struct() {
+    items mut List<c5Out>& = List<c5Out>()
+}
+fn (st c5Shelf&) get(i I64) c5Out { return st.items[i] }
+fn c5Inners(st c5Shelf&, keep mut List<c5In>&) {
+    for i in range st.items.Len() {
+        x := st.get(i).inner
+        keep.Push(x)
+    }
+}
+test "O18c: a field or a payload read off a call's result, and a walk of a read-only copy's reference" {
+    toks := List<c5Token>()
+    for i in range 3 { toks.Push(c5Token(I32(i), "w" $(i * sbRun))) }
+    p := c5Parser(toks)
+    got := p.names()
+    args := List<c5Value&>()
+    inner := List<c5Value&>()
+    args.Push(c5Value.Items(inner))
+    args.Push(c5Value.Nil)
+    c5PushItem(args)
+    mods := List<c5Module>()
+    mods.Push(c5Module("a"))
+    mods[0].deps.Push("x" $sbRun)
+    mods[0].deps.Push("y")
+    shelf := c5Shelf()
+    for i in range 3 { shelf.items.Push(c5Out(c5In("s" $(i + sbRun)))) }
+    keep := List<c5In>()
+    c5Inners(shelf, keep)
+    sbChurn()
+    assert keep.Len() == 3 and keep[2].s == "s3"
+    assert got.Len() == 3 and got[2] == "w2"
+    assert inner.Len() == 1
+    assert c5Report(mods, 0) == "a x1 y"
+}
+
+# O4b: a Map whose values hold Maps of themselves - a JSON-like value, an interpreter's environment (study 6's r04).
+# The Map's slot was instantiated while the value type was still being declared, so its value parameter had no scope
+# of its own and what it held read as living in the slot constructor's frame (C2d); it gets one once types are finished
+type c5Dyn enum {
+    Nil
+    Num(n F64)
+    Obj(fields Map<String&, c5Dyn>&)
+}
+fn c5DynTotal(v c5Dyn) F64 {
+    match v {
+        case c5Dyn.Num(n) { return n }
+        case c5Dyn.Obj(m) {
+            s F64 = 0.0
+            for e in m { s += c5DynTotal(e.Value) }
+            return s
+        }
+        nomatch { return 0.0 }
+    }
+}
+type c5Fn enum {
+    Nil
+    Fn(c c5Closure&)
+}
+type c5Closure struct(env c5Env&) { env }
+type c5Env struct() {
+    vars mut Map<I64, c5Fn>& = Map<I64, c5Fn>()
+}
+test "O4b: a Map whose values hold Maps of themselves" {
+    outer := Map<String&, c5Dyn>()
+    for i in range 3 {
+        inner mut Map<String&, c5Dyn>&outer = Map<String&, c5Dyn>()
+        inner.Put("x", c5Dyn.Num(F64(i * sbRun)))
+        inner.Put("y", c5Dyn.Num(0.5))
+        outer.Put("k" $i, c5Dyn.Obj(inner))
+    }
+    env := c5Env()
+    env.vars.Put(1, c5Fn.Nil)
+    env.vars.Put(2, c5Fn.Fn(c5Closure(env)))
+    sbChurn()
+    assert c5DynTotal(c5Dyn.Obj(outer)) == 4.5
+    assert env.vars.Len() == 2
+}
+
+# C2d/E25: a constructor given a scope argument and declared with ':=' is judged where that argument puts it - "local
+# := Env&c(c.env)" holds c.env, which lives exactly there (study 6's r07: refused, where 'local mut Env&c = Env(c.env)'
+# compiled)
+type c5Frame struct(parent mut c5Frame&) {
+    n I64 = 0
+    parent
+}
+type c5Clo struct(env mut c5Frame&) {
+    env
+}
+type c5Callable enum {
+    Nil
+    Fn(c c5Clo&)
+}
+fn c5Call(f c5Callable&, k I64) I64 {
+    match f {
+        case c5Callable.Fn(c) {
+            local := c5Frame&c(c.env)
+            local.n = k
+            frame mut c5Frame&c = c5Frame(c.env)
+            frame.n = local.n
+            c.env.parent = frame
+            return local.n + local.parent.n
+        }
+        nomatch { return 0 }
+    }
+}
+test "C2d/E25: a constructor with a scope argument, declared with ':='" {
+    g mut c5Frame& = c5Frame(null)
+    g.n = 10
+    f c5Callable& = c5Callable.Fn(c5Clo(g))
+    for k in range 3 { assert c5Call(f, k * sbRun) == k + 10 }
+    sbChurn()
+    assert g.parent.n == 2 and g.parent.parent == g
+}

@@ -1546,7 +1546,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   again for a reason that was not the problem - `v.data[0]` across a module boundary said "this struct
   member is private" and then "operand is not an array", which points at a non-problem. The member exists
   and its type is known; only its visibility is wrong, so the type is kept and the one real error stands
-  alone. `UNKNOWN_STRUCT_MEMBER` still recovers as `int32`, correctly - there is no type to carry there.
+  alone. An unknown member recovers as the unknown stand-in, which fits anything (B11, 2026-10-10 - it recovered as
+  `int32`, so `if s.flag {` added "a condition is a Bool, found I32").
 - **Two use-after-frees found by writing the first realistic `Vec`, both in code the design record already
   claimed was safe (O2d, D13a).**
   **O2d - a call inside a block allocated into that block, not into the scope its argument named.** Where an
@@ -4561,6 +4562,47 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   or referent a `Str` made, holding writable references in `&p` fields (a cursor over the value), was taken to reach
   nothing - `cur := Cur(b); poke(cur)` writing `cur.c.v` changed the rendered value; such an argument now counts as
   reaching storage that was there (where an `&p` field refers is its instance's binding, O23a, not known there).
+- **A view's function keeps nothing it cannot hand back; a field of a call's result passed on; study 6's checker
+  findings (O26a, O18c, O20, O4b, C2d/E25, T25c, O25, S12b, T17c, B11, 2026-10-10; oann's three and study 6, details
+  mine).** **O26a**: a dotted call (`g.count(i)`, `g.infos[k].size(i)`, `linalg.View(...)`) is resolved where its
+  receiver's type is known and lets an argument go only when the callee can keep it nowhere - not in its result, nor in
+  its receiver or another argument, which its checked body's obligations say (a generic or unchecked callee keeps
+  everything); and a number or `Bool` is never moved, whatever the result is. oann's `resultgrowth` (a copy of a List
+  element handed to a method, kept in the graph's scope at every view: 64 MB over 4M calls) is flat, as is study 6's r02.
+  **O18c/O20**: a reference read out of a call's value result and passed on (`sum(g.params().Data)`) leads where that
+  result landed - a regression since study 5's batch read the empty slot tag as this function's scope (O10d). A `:=`
+  from a field, element, slice or payload of a call's result (`t := p.next().text`, `l := args[0] as V.Items`) lands the
+  call as `:=` from the call does; a call whose result nothing puts anywhere (`$mods[i].name`) lands by its obligations
+  only where its callee needs its result scope to outlive an argument's (r05). **O4b**: an instantiation's constructor
+  gets its by-value parameters' scope variables once the type is finished (`Map<String&, Value>`, `Value` holding a Map
+  of itself - r04). **C2d/E25**: `x := Env&c(c.env)` is judged where the scope argument puts the instance (r07).
+  **T25c, pre-existing hole**: a for-in over a reference a read-only copy holds borrows it read-only. **Diagnostics
+  (B11)**: an unknown member is one error (oann's membercascade); O25 names the local and offers refilling the one kept
+  (`w.alive.Clear()`, r10); `case X => return v` gets S12b's hint whatever `v` starts with (r13); O10c's note names every
+  argument made in a block (r14); T17c's headline says to make the storage where the value is kept (r15). Each
+  relaxation has a must-fail case; `checks` runs `resultviews` under `ulimit -v`.
+- **That batch's review, fixed: a call lands where it costs nothing (O18c, O26a, O10c, B11, E12c/O20, 2026-10-10; the
+  review /home/user/review/chk5, details mine).** **O18c, unbounded growth**: `t := lx.next().text` and `x := mk(base,
+  64).p` in a loop kept every turn's new text (206 MB) or array (1 GB) where the lexer, or base, lives - and `tk :=
+  lx.next()` already did on base. The cause: landing by obligations takes the shortest scope the obligations say must
+  outlive the result scope, which is the LONGEST legal place for it (they are upper bounds), so everything the callee
+  builds lived there. **Decided (mine)**: a `:=` from a call or a part of one lands by its obligations only where the
+  callee builds nothing (an element, a borrowed part), an obligation needs the result scope to outlive, or be, one an
+  argument gives (O25g), or the local is kept beyond its block (pushed outside, stored through a reference, returned,
+  handed to a call that can keep it - read off the rest of the block as O26a reads flows, a store through a local not
+  declared yet counting); else it is the block's. A for-in's element is judged from the loop body's statements, a
+  comprehension's is kept. A callee unchecked or in an unsettled cycle is taken to build. `checks` runs `callparts`
+  (four shapes, a for-in's included) under `ulimit -v`: 1.6 MB where it was 213 MB-1 GB. **O26a/O10c**: a callee whose
+  obligations are not all known yet (a cycle of calls: `obligUnsettled`, propagated to every caller in the cycle) or
+  unchecked is taken to keep its argument - mutually recursive methods returning through a local were refused (plain
+  calls already on base); and a method called on a local declared later in the block, its type not known yet, counts as
+  reading it (`toks := lex(src); p := Parser(toks); return p.expr(1)`). **B11**: an identical error found twice (C2d by
+  E25's scope argument and by the declaration) is reported, and counted, once. **E12c/O20, pre-existing O10d**:
+  `sizeFn(g.arr[0])`, `arr` a bare reference field of a reference parameter, read the element's storage as this
+  function's; it is where `g`'s instance is. **Found on the way**: the may-build walk took a returned array REFERENCE for
+  T7b's value copy, so every function returning `String&` "built" (a Map's `Keys()` element then landed in the loop
+  body); `callAround`'s `isMethod` was read uninitialized. Not changed: a for-in element its `Next` builds and the body
+  keeps is still O10c's "loop's copy" error (pre-existing; write `$x`, as io.Lines says).
 - **An integer literal's own type is `I64` (T6a, L10, T6, D15, E4a, E6d, E8b, S9b, G9a, B9a, B10/B10a, B11,
   2026-10-10, the user: "yes" to QD).** Where nothing adapts it an integer literal is an `I64` (a decimal one above
   `I64`'s maximum a `U64`), as a float literal is an `F64`: `x := 0` and `x := 1 + 2` declare `I64`s, `for i in range

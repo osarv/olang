@@ -280,6 +280,17 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b numberflow.olang > out.txt 2>&1") == 0, "numberflow build", dir)
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
     try r.expect(outOf(dir) == "22\n", "numberflow output", dir)
+    #O26a: a view's function keeps no local in the structure's scope that what it returns cannot hold - a copy handed to
+    #a method or another module's function giving a number, numbers for a slice (the master compiler: out of memory)
+    try r.expect(sh(dir, "\"$OLANG\" -b resultviews.olang > out.txt 2>&1") == 0, "resultviews build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/resultviews) > out.txt 2>&1") == 0, "resultviews", dir)
+    try r.expect(outOf(dir) == "10000000 28000000\n", "resultviews output", dir)
+    #O18c: a call building new text or a new array is its loop body's, reached whole, through a part of its result or
+    #as a for-in's element
+    #(the review's lexer and mk loops: 206 MB and 1 GB where the result landed where the lexer, or base, lives)
+    try r.expect(sh(dir, "\"$OLANG\" -b callparts.olang > out.txt 2>&1") == 0, "callparts build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/callparts) > out.txt 2>&1") == 0, "callparts", dir)
+    try r.expect(outOf(dir) == "43444445 47000000 11000000 43444445\n", "callparts output", dir)
     #O17b: handles lent as their references - built, built -d and interpreted, read back after the arena churned
     try r.expect(sh(dir, "\"$OLANG\" -b handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b -d handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0,

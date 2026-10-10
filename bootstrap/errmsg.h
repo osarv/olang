@@ -287,6 +287,7 @@ struct type;
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
     X(ERR_REFERENCE_NARROWED,           "O25",   "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") \
+    X(ERR_REFERENCE_NARROWED_LOCAL,     "O25",   "a reference never narrows - '%S' lives in a block that closes first, and this keeps it longer") \
     X(ERR_REFERENCE_NARROWED_RETURNED,  "O25, O26a", "this local flows into what the function returns, so it lives where the result goes - and its value lives elsewhere: make it here, or keep it out of the result") \
     X(ERR_REF_TYPEVAR_NOT_AGGREGATE,    "G11",   "%t cannot be held through '%S&' - only a struct, an enum or an array can") \
     X(ERR_TYPE_ARGS_NOT_INFERABLE,      "G9",    "the type arguments of %S cannot be inferred from these arguments") \
@@ -421,7 +422,7 @@ struct type;
     X(ERR_PAYLOAD_SCOPES_DISAGREE,      "T17c",  "this payload holds references into two scopes, and it lives in one - build what it holds in one scope") \
     X(ERR_ELEM_NOT_IN_ARRAY_SCOPE,      "O25c",  "this element can be stored through, so it lives exactly where the array is put - build it there") \
     X(ERR_ELEM_OUTLIVED,                "O25c",  "the array outlives what this element refers to - build the element where the array goes") \
-    X(ERR_PAYLOAD_OUTLIVED,             "T17c",  "this value's payload refers to storage the value would outlive - build it where that storage lives ('v E&x')") \
+    X(ERR_PAYLOAD_OUTLIVED,             "T17c",  "this value's payload refers to storage the value would outlive - make that storage where the value is kept") \
     X(ERR_INSTANCE_OUTLIVES_REFERENT,   "C2d",   "this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')") \
     X(ERR_INSTANCE_OUTLIVES_ARG,        "C2d",   "this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')") \
     X(ERR_GLOBAL_HOLDS_SHORTER,         "O1b",   "a global holds only what lives as long as the program - store something built here, or another global's") \
@@ -526,6 +527,7 @@ struct type;
     X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
     X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
+    X(NOTE_REFILL_KEPT,                 "",      "or refill the one kept - '%S.Clear()', then put the elements in: one made where '%S' lives stays there, beside every one made before it, until that scope closes") \
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
     X(NOTE_LOOP_COPY_LENT,              "",      "'%S' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") \
     X(NOTE_HELD_INDEX_WHERE,            "",      "the index is held here, for both the read and the write, in a block that closes first - make it where '%S' lives first, then index with it") \

@@ -1,0 +1,17 @@
+# check: fail error[S12b]: '=>' gives a value, and 'return' gives none - a clause that leaves is a block: '{ return one(t) }'
+# also: compilation failed with 1 error
+# S12b: "case X => return v" is the same mistake whatever v starts with - with a name it said L9's "'return' is a
+# keyword, not a name" (study 6's r13)
+type Tok enum {
+    Num
+    Str
+}
+fn one(t Tok) I32 { return 1 }
+fn b(t Tok) I32 {
+    match t {
+        case Tok.Num => return one(t)
+        nomatch { }
+    }
+    return 0
+}
+fn main() ? { println($b(Tok.Str)) }

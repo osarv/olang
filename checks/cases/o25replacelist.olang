@@ -1,0 +1,20 @@
+# check: fail error[O25]: a reference never narrows - 'still' lives in a block that closes first, and this keeps it longer
+# also: refill the one kept - 'w.alive.Clear()'
+# B11/O25: a collection made in a block put in place of one kept longer - the headline names the local, and the notes
+# say both ways out: make it where it is kept (which keeps every one made until that scope closes), or refill the one
+# kept in place (study 6's r10: the message said "declare it with ':='" of a ':=' local)
+type World struct() {
+    alive mut List<I64>& = List<I64>()
+}
+fn (w mut World&) age(s I64) {
+    still := List<I64>()
+    for id in w.alive {
+        if (id + s) % 7 != 0 { still.Push(id) }
+    }
+    w.alive = still
+}
+fn main() ? {
+    w := World()
+    for s in range 3 { w.age(s) }
+    println($w.alive.Len())
+}

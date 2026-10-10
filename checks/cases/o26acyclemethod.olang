@@ -1,0 +1,34 @@
+# check: run
+# O26a/O10c: methods calling each other keep their argument through the cycle - one checked first sees the other's
+# obligations only once every body is (dischargeLateObligations), so a callee in a cycle is taken to keep what it is
+# handed until then, and the local is moved where the result goes (review chk5: refused at the call)
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type Ref struct(r Info&) { r }
+type W struct(x Ref) { x }
+type G struct() { n I64 = 0 }
+fn (g G&) h(i Info&, d I64) Ref {
+    if d < 5 { return g.m(i, d + 1) }
+    return Ref(i)
+}
+fn (g G&) m(i Info&, d I64) Ref { return g.h(i, d) }
+fn (g G&) A(k I64) W {
+    i := Info(k, k + 1)
+    return W(g.m(i, 0))
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, k * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := G()
+    w := g.A(7)
+    churn()
+    assert w.x.r.Offset == 7 and w.x.r.Len == 8
+}

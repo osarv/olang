@@ -64,6 +64,8 @@ struct errRecord {
     char* text;
     size_t size;
     bool dropped; //G16b: given way to the same error from another instantiation, which could spell the generic's types
+    int col;      //B11: where an error is, and what it says - a second one the same at the same place is not written
+    char* msg;
 };
 static struct errRecord** recs;
 static int nRecs, capRecs;
@@ -120,7 +122,7 @@ void ErrMsgWeakSpelling(void) { if (curSeen >= 0 && curSeen < nSeen) seen[curSee
 
 static void freeRecords(int from) {
     closeCur();
-    for (int i = from; i < nRecs; i++) { free(recs[i]->text); free(recs[i]); }
+    for (int i = from; i < nRecs; i++) { free(recs[i]->text); free(recs[i]->msg); free(recs[i]); }
     nRecs = from;
     int k = 0;
     for (int i = 0; i < nSeen; i++) if (seen[i].rec < from) seen[k++] = seen[i];
@@ -544,20 +546,35 @@ static void errorV(struct where w, bool syntax, enum diag d, va_list ap) {
     int use = programUse(w);
     struct where met = w;
     if (use >= 0) w = whereOf(errContexts[use].tok);
+    //B11: one error per cause - the same message at the same place again (two checks reaching one fault: a declaration
+    //judging where a scope argument puts its instance, then the statement storing it there) is not written twice
+    char* msg = NULL;
+    size_t msgSize = 0;
+    int col = columnOf(w);
+    if (!muteDepth) {
+        FILE* mf = open_memstream(&msg, &msgSize);
+        va_list ap2;
+        va_copy(ap2, ap);
+        putMessage(mf, diags[d].fmt, ap2);
+        va_end(ap2);
+        fclose(mf);
+    }
     if (errContextDepth > 0 && !muteDepth && isScopeRule(diags[d].rule)) { //G16b: once for every instantiation
-        int col = columnOf(w), metCol = columnOf(met);
+        int metCol = columnOf(met);
         int i = 0;
         while (i < nSeen && !(seen[i].d == (int)d && seen[i].line == w.line && seen[i].col == col
                               && seen[i].metLine == met.line && seen[i].metCol == metCol
                               && StrCmp(seen[i].file, w.file))) i++;
         if (i < nSeen) {
-            if (!seen[i].weak || seen[i].rec >= nRecs) { lastDropped = true; return; }
+            if (!seen[i].weak || seen[i].rec >= nRecs) { free(msg); lastDropped = true; return; }
             closeCur();
             recs[seen[i].rec]->dropped = true; //this one is written instead, and counted already
             seen[i].rec = nRecs;
             seen[i].weak = false;
             curSeen = i;
             FILE* f = startError(w, diags[d].rule);
+            recs[nRecs - 1]->col = col;
+            recs[nRecs - 1]->msg = msg;
             putMessage(f, diags[d].fmt, ap);
             endError(f, w, use, met);
             return;
@@ -570,8 +587,22 @@ static void errorV(struct where w, bool syntax, enum diag d, va_list ap) {
                                         .d = (int)d, .rec = nRecs };
         curSeen = nSeen++;
     }
-    if (!countError(syntax)) return;
+    //(after G16b's own bookkeeping, which lets a later instantiation's spelling replace an earlier one's: undone here)
+    for (int i = 0; msg && i < nRecs; i++) {
+        struct errRecord* r = recs[i];
+        if (r->msg && !r->dropped && r->line == (w.line > 0 ? w.line : INT_MAX) && r->col == col && StrCmp(r->file, w.file)
+                && !strcmp(r->msg, msg)) {
+            if (curSeen >= 0 && curSeen == nSeen - 1 && seen[curSeen].rec == nRecs) nSeen--;
+            curSeen = -1;
+            free(msg);
+            lastDropped = true;
+            return;
+        }
+    }
+    if (!countError(syntax)) { free(msg); return; }
     FILE* f = startError(w, diags[d].rule);
+    recs[nRecs - 1]->col = col;
+    recs[nRecs - 1]->msg = msg;
     putMessage(f, diags[d].fmt, ap);
     endError(f, w, use, met);
 }

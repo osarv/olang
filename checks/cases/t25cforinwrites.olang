@@ -1,0 +1,25 @@
+# check: fail error[T25c]: a read-only reference cannot become writable
+# T25c: a for-in over a reference a read-only copy holds borrows it read-only (study 6's r05) - a walk that writes, a
+# 'mut' At, is refused at that call
+type Ring struct() {
+    data mut Array<I64>& = Array<I64>(3)
+    reads I64 = 0
+}
+fn (r mut Ring&) At(i I64) I64 {
+    r.reads++
+    return r.data[i]
+}
+fn (r Ring&) Len() I64 { return 3 }
+type Holder struct() {
+    ring mut Ring& = Ring()
+}
+fn walk(hs List<Holder>&) I64 {
+    t I64 = 0
+    for x in hs[0].ring { t += x }
+    return t
+}
+fn main() ? {
+    hs := List<Holder>()
+    hs.Push(Holder())
+    println($walk(hs))
+}

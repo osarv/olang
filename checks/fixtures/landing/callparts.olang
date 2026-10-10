@@ -1,0 +1,74 @@
+# O18c: a ":=" from a call, or from a part of one - or a for-in's element - lands where the callee's obligations say its result is outlived only
+# where that costs nothing or is forced - here the callees build new text and a new array into their result scopes, so
+# each call is the loop body's and is reclaimed every turn. Landed where the lexer, or base, lives, every turn's would
+# be kept until that scope closes (review chk5: 206 MB and 1 GB). Run under an address-space limit far below that
+type Token struct(kind I64, text String&) {
+    kind
+    text
+}
+type Lexer struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (lx mut Lexer&) next() Token {
+    lx.at++
+    if lx.at % 2 == 0 { return Token(1, lx.src[0:3]) } # a slice of the source: lives where the lexer's text does
+    return Token(2, "n" $lx.at)                         # new text, built in the result scope
+}
+# a field read off the call's result
+fn fields(lx mut Lexer&, n I64) I64 {
+    total I64 = 0
+    for k in range n {
+        t := lx.next().text
+        total += t.Len()
+    }
+    return total
+}
+# the whole result, then a field of it
+fn wholes(lx mut Lexer&, n I64) I64 {
+    total I64 = 0
+    for k in range n {
+        tk := lx.next()
+        t := tk.text
+        total += t.Len()
+    }
+    return total
+}
+type Pair2 struct(a String&, b Array<I64>&) {
+    a
+    b
+}
+type Out struct(p Pair2) { p }
+fn mk(t String&, n I64) Out { return Out(Pair2(t, Array<I64>(n, 7))) }
+# a value part holding a new array
+fn arrays(base String&, n I64) I64 {
+    total I64 = 0
+    for k in range n {
+        x := mk(base, 64).p
+        total += x.b[k % 64] + x.a.Len()
+    }
+    return total
+}
+# an iterator handing out new values: the element is a local of the loop body, which keeps nothing of it
+type TokIter struct(src String&, left I64) {
+    src
+    left
+    at I64 = 0
+}
+fn (it mut TokIter&) Next() Token ? Exhausted {
+    if it.left == 0 { error Exhausted.END }
+    it.left--
+    it.at++
+    if it.at % 2 == 0 { return Token(1, it.src[0:3]) }
+    return Token(2, "n" $it.at)
+}
+fn walked(src String&, n I64) I64 {
+    total I64 = 0
+    for tk in TokIter(src, n) { total += tk.text.Len() }
+    return total
+}
+fn main() ? {
+    lx := Lexer("abcdef")
+    base := "base"
+    println($fields(lx, 8000000) " " $wholes(lx, 8000000) " " $arrays(base, 1000000) " " $walked(base, 8000000))
+}
