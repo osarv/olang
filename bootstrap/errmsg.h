@@ -481,7 +481,6 @@ struct type;
     X(ERR_FUNC_VALUE_OBLIGATIONS,       "T22a",  "'%S' relates its arguments' scopes, which a call through a function value cannot check - call it directly") \
     X(ERR_LAMBDA_VALUE_OBLIGATIONS,     "T22a",  "this lambda keeps '%S' beyond the call, which a call through a function value cannot check - keep a copy instead") \
     X(ERR_LAMBDA_VALUE_RELATES,         "T22a",  "this lambda relates its arguments' scopes, which a call through a function value cannot check") \
-    X(ERR_CAPTURE_HOLDS_REFERENCES,     "D16c",  "a lambda copies what it captures, and a copy of this loses its references' scopes - capture a reference to it") \
     X(ERR_LAMBDA_RESULT_UNINFERABLE,    "D16b",  "this value gives the lambda no result type - write one") \
     X(ERR_LAMBDA_ARITY,                 "D16a",  "%t takes %d parameter%s, and this lambda %d") \
     X(ERR_LAMBDA_SIGNATURE,             "D16a",  "this lambda's signature disagrees with %t - leave that part out, or make them agree") \
