@@ -351,6 +351,8 @@ struct var {
     //with such an argument, or through a function value it did not make. effTok: where it was first found
     bool effWrites;
     struct token effTok;
+    struct list effCaps; //E11c: on a lambda, the captures it writes through (struct var*) - an effect of whoever made it
+                         //exactly where what the capture copies reaches storage that was there before that function ran
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program

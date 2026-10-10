@@ -11368,6 +11368,32 @@ static bool effOutsideScope(struct checkCtx* ctx, struct var* v, bool unnamed) {
 }
 //...whether writing the place p writes such storage: a referent reached through a reference, where that reference's
 //scope is not this call's own, or a global's own storage
+//...the capture a reference or a place is reached through, in a lambda's body: there its scope is the capture's, which
+//says nothing about whether it was there before the function making the lambda ran - that function judges it (effCaps)
+static struct var* effCaptureOf(struct checkCtx* ctx, struct operand* p) {
+    if (!ctx->func || !ctx->func->isLambda) return NULL;
+    for (int guard = 0; p && guard < 64; guard++) {
+        if (heldResult(p)) { p = heldResult(p); continue; }
+        if ((p->opType == OPERATION_MEMBER || p->opType == OPERATION_INDEX || p->opType == OPERATION_SLICE
+                || p->opType == OPERATION_AS) && p->args.len) {
+            p = *(struct operand**)ListGetIdx(&p->args, 0);
+            continue;
+        }
+        if (p->opType == OPERATION_READ_VAR && p->readVar) {
+            struct var* v = p->readVar;
+            if (v->isCapture) return v;
+            //a local of the lambda's made from a capture ("k := c.k")
+            if (!v->owner && !v->paramCopy && v->declInit && !v->roAssigns.len) { p = v->declInit; continue; }
+        }
+        return NULL;
+    }
+    return NULL;
+}
+static void effCapAdd(struct var* lambda, struct var* cap) {
+    if (!lambda->effCaps.elemSize) lambda->effCaps = ListInit(sizeof(struct var*));
+    for (int i = 0; i < lambda->effCaps.len; i++) if (*(struct var**)ListGetIdx(&lambda->effCaps, i) == cap) return;
+    ListAdd(&lambda->effCaps, &cap);
+}
 static bool effPlaceOutside(struct checkCtx* ctx, struct operand* p) {
     for (int guard = 0; p && guard < 64; guard++) {
         if (heldResult(p)) { p = heldResult(p); continue; }
@@ -11387,6 +11413,13 @@ static bool effPlaceOutside(struct checkCtx* ctx, struct operand* p) {
         return false;
     }
     return false;
+}
+//...a write of such a place: an effect of this function, or, in a lambda through a capture, of the function making it
+static void effWrite(struct checkCtx* ctx, struct operand* place, struct token tok) {
+    if (!ctx->hasOwnScope || ErrMsgMuted() || place->type.unknown || !effPlaceOutside(ctx, place)) return;
+    struct var* cap = effCaptureOf(ctx, place);
+    if (cap) effCapAdd(ctx->func, cap);
+    else effMark(ctx->func, tok);
 }
 //...whether an argument hands a callee such storage to write through: a reference's referent, a borrowed value's own
 //storage, or a value's references (a copy shares what they name)
@@ -11419,10 +11452,16 @@ static struct var* effLambdaOf(struct operand* op) {
     return NULL;
 }
 static bool roCalleeKnown(struct var* f);
+static void effEdge(struct var* caller, struct var* callee, struct token tok) {
+    if (!effEdges.elemSize) effEdges = ListInit(sizeof(struct effEdge));
+    struct effEdge e = { caller, callee, tok };
+    ListAdd(&effEdges, &e);
+}
 static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args, struct token tok) {
     if (!ctx || !ctx->func || !ctx->hasOwnScope || ErrMsgMuted()) return;
+    struct var* L = func && func->isLambda ? func : NULL;
     if (!roCalleeKnown(func)) { //a function value: its body is not known here, unless this function made it
-        struct var* L = effLambdaOf(op && op->callee ? op->callee : NULL);
+        L = effLambdaOf(op && op->callee ? op->callee : NULL);
         if (!L && func && !func->isLambda) {
             struct operand rv = (struct operand){0};
             rv.opType = OPERATION_READ_VAR;
@@ -11433,15 +11472,29 @@ static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, 
         func = L;
     }
     if (func->type.isExtern) return;
+    //a lambda this function made: whatever its body does is this function's - through its captures, judged here by what
+    //each copies, and everything else it does, settled with every other edge
+    if (L) {
+        effEdge(ctx->func, L, tok);
+        for (int i = 0; i < L->effCaps.len; i++) {
+            struct var* c = *(struct var**)ListGetIdx(&L->effCaps, i);
+            struct var* from = c->capturedFrom;
+            if (!from) { effMark(ctx->func, tok); break; }
+            if (from->isCapture && ctx->func->isLambda) { effCapAdd(ctx->func, from); continue; }
+            struct operand* src = OperandReadVar(from, tok);
+            if (effArgOutside(ctx, src, c->type)) { effMark(ctx->func, tok); break; }
+        }
+    }
     for (int j = 0; j < func->type.vars.len && j < args.len; j++) {
         struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
         struct operand* a = *(struct operand**)ListGetIdx(&args, j);
         bool reach = pt.bType == BASETYPE_FUNC ? !effLambdaOf(a) && !(a->opType == OPERATION_READ_VAR && a->readVar && a->readVar->isFuncDecl)
                                                : effWritableThrough(pt) && effArgOutside(ctx, a, pt);
         if (!reach) continue;
-        if (!effEdges.elemSize) effEdges = ListInit(sizeof(struct effEdge));
-        struct effEdge e = { ctx->func, func, a->tok };
-        ListAdd(&effEdges, &e);
+        //(in a lambda, an argument reached through a capture is the capture's - taken as written, the callee being able to)
+        struct var* cap = pt.bType == BASETYPE_FUNC ? NULL : effCaptureOf(ctx, a);
+        if (cap) { effCapAdd(ctx->func, cap); continue; }
+        effEdge(ctx->func, func, a->tok);
         return;
     }
 }
@@ -13255,7 +13308,7 @@ static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target,
         ListAdd(&seq->comprBody, &set);
         return seq; //S3a: no value - nothing reads one, and giving it the target's would evaluate the place again (S4)
     }
-    if (ctx->hasOwnScope && !ErrMsgMuted() && !target->type.unknown && effPlaceOutside(ctx, target)) effMark(ctx->func, tok); //E11c
+    effWrite(ctx, target, tok); //E11c
     if (target->type.bType == BASETYPE_TYPEVAR) return NULL;
     //under "try" (E31) a number's increment is "x = x + 1", which the try then checks for overflow
     bool num = TypeIsNumeric(target->type);
@@ -14508,7 +14561,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         struct list atArgs = prebuiltMethodArgs ? *prebuiltMethodArgs : buildArgs(ctx, argsNode);
         rejectDefaultArgs(atArgs);
         ctx->allowFallibleCall = allowedAt;
-        if (atomKind != OPERATION_ATOMIC_LOAD && ctx->hasOwnScope && !ErrMsgMuted() && effPlaceOutside(ctx, recvOp)) effMark(ctx->func, mTok); //E11c
+        if (atomKind != OPERATION_ATOMIC_LOAD) effWrite(ctx, recvOp, mTok); //E11c
         return OperandAtomic(ctx->func, recvOp, atArgs, atomKind, mTok);
     }
     //a field always wins - a method may not share its name (M19) - so "x.f(args)" on a field is E13b's call through
@@ -17487,7 +17540,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         if (!target->readVar->roAssigns.elemSize) target->readVar->roAssigns = ListInit(sizeof(struct operand*));
         ListAdd(&target->readVar->roAssigns, &rhs);
     }
-    if (ctx->hasOwnScope && !ErrMsgMuted() && !target->type.unknown && effPlaceOutside(ctx, target)) effMark(ctx->func, opTok); //E11c
+    effWrite(ctx, target, opTok); //E11c
 
     bool isCompound;
     enum operation compoundOp = compoundOpFromAssignTok(opTok.type, &isCompound);
