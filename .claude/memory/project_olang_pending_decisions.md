@@ -96,6 +96,13 @@ length Vec<T> again right?"):**
     aliasing-XOR-mutation.
   - Spelled as a reference modifier like `mut` (`Map<I64, box Conn&>`, `box mut Conn&`), not a `Box<T>` type. That way
     method calls and every other reference rule apply unchanged, with no deref rules.
+  - RENAMED 13:20 CEST: I argued `owned` reads better than `box` (it says the rule; `box` is a common variable name in
+    vision and GUI code), and the user proposed "just own" -> the modifier is `own` (`Map<I64, own Conn&>`,
+    `own mut Conn&`), beside `mut`. No identifier in the repository or oann is named `own`. Read "box" below as `own`.
+  - Moving out of a container: `Map.Take(k)` (fails with the default error on a miss, as Get does) and `List.TakeAt(i)`
+    remove the entry and hand the caller the owned object (the user: "that would read better"). A call's result never
+    needs `take`: it belongs to nobody yet. `take` is for a named place that would otherwise still hold it (field,
+    element, global, a local used again); `return c` of a local needs none.
   - Freeing (the user asked "is it take only or a free keyword as well?"): no `free` keyword. A box is freed when its
     owner lets go of it:
     - removed from its container (`Remove`, `RemoveAt`, `Clear`, `Truncate`);
