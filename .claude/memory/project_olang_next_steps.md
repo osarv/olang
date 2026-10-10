@@ -563,6 +563,18 @@ because what it finds about structure feeds the refactor.
   read-only soundness review of that E11c change runs (/home/user/wt/rv7 -> /home/user/review/tonight7). Decision 47
   failed its gate (+10%); round 3 builds decision 48 (closure-call check) in wt-rv3fix. oann phase 10 started (catch-up
   to ada716d via /home/user/wt/oannc5, settling open questions 15-17). Morning report posted 06:10 CEST.
+- 09:30 CEST (2026-10-10): oann phase 10 pushed (334f338 catch-up to ada716d, 0ed5de3 settling Q15-17: recall alone
+  at gain 2, partial cues completed, familiarity-weighted generalization; 138 tests; open question 18). It found
+  oann repro/resultgrowth (O26a keeps a local in a structure's scope on every call - unbounded growth),
+  fieldofresult (O10d regression since efdb82c) and membercascade (a cascade) -> wt-chk5, together with study6 r02, r04,
+  r05, r07, r10 and r13-r15. Decision 48's review (/home/user/review/tonight8) found F1: the may-build walk misses
+  temporaries built where a conditional, match value or catch default lands, plus a Call adapter loading the raw scope.
+  Also found: 02, a crash on a reference default temporary used from two functions, and 03, an over-rejection. All sent
+  to a fix agent on wt-rv3fix. Decision 49 (wt-str1 d6c7f52) review (/home/user/review/str1): 3 new UAFs (a read-only
+  capture skipping O17, destructors storing after Str's temporary scope, item 3's C2d skip), a builder leak, and 6x
+  stack per frame. Sent back to the str1 agent with direction: Str's receiver scope is O12's unknown, nothing built
+  there; revert item 3; fix P1; the builder overflow comes from the arena. It needs a second review before merging.
+  Running: rv3fix (F1), i64lit (QD), chk5, str1 (round 2).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
