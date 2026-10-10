@@ -685,6 +685,15 @@ because what it finds about structure feeds the refactor.
   Also: a pre-existing destructor leak on field assignment (P1), and two safe over-rejections. Sent back to the own
   agent (afe0b23) on wt-own. A follow-up soundness review runs before the merge.
   The user, 23:35 CEST: the port's scanner (M1) waits - start it once own merges, beside own phase 2, not now.
+- 00:40 CEST (2026-10-11): own's fixes on wt-own (252c3bc, verified):
+  - C1: a take is refused under a live loan.
+  - C2: borrow effects, with loans held to the join.
+  - P1: the destructor leak.
+  - Two relaxations: R1, an assignment's value may borrow what the store releases; R2, a release through one slot does
+    not hit a loan read through another slot of the same object.
+  - O33 amended: only := holds a borrow.
+  The fuzzer found 56 issues in 60 programs before the fix and 0 after. A follow-up soundness review runs
+  (/home/user/wt/rvown2 @ 252c3bc -> /home/user/review/own2), attacking R1/R2 hardest. Merge only if it is clean.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
