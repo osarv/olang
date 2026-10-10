@@ -1,4 +1,4 @@
-# check: fail error[S9a]: I32 cannot be walked
+# check: fail error[S9a]: I64 cannot be walked
 error E { X }
 fn main() ? E {
     for x in 5 { }

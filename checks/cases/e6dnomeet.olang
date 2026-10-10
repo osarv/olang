@@ -1,7 +1,7 @@
-# check: fail error[E6d]: this literal does not fit U32, and U32 does not flow into I32
-# E6d: -1 does not fit a U32, so the two would meet at the literal's own type, I32 - but a U32 does not flow into an
-# I32 (only into the wider I64, T6b), so they do not meet; the fix is to convert, as I64(u) - 1, or to write u + 1
+# check: fail error[E6d]: this literal does not fit U64, and U64 does not flow into I64
+# E6d: -1 does not fit a U64, so the two would meet at the literal's own type, I64 - but a U64 does not flow into an
+# I64 (no signed type is wider, T6b), so they do not meet; the fix is to convert, as I64(u) - 1, or to write u + 1
 fn main() ? {
-    u U32 = 5
-    v U32 = u - (-1)
+    u U64 = 5
+    v U64 = u - (-1)
 }

@@ -1,0 +1,17 @@
+# check: run
+# flags: -D N=5
+# B10/T6a: a -D integer is typed as its literal is - an I64 - and adapts nowhere, as a typed value does not; a literal
+# beside it, or written against a typed target, still adapts
+fn kind(v <T>) I32 {
+    match T {
+        case I32 { return 32 }
+        case I64 { return 64 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? {
+    assert kind(N) == 64 and kind(N + 1) == 64 and kind(5) == 64
+    x I32 = I32(N)
+    y I32 = 5
+    assert x == y and N * 1000000000 == 5000000000
+}

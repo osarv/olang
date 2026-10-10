@@ -1,7 +1,7 @@
 # check: run
-# flags: -D N=2147483647
-# B9a: N is an I32, so N + 1 wraps in the program - the token evaluator does not compute it in 64 bits and decide
-# otherwise, but leaves it to compile-time evaluation (B9c), which agrees with the run time
+# flags: -D N=9223372036854775807
+# B9a: N is an I64, so N + 1 wraps in the program - the token evaluator does not decide from the exact sum, but leaves
+# it to compile-time evaluation (B9c), which agrees with the run time
 fn viaIf() I32 {
     if N + 1 < 0 {
         return 1
@@ -14,7 +14,7 @@ if N + 1 < 0 {
     fn top() I32 { return 2 }
 }
 fn viaValue() I32 {
-    v I32 = N + 1
+    v I64 = N + 1
     if v < 0 {
         return 1
     }

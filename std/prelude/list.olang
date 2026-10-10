@@ -679,7 +679,7 @@ if TestBuild {
 
     test "a list of structs" {
         l mut List<listKV>& = List<listKV>()
-        for i in range 20 {
+        for i in range I32(20) {
             l.Push(listKV(i, i * i))
         }
         a Array<listKV>& = l.ToArray()
@@ -776,7 +776,7 @@ if TestBuild {
     # 100 and doubles, so 250 elements grow it twice
     test "a comprehension walks a List" {
         l mut List<I32>& = List<I32>()
-        for i in range 250 { l.Push(i) }
+        for i in range I32(250) { l.Push(i) }
         evens := I32[x for x in l if x % 2 == 0]
         assert evens.Len() == 125
         assert evens[124] == 248

@@ -3163,9 +3163,8 @@ static cfWide cfFromBits(long long bits, enum baseType p) {
     if (pi && pi->kind == 'u' && pi->bits >= 64) return (cfWide)(unsigned long long)bits;
     return bits;
 }
-//a literal's own type (T6a, L10): I32, else I64, else U64 - BASETYPE_VOID beyond them
+//a literal's own type (T6a, L10): I64, else U64 - BASETYPE_VOID beyond them
 static enum baseType cfOwnType(cfWide v) {
-    if (cfRange(BASETYPE_INT32, v)) return BASETYPE_INT32;
     if (cfRange(BASETYPE_INT64, v)) return BASETYPE_INT64;
     if (cfRange(BASETYPE_U64, v)) return BASETYPE_U64;
     return BASETYPE_VOID;
@@ -7063,8 +7062,7 @@ static enum litValueFail literalExprFoldAs(struct operand* op, bool unsignedPatt
         lit = operandNew(op->tok, OPERATION_NONE, TypeVanilla(BASETYPE_FLOAT64));
         lit->floatLiteralVal = v.f;
     } else {
-        struct type t = TypeVanilla(BASETYPE_INT32);
-        if (!intLiteralFitsIntType(v.i, t)) t = TypeVanilla(BASETYPE_INT64);
+        struct type t = TypeVanilla(BASETYPE_INT64); //T6a: the value written as one literal - an I64, else a U64
         if (!intLiteralFitsIntType(v.i, t)) t = TypeVanilla(BASETYPE_U64);
         if (!intLiteralFitsIntType(v.i, t)) return LIT_VALUE_NONE;
         lit = operandNew(op->tok, OPERATION_NONE, t);
@@ -7248,12 +7246,14 @@ static bool adaptShiftOfLiteral(struct operand* op, struct type to) {
 }
 
 //T6's ordering for the both-operands-are-literals case below: the narrower of two literal types adapts to
-//the wider, so "'a' + 1" is int32 arithmetic rather than byte arithmetic that could wrap.
-//every integer below every float; within each by width, a signed type above the unsigned one of its width
+//the wider, so "'a' + 1" is I64 arithmetic rather than Char arithmetic that could wrap.
+//every integer below every float; within each by width, an unsigned type above the signed one of its width - the one
+//such pair two literals make is I64 and U64 (T6a), and an I64 literal fits a U64 where it is not negative, where a U64
+//one never fits an I64: "18446744073709551615 & 7" is U64 arithmetic
 static int numericTypeRank(struct type t) {
     const struct primInfo* p = PrimInfo(t.bType);
     if (!p) return 0;
-    return p->kind == 'f' ? 1000 + p->bits : p->bits * 2 + (p->kind == 'i');
+    return p->kind == 'f' ? 1000 + p->bits : p->bits * 2 + (p->kind == 'u');
 }
 
 //can op flow into a target-typed slot (assignment, initialization, argument passing)? a numeric
@@ -8331,6 +8331,49 @@ static struct operand* unfitLiteralValue(struct operand* op, struct type want) {
     return op;
 }
 
+//B11/T6a: of a number that does not flow into the integer type `want`, the local whose literal made it an I64 - where
+//every value the arithmetic reads is such a local, a literal, or a value whose type flows into `want`, so declaring
+//that local `want` makes the whole fit. *blocked when something else decides the type
+static void litOwnWalk(struct operand* op, struct type want, struct var** found, bool* blocked) {
+    if (*blocked || op->isLiteral) return;
+    switch (op->opType) {
+        case OPERATION_READ_VAR: {
+            struct var* v = op->readVar;
+            while (v && v->isCapture && v->capturedFrom) v = v->capturedFrom;
+            if (v && (v->litOwnDecl || v->litOwnRange)) { if (!*found) *found = v; return; }
+            break;
+        }
+        case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL: case OPERATION_DIV: case OPERATION_MOD:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR:
+            for (int i = 0; i < op->args.len; i++) litOwnWalk(*(struct operand**)ListGetIdx(&op->args, i), want, found, blocked);
+            return;
+        case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: case OPERATION_MINUS: case OPERATION_BTWSE_INV:
+            litOwnWalk(*(struct operand**)ListGetIdx(&op->args, 0), want, found, blocked); //a shift has its left operand's type
+            return;
+        case OPERATION_NUMERIC_CONVERT: { //a widening the meeting made (T6b) - what it widens decides
+            struct operand* in = *(struct operand**)ListGetIdx(&op->args, 0);
+            if (NumericFlows(in->type, op->type, true)) { litOwnWalk(in, want, found, blocked); return; }
+            break;
+        }
+        default: break;
+    }
+    if (!TypeIsSame(op->type, want) && !NumericFlows(op->type, want, false)) *blocked = true;
+}
+
+static void noteLiteralOwnType(struct operand* op, struct type want) {
+    if (!TypeIsInt(want) || want.owner || !TypeIsInt(op->type)) return;
+    struct var* v = NULL;
+    bool blocked = false;
+    litOwnWalk(op, want, &v, &blocked);
+    if (!v || blocked) return;
+    struct type own = TypeVanilla(v->type.bType);
+    struct type w = TypeVanilla(want.bType);
+    if (v->litOwnDecl) Note(v->tok, NOTE_LITERAL_LOCAL, v->name, &own, v->name, &w);
+    else if (v->litOwnRangeEnd->tok.type == TOK_INT_LIT) //one literal as written - an expression may be folded into one
+        Note(v->litOwnRangeEnd->tok, NOTE_LITERAL_RANGE, v->name, &own, &w, strFromTok(v->litOwnRangeEnd->tok), &w);
+    else Note(v->litOwnRangeEnd->tok, NOTE_LITERAL_RANGE_EXPR, v->name, &own, &w, &w);
+}
+
 void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struct type want) {
     if (fit == TYPE_FIT_LITERAL_RANGE || fit == TYPE_FIT_LITERAL_EXPR) {
         struct operand* u = unfitLiteralValue(op, want);
@@ -8346,7 +8389,7 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
     else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
-    else if (fit == TYPE_FIT_NUMBER) Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want);
+    else if (fit == TYPE_FIT_NUMBER) { Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want); noteLiteralOwnType(op, want); }
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
     else if (fit == TYPE_FIT_CTOR) Err(tok, ERR_LITERAL_NEEDS_CTOR, &want, &want);
     else if (fit == TYPE_FIT_READ_ONLY) {
@@ -12303,11 +12346,13 @@ struct operand* OperandCharLiteral(struct token tok) {
     return op;
 }
 
-//T6a: an integer literal's own type is int32 when its value fits one and int64 otherwise. The fallback
-//matters even though T6 no longer cares about the tag when adapting: without it a literal too large for
-//int32 was tagged int32 anyway, so an int32 target matched it EXACTLY, skipped T6 entirely, and truncated
-//it silently at codegen.
+//T6a: an integer literal's own type is I64 - a U64 above I64's maximum (L10). A target still adapts it (T6), so "b U8 =
+//3" stays a U8; the own type is what "x := 0", a type variable only literals reach (G9a) and a -D constant (B10) get.
 struct operand* OperandIntLiteralValue(struct token tok, long long value, bool u64);
+
+//B11/T6a: an initializer that gives ":=" its literal's own type - an integer literal, or a literal-only expression folded
+//into one (E4a): "x := 0" is an I64
+static bool litOwnInit(struct operand* rhs) { return rhs && rhs->isLiteral && !rhs->type.owner && TypeIsInt(rhs->type); }
 
 //what an unknown name, already reported, stands for: of the stand-in type every check lets through, so the one
 //misspelling is the one error - "nope[0] = 1" is not also "operand is not an array"
@@ -12334,15 +12379,11 @@ struct operand* OperandIntLiteral(struct token tok) {
 }
 
 //an integer literal whose value is already known - a -D build constant's (B10) - typed as T6a types its literal: a U64
-//where it is one (its bits in value), else I32 where it fits and I64 otherwise
+//where it is one (its bits in value), else an I64
 struct operand* OperandIntLiteralValue(struct token tok, long long value, bool u64) {
-    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(BASETYPE_INT32));
+    struct operand* op = operandNew(tok, OPERATION_NONE, TypeVanilla(u64 ? BASETYPE_U64 : BASETYPE_INT64));
     op->isLiteral = true;
     op->intLiteralVal = value;
-    if (u64) op->type = TypeVanilla(BASETYPE_U64);
-    else if (!intLiteralFitsIntType(op->intLiteralVal, TypeVanilla(BASETYPE_INT32))) {
-        op->type = TypeVanilla(BASETYPE_INT64);
-    }
     return op;
 }
 
@@ -16835,9 +16876,20 @@ static bool tokEndsWhole(enum tokenType t) {
     return t == TOK_PAREN_C || t == TOK_COMMA || t == TOK_SQUARE_C || t == TOK_IF || t == TOK_ELSE
            || t == TOK_STMNT_END || t == TOK_CURLY_C || t == TOK_CATCH || t == TOK_CASE || t == TOK_NOMATCH;
 }
+//O26a: e's tokens, leaving out what a rendering renders - "$(x)" is new text, holding nothing of x, as "$x" is
+static bool syntaxIsRendering(struct syntax* n);
+static void syntaxTokensNoRendering(struct syntax* n, struct list* out) {
+    if (syntaxIsRendering(n)) return;
+    for (int i = 0; i < n->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&n->parts, i);
+        if (p->isToken) ListAdd(out, &p->tok);
+        else syntaxTokensNoRendering(p->sntx, out);
+    }
+}
+
 static bool syntaxMentionsName(struct syntax* e, struct str name, bool skipFirst) {
     struct list toks = ListInit(sizeof(struct token));
-    syntaxTokensInto(e, &toks);
+    syntaxTokensNoRendering(e, &toks);
     bool found = false;
     for (int i = skipFirst ? 1 : 0; i < toks.len && !found; i++) {
         struct token* t = ListGetIdx(&toks, i);
@@ -16983,7 +17035,7 @@ static bool calleeMayKeepArg(struct var* m, int idx);
 //of the local can take what it refers to into the result
 static bool flowMentionsName(struct flowScan* fs, struct syntax* e, struct str name, bool skipFirst) {
     struct list toks = ListInit(sizeof(struct token));
-    syntaxTokensInto(e, &toks);
+    syntaxTokensNoRendering(e, &toks);
     struct type nt;
     bool known = flowNameType(fs, name, &nt);
     bool found = false;
@@ -17623,6 +17675,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     v->scopeUnnamed = unnamedScope;
     v->permByType = permByType;
     if (exprNode) v->declInit = rhs;
+    if (exprNode && !typeExprNode) v->litOwnDecl = litOwnInit(rhs); //B11: "x := 0" is an I64 (T6a)
     if (exprNode && roInheritDecl) roInheritFrom(v, rhs);
     //O25a: "x := e" takes e's scope - for a value holding references, where e's references were built
     if (inResult) { //O26a: its storage and its references are in the result scope
@@ -19337,8 +19390,8 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     struct operand* args[3] = { NULL, NULL, NULL };
     for (int i = 0; i < argNodes.len; i++) args[i] = buildExprFromSyntax(&w, *(struct syntax**)ListGetIdx(&argNodes, i));
     //the range's type: the first argument that is not a literal decides it, and literals adapt to it (T6);
-    //literals alone make it the widest of their own types
-    struct type T = TypeVanilla(BASETYPE_INT32);
+    //literals alone make it the widest of their own types - an I64 (T6a)
+    struct type T = TypeVanilla(BASETYPE_INT64);
     bool fixed = false;
     for (int i = 0; i < argNodes.len; i++) {
         if (!TypeIsInt(args[i]->type)) { Err(args[i]->tok, ERR_RANGE_NOT_INT, &args[i]->type); return (struct statement){0}; }
@@ -19405,6 +19458,11 @@ static struct statement buildForRangeStmnt(struct checkCtx* ctx, struct syntax* 
     struct operand* stepped = OperandBinary(rangeRead(vStep, kw), rangeRead(vC, kw), OPERATION_MUL, kw);
     struct statement d = buildVarDeclFromOperand(&l, elemTok, OperandBinary(rangeRead(vStart, kw), stepped, OPERATION_ADD, kw));
     ListAdd(&body, &d);
+    if (!fixed) { //B11: its literals made the values I64 (T6a) - where one does not fit, a note names the range's end
+        struct operand* end = args[1] ? args[1] : args[0];
+        struct var* names[2] = { scopeFindLocal(l.scope, strFromTok(elemTok)), idxTok ? scopeFindLocal(l.scope, strFromTok(*idxTok)) : NULL };
+        for (int i = 0; i < 2; i++) if (names[i]) { names[i]->litOwnRange = true; names[i]->litOwnRangeEnd = end; }
+    }
     struct list user = forInBody(&l, s, spec, kw);
     for (int i = 0; i < user.len; i++) ListAdd(&body, ListGetIdx(&user, i));
     loop.block = body;
@@ -20094,6 +20152,7 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     loopVar->scopeUnnamed = loopUnnamed;
     loopVar->permByType = permByType;
     loopVar->declInit = initVal;
+    if (!typeExprNode) loopVar->litOwnDecl = litOwnInit(initVal); //B11: "for i := 0, ..." is an I64 (T6a)
     if (!typeExprNode) { //T25b: as ":=" anywhere - its permission is its initializer's
         loopVar->roFrom = initVal;
         if (TypeIsPermRef(loopVar->type) && loopVar->type.refMut && roRefOf(initVal, NULL, 0)) loopVar->type.refMut = false;
@@ -21758,7 +21817,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
                     struct str fname = call->readVar->name;
                     for (int k = 0; k < fname.len; k++) if (fname.ptr[k] == '$') { fname.len = k; break; } //G16: as written
                     Err(t->tok, ERR_SPAWN_RESULT_AS_REF, &want, &t->type, fname, &shown);
-                } else Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type);
+                } else { Err(t->tok, ERR_SPAWN_RESULT_TYPE, &want, &t->type); noteLiteralOwnType(t, want); }
                 fits = false;
             }
             if (!OperandIsMutableLvalue(t)) fits = false;

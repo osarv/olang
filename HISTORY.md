@@ -13679,3 +13679,80 @@ only a callee writing through such a field into storage the `Str` itself made, w
 `checks/cases/s6strref` pins the reference and temporary shapes. SPEC's E11c now says what a `Str` makes for itself - an
 iterator or cursor included - it may change, through a callee too, and that what such a value's references reach (a
 `&p` field's included) is not its own. The evaluator needed nothing: E11c is a check, and `Str`s it accepts are K1-pure.
+
+### An integer literal's own type is `I64` (T6a, L10, T6, D15, E4a, E6d, E8b, S9b, G9a, B9a, B10/B10a, B11, 2026-10-10)
+
+**The decision.** Usage study 4 asked it (QD): float literals had become `F64` (T6a, 2026-10-08), while an integer
+literal with nothing to adapt to was still an `I32`. Every length, count and position in the language is an `I64` -
+`Len()`, `Find`, `IndexOf`, a for-in's index, `List`'s counts - so the most ordinary shape, `n := 0` then `n +=
+a.Len()`, was an error (an `I64` does not flow into an `I32`, T6b), and an `I32` counter or sum written with `:=`
+wrapped at 2^31 with nothing to say so. Go's untyped constants default to `int`, 64-bit on every platform olang
+targets. The user answered "yes" (2026-10-10).
+
+**What it touches, rule by rule.** A literal still adapts wherever something gives it a type (T6), so typed code keeps
+its meaning; only the places where a literal's *own* type shows change:
+- **L10/T6a**: an integer literal's own type is `I64`, a decimal one above `I64`'s maximum a `U64` (as before).
+- **D15**: `x := 0`, `x := 1 + 2` (E4a: a literal-only expression declares what its value as one literal would) are
+  `I64`s; `x := 9223372036854775807 + 1` a `U64`.
+- **E6d**: beside an operand whose type cannot hold it, a literal meets it at its own type - `b + 300` with `b` a `U8`
+  is now an `I64`, `u32 - (-1)` an `I64` (it was an error: the `I32` it met at did not take a `U32`); `'a' + 1`, two
+  literals, meets at the wider own type, `I64`.
+- **E8b**: `y := 1 << s` shifts an `I64`.
+- **S9b**: a range of literals counts in `I64`; a range's type is its first argument that is no literal, so
+  `range I32(10)` counts in `I32`.
+- **G9a**: a type variable only literals reach binds `I64` (`Pick(1, 2)`); one an argument of a type reaches is that
+  type, the literals adapting (`Fold(I32(0), ...)`, or a lambda's written `acc I32`).
+- **B10/B10a**: `-D N=5` defines an `I64`, and so is `TargetVectorBits`.
+- **B9a**: the token evaluator's literals are 64-bit (`LITERAL_INT_BITS`), so a top-level condition computes as the
+  program does (`IntLitTop := 2147483647; if IntLitTop + 1 > 0` takes the first branch now).
+
+**The checker.** The change itself is small - the literal's operand (`OperandIntLiteralValue`), the constant fold's own
+type (`cfOwnType`), E4a's folded result (`literalExprFold`), a range's default (`buildForRangeStmnt`) and the token
+evaluator - since every other site already read the literal's type. One meeting rule had to move: two literals meet at
+the higher rank, and `numericTypeRank` put a signed type above an unsigned one of the same width. Harmless while the
+default was 32-bit; once both were 64-bit, `18446744073709551615 & 7` met at `I64`, which the `U64` literal does not
+fit (an error in `checks/cases/b10u64` and in fuzz seed 1). Unsigned now ranks above signed at the same width, so it is
+a `U64` computation and the `7` adapts.
+
+**Diagnostics (B11).** The failure the change produces is always the same shape: a value a literal made an `I64` is
+handed to something narrower - an `I32` parameter, field, element or spawn target - which T6b refuses. The error is
+right, but it points at the use, while the fix is at the declaration. So T6b's error (and P1g's) now walks the value
+back (`litOwnWalk`: locals, arithmetic, widening conversions, captures) to the declarations whose literal gave it its
+type, and adds a note there: `'n' is I64, its literal's own type - declare the type it should have, 'n I32 = ...'`
+for a `:=` local (`litOwnDecl`), or for a range's element or index (`litOwnRange`) `the range's literals make 'i' I64
+- write 'I32(10)' here for I32 values`, pointing at the range's end (`convert its end, 'I32(...)'` when the end is an
+expression). Pinned by `checks/cases/t6alocalnote`, `t6arangenote`, `t6aspawnnote`, and `t6adefine` for `-D N=5`.
+
+**Migration.** `tools/int_literal_i64.py` applies those notes, as `tools/perm_mut.py` applies the permission notes:
+each file compiled (`-t` where it has tests), `NAME :=` rewritten to `NAME TYPE =`, a range's end wrapped in
+`TYPE(...)`, rounds until nothing changes; comments and literals untouched, a checks/cases program keeps the failure it
+is about (no edit is made from a diagnostic carrying its expected text, whose LINE:COL follows any edit), and an error
+no note answers - a `Fold(0, ...)` whose `U` only the literal reached, a conditional mixing an `I32` with such a local -
+is printed for a look by hand. **Decided (mine)**: the tool writes the type the old rule gave (the program was written
+against it), and by hand `I64` is kept wherever it is the better type - sums and counts, `TargetVectorBits` locals
+(`b12level`), the generated `manyifs` function (`f(x I32) I64`), `defsfast`'s `pick()`. Sizes: std 6 ranges and one
+global (`arraySumBaked I64`); shared.olang 20 locals and 23 ranges by the tool, about a dozen assertions about what a
+literal's type is by hand (they asserted `I32` and now assert `I64`, with `I32(...)` beside them where the point was an
+`I32` instantiation); checks 8 programs by the tool, 13 cases whose expected text named `I32`, 2 lines of
+checks.olang; fuzz 3 ranges by the tool plus the generator's own type id for a range counter (it generated a counter
+typed by its literals); bench and compiler/DESIGN.md nothing. For oann:
+`python3 /home/user/olang/tools/int_literal_i64.py --olang /home/user/olang/build/out /home/user/oann`.
+
+**Tests the evaluator runs.** `IntLitSquare I64 = intLitSquare(100000)` (10^10, past `I32`), `IntLitWrap` (wrapping at
+`I64`'s maximum) and `IntLitTop`'s top-level branch are baked while compiling and compared with the same computation
+at run time through a mutable global; `litKind` (a `match T` per type) shows each own type, and the typed targets still
+adapting.
+
+**Measured.** The bench suite under callgrind, both compilers building at `-a x86-64-v3` (valgrind has no AVX-512):
+every program within 0.01% of its instructions, same output - the benches declare their types. What can cost is a
+`:=` accumulator that is now 64-bit where 32 would do: summing 10M `I32` elements 50 times, `s := 0` 267-301 ms against
+`s I32 = 0` 236-272 ms (memory-bound, about 10%) - and the `I32` sum overflowed (-1954181760 against 255743856000).
+
+**Found on the way.** (1) Pre-existing, found by the fuzzer under the new literals (seed 134) and reproduced on master:
+O26a's flow analysis (`syntaxMentionsName`, `flowMentionsName`) read a rendering's operand as a flow of what it
+renders, so `x5 = x3` followed by `return $(x5)` made `x5` "flow into the result" and the assignment was O25's error. A
+rendering builds new text and holds nothing of its operand; both walkers skip renderings now
+(`syntaxTokensNoRendering`), pinned by a corpus test. (2) `checks.olang`'s `tcrash` runs the compiler under `ulimit -s
+256` to force a crash on a deeply nested file; the prelude's own test build, which every test build checks first, needs
+about 260KB of the compiler's stack under that limit - it was already at the edge - so the limit is 1MB, and the nested
+file still crashes it.

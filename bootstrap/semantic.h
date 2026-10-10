@@ -406,6 +406,12 @@ struct var {
     struct list codeBlock; //for functions
     struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
     struct operand* declInit; //a local's initializer, as checked - B11: what a scope diagnostic traces a value back to
+    //B11/T6a: an integer local typed by its literal's own type, I64 - declared by ":=" from a literal or a literal-only
+    //expression (litOwnDecl, at tok), or a range's value or counter whose bounds are all literals (litOwnRange, the
+    //range's end argument): where it does not flow into a narrower integer, a note names the declaration to change
+    bool litOwnDecl;
+    bool litOwnRange;
+    struct operand* litOwnRangeEnd;
     bool bodyUnparsed;        //its body did not parse (the error reported): declared by its signature, never checked
     bool bodyIncomplete;      //S8b: a branch in this body is still being decided (it was skipped unparsed),
                               //so its body is not yet the program's and must not be evaluated

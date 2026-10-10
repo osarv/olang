@@ -1,7 +1,7 @@
 # check: run
 error E { X }
 fn main() ? E {
-    compif := 1
+    compif I32 = 1
     compelse I32 = compif
     assert compelse == 1
 }

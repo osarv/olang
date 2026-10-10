@@ -327,6 +327,9 @@ struct type;
     X(NOTE_PROTOCOL_SPELLING,           "",      "'%S' is %s's private spelling with %s's parameters, so it is held to its shape") \
     X(NOTE_DECLARED_HERE,               "",      "%n is declared here") \
     X(NOTE_DECLARE_WRITABLE,            "",      "'%S' is declared read-only here - declare it '%S mut %t' to write through it") \
+    X(NOTE_LITERAL_LOCAL,               "",      "'%S' is %t, its literal's own type - declare the type it should have, '%S %t = ...'") \
+    X(NOTE_LITERAL_RANGE,               "",      "the range's literals make '%S' %t - write '%t(%S)' here for %t values") \
+    X(NOTE_LITERAL_RANGE_EXPR,          "",      "the range's literals make '%S' %t - convert its end, '%t(...)', for %t values") \
     X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \

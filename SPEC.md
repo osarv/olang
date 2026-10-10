@@ -134,8 +134,7 @@ C2a). Anywhere else - a parameter, a local, a function, a type - the words stay 
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
 `decimal-int ::= digit { digit-sep digit }`. No unary minus is
 part of the literal itself (negation is the unary `-` operator, §5). An `INT_LIT`'s own type follows its
-written value: `I32` where it fits one, `I64` where it fits that, and `U64` for a decimal value above `I64`'s maximum
-(T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
+written value: `I64`, and `U64` for a decimal value above `I64`'s maximum (T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
 saturated or wrapped - and so is a hexadecimal or binary one needing more than 64 bits.
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
@@ -426,8 +425,10 @@ Adaptation is therefore never a silent truncation or overflow, and never turns a
 it is not restricted to widening either: `x U8 = 65` and `b == 'a'` are as valid as `n I64 = 1`, because the literal
 has no representation of its own yet and the value written fits. A **literal-only expression** (E4a) adapts exactly
 as the one literal holding its value would. Where both operands of a same-type-requiring binary operator are literals
-(or literal-only expressions) of differing numeric types, the narrower adapts to the wider (`Char` < `I32` < `I64` <
-`F64`, the types T6a gives them), subject to the same representability rule. Beside an operand whose type cannot
+(or literal-only expressions) of differing numeric types, the narrower adapts to the wider (`Char` < `I64` < `U64` <
+`F64`, the types T6a gives them), subject to the same representability rule - so beside a `U64` literal an `I64` one
+adapts to `U64` where it is not negative (`18446744073709551615 & 7` is `U64` arithmetic), and a negative one does not
+fit, which is an error. Beside an operand whose type cannot
 represent its value, a literal does not adapt: the two meet at the literal's own type (E6d). A non-literal value of a
 different numeric type requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
 
@@ -448,14 +449,16 @@ base, an integer and a float - do not meet, and that is a compile-time error. A 
 to meet with: beside a number it adapts (T6), or, where that number's type cannot hold it, meets it at the literal's
 own type (E6d).
 
-**T6a.** Where nothing adapts it, a literal's own type is: `I32` for an integer literal whose value is representable in
-`I32`, `I64` for one representable in `I64` but not `I32`, `U64` for a decimal one above `I64`'s maximum (L10; a
-hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned type, L10a), `F64` for a float literal,
-`Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
-the type such a literal carries into a context that requires no particular type of it - a type variable only
-literals reach (G9a), a `-D` build constant (B10). It follows that an
-integer literal too large for `I32` is never silently truncated by an `I32` target: its own type is
-already `I64`, so T6 must adapt it, and the value does not fit. A literal-only expression (E4a) that nothing adapts
+**T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal, `U64` for a decimal one above
+`I64`'s maximum (L10; a hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned
+type, L10a), `F64` for a float literal, `Char` for a character literal, and `Bool` for `true`/`false` - the widest
+signed integer and the widest float, so a value nothing types is never narrowed or wrapped by a type nobody chose. This
+is the type `:=` infers (§6.2 D15: `x := 0` is an `I64`) and the type such a literal carries into a context that
+requires no particular type of it - a range of literals (S9b), a type variable only literals reach (G9a), a `-D` build
+constant (B10). A literal written against a typed target still adapts to it (T6): `b U8 = 3`, an `I32` argument `5`,
+`i32 + 1` and `case 5` against an `I32` are as before. Where an `I64` made so meets a narrower integer it does not flow
+into (T6b) - `x := 0` handed to an `I32` parameter - the type it should have is declared (`x I32 = 0`), or the value
+converted (`I32(x)`). A literal-only expression (E4a) that nothing adapts
 is an ordinary expression of its literals' own types, computed as it is written (E6c's wrapping included).
 
 ### 2.3 Array types
@@ -1084,7 +1087,7 @@ between two such arrays as it does between a declared type and its base (`String
 **T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<Char>`, the text type, and
 the text operations are its methods. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
-literal's is `I32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
+literal's is `I64` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
 bound to a type variable (G9a), as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`), and as an
 operand of an operator a type declares (E31), so `"a" < s` calls `String`'s `Less` as `s > "a"` does.
 Like a literal (T29a) it is a temporary with no type worth defending, so it still **adapts** to any other array of
@@ -1531,8 +1534,9 @@ slice, arithmetic, a comparison, a conditional, a `match`, a conversion, text. T
 compile-time errors: `null`, which has none until it meets one (T2a) - and so any expression whose type is null's,
 `null if c else null` - and a call that returns nothing. A call's several results are destructured instead (D8c).
 An expression of numeric literals alone (E4a), `x := 1 + 2`, is computed while compiling and declares what its value
-written as one literal would (T6a: `I32`, else `I64`, else `U64` for an integer; `F64` for a float) - so `x :=
-2147483647 + 1` is the `I64` 2147483648, exactly as `x := 2147483648` is; one whose value no type holds is an error.
+written as one literal would (T6a: `I64`, else `U64` for an integer; `F64` for a float) - so `x := 1 + 2` is the `I64` 3
+and `x := 9223372036854775807 + 1` the `U64` 9223372036854775808, exactly as `x := 9223372036854775808` is; one whose
+value no type holds is an error.
 Text declares a `String` (T29c). An array literal declares an
 `Array<T>` (T7) - as a conditional or a `match` all of whose values are array literals does: its length is not part of
 the type, and a later assignment may change it; a fixed length is written, `x Array<I32, 3> = I32[1, 2, 3]` (T7d), and
@@ -2141,13 +2145,14 @@ would be a cost the code does not show. Division is the exception, by E6a.
 
 **E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
 (T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value, or a conditional of
-literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
+literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I64`, or `U64` for one above `I64`'s maximum, for an integer; `F64` for a
 float; for a conditional, the widest of its values' own types, each value - a literal-only expression, a shift among
 them, computed exactly as E4a computes it - then adapting to that type) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
-type's. So with `b` a `U8`, `b + 300` is an `I32` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
-`I32`, `0x7FF0000000000001 * one` is an `I64`; with `g` an `F32`, `g + 1e300` is an `F64`. Where the other operand's
-type does not flow into the literal's own type - `u - (-1)` with `u` a `U32`, since a `U32` flows only into an `I64`;
-an integer beside a float literal - the two do not meet, and that is a compile-time error: one is converted.
+type's. So with `b` a `U8`, `b + 300` is an `I64` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
+`I32`, `0x7FF0000000000001 * one` is an `I64`; with `u` a `U32`, `u - (-1)` is an `I64`; with `g` an `F32`,
+`g + 1e300` is an `F64`. Where the other operand's type does not flow into the literal's own type - `u - (-1)` with `u` a
+`U64`, since a `U64` flows into no signed type; an integer beside a float literal - the two do not meet, and that is a
+compile-time error: one is converted.
 
 **E6b (withdrawn).** `+` does not apply to arrays; no arithmetic operator does. Text is joined by writing
 its pieces side by side (E11b). `+` with two array operands is a compile-time error that says so.
@@ -2189,7 +2194,7 @@ operand of one in a binary operator (T6's adaptation to the other operand), the 
 shift is computed at its width. So `x I64 = 1 << s` and `i64 + (1 << s)` shift an `I64`, as their `1` alone would have
 been one. The same holds through arithmetic of such shifts with literals - `mask I64 = (1 << s) - 1` - every literal in
 it adapting together. With nothing adapting it, the literal keeps its own type (T6a): in `y := 1 << s` the shift is an
-`I32`'s. The literals must hold values of the type they adapt to, as T6 requires of any literal; only a primitive
+`I64`'s. The literals must hold values of the type they adapt to, as T6 requires of any literal; only a primitive
 integer type is adapted to (a declared type is entered through its constructor, T29d).
 
 **E9.** `< <= > >=` require both operands to be of one numeric type (subject to T6's numeric-literal
@@ -3158,7 +3163,8 @@ being built.
 (no parentheses) names a sequence of integers. One argument is its **end**, with start `0`; two are its
 **start** and **end**; three are **start**, **end** and **step** (default `1`). All are integers; the first
 argument that is not a literal gives the type of the range, of the loop's value and of its counter `i`, and
-literals adapt to it (T6). Each is evaluated once, in the order written, before the first iteration.
+literals adapt to it (T6); literals alone give the widest of their own types (T6a), so `for i in range 10` counts in
+`I64`, and `range I32(10)` in `I32`. Each is evaluated once, in the order written, before the first iteration.
 
 The values run **upward** from start, **included**, to end, **excluded**, `step` apart. A range only counts
 upward: when start is not below end, or the step is not positive, the loop runs no times.
@@ -5197,7 +5203,7 @@ compares here as it does everywhere else: a `String` by content, through its `Eq
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
 that is - after an optional `-` - one whole integer literal (L10) is an integer, and one whole float literal (L12) an
-`F64` (each typed by T6a); anything else — or anything in double quotes — is text, a `String` (T29c), so it
+`F64` (each typed by T6a: `-D N=5` is an `I64`); anything else — or anything in double quotes — is text, a `String` (T29c), so it
 compares, renders and passes as any other text does: `-D Version=1.2.3` is text. A value beginning `0x` or `0b` is
 always a number and must be a valid one (`-D X=0x` is an error), and a number must be one a literal can be (L10): a
 decimal integer at most `U64`'s largest - above `I64`'s maximum it is a `U64`, as its literal would be, so
@@ -5223,7 +5229,7 @@ S8b) says it may be a build constant `-D` did not define.
 **B10a.** Every build defines eight build constants of its own, and `-D` may not redefine them. Five describe its
 target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
-`TargetVectorBits`, an integer, the width in bits of the vectors the generated code computes with - `512` where the
+`TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
 `Bool`, whether the target has fused multiply-add instructions - whether `math.Fma` (X8) is one instruction or a call.
 Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-d`, `-r` and
@@ -5573,8 +5579,8 @@ different types, the call is a compile-time error.
 that matching while any other argument binds the same variable: the variable is determined by the other
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
-literal operands (§5.4). So `Pick(v, 7)` with `v I64` instantiates `Pick` at `I64`, and `Pick(1, 2.5)`
-at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
+literal operands (§5.4). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
+`Pick(1, 2.5)` at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
 such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
 at `I64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
 
@@ -5584,8 +5590,8 @@ while another argument binds the variable, and is then built as a temporary of t
 the variable is the text's own type (`String`).
 
 A lambda argument whose parameters or result are **written** counts as an argument that binds: its written types are
-matched against its parameter's function type before any literal is, so `a.Fold(0, fn(acc I64, x I32) I64 { ... })`
-binds the accumulator's variable to `I64` and the `0` adapts to it, where the literal alone would have bound `I32`.
+matched against its parameter's function type before any literal is, so `a.Fold(0, fn(acc I32, x I32) I32 { ... })`
+binds the accumulator's variable to `I32` and the `0` adapts to it, where the literal alone would have bound `I64`.
 Parts of a lambda left unwritten are taken from the function type once its variables are bound (D16a).
 
 `null` (T2a) takes no part in the matching at all, whatever its parameter's type: it is checked against that type

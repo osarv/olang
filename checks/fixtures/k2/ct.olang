@@ -10,7 +10,7 @@ fn fib(n I32) I32 {
 }
 fn table() Array<I32>& {
     t mut Array<I32>&return = Array<I32>(4)
-    for i in range 4 { t[i] = fib(i + 10) }
+    for i in range I32(4) { t[i] = fib(i + 10) }
     return t
 }
 type Node struct(v I32, next mut Node&) {

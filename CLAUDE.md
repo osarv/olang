@@ -3011,7 +3011,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   if nothing folded it (`$(1 << 40)`). Integer `/` `%` by a literal-only zero is an error anywhere; **a float division
   by zero stays an infinity/NaN** (IEEE; the prelude writes them that way) - my call against the literal wording,
   flagged. **E6d (the coordinator's addition)**: beside an operand whose type cannot hold it, a literal meets it at the
-  literal's own type by T6b - `b + 300` (b `U8`) is an `I32`, `f32 + 1e300` an `F64` - and where that operand does not
+  literal's own type by T6b - `b + 300` (b `U8`) is an `I32` (an `I64` since 2026-10-10, T6a), `f32 + 1e300` an `F64` - and where that operand does not
   flow there (`u32 - (-1)`, an integer beside `1.5`) it is an error naming the fix. **T6/L12b**: a value overflowing a
   narrower float when rounded (`f F32 = 1e39`, `F16` given `70000` or `65520.0`; `65519.99` rounds to 65504 and fits)
   is an error; underflow to zero or a subnormal fits (flagged); a literal beyond `F64` (`1e400`) is an error.
@@ -4553,6 +4553,28 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   or referent a `Str` made, holding writable references in `&p` fields (a cursor over the value), was taken to reach
   nothing - `cur := Cur(b); poke(cur)` writing `cur.c.v` changed the rendered value; such an argument now counts as
   reaching storage that was there (where an `&p` field refers is its instance's binding, O23a, not known there).
+- **An integer literal's own type is `I64` (T6a, L10, T6, D15, E4a, E6d, E8b, S9b, G9a, B9a, B10/B10a, B11,
+  2026-10-10, the user: "yes" to QD).** Where nothing adapts it an integer literal is an `I64` (a decimal one above
+  `I64`'s maximum a `U64`), as a float literal is an `F64`: `x := 0` and `x := 1 + 2` declare `I64`s, `for i in range
+  10` counts in `I64`, a type variable only literals reach binds `I64` (`Pick(1, 2)`), `-D N=5` and `TargetVectorBits`
+  are `I64`s, `b + 300` (b `U8`) and `'a' + 1` are `I64`s. A literal written against a typed target still adapts (T6):
+  `x I32 = 0`, an `I32` argument, `range I32(10)` (S9b: a range's first argument that is no literal gives its type).
+  Why: every length, count and position is an `I64` (`Len()`, `Find`, a for-in index), so `n := 0; n += a.Len()` failed,
+  and an `I32` counter wrapped at 2^31 unseen. **Diagnostics (B11)**: where a value a literal made an `I64` is handed to
+  something narrower (T6b, a spawn target, P1g), a note at its declaration says `declare the type it should have, 'n I32
+  = ...'`, or at a range's end `write 'I32(10)' here`. **Decided (mine)**: two literals of one width meet unsigned above
+  signed (`numericTypeRank`), so `18446744073709551615 & 7` is a `U64` computation (it was an error once both were
+  64-bit); the migration writes the type the old rule gave (`x I32 = 0`, `range I32(n)`) and keeps `I64` where it is the
+  better type (sums, counts, `TargetVectorBits` locals); the B9a token evaluator's literal width is 64. The evaluator
+  needed nothing (it reads the literal's type) - shown by baked globals (`100000 * 100000`, a wrap at `I64`) and a
+  top-level condition beside the run time. `tools/int_literal_i64.py` migrates from the notes, re-runnable (oann:
+  `python3 /home/user/olang/tools/int_literal_i64.py --olang /home/user/olang/build/out /home/user/oann`): std 7 lines,
+  shared.olang 20 locals and 23 ranges plus ~12 assertions about literal types by hand, checks 8 programs and 13
+  expected texts, fuzz 3 plus the generator's range type; bench and compiler/DESIGN.md none. Measured (callgrind, bench
+  suite at `-a x86-64-v3`): every program within 0.01% of its instructions, same output - the benches declare their
+  types. **Found on the way, pre-existing**: O26a read a rendering's operand as a flow of what it renders, so `x5 = x3;
+  return $(x5)` was O25's error (the fuzzer, master too) - a rendering holds nothing of what it renders; and the `tcrash`
+  check's 256KB stack was already at the edge of what the prelude's test build needs (1MB now).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

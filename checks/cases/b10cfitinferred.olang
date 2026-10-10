@@ -1,5 +1,5 @@
-# check: fail error[B10c]: -D Small=5000000000 does not fit 'Small', which is I32
-# flags: -D Small=5000000000
+# check: fail error[B10c]: -D Small=10000000000000000000 does not fit 'Small', which is I64
+# flags: -D Small=10000000000000000000
 # B10c: a ":=" default has its initializer's type, and -D's value must fit it
 Small := 4
 fn main() ? { }
