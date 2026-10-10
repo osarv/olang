@@ -13399,3 +13399,26 @@ stores included, and `s6handlestore` for the loop's text refused),
 F4 (`s5mapgetreturn`), F5 (`s5projection`, `s5projectionelem`) and F9's note (`s5heldindexnote`). Still a limit, as on
 master: a by-value handle field of an element, `boxes[i].items.Push(x)` with `items List<I64>`, is O10c, as is
 `h := boxes[i].items` - a field read straight off a call's result (study 6's r05).
+
+**A follow-up review of a10397c (/home/user/review/tonight6, "Follow-up") closed F1-F9 and found four more.** **G1, a
+use-after-free of the shape the batch claimed (pre-existing on master too)**: a call on a handle element read out of
+another handle element - `users[0][0].Push(t)`, `pushFn(users[0][0], t)`, `(try mm.Get(0))[0].Push(t)`, `t` a loop's
+text - built: the call path held `users[0][0]` in a hidden local, but its collection `users[0]` was a call result
+already passed on (to the outer At, which landed it), so the hidden copy's references read as the statement's block and
+Push bound there. The call path now reads the element again as the store path does (`atReadAgain`), holding every level
+- an At read of a collection that is itself read out of another, and any other call's result holding a handle
+(`(try mm.Get(0))`) - and a hidden declaration of a call whose result already landed keeps its references where it
+landed, as the same `:=` would have. All three are O10c now, as one level always was. **G2, a lost write**: a program's
+own handle type with a `mut` method assigning the handle's field (`bags[0].Reset()` doing `b.s = State()`) ran on the
+hidden copy, and the reset was lost (inside a loop it happened to be O17's split-lend error instead). The coordinator's
+decision: the handle exemption holds only where the callee uses the handle only through its reference - s4sem's O17b
+reading of the checked body (`handleThroughParam`), asked of the function the call reaches (an instantiation, so after
+the call is built: `atHandleThrough`), and once every body is checked for one checked only later - otherwise it is
+E31b's error as for an element that is no handle. List, Map and StringBuilder methods all qualify. **G3**: `v[0].E =
+shrink(v)`, whose value empties the collection, reads and writes back at an index that is out of range by then - the
+coordinator's decision: E16e's unchecked index, since the access runs after the value as S4 orders it, and the index is
+the program's; E31b and S4 now say so. **G4**: the O10c note on `names[0][0] = t` named the compiler's hidden local
+(`'$handle2'`); notes name the collection the copy was read out of (`'names'`). G5 (a by-value List field of an element,
+elements of a global List of Lists) is left as recorded above. Check cases `s5nestedhandle`, `s5nestedhandlemap`,
+`s5handlerepoint`, `s5handlerepointfn`, `s5handlenote`, `s6nestedhandlerun` (under `-s`), and the corpus test
+`s5NestedHandles` (baked, read back after a churn).

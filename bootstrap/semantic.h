@@ -365,6 +365,7 @@ struct var {
     bool slotBorrowed;  //C2d: a value local whose storage a reference was taken to (E12c) - a constructor's field local so
                         //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
     bool atElemCopy; //E31: the hidden local an element "x[i]" is read into to be written through, then written back
+    bool atHandleCopy; //E31b/O17b: a hidden copy of a handle element x[i], lent to a call as its reference
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
                              //the first

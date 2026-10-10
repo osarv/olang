@@ -2785,7 +2785,9 @@ read out of another (`l[i][j].f = v`, `rows[0][1] = v`) is read and written back
 inner write-back. A write through a reference read out of `x[i]` is not a write into the element and is unchanged (it
 goes where the reference points). Under `try` (R21) the read is checked as `try x[i]` is and the write-back as
 `try x[i] = v`. A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
-compile-time error naming `SetAt`.
+compile-time error naming `SetAt`. The element is read and written after the value is computed (S4), so a value that
+shrinks the collection leaves the held index out of range when the access runs - the program's out-of-range index
+(E16e), unchecked unless the store is written under `try`.
 
 **A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
 an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])`, where the element is
@@ -2795,18 +2797,19 @@ so one of the two writes would be lost. The error names the written-out form, `t
 read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call.
 
 **A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
-by every copy of it, so a call on `x[i]`, on a field of it, or on any call's value result giving one -
-`users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden local, lent
-as its reference: what the callee builds is built where the handle's state lives, and nothing is written back. A store
-into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner collection's `SetAt`
-on such a copy. Spawned,
-such a copy would be held in the spawner's block, which closes (or is made again by the next turn of a loop) before
-the join, and is a compile-time error: the task is a function taking the collection that calls `x[i].M(...)` itself.
-What a copy's references hold is checked as for any such copy (O17): a store that lends the copy to a call that can
-build into what the element holds (an element type's `SetAt` pushing onto a `List` field of the copy) would build where
-the copy is, and is an error saying to hold the elements by reference or to make the copy where the collection lives
-(`t mut T&l = l[i]`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an
-error.
+by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked
+body) a call on `x[i]`, on a field of it, an element of one read out of another, or on any call's value result giving
+one - `users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden
+local, lent as its reference: what the callee builds is built where the handle's state lives, and nothing is written
+back. A store into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner
+collection's `SetAt` on such a copy. A callee that uses the handle otherwise - assigning its own field (`b.s =
+State()`), keeping it - would write the copy, and is E31b's error as for any element. Spawned, such a copy would be
+held in the spawner's block, which closes (or is made again by the next turn of a loop) before the join, and is a
+compile-time error: the task is a function taking the collection that calls `x[i].M(...)` itself. What a copy's
+references hold is checked as for any such copy (O17): a store that lends the copy to a call that can build into what
+the element holds (an element type's `SetAt` pushing onto a `List` field of the copy) would build where the copy is,
+and is an error saying to hold the elements by reference or to make the copy where the collection lives (`t mut T&l =
+l[i]`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an error.
 
 **E31a (checked forms).** An operation that can fail has a **checked form**, a method of its own named with `Try`:
 `TryAt`, `TrySetAt`, `TrySlice`, `TryPlus`, `TryMinus`, `TryMul`, `TryDiv`, `TryRem`, `TryMatMul`, `TryNeg`,
@@ -2984,7 +2987,10 @@ anything else on the left of an assignment operator is a compile-time error.
 An assignment is evaluated **left to right**: first the target's **place** - the subexpressions of `lvalue` as
 written, its base before its index, outermost base first - then `expr`, then the store. So in `a[next()] = next() * 10`
 the index is the first call and the value the second, and a value whose evaluation changes what the target's base
-refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1).
+refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1). Where the
+place is an element reached through `At`/`SetAt` (E31, E31b) the element itself is read and written only after the
+value is computed: an index held while it was in range is the program's index when the access runs, so a value that
+shrinks the collection makes it an out-of-range index (E16e) - checked only under `try`.
 
 **S4d.** A **value** place - one an assignment writes over where it is (T11b), not a reference, which `=` repoints
 (S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or

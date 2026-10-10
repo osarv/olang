@@ -15261,3 +15261,50 @@ S5ProjectionsBaked I64 = s5Projections(2)
 test "O18c: a field or an element of a call's value result passed on" {
     assert s5Projections(sbRun * 3) == 270 and S5ProjectionsBaked == 180
 }
+
+# E31b/O17b (the follow-up review, G1/G2): a call on a handle element read out of another handle element holds and
+# lends every level, so what it builds lives where the innermost list's state does - read back after an arena churn;
+# and a method assigning the handle's own field is written out ("t := bags[0]; t.Reset(); bags[0] = t")
+type s5State struct() {
+    n I64 = 0
+}
+type s5Bag struct() {
+    s mut s5State& = s5State()
+}
+fn (b mut s5Bag&) Add(v I64) { b.s.n = b.s.n + v }
+fn (b mut s5Bag&) Reset() { b.s = s5State() }
+fn (b s5Bag&) Total() I64 { return b.s.n }
+fn s5PushNested(l mut List<String&>&, s String&) { l.Push(s) }
+fn s5NestedHandles(n I64) I64 ? {
+    users := List<List<List<String&>>>()
+    users.Push(List<List<String&>>())
+    users[0].Push(List<String&>())
+    mm := Map<I64, List<List<String&>>>()
+    mm.Put(0, List<List<String&>>())
+    (try mm.Get(0)).Push(List<String&>())
+    kept := "kept-text-of-moderate-length"
+    for k in range n {
+        users[0][0].Push(kept)
+        s5PushNested(users[0][0], kept)
+        (try mm.Get(0))[0].Push(kept)
+        users[0][0][0] = kept
+        sbChurn()
+    }
+    sbChurn()
+    bags := List<s5Bag>()
+    bags.Push(s5Bag())
+    bags[0].Add(5)
+    t := bags[0]
+    t.Reset()
+    bags[0] = t
+    bags[0].Add(7)
+    r I64 = 0
+    for s in users[0][0] { r += s.Len() }
+    for s in (try mm.Get(0))[0] { r += s.Len() }
+    return r * 100 + bags[0].Total()
+}
+S5NestedBaked I64 = try s5NestedHandles(2) catch default -1
+test "E31b/O17b: nested handle elements are held and lent at every level; a repointing method is written out" {
+    assert (try s5NestedHandles(sbRun * 3) catch default -1) == 25207
+    assert S5NestedBaked == 16807
+}

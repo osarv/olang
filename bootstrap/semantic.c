@@ -9465,7 +9465,7 @@ static struct list handleMemos;
 struct handleVisit { struct var* func; int idx; };
 //a call whose answer rested on a body not checked yet (a cycle through the call being checked) - verified once every
 //body is (settleHandleLends), an error where it turns out no
-struct handlePending { struct var* func; int idx; struct token tok; };
+struct handlePending { struct var* func; int idx; struct token tok; bool atCopy; };
 static struct list handlePendings;
 struct htScan { struct var* p; struct list* visiting; bool* assumed; bool* unknown; bool bad; struct list seen; };
 static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown);
@@ -9602,16 +9602,20 @@ static void htStmt(struct htScan* sc, struct statement* s) {
         htOp(sc, cc->dflt);
     }
 }
-static bool handleThroughParam(struct var* func, int idx, struct token tok) {
+//atCopy: the handle is a copy of x[i] (E31b) - a "no" found once every body is checked is said as E31b's error
+static bool handleThroughParamAs(struct var* func, int idx, struct token tok, bool atCopy) {
     struct list visiting = ListInit(sizeof(struct handleVisit));
     bool assumed = false, unknown = false;
     bool r = handleThroughAt(func, idx, &visiting, &assumed, &unknown);
     ListDestroy(visiting);
     if (r && unknown && !ErrMsgMuted()) {
-        struct handlePending h = { func, idx, tok };
+        struct handlePending h = { func, idx, tok, atCopy };
         ListAdd(&handlePendings, &h);
     }
     return r;
+}
+static bool handleThroughParam(struct var* func, int idx, struct token tok) {
+    return handleThroughParamAs(func, idx, tok, false);
 }
 static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown) {
     if (!func || func->type.bType != BASETYPE_FUNC || func->type.isExtern || func->isLambda || idx < 0
@@ -9668,7 +9672,14 @@ static void settleHandleLends(void) {
         bool assumed = false, unknown = false;
         bool r = handleThroughAt(h->func, h->idx, &visiting, &assumed, &unknown);
         ListDestroy(visiting);
-        if (!r || unknown) Err(h->tok, ERR_BORROW_SPLIT_SCOPES);
+        if (r && !unknown) continue;
+        //one error for one argument: a copy of x[i] lent for it is E31b's, said first (atWriteBackArgs)
+        bool said = false;
+        for (int k = 0; k < i && !said; k++) {
+            struct handlePending* e = ListGetIdx(&handlePendings, k);
+            said = e->tok.str.ptr == h->tok.str.ptr && e->tok.owner == h->tok.owner;
+        }
+        if (!said) Err(h->tok, h->atCopy ? ERR_WRITE_THROUGH_AT_CALL : ERR_BORROW_SPLIT_SCOPES);
     }
 }
 
@@ -10253,6 +10264,18 @@ static struct var* livesWithVar(struct operand* op) {
     struct var* r = lvalueRootVar(op);
     return r && !r->owner && !r->isFuncDecl ? r : NULL;
 }
+//B11: the variable a note names for v - a copy the compiler held ("$handle" for "names[0]", E31b) is named as the program
+//wrote it, by the collection it was read out of, whose state it shares; NULL where nothing written is to be named
+static struct var* shownVar(struct var* v) {
+    for (int guard = 0; v && v->name.len && v->name.ptr[0] == '$' && v->declInit && guard < 16; guard++) {
+        struct operand* init = v->declInit;
+        while (init && (heldResult(init) || (init->opType == OPERATION_FUNCCALL && init->args.len
+                                             && (init->isAtCall || (init->readVar && init->readVar->isMethod)))))
+            init = heldResult(init) ? heldResult(init) : *(struct operand**)ListGetIdx(&init->args, 0);
+        v = init ? lvalueRootVar(init) : NULL;
+    }
+    return v && v->name.len && v->name.ptr[0] != '$' && !v->owner && !v->isFuncDecl ? v : NULL;
+}
 
 //B11: what to change where an argument lives too briefly for another one it must live with (O25e) or outlive (O10c): it is
 //made in a block of this function that closes first, so say where it is made and how to make it where the other lives
@@ -10510,7 +10533,7 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         //B11: text read out of something made too briefly is passed as a copy - rendered text is built where the callee
         //needs it (O18b), "m.Update($cols[0], ...)"
         struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
-        struct var* with = sArg ? livesWithVar(sArg) : NULL;
+        struct var* with = sArg ? shownVar(livesWithVar(sArg)) : NULL;
         //(an index a compound assignment holds for its read and its write is in this block, rendering or not - it is
         //built where it is needed by being written there first)
         bool held = lArg && lArg->opType == OPERATION_READ_VAR && lArg->readVar && lArg->readVar->name.len
@@ -13111,6 +13134,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
 static struct list* prebuiltMethodArgs = NULL;
 static void atWriteBackArgs(struct checkCtx* ctx, struct var* func, struct list* args, struct token tok, struct list* pre);
 static struct operand* atWriteBackWrap(struct checkCtx* ctx, struct operand* call, struct list pre, struct token tok);
+static void atHandleThrough(struct operand* call);
 static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNode, struct syntax* cNode,
                                        bool negated, struct token tok) {
     struct operand* x = buildExprFromSyntax(ctx, xNode);
@@ -14723,6 +14747,7 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct list wbPre = ListInit(sizeof(struct statement)); //E31b: "x[i].M()" with a "mut" receiver - a handle's copy held
     atWriteBackArgs(ctx, m, &withRecv, mTok, &wbPre);
     struct operand* call = OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
+    atHandleThrough(call);
     //T29f: an array method a declared type inherits gives the declared type where it gives its receiver's own type -
     //a String's Filter is a String. Same representation, so only the type changes.
     if (recvType.bType == BASETYPE_ARRAY && isDeclaredArray(recvType) && receiverIsBuiltin(p0) && m->type.hasRetType
@@ -15076,6 +15101,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         struct list wbPre = ListInit(sizeof(struct statement)); //E31b: "f(x[i])" for a "mut &" parameter - a handle's copy
         atWriteBackArgs(ctx, func, &args, nameTok, &wbPre);
         struct operand* call = OperandFuncCall(ctx, func, args, nameTok, scopeArgNodes);
+        atHandleThrough(call);
         //a constructor is exactly the function a struct type points at as its own - true for an
         //instantiation's monomorphized constructor too, since that points at the instantiation
         if (call->readVar) func = call->readVar; //G10c: the instantiation's constructor, when inferred
@@ -16479,7 +16505,11 @@ static struct statement buildVarDeclFromOperandIn(struct checkCtx* ctx, struct t
     declType.scopeParam = NULL; //writes no tag: takes the value's exact scope (O25a)
     declType.scopeWritten = false;
     if (inResult && callIsLanding(rhs)) landCall(rhs, resultHome(ctx->func), 0);
-    bool landedByOblig = !inResult && landDeclByObligations(ctx, rhs); //O18c
+    //O18c: a call's result not landed yet lands by its obligations; one landed already - passed on before the compiler
+    //held it ("(try m.Get(k))[0]", E31b) - keeps its references where it landed, as the same declaration would have
+    bool landedAlready = !inResult && rhs->opType == OPERATION_FUNCCALL && rhs->readVar && rhs->readVar->type.resultScope
+                         && !callIsLanding(rhs);
+    bool landedByOblig = !inResult && (landedAlready || landDeclByObligations(ctx, rhs));
     bool unnamedScope = false;
     if (!adoptInitializerScope(ctx, &declType, rhs, &unnamedScope)) declType.scopeDepth = ctx->blockDepth;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
@@ -17775,6 +17805,10 @@ static struct operand* atReadAgain(struct checkCtx* ctx, struct operand* at, str
     if (base->opType == OPERATION_FUNCCALL && base->isAtCall && !base->type.structMAlloc) {
         struct operand* h = holdHandleCopy(ctx, atReadAgain(ctx, base, tok, pre), pre);
         if (h) base = h;
+    } else if (!base->type.structMAlloc && !OperandIsLvalue(base) && handleField(base->type) && operandHasCall(base)) {
+        //...and so is any other call's result holding one ("(try m.Get(k))[0]"), as ":=" would hold it
+        struct operand* h = holdHandleCopy(ctx, base, pre);
+        if (h) base = h;
     }
     struct list idxs = ListInit(sizeof(struct operand*));
     for (int k = 1; k < at->args.len; k++) ListAdd(&idxs, ListGetIdx(&at->args, k));
@@ -17812,8 +17846,28 @@ static void atWriteBackArgs(struct checkCtx* ctx, struct var* func, struct list*
             }
         }
         any = true;
+        //read again so it is free to land, a collection it is read out of held as well ("users[0][0].Push(t)")
+        struct token argTok = arg->tok;
+        if (arg->opType == OPERATION_FUNCCALL && arg->isAtCall) arg = atReadAgain(ctx, arg, tok, pre);
         struct operand* h = holdHandleCopy(ctx, arg, pre);
-        if (h) *(struct operand**)ListGetIdx(args, j) = h;
+        if (!h) continue;
+        h->tok = argTok;
+        if (atCopy) canonicalVar(h->readVar)->atHandleCopy = true; //judged by the call it is lent to (atHandleThrough)
+        *(struct operand**)ListGetIdx(args, j) = h;
+    }
+}
+
+//E31b/O17b: a handle copy of x[i] shares its state only with a callee that uses it through its reference alone - one
+//assigning the handle's own field ("b.s = State()") writes the copy, and that write is lost as any element's would be:
+//E31b's error, as for an element that is no handle. Judged once the call names the function it reaches (an
+//instantiation), from its checked body; a body checked only later is judged then (settleHandleLends)
+static void atHandleThrough(struct operand* call) {
+    if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) return;
+    for (int j = 0; j < call->args.len && j < call->readVar->type.vars.len; j++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&call->args, j);
+        if (a->opType != OPERATION_READ_VAR || !a->readVar || !canonicalVar(a->readVar)->atHandleCopy) continue;
+        ensureBodyChecked(call->readVar);
+        if (!handleThroughParamAs(call->readVar, j, a->tok, true)) Err(a->tok, ERR_WRITE_THROUGH_AT_CALL);
     }
 }
 

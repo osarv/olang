@@ -4473,25 +4473,30 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   handle element is an error naming a function that takes the collection - the hidden copy would sit in the spawner's
   block, which closes (or is made again by a loop) before the join (on master it compiled and was a use-after-free); a
   store lending the copy to an element type's own SetAt that can build into what it holds stays O17's split-lend error
-  worded for the copy. Also from the review: **F4** a local returned directly is always moved into the result scope
-  (O26a), so `l := try groups.Get(k); return l` with `groups` a local is O10c again (`callResultTiedToBlock` withholds
-  only indirect flows); **F5** (pre-existing UAF) a field, an element or a slice of a call's value result passed on
-  (`bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])`, `bs.Push(wrap(pair(t).a))`) determines the parameter's scope where
-  that result landed (O18c); **F9** a compound store holding a rendered index gets a note that says so instead of
-  "write '$' before it". **Found on the way, pre-existing**: the At call built for an assignment's target `x[i] = v`
-  (and for a write-through place) was thrown away but still owed its obligations, so `t := l[0]; l[0] = t` in a loop
-  was O10c for a type holding writable references - a set-aside call now owes nothing (`forgetCall`). **O17**: a
-  body's region facts (stored, handed out) were kept on the scope VARIABLE, which a generic's instantiations share, so
-  `List<List<String&>>.At` handing its region out made `List<String&>.At` appear to, depending on statement order
-  (r03) - they are the function's own now. **O26a**: a for-in element flows as an indexed read does (`for p in all {
-  out.Push(p) }`, r05), and a local declared from a call whose result holds a block's storage is never moved to the
-  result scope (`l := groups.Get(k)`, pre-existing: it was moved, then rejected). **E25**: destructured results keep
-  where a scope argument put them (`rec, next := mk2&rows(k)`, r04). **D16c**: a lambda captures a value holding
-  references with the scope they live in, read-only, as a by-value parameter has one (O4b) - so `fn(v F64) F64 {
-  return v + rd.Value }` compiles and the lambda lives no longer than `rd`'s references (r07). **L18**: a `;` is one
-  error and ends the statement. **B11**: notes for a lent loop copy (r06, which stays a limit: a borrowed copy's scope
-  is its storage's) and for text to copy with `$` (r13). Not done: r12 (a literal into a declared operator parameter),
-  r11, r14-r17 diagnostics.
+  worded for the copy. A follow-up review found four more: **G1** (pre-existing UAF) a call on a handle element of a
+  handle element (`users[0][0].Push(t)`, `(try mm.Get(0))[0].Push(t)`) held only the outer level - every level is held
+  and lent now; **G2** (the coordinator's call) the handle exemption holds only for a callee using the handle only
+  through its reference (O17b's reading of the body) - a method assigning the handle's own field is E31b's error;
+  **G3** (the coordinator's call) a value that shrinks the collection makes the held index E16e's out-of-range index,
+  stated in S4/E31b; **G4** notes name the collection, never the hidden copy. Also from the review: **F4** a local
+  returned directly is always moved into the result scope (O26a), so `l := try groups.Get(k); return l` with `groups`
+  a local is O10c again (`callResultTiedToBlock` withholds only indirect flows); **F5** (pre-existing UAF) a field, an
+  element or a slice of a call's value result passed on (`bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])`,
+  `bs.Push(wrap(pair(t).a))`) determines the parameter's scope where that result landed (O18c); **F9** a compound
+  store holding a rendered index gets a note that says so instead of "write '$' before it". **Found on the way,
+  pre-existing**: the At call built for an assignment's target `x[i] = v` (and for a write-through place) was thrown
+  away but still owed its obligations, so `t := l[0]; l[0] = t` in a loop was O10c for a type holding writable
+  references - a set-aside call now owes nothing (`forgetCall`). **O17**: a body's region facts (stored, handed out)
+  were kept on the scope VARIABLE, which a generic's instantiations share, so `List<List<String&>>.At` handing its
+  region out made `List<String&>.At` appear to, depending on statement order (r03) - they are the function's own now.
+  **O26a**: a for-in element flows as an indexed read does (`for p in all { out.Push(p) }`, r05), and a local declared
+  from a call whose result holds a block's storage is never moved to the result scope (`l := groups.Get(k)`,
+  pre-existing: it was moved, then rejected). **E25**: destructured results keep where a scope argument put them
+  (`rec, next := mk2&rows(k)`, r04). **D16c**: a lambda captures a value holding references with the scope they live
+  in, read-only, as a by-value parameter has one (O4b) - so `fn(v F64) F64 { return v + rd.Value }` compiles and the
+  lambda lives no longer than `rd`'s references (r07). **L18**: a `;` is one error and ends the statement. **B11**:
+  notes for a lent loop copy (r06, which stays a limit: a borrowed copy's scope is its storage's) and for text to copy
+  with `$` (r13). Not done: r12 (a literal into a declared operator parameter), r11, r14-r17 diagnostics.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

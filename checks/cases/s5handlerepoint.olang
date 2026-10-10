@@ -1,0 +1,18 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b/O17b (G2): a handle element is lent as its reference only to a callee that uses it through that reference alone -
+# Reset assigns the handle's own field, which would write the copy and be lost
+type State struct() {
+    n I64 = 0
+}
+type Bag struct() {
+    s mut State& = State()
+}
+fn (b mut Bag&) Add(v I64) { b.s.n = b.s.n + v }
+fn (b mut Bag&) Reset() { b.s = State() }
+
+fn main() ? {
+    bags := List<Bag>()
+    bags.Push(Bag())
+    bags[0].Add(5)
+    bags[0].Reset()
+}
