@@ -629,6 +629,19 @@ because what it finds about structure feeds the refactor.
   destructors and failing spawns; the fuzzer missed all three findings. str1 round 3 (e27b83b, merged with master
   b6259d1) is under its third review (/home/user/wt/rvstr3 -> /home/user/review/str3). Running: b6fix and the str3
   review.
+- 15:50 CEST: str3 review (/home/user/review/str3):
+  - The walk held: no false ICE, and 16 receiver builds refused.
+  - New segfaults: the null receiver scope meets decision 48's escape/mine header reads (closures, Call adapters).
+  - A walk gap: an adapter's Call body is not read.
+  - G9d side effects: inference depends on argument order, and G10c disagrees.
+  - Double destruction through a try default; shallower recursion; a pre-existing landing bug (P1).
+  Round 4 sent:
+  - a real empty scope per Str call instead of null;
+  - the walk reads an adapter's Call body;
+  - G9d kept but order-independent and agreeing with G10c (or reverted for a hand-off, the agent's call);
+  - P1, N7 and N8 fixed;
+  - over-rejections: o6, the "anon" idiom via T25d, cgEnvOnStack in the walk, adapter and stand-in skips.
+  Running: str1 (round 4), b6fix.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
