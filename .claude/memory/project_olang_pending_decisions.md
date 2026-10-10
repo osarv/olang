@@ -112,6 +112,11 @@ length Vec<T> again right?"):**
     - at the latest, its container's scope closing.
     `take` only moves. This keeps "no manual free": nothing frees memory, an owner lets go.
 
+**Decided 2026-10-10 18:20 CEST (the user):** "You should probably build it into the C compiler because they are such
+central parts to the language that will be useful for the compiler" -> `own`, `take`, the liveness-checked local
+borrows and Vec<T> (the default growable array) are built in the C compiler BEFORE the port starts, so the port can be
+written with them. Order: decision 49 merges, then `own` (spec first), then Vec, then the port.
+
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
   - An object built into an owned slot lives in a small region of its own. Its parts live there too.
