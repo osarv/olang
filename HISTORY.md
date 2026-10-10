@@ -12757,3 +12757,112 @@ written through a struct, a narrow count bumped beside them), and a checks scena
 `checks/fixtures/tbaa/narrow.olang` - every narrow type's array written through a struct, and a `Code extends U16` array
 written beside its `Array<U16>` view of the same storage - at `-O3` and at `-d` with the same answers, reading off the IR
 that a BF16 and an F16 store carry a tag and that the BF16 element leaf exists (it fails on the previous compiler).
+### The scope sanitizer (`-s`) and a fuzzer for where values live (B2f, 2026-10-10)
+
+**Why.** Three read-only reviews on the night of 2026-10-09 each found use-after-frees the static check (§8.4) let
+through, most of them older than the night, and every one was found by a person reading the checker and then writing
+a program that churned the arena and read a wrong number back. Nothing ran over the corpus that could have found them,
+because the obvious tool is blind here: valgrind and ASan see `malloc`/`free`, and a closed scope does neither - its
+chunks go back to the pool, the next scope takes them, and a stale read reads memory that is live again. So the question
+was what the allocator itself has to do for a stale read to be unmistakable.
+
+**What a scope close does under `-s`** (bootstrap/runtime.c, `emitScopeSanRuntime`):
+1. *Poison* what the chunk handed out with one 64-bit word, `0x7FF57FF57FF57FF5`, chosen so every reading of it is wrong
+   at once: a NaN as an F64, as each half read as an F32 and as each quarter read as an F16 or BF16; an integer near its
+   type's maximum (I64 9.2e18, I32 2.1e9, I16 32757), so a length or an index read out of it is absurd; and a
+   non-canonical address on x86-64 (and AArch64), so a reference read out of poisoned storage faults the moment it is
+   followed, with nothing mapped there by accident.
+2. *Protect* the chunk: `mprotect(PROT_NONE)`, so any read or write faults on the spot - the poison matters only for
+   what was read before the close, or where protecting fails. Every chunk is `mmap`ed under `-s` (normally only those of
+   128KB and more are), page-aligned so it can be protected on its own; a chunk over 1MB keeps one poisoned page and
+   gives the rest back with `MADV_DONTNEED` after it is protected, so a large closed array costs no memory.
+3. *Hold it back* in one FIFO quarantine for the whole process - a ring of 16,384 chunks or 256MB, under a mutex - and
+   only when it overflows give the oldest back (`PROT_READ|PROT_WRITE`, then the ordinary pool, O8b). The tasks' scopes
+   need nothing of their own: a task's sub-arena is spliced into its parent at the join (P2) and closed with it.
+
+A SIGSEGV handler (SA_SIGINFO, on the alternate stack where the thread has one, installed first thing in `main`) tells
+the sanitizer's faults from any other: the faulting address inside a quarantined chunk; or a general-protection fault
+(x86-64 reports a non-canonical address as SI_KERNEL with no address) with the poison word in one of the general
+registers, read out of the `ucontext`; and separately, before any fault, `__olang_new_chunk` treats a request of 2^60
+bytes or more as a length read from poison. Each is reported through `__olang_check_failed` with its own line -
+`use after scope closed: storage a closed scope gave back was read or written`, `... a reference read from storage a
+closed scope gave back was followed`, `... an allocation of more than 2^60 bytes - a length read from storage a closed
+scope gave back` - so it is a failed check in every respect (S18): a test fails and the rest run, and outside a test the
+process aborts with 134. Any other fault restores the action that was there before and returns, so it ends the program
+as it would have. `os.OnCrash` installs its own SIGSEGV action later than the sanitizer; under `-s` that action is copied
+into the sanitizer's fallback instead of replacing the sanitizer, so a program's crash message still appears for a
+crash that is not a use after free (and, as for a failed check, after the sanitizer's report too, since OnCrash also
+handles SIGABRT). The handler is left uninstrumented under `-r`, as the crash handler is (it can block on TSan's lock).
+
+**Why a flag of its own, and not "always under `-d`".** Measured on the bench programs (`-b` against `-b -s`, medians of
+two): binarytrees at depth 18 0.55s -> 3.9s and 18MB -> 146MB, and text (5M renderings, each loop turn one block scope
+that allocates) 0.5s -> 41s - two `mprotect` calls per scope close that allocated, which strace confirms is almost all of
+it (383,650 `mprotect` for 200,000 turns). `-d` is for a debugger and should not cost that unasked, and `-s` is as useful
+at `-O3` (`-b -s`), whose inlining and layout are what a fault in production would have: every reproducer below stops
+under both. One character, as B1 has it: `-s`, for scope. A sanitized object is its own artifact (`.san`, B4) - the
+fifth time the staleness trap applies - and the runtime's IR without `-s` is byte for byte what it was (runner.olang's
+nineteen `.ll` files compared), so it costs nothing to a build that does not ask for it.
+
+**Validation.** The night's third review left five use-after-free reproducers open (/home/user/review/tonight3/repro:
+02 a copy out of a call's returned reference, 02b a reference passed for a by-value parameter, 02c a reference kept by a
+constructor's or a payload's by-value field, 02d a copy of a payload out of an enum parameter, 03 a slice of a split
+value). Each prints a wrong number built `-d` (`-7`, the churn's fill) and stops under `-d -s` and `-b -s` with
+`use after scope closed`, where `-i` (which never reclaims) prints the right one. Its 01, a race between tasks bumping
+one arena, faults under `-s` as without it (heap corruption, not a stale read); 04-10 are not memory errors and are
+unchanged. The fixed reproducers of the first two reviews (/home/user/review/tonight, tonight2) run clean. The whole
+`make test` suite under `-t -s` passes - except two tests in shared.olang, which have a real use-after-free (below) and
+pass without `-s` by luck - and the concurrent files (std/chan, std/cancel, worker, std/prelude/tests/list) are also
+clean under `-t -r -s`: ThreadSanitizer sees the quarantine's mutex and reports nothing.
+
+**Found by running the corpus under it** (fuzz/repro/scopectornested.olang, not fixed - semantic.c was other agents'
+that night): a constructor that grows a field's List inside a nested block - `for i in range n { left.Push(i) }` -
+builds into that block's scope. C2g made a constructor's top level allocate into the instance; a call in a nested block
+binds its receiver's scope variable with no depth (the field local's scope is the instance's), so
+`SemanticBoundScopeDepth` answers the call's own block and codegen passes the loop body's arena. Each chunk Push makes
+there is reclaimed at the end of the turn. shared.olang's tests over `c3Holder` and `sc3Countdown` have the shape.
+
+**The scope fuzzer** (fuzz/scopegen.olang; `fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]]`, `make scopefuzz`). The
+differential fuzzer (K1) generates arithmetic; this one generates *where values live*. A program is a fixed prelude of
+types (a Node with a `mut` next, a Box holding one, wrappers, an enum with a Box payload, a struct of Lists, a struct
+with an inline `Array<mut Node&, 2>`) and helpers, plus independent scenarios: each declares a target - a node, a box in
+a struct, a List, a Map, an array of references, a List returned through two calls, a global, a node built and
+returned by a callee - and grows a random tree of statements storing new nodes into it: in nested `if`/`for`/`match`/
+bare/`defer` blocks with churns between, through helpers taking the target by reference and by value, through copies
+out of references, fields, elements, slices, views and payloads, through constructors and enum cases, captured by
+lambdas, from spawned calls and spawned lambdas, and made as locals of an inner block and stored outward (which must be
+refused). It ends with a churn and a checksum of everything the target reaches. Built `-b -d -s` and interpreted with
+`-i`, the two outputs must be equal. A scenario the checker refuses is left out and the program built again - each
+scenario's text starts with a `# scenario k` line, so an error's line names its scenario - and refusals are counted,
+not reported. A finding keeps the program and a one-scenario program in build/fz/scope/SEED. A line-deleting reducer
+(kept in the scratchpad, not in the repository: Python) then shrank each to a few lines.
+
+*Run 1, 300 programs* (seeds 100-399, 12 scenarios each): 1,754 scenarios ran, 1,846 were refused, 62 findings - all
+known shapes but one: 40 the review's 02d (the prelude's `byAs`, a by-value enum parameter's payload copied and built
+through, sits in most enum scenarios), 4 its 02, 4 its 02c, and 14 a variant of 02d nobody had written: the enum is a
+*local*, its payload copied by a match binding or `as` in an inner block and then passed by value, lent to a callee that
+builds through it, or a reference read out of it captured by a lambda (fuzz/repro/scopepayloadcopy.olang). Its cause is
+02d's: `copyRefsHome` (O25h) returns when its source is not an lvalue, and `OperandIsLvalue` does not count
+`OPERATION_AS`, which both `as` and a match binding's lowering read a payload through, so the copy records no home for
+its references; `valueRefsHome` likewise walks only through `OPERATION_MEMBER`. A store written directly through the
+copy happens to be built right (another path walks through it), which is why 02d's reviewer saw it only for parameters.
+*Run 2, 300 programs with `avoid`* (seeds 1000-1299, the generator leaving out those four known shapes and the
+variant): 1,708 scenarios ran, 1,892 were refused, and nothing was found - so, as far as these shapes reach, the open
+holes are the review's four and the local-enum variant. About half of every program's scenarios are refused, nearly all
+by O25 (an inner block's node stored outward, a box made here around a longer-lived node), which is the checker doing
+its job.
+
+**In `make verify`**: a checks scenario (`scopesan`) builds a small program `-b -d -s` and links its objects with a C
+driver (checks/fixtures/scopesan/drive.c, the program's `main` renamed with objcopy) that calls the runtime directly:
+storage read and written after the close, a large chunk, a poison reference followed, a poison length allocated - each
+stopping with its message and 134 - a fault that is not the sanitizer's ending as it would (139), the same with an
+OnCrash message, and 40,000 closed scopes (more than are held back) with the newest still caught; then two
+arena-churning prelude test files under `-t -d -s`, and grep that a plain build's IR carries none of it. The `fuzz`
+scenario runs two scope-fuzz seeds that are clean today. `make scopesan` runs the whole suite under it - not in verify,
+since shared.olang alone takes a minute and a half under it and its two tests fail until the constructor finding is
+fixed.
+
+**Limits, stated.** It is a detector, not a proof: it sees the uses a run made, and a use of storage that has left the
+quarantine reads whatever was put there since (the poison survives until the chunk is reused). Storage made outside the
+arena is not covered: a stack slot (a value local, a temporary under 64KB) is out of its reach. Under `-r`, a recursion
+within reach of ThreadSanitizer's own frame limit (P7) faults sooner with `-s` than without - std/os's 200,000-frame
+RunOnStack test faults under `-r -s` every time where `-r` alone fails one run in four - which no make target combines.
