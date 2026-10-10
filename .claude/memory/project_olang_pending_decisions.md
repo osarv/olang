@@ -83,6 +83,19 @@ design. Do what you want") - nothing to decide until a GUI is written.
     2. may an owned object also leave by MOVING out (`Pop` hands it to the caller, who then owns it), besides copying -
        recommended yes, explicit `take` rather than Rust's implicit moves (`x = y` keeps meaning `x == y`).
   - In effect: nothing built. The decision-48 fix and failing spawns (decision 50) go first.
+  - The user, 09:20 CEST (dictated, read as heap): "Then we have a normal heap for this memory. So it's a special case of
+    the language where we restrict ourselves to not borrowing." My answer, recommended:
+    - The memory is the ordinary heap: one allocation per object, from the chunk pool's size classes, holding the
+      object and what it builds into itself, freed in one step.
+    - Adopt the restriction in its workable form: no borrow outlives the expression or statement that takes it.
+      - No local, field or element may hold a reference into an owned object (`c := try conns.Get(id)` is refused).
+      - Use goes through the path: `(try s.conns.Get(id)).Handle(msg)`, or one call `handle(try s.conns.Get(id), msg)`.
+      - This drops my liveness analysis of locals entirely.
+    - Two borrows cannot be avoided, because the object would be unusable without them, and both keep the "may free"
+      rule:
+      - a method call or argument: the callee may not free an owned object of that type;
+      - a for-in over owned elements: the loop variable is the one named borrow, and the body may not free one.
+    - Allowing local borrows later (with liveness) is additive, so start strict.
 
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
