@@ -88,6 +88,14 @@ length Vec<T> again right?"):**
 - QI. "Can we find another name than owned for this rule?" Proposed, recommended first: `unique` (C++'s unique_ptr is
   the same concept: one owner, moved not copied, freed when the owner lets go), `box` (Rust's Box), `sole`. In effect:
   `owned` until answered.
+  ANSWERED 12:50 CEST, the user: "Is the Box the natural Rust equivalent? Do these do basically the same thing? If so,
+  use it" -> YES, it is `box`.
+  - It is Rust's Box: one owner, a heap allocation, moved rather than copied (`take`), freed when its owner lets go,
+    and no borrow outlives it.
+  - Two differences: the box also holds what the object builds into itself, and only freeing is checked, not Rust's
+    aliasing-XOR-mutation.
+  - Spelled as a reference modifier like `mut` (`Map<I64, box Conn&>`, `box mut Conn&`), not a `Box<T>` type. That way
+    method calls and every other reference rule apply unchanged, with no deref rules.
 
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
