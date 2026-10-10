@@ -1554,24 +1554,44 @@ static char* cgValueSlot(struct cgCtx* ctx, struct type t, const char* ty) {
 //CONSISTENCY IS THE OBLIGATION: every access to the same storage must use the same family, or LLVM is told
 //two aliasing accesses do not alias. So an array literal's element stores are element-tagged exactly as a
 //later read of them is.
-//Deliberately narrow. Only the six primitives and the runtime-length array descriptor are tagged;
-//aggregates, references, and anything reached through a CHOICE PAYLOAD stay untagged, which means "may
-//alias anything" and is always the safe answer. The payload is the one place olang could pun - two cases
-//can put different types in the same bytes - so it is excluded rather than reasoned about.
+//Deliberately narrow. Only Bool, the numeric primitives (each its own leaf, every one in the T4 table) and the
+//runtime-length array descriptor are tagged; aggregates and references stay untagged, which means "may alias
+//anything" and is always the safe answer. A DECLARED type over a number ("type Char extends U8", "type Meters I32")
+//has its base's bType and so its base's tag - which is what makes T29h's view of an Array<Char> as an Array<U8>
+//sound - and no conversion, view or flow ever reaches one primitive's storage as another's (an array conversion
+//compares element bTypes, T29a/T29h; E33's Bits/FromBits move values, never storage; X3 hands a foreign call a
+//bare pointer, opaque to LLVM). Two types of one LLVM shape (U8 and I8, F16's half and BF16's bfloat beside I16)
+//are still different leaves: nothing reaches one's storage as the other. A CHOICE PAYLOAD is the one place two
+//types share bytes, and its fields are tagged anyway: changing which case is live is always a whole-value store
+//of the choice (built in a fresh slot by cgChoiceValue, then stored as one untagged aggregate), and a payload is
+//never assigned field by field (O25g), so no tagged access of one case's field can be reordered with another's.
 //T36: a closure's environment (D16c) is a family of its own - written once where the closure is made, read only by the
 //code it is made for, so its loads never alias a program's fields or elements (see cgClosureType)
 static const char* cgCaptureTbaa = ", !tbaa !28";
 
 static char* cgCheckMsg(struct cgCtx* ctx, struct operand* op, const char* what);
 
+//T36: the tagged scalars, each with its two families' access tags (and its type nodes, numbered as emitTbaaTypeTree
+//writes them: a field leaf at fieldTag - 10, an element leaf at elemTag + 10). Bool and the first six numbers keep the
+//numbers they always had; the rest of the T4 table (I8 ... BF16) was untagged until their element stores were found
+//reloading an array descriptor at every element - a BF16 loop through a struct never vectorized
+static const struct cgTbaaLeaf { enum baseType b; const char* name; int fieldTag, elemTag; } cgTbaaLeaves[] = {
+    { BASETYPE_BOOL, "bool", 21, 31 },     { BASETYPE_BYTE, "byte", 22, 32 },       { BASETYPE_INT32, "int32", 23, 33 },
+    { BASETYPE_INT64, "int64", 24, 34 },   { BASETYPE_FLOAT32, "float32", 25, 35 }, { BASETYPE_FLOAT64, "float64", 26, 36 },
+    { BASETYPE_I8, "i8", 61, 81 },         { BASETYPE_I16, "i16", 62, 82 },         { BASETYPE_U16, "u16", 63, 83 },
+    { BASETYPE_U32, "u32", 64, 84 },       { BASETYPE_U64, "u64", 65, 85 },         { BASETYPE_F16, "f16", 66, 86 },
+    { BASETYPE_BF16, "bf16", 67, 87 },
+};
+
 static const char* cgTbaa(struct type t, bool elem) {
+    static char tags[sizeof(cgTbaaLeaves) / sizeof(cgTbaaLeaves[0])][2][16];
+    for (size_t i = 0; i < sizeof(cgTbaaLeaves) / sizeof(cgTbaaLeaves[0]); i++) {
+        if (cgTbaaLeaves[i].b != t.bType) continue;
+        char* tag = tags[i][elem];
+        if (!tag[0]) snprintf(tag, sizeof(tags[i][elem]), ", !tbaa !%d", elem ? cgTbaaLeaves[i].elemTag : cgTbaaLeaves[i].fieldTag);
+        return tag;
+    }
     switch (t.bType) {
-        case BASETYPE_BOOL: return elem ? ", !tbaa !31" : ", !tbaa !21";
-        case BASETYPE_BYTE: return elem ? ", !tbaa !32" : ", !tbaa !22";
-        case BASETYPE_INT32: return elem ? ", !tbaa !33" : ", !tbaa !23";
-        case BASETYPE_INT64: return elem ? ", !tbaa !34" : ", !tbaa !24";
-        case BASETYPE_FLOAT32: return elem ? ", !tbaa !35" : ", !tbaa !25";
-        case BASETYPE_FLOAT64: return elem ? ", !tbaa !36" : ", !tbaa !26";
         //the "{ i64, ptr }" descriptor. llvmType gives a runtime-length array that shape whatever marker it
         //carries (T11), so the marker is irrelevant here; a compile-time-length array is inline storage or
         //a bare ptr and stays untagged. An element variant is needed too, for an array of arrays' elements.
@@ -7221,37 +7241,21 @@ void emitTargetTriple(FILE* out) {
 //different tagged types are proven not to alias, and anything untagged still aliases everything.
 void emitTbaaTypeTree(FILE* out) {
     fputs("!20 = !{!\"olang\"}\n"
-          "!11 = !{!\"bool\", !20, i64 0}\n"
-          "!12 = !{!\"byte\", !20, i64 0}\n"
-          "!13 = !{!\"int32\", !20, i64 0}\n"
-          "!14 = !{!\"int64\", !20, i64 0}\n"
-          "!15 = !{!\"float32\", !20, i64 0}\n"
-          "!16 = !{!\"float64\", !20, i64 0}\n"
           "!17 = !{!\"arraydesc\", !20, i64 0}\n"
           "!18 = !{!\"closure\", !20, i64 0}\n" //a closure's environment (cgCaptureTbaa)
-          //the element family: same types, reached by indexing rather than as a field
-          "!41 = !{!\"bool[]\", !20, i64 0}\n"
-          "!42 = !{!\"byte[]\", !20, i64 0}\n"
-          "!43 = !{!\"int32[]\", !20, i64 0}\n"
-          "!44 = !{!\"int64[]\", !20, i64 0}\n"
-          "!45 = !{!\"float32[]\", !20, i64 0}\n"
-          "!46 = !{!\"float64[]\", !20, i64 0}\n"
           "!47 = !{!\"arraydesc[]\", !20, i64 0}\n"
-          "!21 = !{!11, !11, i64 0}\n"
-          "!22 = !{!12, !12, i64 0}\n"
-          "!23 = !{!13, !13, i64 0}\n"
-          "!24 = !{!14, !14, i64 0}\n"
-          "!25 = !{!15, !15, i64 0}\n"
-          "!26 = !{!16, !16, i64 0}\n"
           "!27 = !{!17, !17, i64 0}\n"
           "!28 = !{!18, !18, i64 0}\n"
-          "!31 = !{!41, !41, i64 0}\n"
-          "!32 = !{!42, !42, i64 0}\n"
-          "!33 = !{!43, !43, i64 0}\n"
-          "!34 = !{!44, !44, i64 0}\n"
-          "!35 = !{!45, !45, i64 0}\n"
-          "!36 = !{!46, !46, i64 0}\n"
-          "!37 = !{!47, !47, i64 0}\n\n", out);
+          "!37 = !{!47, !47, i64 0}\n", out);
+    //each scalar's two leaves - the element family is the same type reached by indexing rather than as a field ("[]")
+    for (size_t i = 0; i < sizeof(cgTbaaLeaves) / sizeof(cgTbaaLeaves[0]); i++) {
+        const struct cgTbaaLeaf* l = &cgTbaaLeaves[i];
+        fprintf(out, "!%d = !{!\"%s\", !20, i64 0}\n!%d = !{!%d, !%d, i64 0}\n", l->fieldTag - 10, l->name, l->fieldTag,
+                l->fieldTag - 10, l->fieldTag - 10);
+        fprintf(out, "!%d = !{!\"%s[]\", !20, i64 0}\n!%d = !{!%d, !%d, i64 0}\n", l->elemTag + 10, l->name, l->elemTag,
+                l->elemTag + 10, l->elemTag + 10);
+    }
+    fputs("\n", out);
 }
 
 void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
