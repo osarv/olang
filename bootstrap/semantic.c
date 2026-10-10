@@ -1748,6 +1748,7 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
 //global) around their type's resolution only, and never inside it: a type argument, a function type's parameter or a
 //payload resolved within sees it cleared
 static bool ownAllowed;
+static bool ownUsed; //O39: an own reference is written somewhere in the program - else the borrow pass has nothing to do
 struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
 static struct paramDefault* boundParamDefault(struct paramDefault* d, struct type paramType, struct list* bindings);
 struct operand* paramDefaultOp(struct var* param);
@@ -5481,6 +5482,7 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
             Err(ot, ERR_OWN_POSITION_NOT_YET);
         } else {
             t.refOwn = true;
+            ownUsed = true;
         }
     }
     return t;
@@ -8854,10 +8856,11 @@ static struct var* ownRegionOf(struct operand* op) {
 }
 
 //O39: where op was reached from, for what releasing below it may reach
-static int ownRootOf(struct var* func, struct operand* op, int* param) {
+static int ownRootOf(struct var* func, struct operand* op, int* param, struct var** local) {
     *param = -1;
+    *local = NULL;
     struct var* R = ownRegionOf(op);
-    if (R) { *param = R->regionRootParam; return R->regionRoot; }
+    if (R) { *param = R->regionRootParam; *local = R->regionRootLocal; return R->regionRoot; }
     if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->type.structMAlloc) {
         int i = ownParamIndex(func, op->readVar);
         if (i >= 0) { *param = i; return OWN_ROOT_PARAM; }
@@ -8899,19 +8902,28 @@ static struct operand* ownBorrowRead(struct operand* op) {
     int rd = 0;
     bool ru = false;
     int root = OWN_ROOT_ANY, rootParam = -1;
+    struct var* rootLocal = NULL;
     if (op->opType == OPERATION_MEMBER) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
         ownReachOfBase(ctx, base, &rv, &rd, &ru);
-        root = ownRootOf(ctx->func, base, &rootParam);
+        root = ownRootOf(ctx->func, base, &rootParam, &rootLocal);
     } else if (op->opType == OPERATION_READ_VAR && op->readVar) {
+        struct var* v = canonicalVar(op->readVar);
         if (op->readVar->owner && !op->readVar->isFuncDecl) ru = true; //a global's: the program's
         else {
-            rd = op->readVar->type.scopeDepth;
+            if (v->ownReachSet) { //an owner local's: what its object is known to need (buildOwnDecl)
+                rv = v->ownReach;
+                rd = v->ownReachDepth;
+                ru = v->ownReachUnnamed;
+            } else rd = op->readVar->type.scopeDepth;
             root = OWN_ROOT_LOCAL;
+            rootLocal = v;
         }
     } else return op;
     struct var* R = ownRegionNew(op->tok, rv, rd, ru, root, rootParam);
+    R->regionRootLocal = rootLocal;
     R->regionSlot = op;
+    R->regionType = canonicalStructOf(op->type);
     bool writable = op->type.refMut && OperandIsMutableLvalue(op);
     op->ownOrig = MallocOrCrash(sizeof(struct type));
     *op->ownOrig = op->type;
@@ -19274,6 +19286,7 @@ static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type s
     }
     if (opIsCtorCall(val) && ownSameStruct(val->type, slotT) && !val->isTried) {
         struct var* R = ownRegionNew(val->tok, rv, rd, ru, OWN_ROOT_LOCAL, -1);
+        R->regionType = canonicalStructOf(slotT);
         val->ownNewRegion = true;
         val->ownRegion = R;
         landCall(val, R, 0);
@@ -19301,8 +19314,24 @@ static struct statement buildOwnAssign(struct checkCtx* ctx, struct operand* tar
     return stmt;
 }
 
-//O34: a local - a constructor's field among them - or a global declared own: an owner local, its reach its block (the
-//instance's scope for a constructor's field, C2g), released at that block's end unless moved on (codegen)
+//O33: whether a constructor call refers to nothing outside what it builds - each argument a number, text written in the
+//program (constant data), null, or a constructor call of the same kind - so its object may be moved anywhere
+static bool ownCtorPlain(struct operand* call, int depth) {
+    if (depth > 32) return false;
+    for (int i = 0; i < call->args.len; i++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&call->args, i);
+        if (!a || a->isNullLiteral || a->isLiteral || a->isDefaultArg || OperandIsWrittenText(a) || !typeCarriesScopes(a->type))
+            continue;
+        if (opIsCtorCall(a) && ownCtorPlain(a, depth + 1)) continue;
+        return false;
+    }
+    return true;
+}
+
+//O34: a local - a constructor's field among them - or a global declared own: an owner local, released at its block's end
+//unless moved on (codegen). Its reach (O33) is what its initializer needs: a constructor call referring to nothing outside
+//it, or null, needs nothing - the program's scope, so the owner may be moved anywhere; "take x" what x's needed; any other
+//constructor call its block (the instance's scope for a constructor's field, C2g)
 static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok, struct type declType, struct operand* rhs,
                                      struct syntax* exprNode) {
     declType.scopeParam = NULL;
@@ -19313,8 +19342,21 @@ static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok,
         want.refOwn = false;
         rhs = buildExpecting(ctx, exprNode, &want);
     }
-    if (rhs) ownMoveInto(ctx, rhs, declType, NULL, ctx->blockDepth, false);
+    struct var* reach = NULL;
+    int reachDepth = ctx->blockDepth;
+    bool reachUnnamed = false;
+    if (!rhs || rhs->isNullLiteral || (opIsCtorCall(rhs) && ownCtorPlain(rhs, 0))) reachUnnamed = true;
+    else if (rhs->opType == OPERATION_TAKE && rhs->ownRegion) {
+        reach = rhs->ownRegion->regionReach;
+        reachDepth = rhs->ownRegion->regionReachDepth;
+        reachUnnamed = rhs->ownRegion->regionReachUnnamed;
+    }
+    if (rhs) ownMoveInto(ctx, rhs, declType, reach, reachDepth, reachUnnamed);
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
+    v->ownReachSet = true;
+    v->ownReach = reach;
+    v->ownReachDepth = reachDepth;
+    v->ownReachUnnamed = reachUnnamed;
     if (rhs) v->declInit = rhs;
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_VAR_DECL;
@@ -26021,6 +26063,805 @@ static bool isLibraryFile(struct str file) {
     return false;
 }
 
+// ---- own references (§8.8): what a body may release, and the borrow check ----
+
+//O39: a release a body may make - of an object of type t (canonical), below parameter param's referent by own fields only
+//(-1: anywhere - through a global, a capture, or a reference no own field reached), first seen at tok
+struct ownRel { struct type* t; int param; struct token tok; };
+struct ownEffects { struct list rels; };
+//O38: a region borrowed - one read of an own slot - and where it was read, for the message
+struct ownLoan { struct var* R; struct token tok; };
+//...held by a local (or, always, by a task until its join) for as long as the local is used
+struct ownHolder { struct var* v; struct list loans; int frame; bool always; };
+//a block being walked, the statement in it at idx being the one walked; owner: the statement the block belongs to
+struct ownFrame { struct list* block; int idx; struct statement* owner; };
+
+static struct {
+    bool check;          //false: finding what each body may release (ownEff); true: checking each body against it
+    struct var* func;    //the body's function, NULL for a test or a global's initializer
+    struct statement* stmt; //the statement being walked
+    struct list frames;  //struct ownFrame
+    struct list holders; //struct ownHolder
+    struct list cur;     //struct ownLoan - what the statement being walked borrows while it runs
+    struct list encl;    //struct ownLoan - what statements around an expression's own block borrow while it runs
+    struct list reported; //struct token - one error per release
+    bool changed;
+} ow;
+
+static struct str ownQuoted(struct var* f);
+//a function's name as written - an instantiation's without its type arguments (G16)
+static struct str ownFuncName(struct var* f) {
+    struct str n = canonicalVar(f)->name;
+    for (int k = 0; k < n.len; k++)
+        if (n.ptr[k] == '$') { n.len = k; break; }
+    return n;
+}
+
+static bool ownTypeIn(struct list* l, struct type* t) {
+    for (int i = 0; i < l->len; i++)
+        if (*(struct type**)ListGetIdx(l, i) == t) return true;
+    return false;
+}
+
+//O39: what releasing an object of type t frees - the object and what its own fields own, all the way down
+static void ownHeld(struct type* t, struct list* out) {
+    if (!t || ownTypeIn(out, t)) return;
+    ListAdd(out, &t);
+    for (int i = 0; i < t->vars.len; i++) {
+        struct var* f = ListGetIdx(&t->vars, i);
+        if (f->type.refOwn) ownHeld(canonicalStructOf(f->type), out);
+    }
+}
+
+static void ownEffAdd(struct var* f, struct type* t, int param, struct token tok) {
+    if (!f || !t) return;
+    f = canonicalVar(f);
+    if (!f->ownEff) {
+        f->ownEff = MallocOrCrash(sizeof(struct ownEffects));
+        f->ownEff->rels = ListInit(sizeof(struct ownRel));
+    }
+    for (int i = 0; i < f->ownEff->rels.len; i++) {
+        struct ownRel* r = ListGetIdx(&f->ownEff->rels, i);
+        if (r->t == t && r->param == param) return;
+    }
+    struct ownRel r = { t, param, tok };
+    ListAdd(&f->ownEff->rels, &r);
+    ow.changed = true;
+}
+
+//O39: where a place or a value was reached from - below which parameter by own fields only, an owner local of this body
+//(nothing a caller holds), or anything else. A value made here (a constructor call, a literal) is this body's own
+static int ownEvRoot(struct operand* op, int* param, struct var** local) {
+    *param = -1;
+    *local = NULL;
+    if (!op) return OWN_ROOT_ANY;
+    struct var* R = ownRegionOf(op);
+    if (R) {
+        *param = R->regionRootParam;
+        *local = R->regionRootLocal;
+        return R->regionRoot;
+    }
+    if (op->opType == OPERATION_READ_VAR && op->readVar) {
+        int i = ownParamIndex(ow.func, op->readVar);
+        if (i >= 0) {
+            *param = i;
+            return OWN_ROOT_PARAM;
+        }
+        struct var* v = canonicalVar(op->readVar);
+        if (v->type.refOwn && !v->owner) {
+            *local = v;
+            return OWN_ROOT_LOCAL;
+        }
+        return OWN_ROOT_ANY;
+    }
+    if (opIsCtorCall(op) || (op->isLiteral && !op->isNullLiteral)) return OWN_ROOT_LOCAL;
+    return OWN_ROOT_ANY;
+}
+
+//O39: the regions a value is a borrow of, from the one it names up through the own slots it was read out of - a release
+//below the value reaches none of them, owners forming trees
+static void ownChain(struct operand* op, struct list* out) {
+    for (int guard = 0; op && guard < 256; guard++) {
+        struct var* R = ownRegionOf(op);
+        if (!R) return;
+        ListAdd(out, &R);
+        struct operand* slot = R->regionSlot;
+        if (!slot || slot->opType != OPERATION_MEMBER || !slot->args.len) return;
+        op = *(struct operand**)ListGetIdx(&slot->args, 0);
+    }
+}
+
+static struct ownHolder* ownHolderOf(struct var* v) {
+    if (!v) return NULL;
+    v = canonicalVar(v);
+    for (int i = ow.holders.len - 1; i >= 0; i--) {
+        struct ownHolder* h = ListGetIdx(&ow.holders, i);
+        if (h->v == v) return h;
+    }
+    return NULL;
+}
+
+static void ownLoanAdd(struct list* out, struct var* R, struct token tok) {
+    for (int i = 0; i < out->len; i++)
+        if (((struct ownLoan*)ListGetIdx(out, i))->R == R) return;
+    struct ownLoan l = { R, tok };
+    ListAdd(out, &l);
+}
+
+static void ownLoansAll(struct list* from, struct list* out) {
+    for (int i = 0; i < from->len; i++) {
+        struct ownLoan* l = ListGetIdx(from, i);
+        ownLoanAdd(out, l->R, l->tok);
+    }
+}
+
+static void ownLoansOfBlockDeep(struct list* block, struct list* out);
+//O38: what evaluating op borrows while it runs - every read of an own slot made into a borrow, and every local holding
+//some, except where the value is used at once for something holding no reference (transient: "s.cur.n", a comparison, a
+//rendering). place: op is where an assignment stores, used until the store whatever it reads
+static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
+    if (!op) return;
+    if (!transient) {
+        if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
+        else if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) {
+            struct ownHolder* h = ownHolderOf(op->readVar);
+            if (h) ownLoansAll(&h->loans, out);
+            for (int i = 0; i < op->readVar->lambdaCaptures.len; i++) { //a closure made: what it captured
+                struct lambdaCapture* c = ListGetIdx(&op->readVar->lambdaCaptures, i);
+                struct ownHolder* ch = ownHolderOf(c->outer);
+                if (ch) ownLoansAll(&ch->loans, out);
+            }
+        }
+    }
+    switch (op->opType) {
+    case OPERATION_MEMBER:
+        if (op->args.len)
+            ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out,
+                       !place && (transient || !typeCarriesScopes(op->type)), place);
+        return;
+    case OPERATION_INDEX:
+        if (op->args.len)
+            ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out,
+                       !place && (transient || !typeCarriesScopes(op->type)), place);
+        for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
+        return;
+    case OPERATION_EQ:
+    case OPERATION_NEQ:
+    case OPERATION_IS:
+    case OPERATION_STR_OF:
+        transient = true;
+        break;
+    default:
+        transient = false;
+        break;
+    }
+    for (int i = 0; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, transient, false);
+    for (int i = 0; i < op->chainOperands.len; i++)
+        ownLoansIn(*(struct operand**)ListGetIdx(&op->chainOperands, i), out, true, false);
+    ownLoansIn(op->callee, out, false, false);
+    for (int i = 0; i < op->catchClauses.len; i++)
+        ownLoansIn(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt, out, false, false);
+    if (op->comprBody.len) ownLoansOfBlockDeep(&op->comprBody, out);
+}
+
+static void ownLoansOfStmtDeep(struct statement* s, struct list* out) {
+    ownLoansIn(s->op, out, false, false);
+    ownLoansIn(s->target, out, false, true);
+    ownLoansIn(s->fillValue, out, false, false);
+    ownLoansIn(s->forInit, out, false, false);
+    ownLoansIn(s->caseGuard, out, false, false);
+    ownLoansIn(s->nomatchValue, out, false, false);
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        ownLoansIn(a->test, out, false, false);
+        for (int k = 0; k < a->binds.len; k++) ownLoansIn(((struct caseBind*)ListGetIdx(&a->binds, k))->from, out, false, false);
+    }
+    ownLoansOfBlockDeep(&s->block, out);
+    ownLoansOfBlockDeep(&s->matchHold, out);
+    ownLoansOfBlockDeep(&s->matchCases, out);
+    ownLoansOfBlockDeep(&s->nomatchBlock, out);
+    if (s->elseStmnt) ownLoansOfStmtDeep(s->elseStmnt, out);
+}
+
+static void ownLoansOfBlockDeep(struct list* block, struct list* out) {
+    for (int i = 0; i < block->len; i++) ownLoansOfStmtDeep(ListGetIdx(block, i), out);
+}
+
+//O38: what a statement borrows while it runs - its own operands', not its blocks' (each its own statements')
+static void ownLoansOfStmt(struct statement* s, struct list* out) {
+    switch (s->sType) {
+    case STATEMENT_VAR_DECL:
+        ownLoansIn(s->op, out, false, false);
+        ownLoansIn(s->fillValue, out, false, false);
+        break;
+    case STATEMENT_ASSIGN:
+        ownLoansIn(s->target, out, false, true);
+        ownLoansIn(s->op, out, false, false);
+        break;
+    case STATEMENT_FOR:
+        ownLoansIn(s->forInit, out, false, false);
+        ownLoansIn(s->op, out, false, false);
+        break;
+    case STATEMENT_ASSERT:
+        ownLoansIn(s->op, out, false, false);
+        ownLoansIn(s->assertMsg, out, false, false);
+        break;
+    case STATEMENT_CASE:
+        for (int i = 0; i < s->caseAlts.len; i++) {
+            struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+            ownLoansIn(a->test, out, false, false);
+            for (int k = 0; k < a->binds.len; k++)
+                ownLoansIn(((struct caseBind*)ListGetIdx(&a->binds, k))->from, out, false, false);
+        }
+        ownLoansIn(s->caseGuard, out, false, false);
+        break;
+    default:
+        ownLoansIn(s->op, out, false, false);
+        break;
+    }
+}
+
+static bool ownBlockReads(struct list* block, struct var* v);
+static bool ownStmtReads(struct statement* s, struct var* v);
+//whether op reads v - directly, or as a capture of a closure it makes
+static bool ownOpReads(struct operand* op, struct var* v) {
+    if (!op) return false;
+    if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) { //(a call through it reads it)
+        if (canonicalVar(op->readVar) == v) return true;
+        for (int i = 0; i < op->readVar->lambdaCaptures.len; i++)
+            if (canonicalVar(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer) == v) return true;
+    }
+    for (int i = 0; i < op->args.len; i++)
+        if (ownOpReads(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
+    for (int i = 0; i < op->chainOperands.len; i++)
+        if (ownOpReads(*(struct operand**)ListGetIdx(&op->chainOperands, i), v)) return true;
+    if (ownOpReads(op->callee, v)) return true;
+    for (int i = 0; i < op->catchClauses.len; i++) {
+        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
+        if (ownOpReads(c->dflt, v) || ownBlockReads(&c->block, v)) return true;
+    }
+    return ownBlockReads(&op->comprBody, v);
+}
+
+static bool ownStmtReads(struct statement* s, struct var* v) {
+    if (ownOpReads(s->op, v) || ownOpReads(s->target, v) || ownOpReads(s->fillValue, v) || ownOpReads(s->forInit, v)
+            || ownOpReads(s->assertMsg, v) || ownOpReads(s->caseGuard, v) || ownOpReads(s->nomatchValue, v))
+        return true;
+    if (s->forPost && ownStmtReads(s->forPost, v)) return true;
+    if (s->elseStmnt && ownStmtReads(s->elseStmnt, v)) return true;
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        if (ownOpReads(a->test, v)) return true;
+        for (int k = 0; k < a->binds.len; k++)
+            if (ownOpReads(((struct caseBind*)ListGetIdx(&a->binds, k))->from, v)) return true;
+    }
+    for (int i = 0; i < s->spawnTargets.len; i++)
+        if (ownOpReads(*(struct operand**)ListGetIdx(&s->spawnTargets, i), v)) return true;
+    for (int i = 0; i < s->catchClauses.len; i++) {
+        struct catchClause* c = ListGetIdx(&s->catchClauses, i);
+        if (ownOpReads(c->dflt, v) || ownBlockReads(&c->block, v)) return true;
+    }
+    return ownBlockReads(&s->block, v) || ownBlockReads(&s->matchHold, v) || ownBlockReads(&s->matchCases, v)
+           || ownBlockReads(&s->nomatchBlock, v);
+}
+
+static bool ownBlockReads(struct list* block, struct var* v) {
+    for (int i = 0; i < block->len; i++)
+        if (ownStmtReads(ListGetIdx(block, i), v)) return true;
+    return false;
+}
+
+static bool ownLoopOwner(struct statement* s) {
+    return s && (s->sType == STATEMENT_FOR || s->sType == STATEMENT_DO);
+}
+
+//O38: whether a local's loans are still in use - it is read after this point: later in its block or one around it, in
+//deferred code, or anywhere in a loop around this point inside its block (the next turn reads it again)
+static bool ownHolderLive(struct ownHolder* h) {
+    if (h->always) return true;
+    for (int k = ow.frames.len - 1; k >= h->frame && k >= 0; k--) {
+        struct ownFrame* F = ListGetIdx(&ow.frames, k);
+        for (int i = F->idx < 0 ? 0 : F->idx; i < F->block->len; i++)
+            if (ownStmtReads(ListGetIdx(F->block, i), h->v)) return true;
+        for (int i = 0; i < F->idx && i < F->block->len; i++) {
+            struct statement* d = ListGetIdx(F->block, i);
+            if (d->sType == STATEMENT_DEFER && ownStmtReads(d, h->v)) return true;
+        }
+        if (ownLoopOwner(F->owner)) {
+            if (k > h->frame && ownStmtReads(F->owner, h->v)) return true;
+            if (k == h->frame && (ownOpReads(F->owner->op, h->v) || (F->owner->forPost && ownStmtReads(F->owner->forPost, h->v))))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool ownReportedAt(struct token tok) {
+    for (int i = 0; i < ow.reported.len; i++) {
+        struct token* t = ListGetIdx(&ow.reported, i);
+        if (t->owner == tok.owner && t->tokId == tok.tokId) return true;
+    }
+    ListAdd(&ow.reported, &tok);
+    return false;
+}
+
+//O39: an owner local's tree is reached by own fields only through it: a release below it hits no loan read below another
+//owner local or below a parameter (what was moved into it was let go of there, by "take", checked then), and a release
+//below a parameter none read below an owner local. A value made here is nobody's yet. What was reached otherwise - a
+//global, a capture, a plain reference, which may point anywhere a reference may - meets everything
+static bool ownLoanHits(struct ownLoan* l, struct list* types, struct list* chain, int root, struct var* local) {
+    int lr = l->R->regionRoot;
+    if (root == OWN_ROOT_LOCAL && (!local || (lr == OWN_ROOT_LOCAL && local != l->R->regionRootLocal) || lr == OWN_ROOT_PARAM))
+        return false;
+    if (root == OWN_ROOT_PARAM && lr == OWN_ROOT_LOCAL) return false;
+    if (!l->R->regionType || !ownTypeIn(types, l->R->regionType)) return false;
+    for (int i = 0; i < chain->len; i++)
+        if (*(struct var**)ListGetIdx(chain, i) == l->R) return false;
+    return true;
+}
+
+static void ownReport(struct ownLoan* l, struct token tok, const char* what, struct ownRel* via, struct var* callee) {
+    if (ownReportedAt(tok)) return;
+    Err(tok, ERR_OWN_RELEASE_UNDER_LOAN, what, l->R->regionType, l->tok.lineNr);
+    Note(l->tok, NOTE_OWN_BORROWED_HERE);
+    if (via && callee && via->tok.owner) Note(via->tok, NOTE_OWN_RELEASES_HERE, ownQuoted(callee));
+}
+
+//O39: a release of the types in types (closed: ownHeld), below the value chainOf names (NULL: anywhere) - an error where
+//a loan on an object it may free is still in use
+static void ownConflict(struct list* types, struct operand* chainOf, int root, struct var* local, struct token tok,
+                        const char* what, struct ownRel* via, struct var* callee) {
+    if (!ow.check || !types->len) return;
+    struct list chain = ListInit(sizeof(struct var*));
+    if (chainOf) ownChain(chainOf, &chain);
+    struct list* opens[2] = { &ow.cur, &ow.encl };
+    for (int o = 0; o < 2; o++)
+        for (int i = 0; i < opens[o]->len; i++) {
+            struct ownLoan* l = ListGetIdx(opens[o], i);
+            if (ownLoanHits(l, types, &chain, root, local)) { ownReport(l, tok, what, via, callee); return; }
+        }
+    for (int i = 0; i < ow.holders.len; i++) {
+        struct ownHolder* h = ListGetIdx(&ow.holders, i);
+        for (int k = 0; k < h->loans.len; k++) {
+            struct ownLoan* l = ListGetIdx(&h->loans, k);
+            if (ownLoanHits(l, types, &chain, root, local) && ownHolderLive(h)) { ownReport(l, tok, what, via, callee); return; }
+        }
+    }
+}
+
+//O35/O39: an own slot let go of - assigned, or taken out of: what it held may be freed
+static void ownSlotRelease(struct operand* place, struct token tok, const char* what) {
+    struct type* t = canonicalStructOf(place->type);
+    if (!t) return;
+    struct operand* base = place->opType == OPERATION_MEMBER && place->args.len ? *(struct operand**)ListGetIdx(&place->args, 0)
+                                                                               : NULL;
+    struct list types = ListInit(sizeof(struct type*));
+    ownHeld(t, &types);
+    int param;
+    struct var* local;
+    int root = ownEvRoot(base ? base : place, &param, &local);
+    if (!ow.check) {
+        if (root == OWN_ROOT_LOCAL) return;
+        for (int i = 0; i < types.len; i++)
+            ownEffAdd(ow.func, *(struct type**)ListGetIdx(&types, i), root == OWN_ROOT_PARAM ? param : -1, tok);
+        return;
+    }
+    ownConflict(&types, base, root, local, tok, what, NULL, NULL);
+}
+
+static char* ownWhat(const char* fmt, const char* a) {
+    size_t n = strlen(fmt) + strlen(a) + 1;
+    char* t = MallocOrCrash(n);
+    snprintf(t, n, fmt, a);
+    return t;
+}
+
+//O39: a call releases what its callee's body may (ownEff): below each argument, and anywhere. A call through a function
+//value releases nothing (O40)
+static void ownCallRelease(struct operand* call) {
+    struct var* g = !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
+    if (!g || !g->ownEff) return;
+    char nm[160];
+    struct str shown = ownFuncName(g);
+    snprintf(nm, sizeof(nm), "'%.*s'", shown.len > 120 ? 120 : shown.len, shown.ptr);
+    for (int i = 0; i < g->ownEff->rels.len; i++) {
+        struct ownRel* r = ListGetIdx(&g->ownEff->rels, i);
+        struct operand* arg = r->param >= 0 && r->param < call->args.len ? *(struct operand**)ListGetIdx(&call->args, r->param)
+                                                                         : NULL;
+        if (r->param >= 0 && !arg) continue;
+        int param = -1;
+        struct var* local = NULL;
+        int root = arg ? ownEvRoot(arg, &param, &local) : OWN_ROOT_ANY;
+        if (!ow.check) {
+            if (root != OWN_ROOT_LOCAL) ownEffAdd(ow.func, r->t, root == OWN_ROOT_PARAM ? param : -1, r->tok);
+            continue;
+        }
+        struct list one = ListInit(sizeof(struct type*));
+        ListAdd(&one, &r->t);
+        ownConflict(&one, arg, root, local, call->tok, ownWhat("calling %s", nm), r, g);
+    }
+}
+
+static void ownBlockWalk(struct list* block, struct statement* owner);
+static void ownStmtWalk(struct statement* s);
+static void ownOpWalk(struct operand* op);
+
+//a block run in the middle of the statement walked - a catch clause's, a match value's, a comprehension's: what that
+//statement borrows stays borrowed while it runs
+static void ownExprBlockWalk(struct list* block) {
+    if (!block->len) return;
+    int had = ow.encl.len;
+    ownLoansAll(&ow.cur, &ow.encl);
+    struct list cur = ow.cur;
+    struct statement* stmt = ow.stmt;
+    ownBlockWalk(block, stmt);
+    ow.cur = cur;
+    ow.stmt = stmt;
+    ow.encl.len = had;
+}
+
+static void ownOpWalk(struct operand* op) {
+    if (!op) return;
+    for (int i = 0; i < op->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&op->args, i));
+    for (int i = 0; i < op->chainOperands.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&op->chainOperands, i));
+    ownOpWalk(op->callee);
+    if (op->comprBody.len) ownExprBlockWalk(&op->comprBody);
+    for (int i = 0; i < op->catchClauses.len; i++) {
+        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
+        ownExprBlockWalk(&c->block);
+        ownOpWalk(c->dflt);
+    }
+    if (op->opType == OPERATION_FUNCCALL) ownCallRelease(op);
+    else if (op->opType == OPERATION_TAKE && op->args.len) {
+        struct operand* place = *(struct operand**)ListGetIdx(&op->args, 0);
+        ownSlotRelease(place, op->tok, ownWhat("taking '%s'", ownPlaceText(place)));
+    }
+}
+
+static int ownFramePush(struct list* block, struct statement* owner) {
+    struct ownFrame f = { block, 0, owner };
+    ListAdd(&ow.frames, &f);
+    return ow.frames.len - 1;
+}
+
+static void ownFramePop(int k) {
+    while (ow.holders.len) {
+        struct ownHolder* h = ListGetIdx(&ow.holders, ow.holders.len - 1);
+        if (h->frame < k) break;
+        ow.holders.len--;
+    }
+    ow.frames.len = k;
+}
+
+//O38: a local declared holding what it was given - a reference, a value holding one, or a closure - until its last use
+static void ownHold(struct var* v, struct list* loans, int frame) {
+    if (!v || v->type.refOwn || !typeCarriesScopes(v->type)) return;
+    struct ownHolder h = { canonicalVar(v), ListInit(sizeof(struct ownLoan)), frame, false };
+    ownLoansAll(loans, &h.loans);
+    ListAdd(&ow.holders, &h);
+}
+
+//...or later given more, by an assignment to it or into a value it holds
+static void ownHoldMore(struct operand* target, struct list* loans) {
+    struct operand* t = target;
+    while (t && (t->opType == OPERATION_MEMBER || t->opType == OPERATION_INDEX) && t->args.len) {
+        struct operand* b = *(struct operand**)ListGetIdx(&t->args, 0);
+        if (b->type.structMAlloc) return; //(stored through a reference: not into a local's storage)
+        t = b;
+    }
+    if (!t || t->opType != OPERATION_READ_VAR || !t->readVar || !loans->len) return;
+    struct ownHolder* h = ownHolderOf(t->readVar);
+    if (!h) {
+        if (t->readVar->owner || !typeCarriesScopes(t->readVar->type)) return;
+        ownHold(t->readVar, loans, 0);
+        return;
+    }
+    ownLoansAll(loans, &h->loans);
+}
+
+static void ownBlockWalkIn(int k) {
+    struct ownFrame* F = ListGetIdx(&ow.frames, k);
+    for (int i = 0; i < F->block->len; i++) {
+        ((struct ownFrame*)ListGetIdx(&ow.frames, k))->idx = i;
+        ownStmtWalk(ListGetIdx(F->block, i));
+    }
+}
+
+static void ownBlockWalk(struct list* block, struct statement* owner) {
+    if (!block->len) return;
+    int k = ownFramePush(block, owner);
+    ownBlockWalkIn(k);
+    ownFramePop(k);
+}
+
+static void ownStmtWalk(struct statement* s) {
+    struct list cur = ow.cur;
+    struct statement* stmt = ow.stmt;
+    ow.stmt = s;
+    ow.cur = ListInit(sizeof(struct ownLoan));
+    if (ow.check) ownLoansOfStmt(s, &ow.cur);
+    switch (s->sType) {
+    case STATEMENT_VAR_DECL:
+        ownOpWalk(s->op);
+        ownOpWalk(s->fillValue);
+        if (ow.check) ownHold(&s->var, &ow.cur, ow.frames.len - 1);
+        break;
+    case STATEMENT_ASSIGN:
+        if (s->target)
+            for (int i = 0; i < s->target->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->target->args, i));
+        ownOpWalk(s->op);
+        if (s->target && s->target->type.refOwn && !s->target->ownOrig)
+            ownSlotRelease(s->target, s->target->tok, ownWhat("assigning '%s'", ownPlaceText(s->target)));
+        if (ow.check && s->target) ownHoldMore(s->target, &ow.cur);
+        break;
+    case STATEMENT_IF: {
+        ownOpWalk(s->op);
+        ow.cur.len = 0;
+        ownBlockWalk(&s->block, s);
+        if (s->elseStmnt) {
+            struct list one = ListInit(sizeof(struct statement));
+            ListAdd(&one, s->elseStmnt);
+            int k = ownFramePush(&one, s);
+            ownStmtWalk(s->elseStmnt);
+            ownFramePop(k);
+        }
+        break;
+    }
+    case STATEMENT_FOR: {
+        ownOpWalk(s->forInit);
+        int k = ownFramePush(&s->block, s);
+        if (ow.check) ownHold(&s->var, &ow.cur, k);
+        ownOpWalk(s->op);
+        ow.cur.len = 0;
+        if (s->forPost) ownStmtWalk(s->forPost);
+        ownBlockWalkIn(k);
+        ownFramePop(k);
+        break;
+    }
+    case STATEMENT_DO: {
+        ow.cur.len = 0;
+        int k = ownFramePush(&s->block, s);
+        ownBlockWalkIn(k);
+        ((struct ownFrame*)ListGetIdx(&ow.frames, k))->idx = s->block.len;
+        ownOpWalk(s->op);
+        ownFramePop(k);
+        break;
+    }
+    case STATEMENT_MATCH: {
+        ownOpWalk(s->op);
+        ow.cur.len = 0;
+        int k = ownFramePush(&s->matchCases, s);
+        for (int i = 0; i < s->matchHold.len; i++) ownStmtWalk(ListGetIdx(&s->matchHold, i));
+        ownBlockWalkIn(k);
+        ownFramePop(k);
+        ownBlockWalk(&s->nomatchBlock, s);
+        ownOpWalk(s->nomatchValue);
+        break;
+    }
+    case STATEMENT_CASE: {
+        for (int i = 0; i < s->caseAlts.len; i++) {
+            struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+            ownOpWalk(a->test);
+            for (int j = 0; j < a->binds.len; j++) ownOpWalk(((struct caseBind*)ListGetIdx(&a->binds, j))->from);
+        }
+        int k = ownFramePush(&s->block, s);
+        if (ow.check)
+            for (int i = 0; i < s->caseAlts.len; i++) {
+                struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+                for (int j = 0; j < a->binds.len; j++) {
+                    struct caseBind* b = ListGetIdx(&a->binds, j);
+                    struct list loans = ListInit(sizeof(struct ownLoan));
+                    ownLoansIn(b->from, &loans, false, false);
+                    struct ownHolder* h = ownHolderOf(b->v);
+                    if (h && h->frame == k) ownLoansAll(&loans, &h->loans);
+                    else ownHold(b->v, &loans, k);
+                }
+            }
+        ownOpWalk(s->caseGuard);
+        ownBlockWalkIn(k);
+        ownOpWalk(s->op);
+        ownFramePop(k);
+        break;
+    }
+    case STATEMENT_DEFER:
+        ow.cur.len = 0;
+        ownBlockWalk(&s->block, s);
+        break;
+    case STATEMENT_JOIN:
+        ow.cur.len = 0;
+        ownBlockWalk(&s->block, s);
+        for (int i = 0; i < s->catchClauses.len; i++) ownBlockWalk(&((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block, s);
+        break;
+    case STATEMENT_SPAWN: {
+        struct operand* call = s->op;
+        if (call) {
+            for (int i = 0; i < call->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&call->args, i));
+            ownOpWalk(call->callee);
+        }
+        for (int i = 0; i < s->spawnTargets.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->spawnTargets, i));
+        struct var* g = call && !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
+        if (g && g->ownEff && g->ownEff->rels.len) {
+            if (!ow.check) ownCallRelease(call);
+            else if (!ownReportedAt(call->tok)) {
+                Err(call->tok, ERR_OWN_TASK_RELEASE, ownFuncName(g));
+                struct ownRel* r = ListGetIdx(&g->ownEff->rels, 0);
+                if (r->tok.owner) Note(r->tok, NOTE_OWN_RELEASES_HERE, ownQuoted(g));
+            }
+        }
+        if (ow.check && ow.cur.len) //O41: a task's arguments are borrowed until its join
+            for (int k = ow.frames.len - 1; k >= 0; k--) {
+                struct ownFrame* F = ListGetIdx(&ow.frames, k);
+                if (!F->owner || F->owner->sType != STATEMENT_JOIN) continue;
+                struct ownHolder h = { NULL, ListInit(sizeof(struct ownLoan)), k, true };
+                ownLoansAll(&ow.cur, &h.loans);
+                ListAdd(&ow.holders, &h);
+                break;
+            }
+        break;
+    }
+    case STATEMENT_TRY_CATCH:
+        ownOpWalk(s->op);
+        ow.cur.len = 0;
+        for (int i = 0; i < s->catchClauses.len; i++) {
+            struct catchClause* c = ListGetIdx(&s->catchClauses, i);
+            ownBlockWalk(&c->block, s);
+            ownOpWalk(c->dflt);
+        }
+        break;
+    case STATEMENT_ASSERT:
+        ownOpWalk(s->op);
+        ownOpWalk(s->assertMsg);
+        break;
+    default:
+        ownOpWalk(s->op);
+        break;
+    }
+    ow.cur = cur;
+    ow.stmt = stmt;
+}
+
+static void ownBodyWalk(struct var* func, struct list* block) {
+    ow.func = func;
+    ow.stmt = NULL;
+    ow.frames.len = 0;
+    ow.holders.len = 0;
+    ow.cur = ListInit(sizeof(struct ownLoan));
+    ow.encl.len = 0;
+    ownBlockWalk(block, NULL);
+}
+
+//every checked body of the program: functions, constructors and destructors, instantiations, lambdas, tests, and each
+//global's initializer
+static void ownForEachBody(void (*fn)(struct var*, struct list*)) {
+    for (int m = 0; m < allModules.len; m++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, m);
+        for (int i = 0; i < mod->vars.len; i++) {
+            struct var* v = ListGetIdx(&mod->vars, i);
+            if (v->isGlobalVar && v->initExpr) {
+                struct list one = ListInit(sizeof(struct statement));
+                struct statement st = (struct statement){0};
+                st.sType = STATEMENT_EXPR;
+                st.op = v->initExpr;
+                ListAdd(&one, &st);
+                fn(NULL, &one);
+                continue;
+            }
+            if (v->type.bType != BASETYPE_FUNC || v->type.isExtern || v->isGlobalVar || v->type.typeParams.len) continue;
+            fn(v, &v->codeBlock);
+        }
+        for (int i = 0; i < mod->tests.len; i++) fn(NULL, &((struct semaTest*)ListGetIdx(&mod->tests, i))->codeBlock);
+    }
+    for (int i = 0; i < instantiations.len; i++) {
+        struct instantiation* inst = ListGetIdx(&instantiations, i);
+        fn(inst->specialized, &inst->specialized->codeBlock);
+    }
+    for (int i = 0; i < typeInstantiations.len; i++) {
+        struct type* t = *(struct type**)ListGetIdx(&typeInstantiations, i);
+        if (t->typeParams.len) continue;
+        if (t->ctorFunc) fn(t->ctorFunc, &t->ctorFunc->codeBlock);
+        if (t->destructFunc) fn(t->destructFunc, &t->destructFunc->codeBlock);
+    }
+    for (int i = 0; i < ctorTwins.len; i++) {
+        struct type* t = *(struct type**)ListGetIdx(&ctorTwins, i);
+        fn(t->ctorFunc, &t->ctorFunc->codeBlock);
+    }
+    for (int i = 0; i < allLambdas.len; i++) {
+        struct var* L = *(struct var**)ListGetIdx(&allLambdas, i);
+        fn(L, &L->codeBlock);
+    }
+}
+
+static bool ownEffectsSome(struct var* f) {
+    f = canonicalVar(f);
+    return f && f->ownEff && f->ownEff->rels.len;
+}
+
+//O40: a function whose calls nothing at its call site shows - a function value, a destructor, a method "$", "==" or a
+//Map calls by itself - releases nothing a caller could have borrowed
+static void ownImplicitCheck(struct var* f, struct token at, enum diag d, struct str name) {
+    if (!ownEffectsSome(f) || ownReportedAt(at)) return;
+    struct ownRel* r = ListGetIdx(&canonicalVar(f)->ownEff->rels, 0);
+    if (d == ERR_OWN_DESTRUCTOR_RELEASE) Err(r->tok, d);
+    else Err(at, d, name);
+    if (r->tok.owner && d != ERR_OWN_DESTRUCTOR_RELEASE) Note(r->tok, NOTE_OWN_RELEASES_HERE, name);
+}
+
+static struct str ownQuoted(struct var* f) {
+    struct str n = ownFuncName(f);
+    char* t = MallocOrCrash((size_t)n.len + 3);
+    snprintf(t, (size_t)n.len + 3, "'%.*s'", n.len, n.ptr);
+    return StrFromCStr(t);
+}
+
+static bool ownImplicitName(struct str n) {
+    return n.len && (StrCmp(n, StrFromCStr("Str")) || StrCmp(n, StrFromCStr("str")) || StrCmp(n, StrFromCStr("Eq"))
+                     || StrCmp(n, StrFromCStr("eq")) || StrCmp(n, StrFromCStr("Hash")) || StrCmp(n, StrFromCStr("hash")));
+}
+
+static void ownImplicitBody(struct var* f, struct list* block) {
+    (void)block;
+    if (!f) return;
+    if (f->isLambda) ownImplicitCheck(f, f->tok, ERR_OWN_FUNC_VALUE_RELEASE, StrFromCStr("the lambda"));
+    else if (f->isMethod && ownImplicitName(ownFuncName(f))) ownImplicitCheck(f, f->tok, ERR_OWN_IMPLICIT_RELEASE, ownQuoted(f));
+    else if (f->type.vars.len) {
+        struct var* p = ListGetIdx(&f->type.vars, 0);
+        if (p->type.bType == BASETYPE_STRUCT && p->type.destructFunc && canonicalVar(p->type.destructFunc) == canonicalVar(f))
+            ownImplicitCheck(f, f->tok, ERR_OWN_DESTRUCTOR_RELEASE, (struct str){0});
+    }
+}
+
+//K2: whether a value of type t reaches an own reference - through its fields, elements, payloads and references. An owned
+//object lives in a region of its own (O30), which a global written out as data is not, so such a global is never baked
+static bool ownReachesOwnIn(struct type t, struct list* seen, int depth) {
+    if (depth > 64) return true;
+    if (t.refOwn) return true;
+    if (t.bType == BASETYPE_ARRAY) return t.arrElem && ownReachesOwnIn(*t.arrElem, seen, depth + 1);
+    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE) return false;
+    struct type* c = canonicalStructOf(t);
+    if (c) {
+        if (ownTypeIn(seen, c)) return false;
+        ListAdd(seen, &c);
+        t = *c;
+    }
+    for (int i = 0; i < t.vars.len; i++)
+        if (ownReachesOwnIn(((struct var*)ListGetIdx(&t.vars, i))->type, seen, depth + 1)) return true;
+    return false;
+}
+
+static bool ownReachesOwn(struct type t) {
+    if (!ownUsed) return false;
+    struct list seen = ListInit(sizeof(struct type*));
+    return ownReachesOwnIn(t, &seen, 0);
+}
+
+//O39-O41: once every body is checked - what each body may release, a least fixed point over calls; then where that is
+//refused (O40, O41), and each body against what its statements borrow (O38/O39)
+static void settleOwnBorrows(void) {
+    if (!ownUsed) return;
+    ow.frames = ListInit(sizeof(struct ownFrame));
+    ow.holders = ListInit(sizeof(struct ownHolder));
+    ow.encl = ListInit(sizeof(struct ownLoan));
+    ow.reported = ListInit(sizeof(struct token));
+    ow.check = false;
+    for (int round = 0; round < 1000; round++) {
+        ow.changed = false;
+        ownForEachBody(ownBodyWalk);
+        if (!ow.changed) break;
+    }
+    ownForEachBody(ownImplicitBody);
+    for (int i = 0; i < funcValueUses.len; i++) {
+        struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
+        if (u->f->isLambda) continue; //(a lambda: above, at itself)
+        ownImplicitCheck(u->f, u->tok, ERR_OWN_FUNC_VALUE_RELEASE, ownQuoted(u->f));
+    }
+    for (int i = 0; i < roCallAdapters.len; i++) {
+        struct roFuncValue* u = ListGetIdx(&roCallAdapters, i);
+        ownImplicitCheck(u->f, u->tok, ERR_OWN_FUNC_VALUE_RELEASE, ownQuoted(u->f));
+    }
+    ow.check = true;
+    ownForEachBody(ownBodyWalk);
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
     ErrMsgSetLibraryTest(isLibraryFile);
@@ -26058,6 +26899,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
 
     instantiations = ListInit(sizeof(struct instantiation));
     allLambdas = ListInit(sizeof(struct var*)); //D16
+    ownUsed = false; //O39
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));
@@ -26164,6 +27006,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     settleFrameLambdas(); //D16c: before the may-build walk, which reads it
     checkStrRendered(); //E11c
     settleMayBuild(); //E11c
+    if (ErrMsgGetNErrors() == errsAtStart) settleOwnBorrows(); //O38-O41: on a program that checked cleanly
 
     //K2: every immutable global whose initializer can be computed now is - its value becomes the global's
     //data, and nothing is left to run at startup. Only once the program has checked cleanly: evaluation
@@ -26238,6 +27081,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             for (int i = 0; i < mod->vars.len; i++) {
                 struct var* v = ListGetIdx(&mod->vars, i);
                 if ((v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) || !v->initExpr || v->mut || v->isMethod) continue;
+                if (ownReachesOwn(v->type)) continue; //K2: an owned object's region is no global's data
                 struct ctVal* val;
                 struct token whyTok = (struct token){0};
                 const char* why = NULL;

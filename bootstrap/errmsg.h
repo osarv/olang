@@ -199,9 +199,9 @@ struct type;
     X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
     X(ERR_TAKE_NOT_PLACE,               "E34",   "'take' moves out of a place holding an owner - a field, a local or a global declared 'own'") \
     X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
-    X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %S borrowed on line %d, which is still in use here") \
+    X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
     X(ERR_OWN_TASK_RELEASE,             "O41",   "a task may not release owned objects yet, and '%S' may - release them before the spawn or after the join") \
-    X(ERR_OWN_FUNC_VALUE_RELEASE,       "O40",   "'%S' releases owned objects, so it cannot be a function value - a function value releases nothing yet") \
+    X(ERR_OWN_FUNC_VALUE_RELEASE,       "O40",   "%S releases owned objects, so it cannot be a function value - a function value releases nothing yet") \
     X(ERR_OWN_DESTRUCTOR_RELEASE,       "O40",   "a destructor may not release owned objects - its instance's own fields are released after it runs") \
     X(ERR_TRAIT_NOT_A_TYPE,             "T30",   "%t is a trait - a constraint on a type variable, never the type of a value") \
     X(ERR_ENUM_CASE_IN_USE,             "T17",   "enum case %n is already declared") \
@@ -339,8 +339,8 @@ struct type;
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
-    X(ERR_OWN_STR_RELEASE,              "O40",   "'Str' may not release owned objects - '$' calls it where a borrow may be in use") \
-    X(NOTE_OWN_RELEASES_HERE,           "",      "'%S' releases here") \
+    X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
+    X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
     X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
     X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \

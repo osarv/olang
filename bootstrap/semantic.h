@@ -454,6 +454,15 @@ struct var {
     bool regionReachUnnamed;    //...the program's scope (a global's slot)
     int regionRoot;
     int regionRootParam;
+    struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
+    struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
+    //O33: an owner local's reach - the scope what its object refers to is known to outlive, which a slot it is moved into
+    //may not outlive: its initializer's (a constructor call holding nothing outside it, null: the program's; "take x": x's)
+    bool ownReachSet;
+    struct var* ownReach;
+    int ownReachDepth;
+    bool ownReachUnnamed;
+    struct ownEffects* ownEff;  //O39: on a function, what its body may release (settleOwnEffects), NULL for nothing
     int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
                               //value, which codegen writes out as the global's data instead of setting it
