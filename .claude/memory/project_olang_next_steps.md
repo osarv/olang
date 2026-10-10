@@ -550,6 +550,12 @@ because what it finds about structure feeds the refactor.
   noisy cues, similar new observations, transfer, a forgetting store; cost conflicting surroundings; open questions
   15-17), make test running before push. QUEUED (compiler, found by s6std): `type Letter extends Char` renders as a
   number; `List<Array<I64, 3>>` renders its element type as I64; `mut` dropped from rendered type names.
+- 05:45 CEST: render pushed (12eea59). rv3fix round 2 at a385b04 (verified alone) under a follow-up review
+  (/home/user/review/tonight5 "Follow-up (a385b04)"); s5scope fixing G1/G2/G4 from its follow-up review; then rv3fix
+  merges s5scope's final tip, re-verifies, I merge after both reviews are clean, then s6std. QUEUED (semantic.c):
+  `type Letter extends Char` gets U8's methods, not Char's (VarGetMethod, MethodReceiverAccepts, InterfaceMethodImpl,
+  unifyThroughMethods, T29f result typing follow the bare U8); study6 r02/r04/r05/r07/r10/r13-r15, G5 over-rejections,
+  oann lambdalend, r10 T(x), for-in iterator in place, the semantic.c cleanup.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

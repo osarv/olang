@@ -291,6 +291,15 @@ rule and where it is recorded; the morning report lists them all, then they move
    collection before an At/SetAt store (`v[0].E = shrink(v)`) makes the program's index out of range at the access -
    E16e's unchecked index, stated in SPEC, no check added. Spawn on a handle element is E31b/P2's error (s5scope).
 
+45. (wt-render, E11a/T29h/E21) a declared type over Char renders as a character (an Array<Letter> as `Letter['a']`,
+   only Char/String as text); an array of fixed arrays renders as `Array<I64, 3>[I64[1, 2, 3], ...]` (the 2-D row
+   rendering removed); inner `mut` is written in rendered types (`List<mut Node&>`), cleared at the outermost level of
+   diagnostics, parameters and a literal's element type. Pushed 12eea59.
+46. (wt-rv3fix round 2) P2 stand-ins live as long as the scope they stand in for and forward to it once folded (slow
+   path only); function values handed to a task are copied once per spawn but keep their identity; decision 40 narrowed
+   to refusing a task that CALLS a function value held in what it is handed (carrying/storing allowed); a constructor's
+   top level is depth 1, its by-value parameters depth 2; a match binding lives in its clause's block.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
