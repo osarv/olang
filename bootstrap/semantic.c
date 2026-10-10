@@ -22441,8 +22441,9 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
             Err(field->tok, ERR_FIELD_HAS_PARAM_NAME, field->tok);
             Note(clash->tok, NOTE_DECLARED_HERE, clash->tok);
         } else if (!isPun) {
-            struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok,
-                                             field->type.structMAlloc && !field->type.scopeParam ? fieldAsLocal : field->type, true);
+            fieldAsLocal = field->type; //(a ":=" field's type is known only now)
+            if (fieldAsLocal.structMAlloc && !fieldAsLocal.scopeParam && fieldAsLocal.scopeDepth == 0) fieldAsLocal.scopeDepth = 1;
+            struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, fieldAsLocal, true);
             local->scopeBindings = field->scopeBindings;
             struct statement decl = (struct statement){0};
             decl.sType = STATEMENT_VAR_DECL;
