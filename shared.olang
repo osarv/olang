@@ -14407,9 +14407,10 @@ fn rv3ViaAs(e rv3E) {
     b.head.next = rv3Node()
     b.head.next.v = 45
 }
-fn rv3Churn() I64 {
+# an arena churn of n rounds - few while compiling, where nothing is reclaimed, and 300 at run time
+fn rv3Churn(n I64) I64 {
     t I64 = 0
-    for i in range 300 {
+    for i in range n {
         a := Array<I64>(64, -7)
         t += a[3]
         s := $i $i $i "-" $(i * 7)
@@ -14417,7 +14418,7 @@ fn rv3Churn() I64 {
     }
     return t
 }
-fn rv3CopiesOut() I64 {
+fn rv3CopiesOut(k I64, n I64) I64 {
     w1 := rv3W(rv3Box())
     w2 := rv3W(rv3Box())
     w4 := rv3W(rv3Box())
@@ -14426,14 +14427,15 @@ fn rv3CopiesOut() I64 {
     rv3ViaParam(w2.b)
     rv3ViaMatch(rv3E.A(w4.b))
     rv3ViaAs(rv3E.A(w5.b))
-    rv3Churn()
-    return w1.b.head.next.v + w2.b.head.next.v + w4.b.head.next.v + w5.b.head.next.v
+    rv3Churn(n)
+    return w1.b.head.next.v + w2.b.head.next.v + w4.b.head.next.v + w5.b.head.next.v + k
 }
-Rv3CopiedBaked := rv3CopiesOut()
+Rv3CopiedBaked := rv3CopiesOut(0, 2)
 test "O25h: a copy out of a reference, by any expression, builds where the referent's references live" {
-    assert rv3CopiesOut() == 172 and Rv3CopiedBaked == 172
+    k I64 = I64(ctRuntimeZero)
+    assert rv3CopiesOut(k, 300) == 172 and Rv3CopiedBaked == 172
     sbChurn()
-    assert rv3CopiesOut() == Rv3CopiedBaked
+    assert rv3CopiesOut(k, 300) == Rv3CopiedBaked
 }
 
 # S4d/O18a: a compound assignment and an increment are "x = x + v" and "x = x.Inc()", so an operator method keeping its
@@ -14452,26 +14454,26 @@ fn rv3Eval(e rv3X&) I64 {
 fn (a rv3X&) Plus(b rv3X&) rv3X { return rv3X.Add(a, b) }
 fn (a rv3X&) Inc() rv3X { return rv3X.Add(a, rv3X.Lit(1)) }
 type rv3XH struct() { e rv3X = rv3X.Lit(10) }
-fn rv3Compound(k I64) I64 {
+fn rv3Compound(k I64, n I64) I64 {
     x := rv3X.Lit(1)
     x += rv3X.Lit(2)
     for i in range 3 + k {
         x += rv3X.Lit(i)
         x++
-        rv3Churn()
+        rv3Churn(n)
     }
     h := rv3XH()
     for i in range 2 + k {
         h.e += rv3X.Lit(i)
         h.e++
     }
-    rv3Churn()
+    rv3Churn(n)
     return rv3Eval(x) * 100 + rv3Eval(h.e)
 }
-Rv3CompoundBaked := rv3Compound(0)
+Rv3CompoundBaked := rv3Compound(0, 2)
 test "S4d: a compound assignment and an increment keep the place's old value, and land where the place lives" {
     k I64 = I64(ctRuntimeZero)
-    assert rv3Compound(k) == 913 and Rv3CompoundBaked == 913
+    assert rv3Compound(k, 300) == 913 and Rv3CompoundBaked == 913
 }
 
 # E4a/E6d: a conditional of literals beside an operand that cannot hold one of its values meets it at the widest of its
@@ -14518,7 +14520,7 @@ test "E11c: a Str building only for itself renders the same however often it run
 # are the same lists), and on a read-only one read what they give
 fn rv3First(l List<<T>>&) T { return l[0] }
 fn rv3ReadOnly(ls List<List<I64>>&) I64 { return ls[0].Len() + rv3First(ls).Len() }
-fn rv3Handles(k I64) I64 {
+fn rv3Handles(k I64, n I64) I64 {
     m := Map<I64, List<I64>>()
     m.Put(1, I64[1, 2].ToList())
     g := try m.Get(1) catch { return -1 }
@@ -14534,13 +14536,13 @@ fn rv3Handles(k I64) I64 {
     arr := Array<List<I64>>(1, I64[7].ToList())
     t := arr.ToList()
     f := arr.Filter(fn(x List<I64>) Bool { return x.Len() > 0 })
-    rv3Churn()
+    rv3Churn(n)
     return rv3ReadOnly(ll) * 1000 + mm.Len() * 100 + t[0].Len() * 10 + f.Len()
 }
-Rv3HandlesBaked := rv3Handles(0)
+Rv3HandlesBaked := rv3Handles(0, 2)
 test "T25c: a generic's read-only parameter gives copies as writable as its argument" {
     k I64 = I64(ctRuntimeZero)
-    assert rv3Handles(k) == 4311 and Rv3HandlesBaked == 4311
+    assert rv3Handles(k, 300) == 4311 and Rv3HandlesBaked == 4311
 }
 
 # P2: a spawned lambda building through a reference it captured from the spawner's block builds into its task's own
@@ -14549,7 +14551,7 @@ type rv3TN struct(v I64) {
     v
     w I64 = v * 3
 }
-fn rv3Spawned(n I64) I64 {
+fn rv3Spawned(n I64, churns I64) I64 {
     a mut List<rv3TN&>& = List<rv3TN&>()
     b mut List<rv3TN&>& = List<rv3TN&>()
     c mut List<rv3TN&>& = List<rv3TN&>()
@@ -14560,7 +14562,7 @@ fn rv3Spawned(n I64) I64 {
         spawn fn() { for i in range n { c.Push(rv3TN(i + 2000000)) } }
         spawn fn() { for i in range n { d.Push(rv3TN(i + 3000000)) } }
     }
-    rv3Churn()
+    rv3Churn(churns)
     bad I64 = 0
     for i, x in a { if x.v != i or x.w != 3 * i { bad++ } }
     for i, x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } }
@@ -14568,7 +14570,8 @@ fn rv3Spawned(n I64) I64 {
     for i, x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } }
     return bad * 1000000000 + a.Len() + b.Len() + c.Len() + d.Len()
 }
-Rv3SpawnedBaked := rv3Spawned(50)
+Rv3SpawnedBaked := rv3Spawned(50, 2)
 test "P2: spawned lambdas building through what they captured each build into a stand-in of their own" {
-    assert rv3Spawned(40000) == 160000 and Rv3SpawnedBaked == 200
+    k I64 = I64(ctRuntimeZero)
+    assert rv3Spawned(40000 + k, 300) == 160000 and Rv3SpawnedBaked == 200
 }
