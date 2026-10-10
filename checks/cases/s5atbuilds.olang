@@ -1,6 +1,7 @@
-# check: fail x[i] gives a copy, written back after the call, and the call can build into what it holds
-# E31/O17: a write through x[i] goes to a copy of the element, written back by SetAt; a call that stores into what the
-# copy holds would do so in the copy's block, which the collection outlives
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a "mut" method called on x[i] - an element that is no handle - would write a copy of it, while the method can
+# reach the collection another way; the copy is written out ("t := l[i]; t.M(); l[i] = t") or the elements held by
+# reference
 type Rec struct(name String&) {
     name
     tags List<String&> = List<String&>()

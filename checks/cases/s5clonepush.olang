@@ -1,6 +1,6 @@
 # check: fail the callee needs one argument's scope to outlive another's
-# O18c: Clone copies a list's elements - for a List<String&>, the references - so a clone of a loop's list holds what the
-# loop's block holds, and cannot be kept past it
+# O18c: Clone copies a list's elements - for a List<String&>, the references - so a clone of a loop's list holds what
+# the loop's block holds, and cannot be kept past it
 fn main() ? {
     rows := List<List<String&>>()
     for k in range 4 {

@@ -2775,25 +2775,38 @@ module (M6b): there the operator calls it, and anywhere else the operator is an 
 operator by both names is an error. None of them may declare errors except `Call`, which stands for a function
 and is called `try f(x)` when it can fail.
 
-**E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element. A write through it -
-a field (or an inline element) of it assigned, `x[i].f = v` or `x[i].f op= v`; an increment `x[i].f++`; a method with a
-writable receiver called on it, `x[i].M()`; or it passed for a writable reference parameter, `g(x[i])` - is a
-**read-modify-write**: `x` is held as a place and each index evaluated once, the element is read through `At` into a
-hidden local as `t := x[i]` would read it, the write or the call is made on that local, and `SetAt` writes it back
-(`x[i] = t`) once the call returns, as `x[i] op= v` already is. The element is read where the place is evaluated - after
-`x` and the indices, before the value assigned or the call's other arguments after it - and a call's arguments before
-it that make a call of their own are evaluated first, held as their values. Several such arguments are written back in
-order. A collection read out of another (`l[i][j].f = v`, `rows[0][1].M()`) is read and written back the same way one
-level out, after the inner write-back. The one difference from an array element, written in place: the callee works on
-the copy, so something reaching the same collection another way sees the element as it was until the write-back. A
-write through a reference read out of `x[i]` is not a write into the element and is unchanged (it goes where the
-reference points). Under `try` (R21) the read is checked as `try x[i]` is and the write-back as `try x[i] = v`. A type
-declaring `At` and no `SetAt` has nothing to write the copy back with, and such a write is a compile-time error naming
-`SetAt`; a call that can fail, or gives several results, is not written back, and is an error saying to write `t := x[i]`,
-the call on `t`, then `x[i] = t`. What the copy's references hold is checked as for any such copy (O17): a call that can
-build into what the element holds - a method pushing onto a `List` field of it - would build where the copy is, and is
-an error saying to hold the elements by reference or to make the copy where the collection lives (`t mut T&l = l[i]`).
-Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an error.
+**E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element. A **store** through
+it - a field (or an inline element) of it assigned, `x[i].f = v` or `x[i].f op= v`; an increment `x[i].f++`; an
+element of it assigned, `x[i][j] = v` - is a **read-modify-write** with nothing run between the read and the write:
+first the place is held - `x` as a place and each index evaluated once, left to right; then the value is evaluated (a
+compound assignment's operand, held); only then is the element read through `At` into a hidden local as `t := x[i]`
+would read it, the store made into that local, and the local written back through `SetAt` (`x[i] = t`). A collection
+read out of another (`l[i][j].f = v`, `rows[0][1] = v`) is read and written back the same way one level out, after the
+inner write-back. A write through a reference read out of `x[i]` is not a write into the element and is unchanged (it
+goes where the reference points). Under `try` (R21) the read is checked as `try x[i]` is and the write-back as
+`try x[i] = v`. A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
+compile-time error naming `SetAt`.
+
+**A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
+an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])`, where the element is
+not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
+so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
+`x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
+read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call.
+
+**A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
+by every copy of it, so a call on `x[i]`, on a field of it, or on any call's value result giving one -
+`users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden local, lent
+as its reference: what the callee builds is built where the handle's state lives, and nothing is written back. A store
+into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner collection's `SetAt`
+on such a copy. Spawned,
+such a copy would be held in the spawner's block, which closes (or is made again by the next turn of a loop) before
+the join, and is a compile-time error: the task is a function taking the collection that calls `x[i].M(...)` itself.
+What a copy's references hold is checked as for any such copy (O17): a store that lends the copy to a call that can
+build into what the element holds (an element type's `SetAt` pushing onto a `List` field of the copy) would build where
+the copy is, and is an error saying to hold the elements by reference or to make the copy where the collection lives
+(`t mut T&l = l[i]`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an
+error.
 
 **E31a (checked forms).** An operation that can fail has a **checked form**, a method of its own named with `Try`:
 `TryAt`, `TrySetAt`, `TrySlice`, `TryPlus`, `TryMinus`, `TryMul`, `TryDiv`, `TryRem`, `TryMatMul`, `TryNeg`,
@@ -4444,8 +4457,10 @@ what it walks, read out, so where the body puts the element is where the collect
 out.Push(p) }` with `out` returned is `out.Push(all[i])` - unless the element can hold no reference (a character of
 text), which carries nothing of it. A local declared from a call whose result holds what an
 argument living in a block of this function refers to (the callee holds that argument's scope to outlive its result
-scope, O10b - `l := groups.Get(k)`, `groups` a local) is not moved: its result cannot live where the function's does,
-and the move would only make an error of what is correct in the block. So the recursive-descent and Pratt idioms are
+scope, O10b - `l := groups.Get(k)`, `groups` a local) is not moved by such a flow: its result cannot live where the function's does,
+and the move would only make an error of what is correct in the block. Returned **directly** - `return l`, or as a
+value the return reads it into - it is moved all the same, and the callee's obligation then makes the call an error
+(O10c): `l := try groups.Get(k); return l`, `groups` a local, would hand back the local map's state. So the recursive-descent and Pratt idioms are
 correct as written:
 
 ```
@@ -4645,7 +4660,10 @@ read out of: `for x in l[0].tags` lands `l[0]` as `t := l[0]` would. A **value**
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
 with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(rec.Clone())` for a loop's list `rec`
-- never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A statement
+- never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
+element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
+result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
+`p := pair(t); bs.Push(p.a)`, an error on the same terms. A statement
 nested in another - in a catch clause's block, a
 lambda's body - discharges its own obligations at its end and leaves the enclosing statement's to its end, so
 `n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.

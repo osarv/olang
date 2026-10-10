@@ -695,8 +695,8 @@ struct operand {
     bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
-    bool isWriteBack;           //E31: an OPERATION_SEQ standing for a call writing through "x[i]" - the element read
-                                //through At, the call, the element written back through SetAt
+    bool isWriteBack;           //E31b: an OPERATION_SEQ standing for a call on a handle element - "users[i].Push(x)":
+                                //the handle's copy held in a hidden local, then the call lending it as its reference
     bool isOperatorCall;        //E31: a call the compiler made for an operator, an index or a slice - "try" reaches
                                 //through it to what is inside, as it does through a built-in operation (R20)
     bool isTryStmt;             //E31: an OPERATION_SEQ standing for "try x[i] = v" - its clauses are a statement's,

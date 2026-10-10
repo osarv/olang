@@ -14969,9 +14969,10 @@ test "O18c: a reference read out of a call's value result is kept where its refe
     assert s5KeptField(sbRun * 2) == 361
 }
 
-# E31 (study 5, r02): a write through x[i] - a field assigned, a "mut" method, a "mut &" argument, an increment - reads
-# the element through At and writes the copy back through SetAt; a collection read out of another is written back one
-# level at a time
+# E31 (study 5, r02): a store through x[i] - a field assigned, an increment, a nested element - reads the element through
+# At, assigns into the copy and writes it back through SetAt; a collection read out of another is written back one level
+# at a time. E31b: a "mut" method or a "mut &" argument on x[i] is written out ("t := l[i]; t.M(); l[i] = t") - the
+# copy is the program's own then
 type s5Pt struct() {
     X I64 = 0
 }
@@ -14995,23 +14996,33 @@ fn s5Writes(k I64) I64 {
     l := List<s5Acc>()
     l.Push(s5Acc())
     l.Push(s5Acc())
-    l[0].Add()
+    t := l[0]
+    t.Add()
+    l[0] = t
     l[0].N += 5 + k
     l[1].N = 7
     l[1].In.X = 3
-    l[1].In.Move(4)
-    s5Bump(l[0])
-    g := l[0].AddGet(2)
+    u := l[1]
+    u.In.Move(4)
+    l[1] = u
+    v := l[0]
+    s5Bump(v)
+    g := v.AddGet(2)
+    l[0] = v
     l[1].N++
     rows := List<s5Row>()
     rows.Push(s5Row())
     rows[0][1].N = 9
-    rows[0][2].Add()
-    rows[0][2].In.Move(5)
+    c := rows[0][2]
+    c.Add()
+    c.In.Move(5)
+    rows[0][2] = c
     ll := List<List<s5Acc>>()
     ll.Push(List<s5Acc>())
     ll[0].Push(s5Acc())
-    ll[0][0].Add()
+    w := ll[0][0]
+    w.Add()
+    ll[0][0] = w
     ll[0][0].N += 40
     return l[0].N * 1000000 + l[1].N * 10000 + l[1].In.X * 1000 + g * 10 + rows[0][1].N + rows[0][2].N * 100 +
            rows[0][2].In.X * 100000000 + ll[0][0].N * 1000000000
@@ -15152,4 +15163,101 @@ fn s5Captures(n I64) F64 {
 S5CapturesBaked F64 = s5Captures(2)
 test "D16c: a lambda capturing a value holding references" {
     assert s5Captures(sbRun * 2) == 31.0 and S5CapturesBaked == 31.0
+}
+
+# E31b (the review of study 5's fixes, F2): a store through x[i] holds its place - the base and every index, each
+# evaluated once and first - then evaluates the value, and only then reads the element, assigns into the copy and writes
+# it back: nothing runs between the read and the write back, so nothing the value does is lost
+type s5Ctr struct() {
+    n I64 = 0
+}
+fn s5Next(c mut s5Ctr&) I64 {
+    c.n++
+    return c.n - 1
+}
+fn s5Touch(l mut List<s5Acc>&) I64 {
+    l[0].N += 100
+    return 5
+}
+fn s5PlaceFirst() I64 {
+    l := List<s5Acc>()
+    l.Push(s5Acc())
+    l.Push(s5Acc())
+    c := s5Ctr()
+    l[s5Next(c)].N = 7 + s5Next(c) * 10
+    l[0].N += s5Touch(l)
+    l[s5Next(c) - 1].N++
+    rows := List<s5Row>()
+    rows.Push(s5Row())
+    rows[s5Next(c) - 3][s5Next(c) - 2].In.X += s5Next(c)
+    return l[0].N * 100000 + l[1].N * 10000 + rows[0][2].In.X * 100 + c.n
+}
+S5PlaceBaked I64 = s5PlaceFirst()
+test "E31b: a store through x[i] holds its place, evaluates the value, then reads, assigns and writes back" {
+    assert s5PlaceFirst() == 12210506 and S5PlaceBaked == 12210506
+}
+
+# E31b/O17b (study 6, r01): a call on a HANDLE element - a List in a List, a List field of a struct element, a List a
+# Map gives - runs on the copy and reaches the shared state through its reference, nothing written back; what it builds
+# is built where that state lives, so it is there after an arena churn
+type s5HBox struct(v I64) {
+    v
+    items mut List<I64>& = List<I64>()
+}
+fn s5Handles(n I64) I64 ? {
+    users := List<List<I64>>()
+    boxes := List<s5HBox>()
+    m := Map<I64, List<I64>>()
+    for i in range n {
+        users.Push(List<I64>())
+        boxes.Push(s5HBox(i))
+        m.Put(i, List<I64>())
+    }
+    for i in range n {
+        for j in range 20 {
+            users[i].Push(i * 10 + j)
+            boxes[i].items.Push(i * 100 + j)
+            (try m.Get(i)).Push(i * 1000 + j)
+            sbChurn()
+        }
+    }
+    sbChurn()
+    t I64 = 0
+    for i in range n { t += users[i].Len() + users[i][19] + boxes[i].items[19] + (try m.Get(i))[19] }
+    return t
+}
+S5HandlesBaked I64 = try s5Handles(2) catch default -1
+test "E31b/O17b: a call on a handle element reaches the shared state, read back after an arena churn" {
+    assert (try s5Handles(sbRun * 5) catch default -1) == 11485
+    assert S5HandlesBaked == 1264
+}
+
+# O18c (the review of study 5's fixes, F5): a field or an element of a call's value result passed on is a copy out of
+# it, whose references are where that call's result landed - accepted where the result's arguments live long enough
+type s5FBox struct(s String&) { s }
+type s5PairT struct(a s5FBox, n I64) {
+    a
+    n
+}
+fn s5Pairish(s String&) s5PairT { return s5PairT(s5FBox(s), 1) }
+fn s5Boxes(s String&) Array<s5FBox> { return s5FBox[s5FBox(s)] }
+fn s5Wrap(b s5FBox) s5FBox { return b }
+fn s5Projections(n I64) I64 {
+    bs := List<s5FBox>()
+    t := "outer-text-of-moderate-length"
+    for k in range n {
+        bs.Push(s5Pairish(t).a)
+        bs.Push(s5Boxes(t)[0])
+        bs.Push(s5Wrap(s5Pairish(t).a))
+        bs.Push(s5Pairish("lit").a)
+        sbChurn()
+    }
+    sbChurn()
+    r I64 = 0
+    for b in bs { r += b.s.Len() }
+    return r
+}
+S5ProjectionsBaked I64 = s5Projections(2)
+test "O18c: a field or an element of a call's value result passed on" {
+    assert s5Projections(sbRun * 3) == 270 and S5ProjectionsBaked == 180
 }

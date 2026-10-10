@@ -1,0 +1,17 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (the review of study 5's fixes, F1/F3/F7): x[i] lent to a "mut &" parameter - here a helper that also reaches the
+# collection - would be written in a copy, the helper's own write to the collection then lost when the copy is written
+# back; "t := l[i]; bump(t, l); l[i] = t" says which write wins
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(a mut Acc&, l mut List<Acc>&) {
+    l[0].N = 100
+    a.N++
+}
+
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    bump(l[0], l)
+}

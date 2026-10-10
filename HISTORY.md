@@ -13333,3 +13333,69 @@ call's result scope landed by its obligations (`landedCallRefsScope`), as `b := 
 Tests: corpus tests for each (read back after an arena churn, the write-backs and the captures also baked into globals),
 check cases for each refusal (`s5*`, `l18semicolon`), and `listfieldwrite` changed to the new rule (a write through
 `x[i]` on a type without SetAt).
+
+**Decision 33 narrowed (decision 42), from a soundness review of this batch (/home/user/review/tonight6).** The
+write-back as first built was sound only where no code of the program's ran between reading the element and writing it
+back, and a call is exactly such code. The review reproduced it: a `mut` method on `l[i]` that also writes `l` another
+way had that write overwritten by the stale copy (F3); `bump(l[i], l)` likewise, and a reference to the element taken
+inside the call named the copy, not the element (F7); the element was read before the value or the call's other
+arguments ran, so a value that wrote the collection was lost too (F2), and a base or an index was evaluated twice when
+it was not a plain variable (F2b); a write through an index out of range read garbage before SetAt could check it (F1);
+a global initializer skipped the write-back entirely (F6); and a spawned call said "'spawn' takes a call" (F8). The
+coordinator's decision: keep the write-back for STORES - a field or an element of `x[i]` assigned, incremented or
+compound-assigned - with the order fixed: the place held (base and every index evaluated once, left to right), then the
+value (held where it makes a call), and only then the element read, the store into the copy and the write-back, nothing
+between them; and make a writable call on `x[i]` - a `mut` receiver, a `mut &` argument, spawned or not - a
+compile-time error naming `t := x[i]; t.M(); x[i] = t` or holding the elements by reference. The rewrite: one routine
+(`atReadForWrite`) holds the place into one list, declares the element read into another and the write-back into a
+third, and `buildAtFieldAssign` orders them holds, value, reads, store, write-backs; an element of an element
+(`rows[i][j] = v`) takes the same route, its root the outer At call. A field of `x[i]` lent to a call is part of the
+copy too - it is an assignable place, so the check asks for the At root whatever OperandIsLvalue says (`l[0].In.Move(4)`
+first gave T25c instead). The corpus test of the old rule was rewritten to the explicit form with the same values, baked
+and run.
+
+**A handle is not a copy in the hazardous sense (study 6's amendment).** Study 6 (/home/user/review/study6) showed that
+`users[i].Push(x)` (a List in a List), `boxes[i].items.Push(x)` and `(try m.Get(k)).Push(x)` - the adjacency list every
+graph program has - must keep compiling, and that on master each was a use-after-free in a loop: the callee's scope
+variable was bound to where the copy of the handle landed, the loop's block, so the inner list's new chunk was built
+there while linked into state that lives where the outer list does (r01). A handle's every copy shares its state, so a
+call on one writes the state through its reference and there is nothing to write back. Such a call now holds the copy in
+a hidden local declared as `h := x[i]` declares it - its reference where the collection's elements live (O25h) - and
+lends it as its reference (O17b), so the callee builds where the state is. Spawned, the hidden local would sit in the
+spawner's block, which closes, or is made again by the next turn of a loop, before the join - on master that compiled
+and was a use-after-free too. Decided (mine): it is an error naming the written form, a function that takes the
+collection and calls `x[i].Push(v)` itself (a check runs that form under the sanitizer). Study 6's r06 (`l[i] = v`
+refused where `l.SetAt(i, v)` compiles) compiles: `forgetCall` already drops the At call set aside for the target.
+Writing the tests found the store form of r01 still open: `names[i][0] = t`, `t` a loop's text, built and kept the
+text past the loop, because the inner list's SetAt was called on `names[i]` as a temporary, never lent as its
+reference. It now takes the method call's path - the copy held and lent - with one wrinkle: the read `names[i]` built
+for the target had already been passed to the target's At and landed with it, so holding it as it was found nothing
+for its obligations to land; it is read again (`atReadAgain`), still free to land, and the original set aside. An
+element of an element that is no handle (`rows[i][j] = v`) is a store through `rows[i]` like a field's, written back.
+
+**F4, a use-after-free the batch had opened.** `callResultTiedToBlock` kept a local declared from a call whose result
+holds a local's storage in its block, so that a flow through it would not move it into the result scope only to make an
+error. But a local RETURNED directly was then judged by nothing: `l := try groups.Get(1); return l` with `groups` a
+local Map handed back the map's state (and `x := try ll.Last()`, and `try m.Get(0) catch default ...`). A local the
+function returns directly is moved as before, so the callee's obligation makes the call the error it was; the tie only
+withholds indirect flows. `x := ll[0]; return x` still compiles and runs right: `ll` is moved with it.
+
+**F5, pre-existing: a projection of a call's value result passed on.** r01's fix reached `bs.Push(box(t))` but not
+`bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` or `bs.Push(wrap(pair(t).a))`: a field read counts as a copy of existing
+storage, and asking where that storage's references are failed for a call - so the parameter was left unbound and
+nothing judged it. Where the copy's source is a call's result landed by its obligations, the projection now determines
+the parameter there, as `p := pair(t); bs.Push(p.a)` does. With `t` outside the loop all three compile and run right
+(a corpus test, baked as well). **F9**: `m[$k "..."] += 100` on a user type whose SetAt keeps its key holds the rendered
+key in a hidden local for both At and SetAt, in the statement's block - O10c, and the note said "write '$' before it"
+of what already was a rendering; it now says the index is held there for the read and the write and to make it where
+the collection lives first (`k String&m = ...`, which compiles).
+
+Tests: `s5Writes` rewritten to the explicit form (same values, baked), corpus tests for the store order
+(`s5PlaceFirst`, an index and a value counting calls), handle calls on elements and on a Map's result in a loop
+(`s5Handles`, baked and read back after a churn), and passed-on projections (`s5Projections`); check cases for the call
+errors (`s5atbuilds`, `s5atnosetat` changed, `s5e31bargs`, `s5e31bfield`, `s5e31bspawn`), the spawned handle call
+(`s5spawnhandle`, and `s5spawnhandlerun` for its written form under `-s`), study 6's r01 under `-s` (`s6handleloop`,
+stores included, and `s6handlestore` for the loop's text refused),
+F4 (`s5mapgetreturn`), F5 (`s5projection`, `s5projectionelem`) and F9's note (`s5heldindexnote`). Still a limit, as on
+master: a by-value handle field of an element, `boxes[i].items.Push(x)` with `items List<I64>`, is O10c, as is
+`h := boxes[i].items` - a field read straight off a call's result (study 6's r05).

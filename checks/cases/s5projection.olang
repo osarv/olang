@@ -1,0 +1,18 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# O18c (the review of study 5's fixes, F5): a field or an element of a call's value result passed on is a copy out of
+# it - its references are where that call's result landed, which its argument's block decides; pushed into a list that
+# outlives the block, they would be read after it closed
+type Box struct(s String&) { s }
+type Pairish struct(a Box, n I64) {
+    a
+    n
+}
+fn pairish(s String&) Pairish { return Pairish(Box(s), 1) }
+
+fn main() ? {
+    bs := List<Box>()
+    for k in range 4 {
+        t := $k "-text"
+        bs.Push(pairish(t).a)
+    }
+}
