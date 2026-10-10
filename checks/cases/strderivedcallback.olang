@@ -1,0 +1,33 @@
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# C2d/O23a: a callback handed elements read through a "&p" field of a view over the receiver's array would build where
+# the element's derived scope resolves at the call - an underestimate - so it is refused (C3)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type View struct(ns Array<mut Node&>&) {
+    at Array<mut Node&>&ns = ns
+}
+type Bag struct(ns Array<mut Node&>&) {
+    ns
+}
+fn visit(w View&, g fn(x mut Node&)) {
+    for x in w.at { g(x) }
+}
+fn (b Bag&) Str() String {
+    visit(View(b.ns), fn(x mut Node&) { x.next = Node(x.v + 100) })
+    return "b" $b.ns[0].v
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    b := Bag(Array<mut Node&>(1, Node(3)))
+    println($b)
+    t := churn(100)
+    println($b.ns[0].next.v " " $t)
+}

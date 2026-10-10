@@ -1,6 +1,6 @@
-# check: run
-# flags: -s
-# E11c/P2: a helper handed the receiver's node spawns a call with it that builds nothing there - no stand-in is made
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/P2: a helper handed the receiver's node spawns a call with it - every task gets a stand-in for each scope its call
+# binds, made in that scope, so even a call building nothing there is refused (no raw scope for a task, C2/C4)
 type Node struct(v I64, next mut Node&) {
     v
     next

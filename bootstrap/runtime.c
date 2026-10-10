@@ -1892,11 +1892,13 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "}\n\n", out);
 }
 
-//E11c: a rendering built in one pass - text that grows as it is written, { ptr data, i64 len, i64 cap, ptr scope }: data
-//starts in a small room beside the builder and, once it outgrows that, grows in a scope of the builder's own - made on
-//that first growth, so a frame that never outgrows its room keeps no header (@__olang_sb_scratch), and closed when the
-//text is copied out (@__olang_sb_done). While it exists it is on the unwind chain, so a test left part way through a
-//rendering reclaims its chunks. Written only into an object that builds one (a rendering that reaches a Str)
+//E11c: a rendering built in one pass - text that grows as it is written, { ptr data, i64 len, i64 cap, ptr scope,
+//ptr node }: data starts in a small room beside the builder and, once it outgrows that, grows in a scope of the builder's
+//own - made on that first growth, so a frame that never outgrows its room keeps no header (@__olang_sb_scratch), and
+//closed when the text is copied out (@__olang_sb_done). While a test runs the scope is the frame's, made with the
+//builder and pushed on the unwind chain where the builder is made (node: its unwind node, null outside a test build), so
+//a test left part way through a rendering reclaims its chunks, and the chain stays in the order frames are in. Written
+//only into an object that builds one (a rendering that reaches a Str)
 void emitTextBuilderRuntime(FILE* out) {
     fputs(
         //room for need more bytes past what it holds - the place they go: inline where it fits, else grown
@@ -1946,34 +1948,31 @@ void emitTextBuilderRuntime(FILE* out) {
         "  %p = getelementptr i8, ptr %nd, i64 %len\n"
         "  ret ptr %p\n"
         "}\n\n"
-        //the builder's own scope, on its first growth: { unwind node, scope header }, the node pushed on the unwind chain
+        //the builder's own scope, on its first growth outside a test build (in one the frame's is made with the builder)
         "define linkonce_odr ptr @__olang_sb_scratch(ptr %scopep) noinline {\n"
         "entry:\n"
-        "  %blk = call ptr @malloc(i64 72)\n"
-        "  call void @__olang_alloc_check(ptr %blk)\n"
-        "  store [9 x i64] zeroinitializer, ptr %blk\n"
-        "  %h = getelementptr i8, ptr %blk, i64 24\n"
-        "  %top = load ptr, ptr @__olang_unwind_top\n"
-        "  store ptr %top, ptr %blk\n"
-        "  %sslot = getelementptr %olang.unwind, ptr %blk, i32 0, i32 1\n"
-        "  store ptr %h, ptr %sslot\n"
-        "  store ptr %blk, ptr @__olang_unwind_top\n"
+        "  %h = call ptr @malloc(i64 48)\n"
+        "  call void @__olang_alloc_check(ptr %h)\n"
+        "  store %olang.scope zeroinitializer, ptr %h\n"
         "  store ptr %h, ptr %scopep\n"
         "  ret ptr %h\n"
         "}\n\n"
-        //the text copied out: the builder's own scope, if it grew one, closed - its node popped, its memory freed
+        //the text copied out: the builder's own scope, if it has one, closed - and freed, made by @__olang_sb_scratch
+        //(the frame's, in a test build, is popped off the unwind chain where the builder was made)
         "define linkonce_odr void @__olang_sb_done(ptr %sb) {\n"
         "entry:\n"
-        "  %scopep = getelementptr { ptr, i64, i64, ptr }, ptr %sb, i32 0, i32 3\n"
+        "  %scopep = getelementptr { ptr, i64, i64, ptr, ptr }, ptr %sb, i32 0, i32 3\n"
         "  %h = load ptr, ptr %scopep\n"
         "  %none = icmp eq ptr %h, null\n"
         "  br i1 %none, label %done, label %close\n"
         "close:\n"
         "  call void @__olang_scope_close(ptr %h)\n"
-        "  %blk = getelementptr i8, ptr %h, i64 -24\n"
-        "  %prev = load ptr, ptr %blk\n"
-        "  store ptr %prev, ptr @__olang_unwind_top\n"
-        "  call void @free(ptr %blk)\n"
+        "  %nodep = getelementptr { ptr, i64, i64, ptr, ptr }, ptr %sb, i32 0, i32 4\n"
+        "  %node = load ptr, ptr %nodep\n"
+        "  %inframe = icmp ne ptr %node, null\n"
+        "  br i1 %inframe, label %done, label %free\n"
+        "free:\n"
+        "  call void @free(ptr %h)\n"
         "  br label %done\n"
         "done:\n"
         "  ret void\n"

@@ -14632,6 +14632,70 @@ building where its capture lives (`strtransientbuilds`). The review's generators
 run correctly under `-s` and 15 are refused (round 3: 10 crashes); seed 2, 150 programs, 111 run and 39 are refused; the
 eighteen indirections as before - every build into the receiver refused, the control running. No internal error.
 
+**Round 5, after the fourth review (`/home/user/review/str4`).** The walk's newest half did not hold: two of round 4's three
+relaxations each had two holes and the third one more, and every one of them is a use-after-free now that the receiver's
+variables are handed a real scope (a miss in rounds 2-3 was a null scope, a segfault). The coordinator's call: "be
+conservative and get decision 49 merged" - over-rejections are acceptable, and removing them properly is the port's
+section-8 pass, which can carry a callback's effect in its type rather than in a memo. So the three relaxations are
+**reverted**, and the fixes that do not relax anything are kept:
+- *The parametric walk (`mbiMemo.deps`, o6) is gone.* **C1/C1b**: a memo in progress answered "no" with no deps yet (they
+  were stored only when its body's walk ended), so a cycle - or a function recursing with a building callback - read its
+  own head's deps as none, and the one building lambda was never asked: a Str built `Node(101)` in the scope `$` opens,
+  reclaimed with the text (`-s`: "use after scope closed"; `-i` printed the right answer). Iterating the cycle to a fixed
+  point on its deps would close that. **C7** would not: a callback parameter is the callee's own copy (D9), and `g =
+  fn(...) { builds }` before `g(n)` made "deps = {g}" a lie that no walk of the call site can see. A call through a
+  function value - a function-typed parameter's included - is a body not known again, taken to build wherever it binds
+  the variable asked about: `b.words.Count(fn(s) ...)` in a Str is refused again (`strarraycallback`).
+- *A task gets a stand-in for every scope its call binds (o4 reverted, P2 as on master).* **C2/C7b**: a task reaching C1's
+  or C7's shapes was handed its spawner's block raw and four tasks allocated in it unlocked (4325 for 4200; TSan: a race in
+  `__olang_scope_alloc_a`). **C4**: the stand-in decision asked only the callee's body, but a task's catch default is built
+  in the call's result scope (`cgTaskCallClause`), and a callee that errors or returns null builds nothing - sixteen tasks'
+  defaults raced in the spawner's scope. A stand-in costs a header and a fold per task; being right costs nothing more.
+- *A `Call` adapter is made where its instance lives (o3 reverted).* **C8**: "keeps nothing of it" was read off
+  obligations, and a call through a function value records none - `keepVia(s, g) { s(g) }` with `s` a Keeper whose `Call`
+  stores its argument kept the frame's adapter past the frame (a segfault).
+- **C5** (an internal error, no Str needed): the transient flag a capturing lambda passed to a callee keeping nothing of it
+  sets, and the in-spawn flag, leaked into the walks of the bodies they triggered - the lambda's own body, where a closure
+  it makes really is built where its capture lives - so its memo said "no" and codegen's holding check stopped the
+  compiler on an ordinary task. `mayBuildInto` now saves and resets both for every body it reads; they describe the call
+  being read, never what the body does.
+- **C9**: a spawned try's default is built where the call's result lands, and the walk now asks that - the target, or the
+  scope the result scope is bound to - for each clause that gives a value (the clause's lambda is called with that scope).
+- **C6** (a hang): round 4's builder pushed its unwind node, off the stack, at its first growth - inside a render helper,
+  above the helper's own scratch node, which the helper then popped from below it; the builder's later pop restored the
+  chain to the helper's dead frame, and a failing assert afterwards in the same test walked garbage (`__olang_join_tasks`
+  on a garbage list). The builder now pushes its node where it is made (`cgTextBuilt`), in order with every node around
+  it, and in a test build its header is in that frame (round 3's; N8's "no header per frame" holds outside tests, where
+  no unwind chain exists). `__olang_sb_scratch` no longer touches the chain, and frees nothing it did not malloc.
+- **PE1** (pre-existing): T22a refused a lambda keeping its parameter beyond the call, but a value whose `Call` does the
+  same fits the same function type. A value adapted through its `Call` is now a function value of `Call` for T22a
+  (`noteCallValueUse`): a Call with an obligation is refused there (`callvaluekeeps`, `callvaluekeepsblock`,
+  `callvaluekeepsframe`). And `SemanticParamTransient` - frame environments for capturing lambdas - no longer trusts
+  obligations alone for a function-typed parameter: every read of it the check made (`paramReads`, as O17b records a
+  handle's) must be an argument of a direct call to a named function that keeps nothing of that parameter itself (a
+  fixed point, a cycle taken to keep), and no lambda may capture it.
+- **PE2** (pre-existing; C3 is it reached from a Str): `grow(w.at[0])` - a reference read through a `&p` field handed to
+  a callee that builds through it - was refused (C2d), but the same reference copied into a local, a for-in element or a
+  capture first has a derived scope (O23a), and a callee that may build into it was handed, at the call, the scope the
+  derived one was read through: the node was built there and hung off an element living longer. Such an argument is now
+  refused as the direct form is - immediately where the callee may write the parameter, else once every body is checked,
+  where it builds into it (`settleRegions`). The cost is PE3's, the same rule reached sooner: an iterator helper's
+  callback (a body not known there) handed an element something can be stored through is refused even when it only
+  reads - `bags.Iter().Count(fn(b) ...)` over a `List<listBag&>` (`derivedhelpercount`). The prelude's own S9f test did
+  exactly that; it now counts `listItem`s, which hold nothing writable, and keeps walking `listBag`s by for-in.
+- *Depth through a Str.* Master's batch-6 merge made the scope close every frame inlines larger (C9a: what a
+  destructor's task built is folded as each destructor returns), and the render helper's frame grew 152 -> 200 bytes
+  (216 with the builder's unwind-node field): a recursion through a Str now reaches about 30,000 levels in 8MB, not
+  ~40,200, so `strdepth` checks 28,000. Moving the destructor loop out of line was tried and made it worse (LLVM then
+  inlined the helper into Str the other way round, a larger frame), so it is left alone.
+Every reproducer of the review is a check: the refused ones `checks/cases` (`strcycledeps`, `strselfrecdeps`,
+`strreassignedcallback`, `strspawnclausedefault`, `strtransientinner`, `strderivedcallback`, `derivedcopybuild`,
+`derivedcopycapture`, `callvaluekeeps*`), the task ones run built `-s` with their sums asserted (`p2cycledeps`,
+`p2clausedefault`, `p2transientinner`, `p2reassignedcallback`), and C6 a `strheld` fixture run under `-t`. Round 4's
+cases for the reverted relaxations are refused cases again (`stradapter`, `strcalleeadapter`, `strcalleespawn`,
+`strspawnpart`, and the `transientadapter`, `spawnnobuild` and `arraycallback` fixtures as `strtransientadapter`,
+`strspawnnobuild`, `strarraycallback`).
+
 ### A spawned call may fail; a join that can fail is `try join` (P4, P4a-P4d, P1, P1g, R8, R10, D10a, K1, 2026-10-10)
 
 **Where it came from.** P4 said a spawned function may not declare errors, on the grounds that an error raised on

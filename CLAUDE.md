@@ -4783,16 +4783,35 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   the call (166/139MB -> 1.5MB at 1M iterations). **N7**: a try's catch default is promoted with the try (one destruction).
   **N8**: the builder's scope header is made, off the stack, on its first growth past the room (~32,400 -> ~40,200 levels
   of recursion through a Str; decision 48's larger header is the rest of the way to 7345ff9's ~43,400). **Over-rejections
-  removed**: the walk is parametric in a body's function-typed parameters (`mbiMemo.deps`), so `Count`/`Any`/`Fold`/`Map`/
-  `Filter` over what the receiver reaches ask their callback's body (o6); T25d reaches a read-only conditional's or match's
-  value, so `b.name if ... else "anon"` runs in a Str (o5, the evaluator agreeing on identity); a capturing lambda passed to
-  a callee that keeps nothing of it, or held in a local every use of which the checker recorded is a call through it
-  (never a read as a value, a capture or a spawn - decided from the checked operands, not the tokens), keeps its
-  environment in the frame and builds nowhere (o1/o2, D16c), and so does a `Call` adapter for such a callee (o3); a task
-  whose call builds nothing into a scope gets no stand-in for it, read off the walk once every body is checked (o4, P2).
-  Also: O17's region facts no longer report E11c (they took a call through a function value to build where it was bound,
-  a second path refusing o6); decision 50's join and spawn clauses, merged from master, are walked. Left by design: n4
-  (identity, `Hashable`), n5 (read-only by G10c), n2b refused; `-i` refuses destructors (stage 1).
+  removed**: T25d reaches a read-only conditional's or match's value, so `b.name if ... else "anon"` runs in a Str (o5,
+  the evaluator agreeing on identity); a capturing lambda passed to a callee that keeps nothing of it, or held in a local
+  every use of which the checker recorded is a call through it (never a read as a value, a capture or a spawn - decided
+  from the checked operands, not the tokens), keeps its environment in the frame and builds nowhere (o1/o2, D16c). Round 4
+  also made the walk parametric in a body's function-typed parameters (`mbiMemo.deps`, o6), a `Call` adapter for a callee
+  keeping nothing of it a frame object (o3), and a task whose call builds nothing into a scope stand-in-free (o4) - **all
+  three reverted in round 5**, below. Also: O17's region facts no longer report E11c; decision 50's join and spawn
+  clauses, merged from master, are walked. Left by design: n4 (identity, `Hashable`), n5 (read-only by G10c), n2b
+  refused; `-i` refuses destructors (stage 1).
+  **Round 5, after the fourth review** (`/home/user/review/str4`; the coordinator's call: "be conservative and get
+  decision 49 merged" - over-rejections are left to the port's section-8 pass). Each of round 4's three relaxations had
+  opened use-after-frees or races, so they are **reverted**: the parametric walk read a call cycle's in-progress deps as
+  none and trusted a callback parameter the body reassigned (C1, C7: a Str building in `$`'s scope, a task handed a scope
+  raw); a raw task scope missed a task's catch default, built there (C4); a frame `Call` adapter could be kept through a
+  function value (C8). A call through a function value - a function-typed parameter's included - is again a body not known
+  (o6 refused again), every task gets a stand-in for every scope its call binds (P2 as on master), and an adapter lives where
+  its instance does. **Fixed**: the walk's transient-lambda and in-spawn flags are the call's, saved and reset for every
+  body the walk reads (C5, an internal error on an ordinary task); a spawned try's default is walked as a build where the
+  call's result lands (C9); a join's builder pushes its unwind node where the builder is made - in a test build its header
+  is in that frame (C6: a later failing check walked a dead frame and hung the test); **T22a reaches a `Call` adapter**
+  (E31) - a Call keeping its argument beyond the call is as unchecked through a function value as a lambda keeping its
+  parameter, so a value is not adapted through one (PE1, pre-existing); `SemanticParamTransient` takes a function-typed
+  parameter to be kept unless it is only called, or passed straight on to a named function keeping nothing of it (PE1);
+  and **C2d reaches a copy of a reference read through a `&p` field** - a local, a for-in element, a capture - which a
+  callee or lambda that may build through it would build in the scope the derived one was read through, an underestimate
+  (PE2, pre-existing; C3 with it). Its over-rejection, as PE3's: an iterator helper's callback handed an element something
+  can be stored through is refused even when it only reads (`derivedhelpercount`; one prelude test counts `listItem`s
+  instead of `listBag`s for it). Master's larger inlined scope close (C9a) cost N8's depth: ~30,000 levels now, checked
+  at 28,000.
 - **A spawned call may fail; a join that can fail is `try join` (P4/P4a-P4d replace the old P4, P1, P1g, R8, R10, D10a,
   K1, 2026-10-10; decision 50, the user's QE "We need some way to make spawn functions fail ... Solve it", the shape
   approved; details mine).** `spawn try f(a)`, `spawn x = try f(a) catch E default v`, `spawn try f(a) catch E { ... }`;

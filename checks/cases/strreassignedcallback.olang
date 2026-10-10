@@ -1,0 +1,31 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c: a callback parameter reassigned to one that builds - a parameter is the callee's own copy (D9), so a call
+# through it is a body not known and is taken to build (C7)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn hook(g fn(x mut Node&), n mut Node&) {
+    g = fn(x mut Node&) { x.next = Node(x.v + 100) }
+    g(n)
+}
+fn (b Bag&) Str() String {
+    hook(fn(x mut Node&) { }, b.head)
+    return "b" $b.head.v
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    b := Bag(Node(1))
+    println($b)
+    t := churn(100)
+    println($b.head.next.v " " $t)
+}

@@ -1,0 +1,30 @@
+# check: run
+# flags: -s
+# P2: a task's callee hands on a callback parameter it reassigned to one that builds - every task gets its stand-ins,
+# so the four never share an arena (C7b)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn hook(g fn(x mut Node&), n mut Node&) {
+    g = fn(x mut Node&) { x.next = Node(x.v + 1) }
+    for i in range 300 { g(n) }
+}
+fn cc(n mut Node&) { hook(fn(x mut Node&) { }, n) }
+fn main() ? {
+    total I64 = 0
+    for r in range 300 {
+        a := Node(1)
+        b := Node(2)
+        c := Node(3)
+        d := Node(4)
+        join {
+            spawn cc(a)
+            spawn cc(b)
+            spawn cc(c)
+            spawn cc(d)
+        }
+        total += a.next.v + b.next.v + c.next.v + d.next.v
+    }
+    assert total == 4200, $total
+}

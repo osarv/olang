@@ -1,0 +1,21 @@
+# check: run
+# flags: -s
+# D16c: a capturing lambda handed to a callee keeping nothing of it, whose body makes a closure that escapes - the walk
+# of that body is its own, so the closure is seen where it lives and the task compiles (C5, an internal error before)
+type Node struct(v I64) {
+    v
+}
+fn apply(f fn() I64) I64 { return f() }
+fn work(n Node&) I64 {
+    return apply(fn() I64 {
+        h := fn() I64 { return n.v }
+        t := h is h
+        return h() if t else 0
+    })
+}
+fn main() ? {
+    n := Node(4)
+    x I64 = 0
+    join { spawn x = work(n) }
+    assert x == 4, $x
+}

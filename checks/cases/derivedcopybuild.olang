@@ -1,0 +1,29 @@
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# C2d/O23a: a reference read through a "&p" field and copied into a local is built through as the direct form
+# "grow(w.at[0])" is - refused: what grow builds would be reclaimed with the view's scope, not where the element lives
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type View struct(ns Array<mut Node&>&) {
+    at Array<mut Node&>&ns = ns
+}
+fn grow(x mut Node&) { x.next = Node(x.v + 100) }
+fn visit(w View&) {
+    x := w.at[0]
+    grow(x)
+}
+fn work(a Array<mut Node&>&) { visit(View(a)) }
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    a := Array<mut Node&>(1, Node(3))
+    work(a)
+    t := churn(100)
+    println($a[0].next.v " " $t)
+}

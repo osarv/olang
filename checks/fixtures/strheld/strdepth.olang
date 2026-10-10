@@ -1,5 +1,6 @@
 # E11c: a recursion through a Str renders a list as deep as its frames allow - a builder whose text fits its room keeps no scope header
-# in the frame (38,000 deep in an 8MB stack; a header in every frame stopped it at about 32,400)
+# in the frame (28,000 deep in an 8MB stack, about 30,000 the limit since the scope close every frame inlines grew - C9a's
+# fold after each destructor; a header in every frame would cost another 48 bytes a level)
 import "std/os"
 type L struct(v I64, next L&) {
     v

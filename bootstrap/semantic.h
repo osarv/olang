@@ -345,6 +345,7 @@ struct var {
                             //match binding (the place it reads)
     bool paramCopy;       //T25c: a parameter's own copy in its function's body (canonicalVar is the signature's)
     bool valueEscapes;    //D16c: read as a value anywhere (OperandReadVar), captured, or spawned - anything but called
+    bool capturedFnParam; //D16c: a function-typed parameter a lambda captured - it may keep it beyond the call
     bool roNeedsWritable; //T25c: a signature's by-value parameter holding writable references whose copy the body writes
                           //through, lends writably or stores where it can be written - no read-only value may be passed
     //T25c: a read-only reference parameter of a generic's instantiation, on its signature and its copy in the body - a
@@ -940,7 +941,6 @@ bool SemanticParamTransient(struct var* func, int j);
 bool SemanticMayBuild(struct var* func);
 bool SemanticMayBuildInto(struct var* func, struct var* v); //E11c/O12: the walk above, asked of one scope variable
 bool SemanticReliesNoBuild(struct var* func, struct var* v);
-bool SemanticTaskBuildsInto(struct var* func, struct var* sv);  //...whose answer of no codegen holds the body to
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
 bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv);
 //M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit

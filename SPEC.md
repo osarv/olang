@@ -803,6 +803,8 @@ outlive its result scope - and to be exactly it where something can be stored th
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
 such a type may require that much and no more: `l.Iter().Fold(l[0], fn(best, w) { return w if w.Len() > best.Len() else
 best })` keeps the longest element.
+A value adapted to a function type through its `Call` (E31) is a function value of that `Call`: one whose `Call` carries
+an obligation - keeps an argument beyond the call - is not adapted, as such a function is not used as a value.
 
 ### 2.8 Scopes
 
@@ -1428,8 +1430,10 @@ then decides where it may be stored, passed and returned, so it can never be cal
 anywhere. Nothing is written through a function value itself, so it need only outlive where it is put: the
 exactness O25 requires of a reference does not apply to one. Where the lambda lives is unobservable beyond that, so an
 implementation may keep one made as an argument for a callee that can keep nothing of it - no obligation of the
-callee names that parameter's scope, its result does not, and no other parameter shares it - in the caller's frame,
-where its captures are seen through: a function value it captured is then known at the call through it.
+callee names that parameter's scope, its result does not, no other parameter shares it, no lambda captures it, and every
+read of it as a value is an argument of a direct call to a named function keeping nothing of that parameter (a call
+through a function value, which records no obligation, may keep what it is handed) - in the caller's frame, where its
+captures are seen through: a function value it captured is then known at the call through it.
 
 **D16e (spawning a lambda).** `spawn fn() { ... }` starts a task running the lambda's body (§6.8 P1). The lambda
 takes no parameters; its captures are made when the `spawn` runs, so a loop spawning one per iteration hands
@@ -2407,7 +2411,10 @@ there) - and may require nothing of such a scope (an obligation, O10b, naming on
 them. The same holds through whatever `Str` does with a part
 of what its receiver reaches: a function it passes the part to, a closure capturing it (D16d), a task handed it (P2), a
 function value adapting it (E31), a conditional's or a match's new value, or a catch default, placed with it (E28,
-S12b, R9a) - each is judged by what is built where that part lives, and building there is the error, at `Str`.
+S12b, R9a) - each is judged by what is built where that part lives, and building there is the error, at `Str`. A call
+through a function value - a callback a function was handed included - is a body not known there, so it is judged to build
+wherever it binds such a scope, whatever is passed for it; a task handed a part gets a stand-in made where the part lives
+(P2), and a function value adapting a part (E31) is made there, so each is building there too.
 And since `$` renders read-only values too (an immutable global, a part of a read-only reference, T25c), a by-value
 receiver of `Str` is one that takes a read-only copy: one whose body lends what it holds writably, or keeps it, is a
 compile-time error.
@@ -3620,8 +3627,7 @@ call (§8 O17, O18a), never the join block merely because the spawn is written i
 outlive it - a closure capturing a reference it was handed, a function value it returns through a spawn target or
 stores - so a stand-in lives as long as the scope it stands in for and, once folded, **forwards** to it: whatever builds
 through it afterwards builds in that scope, and a later task's stand-in whose parent is such a stand-in is folded into
-the scope it forwards to. A scope the task's call can build nothing into - read off its callee's body, everything it calls
-included - is handed to it as it is: nothing is allocated there, so nothing needs standing in.
+the scope it forwards to.
 
 Every other scope a thread builds into belongs to one thread, its **owner** - the thread that opened it, or for a
 stand-in the task it was made for - and no thread but its owner ever allocates there. A scope reaches another thread in
@@ -4496,11 +4502,13 @@ container is a **parameter** `p` of the function, the binding was made by whoeve
 it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
 for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
 of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that
-nothing is built into it (C2d's restriction on such a field): a result that would land in one, or a callee that may
-build into a parameter given one (it can write the parameter, or its borrowed result names it), reaches instead the
-scope the field was read through, which the derived scope outlives; and a temporary put where a derived scope's
-referent lives, a scope argument naming one, or a copy out of such a field handed by value to a callee that can build
-through what it holds (the copy's references being where the field's referent is), is a compile-time error. At each call it
+nothing is built into it (C2d's restriction on such a field): a temporary put where a derived scope's referent lives, a
+result that would land there, a scope argument naming one, a reference living in one - read through the field, or a copy
+of that reference in a local, a `for ... in` element or a lambda's capture - passed for a parameter of a callee that may
+build into it (something can be stored through the parameter and the callee may write it, or its borrowed result names
+it, or its body builds there), or a copy out of such a field handed by value to a callee that can build through what it
+holds (the copy's references being where the field's referent is), is a compile-time error: what the callee built would
+be in the scope the field was read through, which the referent outlives. At each call it
 is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
 parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
@@ -4969,8 +4977,9 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
   each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
-  temporary stored into the field or anything reached through it, or the field passed for a parameter the callee
-  may build into, is a compile-time error there;
+  temporary stored into the field or anything reached through it, or the field - or a copy of what it refers to, in a
+  local, a `for ... in` element or a capture - passed for a parameter the callee may build into, is a compile-time
+  error there;
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
   `T` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);

@@ -256,7 +256,6 @@ struct cgCtx {
     char* tdSlot;
     char tdJoin[32];
     bool tdPromoted; //C11/O16: the try whose slot this is is being promoted - a default's own instance is promoted with it
-    bool adapterHere; //E31/D16c: the Call adapter about to be made is for a parameter its callee keeps nothing of - in this frame
 };
 
 //a module's own stable symbol prefix: its file's base name, directory and ".olang" extension stripped,
@@ -1932,8 +1931,6 @@ static bool cgAdoptsFresh(struct type dstT, struct operand* op, bool dstHoldsLiv
 //code does (then the function type's scope arguments and parameters) and calls the instance's Call with them
 static bool cgSymAlreadyEmitted(struct cgCtx* ctx, char* sym);
 static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct type dstT, char* scopeOverride) {
-    bool here = ctx->adapterHere;
-    ctx->adapterHere = false;
     struct var* call = SemanticCallOf(op->type);
     char callSym[256];
     mangleFuncSym(call, callSym, sizeof(callSym));
@@ -2012,10 +2009,7 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         instScope = where;
     }
     char* obj = cgNewTmp(ctx);
-    //D16c: made for a callee that keeps nothing of it, it lives only while the call runs - in this frame, as a lambda's
-    //environment does (cgEnvOnStack)
-    if (here) fprintf(cgAllocaOut(ctx), "  %s = alloca { ptr, ptr }, align 8\n", obj);
-    else cgArenaAlloc(ctx, obj, where, "16", 8);
+    cgArenaAlloc(ctx, obj, where, "16", 8);
     if (SemanticMayBuild(call)) fprintf(ctx->fnOut, "  call void @__olang_scope_escape(ptr %s)\n", instScope); //P2: as cgClosure
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", instScope, obj, cgCaptureTbaa);
     char* p1 = cgNewTmp(ctx);
@@ -3488,9 +3482,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
         if (readOnly) ctx->capReadOnly--;
-        //P2: no stand-in where the callee builds nothing into that scope (SemanticTaskBuildsInto) - handed it raw
-        if (spawnMerges && !atHere && (op->callee || SemanticTaskBuildsInto(func, sv)))
-            sval = cgSpawnSubScope(ctx, spawnMerges, sval, args->len);
+        if (spawnMerges && !atHere) sval = cgSpawnSubScope(ctx, spawnMerges, sval, args->len);
         else if (spawnMerges) {
             struct cgScopeMerge alias = { hereArg, args->len, false };
             ListAdd(spawnMerges, &alias);
@@ -3540,12 +3532,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         if (!spawnMerges && argOp->opType == OPERATION_READ_VAR && argOp->readVar && argOp->readVar->isLambda
                 && argOp->readVar->lambdaCaptures.len && SemanticParamTransient(func, i))
             argOp->cgEnvOnStack = true;
-        //...and so does the adapter a value with a Call is made into for one (E31), for an instance with storage of its own
-        ctx->adapterHere = !spawnMerges && paramT.bType == BASETYPE_FUNC && argOp->type.bType != BASETYPE_FUNC
-                           && (argOp->type.structMAlloc || OperandIsLvalue(argOp)) && SemanticCallOf(argOp->type)
-                           && SemanticParamTransient(func, i);
         char* av = cgBoundaryValue(ctx, argOp, paramT, scopeOverride);
-        ctx->adapterHere = false;
         if (cgParamSplit(paramT)) { //D16: its two words (cgParamSplit)
             char* code;
             char* clo;
@@ -5435,12 +5422,26 @@ static char* cgTextBuilt(struct cgCtx* ctx, struct operand* op, struct list* pie
     ctx->textBuilt = true;
     char* sb = cgNewTmp(ctx);
     char* room = cgNewTmp(ctx);
-    fprintf(cgAllocaOut(ctx), "  %s = alloca { ptr, i64, i64, ptr }\n", sb);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca { ptr, i64, i64, ptr, ptr }\n", sb);
     fprintf(cgAllocaOut(ctx), "  %s = alloca [%d x i8]\n", room, CG_TEXT_FIRST_ROOM);
     char* t1 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr } { ptr undef, i64 0, i64 %d, ptr null }, ptr %s, 0\n",
-            t1, CG_TEXT_FIRST_ROOM, room);
-    fprintf(ctx->fnOut, "  store { ptr, i64, i64, ptr } %s, ptr %s\n", t1, sb);
+    fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr, ptr } { ptr undef, i64 0, i64 %d, ptr null, ptr null }, "
+            "ptr %s, 0\n", t1, CG_TEXT_FIRST_ROOM, room);
+    //while a test runs, the builder's scope is on the unwind chain (P1d) from where the builder is made until its text is
+    //copied out - pushed here, in order with every node around it, so a rendering's helpers push and pop theirs above it.
+    //Its header is then in this frame too (a recursion in a test build keeps it; elsewhere it is made on the first growth,
+    //@__olang_sb_scratch, so a frame whose text fits its room keeps none)
+    char* node = NULL;
+    char* prevTop = NULL;
+    char* t2 = t1;
+    if (ctx->emitUnwind) {
+        char* hdr = cgScratchScopeOpen(ctx, &node, &prevTop);
+        char* t3 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr, ptr } %s, ptr %s, 3\n", t3, t1, hdr);
+        t2 = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = insertvalue { ptr, i64, i64, ptr, ptr } %s, ptr %s, 4\n", t2, t3, node);
+    }
+    fprintf(ctx->fnOut, "  store { ptr, i64, i64, ptr, ptr } %s, ptr %s\n", t2, sb);
     for (int i = 0; i < pieces->len; i++) {
         struct textPiece* tp = ListGetIdx(pieces, i);
         if (tp->desc) {
@@ -5472,6 +5473,7 @@ static char* cgTextBuilt(struct cgCtx* ctx, struct operand* op, struct list* pie
     fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc(ptr %s, i64 %s)\n", copy, scopeVal, total);
     fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %s, i1 false)\n", copy, data, total);
     fprintf(ctx->fnOut, "  call void @__olang_sb_done(ptr %s)\n", sb);
+    if (node) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", prevTop);
     char* a1 = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", a1, total);
     char* a2 = cgNewTmp(ctx);

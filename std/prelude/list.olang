@@ -1030,7 +1030,13 @@ if TestBuild {
         s I64 = 0
         for b in bags { s += b.items.Len() + 1 }
         for b in bags.Iter() { s += b.items.Len() + 1 }
-        assert s == 4 and bags.Iter().Count(fn(b) { return b.items.Len() == 0 }) == 2
+        assert s == 4
+        #(a helper's callback handed an element something can be stored through is refused - the element's scope is
+        #derived from the iterator's, O23a, which a build through it would underestimate: C2d - so it counts these)
+        items := List<listItem&>()
+        items.Push(listItem(4))
+        items.Push(listItem(5))
+        assert items.Iter().Count(fn(b) { return b.n > 4 }) == 1
         m := List<Pair<String&, listItem&>>()
         k String& = "x"
         m.Push(Pair<String&, listItem&>(k, listItem(4)))

@@ -1,7 +1,7 @@
-# check: run
-# flags: -s
-# E11c/E31/D16c: a part of the receiver with a Call method passed where a function value is wanted, to a callee that keeps
-# nothing of it - the adapter is in the frame and Call builds nothing where the part lives, so it runs
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/E31: a part of the receiver with a Call method passed where a function value is wanted - the adapter is made where
+# the part lives (no frame adapter: a callee keeping nothing of it may still hand it to a function value that keeps it,
+# C8), so it is refused though Call builds nothing there
 type Node struct(v I64, next mut Node&) {
     v
     next
