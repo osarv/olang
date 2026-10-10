@@ -14474,7 +14474,7 @@ static void buildDestruct(struct checkCtx* ctx, struct syntax* s, struct list* o
         hv->valueHomeSet = true;
         hv->valueHome = resultHome(ctx->func);
         hv->valueHomeDepth = 0;
-    }
+    } else if (TypeHoldsReferences(ht)) valueHomeOf(ctx, rhs, hv); //E25: where a scope argument put them ("mk2&rows(k)")
     struct statement hold = (struct statement){0};
     hold.sType = STATEMENT_VAR_DECL;
     hold.var = *hv;
@@ -15795,6 +15795,27 @@ static bool flowScanNode(struct flowScan* fs, struct syntax* n, struct str name,
             struct str T;
             if (e && syntaxRootName(e, &T) && !StrCmp(T, name) && syntaxMentionsName(e, name, true) && flowTarget(fs, T, after))
                 return true;
+            break;
+        }
+        case SNTX_STMNT_FOR_IN: {
+            //S9a: the loop's element is an element of what it walks, read out - so where the body puts it is where the
+            //collection's elements go: "for p in all { out.Push(p) }" with out returned is "out.Push(all[i])"
+            struct syntax* e = firstPartOfType(n, SNTX_EXPR);
+            struct syntax* body = firstPartOfType(n, SNTX_BLOCK);
+            if (e && body && syntaxMentionsName(e, name, false)) {
+                struct token elem = (struct token){0};
+                for (int i = 0; i < n->parts.len; i++) {
+                    struct syntaxPart* p = ListGetIdx(&n->parts, i);
+                    if (p->isToken && p->tok.type == TOK_IDEN) elem = p->tok;
+                }
+                if (elem.type == TOK_IDEN) {
+                    struct list inner = allPartsOfType(body, SNTX_STMNT);
+                    struct flowCont k = { &inner, 0, after };
+                    bool r = flowExplore(fs, strFromTok(elem), &k);
+                    ListDestroy(inner);
+                    if (r) return true;
+                }
+            }
             break;
         }
         default: break;
@@ -20263,9 +20284,17 @@ static struct var* lambdaCapture(struct var* L, struct var* outer, struct token 
     //own storage, and the lambda lives no longer than that storage (D16d)
     bool borrowed = !isRef && inner->type.bType == BASETYPE_ARRAY;
     if (borrowed) { inner->type.structMAlloc = true; inner->isBorrowedCapture = true; }
-    else if (!isRef && TypeHoldsReferences(inner->type)) Err(tok, ERR_CAPTURE_HOLDS_REFERENCES);
     (void)tok;
     inner->mut = isRef && outer->mut;
+    //D16c/O4b: a value holding references is copied with the scope its references live in - an implicit scope of its
+    //own, as a by-value parameter holding references has, bound where the lambda is made to where the captured value's
+    //references are and carried in the closure - so the lambda lives no longer than they do (D16d)
+    if (!isRef && !borrowed && TypeHoldsReferences(inner->type)) {
+        inner->type.scopeParam = NULL;
+        inner->type.scopeWritten = false;
+        giveImplicitScope(inner, &L->type.scopeVars);
+        if (inner->type.scopeParam) inner->type.scopeParam->isCaptureScope = true;
+    }
     isRef = isRef || borrowed;
     if (isRef) {
         inner->type.scopeParam = NULL;
@@ -20525,12 +20554,14 @@ void FinalizeLambda(struct operand* op, struct type* expected) {
         for (int i = 0; i < caps.len; i++) {
             struct operand* r = *(struct operand**)ListGetIdx(&caps, i);
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
-            if (!in->type.structMAlloc) continue;
+            bool valueRefs = !in->type.structMAlloc && in->type.scopeParam; //a value holding references (above)
+            if (!in->type.structMAlloc && !valueRefs) continue;
             bool asRef = r->type.structMAlloc; //else a borrowed array
             struct var* sv;
             int sd;
             bool su;
-            if (!RefExactScope(octx, r, asRef, &sv, &sd, &su) || su) continue; //a global's referent outlives all
+            if (!(valueRefs ? valueRefsScope(octx, r, &sv, &sd, &su) : RefExactScope(octx, r, asRef, &sv, &sd, &su)) || su)
+                continue; //a global's referent outlives all
             if (scopeIsDerived(sv)) { //O23a: the closure is built, and nothing is built in a derived scope
                 sv = SemanticRuntimeScope(sv, &sd);
                 if (sv) sd = 0;
