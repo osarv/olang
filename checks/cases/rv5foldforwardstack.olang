@@ -1,0 +1,34 @@
+# check: run
+# flags: -d -s
+# P2 (a review of rv3fix, h3b): the same through os.RunOnStack - its stand-in for a scope a kept closure holds through
+# a folded stand-in is folded into what that one forwards to, so R(1) and R(2) are destructed with run's scope.
+import "std/os"
+Dtors mut I64 = 0
+type R struct(n I64) {
+    n
+} destruct {
+    Dtors += n
+}
+type Holder struct() {
+    res mut R& = null
+}
+fn pass(f fn()) fn() { return f }
+fn run() {
+    h mut Holder& = Holder()
+    c mut List<I64>& = List<I64>()
+    g := fn() {
+        c.Push(1)
+        h.res = R(c.Len())
+    }
+    k fn() = g
+    join {
+        spawn k = pass(g)
+    }
+    os.RunOnStack(1 << 20, k)
+    k()
+    g()
+}
+fn main() ? {
+    run()
+    if Dtors != 6 { fail }
+}

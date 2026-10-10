@@ -13216,6 +13216,19 @@ through a derived scope on the reference path only; a by-value parameter bound f
 still copied into a task rather than borrowed - one copy per spawn, made where the closure lives. Decision 40 refuses
 calling any held function value, read-only captures included.
 
+**A follow-up review of that tip** confirmed the seven and found, besides three holes left for the next round (decision
+40 evaded through a helper calling its parameter, a lambda or a list the task made; the program scope's stand-in reached
+through a scope variable bound at run time; a handed-on closure copied into its owner's scope from the task's thread),
+one regression of this batch's own: `__olang_scope_merge` did not resolve its destination. A closure a first task handed
+back holds that task's stand-in, folded and forwarding; a second task handed it gets a stand-in whose parent is the
+forwarder, and the join spliced its chunks and destructor nodes into the forwarder itself - a header no one closes, which
+then stopped forwarding, so what the main thread built through the closure afterwards landed there too: destructors lost
+(the review's program printed one of three). The merge resolves its destination first; nothing else writes into a
+forwarder (the allocator's slow path and `register_dtor` already resolve). `rv5foldforward` and `rv5foldforwardstack`
+(through `os.RunOnStack`) fail without it. And one over-rejection: a `:=` field copying a by-value parameter took the
+parameter's depth with its type (2, the frame), so a reference field given it was O10; a field's local is the
+constructor's top level whatever its initializer was, as an ordinary local's is its block (`rv5ctorfieldcopy`).
+
 ### std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10)
 
 Usage study 5 (`/home/user/review/study5`, numeric and data-science scripts) found three programs writing the same

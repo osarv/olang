@@ -3549,7 +3549,8 @@ it captured into the task's own stand-in for that reference's scope, never into 
 thread. `os.RunOnStack` runs its function the same way, its thread building into stand-ins folded in when the function
 returns. What a task makes or is handed may outlive it - a closure capturing a reference it was handed, a function value
 it returns through a spawn target or stores - so a stand-in lives as long as the scope it stands in for and, once folded,
-**forwards** to it: whatever builds through it afterwards builds in that scope, on whichever thread then owns it. The
+**forwards** to it: whatever builds through it afterwards builds in that scope, on whichever thread then owns it, and a
+later task's stand-in whose parent is such a stand-in is folded into the scope it forwards to. The
 function value a task is handed is the same value it was (`is` holds between the two), and one spawn hands one function
 value once however many of its arguments reach it. A capture living in the program's scope is that scope as the thread
 calling the closure reaches it. A task **calls no function value held in what it is handed** - in a field, an element or
@@ -4820,7 +4821,8 @@ own storage where a reference to it is taken. Its nested blocks keep scopes of t
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
 its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
-given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one is a copy into the instance.
+given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
+is a copy into the instance, which a reference field may be given.
 What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
 
 ```

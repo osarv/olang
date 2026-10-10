@@ -1655,8 +1655,12 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //ones that were already there when it was spawned - the same LIFO order a sequential call gives.
         //The chunk splice is O(1) off the recorded tail; the dtor splice walks the sub-scope's own nodes
         //only, of which there is one per destructor-bearing instance the task constructed.
-        "define linkonce_odr void @__olang_scope_merge(ptr %dst, ptr %src) {\n"
+        //A dst that was itself a stand-in folded already is followed to what it forwards to (a closure a task handed back
+        //may hold one, and a later task's stand-in then has it for its parent): spliced into the forwarder, the chunks and
+        //destructors would sit in a header no one closes, and it would stop forwarding.
+        "define linkonce_odr void @__olang_scope_merge(ptr %dst0, ptr %src) {\n"
         "entry:\n"
+        "  %dst = call ptr @__olang_scope_resolve(ptr %dst0)\n"
         "  %sdheadptr = getelementptr %olang.scope, ptr %src, i32 0, i32 1\n"
         "  %sdhead = load ptr, ptr %sdheadptr\n"
         "  %nodtors = icmp eq ptr %sdhead, null\n"

@@ -1,0 +1,24 @@
+# check: run
+# flags: -d -s
+# C2g (a review of rv3fix, g14): a ":=" field copying a by-value parameter is a field - its storage the instance's, not
+# the parameter's slot - so a reference field may be given it; read back after a churn.
+N mut I64 = 64
+type P struct(v I64) { v }
+type H struct(p P) {
+    q := p
+    keep P& = q
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range N {
+        x := P(i)
+        s += x.v
+    }
+    return s
+}
+fn main() ? {
+    h := H(P(42))
+    h2 := H(P(7))
+    if churn() != 2016 { fail }
+    if h.keep.v != 42 or h2.keep.v != 7 or h.q.v != 42 { fail }
+}

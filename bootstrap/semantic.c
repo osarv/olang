@@ -23086,8 +23086,10 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
         //C2g: a reference field written with a bare "&" holds what lives where the instance does - the constructor's top
         //level, depth 1 - so what it is given must last that long: a borrow of a parameter's slot or of an inner block's
         //local does not (as a field's own type, depth 0 would accept any)
+        //(a field's local is the constructor's top level, the instance's scope, C2g - a value one's own storage whatever its
+        //initializer's was, as an ordinary local's is its block: "q := p" is not the parameter's slot, depth 2)
         struct type fieldAsLocal = field->type;
-        if (fieldAsLocal.structMAlloc && !fieldAsLocal.scopeParam && fieldAsLocal.scopeDepth == 0) fieldAsLocal.scopeDepth = 1;
+        if (!fieldAsLocal.scopeParam && (!fieldAsLocal.structMAlloc || fieldAsLocal.scopeDepth == 0)) fieldAsLocal.scopeDepth = 1;
         if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
             if (typeExprNode) {
@@ -23168,7 +23170,7 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
             Note(clash->tok, NOTE_DECLARED_HERE, clash->tok);
         } else if (!isPun) {
             fieldAsLocal = field->type; //(a ":=" field's type is known only now)
-            if (fieldAsLocal.structMAlloc && !fieldAsLocal.scopeParam && fieldAsLocal.scopeDepth == 0) fieldAsLocal.scopeDepth = 1;
+            if (!fieldAsLocal.scopeParam && (!fieldAsLocal.structMAlloc || fieldAsLocal.scopeDepth == 0)) fieldAsLocal.scopeDepth = 1;
             struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, fieldAsLocal, true);
             local->scopeBindings = field->scopeBindings;
             struct statement decl = (struct statement){0};

@@ -4452,7 +4452,10 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   a capturing lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee
   that can build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a
   stand-in header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task,
-  not borrowed (identity kept by `__olang_env_canon`).
+  not borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
+  (new): a fold into a stand-in folded already spliced into the forwarder, which no one closes - destructors lost; the
+  merge now resolves its destination. And an over-rejection: a `:=` field copying a by-value parameter took the
+  parameter's depth (2), so `keep P& = q` was O10; a field's local is the top level whatever it copies.
 - **std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10; study 5's r08 and
   r19, details mine).** **`std/csv`**: `for row in try csv.Rows(text, sep = ',')` gives each record as an
   `Array<String&>` built where the loop puts it; RFC 4180 strictly - quoted fields with separators, line breaks and
