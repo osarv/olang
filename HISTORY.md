@@ -13084,7 +13084,13 @@ union over instantiations), so never unsound - but order-dependent. The facts ar
 exposed a pre-existing over-rejection the indexed spelling also had (`b.Push(l[0])` beside a returned builder): a local
 declared from a call whose result holds a block's storage - `l := groups.Get(k)`, `groups` a local Map - was moved into
 the result scope as "built here" (an O14b result scope makes the call look like a temporary), and the move made its
-own error. Such a local is never moved now (`callResultTiedToBlock`); the corpus's `sbRegroup` is the case.
+own error. Such a local is never moved now (`callResultTiedToBlock`); the corpus's `sbRegroup` is the case. After
+merging master the first full verify caught one more: `filepath.Join` walks its parts and copies each one's characters
+into the text it returns (`for ch in p { joined[w] = ch }`), and following the element made its parameters flow into
+the result - an obligation on every caller (`b11notevalue` lost its note, and `Join(t, "b")` with `t` a loop's text
+became an error). An element that can hold no reference carries nothing, as master's s4sem had just said of numbers
+computed from a local: where the walked local's type is known (the local being decided, a declared one, or an element
+already explored), an element type holding no reference ends the flow there.
 
 **r04, r07.** A destructured call's results took no notice of a scope argument: the hidden local holding them had no
 home for its references, so they read as the statement's block - it now takes the call's (`rec, next := mk2&rows(k)`).

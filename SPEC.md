@@ -4402,7 +4402,8 @@ be borrowed - text, an array, a struct - flows the same way through what borrows
 given it, flowing into what is returned (`s := a[1:4]; return V(s)`, `h.name = a; return h`) puts it in the result scope
 too; stored anywhere else it stays in its block. A `for ... in` over it is followed: the loop's element is an element of
 what it walks, read out, so where the body puts the element is where the collection's elements go - `for p in all {
-out.Push(p) }` with `out` returned is `out.Push(all[i])`. A local declared from a call whose result holds what an
+out.Push(p) }` with `out` returned is `out.Push(all[i])` - unless the element can hold no reference (a character of
+text), which carries nothing of it. A local declared from a call whose result holds what an
 argument living in a block of this function refers to (the callee holds that argument's scope to outlive its result
 scope, O10b - `l := groups.Get(k)`, `groups` a local) is not moved: its result cannot live where the function's does,
 and the move would only make an error of what is correct in the block. So the recursive-descent and Pratt idioms are
