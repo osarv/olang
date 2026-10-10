@@ -4353,7 +4353,10 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   does), and where the body keeps such a copy writable (`Clone`, `ToArray`, `ToList`, `Filter`) the argument must be
   writable - judged by following copies through references, locals (every assignment) and calls, once each body is
   checked; with numbers for elements nothing applies. The prelude's `Map.Get` cursor became `mut`, `Clone` copies chunks
-  directly. Settle-time T25c errors are reported at the program's use (B11). **Left**: a closure held in a struct a task
+  directly. Settle-time T25c errors are reported at the program's use (B11). **From the scope sanitizer, two more**: a
+  constructor growing a field's List inside a nested block built into that block (C2g held only at its top level - a
+  binding determined at depth 0 now means the body's top level, which in a constructor is the instance's scope); and a
+  copy of a *local* enum's payload is covered by the general O25h above. **Left**: a closure held in a struct a task
   is given (`spawn work(h)` calling `h.f`) still builds into the scope it captured from the task's thread - fixing it
   needs the allocator to know a scope's owner, or a P2 rule refusing such arguments.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,

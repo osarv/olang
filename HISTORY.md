@@ -12868,3 +12868,15 @@ compared with the run time), must-fail programs in checks/cases (`rv3*.olang`) a
    **Recorded limit**: an iterator a read-only collection hands out (`ro.Iter()`, and so `for e in m` over a read-only
    `Map`) still gives writable copies: it holds a writable reference to the state by shallow permission, and making its
    elements read-only would make every iteration of a writable collection read-only too.
+
+**Two more from the scope sanitizer** (found while this batch was open, the sanitizer reporting "use after scope
+closed"). A constructor growing a field's `List` inside a nested block - `for i in range n { left.Push(n - i) }` - built
+each chunk in the loop body's arena, though the instance kept it: C2g makes a constructor's top level the instance's
+scope, but the call's binding recorded the field local's depth as 0 (a constructor's top level is depth 0 to the
+checker), and `SemanticBoundScopeDepth` read a determined binding at depth 0 as "the block the call is written in". It
+means the body's top level now (as `normDepth` already reads it in the checker), which codegen's `cgOwnAllocSlot` makes
+the instance's scope in a constructor and the function's own elsewhere - never shorter than what the checker proved.
+shared.olang's tests over `c3Holder` and `sc3Countdown` had the shape and passed by luck. And a copy of a *local* enum's
+payload (a match binding, `y := e as E.A`) passed by value, captured through a reference read out of it, or lent to a
+callee that builds through it, had the callee build in the copy's block - the same root as finding 2's fourth shape,
+closed by the same general O25h (the lend is refused, O17). Both have corpus tests and a checks case.

@@ -6696,6 +6696,10 @@ int SemanticBoundScopeDepth(struct operand* callOp, struct var* sv, int callDept
         struct scopeBinding* b = ListGetIdx(&callOp->scopeBindings, i);
         if (canonicalVar(b->typeParam) != canon) continue;
         if (b->boundTo == NULL && b->boundDepth > 0) return b->boundDepth;
+        //O2d/C2g: an argument determining it at depth 0 lives at the body's top level - a constructor's field local
+        //(whose top level is the instance's scope, where what is built through a field belongs) or a parameter's own
+        //storage - never in the block the call happens to be written in (a loop body inside a constructor, say)
+        if (b->boundTo == NULL && !b->landing) return 1;
     }
     return callDepth;
 }

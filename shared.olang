@@ -14575,3 +14575,86 @@ test "P2: spawned lambdas building through what they captured each build into a 
     k I64 = I64(ctRuntimeZero)
     assert rv3Spawned(40000 + k, 300) == 160000 and Rv3SpawnedBaked == 200
 }
+
+# C2g/O2d: a constructor growing a field's List - or a list a field holds - inside a nested block (a loop, an if, a bare
+# block) builds into the instance's scope, as at its top level: the call's binding named the field local's depth 0,
+# which codegen read as the block the call is written in, so each chunk went with the loop body's arena
+type rv3Inner struct() {
+    xs List<I64>
+}
+type rv3Countdown struct(n I64) {
+    left List<I64>
+    inr rv3Inner = rv3Inner()
+    for i in range n {
+        if i % 2 == 0 {
+            left.Push(n - i)
+            for j in range 2 { inr.xs.Push(j + i) }
+        } else {
+            left.Push(n - i)
+        }
+    }
+    {
+        k := List<I64>()
+        k.Push(5)
+        left.Push(k[0])
+    }
+}
+fn rv3CountdownSum(n I64, churns I64) I64 {
+    c := rv3Countdown(n)
+    rv3Churn(churns)
+    s I64 = 0
+    for v in c.left { s += v }
+    for v in c.inr.xs { s += v * 1000 }
+    return s
+}
+Rv3CountdownBaked := rv3CountdownSum(20, 2)
+test "C2g: a constructor's nested blocks build through its fields into the instance's scope" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3CountdownSum(20 + k, 300) == 190215 and Rv3CountdownBaked == 190215
+}
+
+# O25h: a copy of a local enum's payload - a match binding, an "as" - keeps its references where the enum's are, so a
+# callee given it by value, or a lambda through a reference read out of it, builds there and not in the clause's block
+type rv3PN struct(v I64) {
+    v
+    next mut rv3PN& = null
+}
+type rv3PBox struct() { head mut rv3PN& = rv3PN(1) }
+type rv3PE enum {
+    A(b rv3PBox)
+    Z
+}
+fn rv3PBuild(b rv3PBox) { b.head.next = rv3PN(42) }
+fn rv3PSecond(e rv3PE) I64 {
+    b := e as rv3PE.A
+    if b.head.next == null { return 0 }
+    return b.head.next.v
+}
+fn rv3PayloadCopies(n I64) I64 {
+    e1 := rv3PE.A(rv3PBox())
+    match e1 {
+        case rv3PE.A(y) { rv3PBuild(y) }
+        case _ { }
+    }
+    e2 := rv3PE.A(rv3PBox())
+    {
+        y := e2 as rv3PE.A
+        y.head.next = rv3PN(43)
+    }
+    e3 := rv3PE.A(rv3PBox())
+    match e3 {
+        case rv3PE.A(y) {
+            h := y.head
+            f := fn(v I64) { h.next = rv3PN(v) }
+            f(44)
+        }
+        case _ { }
+    }
+    rv3Churn(n)
+    return rv3PSecond(e1) * 10000 + rv3PSecond(e2) * 100 + rv3PSecond(e3)
+}
+Rv3PayloadBaked := rv3PayloadCopies(2)
+test "O25h: copies of a local enum's payload build where the enum's references live" {
+    k I64 = I64(ctRuntimeZero)
+    assert rv3PayloadCopies(300 + k) == 424344 and Rv3PayloadBaked == 424344
+}

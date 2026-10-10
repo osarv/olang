@@ -4676,7 +4676,9 @@ whose body is being checked when its call is (a call inside its own body) binds 
 (C2a), so what its body allocates at its top level is allocated where the instance lands (C2c), never in a scope that
 closes at its return: a field's referent, what a call through a field builds while the constructor runs (`items.Push(6)`
 growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
-own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2).
+own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
+but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
+instance's scope, as at the top level.
 
 ```
 type Box struct(v I32) { inner Point& = Point(v, v) }   # inner lives wherever the Box does
