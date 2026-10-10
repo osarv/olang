@@ -4782,7 +4782,7 @@ type happens to declare a destructor.
 **B1.** Each module — one `.olang` file (§4 M1) — is a **separate compilation unit**, compiled to its own
 object file and linked with the others. The compiler operates in exactly one of four modes, selected
 by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
-(B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-u` (§4 M23c), `-a` (B12) and `-D` (B10). Any other argument
+(B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-s` (B2f), `-u` (§4 M23c), `-a` (B12) and `-D` (B10). Any other argument
 beginning with `-` is an error — except one after the file `-i` interprets, which is that program's own (B3f). Apart from
 the modes, `-e RULE` prints a rule of this specification (B11a).
 
@@ -4817,6 +4817,19 @@ aggregate local is not yet described, and a test build's `test` blocks share one
 
 A debug object is a distinct artifact from an optimized one and is named accordingly (B4) — without that,
 a `-d` build would silently reuse optimized objects and be exactly what was not asked for.
+
+**B2f.** `-s` is a modifier, valid alongside any mode and in any position, that builds the **scope sanitizer** into
+the whole program: a check, at run time, that storage a closing scope reclaimed (O8) is not used afterwards - a use the
+static check (§8.4) should have refused. Storage a scope reclaims is overwritten with a pattern (every 8 bytes
+`0x7FF57FF57FF57FF5`: a NaN as any float, an integer near its type's maximum, and an address no reference can hold) and
+held back from reuse - the most recently reclaimed, up to 256MB or 16,384 chunks in the whole process - unreadable for as
+long as it is held back where the system allows it. Reading or writing held-back storage, following a reference read out
+of it, or allocating a length read out of it is reported as `use after scope closed: ...` and ends the program as a
+failed check does (S18): a test fails and the others run, and outside a test the process aborts. A fault that is not one
+of these ends the program as it would without `-s` (an `os.OnCrash` message included). A program that obeys §8 behaves
+under `-s` as without it, but for time and memory. It is a **detector, not a proof**: it sees the uses a run made, and
+a use of storage no longer held back reads whatever the allocator has put there since. Under `-i` it changes nothing,
+since the evaluator never reclaims storage. A sanitized object is a distinct artifact (B4), named with `.san`.
 
 **O2d.** Where a call binds one of a callee's scope variables to the caller's own scope, the **block** that
 means is decided by what bound it. A binding an argument determines (O17) refers to the block the

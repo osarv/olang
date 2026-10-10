@@ -1,0 +1,62 @@
+# A copy of an enum's payload - a match binding, or "y := e as E.A" - is taken to hold its references in its own block,
+# where they live where the enum's do. Passed on by value (build(y)), lent to a callee that builds through it (grow(y)),
+# or a reference read out of it and captured (h := y.head), it has the callee build in the copy's block - a match clause,
+# an inner block - and hang the new node off the enum's, which outlives that block: a use after free.
+#     expected: "42 43 44" (as -i prints), or errors at the three calls
+#     actual:   -b and -d print "-7 -7 -7" (the nodes' chunks reused by churn); built -d -s it stops at the first read:
+#               "use after scope closed: storage a closed scope gave back was read or written"
+# Found by the scope fuzzer (fuzz scope, B2f; 14 of its 62 findings over 300 programs). The same shapes for an enum the
+# function was handed are /home/user/review/tonight3/repro/02d; a store written directly through the copy
+# ("y.head.next = Node(45)") is built in the right place, and "y := w.b" (a field's copy) is refused by O17a.
+# Cause (semantic.c): copyRefsHome (~15420, O25h) returns at once when its source is not an lvalue, and OperandIsLvalue
+# (~8150) knows only READ_VAR, INDEX and MEMBER - not OPERATION_AS, which both "as" and a match binding's lowering read
+# the payload through - so the copy's refsHome is never set; valueRefsHome (~7604) likewise walks down through MEMBER
+# only. With no home recorded, valueRefsScope answers the copy's own storage: O4b binds build's scope variable there,
+# O17a's splitValueHome sees no split (so grow(y) is not refused), and "h := y.head" takes the copy's block (O25a).
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn build(b Box) { b.head.next = Node(42) }
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn second(e E) I64 {
+    b := e as E.A
+    if b.head.next == null { return 0 }
+    return b.head.next.v
+}
+fn main() ? {
+    e1 := E.A(Box())
+    match e1 {
+        case E.A(y) { build(y) }
+        case _ { }
+    }
+    e2 := E.A(Box())
+    {
+        y := e2 as E.A
+        grow(y)
+    }
+    e3 := E.A(Box())
+    match e3 {
+        case E.A(y) {
+            h := y.head
+            f := fn(v I64) { h.next = Node(v) }
+            f(44)
+        }
+        case _ { }
+    }
+    churn()
+    println($second(e1) " " $second(e2) " " $second(e3))
+}

@@ -13,11 +13,21 @@
 #     fuzz run START COUNT [JOBS [CASES]]   seeds START.. START+COUNT-1, JOBS at a time (2), CASES cases each (30)
 #     fuzz show SEED [CASES [ONLY]]         prints a program - or only its case ONLY
 #
+# The scope fuzzer (B2f) is the same driver over scopegen's programs, which stress where values live (see
+# scopegen.olang): each is built under the scope sanitizer (-d -s) and interpreted (-i), and the two outputs must be
+# the same - a value used after its scope closed reads poison or faults under -s, while -i keeps every value alive.
+# A scenario the compiler refuses is left out and the rest built again; what was refused is counted, not a finding.
+#
+#     fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]]   seeds START.., SCENARIOS scenarios each (12); "avoid" leaves
+#                                                   out the shapes of use-after-frees known when it was written
+#     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY
+#
 # Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/out under the working directory.
 import "std/io"
 import "std/os"
 import "std/chan"
 import "gen"
+import "scopegen"
 
 Olang mut String& = ""
 Root mut String& = ""
@@ -26,6 +36,8 @@ Ran mut I64 = 0
 Found mut I64 = 0
 Baked mut I64 = 0
 Total mut I64 = 0
+Scenarios mut I64 = 12
+Refused mut I64 = 0
 
 fn main() ? {
     args := os.Args()
@@ -38,6 +50,23 @@ fn main() ? {
         only I64 = -1
         if args.Len() > 4 { only = try args[4].ParseInt() catch default -1 }
         try io.Print(gen.Program(U64(seed), Cases, only, true, Array<String&>(0), Array<Bool>(0))) catch { }
+        return
+    }
+    if args[1] == "scopeshow" {
+        seed := try args[2].ParseInt() catch default 1
+        if args.Len() > 3 { Scenarios = try args[3].ParseInt() catch default 12 }
+        if args.Len() > 5 and args[5] == "avoid" { scopegen.AvoidKnown = true }
+        keep := Array<Bool>(0)
+        if args.Len() > 4 {
+            only := try args[4].ParseInt() catch default 0
+            keep = Array<Bool>(Scenarios)
+            keep[only] = true
+        }
+        try io.Print(scopegen.Program(U64(seed), Scenarios, keep)) catch { }
+        return
+    }
+    if args[1] == "scope" and args.Len() >= 4 {
+        scopeMain(args)
         return
     }
     if args[1] != "run" or args.Len() < 4 { usage() }
@@ -60,7 +89,8 @@ fn main() ? {
 }
 
 fn usage() {
-    try io.PrintErr("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]\n") catch { }
+    try io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
+                     " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]\n")) catch { }
     fail
 }
 
@@ -193,4 +223,134 @@ fn finding(dir String&, seed I64, ci I64, what String&, detail String&) {
     if detail.Len() > 0 {
         try os.WriteFile($to "/detail" $ci ".txt", detail) catch { }
     }
+}
+
+# ---- the scope fuzzer ----
+
+fn scopeMain(args Array<String&>&) {
+    start := try args[2].ParseInt() catch default 1
+    count := try args[3].ParseInt() catch default 1
+    jobs I64 = 2
+    if args.Len() > 4 { jobs = try args[4].ParseInt() catch default 2 }
+    if args.Len() > 5 { Scenarios = try args[5].ParseInt() catch default 12 }
+    if args.Len() > 6 and args[6] == "avoid" { scopegen.AvoidKnown = true }
+    os.Run("mkdir -p " $os.Quote($Root "/build/fz/scope"))
+    queue mut chan.Chan<I64>& = chan.Chan<I64>(I32(count))
+    chan.Init(queue)
+    for i in range count { chan.Send(queue, start + i) }
+    chan.Close(queue)
+    join {
+        for w in range jobs { spawn scopeWorker(queue, w) }
+    }
+    summary String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
+    try io.Print($summary ", " $Found " findings\n") catch { }
+    if Found > 0 { fail }
+}
+
+fn scopeWorker(queue mut chan.Chan<I64>&, w I64) {
+    dir String& = $Root "/build/fz/sw" $w
+    os.Run("mkdir -p " $os.Quote(dir))
+    for seed in queue {
+        scopeSeed(seed, dir)
+        Ran.AtomicAdd(1)
+    }
+}
+
+# seed's scope program, built -d -s and interpreted, in dir
+fn scopeSeed(seed I64, dir String&) {
+    keep mut Array<Bool>& = Array<Bool>(Scenarios, true)
+    built := false
+    for attempt in range 6 {
+        src := scopegen.Program(U64(seed), Scenarios, keep)
+        try os.WriteFile($dir "/p.olang", src) catch {
+            scopeFinding(dir, seed, -1, "cannot write the program", "")
+            return
+        }
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b -d -s p.olang > c.txt 2>&1") == 0 {
+            built = true
+            break
+        }
+        diag := read(dir, "c.txt")
+        dropped := dropRefused(src, diag, keep)
+        if dropped == 0 {
+            scopeFinding(dir, seed, -1, "does not compile, and no scenario is to blame", diag)
+            return
+        }
+        Refused.AtomicAdd(dropped)
+    }
+    if not built {
+        scopeFinding(dir, seed, -1, "still does not compile after leaving scenarios out", read(dir, "c.txt"))
+        return
+    }
+    n I64 = 0
+    for k in keep { if k { n++ } }
+    if n == 0 { return }
+    Total.AtomicAdd(n)
+    st := sh(dir, "timeout 120 ./build/p.debug.san > s.txt 2> serr.txt")
+    sOut := read(dir, "s.txt")
+    ist := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -i p.olang > i.txt 2> ierr.txt")
+    iOut := read(dir, "i.txt")
+    if ist != 0 {
+        scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
+        return
+    }
+    if st == 0 and sOut == iOut { return }
+    # the first scenario whose line differs or is missing is the one to blame; with none, the run ended early
+    want := iOut.Split("\n")
+    got := sOut.Split("\n")
+    for i, line in want {
+        if line.Len() == 0 { continue }
+        if i < got.Len() and got[i] == line { continue }
+        at := try line.Find(": ") catch default 0
+        k := try line[:at].ParseInt() catch default -1
+        detail String& = $line "\n<missing>"
+        if i < got.Len() { detail = $line "\n" $got[i] }
+        detail = $detail "\n" $read(dir, "serr.txt")
+        scopeFinding(dir, seed, k, "-d -s disagrees with -i (a use after a scope closed)", detail)
+        return
+    }
+    scopeFinding(dir, seed, -1, "-d -s run failed", read(dir, "serr.txt"))
+}
+
+# leaves out every scenario an error in diag is reported in, from the "# scenario k" lines of src; how many it left out
+fn dropRefused(src String&, diag String&, keep mut Array<Bool>&) I64 {
+    lines := src.Split("\n")
+    owner := Array<I64>(lines.Len() + 1, -1)
+    cur I64 = -1
+    for i, line in lines {
+        if line.StartsWith("# scenario ") { cur = try line[11:].ParseInt() catch default -1 }
+        if line.StartsWith("fn main()") { cur = -1 }
+        owner[i + 1] = cur
+    }
+    dropped I64 = 0
+    for d in diag.Split("\n") {
+        if not d.StartsWith("p.olang:") { continue }
+        if not d.Contains(": error") { continue }
+        rest := d[8:]
+        end := try rest.FindByte(':') catch { continue }
+        ln := try rest[:end].ParseInt() catch { continue }
+        if ln < 1 or ln >= owner.Len() { continue }
+        k := owner[ln]
+        if k >= 0 and k < keep.Len() and keep[k] {
+            keep[k] = false
+            dropped++
+        }
+    }
+    return dropped
+}
+
+# records a scope finding: the program in build/fz/scope/<seed>, scenario k's own program beside it
+fn scopeFinding(dir String&, seed I64, k I64, what String&, detail String&) {
+    Found.AtomicAdd(1)
+    to String& = $Root "/build/fz/scope/" $seed
+    os.Run("mkdir -p " $os.Quote(to) " && cp " $os.Quote(dir) "/p.olang " $os.Quote(dir) "/*.txt " $os.Quote(to) " 2> /dev/null")
+    if k >= 0 {
+        keep := Array<Bool>(Scenarios)
+        keep[k] = true
+        try os.WriteFile($to "/scenario" $k ".olang", scopegen.Program(U64(seed), Scenarios, keep)) catch { }
+    }
+    line String& = "scope seed " $seed " scenario " $k ": " $what "\n"
+    try io.Print(line) catch { }
+    os.Run("printf '%s' " $os.Quote(line) " >> " $os.Quote($Root "/build/fz/scope/findings.txt"))
+    if detail.Len() > 0 { try os.WriteFile($to "/detail" $k ".txt", detail) catch { } }
 }

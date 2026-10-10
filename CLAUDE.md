@@ -4331,6 +4331,35 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   `-O2`, its IR identical as well) and, once `compiler/` holds the olang compiler, will walk `bootstrap/CHAIN` (empty
   today) and build stages 1-3 to a fixed point - a TODO in the makefile. From the port's start `bootstrap/` takes fixes
   only (QB).
+- **The scope sanitizer, `-s`, and a fuzzer for where values live (B2f, 2026-10-10).** Three reviews in one night each
+  found use-after-frees the static check let through, and valgrind is blind to them: a closed scope's chunks go back to
+  the pool and the next scope takes them, so a stale read reads live memory. Under `-s` (a modifier like `-r`, objects
+  `.san`) a closing scope's chunks are **poisoned** with `0x7FF57FF57FF57FF5` - a NaN as every float width, near-maximal
+  as every integer, a non-canonical address so a reference read from it faults when followed - **protected**
+  (`PROT_NONE`; every chunk is `mmap`ed under `-s`, one over 1MB keeps one page and gives the rest back) and **held
+  back** in one process-wide FIFO (16,384 chunks or 256MB, the oldest given back to the pool). A SIGSEGV handler knows
+  its faults - an address in a held-back chunk, the poison word in a faulting register, an allocation of 2^60 bytes or
+  more - and reports `use after scope closed: ...` as a failed check (a test fails and the rest run, else abort 134);
+  any other fault goes to the action it replaced, os.OnCrash's included (under `-s` OnCrash's SIGSEGV action becomes
+  its fallback). **Decided (mine)**: its own flag, not "always under `-d`" - two `mprotect` calls per scope close that
+  allocated cost binarytrees 7x and a loop closing 5M scopes 80x, which a debug build should not pay unasked, and it is
+  as useful at `-O3` (`-b -s`); without `-s` the IR is byte-identical. **Validation**: the third review's five open
+  use-after-free reproducers stop under `-d -s` and `-b -s` where `-i` prints the right answer; the fixed ones run clean;
+  the suite passes under `-t -s` but for two shared.olang tests with a real use-after-free, and the concurrent files
+  under `-t -r -s`. **The scope fuzzer** (`fuzz/scopegen.olang`, `fuzz scope`, `make scopefuzz`): scenarios storing,
+  lending, copying, capturing and returning across closing scopes, built `-d -s` and interpreted, outputs compared; a
+  scenario the checker refuses is left out. 300 programs (1,754 scenarios run, 1,846 refused): 62 findings, all the
+  review's open shapes (02d 40, 02 4, 02c 4) but 14 of a new variant - a LOCAL enum's payload copied by a match binding
+  or `as`, then passed on, lent or captured (fuzz/repro/scopepayloadcopy.olang: `copyRefsHome` skips non-lvalues and
+  `OperandIsLvalue` excludes `OPERATION_AS`, so the copy records no home); 300 more with those shapes left out (`avoid`):
+  1,708 run, 1,892 refused, no findings. **Found on the corpus**: a constructor
+  growing a field's List in a nested block builds into that block (fuzz/repro/scopectornested.olang: C2g covers only the
+  top level; the binding has no depth, so `SemanticBoundScopeDepth` answers the call's block). Neither fixed here
+  (semantic.c is other work's), diagnoses in the reproducers. In verify: a checks scenario drives the runtime from C
+  (each report, a foreign fault, OnCrash, eviction), runs two churning prelude test files under `-t -d -s` and checks a
+  plain build carries none of it, and the fuzz scenario runs two clean scope-fuzz seeds; `make scopesan` runs the whole
+  suite under it. Limits: a detector, not a proof; a stack slot is out of reach; under `-r` a recursion near
+  ThreadSanitizer's frame limit faults sooner with `-s`.
 - **A soundness review of the night's merges, fixed (P2, O25h, O17a, O12, E4a/E6d, T25c, E11c, S4d, O18a, B11,
   2026-10-10).** Ten findings of a read-only review, all fixed. **P2**: a spawned lambda built through what it
   captured into the spawner's arena from the task's thread (heap corruption) - every scope a task's function value

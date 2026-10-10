@@ -7,7 +7,9 @@ CC = gcc
 CFLAGS = -Wall -Werror -Wextra -Wpedantic -g -MMD -MP
 # the C compiler - stage 0 of the bootstrap (bootstrap/README.md) - is bootstrap/*.c, built to build/out
 SRC = $(wildcard bootstrap/*.c)
-OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
+# objects under build/obj/, not build/: a checkout built before the move to bootstrap/ holds build/*.d files naming
+# codegen.c and the rest at the top level, and make would read them and stop at "No rule to make target 'codegen.c'"
+OBJ = $(addprefix build/obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
 # the same sources built optimized, as the compiler a bootstrap starts from (make bootstrap)
 STAGE0_CFLAGS = -O2 -Wall -Werror -Wextra -Wpedantic -MMD -MP
 STAGE0_OBJ = $(addprefix build/stage0.obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
@@ -21,8 +23,8 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang)) $(wildcard geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) checks/checks.olang
 
-build/%.o: bootstrap/%.c
-	mkdir -p build
+build/obj/%.o: bootstrap/%.c
+	mkdir -p build/obj
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # build/out is the real target (not "build") so make tracks it by the file's own mtime - naming the
@@ -111,14 +113,29 @@ fuzz: build/out
 	nice -n 19 build/out -b -d fuzz/fuzz.olang
 	nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
 
+# the suite under the scope sanitizer (B2f): every use of storage after its scope closed stops the program, or fails the
+# test it happens in. Not part of "verify" - shared.olang alone takes a minute and a half under it - and not a race-style
+# expected count either: a correct run passes every test, and a failure is a use after free the static check (section
+# 8) let through. checks.olang is left out: what it checks is the compiler, and it runs its own sanitized builds.
+scopesan: build/out
+	build/out -t -d -s $(filter-out checks/checks.olang, $(OLANG_TESTS))
+
+# the scope fuzzer (fuzz/scopegen.olang, B2f): random programs storing, lending, copying and returning where scopes close,
+# built under the scope sanitizer and interpreted, the two outputs compared. "make scopefuzz SEED=1 COUNT=300 SCENARIOS=12";
+# findings land in build/fz/scope, a line each in build/fz/scope/findings.txt.
+SCENARIOS ?= 12
+scopefuzz: build/out
+	nice -n 19 build/out -b -d fuzz/fuzz.olang
+	nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
+
 all: clean build run
 
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir race fuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
-# ("build/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
+# ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
 # Placed higher up, that silently made "make" build one object file instead of build/out.
 -include $(DEP)

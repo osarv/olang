@@ -108,6 +108,9 @@ void CodegenSetTarget(const char* triple, const char* arch, const char* attrs) {
     cgArch = arch;
     cgTargetAttrs = attrs;
 }
+//B2f: the scope sanitizer - a whole-build mode, as -r is, since the runtime it changes is in every object
+static bool cgScopeSan = false;
+void CodegenSetScopeSan(bool on) { cgScopeSan = on; }
 struct cgDbgFile { struct str name; int id; int sp; }; //sp set on an entry recording a subprogram's own file
 
 struct cgStaticLit { struct operand* op; char* name; };
@@ -6875,7 +6878,7 @@ static bool cgRuntimeDeclaresSym(struct str name, bool dyncall) {
     if (!text) {
         FILE* f = open_memstream(&texts[dyncall], &lens[dyncall]);
         if (!f) ErrorBugFound();
-        emitRuntimeDecls(f, cgArch);
+        emitRuntimeDecls(f, cgArch, cgScopeSan);
         if (dyncall) emitDyncallRuntime(f, cgArch);
         fclose(f);
         text = texts[dyncall];
@@ -7349,7 +7352,7 @@ void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
     emitTargetTriple(out);
     emitStructTypeDefs(out);
     fputs("\n", out);
-    emitRuntimeDecls(out, cgArch);
+    emitRuntimeDecls(out, cgArch, cgScopeSan);
     bool dyncall = cgModuleDeclaresDyncall(emitMod);
     if (dyncall) emitDyncallRuntime(out, cgArch);
     emitExternDecls(out, dyncall);
@@ -7362,6 +7365,8 @@ void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
 //initializer may already read it (B5a)
 static void cgSaveCommandLine(struct cgCtx* ctx) {
     fputs("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n", ctx->fnOut);
+    //B2f: the scope sanitizer's handler, in place before anything can close a scope
+    if (cgScopeSan) fputs("  call void @__olang_san_init()\n", ctx->fnOut);
 }
 
 //main's signature is fixed to "<errors> ? void" (checked in semantic.c: no params, no success type, at
@@ -7619,7 +7624,8 @@ static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
             //S2: the crash handler is never instrumented - it can run while ThreadSanitizer's own state is
             //inconsistent (a fault inside its bookkeeping, holding its locks), and an instrumented load there waited
             //for a lock its own thread held, forever
-            bool plain = memmem(&buf[i], cut, "@__olang_crash_handler(", 23) != NULL;
+            bool plain = memmem(&buf[i], cut, "@__olang_crash_handler(", 23) != NULL
+                         || memmem(&buf[i], cut, "@__olang_san_handler(", 21) != NULL; //B2f's, for the same reason
             fwrite(&buf[i], 1, cut, dst);
             fputs(plain ? (dbg ? " #1" : "#1 {") : (dbg ? " #0" : "#0 {"), dst);
             if (dbg) fwrite(dbg, 1, lineLen - cut, dst);
