@@ -1165,7 +1165,9 @@ another's: a numeric conversion (E26) produces a value, a float's bit pattern (E
 value, never a view of the storage holding the float, an `enum` (§2.5) reaches a payload only through
 the case its tag selects, and `&` (T24) is typed. Two accesses of different types therefore never overlap,
 except where an external function writes storage handed to it (X3b), which this language does not
-describe.
+describe. A declared type over a number (T29) is stored as its base is - T29h's view of an `Array<Char>` as an
+`Array<U8>` reads what was written - while every numeric primitive (T4) is a storage type of its own, two of one
+width included: `U8` storage is never read as `I8`, nor `F16` as `BF16` or `U16`.
 
 This is a property an implementation may rely on when deciding whether two accesses can refer to the same
 storage.

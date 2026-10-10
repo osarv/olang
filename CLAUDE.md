@@ -1506,8 +1506,11 @@ Go through this for every change to what olang means - a rule added, revised or 
   unions, no casts, no reinterpretation - a numeric conversion produces a value, a choice reaches its
   payload only through the case its tag selects, and `&` is typed. So an access of one type never overlaps
   an access of another.
-  **Deliberately narrow.** Only the six primitives and the runtime-length array descriptor are tagged;
+  **Deliberately narrow.** Only the primitives and the runtime-length array descriptor are tagged;
   aggregates and references stay untagged, which means "may alias anything" and is always the safe answer.
+  (Since 2026-10-10 every numeric primitive of T4's table has its own two leaves - I8, I16, U16, U32, U64, F16 and BF16
+  were untagged, so a BF16 element store through a struct, std/linalg's `Map`, reloaded the array's descriptor each
+  element and never vectorized: 2.1-5.1 -> 0.30-0.78 ns an element, as with locals; a declared number is its base's.)
   **There are TWO families per type, split by the LAST step of the access path** - an array ELEMENT reached
   by indexing, or a FIELD (a struct member, a local, a global). That split is sound because no storage is
   reachable both ways: olang cannot build an `int32[]` view over a `Point[]`, so a field is never nameable
