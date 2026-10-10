@@ -381,3 +381,13 @@ test "a Map's Clone outlives the map it copies" {
     for e in kept { s += e.Value }
     assert s == 3 * 4950
 }
+
+test "a Map walked in order of its keys: its entries listed, then sorted" {
+    m := Map<String&, I64>()
+    for w in "pear fig apple fig kiwi apple fig".Split(" ") { m.Update($w, 0, fn(n I64) I64 { return n + 1 }) }
+    es := m.Iter().ToList()
+    es.Sort(fn(a, b) { return a.Key < b.Key })
+    b := StringBuilder()
+    for e in es { b.Push($e.Key "=" $e.Value " ") }
+    assert b.ToString() == "apple=2 fig=3 kiwi=1 pear=1 "
+}

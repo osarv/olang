@@ -1723,8 +1723,9 @@ fails with `Exhausted` at `Len()`, so `for x in l` walks a `List` run by run (S9
 out a fresh position (S9c), a `ListIter<T>` whose iterator helpers (`Any`, `All`, `Count`, `Fold`, `Map`, `Filter` -
 M19e overrides) walk the rest of the list run by run too, leaving it where `Next()` would.
 `First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with the default error (R15) when
-there is none; `Clear()` removes every element. Neither moves anything, and the chunks they empty are kept and
-filled again by the `Push`es that follow. `RemoveAt(i)` removes the element at `i` and gives it, and `Insert(i, x)`
+there is none; `Clear()` removes every element, and `Truncate(n)` all but the first `n` (nothing when the list holds
+`n` or fewer; a negative `n` is a mistake in the program, which stops it). None moves anything, and the chunks they
+empty are kept and filled again by the `Push`es that follow. `RemoveAt(i)` removes the element at `i` and gives it, and `Insert(i, x)`
 puts `x` at `i` (`Insert(Len(), x)` is `Push(x)`); each moves the elements after `i` one place, so costs their
 number, and takes `i` from `0` to `Len() - 1` (`RemoveAt`) or `Len()` (`Insert`) - another is a mistake in the
 program, checked once per call, and stops it as an `assert` does. `Reverse()` reverses the elements in place, and
