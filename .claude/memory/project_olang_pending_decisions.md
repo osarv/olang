@@ -226,6 +226,16 @@ rule and where it is recorded; the morning report lists them all, then they move
 34. (mine, study5 r12) a numeric literal does not adapt to a declared type through an operator method's parameter -
    `d / 2.0` with Meters declaring `Div(t Seconds) Speed` silently made a Speed; now an error naming `Seconds(2.0)`.
 
+35. (wt-tbaa, T36) every numeric primitive has its own alias-tag leaves (I8, I16, U16, U32, U64, F16, BF16 were
+   untagged); a declared number takes its base's. BF16 loops through a struct 2.1-5.1 -> 0.30-0.78 ns an element.
+36. (wt-scopesan, B2f) `-s` is the scope sanitizer: closed chunks poisoned (0x7FF5...), PROT_NONE, held in a 256MB FIFO;
+   a use reports "use after scope closed" through the failed-check path; zero cost without `-s`; `make scopesan` /
+   `make scopefuzz` (not in verify - two shared.olang tests fail under it from a real UAF, handed to rv3fix).
+37. (wt-s4sem, O17b/O26a/E16/T20) a handle (a struct of one field, a reference or another handle) is lent as its
+   reference when the callee's checked body uses it only through that reference (every read accounted for, cycles
+   re-checked); O26a follows views of a returned local; numbers carry no scope; under `try` a known out-of-range index is
+   checked where it runs; an error type is no value type; keywords may name fields.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
