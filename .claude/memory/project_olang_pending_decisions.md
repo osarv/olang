@@ -61,6 +61,23 @@ design. Do what you want") - nothing to decide until a GUI is written.
   problem might fail like this"-gap so it doesn't really introduce anything new" -> taken as GO, with their early free:
   decision 51 below. Queued after decision 50 (QE).
 
+**Answered 2026-10-10 12:15 CEST (the user: "1) good .2) yes. 3. Okay."):**
+- Decision 50 (failing spawns, the design as given) - APPROVED; built next.
+- QG question 2: owned objects may also move out with an explicit `take` - YES. QG question 1 was answered earlier by
+  the user's own no-borrowing refinement (compile-time, strict start).
+- Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted.
+**Asked 2026-10-10 12:20 CEST (the user: "Given the new borrowing rules, it is now possible to create the dynamic
+length Vec<T> again right?"):**
+- QH. Yes, once `owned` exists. `Vec<T>` is library code: its buffer is an owned array, growth makes the next buffer,
+  copies, and frees the old one at once, and the no-free-while-borrowed rule makes that safe (Rust's rule: no Push
+  while a view of v is in use). Two questions:
+  1. Numeric code wants `data := v.View()` held across a loop, which the strict start refuses. Allow local borrows
+     checked by liveness (refused only if something that may free v runs before the borrow's last use) together with
+     Vec? Recommended yes.
+  2. Should Vec sit beside List, or replace it as the growable type? Recommended beside for now: List keeps stable
+     addresses and no copy on growth; decide after measuring.
+  In effect: nothing; order is failing spawns, owned + take, then Vec.
+
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
   - An object built into an owned slot lives in a small region of its own. Its parts live there too.
