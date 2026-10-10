@@ -256,6 +256,7 @@ struct type;
     X(ERR_READ_ONLY_COPY_GLOBAL,        "T25c",  "a mutable global holds no copy of a read-only %t - give it one of its own, made %s, or drop its 'mut'") \
     X(ERR_READ_ONLY_COPY_STORED,        "T25c",  "a copy of a read-only %t cannot be stored where it can be written - store one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_RETURNED,      "T25c",  "a copy of a read-only %t cannot be returned as a writable value - return one of its own, made %s, or a read-only reference") \
+    X(ERR_READ_ONLY_REF_KEPT,           "T25c",  "'%S' keeps what its parameter '%S' reaches where it can be written, and this %t is read-only - pass a writable one") \
     X(ERR_READ_ONLY_COPY_ARG,           "T25c",  "'%S' writes through or keeps its parameter '%S', and this %t is a read-only copy - pass one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_LENT,          "T25c",  "a read-only copy cannot be passed where it may be written - pass one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_WRITE,         "T25c",  "this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares") \

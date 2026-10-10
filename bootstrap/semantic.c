@@ -2655,6 +2655,13 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
         finishTypeVarResult(&spec->type, spec->tok);
     spec->origin = spec;
     spec->codeBlock = ListInit(sizeof(struct statement));
+    //T25c: what a read-only reference parameter reaches is as read-only as its argument - copies out of it are judged
+    //per call (roByArg), since the generic's declaration cannot say "mut" for some instantiations and not others
+    for (int i = 0; i < spec->type.vars.len; i++) {
+        struct var* p = ListGetIdx(&spec->type.vars, i);
+        p->roByArg = TypeIsPermRef(p->type) && !p->type.refMut && p->type.bType != BASETYPE_FUNC;
+        p->roToResult = false;
+    }
 
     struct instantiation inst = (struct instantiation){0};
     inst.generic = generic;
@@ -7467,6 +7474,9 @@ static bool roValueRoot(struct operand* op, struct list* params, int depth);
 static void roMarkParams(struct list* params);
 static bool roStoreCheck(struct operand* v, struct token tok, enum diag d);
 static void roArgRecord(struct var* callee, struct var* param, struct operand* arg);
+static bool roCallResultFollows(struct var* f, int j);
+static void noteRoSource(struct operand* v, int depth);
+static void roDeepNeed(struct operand* v);
 static void noteRoCopy(struct operand* op);
 static const char* roCopyFix(struct type t);
 static void roInheritFrom(struct var* v, struct operand* init);
@@ -8214,6 +8224,9 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
         if (!TypeIsPermRef(op->type) && OperandNamesExistingStorage(op) && OperandIsMutableLvalue(op)) {
             Err(tok, ERR_READ_ONLY_COPY_LENT, roCopyFix(op->type));
             noteRoCopy(op);
+        } else if (!TypeIsPermRef(op->type) && op->opType == OPERATION_FUNCCALL) { //a result copied out of a read-only argument
+            Err(tok, ERR_READ_ONLY_COPY_LENT, roCopyFix(op->type));
+            noteRoSource(op, 0);
         } else if (TypeIsPermRef(op->type) && op->type.refMut && op->opType != OPERATION_COND && op->opType != OPERATION_MATCH) {
             Err(tok, ERR_READ_ONLY_COPY_REF);
             noteRoCopy(op);
@@ -8319,8 +8332,16 @@ bool OperandGivesWritable(struct operand* op) {
             struct list ps = ListInit(sizeof(struct var*));
             if (roValueRoot(op, &ps, 0)) return false;
             roMarkParams(&ps);
+            roDeepNeed(op);
         }
         return true;
+    }
+    //...and so is a value a call gives copied out of what a read-only argument reaches (roToResult)
+    if (TypeHoldsWritableRefs(op->type)) {
+        struct list ps = ListInit(sizeof(struct var*));
+        if (roValueOf(op, &ps, 0)) return false;
+        roMarkParams(&ps);
+        roDeepNeed(op);
     }
     return true;
 }
@@ -14944,7 +14965,16 @@ static bool roValueOf(struct operand* op, struct list* params, int depth) {
             if (b->type.bType == BASETYPE_FUNC) return false;
             return TypeIsPermRef(b->type) ? roRefOf(b, params, depth + 1) : roValueOf(b, params, depth + 1);
         }
-        default: return false; //a value the expression makes - a call's result, a literal, a constructor's instance
+        case OPERATION_FUNCCALL: {
+            //T25c: a result copied out of what an instantiation's read-only reference parameter reaches is as read-only
+            //as that argument (roToResult)
+            struct var* f = op->readVar;
+            if (!f || op->callee) return false;
+            for (int j = 0; j < f->type.vars.len && j < op->args.len; j++)
+                if (roCallResultFollows(f, j) && roRefOf(*(struct operand**)ListGetIdx(&op->args, j), params, depth + 1)) return true;
+            return false;
+        }
+        default: return false; //a value the expression makes - a literal, a constructor's instance, any other call's result
     }
 }
 //T25c: the value whose own storage the reference op names, where op was made from one - a slice or a view of it, or a
@@ -15001,6 +15031,23 @@ static bool roRefOf(struct operand* op, struct list* params, int depth) {
     }
     if (!TypeIsPermRef(op->type)) //a value borrowed: what is lent of it, where it holds what it shares
         return TypeHoldsWritableRefs(op->type) && roValueRoot(op, params, depth + 1);
+    //T25c: an instantiation's read-only reference parameter is as read-only as its argument - judged per call, from the
+    //copies its body makes (roDeepParams); a loop's hidden borrow, as what it borrows
+    if (op->opType == OPERATION_READ_VAR && op->readVar) {
+        struct var* v = op->readVar;
+        if (v->roByArg) return false;
+        if (v->roFrom && v->name.len && v->name.ptr[0] == '$') return roRefOf(v->roFrom, params, depth + 1);
+    }
+    //...and a read-only reference an instantiation hands back borrowed from such a parameter, as its argument
+    if (op->opType == OPERATION_FUNCCALL && !op->type.refMut && op->readVar && !op->callee && op->readVar->type.hasRetType) {
+        struct var* f = op->readVar;
+        struct type* rt = f->type.retType;
+        for (int j = 0; j < f->type.vars.len && j < op->args.len && rt->scopeParam; j++) {
+            struct var* p = ListGetIdx(&f->type.vars, j);
+            if (p->roByArg && p->type.scopeParam && canonicalVar(p->type.scopeParam) == canonicalVar(rt->scopeParam))
+                return roRefOf(*(struct operand**)ListGetIdx(&op->args, j), params, depth + 1);
+        }
+    }
     if (!op->type.refMut) return true;
     if ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_AS) && op->args.len) {
         struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
@@ -15094,9 +15141,98 @@ static void noteRoSource(struct operand* v, int depth) {
         }
         return;
     }
+    //a call's result copied out of what a read-only argument reaches (roToResult): that argument
+    if (v->opType == OPERATION_FUNCCALL && v->readVar && !v->callee) {
+        for (int j = 0; j < v->readVar->type.vars.len && j < v->args.len; j++) {
+            struct operand* a = *(struct operand**)ListGetIdx(&v->args, j);
+            if (roCallResultFollows(v->readVar, j) && roRefOf(a, NULL, 0)) { noteRoSource(a, depth + 1); return; }
+        }
+        return;
+    }
     if (TypeIsPermRef(v->type) && readOnlyLocalOf(v)) noteReadOnlyLocal(v);
     else noteRoCopy(v);
 }
+//T25c: the read-only reference parameters of an instantiation's body (roByArg) a value is copied out of, through any
+//number of references and of locals (by their initializers and every value later assigned to them), and through calls
+//handing back what such a parameter reaches - their result copied out of it (roToResult), or borrowed from it. Judged
+//once the body has checked, when every assignment to a local is known: a copy out of such a parameter is as read-only as
+//the argument a call gives it
+static struct var* roBodyFunc; //the instantiation whose body is being checked, where it has such a parameter
+static struct list roDeepNeeds; //struct operand*: values kept writable - their parameters need writable arguments
+struct roDeepResult { struct var* func; struct operand* op; };
+static struct list roDeepResults; //by-value results: their parameters give the call's result their argument's permission
+static void roDeepParamsIn(struct operand* op, struct list* params, struct list* seen, int depth) {
+    for (int guard = 0; op && depth < 48 && guard < 64; guard++) {
+        if (heldResult(op)) { op = heldResult(op); continue; }
+        switch (op->opType) {
+            case OPERATION_COND:
+                if (op->args.len == 3) {
+                    roDeepParamsIn(*(struct operand**)ListGetIdx(&op->args, 1), params, seen, depth + 1);
+                    op = *(struct operand**)ListGetIdx(&op->args, 2);
+                    continue;
+                }
+                return;
+            case OPERATION_MATCH: {
+                struct list vs = SemanticMatchValues(op);
+                for (int i = 0; i < vs.len; i++) roDeepParamsIn(*(struct operand**)ListGetIdx(&vs, i), params, seen, depth + 1);
+                return;
+            }
+            case OPERATION_SEQ:
+                if (!op->args.len) return;
+                op = *(struct operand**)ListGetIdx(&op->args, op->args.len - 1);
+                continue;
+            case OPERATION_MEMBER: case OPERATION_INDEX: case OPERATION_SLICE: case OPERATION_AS:
+            case OPERATION_BOUNDS: case OPERATION_NOMINAL_CONVERT:
+                if (!op->args.len || op->isAtCall) break;
+                op = *(struct operand**)ListGetIdx(&op->args, 0);
+                if (op->type.bType == BASETYPE_FUNC) return;
+                continue;
+            case OPERATION_READ_VAR: {
+                struct var* v = op->readVar;
+                if (!v) return;
+                if (v->roByArg) { roAddParam(params, v); return; }
+                if (v->isGlobalVar || v->isFuncDecl || v->paramCopy || v->isCapture) return;
+                for (int i = 0; i < seen->len; i++) if (*(struct var**)ListGetIdx(seen, i) == v) return;
+                ListAdd(seen, &v);
+                if (v->roFrom) roDeepParamsIn(v->roFrom, params, seen, depth + 1);
+                if (v->declInit) roDeepParamsIn(v->declInit, params, seen, depth + 1);
+                for (int i = 0; i < v->roAssigns.len; i++)
+                    roDeepParamsIn(*(struct operand**)ListGetIdx(&v->roAssigns, i), params, seen, depth + 1);
+                return;
+            }
+            default: break;
+        }
+        if (op->opType != OPERATION_FUNCCALL || !op->readVar || op->callee) return;
+        //a call: what it hands back of an argument - a by-value result copied out of a parameter (roToResult), or a
+        //reference borrowed from one (its scope variable the result's)
+        struct var* f = op->readVar;
+        struct type* rt = f->type.hasRetType ? f->type.retType : NULL;
+        for (int j = 0; j < f->type.vars.len && j < op->args.len; j++) {
+            struct var* p = ListGetIdx(&f->type.vars, j);
+            bool hands = !rt ? false
+                       : TypeIsPermRef(*rt) ? (TypeIsPermRef(p->type) && p->type.scopeParam && rt->scopeParam
+                                               && canonicalVar(p->type.scopeParam) == canonicalVar(rt->scopeParam))
+                                            : (p->roToResult || (p->roByArg && f->bodyState != 2));
+            if (hands) roDeepParamsIn(*(struct operand**)ListGetIdx(&op->args, j), params, seen, depth + 1);
+        }
+        return;
+    }
+}
+static void roDeepParams(struct operand* op, struct list* params) {
+    struct list seen = ListInit(sizeof(struct var*));
+    roDeepParamsIn(op, params, &seen, 0);
+}
+static void roDeepNeed(struct operand* v) {
+    if (!roBodyFunc || ErrMsgMuted() || !v) return;
+    ListAdd(&roDeepNeeds, &v);
+}
+//...a call of f gives a by-value result as read-only as one of these arguments: a parameter its result is copied out of,
+//or, while f's body is still being checked (a cycle), any read-only reference parameter of an instantiation
+static bool roCallResultFollows(struct var* f, int j) {
+    struct var* p = ListGetIdx(&f->type.vars, j);
+    return p->roToResult || (p->roByArg && f->bodyState != 2);
+}
+
 //the parameters a by-value read-only-ness is conditional on need writable arguments - their copies are written through,
 //lent writably or stored where they can be written (T25c). A probe's checks are never run, so they mark nothing
 static void roMarkParams(struct list* params) {
@@ -15118,12 +15254,34 @@ static bool roStoreCheck(struct operand* v, struct token tok, enum diag d) {
         return true;
     }
     roMarkParams(&ps);
+    if (d != ERR_READ_ONLY_COPY_RETURNED) roDeepNeed(v);
     return false;
+}
+//...v returned as a by-value result: copied out of an instantiation's read-only reference parameter, the result is as
+//read-only as that parameter's argument at each call (roToResult) - judged once the body has checked
+static void roResultCheck(struct checkCtx* ctx, struct operand* v) {
+    if (roStoreCheck(v, v->tok, ERR_READ_ONLY_COPY_RETURNED) || !roBodyFunc || ctx->func != roBodyFunc || ErrMsgMuted()) return;
+    struct type vt = v->type;
+    vt.structMAlloc = false;
+    if (!TypeHoldsWritableRefs(vt)) return;
+    struct roDeepResult r = { ctx->func, v };
+    ListAdd(&roDeepResults, &r);
+}
+static void roSettleResults(struct var* func) {
+    for (int i = 0; i < roDeepResults.len; i++) {
+        struct roDeepResult* r = ListGetIdx(&roDeepResults, i);
+        if (func && r->func != func) continue;
+        struct list ps = ListInit(sizeof(struct var*));
+        roDeepParams(r->op, &ps);
+        for (int k = 0; k < ps.len; k++) (*(struct var**)ListGetIdx(&ps, k))->roToResult = true;
+        ListRemoveIdx(&roDeepResults, i);
+        i--;
+    }
 }
 //T25c: a by-value argument for a parameter whose body may need it writable - decided once every body is checked, since a
 //call may be checked before its callee (a cycle) and a callee's need may come from a callee of its own
-struct roArgCheck { struct var* param; struct var* callee; struct token tok; bool definite; struct list params;
-                    struct type type; const char* fix; };
+struct roArgCheck { struct var* param; struct var* callee; struct operand* arg; struct token tok; bool isRef;
+                    struct errContextSaved* where; bool definite; struct list params; struct type type; const char* fix; };
 static struct list roArgChecks;
 //...a call of a function its body is known for: a function value's is not, and is held to needing no writable by-value
 //argument where it is made a value (roFuncValues), so a call through one passes anything
@@ -15132,16 +15290,27 @@ static bool roCalleeKnown(struct var* f) {
     struct type* ct = f->type.hasRetType ? f->type.retType : NULL;
     return ct && ct->bType == BASETYPE_STRUCT && ct->ctorFunc && canonicalVar(ct->ctorFunc) == canonicalVar(f);
 }
+//...judged once every body is checked (settleReadOnlyArgs): what the argument is a copy of, and of whose argument
 static void roArgRecord(struct var* callee, struct var* param, struct operand* arg) {
     if (ErrMsgMuted() || !arg || !callee || !param || !roCalleeKnown(callee) || arg->type.bType == BASETYPE_FUNC) return;
-    if (TypeIsPermRef(param->type) || param->type.bType == BASETYPE_FUNC || !TypeHoldsWritableRefs(param->type)) return;
-    struct type vt = arg->type; //a reference copied out passes the value it names (E12)
-    vt.structMAlloc = false;
-    struct list ps = ListInit(sizeof(struct var*));
-    bool definite = roValueOf(arg, &ps, 0);
-    if (!definite && !ps.len) return;
-    struct roArgCheck c = { param, callee, arg->tok, definite, ps, vt, definite ? roCopyFixOf(arg, vt) : NULL };
+    if (param->type.bType == BASETYPE_FUNC) return;
+    //an instantiation's read-only reference parameter needs a writable argument where its body keeps what it reaches
+    //writable (roByArg)
+    bool isRef = TypeIsPermRef(param->type);
+    if (isRef && !param->roByArg) return;
+    struct type pt = param->type;
+    pt.structMAlloc = false;
+    if (!TypeHoldsWritableRefs(pt)) return;
+    struct roArgCheck c = { param, callee, arg, arg->tok, isRef, ErrMsgSaveContext(), false, {0}, {0}, NULL };
     ListAdd(&roArgChecks, &c);
+}
+static void roArgEval(struct roArgCheck* c) {
+    c->type = c->isRef ? c->param->type : c->arg->type; //a reference copied out passes the value it names (E12)
+    c->type.structMAlloc = false;
+    c->params = ListInit(sizeof(struct var*));
+    c->definite = c->isRef ? roRefOf(c->arg, &c->params, 0) : roValueOf(c->arg, &c->params, 0);
+    if (!c->definite) roDeepParams(c->arg, &c->params);
+    c->fix = c->definite && !c->isRef ? roCopyFixOf(c->arg, c->type) : NULL;
 }
 static bool calleeBodyKnown(struct var* func);
 static bool roParamNeeds(struct roArgCheck* c) {
@@ -16665,6 +16834,10 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         if (root && !root->owner && !root->type.structMAlloc) root->lentForStores = true;
     }
     noteRegionStore(ctx, target, rhs);
+    if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar && roBodyFunc) { //T25c
+        if (!target->readVar->roAssigns.elemSize) target->readVar->roAssigns = ListInit(sizeof(struct operand*));
+        ListAdd(&target->readVar->roAssigns, &rhs);
+    }
     if (ctx->hasOwnScope && !ErrMsgMuted() && !target->type.unknown && effPlaceOutside(ctx, target)) effMark(ctx->func, opTok); //E11c
 
     bool isCompound;
@@ -19578,7 +19751,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
                 if (home) landCall(v, home, 0);
                 landReturnedLambda(ctx, v, home, et); //D16d
                 if (checkBuiltResult(ctx, v, et)) continue;
-                if (!TypeIsPermRef(et)) roStoreCheck(v, v->tok, ERR_READ_ONLY_COPY_RETURNED); //T25c, per result
+                if (!TypeIsPermRef(et)) roResultCheck(ctx, v); //T25c, per result
                 struct var* rv;
                 int rd;
                 bool ru;
@@ -19648,8 +19821,7 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
             reportReadOnlyAsBuilt(ctx, val, *ctx->func->type.retType);
         else reportTypeFit(fit, val->tok, val, *ctx->func->type.retType);
         //T25c: a by-value result is new storage the caller may write - a read-only copy is not one
-        if (fit == TYPE_FIT_OK && !TypeIsPermRef(*ctx->func->type.retType))
-            roStoreCheck(val, val->tok, ERR_READ_ONLY_COPY_RETURNED);
+        if (fit == TYPE_FIT_OK && !TypeIsPermRef(*ctx->func->type.retType)) roResultCheck(ctx, val);
         int errsBound = ErrMsgGetNErrors();
         checkReturnedScopeBindings(val, *ctx->func->type.retType, val->tok);
         checkValueResult(ctx, val, *ctx->func->type.retType, ErrMsgGetNErrors() != errsBound); //O14c
@@ -20199,6 +20371,14 @@ static void checkFuncValueUses(void) {
 
 //T25c: the arguments recorded at calls, once every body is checked - what each parameter needs is known only then
 static void settleReadOnlyArgs(void) {
+    //what an instantiation keeps writable of a read-only reference parameter (roByArg), now every assignment is known
+    roSettleResults(NULL);
+    for (int i = 0; i < roDeepNeeds.len; i++) {
+        struct list ps = ListInit(sizeof(struct var*));
+        roDeepParams(*(struct operand**)ListGetIdx(&roDeepNeeds, i), &ps);
+        roMarkParams(&ps);
+    }
+    for (int i = 0; i < roArgChecks.len; i++) roArgEval(ListGetIdx(&roArgChecks, i));
     for (bool changed = true; changed; ) {
         changed = false;
         for (int i = 0; i < roArgChecks.len; i++) {
@@ -20215,8 +20395,11 @@ static void settleReadOnlyArgs(void) {
         if (!c->definite || !roParamNeeds(c)) continue;
         struct str nm = c->callee->name;
         for (int k = 0; k < nm.len; k++) if (nm.ptr[k] == '$') { nm.len = k; break; } //G16: as written
-        Err(c->tok, ERR_READ_ONLY_COPY_ARG, nm, c->param->name, &c->type, c->fix);
+        ErrMsgPushSaved(c->where); //B11: an instantiation's call, reported where the program asked for it
+        if (c->isRef) Err(c->tok, ERR_READ_ONLY_REF_KEPT, nm, c->param->name, &c->type);
+        else Err(c->tok, ERR_READ_ONLY_COPY_ARG, nm, c->param->name, &c->type, c->fix);
         if (c->param->tok.owner) Note(c->param->tok, NOTE_DECLARED_HERE, c->param->tok);
+        ErrMsgPopSaved(c->where);
     }
     for (int i = 0; i < funcValueUses.len; i++) {
         struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
@@ -20943,6 +21126,9 @@ void checkInstantiationBody(struct instantiation* inst) {
 
 static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spec) {
     if (spec->bodyUnparsed) { spec->bodyHadErrors = true; return; } //as checkFuncBody
+    struct var* savedRoBody = roBodyFunc; //T25c: copies out of its read-only reference parameters, judged at its end
+    roBodyFunc = NULL;
+    for (int p = 0; p < spec->type.vars.len; p++) if (((struct var*)ListGetIdx(&spec->type.vars, p))->roByArg) roBodyFunc = spec;
     struct scope fnScope = scopePush(NULL);
     for (int p = 0; p < spec->type.vars.len; p++) {
         struct var* param = ListGetIdx(&spec->type.vars, p);
@@ -20972,6 +21158,8 @@ static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spe
     if (spec->type.hasRetType && !blockAlwaysExits(&spec->codeBlock)) { //D10a, per instantiation (G18)
         Err(spec->tok, ERR_MISSING_RETURN, spec->type.retType);
     }
+    roSettleResults(spec); //T25c: what its calls' results copy out of their arguments, known before any caller asks
+    roBodyFunc = savedRoBody;
     currentBindings = savedBindings; //restored, not nulled: instantiations can nest
 }
 
@@ -21623,6 +21811,8 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
     //a body that did not parse was reported as it was read; its function is declared, and nothing more is said
     if (func->bodyUnparsed || func->type.sigUninferable) { func->bodyHadErrors = true; func->bodyState = 2; return; }
     func->bodyState = 1;
+    struct var* savedRoBody = roBodyFunc; //T25c: a function that is no instantiation has no such parameter
+    roBodyFunc = NULL;
     {
         struct scope fnScope = scopePush(NULL);
         for (int p = 0; p < func->type.vars.len; p++) {
@@ -21656,6 +21846,7 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
             Err(func->tok, ERR_MISSING_RETURN, func->type.retType);
         }
     }
+    roBodyFunc = savedRoBody;
     func->bodyState = 2;
 }
 
@@ -21926,6 +22117,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     regionEdges = ListInit(sizeof(struct regionEdge)); //O17
     lendChecks = ListInit(sizeof(struct lendCheck));
     roArgChecks = ListInit(sizeof(struct roArgCheck)); //T25c
+    roDeepNeeds = ListInit(sizeof(struct operand*));
+    roDeepResults = ListInit(sizeof(struct roDeepResult));
     roCallAdapters = ListInit(sizeof(struct roFuncValue));
     bareErrorType = (struct type){0};
     bareErrorType.bType = BASETYPE_ERROR;
