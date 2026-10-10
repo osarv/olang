@@ -2964,6 +2964,13 @@ char* cgDeepEq(struct cgCtx* ctx, struct type t, char* aVal, char* bVal) {
         char* ca = cgFnCode(ctx, aVal, &ea);
         char* eb;
         char* cb = cgFnCode(ctx, bVal, &eb);
+        //P2: a task's copy of an environment is the same closure as the one it copies (__olang_env_standin)
+        char* ka = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_env_canon(ptr %s)\n", ka, ea);
+        char* kb = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_env_canon(ptr %s)\n", kb, eb);
+        ea = ka;
+        eb = kb;
         char* eqC = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, %s\n", eqC, ca, cb);
         char* eqE = cgNewTmp(ctx);
@@ -3228,7 +3235,9 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
         }
         if (!in->type.scopeParam) continue;
         struct var* sv = in->type.scopeParam;
-        char* sval = cgBoundScopeArg(ctx, op, sv);
+        //O1b/P2: a capture living in the program's scope is held as null - the program's scope as the thread calling the
+        //closure reaches it: a task's own stand-in for it is never kept past the task by a closure it made
+        char* sval = SemanticBindingIsUnnamed(op, sv) ? "null" : cgBoundScopeArg(ctx, op, sv);
         char* sp = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", sp, envTy, obj, cgEnvScopeField(L, i));
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", sval, sp, cgCaptureTbaa);
@@ -3277,28 +3286,32 @@ void cgEmitFuncValues(struct cgCtx* ctx) {
     }
 }
 
-//P2: a task's private arena standing in for `parent` - allocated from the join block's own arena, since a join in a
-//loop starts any number of tasks and the header has to outlive the task rather than the iteration - and recorded
-//to be spliced back into `parent` at the join, the one point at which the task is provably done with it
+//P2: a task's private arena standing in for `parent`, recorded to be spliced back into `parent` at the join, the one point
+//at which the task is provably done with it. Its header is made in `parent` itself, from the spawner's thread: what the
+//task makes may hold it - a closure capturing a reference it was handed - and keep it past the join, where it forwards
+//to `parent` (__olang_scope_merge), so it lives as long as `parent` does. The program's scope is the exception (!persist):
+//a closure never holds the task's stand-in for it (cgClosure keeps null, read as the program's scope wherever the closure
+//runs), so that header is made in the join block's arena and nothing accumulates in the program's scope per task
 struct cgScopeMerge {
     char* sub;
     char* parent;
 };
 
-static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* parent) {
+static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* parent, bool persist) {
     struct cgScopeMerge m;
     m.parent = parent;
     m.sub = cgNewTmp(ctx);
-    cgArenaAlloc(ctx, m.sub, cgScopeSlotAt(ctx, ctx->joinDepth), "24", 8);
+    cgArenaAlloc(ctx, m.sub, persist ? parent : cgScopeSlotAt(ctx, ctx->joinDepth), "24", 8);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", m.sub);
     ListAdd(merges, &m);
     return m.sub;
 }
 
 //P2: a function value's environment as a task holds it - the closure it calls through, or one it is handed: a copy,
-//made at the spawn in the join block's arena, whose every captured scope is a stand-in of the task's own, folded back at
-//the join like the stand-ins above (__olang_env_standin; its merges go on a chain kept in one slot per task, recorded
-//in `merges` as an entry with no sub-scope). A closure made by the spawner holds the spawner's block's scope, which the
+//made at the spawn where the closure lives (the first scope it captured), whose every captured scope is a stand-in of
+//the task's own, folded back at the join like the stand-ins above and forwarding after (__olang_env_standin; its merges
+//go on a chain kept in one slot per task, recorded in `merges` as an entry with no sub-scope). The copy keeps the
+//original's identity (__olang_env_canon), and one spawn copies one environment once. A closure made by the spawner holds the spawner's block's scope, which the
 //task would otherwise bump from its own thread, beside the spawner and every other task
 static char* cgSpawnEnv(struct cgCtx* ctx, struct list* merges, char* env) {
     char* slot = NULL;
@@ -3340,7 +3353,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
 
     bool ctor = cgIsCtor(func);
     char* here = ctor ? cgCtorHereArg(ctx, op) : NULL;
-    char* hereArg = ctor && spawnMerges ? cgSpawnSubScope(ctx, spawnMerges, here) : here;
+    char* hereArg = ctor && spawnMerges ? cgSpawnSubScope(ctx, spawnMerges, here, true) : here;
     if (ctor) cgArgAdd(args, "ptr", hereArg);
     //O17/O18: semantic analysis already bound every one of the callee's scope variables to a scope of
     //ours, recorded on this very call operand - codegen reads it back and resolves it in our own frame
@@ -3359,7 +3372,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         char* sval = atHere ? hereArg
                      : SemanticBindingIsLanding(op, sv) && ctx->targetScopeOverride ? ctx->targetScopeOverride
                      : cgBoundScopeArg(ctx, op, sv);
-        if (spawnMerges && !atHere) sval = cgSpawnSubScope(ctx, spawnMerges, sval);
+        if (spawnMerges && !atHere) sval = cgSpawnSubScope(ctx, spawnMerges, sval, true);
         //R9a: where the result lives - a "catch default" standing for it is built there too
         struct var* rsv = func->type.resultScope ? func->type.resultScope
                           : func->type.hasRetType ? func->type.retType->scopeParam : NULL;
@@ -5462,7 +5475,7 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     //O1b/P2: the task's own stand-in for the program's scope, which code it runs may build into (a global assigned, a
     //result borrowed from a global) - folded into the spawner's at the join, as every other scope it was handed is
     int progIdx = args.len;
-    cgArgAdd(&args, "ptr", cgSpawnSubScope(ctx, merges, cgProgramScope(ctx)));
+    cgArgAdd(&args, "ptr", cgSpawnSubScope(ctx, merges, cgProgramScope(ctx), false));
     struct cgBuf envB = {0};
     cgBufAdd(&envB, "{ ptr");
     for (int i = 0; i < args.len; i++) cgBufAdd(&envB, ", %s", ((struct cgArg*)ListGetIdx(&args, i))->ty);
@@ -7161,9 +7174,15 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", sp, envTy, cgEnvScopeField(func, i));
             char* sval = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = load ptr, ptr %s%s\n", sval, sp, cgCaptureTbaa);
+            //(null: the program's scope, as this thread reaches it - cgClosure)
+            char* isProg = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", isProg, sval);
+            char* prog = cgProgramScope(ctx);
+            char* sres = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = select i1 %s, ptr %s, ptr %s\n", sres, isProg, prog, sval);
             char* sslot = cgDeclareLocal(ctx, in->type.scopeParam->name, in->type.scopeParam->type);
             fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", sslot);
-            fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sval, sslot);
+            fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", sres, sslot);
         }
     }
     //D9b: a parameter holding a run-time-length array by value - a generic's, instantiated with one (D9a) - is the

@@ -277,7 +277,8 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //free-list lock below be a plain zeroinitializer; a worker's own pair is explicitly init'd.
         //state: 0 fresh, 1 has work, 2 finished and waiting to be handed more.
         "%olang.worker = type { ptr, ptr, ptr, i64, ptr, [40 x i8], [48 x i8] }\n"
-        "%olang.merge = type { ptr, ptr, ptr }\n"  //next, dst scope, src sub-scope //next, instance, dtorFn - see __olang_scope_register_dtor
+        "%olang.merge = type { ptr, ptr, ptr }\n"        "%olang.envmap = type { ptr, ptr, ptr, ptr }\n" //P2: next, null (no scope to fold), original env, its copy
+  //next, dst scope, src sub-scope //next, instance, dtorFn - see __olang_scope_register_dtor
         "%olang.scope = type { ptr, ptr, ptr }\n"  //head chunk, head dtor-list node, TAIL chunk (all null
                                                     //if unused). The tail is tracked so a task's sub-scope
                                                     //can be spliced into its parent in O(1) (P2) - chunks are
@@ -298,6 +299,10 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "@__olang_shared_pool = linkonce_odr global %olang.pool zeroinitializer\n"
         "@__olang_shared_lock = linkonce_odr global [40 x i8] zeroinitializer\n"
         "@__olang_shared_holds = linkonce_odr global i64 0\n"
+        //P2: a task's stand-in for a scope, once folded back at the join, FORWARDS to the scope it stood in for - a
+        //closure the task made, or was handed, may still hold it. Its head is this chunk, which has no room, so the
+        //allocation's fast path is the same as ever and fails on it, and the slow path finds the scope in its tail slot
+        "@__olang_fwd_chunk = linkonce_odr global %olang.chunk zeroinitializer\n"
         //O1b: the program's own scope - what a global's initializer allocates into. Never closed, so what
         //it holds lives as long as the program
         "@__olang_global_scope = linkonce_odr global %olang.scope zeroinitializer\n"
@@ -850,6 +855,14 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //the pool's spare 4KB chunk when it is there and holds this (O8b) - what a block allocating a little on each pass
         //of a loop takes every time, taken here; anything else is __olang_new_chunk's
         "needchunk:\n"
+        "  %isfwd = icmp eq ptr %head, @__olang_fwd_chunk\n"
+        "  br i1 %isfwd, label %forward, label %fresh\n"
+        "forward:\n"
+        "  %fwdptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
+        "  %fwd = load ptr, ptr %fwdptr\n"
+        "  %viafwd = tail call ptr @__olang_scope_alloc_a(ptr %fwd, i64 %rawsize, i64 %aln)\n"
+        "  ret ptr %viafwd\n"
+        "fresh:\n"
         "  %small = icmp ule i64 %size, 4096\n"
         "  %spare = load ptr, ptr @__olang_pool_spare\n"
         "  %hasspare = icmp ne ptr %spare, null\n"
@@ -1360,12 +1373,17 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %nomerge = icmp eq ptr %mhead, null\n"
         "  br i1 %nomerge, label %aftermerge, label %merge\n"
         "merge:\n"
-        "  %m = phi ptr [ %mhead, %task ], [ %mnext, %merge ]\n"
+        "  %m = phi ptr [ %mhead, %task ], [ %mnext, %mstep ]\n"
         "  %dstptr = getelementptr %olang.merge, ptr %m, i32 0, i32 1\n"
         "  %dst = load ptr, ptr %dstptr\n"
         "  %srcptr = getelementptr %olang.merge, ptr %m, i32 0, i32 2\n"
         "  %src = load ptr, ptr %srcptr\n"
+        "  %isfold = icmp ne ptr %dst, null\n" //(a node recording an environment's copy folds nothing, __olang_env_standin)
+        "  br i1 %isfold, label %fold, label %mstep\n"
+        "fold:\n"
         "  call void @__olang_scope_merge(ptr %dst, ptr %src)\n"
+        "  br label %mstep\n"
+        "mstep:\n"
         "  %mnextptr = getelementptr %olang.merge, ptr %m, i32 0, i32 0\n"
         "  %mnext = load ptr, ptr %mnextptr\n"
         "  %matend = icmp eq ptr %mnext, null\n"
@@ -1379,35 +1397,148 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  ret void\n"
         "}\n\n", out);
     fputs(
-        //P2: a function value's environment as a task - or the thread RunOnStack makes - reaches it: a copy, from %arena,
-        //whose every scope is a stand-in of its own, each recorded on the merge chain at %chain to be folded back into
-        //the scope it stands in for, and whose every function value is given the same, recursively. An environment
-        //opens with how many scopes it holds, how many function values, and its size (cgClosureType); none, or one
-        //holding no scope and no function value, is used as it is
-        "define linkonce_odr ptr @__olang_env_standin(ptr %env, ptr %arena, ptr %chain) {\n"
+        //P2: a function value's environment as a task - or the thread RunOnStack makes - reaches it: a copy whose every
+        //scope is a stand-in of its own, each recorded on the merge chain at %chain to be folded back into the scope it
+        //stands in for, and whose every function value is given the same, recursively. An environment opens with how
+        //many scopes it holds, how many function values, and its size (cgClosureType); one reaching no scope is used as
+        //it is. The task may keep what it is handed - return it, store it - so the copy is made where the closure lives
+        //no longer than: the first scope it captured (__olang_env_home, D16d), and each stand-in where the scope it
+        //stands in for is, which it forwards to once folded (__olang_scope_merge). A copy keeps the original's identity -
+        //word 0 is marked, and the original is kept after its bytes (__olang_env_canon) - and one spawn copies an
+        //environment once, however many of its arguments reach it (a node on the chain with no destination records it)
+        "define linkonce_odr ptr @__olang_env_home(ptr %env) {\n"
+        "entry:\n"
+        "  %none = icmp eq ptr %env, null\n"
+        "  br i1 %none, label %null, label %hdr\n"
+        "hdr:\n"
+        "  %n0 = load i64, ptr %env\n"
+        "  %n = and i64 %n0, 4611686018427387903\n"
+        "  %fp = getelementptr i64, ptr %env, i64 1\n"
+        "  %nf = load i64, ptr %fp\n"
+        "  %anys = icmp ne i64 %n, 0\n"
+        "  br i1 %anys, label %first, label %fns\n"
+        "first:\n" //(a null scope is the program's, which the calling thread reaches as its own - cgClosure)
+        "  %si = phi i64 [ 0, %hdr ], [ %si1, %snext ]\n"
+        "  %sk = add i64 %si, 3\n"
+        "  %sp = getelementptr ptr, ptr %env, i64 %sk\n"
+        "  %s = load ptr, ptr %sp\n"
+        "  %snull = icmp eq ptr %s, null\n"
+        "  br i1 %snull, label %snext, label %sgot\n"
+        "sgot:\n"
+        "  ret ptr %s\n"
+        "snext:\n"
+        "  %si1 = add i64 %si, 1\n"
+        "  %smore = icmp ult i64 %si1, %n\n"
+        "  br i1 %smore, label %first, label %fns\n"
+        "fns:\n"
+        "  %anyf = icmp eq i64 %nf, 0\n"
+        "  br i1 %anyf, label %null, label %fn\n"
+        "fn:\n"
+        "  %j = phi i64 [ 0, %fns ], [ %j1, %next ]\n"
+        "  %w = mul i64 %j, 2\n"
+        "  %w2 = add i64 %w, 4\n"
+        "  %ep = getelementptr ptr, ptr %env, i64 %w2\n"
+        "  %inner = load ptr, ptr %ep\n"
+        "  %h = call ptr @__olang_env_home(ptr %inner)\n"
+        "  %found = icmp ne ptr %h, null\n"
+        "  br i1 %found, label %got, label %next\n"
+        "got:\n"
+        "  ret ptr %h\n"
+        "next:\n"
+        "  %j1 = add i64 %j, 1\n"
+        "  %fmore = icmp ult i64 %j1, %nf\n"
+        "  br i1 %fmore, label %fn, label %null\n"
+        "null:\n"
+        "  ret ptr null\n"
+        "}\n\n", out);
+    fputs(
+        "define linkonce_odr ptr @__olang_env_canon(ptr %env) {\n"
         "entry:\n"
         "  %none = icmp eq ptr %env, null\n"
         "  br i1 %none, label %same, label %hdr\n"
         "hdr:\n"
-        "  %n = load i64, ptr %env\n"
-        "  %fp = getelementptr i64, ptr %env, i64 1\n"
-        "  %nf = load i64, ptr %fp\n"
-        "  %both = or i64 %n, %nf\n"
-        "  %nothing = icmp eq i64 %both, 0\n"
-        "  br i1 %nothing, label %same, label %copy\n"
-        "copy:\n"
+        "  %n0 = load i64, ptr %env\n"
+        "  %mark = and i64 %n0, 4611686018427387904\n"
+        "  %iscopy = icmp ne i64 %mark, 0\n"
+        "  br i1 %iscopy, label %orig, label %same\n"
+        "orig:\n"
         "  %bp = getelementptr i64, ptr %env, i64 2\n"
         "  %bytes = load i64, ptr %bp\n"
-        "  %c = call ptr @__olang_scope_alloc_a(ptr %arena, i64 %bytes, i64 8)\n"
+        "  %op = getelementptr i8, ptr %env, i64 %bytes\n"
+        "  %o = load ptr, ptr %op\n"
+        "  ret ptr %o\n"
+        "same:\n"
+        "  ret ptr %env\n"
+        "}\n\n", out);
+    fputs(
+        "define linkonce_odr ptr @__olang_env_standin(ptr %env, ptr %arena, ptr %chain) {\n"
+        "entry:\n"
+        "  %home = call ptr @__olang_env_home(ptr %env)\n"
+        "  %nohome = icmp eq ptr %home, null\n"
+        "  br i1 %nohome, label %same, label %memo\n"
+        //copied already by this spawn: the same copy, so two arguments naming one closure name one copy
+        "memo:\n"
+        "  %first = load ptr, ptr %chain\n"
+        "  br label %look\n"
+        "look:\n"
+        "  %node = phi ptr [ %first, %memo ], [ %nnext, %lnext ]\n"
+        "  %atend = icmp eq ptr %node, null\n"
+        "  br i1 %atend, label %copy, label %lcheck\n"
+        "lcheck:\n"
+        "  %ndstp = getelementptr %olang.envmap, ptr %node, i32 0, i32 1\n"
+        "  %ndst = load ptr, ptr %ndstp\n"
+        "  %ismap = icmp eq ptr %ndst, null\n"
+        "  br i1 %ismap, label %lorig, label %lnext\n"
+        "lorig:\n"
+        "  %norigp = getelementptr %olang.envmap, ptr %node, i32 0, i32 2\n"
+        "  %norig = load ptr, ptr %norigp\n"
+        "  %hit = icmp eq ptr %norig, %env\n"
+        "  br i1 %hit, label %reuse, label %lnext\n"
+        "reuse:\n"
+        "  %ncopyp = getelementptr %olang.envmap, ptr %node, i32 0, i32 3\n"
+        "  %ncopy = load ptr, ptr %ncopyp\n"
+        "  ret ptr %ncopy\n"
+        "lnext:\n"
+        "  %nnextp = getelementptr %olang.envmap, ptr %node, i32 0, i32 0\n"
+        "  %nnext = load ptr, ptr %nnextp\n"
+        "  br label %look\n"
+        "copy:\n"
+        "  %n0 = load i64, ptr %env\n"
+        "  %n = and i64 %n0, 4611686018427387903\n"
+        "  %fp = getelementptr i64, ptr %env, i64 1\n"
+        "  %nf = load i64, ptr %fp\n"
+        "  %bp = getelementptr i64, ptr %env, i64 2\n"
+        "  %bytes = load i64, ptr %bp\n"
+        "  %room = add i64 %bytes, 8\n"
+        "  %c = call ptr @__olang_scope_alloc_a(ptr %home, i64 %room, i64 8)\n"
         "  call void @llvm.memcpy.p0.p0.i64(ptr %c, ptr %env, i64 %bytes, i1 false)\n"
+        "  %marked = or i64 %n0, 4611686018427387904\n"
+        "  store i64 %marked, ptr %c\n"
+        "  %orig = call ptr @__olang_env_canon(ptr %env)\n"
+        "  %origp = getelementptr i8, ptr %c, i64 %bytes\n"
+        "  store ptr %orig, ptr %origp\n"
+        "  %map = call ptr @__olang_scope_alloc_a(ptr %arena, i64 32, i64 8)\n"
+        "  %mapold = load ptr, ptr %chain\n"
+        "  %map0 = getelementptr %olang.envmap, ptr %map, i32 0, i32 0\n"
+        "  store ptr %mapold, ptr %map0\n"
+        "  %map1 = getelementptr %olang.envmap, ptr %map, i32 0, i32 1\n"
+        "  store ptr null, ptr %map1\n"
+        "  %map2 = getelementptr %olang.envmap, ptr %map, i32 0, i32 2\n"
+        "  store ptr %env, ptr %map2\n"
+        "  %map3 = getelementptr %olang.envmap, ptr %map, i32 0, i32 3\n"
+        "  store ptr %c, ptr %map3\n"
+        "  store ptr %map, ptr %chain\n"
         "  %anys = icmp eq i64 %n, 0\n"
         "  br i1 %anys, label %fns, label %scope\n"
         "scope:\n"
-        "  %i = phi i64 [ 0, %copy ], [ %i1, %scope ]\n"
+        "  %i = phi i64 [ 0, %copy ], [ %i1, %snext ]\n"
         "  %k = add i64 %i, 3\n"
         "  %sp = getelementptr ptr, ptr %c, i64 %k\n"
         "  %parent = load ptr, ptr %sp\n"
-        "  %sub = call ptr @__olang_scope_alloc_a(ptr %arena, i64 24, i64 8)\n"
+        "  %isprog = icmp eq ptr %parent, null\n" //(the program's: the task's own reaches it - cgClosure)
+        "  br i1 %isprog, label %snext, label %stand\n"
+        "stand:\n"
+        "  %sub = call ptr @__olang_scope_alloc_a(ptr %parent, i64 24, i64 8)\n"
         "  store %olang.scope zeroinitializer, ptr %sub\n"
         "  store ptr %sub, ptr %sp\n"
         "  %m = call ptr @__olang_scope_alloc_a(ptr %arena, i64 24, i64 8)\n"
@@ -1419,6 +1550,8 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %m2 = getelementptr %olang.merge, ptr %m, i32 0, i32 2\n"
         "  store ptr %sub, ptr %m2\n"
         "  store ptr %m, ptr %chain\n"
+        "  br label %snext\n"
+        "snext:\n"
         "  %i1 = add i64 %i, 1\n"
         "  %smore = icmp ult i64 %i1, %n\n"
         "  br i1 %smore, label %scope, label %fns\n"
@@ -1483,8 +1616,9 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //any chunk is reclaimed) and is returned to the pool wholesale, so this turns a malloc/free pair
         //per registered instance into a pointer bump and nothing at all. LLVM cannot make this change
         //itself - the node escapes into a list reachable from the scope, so it can prove nothing about it.
-        "define linkonce_odr void @__olang_scope_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) {\n"
+        "define linkonce_odr void @__olang_scope_register_dtor(ptr %scope0, ptr %instance, ptr %dtorFn) {\n"
         "entry:\n"
+        "  %scope = call ptr @__olang_scope_resolve(ptr %scope0)\n"
         "  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 24, i64 8)\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %oldhead = load ptr, ptr %dheadptr\n"
@@ -1496,6 +1630,23 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  store ptr %dtorFn, ptr %fnptr\n"
         "  store ptr %node, ptr %dheadptr\n"
         "  ret void\n"
+        "}\n\n"
+        //P2: the scope a folded stand-in forwards to, followed as far as it goes (__olang_fwd_chunk)
+        "define linkonce_odr ptr @__olang_scope_resolve(ptr %scope) {\n"
+        "entry:\n"
+        "  br label %loop\n"
+        "loop:\n"
+        "  %s = phi ptr [ %scope, %entry ], [ %next, %step ]\n"
+        "  %headptr = getelementptr %olang.scope, ptr %s, i32 0, i32 0\n"
+        "  %head = load ptr, ptr %headptr\n"
+        "  %isfwd = icmp eq ptr %head, @__olang_fwd_chunk\n"
+        "  br i1 %isfwd, label %step, label %done\n"
+        "step:\n"
+        "  %nextptr = getelementptr %olang.scope, ptr %s, i32 0, i32 2\n"
+        "  %next = load ptr, ptr %nextptr\n"
+        "  br label %loop\n"
+        "done:\n"
+        "  ret ptr %s\n"
         "}\n\n"
         //P2: folds a task's sub-scope back into the scope it stands for, on the spawner's thread, after
         //the join - so the only thread that ever bumps a given arena is the one that owns it. Nothing is
@@ -1546,7 +1697,13 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %dtailptr = getelementptr %olang.scope, ptr %dst, i32 0, i32 2\n"
         "  store ptr %stail, ptr %dtailptr\n"
         "  br label %done\n"
+        //...and from now on forwards to it: a closure made on the task, or the environment copy it was handed, may hold it
+        //past the join (its header lives as long as dst does - it was made there)
         "done:\n"
+        "  %fheadptr = getelementptr %olang.scope, ptr %src, i32 0, i32 0\n"
+        "  store ptr @__olang_fwd_chunk, ptr %fheadptr\n"
+        "  %ftailptr = getelementptr %olang.scope, ptr %src, i32 0, i32 2\n"
+        "  store ptr %dst, ptr %ftailptr\n"
         "  ret void\n"
         "}\n\n"
         //walks and calls this scope's own dtor-node list first, LIFO - most-recently-registered first, the order a stack
@@ -2549,12 +2706,17 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san) {
         "  %%nom = icmp eq ptr %%mh, null\n"
         "  br i1 %%nom, label %%folded, label %%fold\n"
         "fold:\n"
-        "  %%m = phi ptr [ %%mh, %%started ], [ %%mn, %%fold ]\n"
+        "  %%m = phi ptr [ %%mh, %%started ], [ %%mn, %%mstep ]\n"
         "  %%mdp = getelementptr %%olang.merge, ptr %%m, i32 0, i32 1\n"
         "  %%md = load ptr, ptr %%mdp\n"
         "  %%msp = getelementptr %%olang.merge, ptr %%m, i32 0, i32 2\n"
         "  %%ms = load ptr, ptr %%msp\n"
+        "  %%isfold = icmp ne ptr %%md, null\n" //(a node recording an environment's copy folds nothing)
+        "  br i1 %%isfold, label %%foldone, label %%mstep\n"
+        "foldone:\n"
         "  call void @__olang_scope_merge(ptr %%md, ptr %%ms)\n"
+        "  br label %%mstep\n"
+        "mstep:\n"
         "  %%mnp = getelementptr %%olang.merge, ptr %%m, i32 0, i32 0\n"
         "  %%mn = load ptr, ptr %%mnp\n"
         "  %%mend = icmp eq ptr %%mn, null\n"
