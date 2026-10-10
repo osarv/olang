@@ -334,11 +334,13 @@ struct var {
     bool paramCopy;       //T25c: a parameter's own copy in its function's body (canonicalVar is the signature's)
     bool roNeedsWritable; //T25c: a signature's by-value parameter holding writable references whose copy the body writes
                           //through, lends writably or stores where it can be written - no read-only value may be passed
-    //O17: on a function's scope variable, what its body does with the region the variable names - stores into a slot
-    //reached through it something not read out of that region (built, or handed in), itself or through a callee
-    //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
-    bool regionStored;
-    bool regionHandedOut;
+    //O17: on a function, for each of its scope variables, what its body does with the region the variable names - stores
+    //into a slot reached through it something not read out of that region (built, or handed in), itself or through a
+    //callee (stored); or returns a reference or value carrying it through which a store is possible (handed out). Kept on
+    //the function, never on the variable: a generic's instantiations share its scope variables, and each has its own
+    //body. regionFlagsOf is the function the list belongs to - a var copied whole starts a list of its own
+    struct list regionFlags;
+    struct var* regionFlagsOf;
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program

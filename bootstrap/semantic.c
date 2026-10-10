@@ -9196,6 +9196,38 @@ static bool paramMayWrite(struct var* func, struct var* pv) {
     return true;
 }
 
+//O17: what func's body does with the region its scope variable sv names (see struct var's regionFlags)
+struct regionFlag { struct var* sv; bool stored; bool handed; };
+static struct regionFlag* regionFlagOf(struct var* func, struct var* sv, bool make) {
+    if (!func || !sv) return NULL;
+    sv = canonicalVar(sv);
+    func = canonicalVar(func);
+    if (func->regionFlagsOf != func) {
+        func->regionFlags = ListInit(sizeof(struct regionFlag));
+        func->regionFlagsOf = func;
+    }
+    for (int i = 0; i < func->regionFlags.len; i++) {
+        struct regionFlag* f = ListGetIdx(&func->regionFlags, i);
+        if (f->sv == sv) return f;
+    }
+    if (!make) return NULL;
+    struct regionFlag f = { sv, false, false };
+    ListAdd(&func->regionFlags, &f);
+    return ListGetIdx(&func->regionFlags, func->regionFlags.len - 1);
+}
+static bool regionStoredIn(struct var* func, struct var* sv) {
+    struct regionFlag* f = regionFlagOf(func, sv, false);
+    return f && f->stored;
+}
+static void markRegionStored(struct var* func, struct var* sv) {
+    struct regionFlag* f = regionFlagOf(func, sv, true);
+    if (f) f->stored = true;
+}
+static void markRegionHandedOut(struct var* func, struct var* sv) {
+    struct regionFlag* f = regionFlagOf(func, sv, true);
+    if (f) f->handed = true;
+}
+
 //O17: one of the checked function's own scope variables (never a derived one, O23a, which a caller resolves from its
 //argument's bindings rather than from where it lends the argument) - the region a store or a hand-out touches
 static struct var* ownRegionVar(struct checkCtx* ctx, struct var* sv) {
@@ -9257,8 +9289,8 @@ static bool calleeStoresRegion(struct var* func, struct var* sv) {
     if (func->type.isExtern) return false;
     if (!calleeBodyKnown(func)) return true;
     if (func->bodyHadErrors) return false;
-    struct var* c = canonicalVar(sv);
-    return c->regionStored || c->regionHandedOut;
+    struct regionFlag* f = regionFlagOf(func, sv, false);
+    return f && (f->stored || f->handed);
 }
 
 //O17: what a call into a declared function or a constructor says - a store the callee may make into a region of the
@@ -9266,7 +9298,7 @@ static bool calleeStoresRegion(struct var* func, struct var* sv) {
 //decided once every body is checked, by settleRegions. Every such call is recorded, its body known or not: a body checked
 //before the call may still reach a cycle whose answer is settled only at the end, and a caller that read the callee's
 //answer too early would keep a stale one
-struct regionEdge { struct var* r; struct var* func; struct var* sv; };
+struct regionEdge { struct var* rFunc; struct var* r; struct var* func; struct var* sv; };
 struct lendCheck { struct var* func; struct var* sv; struct token tok; bool atCopy; };
 static struct list regionEdges;
 static struct list lendChecks;
@@ -9275,8 +9307,8 @@ static void settleRegions(void) {
         changed = false;
         for (int i = 0; i < regionEdges.len; i++) {
             struct regionEdge* e = ListGetIdx(&regionEdges, i);
-            if (e->r->regionStored || e->func->bodyHadErrors) continue;
-            if (!calleeBodyKnown(e->func) || canonicalVar(e->sv)->regionStored) { e->r->regionStored = true; changed = true; }
+            if (regionStoredIn(e->rFunc, e->r) || e->func->bodyHadErrors) continue;
+            if (!calleeBodyKnown(e->func) || regionStoredIn(e->func, e->sv)) { markRegionStored(e->rFunc, e->r); changed = true; }
         }
     }
     for (int i = 0; i < lendChecks.len; i++) {
@@ -9490,15 +9522,15 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 for (int j = 0; j < func->type.vars.len; j++) {
                     struct type ct = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
                     if (ct.scopeParam && canonicalVar(ct.scopeParam) == canonicalVar(sv) && (!TypeIsPermRef(ct) || ct.refMut))
-                        r->regionStored = true;
+                        markRegionStored(ctx->func, r);
                 }
             } else if (func->owner || calleeBodyKnown(func)) {
                 //a declared function's body, or a constructor's: what it is known to store now, and an edge for what it
                 //may be found to store later - a body checked already can still call into a cycle settled at the end
-                struct regionEdge e = { r, func, sv };
+                struct regionEdge e = { ctx->func, r, func, sv };
                 ListAdd(&regionEdges, &e);
-                if (calleeBodyKnown(func) && !func->bodyHadErrors && canonicalVar(sv)->regionStored) r->regionStored = true;
-            } else r->regionStored = true; //a function value: its body is not known here
+                if (calleeBodyKnown(func) && !func->bodyHadErrors && regionStoredIn(func, sv)) markRegionStored(ctx->func, r);
+            } else markRegionStored(ctx->func, r); //a function value: its body is not known here
         }
     }
 
@@ -16612,7 +16644,7 @@ static void noteRegionStore(struct checkCtx* ctx, struct operand* target, struct
     int td;
     bool tu;
     struct var* r = targetRefsScope(ctx, target, &tv, &td, &tu) && !tu ? ownRegionVar(ctx, tv) : NULL;
-    if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) r->regionStored = true;
+    if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) markRegionStored(ctx->func, r);
     //...and what is put there out of another such region, through which a store is possible, hands that region out:
     //whoever later stores through it builds where this slot says, not where that region is
     struct var* rv;
@@ -16622,7 +16654,7 @@ static void noteRegionStore(struct checkCtx* ctx, struct operand* target, struct
     if (asRef ? RefNarrowingMatters(rhs->type) : (OperandIsLvalue(rhs) && valueRefsAdmitStores(rhs->type))) {
         struct var* rr = (asRef ? RefExactScope(ctx, rhs, true, &rv, &rd, &ru) : valueRefsScope(ctx, rhs, &rv, &rd, &ru)) && !ru
                          ? ownRegionVar(ctx, rv) : NULL;
-        if (rr && rr != r) rr->regionStored = true;
+        if (rr && rr != r) markRegionStored(ctx->func, rr);
     }
 }
 
@@ -17982,7 +18014,7 @@ static void forInSplitCall(struct operand* call, struct operand* src, struct tok
     if (!known && f->owner) { //a body checked later (a cycle) - judged with every other once all are (settleRegions)
         struct lendCheck lc = { f, sv, kw, false };
         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
-    } else if (!known || (!f->bodyHadErrors && canonicalVar(sv)->regionStored)) {
+    } else if (!known || (!f->bodyHadErrors && regionStoredIn(f, sv))) {
         Err(kw, ERR_BORROW_SPLIT_SCOPES);
     }
 }
@@ -19478,12 +19510,12 @@ static void noteRegionHandOut(struct checkCtx* ctx, struct operand* v, struct ty
     bool asRef = v->type.structMAlloc;
     if ((asRef ? RefExactScope(ctx, v, true, &rv, &rd, &ru) : OperandIsLvalue(v) && valueRefsScope(ctx, v, &rv, &rd, &ru)) && !ru) {
         struct var* r = ownRegionVar(ctx, rv);
-        if (r) r->regionHandedOut = true;
+        if (r) markRegionHandedOut(ctx->func, r);
     }
     for (int i = 0; i < v->scopeBindings.len; i++) { //an instance built from it, a call's result carrying it (O13c)
         struct scopeBinding* b = ListGetIdx(&v->scopeBindings, i);
         struct var* r = b->landing || b->boundUnnamed ? NULL : ownRegionVar(ctx, b->boundTo);
-        if (r) r->regionHandedOut = true;
+        if (r) markRegionHandedOut(ctx->func, r);
     }
 }
 
