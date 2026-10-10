@@ -578,6 +578,11 @@ because what it finds about structure feeds the refactor.
 - 09:55 CEST: i64lit merged and pushed (43ce396): an integer literal's own type is I64 (T6a). The agent's single full
   verify had shared.olang OOM-killed beside other agents; it then passed on its own (658 tests), with everything else
   passing too. oann must run `tools/int_literal_i64.py` when its compiler next moves.
+- 10:30 CEST: decision 48 merged and pushed (91ab3ba via 5ebd16f): scope owners and parts, plus the tonight8 fixes. Those
+  are F1, where the may-build walk now covers conditional, match and default landings, with codegen holding every body to
+  the walk (an ICE on a miss); 02, a default rebuilt per call (D8a); and 03 (S4c holdForRefTarget). Verified in pieces:
+  checks.olang was OOM-killed beside other agents and passed when rerun. A narrow follow-up review runs
+  (/home/user/wt/rv9 -> /home/user/review/tonight9). Decision 50 (failing spawns) can start now that 48 is on master.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

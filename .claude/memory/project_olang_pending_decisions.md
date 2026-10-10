@@ -362,7 +362,7 @@ rule and where it is recorded; the morning report lists them all, then they move
    folded (the program scope never closes); RunOnStack's thread takes its caller's identity; thread identities come from
    a counter (glibc reuses a dead thread's TLS). Environment copies and decision 40's static refusal are removed.
    Measured (callgrind): 0% on reading lambdas and plain allocation, +7% (2 instructions a call) on closures that build
-   on every call. Built on wt-rv3fix 45eea97, verified; soundness review /home/user/review/tonight8 before merging.
+   on every call. Built on wt-rv3fix 45eea97; review tonight8 found F1 (fixed 91ab3ba); MERGED 5ebd16f; follow-up review tonight9.
    Option 3 (keep 40's static refusal and close evasions one by one) rejected as evadable by design.
 49. (mine, under the revisit rule, from review tonight7: 3 new + ~12 older E11c holes, baked globals disagreeing with
    the run time, and over-rejection of `r.l.Iter().Fold(...)` in a Str) `$` calls a declared Str EXACTLY ONCE per
