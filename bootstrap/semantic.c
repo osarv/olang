@@ -11535,13 +11535,68 @@ struct unOpRule unOpRules[] = {
 //E11c: what a function may write that was there before it was called - an effect "$" would repeat, since it runs a Str
 //as often as building its text needs. A write is one where its place is found (effPlace); a call passes it on from its
 //callee where an argument the callee may write through reaches such storage (effEdges), settled once every body is
-//checked (effSettle). The result scope and a constructor's instance are storage the call itself makes
-struct effEdge { struct var* caller; struct var* callee; struct token tok; };
+//checked (effSettle). The result scope and a constructor's instance are storage the call itself makes.
+//A write of a reference parameter's referent's own storage - a field, an element, reached from the parameter with no
+//further reference - is kept apart, per parameter (effShallow): it is an effect of a caller only where what that caller
+//hands in is itself storage that was there before it ran. A caller lending a local it made (the iterator a "for" walks)
+//has that local written, never what the local's references reach - those are written only by deeper writes, which are
+//effects as any other. A parameter repointed anywhere in its function names other storage, so its writes are not kept
+//apart (decided once the body is checked)
+enum effEdgeKind {
+    EFF_EDGE_ALL,              //caller writes what callee writes, other than through the parameters' own referents
+    EFF_EDGE_SHALLOW_TO_ALL,   //...and what callee writes of parameter calleeParam's referent, handed storage that was there
+    EFF_EDGE_SHALLOW,          //callee's writes of calleeParam's referent are caller's of its own parameter callerParam's
+};
+struct effEdge {
+    struct var* caller;
+    struct var* callee;
+    struct token tok;
+    enum effEdgeKind kind;
+    int calleeParam;
+    int callerParam;
+    struct var* callerPv; //EFF_EDGE_SHALLOW: the caller's parameter as its body reads it, repointed or not
+};
 static struct list effEdges;
+struct effShallowRec { struct var* f; int param; struct var* pv; struct token tok; };
+static struct list effShallowRecs;
 static void effMark(struct var* f, struct token tok) {
     if (!f || f->effWrites) return;
     f->effWrites = true;
     f->effTok = tok;
+}
+static bool effMarkShallow(struct var* f, int j, struct token tok) {
+    if (!f || j < 0 || j >= 64 || (f->effShallow & (1ULL << j))) return false;
+    if (!f->effShallow) f->effShallowTok = tok;
+    f->effShallow |= 1ULL << j;
+    return true;
+}
+//...the reference parameter of this function a read names - the parameter itself, read directly, not a field of it, a
+//local copied from it or a capture - as its index (and the body's variable for it), or -1
+static int effRefParamIndex(struct checkCtx* ctx, struct operand* b, struct var** pv) {
+    if (!ctx->func || !b || b->opType != OPERATION_READ_VAR || !b->readVar || !b->readVar->paramCopy) return -1;
+    if (!b->readVar->type.structMAlloc || b->readVar->type.bType == BASETYPE_FUNC) return -1;
+    struct var* orig = canonicalVar(b->readVar);
+    for (int j = 0; j < ctx->func->type.vars.len && j < 64; j++) {
+        if ((struct var*)ListGetIdx(&ctx->func->type.vars, j) != orig) continue;
+        *pv = b->readVar;
+        return j;
+    }
+    return -1;
+}
+//...the reference parameter whose referent's own storage a place is: the first reference on the way down from the
+//place is that parameter, read directly
+static int effShallowParamOf(struct checkCtx* ctx, struct operand* p, struct var** pv) {
+    for (int guard = 0; p && guard < 64; guard++) {
+        if (heldResult(p)) { p = heldResult(p); continue; }
+        if ((p->opType == OPERATION_MEMBER || p->opType == OPERATION_INDEX || p->opType == OPERATION_SLICE) && p->args.len) {
+            struct operand* b = *(struct operand**)ListGetIdx(&p->args, 0);
+            if (b->type.structMAlloc && b->type.bType != BASETYPE_FUNC) return effRefParamIndex(ctx, b, pv);
+            p = b;
+            continue;
+        }
+        return -1;
+    }
+    return -1;
 }
 static bool effOutsideScope(struct checkCtx* ctx, struct var* v, bool unnamed) {
     if (unnamed || v == SCOPE_AMBIGUOUS) return true;
@@ -11604,19 +11659,41 @@ static bool effPlaceOutside(struct checkCtx* ctx, struct operand* p) {
 static void effWrite(struct checkCtx* ctx, struct operand* place, struct token tok) {
     if (!ctx->hasOwnScope || ErrMsgMuted() || place->type.unknown || !effPlaceOutside(ctx, place)) return;
     struct var* cap = effCaptureOf(ctx, place);
-    if (cap) effCapAdd(ctx->func, cap);
-    else effMark(ctx->func, tok);
+    if (cap) { effCapAdd(ctx->func, cap); return; }
+    struct var* pv = NULL;
+    int j = effShallowParamOf(ctx, place, &pv);
+    if (j < 0) { effMark(ctx->func, tok); return; }
+    if (!effShallowRecs.elemSize) effShallowRecs = ListInit(sizeof(struct effShallowRec));
+    struct effShallowRec r = { ctx->func, j, pv, tok };
+    ListAdd(&effShallowRecs, &r);
+}
+//...whether a value of type t holds writable references through "&p" fields: they refer where the instance's binding
+//says, which is not known here (O23a), so they may reach storage that was there whatever the value's own storage is
+static bool effHoldsUnknownRefs(struct type t) {
+    t.structMAlloc = false;
+    t.refMut = false;
+    return TypeHoldsWritableRefs(t) && typeHasNamedScopeField(t, 0);
 }
 //...whether an argument hands a callee such storage to write through: a reference's referent, a borrowed value's own
-//storage, or a value's references (a copy shares what they name)
-static bool effArgOutside(struct checkCtx* ctx, struct operand* a, struct type pt) {
+//storage (*own: what the callee's writes of its parameter's own referent reach), or a value's references (a copy shares
+//what they name)
+static bool effArgOutside(struct checkCtx* ctx, struct operand* a, struct type pt, bool* own) {
+    *own = false;
     if (!a || a->isNullLiteral) return false;
     struct var* v;
     int d;
     bool u;
-    if (TypeIsPermRef(pt) && !a->type.structMAlloc && OperandNamesExistingStorage(a) && effPlaceOutside(ctx, a)) return true;
-    if (a->type.structMAlloc) return RefExactScope(ctx, a, true, &v, &d, &u) && effOutsideScope(ctx, v, u);
-    return copiesExistingRefs(ctx, a) && copiedRefsScope(ctx, a, &v, &d, &u) && effOutsideScope(ctx, v, u);
+    if (TypeIsPermRef(pt) && !a->type.structMAlloc && OperandNamesExistingStorage(a) && effPlaceOutside(ctx, a)) {
+        *own = true;
+        return true;
+    }
+    if (a->type.structMAlloc && RefExactScope(ctx, a, true, &v, &d, &u) && effOutsideScope(ctx, v, u)) {
+        *own = true;
+        return true;
+    }
+    if (!a->type.structMAlloc && copiesExistingRefs(ctx, a) && copiedRefsScope(ctx, a, &v, &d, &u) && effOutsideScope(ctx, v, u))
+        return true;
+    return effHoldsUnknownRefs(a->type);
 }
 //...whether a parameter of this type can be written through: a writable reference, or a reference or a value reaching
 //writable references (shallow permission, T25b)
@@ -11638,9 +11715,10 @@ static struct var* effLambdaOf(struct operand* op) {
     return NULL;
 }
 static bool roCalleeKnown(struct var* f);
-static void effEdge(struct var* caller, struct var* callee, struct token tok) {
+static void effEdge(struct var* caller, struct var* callee, struct token tok, enum effEdgeKind kind, int calleeParam,
+                    int callerParam, struct var* callerPv) {
     if (!effEdges.elemSize) effEdges = ListInit(sizeof(struct effEdge));
-    struct effEdge e = { caller, callee, tok };
+    struct effEdge e = { caller, callee, tok, kind, calleeParam, callerParam, callerPv };
     ListAdd(&effEdges, &e);
 }
 static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args, struct token tok) {
@@ -11661,35 +11739,64 @@ static void effCall(struct checkCtx* ctx, struct operand* op, struct var* func, 
     //a lambda this function made: whatever its body does is this function's - through its captures, judged here by what
     //each copies, and everything else it does, settled with every other edge
     if (L) {
-        effEdge(ctx->func, L, tok);
+        effEdge(ctx->func, L, tok, EFF_EDGE_ALL, -1, -1, NULL);
         for (int i = 0; i < L->effCaps.len; i++) {
             struct var* c = *(struct var**)ListGetIdx(&L->effCaps, i);
             struct var* from = c->capturedFrom;
             if (!from) { effMark(ctx->func, tok); break; }
             if (from->isCapture && ctx->func->isLambda) { effCapAdd(ctx->func, from); continue; }
             struct operand* src = OperandReadVar(from, tok);
-            if (effArgOutside(ctx, src, c->type)) { effMark(ctx->func, tok); break; }
+            bool own;
+            if (effArgOutside(ctx, src, c->type, &own)) { effMark(ctx->func, tok); break; }
         }
     }
     for (int j = 0; j < func->type.vars.len && j < args.len; j++) {
         struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
         struct operand* a = *(struct operand**)ListGetIdx(&args, j);
+        bool own = false;
         bool reach = pt.bType == BASETYPE_FUNC ? !effLambdaOf(a) && !(a->opType == OPERATION_READ_VAR && a->readVar && a->readVar->isFuncDecl)
-                                               : effWritableThrough(pt) && effArgOutside(ctx, a, pt);
+                                               : effWritableThrough(pt) && effArgOutside(ctx, a, pt, &own);
         if (!reach) continue;
         //(in a lambda, an argument reached through a capture is the capture's - taken as written, the callee being able to)
         struct var* cap = pt.bType == BASETYPE_FUNC ? NULL : effCaptureOf(ctx, a);
         if (cap) { effCapAdd(ctx->func, cap); continue; }
-        effEdge(ctx->func, func, a->tok);
-        return;
+        //what the callee writes of this parameter's referent: this function's parameter's referent's own storage, where the
+        //argument is that parameter or a value lent from that storage (a field of it); storage that was there, where the
+        //argument's own storage is; else a local's or a temporary's own storage, which this call made - only what the
+        //callee writes beyond it is an effect
+        bool refParam = pt.bType != BASETYPE_FUNC && pt.structMAlloc;
+        struct var* pv = NULL;
+        int i = -1;
+        if (refParam && a->type.structMAlloc) i = effRefParamIndex(ctx, a, &pv);
+        else if (refParam && OperandNamesExistingStorage(a)) i = effShallowParamOf(ctx, a, &pv);
+        enum effEdgeKind kind = EFF_EDGE_ALL;
+        if (i >= 0) kind = EFF_EDGE_SHALLOW;
+        else if (refParam && own) kind = EFF_EDGE_SHALLOW_TO_ALL;
+        effEdge(ctx->func, func, a->tok, kind, j, i, pv);
     }
 }
 static void effSettle(void) {
+    //a write through a parameter repointed in its function names whatever it was repointed at: an effect as any other
+    for (int i = 0; i < effShallowRecs.len; i++) {
+        struct effShallowRec* r = ListGetIdx(&effShallowRecs, i);
+        if (r->pv && r->pv->roAssigns.len) effMark(r->f, r->tok);
+        else effMarkShallow(r->f, r->param, r->tok);
+    }
+    effShallowRecs.len = 0;
     for (bool changed = true; changed; ) {
         changed = false;
         for (int i = 0; i < effEdges.len; i++) {
             struct effEdge* e = ListGetIdx(&effEdges, i);
             if (e->callee->effWrites && !e->caller->effWrites) {
+                effMark(e->caller, e->tok);
+                changed = true;
+            }
+            bool calleeShallow = e->calleeParam >= 0 && e->calleeParam < 64 && (e->callee->effShallow & (1ULL << e->calleeParam));
+            if (!calleeShallow || e->kind == EFF_EDGE_ALL) continue;
+            bool repointed = e->callerPv && e->callerPv->roAssigns.len;
+            if (e->kind == EFF_EDGE_SHALLOW && !repointed) {
+                if (effMarkShallow(e->caller, e->callerParam, e->tok)) changed = true;
+            } else if (!e->caller->effWrites) {
                 effMark(e->caller, e->tok);
                 changed = true;
             }
@@ -11793,10 +11900,11 @@ static void checkStrPurity(void) {
         struct strMethod* e = ListGetIdx(&strMethods, i);
         struct token where = e->m->tok;
         const char* why = CtWhyNotEvaluable(e->m, &where);
-        //...which a write through a reference is not, while compiling - but it is one, repeated by every "$"
-        if (!why && e->m->effWrites) {
+        //...which a write through a reference is not, while compiling - but it is one, repeated by every "$" - a write of
+        //what its receiver names included, which was there before Str ran
+        if (!why && (e->m->effWrites || e->m->effShallow)) {
             Err(e->m->tok, ERR_STR_WRITES);
-            Note(e->m->effTok, NOTE_HERE);
+            Note(e->m->effWrites ? e->m->effTok : e->m->effShallowTok, NOTE_HERE);
             continue;
         }
         //T25c: "$" renders read-only copies too (an immutable global, a part of a read-only reference), so a by-value

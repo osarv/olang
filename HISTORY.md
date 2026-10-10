@@ -13618,3 +13618,64 @@ whatever the length (Rust's `swap_remove`), the order not kept; a position out o
 
 **`chan.Chan<T>(cap I64)`**: the capacity was an `I32` while every length and count is an `I64`, so
 `Chan<I64>(n)` was T6b's error (mk). `checks.olang` and the fuzzer dropped their `I32(n)`.
+
+## Merging wt-s6std onto rv3fix round 2: `List.Clone`, and E11c made precise and sound (E11c, O23a, 2026-10-10)
+
+wt-s6std (collections render as their contents, short Lists, `IndexOf`/`Remove`/`SwapRemove`) was verified on its own
+base and merged onto master e6b8d75, which carries rv3fix round 2. The merged tip failed `make verify` in three places:
+`std/prelude/tests/list.olang`, runner, shared and worker ended by SIGSEGV (plainly and under `-t -d -s`), the check
+case `rv3copyrun` segfaulted, and `std/prelude/map.olang`'s `Str` was refused by E11c ("it writes, through a
+reference, what was there before it ran", the note at `for e in m`). The compiler was the merged master's; only std
+had changed.
+
+**The segfaults were one seam of the merge.** rv3fix's T25c work (its item 10) rewrote `List.Clone` to copy the chunks
+directly - `s.chunks[k]` - instead of through `RunFrom`'s read-only runs; s6std made chunk 0 a field of its own
+(`listState.first`) and the array of chunks something made only with the second chunk, routing every other reader
+through `chunk(k)`. Git merged the two textually, so a list within its first chunk - every List of up to 8 elements -
+had a null `chunks` that `Clone` read through: gdb put the fault in `List$I64.Clone$I64`, called from the test's
+`listCopies`, and runner, shared and worker clone short lists too; `rv3copyrun` clones a `List<List<I64>>` of one.
+Under `-s` it was the same null read, not a use after a scope closed. `Clone` walks `s.chunk(k)` now; a grep finds no
+other direct reader of `chunks` outside `grow` and the indexing paths past chunk 0. A test clones Lists of every
+length around the first chunk's edge and the next two (0, 1, 7, 8, 9, 23-25, 56, 57), grows clone and original apart,
+and compares a global the evaluator bakes with the same computation at run time.
+
+**`Map.Str` was refused by an E11c that was too coarse.** `for e in m` walks a `MapIter` the `Str` made, calling `Next`
+and `advance`, which write only the iterator's own fields (`given`, `slot`, `bucket`). E11c's analysis marked a
+function as writing "what was there before it ran" for any write through a reference whose scope was not its own - a
+parameter's included - and passed the mark to each caller whose argument for a writable-through parameter reached such
+storage. The iterator holds references into the map (`slot mut mapSlot&of`), so lending it reached the map, and
+`Next`'s write of `it.slot` - the iterator, which `Str` had just made - was charged to `Str` as a write of the map.
+s6std's `Map.Str` was the first `Str` to walk an iterator; rv3fix's E11c (writes through references, a fixed point over
+calls) was what made such writes count.
+
+**Decided (mine): writes of a parameter's referent's own storage are kept apart.** A write whose place reaches its first
+reference at a reference parameter read directly - `it.slot`, `it.n`, an element of an inline array field - writes
+that parameter's referent and nothing it points to; it is recorded per parameter (`effShallowRecs`, then the bit
+`effShallow` on the function) rather than as an effect. Edges carry what a call hands on (`effEdgeKind`): an argument
+whose own storage was there before the caller ran (a reference to such storage, a lvalue in it) turns the callee's
+writes of that parameter into the caller's effect (`EFF_EDGE_SHALLOW_TO_ALL`); an argument that is the caller's own
+reference parameter, or a value lent from that parameter's own storage (an inline field of it), turns them into the
+caller's own writes of that parameter (`EFF_EDGE_SHALLOW`), so a chain of helpers handing a cursor or its parts on stays
+precise; and an argument the caller made - a local, a temporary - takes only the
+callee's other writes (`EFF_EDGE_ALL`). A parameter repointed anywhere in its function (`roAssigns`, known once the body
+is checked) names other storage, so its writes are general - not reachable today (the checker refuses repointing a
+parameter at what a `&p` field of it refers to, O23a), and kept as the fallback. A `Str`'s own writes of its receiver
+stay effects (`checkStrPurity` reads both). Everything else is as precise as before: a write deeper than the
+parameter's own storage, through a local copied from it, through a slice or a capture, is general. So `Map.Str`, and any
+`Str` stepping a cursor of its own through helpers (`shared.olang`'s E11c test, baked while compiling), compile, while
+a cursor step writing through the cursor (`checks/cases/s6strdeep`) and a helper chain handed a reference the rendered
+value holds (`s6strchain`) are refused.
+
+**Found on the way, pre-existing: E11c missed writes through `&p` fields.** Writing `s6strdeep` first found a hole the
+merged compiler, and the one before it, both built: `cur := Cur(b); poke(cur)`, `Cur` holding `c mut Cell&of = of.c`
+and `poke` writing `p.c.v++`, changed the value being rendered - the old compiler printed the counter incremented once
+per `$`. The argument check asked where a value's references live (`copiedRefsScope`), and for a field written `&p`
+that is answered by the slot - the `Str`'s own block - since where such a field refers is its instance's binding
+(O23a), not known there; a reference argument whose own scope was the `Str`'s (`x mut Cur& = Cur(b)`) or a temporary
+(`poke(Cur(b))`) was taken to reach nothing at all. Now an argument whose type holds writable references through `&p`
+fields counts as reaching storage that was there (`effHoldsUnknownRefs`), which adds an `EFF_EDGE_ALL` edge: the callee's
+writes of the cursor itself still cost nothing, its writes through the cursor's references are effects. It over-rejects
+only a callee writing through such a field into storage the `Str` itself made, which nothing in the corpus or std does.
+`checks/cases/s6strref` pins the reference and temporary shapes. SPEC's E11c now says what a `Str` makes for itself - an
+iterator or cursor included - it may change, through a callee too, and that what such a value's references reach (a
+`&p` field's included) is not its own. The evaluator needed nothing: E11c is a check, and `Str`s it accepts are K1-pure.

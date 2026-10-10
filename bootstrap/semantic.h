@@ -355,6 +355,12 @@ struct var {
     //with such an argument, or through a function value it did not make. effTok: where it was first found
     bool effWrites;
     struct token effTok;
+    //E11c: the reference parameters (bit j, the first 64) whose referent's own storage it writes - a field, an element,
+    //reached from the parameter with no further reference - itself or through a callee it hands the parameter on to. An
+    //effect of a caller only where what that caller hands in is itself storage that was there before it ran: a borrow of
+    //its own local (an iterator it made) is written, never what the local's references reach. effShallowTok: the first
+    unsigned long long effShallow;
+    struct token effShallowTok;
     struct list effCaps; //E11c: on a lambda, the captures it writes through (struct var*) - an effect of whoever made it
                          //exactly where what the capture copies reaches storage that was there before that function ran
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
