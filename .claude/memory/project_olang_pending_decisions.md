@@ -56,6 +56,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   program scope outside; a Set/Compact on a region inside its own With (reached another way) aborts at run time, one
   compare per Set; the handle itself is passed freely and its arena freed when the scope it was made in closes. Not
   built until the user says go.
+  The user, 2026-10-10 08:25 CEST: "That way we could assign shorter lived structures to longer moves contexts and null
+  the reference when we free because we always know where the one reference is. Null variables are already a "the
+  problem might fail like this"-gap so it doesn't really introduce anything new" -> taken as GO, with their early free:
+  decision 51 below. Queued after decision 50 (QE).
 
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
@@ -342,6 +346,17 @@ rule and where it is recorded; the morning report lists them all, then they move
    E { }` leaves buf partly written. Partial results: a per-task default. Memory is unaffected (every task joined,
    stand-ins/parts folded on every exit). Evaluator/-i: tasks in spawn order to completion, then the first failure.
    Replaces P4. To be built after decision 48 merges (it rewrites the same spawn runtime).
+51. (the user's regions + their early free, details mine) `Region<T>`: a value in its own arena, reached only inside
+   `r.With(fn(w mut T&) ...)` (w's scope opaque, as every lambda parameter's is, so nothing outside points in); `Set`/
+   `Compact(fn(old T&) T)` replace the contents and free the old arena at once (Compact forbids new->old pointers);
+   `r.Drop()` frees it early - the user's "null the reference": instead of making the handle unique (needs move
+   semantics olang lacks; List.At/Map.Get copy elements), every COPY of the handle reads as null after a Drop - the
+   handle is {header, generation}, Drop frees the arena and bumps the generation, With on a stale handle traps as a null
+   read does (one compare per With, never per access); the header is recycled within its scope. The handle is built
+   where it lands like any value (so `undo.Push(Region<State>(...))` puts it in undo's scope) and is scope-checked like
+   a List handle; an undropped region is freed when that scope closes (no leak, no manual free needed); a region built
+   inside another's With lives in that one's arena and dies with it (nesting from existing scopes). Drop/Set/Compact
+   on a region inside its own With traps. Contents may point outside only at program-scope data.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
