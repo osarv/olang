@@ -530,6 +530,15 @@ because what it finds about structure feeds the refactor.
   result) - decision 42 narrows E31b to field stores; the s5scope agent is merging wt-rv3merged and fixing. Merge order:
   whichever of rv3fix/s5scope finishes second merges the other's branch; push only after both reviews' findings are
   fixed. Running: rv3fix (fixes), s5scope (fixes), oann-p8 (int8), study6.
+- 04:50 CEST: study6 done (/home/user/review/study6, 4 programs, 15 findings). r01 (UAF: a mut method on a List element
+  handle in a loop) and r06 handed to s5scope with an amendment to decision 42 (handles are exempt - their copy is a
+  second name). Started wt-s6std (Str for List/Map/StringBuilder, short-list walk perf, IndexOf/Remove/SwapRemove,
+  Chan cap I64). QUEUED for the next checker batch (after rv3fix/s5scope land): r02 (O26a moves I64 locals of
+  RunFrom into a borrowed result's scope - every walk of a long-lived List leaks 24 B a chunk), r04 (Map value reaching
+  the Map: C2d inside map.olang - an interpreter Env needs it), r05 (a field/payload read straight off a call result
+  fails O10c - 9 hits), r07 (E25 ctor scope arg C2d, its own note suggests it), r10/r13/r14/r15 diagnostics; and r03
+  (a List walk keeps going after Clear/removal within its run - decide: positions re-checked per run, document).
+  QF (long-lived structures only grow - region values?) asked in the ledger.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

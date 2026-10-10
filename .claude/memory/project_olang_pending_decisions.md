@@ -36,6 +36,21 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QE. Should a spawned function be allowed to fail (P4 forbids it)? In effect: no - a task catches inside, or reports
   through a channel or a spawn target. My recommendation: allow it only through the task's own clauses -
   `spawn x = try f() catch default v` - and keep P4 otherwise (an error has nowhere to go at the join).
+**Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
+- QF. Long-lived, mutated structures only ever grow: what is removed from or replaced in a List/Map/struct that lives
+  for the whole program (an interpreter's frames and values, an ECS world, an editor's undo stack) stays in its scope
+  until that scope closes - 1.8 KB per interpreter loop turn (717 MB at 400k turns), ~0.8 KB per ECS step. Scopes are
+  lexical, so there is no way to move a structure into a fresh scope and close the old one while the program runs.
+  In effect: nothing (it grows). Options: (a) a library/language "generation" idiom - a value rebuilt into a fresh
+  scope every N steps by a loop whose scope holds two generations (needs a scope that outlives one iteration but not
+  the program - e.g. a `region` value: an arena you can create, build into, and drop explicitly, the compiler checking
+  nothing escapes it); (b) per-collection recycling only (Map already reuses slots, List keeps chunks) - covers fixed-
+  size elements, not text/nested lists; (c) a tracing collector or reference counting for one opt-in type - against
+  principle 1. My recommendation: (a) as a first-class region value checked by section 8 (a named, droppable scope
+  created at run time - `r := Region(); x := Build&r(...); ... r.Drop()` with drop refused while anything outlives
+  it) - it keeps "no GC, no free" in spirit (no per-object free; a whole region at once), and is what game engines and
+  compilers do with arenas. Needs design work; not built.
+
 **Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
 - QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
   tooling (formatter, editor support) is built.
