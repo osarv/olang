@@ -236,6 +236,11 @@ rule and where it is recorded; the morning report lists them all, then they move
    re-checked); O26a follows views of a returned local; numbers carry no scope; under `try` a known out-of-range index is
    checked where it runs; an error type is no value type; keywords may name fields.
 
+38. (wt-s5std) std/csv strict as Go's reader (a bare quote is an error; an empty line is one empty field), fields
+   borrow the text unless unquoted; std/stats' default variance is the sample one (n-1), percentiles numpy's linear
+   method, pairwise sums; Array.Sort a stable O(n log n) merge with an n/2 scratch for numbers, blocks of positions for
+   the rest; List.Truncate(n) changes nothing past the length.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"

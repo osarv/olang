@@ -515,6 +515,13 @@ because what it finds about structure feeds the refactor.
   relaxations with adversarial tests, diagnostics r11-r18) - SOUNDNESS REVIEW before merging - and wt-s5std (std/csv,
   std/stats, O(n log n) Array.Sort, List.Truncate). QUEUED: r10 `T(x)` through a type variable (G8b says unsupported;
   make it work per instantiation), r09 -i memory (the port's M8). Usage 00:48 UTC: five-hour 0.50, weekly 0.85.
+- 03:30 CEST: merged and pushed tbaa (5ecf607), the build/obj makefile fix (c8de9bd), scopesan (9e5558a: `-s` scope
+  sanitizer + scope fuzzer; its two findings handed to rv3fix), s4sem (a2e2878, after a follow-up soundness review found
+  nothing); s5std merged locally, verifying. Running: rv3fix, s5scope, oann-p8 (int8 inference, compiler
+  /home/user/wt/oannc4 @ efdb82c). QUEUED (semantic.c, after rv3fix + s5scope): the semantic.c cleanup with the IR
+  comparison, r10 `T(x)` through a type variable, and a detail to decide: a for-in over a local iterator walks a hidden
+  copy, so the iterator never advances for its caller (Python advances it; s5std documented it) - candidate: walk an
+  iterator lvalue in place.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
