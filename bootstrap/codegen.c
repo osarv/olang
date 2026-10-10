@@ -203,6 +203,7 @@ struct cgCtx {
     //callers rest on SemanticMayBuild, so an allocation it did not foresee is a compiler bug, never a silent race
     struct list handed;
     bool hereBuilt;
+    bool ownScopeBorrowed; //C9a: ownScopeSlot is a destructor's scope being closed - its caller's to close, not its own
     //a function returning an aggregate returns it through one slot and one exit block, written by every return
     //site: so once the function is inlined, its result's fields reach the caller as separate values, which LLVM
     //can reason about - a merged aggregate value it cannot see into, and a loop testing a Bool from one (an
@@ -679,7 +680,8 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
     //O2a: innermost first, then the body's own - a return leaves every block it is nested in, and each
     //one's destructors have to run before the arena under it is reclaimed
     cgLeaveBlocks(ctx, 0);
-    if (ctx->ownScopeSlot) fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
+    if (ctx->ownScopeSlot && !ctx->ownScopeBorrowed)
+        fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
     //and take this whole frame back off the unwind chain in one store - every node in it is gone now
     if (ctx->ownUnwindNode) {
         char* ps = cgNewTmp(ctx);
@@ -1095,13 +1097,22 @@ struct cgHanded {
 };
 
 //P2: an allocation (or a destructor's registration) into scope, which is recorded against the handed scope it was
-//loaded from, if any - every site emitting one calls this with the scope value it emits
+//loaded from, if any - every site emitting one calls this with the scope value it emits. A captured scope built into is
+//marked for the prologue too, however it was resolved: a value read for a callee that builds nothing (capReadOnly) is
+//also where that call's "catch default" is built (cgResultScope), and the prologue must then ask for the scope as this
+//thread may build into it - whether the body may build at all is the checker's walk, held to in cgCheckMayBuild
 static void cgNoteBuildInto(struct cgCtx* ctx, const char* scope) {
     if (!scope || !ctx->curFunc) return;
     if (ctx->ctorHere && strcmp(scope, ctx->ctorHere) == 0) ctx->hereBuilt = true;
     for (int i = 0; i < ctx->handed.len; i++) {
         struct cgHanded* h = ListGetIdx(&ctx->handed, i);
-        if (strcmp(h->val, scope) == 0) h->built = true;
+        if (strcmp(h->val, scope) != 0) continue;
+        h->built = true;
+        if (!h->sv->isCaptureScope) continue;
+        for (int k = 0; k < ctx->capScopes.len; k++) {
+            struct cgCapScope* c = ListGetIdx(&ctx->capScopes, k);
+            if (StrCmp(c->sv->name, h->sv->name)) c->built = true;
+        }
     }
 }
 
@@ -5875,6 +5886,11 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     //C2d: a constructor field's value is part of the instance, so whatever it builds with no scope
     //of its own - a reference field's referent, a nested constructor call's - goes where the instance lands
     char* here = s->ctorField ? ctx->ctorHere : resultHere;
+    //O1b/S4c: a reference local whose referent lives in the program's scope, given a temporary - a parallel assignment's
+    //value held for a global's reference field - has it built there, as the assignment alone builds it
+    if (!here && cgIsReference(s->var.type) && (s->var.inProgram || canonicalVar(&s->var)->inProgram) && s->op
+            && !OperandIsLvalue(s->op) && !s->op->isNullLiteral)
+        here = cgProgramScope(ctx);
     //T7b: the function's result, built where it is returned to (cgResultLocal)
     if (s == ctx->resultLocal) {
         struct type rt = *ctx->curFunc->type.retType;
@@ -7090,6 +7106,8 @@ void cgEmitParamList(FILE* out, struct var* func, bool named) {
         else cgParamEntry(&b, p->type, i, named);
         fprintf(out, "%s%s", first ? "" : ", ", cgBufStr(&b));
     }
+    //C9a: the scope being closed, whose destructors this is one of - the destructor's own top level (cgFunctionIn)
+    if (dtor) fprintf(out, named ? ", ptr %%dscope" : ", ptr");
 }
 
 //P1/P2: every function this object does not define but may call - another module's, or one of this
@@ -7151,7 +7169,7 @@ void cgEmitLambdasOf(struct cgCtx* ctx, struct var* host, struct semaModule* mod
     for (int i = 0; i < ls->len; i++) {
         struct var* L = *(struct var**)ListGetIdx(ls, i);
         if (L->lambdaHost != host) continue;
-        if (!host && (L->owner != mod || L->lambdaInTest != inTest)) continue;
+        if (!host && ((L->lambdaObject ? L->lambdaObject : L->owner) != mod || L->lambdaInTest != inTest)) continue;
         cgFunction(ctx, L->owner, L, false);
     }
 }
@@ -7186,26 +7204,18 @@ static void cgCapScopesRead(struct cgCtx* ctx, struct var* func) {
 }
 
 //P2: what the body built into a scope it was handed, held to what the checker said of it. A closure's prologue asks for
-//a captured scope as this thread may build there only where both codegen marked it built and SemanticMayBuild says the
-//body may build; where a closure is made, its scopes are claimed only on SemanticMayBuild; and a callee the walk says
-//builds nothing is handed a captured scope raw. An allocation the walk did not foresee would therefore bump another
-//thread's arena unsynchronised - so it is a compiler bug, stopped here rather than emitted
+//a captured scope as this thread may build there only where both codegen marked it built (cgNoteBuildInto) and
+//SemanticMayBuild says the body may build; where a closure is made, its scopes are claimed only on SemanticMayBuild; and
+//a callee the walk says builds nothing is handed a captured scope raw. An allocation the walk did not foresee would
+//therefore bump another thread's arena unsynchronised - so it is a compiler bug, stopped here rather than emitted
 static void cgCheckMayBuild(struct cgCtx* ctx, struct var* func) {
-    bool builds = SemanticMayBuild(func);
-    bool bad = ctx->hereBuilt && !builds;
-    for (int i = 0; i < ctx->handed.len && !bad; i++) {
-        struct cgHanded* h = ListGetIdx(&ctx->handed, i);
-        if (!h->built) continue;
-        bool ok = builds;
-        for (int k = 0; ok && h->sv->isCaptureScope && k < ctx->capScopes.len; k++) {
-            struct cgCapScope* c = ListGetIdx(&ctx->capScopes, k);
-            if (StrCmp(c->sv->name, h->sv->name)) ok = c->built;
-        }
-        bad = !ok;
-    }
+    if (SemanticMayBuild(func)) return;
+    bool bad = ctx->hereBuilt;
+    for (int i = 0; i < ctx->handed.len && !bad; i++) bad = ((struct cgHanded*)ListGetIdx(&ctx->handed, i))->built;
     if (!bad) return;
-    fprintf(stderr, "olang: internal compiler error: '%.*s' builds into a scope it was handed where the checker found it "
-            "builds nothing (P2, SemanticMayBuild) - a bug in the compiler, not in the program\n", func->name.len, func->name.ptr);
+    fprintf(stderr, "olang: internal compiler error: '%.*s' builds into a scope it was handed, which the checker's walk "
+            "(P2, SemanticMayBuild) found it never does - a bug in the compiler, not in the program\n",
+            func->name.len, func->name.ptr);
     exit(EXIT_FAILURE);
 }
 
@@ -7322,10 +7332,14 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     //this function's own private scope - see emitScopeRuntime/cgCloseOwnScope. Lazily empty (lazy in the
     //sense that no chunk is grabbed until something actually allocates into it) until "own" or a bare
     //"&" allocation touches it; harmless and cheap to always set up even when never used.
+    //C9a: a destructor's is the scope being closed - where its instance lives, so what it builds through the instance's
+    //fields lives where they lead, as the checker sees the destructor's top level; the scope's close reclaims it. Its
+    //frame's unwind node holds an empty scope instead, so a test left inside a destructor never closes that one twice
     char* ownScope = cgNewTmp(ctx);
     fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", ownScope);
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
     ctx->ownScopeSlot = ownScope;
+    ctx->ownScopeBorrowed = false;
     for (int k = 0; k < ownCopies.len; k++) {
         struct var* p = ListGetIdx(&func->type.vars, *(int*)ListGetIdx(&ownCopies, k));
         struct cgLocal* l = cgFindLocal(ctx, p->name);
@@ -7345,6 +7359,10 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->joinPool.len = 0;
     cgSetupUnwind(ctx);
     cgPushOwnUnwind(ctx);
+    if (cgIsDtor(func)) {
+        ctx->ownScopeSlot = "%dscope";
+        ctx->ownScopeBorrowed = true;
+    }
 
     ctx->defers.len = 0; //S19: the body's own deferred code - cgCloseOwnScope runs it on every way out
     ctx->resultLocal = cgResultLocal(func);
@@ -7385,6 +7403,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     cgBodyEnd(ctx, &bb);
     ctx->curFunc = NULL;
     ctx->ownScopeSlot = NULL;
+    ctx->ownScopeBorrowed = false;
     cgPopScope(ctx);
 }
 

@@ -266,6 +266,15 @@ static struct ctVal* ctNew(enum ctKind k, struct type t) {
 //array, the same storage and the same length, so two slices of one buffer agree exactly when they would at run
 //time), or the function named. Null is no node at all.
 static bool ctIsIdentity(struct ctVal* v) { return v->kind == CT_REF || v->kind == CT_NULL || v->kind == CT_FUNC; }
+//an array node's storage, as identity sees it: its elements - or, for a fixed-length array of length 0 (or a slice of
+//one), which has storage of its own all the same (a slot of no bytes at run time), that array. NULL: no storage, as a
+//run-time-length array's zero value has none
+static const void* ctArrayStorage(struct ctVal* a) {
+    if (!a) return NULL;
+    if (a->elems) return a->elems;
+    struct ctVal* s = a->viewOf ? a->viewOf : a;
+    return s->type.bType != BASETYPE_ARRAY || s->type.arrMalloc ? NULL : (const void*)s;
+}
 static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     if (x->kind == CT_FUNC || y->kind == CT_FUNC) {
         //a capturing lambda is a new closure each time it is made, as it is at run time (D16c)
@@ -279,9 +288,7 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     bool arrB = y->kind == CT_NULL ? y->type.bType == BASETYPE_ARRAY : b && b->kind == CT_AGG && b->type.bType == BASETYPE_ARRAY;
     if (arrA && arrB) {
         int na = a ? a->n : 0, nb = b ? b->n : 0;
-        struct ctVal** ea = a ? a->elems : NULL;
-        struct ctVal** eb = b ? b->elems : NULL;
-        return a == b || (na == nb && ea == eb);
+        return a == b || (na == nb && ctArrayStorage(a) == ctArrayStorage(b));
     }
     if (x->kind == CT_NULL || y->kind == CT_NULL) return x->kind == y->kind; //a null is the same only as a null
     return a == b;
@@ -296,11 +303,16 @@ static bool ctArrayRef(struct ctVal* v) {
     while (t && t->kind == CT_REF) t = t->target;
     return t && t->kind == CT_AGG && t->type.bType == BASETYPE_ARRAY;
 }
+//(a fixed-length array is storage of its own however long it is - an Array<T, 0> too, a slot of no bytes at run time - so
+//a reference to it, or a slice of it, is never null; only a run-time-length array's zero value has none)
 static bool ctArrayRefNull(struct ctVal* v) {
     if (v->kind == CT_NULL) return true;
     struct ctVal* t = v->target;
     while (t && t->kind == CT_REF) t = t->target;
-    return !t || (t->kind == CT_AGG && t->n == 0 && !t->elems);
+    if (!t) return true;
+    if (t->kind != CT_AGG || t->n != 0 || t->elems) return false;
+    struct ctVal* s = t->viewOf ? t->viewOf : t;
+    return s->type.bType != BASETYPE_ARRAY || s->type.arrMalloc;
 }
 
 //a fresh, independent copy: an aggregate's elements are copied, a reference keeps pointing where it did

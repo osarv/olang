@@ -766,7 +766,12 @@ Go through this for every change to what olang means - a rule added, revised or 
   also what lets a single checked operand, built once in the declaring module's own context, serve every
   call site (**no longer, 2026-10-10**: a default that is no plain literal is checked once and built again for each call,
   since where its temporaries land is that call's - one shared operand kept the first call's landing, and a second
-  caller crashed the code generator; HISTORY.md, decision 48's review). **Named arguments were considered and rejected**, and `default` is what replaced them: they
+  caller crashed the code generator; HISTORY.md, decision 48's review; **its review (tonight9)**: that rebuild ran inside
+  the caller's check with the caller's constant variables, so a caller's `N` stood for the declaring module's global `N`
+  (a wrong value, or errors reported in the library) - it is built in the declaration's own context now, and a lambda
+  finished there too (a pending lambda carries the context it was written in); a lambda in a default is made once for
+  each module whose code calls it, or each instantiation, and emitted there - it was emitted only in the declaring
+  module's object, which a caller in another module named, and one per call site). **Named arguments were considered and rejected**, and `default` is what replaced them: they
   would make every parameter name of every exported function part of its API permanently (renaming one
   becomes a breaking change), where parameter names are currently internal. The readability they buy is
   better served here by distinct types, which the compiler verifies, than by argument names, which it
@@ -4626,6 +4631,35 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   frame at a function's top level (S4c: it is held as that reference, built where the target's referent lives). Not
   done: a per-thread cache of a foreign thread's part - keyed on a scope's address it needs an epoch bumped at every
   fold to be sound (headers are reused), to save only a scan of the parts list.
+  **Its second review (tonight9) found a false internal error**: a closure's `x := try find(a) catch default Node(i)`
+  (or one as an argument or a condition), `find` building nothing - the walk saw the default, but codegen had resolved the
+  captured scope only for reading (handed to a callee that builds nothing) and built the default where that value said,
+  so the prologue never asked for it and `cgCheckMayBuild` stopped a correct program. **Decided (mine)**: a build into a
+  captured scope marks it for the prologue however the value it went through was resolved (`cgNoteBuildInto`), so the
+  internal error is only ever a build the walk says cannot happen - which its message now says, rather than blaming
+  the walk for what was codegen's own bookkeeping.
+- **Tonight9's review, fixed: slices of temporaries, constructor views, destructors' own scope, `Array<T, 0>`, a
+  parallel global (E16a, C2d/C2g, C9a, E10, K1, S4c/O1b, 2026-10-10; decisions mine).** **E16a/C2d**: a slice or an `as`
+  view of a local borrows its storage as a reference to it does, so a constructor field kept a view of is stored where
+  the instance lands (`slotBorrowed`) - it stayed frame storage, the stack (a dead frame read back) or, over 64KB, the
+  constructor's own scope. **E16a, decided**: a slice of a value with no storage of its own - an inline array of a call's
+  value result, of a constructor's instance, a literal, a new array - borrows the temporary it is made as, **in the
+  block the slice is written in** (a constructor's frame at its top level), so it goes nowhere that outlives that block:
+  `h.r = mk(n).a[0:2]` is O20's error with a note at the slice, where it pointed into a dead frame (nine shapes, all
+  reproduced; a payload read with `as` from an enum value is such a copy too). Refused, not built where it lands: E16a tags a slice with its base's storage, the declaration form was
+  already refused (O10d), and building a whole value elsewhere to keep part of it would be an allocation the program never
+  wrote. Two are not such temporaries: a call's run-time-length array result, built in its result scope, which lands
+  where the slice is put (O18a, unchanged), and text written in the program, constant data (T25d). **C9a, decided**: a
+  destructor's top level is the scope being closed - passed by the runtime - so what it builds through its instance's
+  fields lives where they lead until that scope's destructors have all run, and is reclaimed with it; a value with a
+  destructor it builds there is destructed as it returns, before the next (its node put ahead of the rest of the walk),
+  as one in a function's own scope was. It allocated from a scope of its own, closed as it returned, and the next
+  destructor read freed memory. Chosen over refusing such builds, which would have needed the checker to tell the
+  instance's scope from the destructor's own - the two the checker already took for one. **E10/K1**: an `Array<T, 0>` has
+  storage of its own, a slot of no bytes, so a slice of it is not null - the evaluator and `-i` said `null` where the
+  program said `I16[]`. **S4c/O1b**: a parallel assignment's temporary for a global's reference field is held, and built,
+  in the program's scope, as `G.next = Node(i)` builds it - it was refused. Not done: a parallel target through a `&p`
+  field is refused with O17a/O25 where the single form says C2d - correct, worded worse.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

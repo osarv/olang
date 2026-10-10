@@ -1,0 +1,29 @@
+# check: run
+# flags: -d -s
+# S4c/O1b (tonight9's review): a parallel assignment's temporary for a reference field of a global is held - and built -
+# where the global's referent lives, the program's scope, as the assignment alone builds it. It was refused (O1b, O17a)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        s = s + t.v
+    }
+    return s
+}
+fn setg(i I64) I64 {
+    k I64 = 0
+    G.next, k = Node(i), i
+    return k
+}
+fn main() ? {
+    k := setg(5)
+    x := churn()
+    G.next.next, x = Node(9), x + 1
+    churn()
+    if k != 5 or G.next.v != 5 or G.next.next.v != 9 or x != 1226 { fail }
+}

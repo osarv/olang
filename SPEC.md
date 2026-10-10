@@ -1327,7 +1327,11 @@ constant (and type) variables its declaration introduced before it - a construct
 10)`), a function's (`F(x I64 = N + 1)`, G22): it is then each instantiation's, computed with that instantiation's
 values (G23) and checked where a call omits it. A `null` default refers to nothing, so it fits whatever scope a call
 binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
-it builds is built where that call builds its argument (§8 O18a).
+it builds is built where that call builds its argument (§8 O18a). Its names still mean what they mean at the
+declaration, whichever call it stands in: a name the declaration's module gives a meaning - a global, a type - is
+never one the calling code has in scope, so a caller's own constant variable of that name (G22) is not the default's.
+A lambda in a default captures nothing (a default has no locals); the calls of one module (or of one instantiation,
+G16) share the one made for them, which is a function of that module's code wherever the default was declared.
 
 **D8b.** Defaulted parameters must be **trailing**: once one parameter declares a default, every
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
@@ -2216,7 +2220,8 @@ the type, and a type may say it itself:
 - for a **reference to an array** (`Array<T>&`, `Array<T, N>&`, or a declared array type with no `Eq` of its own):
   the arrays the two name, compared as values are - lengths first, then each element by this same rule - except
   that a null equals only a null. A null array reference is one with **no storage**, as an array value's zero value
-  has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null. Two
+  has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null, and so
+  does an `Array<T, 0>`, a place of no bytes - a reference to one, or a slice of one, is not null. Two
   references to arrays are compared for what they hold however they were made, so `l.ToArray() == m.ToArray()` asks
   whether two lists hold the same elements; whether they are one array is `a is b` (E10c).
 - for any other **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly
@@ -2556,7 +2561,17 @@ length adjusted — never a copy and never an allocation — so its type is a ru
 `String&`, with every method a `String` has - those it inherits by `extends` included, T29f), tagged (§8) to the
 scope `base`'s storage belongs to: slicing a
 local yields a reference in that local's block, slicing an array reference yields one in its referent's scope. The result has
-length `hi - lo`, and writing through it writes `base`.
+length `hi - lo`, and writing through it writes `base`. Slicing a local borrows its storage as a reference to it does
+(E12c): a constructor's field kept a slice or a view of (E32b) is stored where the instance lands (C2d).
+
+Slicing a value with no storage of its own - an inline array of a call's result held by value (`mk(n).a[0:2]`), of a
+constructor's instance, a literal, a new array (`Array<T>(n)[0:2]`), a payload read with `as` from an enum held by value
+(a copy, E32) - borrows the **temporary** that value is made as,
+which is made in the block the slice is written in: the slice lives in that block, and goes nowhere that outlives it
+(at a constructor's top level, in the constructor's own frame, which its instance outlives). Two values are not
+temporaries made there: a call's run-time-length array result, whose storage the call builds in its result scope, which
+lands where the slice is put (O18a) - `h.r = mk(n)[0:2]`, `mk` giving an `Array<I64>` - and text written in the program,
+which is constant data as long-lived as the program (T25d) and read-only.
 
 A slice is not an lvalue and may not be assigned to. It does carry `base`'s **mutability**: a slice of an
 immutable array is itself immutable, and so cannot bind to a `mut` reference parameter (E12a) — without
@@ -3059,7 +3074,8 @@ target written `_` discards its result. The call is evaluated once, before any t
 evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
 the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. A value with
 no storage of its own (§5.3 E12c) going into a reference target is built, when it is evaluated, where that target's
-referent lives - where S4 alone would build it. With `:=` each name is
+referent lives - where S4 alone would build it: the program's scope for a global, or a field reached from one (O1b),
+so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each name is
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
@@ -4844,14 +4860,15 @@ whose body is being checked when its call is (a call inside its own body) binds 
 (C2a), so what its body allocates at its top level is allocated where the instance lands (C2c), never in a scope that
 closes at its return: a field's referent, what a call through a field builds while the constructor runs (`items.Push(6)`
 growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
-own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
+own storage where a reference to it, a slice of it or a view of it (E16a, E32b) is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
 its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
 given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
 is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
 T7c, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
-before it closes.
+before it closes - and so does a temporary made at its top level, so a field keeping a slice of one
+(`r Array<I64>& = Big(n).a[0:2]`) is a compile-time error (E16a).
 What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
 
 ```
@@ -4924,6 +4941,13 @@ allocated into closes (§8.3, §8.6 O15), regardless of which function allocated
 happens to be executing at that point. Because a destructor-declaring type is reference-only (C11),
 an instance always has a scope of its own and this is the only case; the enclosing function's return
 governs nothing here beyond closing that function's own scope (O1).
+
+**C9a.** A destructor runs as part of closing its instance's scope, and that scope is its own: what its body
+allocates at its top level is allocated in the scope being closed, where the instance lives, which stays alive until
+every destructor of it has run and is then reclaimed whole. So a destructor may build through its instance's fields
+what they hold (`n.next = Node(k)`, `n` a field living with the instance): the next destructor of that scope reads it.
+A value with a destructor that a destructor builds there is destructed as that destructor returns, before the scope's
+next one, as one in a function's own scope would be. Its nested blocks keep scopes of their own (O2).
 
 **C10.** A destructor never runs for a struct type that declares no `destruct` block, never runs more
 than once for the same instance, and never runs for storage no constructor call ever produced an

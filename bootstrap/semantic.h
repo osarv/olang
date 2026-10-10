@@ -303,6 +303,15 @@ struct scopeBinding {
 struct ctVal; //comptime.h
 //D8a: a parameter's default - its syntax, kept until the default is built (after every signature and global is
 //known: a default may name a global declared anywhere), and the checked operand once it is
+//D8a: a lambda a parameter's default holds, as made for the calls in one host function (or, with none, one module's
+//global initializers, tests or destructors)
+struct defaultLambda {
+    struct syntax* node;
+    struct var* host;
+    bool inTest;
+    struct semaModule* object;
+    struct var* L;
+};
 struct paramDefault {
     struct syntax* syntax;
     struct semaModule* mod;
@@ -311,6 +320,8 @@ struct paramDefault {
     bool building;
     bool readsVars;      //G23: it reads a constant (or type) variable of its declaration - built per instantiation,
     struct list bindings; //with that instantiation's bindings (struct typeBinding); empty in the generic's own
+    struct list lambdas; //D8a: each lambda it holds, as made for the code calls stand in (struct defaultLambda) - one per
+                         //host function, emitted with that host, which every call of it there shares
 };
 
 struct var {
@@ -424,6 +435,8 @@ struct var {
     bool isCaptureScope;      //D16: the scope variable of a captured reference, bound when the lambda is made
     struct var* lambdaHost;   //D16: the function the lambda is written in, NULL in a test or a global initializer
     bool lambdaInTest;        //D16: written in a test block, so emitted with the test harness
+    struct semaModule* lambdaObject; //D8a: a parameter default's lambda, made for calls in this module's code - the
+                                     //object emitting it, with no host (NULL: its owner's)
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
     bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through
     int bodyState;            //O10b: 0 while this function's body is unchecked, 1 while it is being checked, 2 once
