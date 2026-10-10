@@ -256,8 +256,10 @@ struct type;
     X(ERR_READ_ONLY_TO_BUILT_RESULT,    "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '%S'") \
     X(ERR_READ_ONLY_TO_BUILT_RESULT_NO, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through") \
     X(ERR_READ_ONLY_COPY_DECL,          "T25c",  "this copies a read-only %t, and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own %s") \
+    X(ERR_READ_ONLY_COPY_GLOBAL,        "T25c",  "a mutable global holds no copy of a read-only %t - give it one of its own, made %s, or drop its 'mut'") \
     X(ERR_READ_ONLY_COPY_STORED,        "T25c",  "a copy of a read-only %t cannot be stored where it can be written - store one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_RETURNED,      "T25c",  "a copy of a read-only %t cannot be returned as a writable value - return one of its own, made %s, or a read-only reference") \
+    X(ERR_READ_ONLY_REF_KEPT,           "T25c",  "'%S' keeps what its parameter '%S' reaches where it can be written, and this %t is read-only - pass a writable one") \
     X(ERR_READ_ONLY_COPY_ARG,           "T25c",  "'%S' writes through or keeps its parameter '%S', and this %t is a read-only copy - pass one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_LENT,          "T25c",  "a read-only copy cannot be passed where it may be written - pass one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_WRITE,         "T25c",  "this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares") \
@@ -269,6 +271,7 @@ struct type;
     X(ERR_DECL_FROM_NULL,               "D15",   "':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'") \
     X(ERR_SCOPE_ARG_PROGRAM,            "E25, O1b", "%n lives in the program's scope, which a result reaches by being stored there, not by a scope argument") \
     X(ERR_BUILD_INTO_UNKNOWN_SCOPE,     "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") \
+    X(ERR_STORE_INTO_UNKNOWN_SCOPE,     "O12",   "where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope") \
     X(ERR_BUILD_THROUGH_UNKNOWN_SCOPE,  "C2d",   "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") \
     X(ERR_SCOPE_ARG_UNKNOWN,            "E25",   "%n is no local or parameter here - a scope argument names where the result is built") \
     X(ERR_RETURN_TYPE_MISMATCH,         "D8",    "this function returns %t, found %t") \
@@ -279,6 +282,7 @@ struct type;
     X(ERR_SCOPE_ARG_NOT_ACCEPTED,       "E25",   "%S builds no result a scope argument could place") \
     X(ERR_SCOPE_ARGS_DISAGREE,          "O25e",  "these arguments live in different scopes, and the signature requires one ('&p')") \
     X(ERR_BORROW_SPLIT_SCOPES,          "O17",   "this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')") \
+    X(ERR_SLICE_SPLIT_VALUE,            "O17a",  "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") \
     X(ERR_BORROW_SPLIT_VALUE,           "O17a",  "this value's references live where its own storage does not, so it is not held by reference - use the value itself") \
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
@@ -312,6 +316,8 @@ struct type;
     X(ERR_WRITE_INTO_CALL_VALUE,        "E31",   "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") \
     X(ERR_IMMUTABLE,                    "S6",    "%S cannot be written - only a local, a parameter or a 'mut' global can") \
     X(ERR_STR_HAS_EFFECT,               "E11c",  "Str runs as often as '$' needs, so it must have no effect - it cannot be evaluated while compiling: %s") \
+    X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "Str renders read-only values too, so it only reads its receiver - pass on what it holds read-only") \
+    X(ERR_STR_WRITES,                   "E11c",  "Str runs as often as '$' needs, so it must have no effect - it writes, through a reference, what was there before it ran") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
     X(NOTE_ZERO_BY_REFERENCE,           "",      "'%s' holds it by reference, whose zero value is null") \

@@ -1,0 +1,17 @@
+# check: fail error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed
+# O17a: a copy of a value whose references live elsewhere is not sliced - the slice would be a reference to the copy's
+# storage, carrying it away from where its references are
+type Node struct() {
+    next mut Node& = null
+}
+type Box struct() {
+    items Array<mut Node&, 2>
+}
+type W struct(b Box) { b }
+fn f(src mut W&) {
+    b := src.b
+    s := b.items[0:2]
+    s[0].next = Node()
+}
+fn main() ? {
+}

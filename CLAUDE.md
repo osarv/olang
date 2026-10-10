@@ -2407,7 +2407,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   be captured (D9a) - `name String& = "bob"` can.
   **Stage 3 built: what lambdas are for.** Prelude `std/prelude/array.olang` gives every array `Any`, `All`,
   `FindIndex`, `Count`, `Map`, `Filter`, `Fold` and `Sort` (stable, allocating nothing - Go's insertion blocks
-  merged by rotation, because a scratch array of references-holding-references cannot be in the right scope);
+  merged by rotation, because a scratch array of references-holding-references cannot be in the right scope; a merge
+  sort with a scratch since 2026-10-10, the std-for-data-scripts entry);
   `List` gets `Any`/`All`/`Count`/`Fold`/`Map`/`Filter`. `spawn fn() { ... }` (D16e) runs a lambda's body as a task,
   its closure held in the join block's scope, each spawn copying its captures - and P2 now covers the function
   value a task calls through, which a closure made inside the join's loop failed (it lived in the iteration's
@@ -4401,6 +4402,54 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   callee storing a back link or handing the handle out, a number stored with a line, a task argument) and corpus tests
   read back after an arena churn, the landing scenario running `handles` under `-b`, `-b -d` and `-i` and `numberflow`
   under `ulimit -v 50000`.
+- **std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10; study 5's r08 and
+  r19, details mine).** **`std/csv`**: `for row in try csv.Rows(text, sep = ',')` gives each record as an
+  `Array<String&>` built where the loop puts it; RFC 4180 strictly - quoted fields with separators, line breaks and
+  doubled quotes, CRLF, no line break needed at the end, an empty line one empty field - and `CsvError` `BARE_QUOTE`,
+  `TEXT_AFTER_QUOTE`, `UNCLOSED_QUOTE` (Go's strict reader, not Python's lenient one); a field written as it reads is a
+  slice of the text, one with a doubled quote new text; `rows.Line` says where (a `for` walks a copy, so a caller wanting
+  it calls `Next` itself); `csv.Record(fields, sep)` writes one line, quoting only what must be (Python's minimal), `"\n"`
+  for no fields; a file is `os.ReadFile` then `Rows`. **`std/stats`**: `Sum`, `Mean`, `Variance`/`StdDev` (sample,
+  n - 1) and `PopulationVariance`/`PopulationStdDev`, `Median`, `Percentile(a, p)` (numpy's linear interpolation,
+  bit-identical, by quickselect on a copy) and `Percentiles(a, ps)` (one sort), `Min`/`Max` (an element, NaN
+  propagating), `Histogram(a, edges)` (numpy's bins, last edge closed) and `Edges(lo, hi, bins)`; any number type, F64
+  inside; pairwise sums (numpy's, 8 accumulators: faster than a plain loop, Kahan 4x slower), corrected two-pass
+  variance; `StatsError.TOO_FEW` for no values (or one, for a sample variance), a percentile outside 0..100 an assert.
+  **`Array.Sort`** is a merge sort with a scratch half its length for numbers, `Bool` and `Char` (chosen by `match T`);
+  any other element type is sorted through positions in blocks of 12,288 then merged by rotation, since a scratch of
+  reference-holding elements would put them in the call's scope (G11) - F64 1M 0.52-0.60 -> 0.10-0.18 s (C++
+  stable_sort 0.10-0.11), records holding text 0.59-0.64 -> 0.37-0.45 (C++ 0.21-0.24). **`List.Truncate(n)`** keeps the
+  first n (none removed when it holds fewer, Rust's); a Map in key order is `m.Iter().ToList()` then `Sort` (documented,
+  not added). No prelude conversion helper for `T(x)` through a type variable (r10): the fix is `T(x)` itself, a
+  checker change, and a helper would be one more spelling to retire then.
+- **A soundness review of the night's merges, fixed (P2, O25h, O17a, O12, E4a/E6d, T25c, E11c, S4d, O18a, B11,
+  2026-10-10).** Ten findings of a read-only review, all fixed. **P2**: a spawned lambda built through what it
+  captured into the spawner's arena from the task's thread (heap corruption) - every scope a task's function value
+  captured, and RunOnStack's, gets a stand-in folded back at the join (a closure's environment now starts with its scope
+  count, so the runtime copies it with the stand-ins in place, `__olang_env_standin`). **O25h, general**: a value copied
+  out of a reference keeps its references where the referent's are whatever expression gives the reference (a call's or
+  method's borrowed result, `try`, a conditional or match of references, a loop's initializer, an assignment), and so do
+  a reference handed to a by-value parameter, a constructor or an enum case (C2d/T17c then hold the instance to it), and
+  a match binding or `as` of a payload held by value; a conditional of references from different scopes gives one not
+  known here, into which nothing new is built (O12). **O17a**: a split value is not sliced or viewed. **E6d**: a
+  conditional of literals folds each value exactly (a shift included) and meets at the widest. **T25c**: a mutable
+  global's initializer is no read-only copy; a slice, view or loop over a read-only copy reads it. **E11c**: a `Str`
+  may write nothing that was there before it ran - through a reference, directly or through a callee or a function value
+  it did not make (a fixed point), and its by-value receiver may not need a writable argument. **S4d**: compound
+  assignments and increments copy the old value; **O18a**: their operator's result lands at the target - pre-existing,
+  `y += E.Lit(i)` in a loop built in the loop body. S4d's promise narrowed to "the storage it names" (an alias is the
+  program's cycle). **Decided (mine), item 10**: an instantiation's read-only reference parameter is **as read-only as its
+  argument** (`roByArg`): a by-value result copied out of what it reaches is read-only where the argument is
+  (`roToResult` - so `ls[0]` and `Map.Get` on read-only collections of handles give read-only copies, as `for x in ls`
+  does), and where the body keeps such a copy writable (`Clone`, `ToArray`, `ToList`, `Filter`) the argument must be
+  writable - judged by following copies through references, locals (every assignment) and calls, once each body is
+  checked; with numbers for elements nothing applies. The prelude's `Map.Get` cursor became `mut`, `Clone` copies chunks
+  directly. Settle-time T25c errors are reported at the program's use (B11). **From the scope sanitizer, two more**: a
+  constructor growing a field's List inside a nested block built into that block (C2g held only at its top level - a
+  binding determined at depth 0 now means the body's top level, which in a constructor is the instance's scope); and a
+  copy of a *local* enum's payload is covered by the general O25h above. **Left**: a closure held in a struct a task
+  is given (`spawn work(h)` calling `h.f`) still builds into the scope it captured from the task's thread - fixing it
+  needs the allocator to know a scope's owner, or a P2 rule refusing such arguments.
 - **From study 5 (data science scripts): a call's result passed on, writes through `x[i]`, O17 per instantiation, loop
   copies (O18c, E31b, O17, O26a, E25, D16c, L18, B11, 2026-10-10; E31b decided by the coordinator, the rest mine).**
   **O18c, a use-after-free closed (pre-existing)**: a call's VALUE result holding what its argument refers to, passed

@@ -1,0 +1,8 @@
+# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
+# T25c: Map.Get on a read-only map gives a read-only copy of a value holding writable references
+fn f(m Map<I64, List<I64>>&) {
+    g := try m.Get(1) catch { return }
+    g.Push(1)
+}
+fn main() ? {
+}

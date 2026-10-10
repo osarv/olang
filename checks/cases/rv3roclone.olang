@@ -1,0 +1,10 @@
+# check: fail error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written
+# T25c: a clone of a List of Lists shares the inner lists, writable - so Clone needs a writable list in that
+# instantiation (with I64 elements it takes a read-only one)
+fn f(ro List<List<I64>>&, ok List<I64>&) I64 {
+    a := ok.Clone()
+    c := ro.Clone()
+    return a.Len() + c.Len()
+}
+fn main() ? {
+}

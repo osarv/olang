@@ -13022,6 +13022,222 @@ p) }` over an array of `Map`s compiles, since `merge`'s `for e in from` is `from
 `of.s` (the token scan had refused every `for`) - `o17bloopcopy` runs it after a churn, and `o10cloopcopy` keeps the
 limit and its note for a struct holding a count beside its map, which is no handle.
 
+### std for data scripts: `std/csv`, `std/stats`, an O(n log n) `Sort`, `List.Truncate` (2026-10-10)
+
+Usage study 5 (`/home/user/review/study5`, numeric and data-science scripts) found three programs writing the same
+helpers by hand - a quoted-CSV state machine (csvparse, the program that also met r01/r03/r04), and mean/variance/
+percentile/histogram code in csvstats, hist, report and series (r19) - and `Array.Sort` at 2.5x C's `qsort` (r08). The
+details below are mine.
+
+**`std/csv`.** The pattern is io.Lines' and String.Lines': `for row in try csv.Rows(text) { ... } catch csv.CsvError`.
+Each row is an `Array<String&>` built where the loop puts it - the body's scope, reclaimed per turn - counted first and
+made once at its length. A field the text holds as it reads (unquoted, or quoted with no doubled quote inside) is a
+slice of the text; only a field whose `""` must become `"` is new text, built where the row is. That is what the scope
+rules make natural: the row lands where its caller puts it (O18a), a slice of the text outlives it, and new text built
+with it lives as long. Keeping a field past its turn is `kept.Push($row[i])`; `kept.Push(row[i])` also compiles - the
+checker lands the row where the field is kept (O18c) - which is correct, at the cost of that memory living there.
+Strict, as RFC 4180 and Go's reader are: a quote in an unquoted field is `BARE_QUOTE`, text after a closing quote
+`TEXT_AFTER_QUOTE`, a quote never closed `UNCLOSED_QUOTE` - never read some way of the reader's choosing (Python reads
+`a"b` as text; errors are errors). Decided on the edges: "\r\n" and "\n" end a record, a carriage return just before
+the end of the text goes too (as String.Lines), a lone one inside a field is text; an empty line is a record of one
+empty field (RFC's grammar - Go skips empty lines, which loses rows of a one-column file); the last record needs no
+line break; ragged rows are the caller's to check (`row.Len()`). Where an error is: errors carry no data, so the
+reader keeps `Line` (the line its last record starts on, quoted line breaks counted). A `for` walks a copy of the
+iterator it is given - measured, the loop's hidden iterator does not write back - so a caller wanting `Line` calls
+`Next` itself (`row := try rows.Next() catch Exhausted { break } catch csv.CsvError { ... rows.Line ... }`); the doc says
+so. Writing: `csv.Record(fields, sep)` gives one line with its "\n", built at its length once, quoting a field only
+when it holds the separator, a quote or a line break (Python's QUOTE_MINIMAL; Go also quotes a leading space, which RFC
+4180 does not need); no fields at all is "\n" - CSV has no record of none, so it reads back as one empty field. Found
+writing it: the first `Record` sized its output from `fields.Len()` alone, one short for zero fields (the line break
+written past the end) - caught by the test. A reader over a file descriptor was not written: a file is
+`os.ReadFile` then `Rows`, which lets fields borrow; a streaming reader would have to copy every field, and io.Lines
+plus a per-line `Rows` covers files with no quoted line breaks. Checked: -b and -i give identical output on the study's
+quoted file, a churned arena leaves kept fields intact, and a table parsed while compiling bakes (`csvTotalBaked`). Measured on
+200,000 rows (6.3 MB, a quoted field in each): 68-76 ms, against 44-47 ms for `Lines` and `Split` (which cannot read
+quotes) and 200-380 ms for Python's `csv` module, under a load average of ~10 - each record is scanned twice, once
+to count its fields so the row is made once at its length.
+
+**`std/stats`.** Free functions generic over any number type (`F64(x)` per instantiation), computing in F64 - a sum of
+F16s is not rounded to F16 at every step - and returning F64, except `Min`/`Max`, which give an element back.
+`Variance`/`StdDev` are the sample ones (n - 1, Bessel: numpy's `ddof=1`, Python's `statistics.variance`) and
+`PopulationVariance`/`PopulationStdDev` the others - the longer name for the less common question, so the default
+estimate is the short one. Too few values is `StatsError.TOO_FEW` (one word: no values, or one for a sample variance -
+Python's StatisticsError says the same of both); a percentile outside 0..100 is an assert, a mistake in the program as
+an out-of-range `RemoveAt` is. A NaN among the values gives NaN, as numpy and IEEE do - `Min`/`Max` through
+`math.Min`/`Max`, which propagate it. **Sums are pairwise** (numpy's `pairwise_sum`: blocks of up to 128 in eight
+interleaved accumulators, halves added), and measured on 10M F64 under a load average of ~10: plain loop 16-20 ms,
+pairwise 12-15 ms, Kahan 61-65 ms - the eight independent chains keep the adder busy where one chain waits on each
+add, so the more accurate sum is also the faster one, and Kahan was not used. A first measurement showed pairwise at
+1 ms: LLVM had hoisted the pure call out of the timing loop; writing an element each round fixed the benchmark.
+**Variance is two passes**, the corrected form (sum of squared deviations from the mean, less the square of the summed
+deviations over n), so `[1e9 + 4, 1e9 + 7, 1e9 + 13, 1e9 + 16]` gives exactly 30 where a one-pass sum of squares
+loses every digit. **`Percentile` is numpy's default linear interpolation**, with numpy's own lerp (from `b`'s end when
+past the middle), found by quickselect on a copy (median of three, Hoare's partition, the next rank the least value
+above it) - O(n) on average rather than a sort; `Percentiles(a, ps)` sorts once for several. Against numpy 2.5 on
+normal samples of 1 to 4,097 values and nine percentiles each: every percentile bit-identical, means and variances
+within 1e-9 relative; -i prints the same. `Histogram(a, edges)` is numpy's: k + 1 increasing edges, bin i half-open
+except the last, which holds its right edge, values outside and NaNs in none, the bin found by halving; `Edges(lo, hi,
+bins)` is linspace with the last edge exactly `hi`. Baked while compiling (`statsBakedValue`), and equal to the run
+time's.
+
+**`Array.Sort`, O(n log n).** It was Go's `sort.Stable` - insertion-sorted blocks of 20 merged in place by rotation,
+O(n log^2 n) - because a scratch array holding elements that hold references would put those references in the
+call's own scope (G11: an array's element references live in the array's scope), and nothing read back from it could
+be stored into the caller's array. Checked rather than assumed: a scratch of `T` in the call's scope is O25h/O20's
+error for `String&` and for a struct holding one, and so is a value copy of a slice of the array (its elements read
+back at the copy's scope). Allocating the scratch where the array lives would be accepted, and would leave n / 2
+elements in the caller's scope at every call until it closes - a leak in a loop, so not that. So the element type
+decides, per instantiation, by `match T`: **numbers, `Bool` and `Char`** get a merge sort with a scratch of half the
+length - runs of 24 insertion-sorted, merged pairwise, each merge copying the shorter run into the scratch and merging
+from the front (left shorter) or the back (right shorter), skipped when the two runs are already in order, the
+merges of each 12,288-element block done before the blocks' (cache). **Every other type** - structs, enums, references,
+text - is sorted in blocks of 12,288 through positions (the same merge sort orders the block's `I64` positions,
+comparing the elements they name, then the elements are moved into place one cycle of the permutation at a time),
+and the blocks are merged by the old rotation (SymMerge): O(n log n log(n / 12288)), a block's positions its only
+allocation. Sorting all of such an array through positions was tried first and was slower than the rotation it
+replaced (1.09-1.25 s against 0.57 s on a million 24-byte records): every comparison reads two elements at random
+positions; within a cache-sized block that costs nothing. The first merge also overran its scratch: a left run grows
+past n / 2 at the last level - copying the shorter run, which never exceeds n / 2, is what makes half the length
+enough. Measured interleaved, old and new prelude built by one compiler (`OLANG_STD`), load average ~12: 1M F64
+0.52-0.60 -> 0.10-0.18 s, 1M I64 0.47-0.54 -> 0.08-0.11, 1M records (`F64` key and a `String&`) 0.59-0.64 -> 0.37-0.45,
+200k texts 0.15-0.19 -> 0.09-0.12; C++ `std::stable_sort` on the same machine: F64 0.10-0.11 (qsort 0.18-0.24), the
+records 0.21-0.24, the texts 0.09-0.19. Stable on both paths (a test sorts by a key with many ties at lengths around
+every boundary - 23, 24, 25, 12,287, 12,288, 12,289), evaluated while compiling (`sortBakedSumBaked`), and agreeing
+with -i. List.Sort, which copies out and back, gets the same speed.
+
+**`List.Truncate(n)`** keeps the first n elements - nothing when the list holds n or fewer (Rust's `Vec::truncate`, so
+`l.Sort(f); l.Truncate(k)` is the top k whatever the length) - by setting the tail where element n - 1 lives, as `At`
+finds it; the chunks it empties are kept for the next Pushes, as Pop's are. A `Take(k)` was not added: an array's is
+the slice `a[:k]`, a List's `c := l.Clone(); c.Truncate(k)`. **A sorted walk of a Map** is two lines,
+`es := m.Iter().ToList(); es.Sort(fn(a, b) { return a.Key < b.Key })` - no `Get` that could fail (the study first wrote
+`Keys().ToList()` then `Get`, whose default error cannot sit beside named ones in `main`'s signature, r20) - documented
+on `Map.Iter`, tested, not added. **No conversion helper for `T(x)`** through a type variable (r10, `linalg.Cast` in the
+study): the fix is the conversion itself, a checker change, and a prelude helper would be one more spelling to retire.
+### A soundness review of the night's merges, fixed (P2, O25h, O17a, O12, E4a/E6d, T25c, E11c, S4d, O18a, B11, 2026-10-10)
+
+A read-only review of rvfix, rv2fix and qc reproduced ten findings, each with a program reading memory back after an
+arena churn or comparing `-b`, `-d` and `-i` (valgrind sees none of them: a dead block's chunk goes back to the pool,
+not to malloc). All are fixed, with corpus tests in shared.olang (the `rv3` section, each baked while compiling and
+compared with the run time), must-fail programs in checks/cases (`rv3*.olang`) and two `-d` run cases.
+
+1. **A spawned lambda built into the spawner's arena from the task's thread** (pre-existing). P2 gave a spawned *call*
+   a stand-in for every scope variable it was handed, but `spawn fn() { ... a.Push(N(i)) ... }` reached `a`'s scope
+   through its closure, whose environment held the spawner's block scope - four tasks bumped one arena: segfaults, or
+   thousands of overwritten elements; `-r` reported races in `listState.grow`. The fix is in the runtime, where the
+   closure is: an environment now starts with a header - how many scope pointers it holds, how many function values,
+   its size - followed by the scopes, then the captured function values, then the other captures
+   (`cgEnvScopeField`/`cgEnvValueField`), and `__olang_env_standin` copies an environment into the join block's arena
+   with a fresh sub-scope for each scope pointer (recursively for captured function values), chaining each onto the
+   spawn's merge list, which `__olang_join_tasks` folds into the scope it stands for after the join. A spawn records
+   the environment's chain in a slot of its own, since a lambda's scope count is not known where the spawn's static
+   merge list is built. `os.RunOnStack` stands in the same way, folding when its thread is joined. `E31`'s Call adapter
+   environment took the header too. The review's other shapes - a closure made inside a task capturing a spawner's
+   reference, RunOnStack inside tasks - are clean under `-r` now. **Left, found while testing**: a closure *held in a
+   struct* a task is given (`spawn work(h)`, `work` calling `h.f(i)`) still builds into its captured scope from the
+   task's thread - the environment is reached only inside the task, through storage that cannot be copied at the spawn.
+   Closing it needs either the allocator to know which thread owns a scope (a compare per allocation, and a stand-in
+   made on a mismatch) or a P2 rule refusing a task argument that holds a function value; neither was built here.
+
+2. **A copy out of a reference was placed right only from an lvalue reference** (pre-existing, four shapes). O25h
+   says a value copied out of a reference keeps its references where the referent's are, and `copyRefsHome` honoured it
+   only for `d Box = r`. A call's borrowed result (`d Box = pick(r)`, also a method's, under `try`), a conditional or a
+   match of references, a loop's initializer and an assignment's value all left the copy's references in its block, so
+   building through `d.head.next` built there and the caller read freed memory. One predicate now says whether a value
+   copies existing references (`copiesExistingRefs`: a value lvalue, a slice, an `as` of a payload, anything
+   reference-shaped naming existing storage, a conditional or match any of whose values does) and one says where they
+   are (`copiedRefsScope`: a reference's exact scope, a value's refs home, and for a conditional or match the scope its
+   values share or, where they differ, one not known here). Every O25h site reads them: declarations, assignments, a
+   by-value argument binding its parameter's scope variable (O4b - `build(r)` with `fn build(b Box)` bound it as for a
+   temporary, passing the callee's own scope), a constructor's or an enum case's argument (C2d/T17c now hold the instance
+   to it, so `H(r)` and `E.A(r)` building in this block are errors), a match binding or an `as` of a payload held by
+   value (the payload's refs home; differing alternatives give one not known here). **O12** gained the consequence: a
+   value place whose references are in a scope not known here takes no temporary - only something that already lives
+   somewhere (`ERR_STORE_INTO_UNKNOWN_SCOPE`).
+
+3. **A slice or a view of a split value** (pre-existing; O17a incomplete). `b := src.b; s := b.items[0:2]` borrowed the
+   copy's inline array as a reference whose elements read at the copy's storage scope, so `s[0].next = Node()` built in
+   the block. Decided: refused where something can be stored through it (O25g by the type) - the elements are indexed
+   in place instead, which O25h already gets right. `as Array<T, N>&` is the same operation (E32b) and is refused alike.
+
+4. **A conditional of literals hid an undefined shift** (regression from rvfix). `OperandBinary` took a conditional of
+   literals as fitting without folding it and then marked everything under it folded away, so E8a never saw
+   `1 << 40` inside `b + (1 if c else (1 << 40))`: `-b` printed 4, `-d` 3, `-i` stopped; and `0 if c else (2000000000 +
+   2000000000)` wrapped in `I32`. Now each value is folded exactly as E4a folds one (`condOfLiteralsFold`, nested
+   conditionals included), the widest of their own types is taken, every value adapts to it, and only values actually
+   folded are marked. Both shapes give the exact answer in every mode.
+
+5. **T25c and mutable globals.** `M mut List<I32> = G` shared G's record, so `M.Push(9)` changed an immutable global's
+   list. A mutable global's initializer is stored where it can be written: `roStoreCheck` with
+   `ERR_READ_ONLY_COPY_GLOBAL`, which names the fix (`G.Clone()`, or drop the `mut`).
+
+6. **A read-only copy's references came back writable through a slice, a view or a loop.** `roRefOf` followed an
+   element read through a reference as shallow, so `x.arr[0:2][0].v += 1`, the view and `for e in x.arr` wrote through
+   a read-only copy of a global. A reference made from a value - a slice, a view, a for-in's hidden borrow, a local
+   declared from one - now reads that value (`roViewedValue`): what it gives is read-only where the value is, and a
+   by-value parameter writing through its loop's elements needs a writable argument (`look(G)` is an error).
+
+7. **`Str` writing through a reference** (pre-existing). E11c's purity was K1a evaluability, which refuses a global
+   write but not a write through a reference, so a `Str` bumping a counter it reached through its receiver ran twice
+   per `$` at run time and once under `-i`. A function now records whether it writes storage that was there before it
+   ran (`effWrites`): an assignment, an increment or an atomic whose place is reached through a reference not in this
+   call's own storage (a parameter's scope, a capture's, the program's, one not known here) or is a global; a call
+   passing such storage to a parameter the callee may write through (a writable reference, or one reaching writable
+   references), settled as a fixed point over call edges once every body is checked; and a call through a function
+   value whose body is not known there (a lambda made in the function is judged by its own body). A `Str` with that
+   effect is an error with a note at the write (`ERR_STR_WRITES`); a `Str` building a local list or a `StringBuilder` is
+   fine - the corpus test bakes one while compiling. The T25c half: a by-value receiver of `Str` that needs a writable
+   argument is an error too (`ERR_STR_RECEIVER_WRITABLE`), since `$` renders read-only copies.
+
+8. **S4d missed compound assignments and increments** (rv2fix). Only a plain `=` collected the places it writes over,
+   so `x += E.Lit(2)` with a `Plus` keeping its receiver built a value holding `x` itself. `buildAssignStmnt` collects the
+   place for every operator, and `buildAssignCore`'s compound branch and `buildIncDec` set it around the operator call,
+   so `copyOldBorrows` copies the old value. **Found on the way, pre-existing**: the compound branch never landed the
+   operator's result at the target (O18a's assignment row - the plain branch did), so `y += E.Lit(i)` in a loop built
+   the new value in the loop body's arena and stored it in `y`, outside: wrong answers after a churn. It lands now.
+
+9. **S4d through an alias** (low). The place is told by the names written; `p.a = E.Neg(q.a)` with `q` and `p` one
+   instance is the program's cycle. The spec now promises only "no value holds the storage it names".
+
+10. **The prelude's generic code over collections of handles** (qc). With elements holding writable references - a
+   `List`, a `Map`, any handle - `Map.Get`, `List.Clone`, `Array.ToList` and `Array.Filter` no longer compiled, while
+   `ls[0].Push(9)` through `At` on a read-only `List<List<I32>>&` was accepted (a call's result was fresh) where `for x in
+   ls` gives read-only copies: one element, three answers. Neither "make the receivers `mut`" (refusing a read-only
+   `List<I64>.Clone()`) nor "elements read through `At` are fresh" works, because a generic's declaration cannot say
+   `mut` for some instantiations and not others. **Decided (mine)**: in an instantiation, a read-only reference
+   parameter is as read-only as its argument (`roByArg`, set on the signature by `instantiateFunc`). Copies out of what
+   it reaches are judged by **deep provenance** (`roDeepParams`): following a value back through members, elements,
+   slices and payloads, through references too, through locals by their initializer and every value later assigned to
+   them (`roAssigns`), and through calls that hand back what their own such parameters reach. A by-value **result**
+   copied out of one makes that parameter `roToResult`, settled at the end of the instantiation's body so callers find
+   it: at a call, the result is a read-only copy exactly where that argument is read-only (`roValueOf`'s call case), so
+   `ls[0].Push(9)` on a read-only list is refused with a note at `ls`, and `Map.Get` on a read-only map gives a read-only
+   value. A copy **kept writable** - stored, lent writably, passed to a callee that keeps it - makes the parameter need a
+   writable argument, checked at each call (`ERR_READ_ONLY_REF_KEPT`) once every body is checked, through the existing
+   fixed point. A read-only borrowed result an instantiation hands back from such a parameter (`RunFrom`'s run) and a
+   loop's hidden borrow follow their source. Two prelude edits: `Map.Get`'s cursor is `f mut mapSlot` (the buckets hold
+   writable slots; the read-only local made every value a definite read-only copy), and `Clone` copies the chunks
+   directly rather than through `RunFrom`'s read-only runs, which a declared read-only local makes definitely read-only.
+   **B11**: errors settled after the instantiations' bodies are checked keep the instantiation context they were found
+   in (`ErrMsgSaveContext`), so `PushAll`'s and `grow`'s errors are reported at the program's call. The corpus, std and
+   checks needed no change beyond those two prelude functions.
+   **Recorded limit**: an iterator a read-only collection hands out (`ro.Iter()`, and so `for e in m` over a read-only
+   `Map`) still gives writable copies: it holds a writable reference to the state by shallow permission, and making its
+   elements read-only would make every iteration of a writable collection read-only too.
+
+**Two more from the scope sanitizer** (found while this batch was open, the sanitizer reporting "use after scope
+closed"). A constructor growing a field's `List` inside a nested block - `for i in range n { left.Push(n - i) }` - built
+each chunk in the loop body's arena, though the instance kept it: C2g makes a constructor's top level the instance's
+scope, but the call's binding recorded the field local's depth as 0 (a constructor's top level is depth 0 to the
+checker), and `SemanticBoundScopeDepth` read a determined binding at depth 0 as "the block the call is written in". It
+means the body's top level now (as `normDepth` already reads it in the checker), which codegen's `cgOwnAllocSlot` makes
+the instance's scope in a constructor and the function's own elsewhere - never shorter than what the checker proved.
+shared.olang's tests over `c3Holder` and `sc3Countdown` had the shape and passed by luck. And a copy of a *local* enum's
+payload (a match binding, `y := e as E.A`) passed by value, captured through a reference read out of it, or lent to a
+callee that builds through it, had the callee build in the copy's block - the same root as finding 2's fourth shape,
+closed by the same general O25h (the lend, refused by O17 on this branch, is accepted and built in the right place once
+merged with study 4's O17b). Both have corpus tests and a checks run case built `-d -s`; the checks harness now finds a
+`-s` binary by its `.san` suffix, so a run case can ask for the sanitizer.
+
 ### From study 5: a call's result passed on, writes through `x[i]`, O17 per instantiation, loop copies (O18c, E31b, O17, O26a, E25, D16c, L18, B11, 2026-10-10)
 
 Study 5 (/home/user/review/study5) wrote twelve data-science scripts the way a newcomer would and marked every
@@ -13106,6 +13322,13 @@ the receiver itself; the error now carries a note saying to take that parameter 
 error whose argument at fault is text read out of something made too briefly says to pass a copy, `$cols[0]`, which is
 built where the callee needs it (r13). Not done: r12 (a literal adapting into a declared operator parameter - decided
 to be an error, not built), r11, r14-r17.
+
+**Merging the third review's batch (rv3fix) opened one shape, closed here.** rv3fix made a binding determined at depth
+0 mean the body's top level (SemanticBoundScopeDepth) where it had meant the call's own block. A reference read out of
+a call's value result - `ss.Push(box(t).s)` - resolved to exactly such a depth-0 nothing (the member carries no binding
+of the call's), which had happened to be held to the loop's block and was now taken for the function's top level: the
+text, reclaimed each turn, was kept (the scope sanitizer reported it). RefExactScope now reads such a reference where the
+call's result scope landed by its obligations (`landedCallRefsScope`), as `b := box(t); ss.Push(b.s)` reads it from `b`.
 
 Tests: corpus tests for each (read back after an arena churn, the write-backs and the captures also baked into globals),
 check cases for each refusal (`s5*`, `l18semicolon`), and `listfieldwrite` changed to the new rule (a write through

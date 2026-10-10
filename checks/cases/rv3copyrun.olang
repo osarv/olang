@@ -1,0 +1,65 @@
+# check: run
+# flags: -d -s
+# O25h/S4d/T25c unoptimized: a copy out of a reference builds where the referent's references live, a compound assignment
+# keeps the place's old value and lands at the place, and a generic's read-only parameter gives writable copies of a
+# writable argument - each read back after an arena churn (at -O3 in shared.olang's rv3 tests)
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type W struct(b Box) { b }
+fn pick(x mut Box&) mut Box&x { return x }
+fn viaCall(r mut Box&) {
+    d Box = pick(r)
+    d.head.next = Node()
+    d.head.next.v = 42
+}
+fn build(b Box) {
+    b.head.next = Node()
+    b.head.next.v = 43
+}
+type X enum {
+    Lit(v I64)
+    Add(a X&, b X&)
+}
+fn eval(e X&) I64 {
+    return match e {
+        case X.Lit(v) => v
+        case X.Add(a, b) => eval(a) + eval(b)
+    }
+}
+fn (a X&) Plus(b X&) X { return X.Add(a, b) }
+fn (a X&) Inc() X { return X.Add(a, X.Lit(1)) }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w1 := W(Box())
+    w2 := W(Box())
+    viaCall(w1.b)
+    build(w2.b)
+    x := X.Lit(1)
+    for i in range 4 {
+        x += X.Lit(i)
+        x++
+        churn()
+    }
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    c := ll.Clone()
+    c[0].Push(6)
+    first := ll[0]
+    first.Push(8)
+    churn()
+    if w1.b.head.next.v != 42 or w2.b.head.next.v != 43 or eval(x) != 11 or ll[0].Len() != 2 { fail }
+}

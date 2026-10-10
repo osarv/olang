@@ -1,0 +1,59 @@
+# check: run
+# flags: -d -s
+# O25h under the scope sanitizer: a copy of a local enum's payload - a match binding, an "as" - keeps its references
+# where the enum's are, so a callee given it by value, one it is lent to, and a lambda through a reference read out of it
+# all build there, not in the clause's or the block's own arena (each was "use after scope closed")
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn build(b Box) { b.head.next = Node(42) }
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn second(e E) I64 {
+    b := e as E.A
+    if b.head.next == null { return 0 }
+    return b.head.next.v
+}
+type Countdown struct(n I64) {
+    left List<I64>
+    for i in range n { left.Push(n - i) }
+}
+fn main() ? {
+    e1 := E.A(Box())
+    match e1 {
+        case E.A(y) { build(y) }
+        case _ { }
+    }
+    e2 := E.A(Box())
+    {
+        y := e2 as E.A
+        grow(y)
+    }
+    e3 := E.A(Box())
+    match e3 {
+        case E.A(y) {
+            h := y.head
+            f := fn(v I64) { h.next = Node(v) }
+            f(44)
+        }
+        case _ { }
+    }
+    c := Countdown(20)
+    churn()
+    s I64 = 0
+    for v in c.left { s += v }
+    if second(e1) != 42 or second(e2) != 43 or second(e3) != 44 or s != 210 { fail }
+}

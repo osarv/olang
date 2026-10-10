@@ -1,0 +1,367 @@
+# stats - the statistics a data script reaches for: Sum, Mean, Variance and StdDev (sample and population), Median and
+# Percentile, Min and Max, and a Histogram over given edges.
+#
+#     m := try stats.Mean(prices)
+#     sd := try stats.StdDev(prices)
+#     p95 := try stats.Percentile(latencies, 95.0)
+#     counts := stats.Histogram(values, stats.Edges(0.0, 100.0, 20))
+#
+# Each takes an array of any number type - the four floats and the integers - and computes in F64, whatever the
+# elements are: a sum of F16s is not rounded to F16 at every step, and the answer is an F64 (Min and Max give an element
+# back as it is). A List is handed over as l.ToArray(). Ordinary olang, so every function here runs while compiling (K1)
+# as in a built program and under -i.
+#
+# Sums are pairwise (numpy's): runs of 128 summed in eight interleaved accumulators, then halves added together, so the
+# rounding error grows with the logarithm of the length rather than with the length, and the eight independent sums
+# keep the adder busy - measured as fast as a plain loop. Variance is two passes over the values - the mean, then the
+# squared distances from it - not the one-pass sum of squares, which loses every digit when the values are large and
+# close together.
+#
+# Too few values is an error (StatsError.TOO_FEW): an empty array has no mean, median or extreme, and one value has no
+# sample variance. A NaN among the values makes the answer NaN, as IEEE 754 carries it, and a percentile asked outside
+# 0..100 is a mistake in the program, which stops it as a slice out of range does.
+
+import "math"
+
+# why a statistic has no value
+error StatsError {
+    TOO_FEW             # an empty array, or one value for a sample variance or deviation
+}
+
+# the sum of the elements, as an F64 - pairwise, so its error grows only with the logarithm of the length. The empty
+# array sums to 0
+fn Sum(a Array<<T>>&) F64 { return pairSum(a, 0, a.Len()) }
+
+# the arithmetic mean
+fn Mean(a Array<<T>>&) F64 ? StatsError {
+    if a.Len() == 0 { error StatsError.TOO_FEW }
+    return pairSum(a, 0, a.Len()) / F64(a.Len())
+}
+
+# the sample variance - the squared distances from the mean summed and divided by one less than the count (Bessel's
+# correction): what estimates the variance of the population the values were drawn from. numpy's var(a, ddof=1),
+# Python's statistics.variance. Needs two values
+fn Variance(a Array<<T>>&) F64 ? StatsError {
+    if a.Len() < 2 { error StatsError.TOO_FEW }
+    return squaredDeviations(a) / F64(a.Len() - 1)
+}
+
+# the population variance - the squared distances from the mean divided by the count: the variance of exactly these
+# values. numpy's var(a), Python's statistics.pvariance
+fn PopulationVariance(a Array<<T>>&) F64 ? StatsError {
+    if a.Len() == 0 { error StatsError.TOO_FEW }
+    return squaredDeviations(a) / F64(a.Len())
+}
+
+# the sample standard deviation, the square root of Variance. Needs two values
+fn StdDev(a Array<<T>>&) F64 ? StatsError { return math.Sqrt(try Variance(a)) }
+
+# the population standard deviation, the square root of PopulationVariance
+fn PopulationStdDev(a Array<<T>>&) F64 ? StatsError { return math.Sqrt(try PopulationVariance(a)) }
+
+# the middle value - the mean of the two middle ones for an even count. Percentile(a, 50.0)
+fn Median(a Array<<T>>&) F64 ? StatsError { return try Percentile(a, 50.0) }
+
+# the value p percent of the way through the values in order, p from 0 to 100: linear interpolation between the two
+# closest ranks (numpy's default, Excel's PERCENTILE.INC) - in order v[0] .. v[n-1], the position p / 100 * (n - 1),
+# between v[floor] and v[floor + 1] in proportion. So 0 is the least, 100 the greatest and 50 the median. The array is
+# not changed: the values are copied and only the two needed are put in place (a selection, O(n) on average, not a
+# sort). For several percentiles of one array, Percentiles sorts once
+fn Percentile(a Array<<T>>&, p F64) F64 ? StatsError {
+    assert p >= 0.0 and p <= 100.0, "stats.Percentile: p is a percentage, from 0 to 100"
+    n I64 = a.Len()
+    if n == 0 { error StatsError.TOO_FEW }
+    v := Array<F64>(n)
+    for i, x in a {
+        v[i] = F64(x)
+        if v[i] != v[i] { return v[i] }      # a NaN: no order, so no percentile
+    }
+    pos F64 = p / 100.0 * F64(n - 1)
+    k I64 = I64(pos)
+    selectRank(v, k)
+    if k == n - 1 { return v[k] }
+    above F64 = v[k + 1]                     # every value after k is at least v[k]: the least of them is rank k + 1
+    for i in range k + 2, n {
+        if v[i] < above { above = v[i] }
+    }
+    return lerp(v[k], above, pos - F64(k))
+}
+
+# Percentile for each of ps, in their order, with the values sorted once
+fn Percentiles(a Array<<T>>&, ps Array<F64>&) Array<F64> ? StatsError {
+    n I64 = a.Len()
+    if n == 0 { error StatsError.TOO_FEW }
+    v := Array<F64>(n)
+    nan Bool = false
+    for i, x in a {
+        v[i] = F64(x)
+        if v[i] != v[i] { nan = true }
+    }
+    out := Array<F64>(ps.Len())
+    if not nan { v.Sort(fn(x, y) { return x < y }) }
+    for j, p in ps {
+        assert p >= 0.0 and p <= 100.0, "stats.Percentiles: p is a percentage, from 0 to 100"
+        if nan {
+            out[j] = math.NaN
+            continue
+        }
+        pos F64 = p / 100.0 * F64(n - 1)
+        k I64 = I64(pos)
+        out[j] = v[k] if k == n - 1 else lerp(v[k], v[k + 1], pos - F64(k))
+    }
+    return out
+}
+
+# the least element, as it is - a NaN if there is one, as math.Min gives it
+fn Min(a Array<<T>>&) T ? StatsError {
+    if a.Len() == 0 { error StatsError.TOO_FEW }
+    m := a[0]
+    for i in range 1, a.Len() { m = math.Min(m, a[i]) }
+    return m
+}
+
+# the greatest element, as it is - a NaN if there is one, as math.Max gives it
+fn Max(a Array<<T>>&) T ? StatsError {
+    if a.Len() == 0 { error StatsError.TOO_FEW }
+    m := a[0]
+    for i in range 1, a.Len() { m = math.Max(m, a[i]) }
+    return m
+}
+
+# how many elements fall in each bin the edges bound, numpy's histogram: k + 1 increasing edges make k bins, bin i
+# holding the values from edges[i] up to but not including edges[i + 1] - the last one including its right edge as
+# well. A value below the first edge or above the last, or a NaN, is in no bin. Edges that are not two or more and
+# increasing are a mistake in the program, which stops it
+fn Histogram(a Array<<T>>&, edges Array<F64>&) Array<I64> {
+    assert edges.Len() >= 2, "stats.Histogram: two edges at least, for one bin"
+    for i in range 1, edges.Len() {
+        assert edges[i - 1] < edges[i], "stats.Histogram: the edges must increase"
+    }
+    counts := Array<I64>(edges.Len() - 1)
+    last I64 = edges.Len() - 1
+    for x in a {
+        v := F64(x)
+        if not (v >= edges[0] and v <= edges[last]) { continue }     # outside, or a NaN
+        lo I64 = 0                           # the bin: the last edge at or below v, found by halving
+        hi I64 = last
+        for hi - lo > 1 {
+            mid I64 = (lo + hi) / 2
+            if edges[mid] <= v { lo = mid } else { hi = mid }
+        }
+        counts[lo]++
+    }
+    return counts
+}
+
+# bins + 1 edges spaced evenly from lo to hi, the last exactly hi (numpy's linspace) - for Histogram:
+# stats.Histogram(a, stats.Edges(0.0, 1.0, 10)) counts the values in ten bins of a tenth each
+fn Edges(lo F64, hi F64, bins I64) Array<F64> {
+    assert bins >= 1 and lo < hi, "stats.Edges: one bin at least, between lo and a greater hi"
+    out := Array<F64>(bins + 1)
+    step F64 = (hi - lo) / F64(bins)
+    for i in range bins { out[i] = lo + F64(i) * step }
+    out[bins] = hi
+    return out
+}
+
+# the sum of a[lo:hi] as F64s, pairwise (numpy's pairwise_sum): up to 128 values in eight accumulators, interleaved,
+# so the additions do not wait on each other; more than that in two halves, each summed so
+fn pairSum(a Array<<T>>&, lo I64, hi I64) F64 {
+    n I64 = hi - lo
+    if n < 8 {
+        s F64 = 0.0
+        for i in range lo, hi { s += F64(a[i]) }
+        return s
+    }
+    if n <= 128 {
+        r0, r1, r2, r3 := F64(a[lo]), F64(a[lo + 1]), F64(a[lo + 2]), F64(a[lo + 3])
+        r4, r5, r6, r7 := F64(a[lo + 4]), F64(a[lo + 5]), F64(a[lo + 6]), F64(a[lo + 7])
+        i I64 = lo + 8
+        for i + 8 <= hi {
+            r0 += F64(a[i])
+            r1 += F64(a[i + 1])
+            r2 += F64(a[i + 2])
+            r3 += F64(a[i + 3])
+            r4 += F64(a[i + 4])
+            r5 += F64(a[i + 5])
+            r6 += F64(a[i + 6])
+            r7 += F64(a[i + 7])
+            i += 8
+        }
+        s F64 = ((r0 + r1) + (r2 + r3)) + ((r4 + r5) + (r6 + r7))
+        for i < hi {
+            s += F64(a[i])
+            i++
+        }
+        return s
+    }
+    m I64 = lo + n / 2 / 8 * 8
+    return pairSum(a, lo, m) + pairSum(a, m, hi)
+}
+
+# the squared distances of the values from their mean, summed - the second of two passes, with the first pass's
+# rounding taken back out: the distances themselves sum to the rounding error of the mean, and subtracting its square
+# over n corrects for it (the "corrected two-pass" algorithm)
+fn squaredDeviations(a Array<<T>>&) F64 {
+    n I64 = a.Len()
+    m F64 = pairSum(a, 0, n) / F64(n)
+    d := pairDev(a, 0, n, m, false)
+    return pairDev(a, 0, n, m, true) - d * d / F64(n)
+}
+
+# pairSum of x - m, or of its square
+fn pairDev(a Array<<T>>&, lo I64, hi I64, m F64, square Bool) F64 {
+    n I64 = hi - lo
+    if n <= 128 {
+        r0, r1, r2, r3, r4, r5, r6, r7 := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        i I64 = lo
+        for i + 8 <= hi {
+            d0, d1, d2, d3 := F64(a[i]) - m, F64(a[i + 1]) - m, F64(a[i + 2]) - m, F64(a[i + 3]) - m
+            d4, d5, d6, d7 := F64(a[i + 4]) - m, F64(a[i + 5]) - m, F64(a[i + 6]) - m, F64(a[i + 7]) - m
+            if square {
+                r0 += d0 * d0
+                r1 += d1 * d1
+                r2 += d2 * d2
+                r3 += d3 * d3
+                r4 += d4 * d4
+                r5 += d5 * d5
+                r6 += d6 * d6
+                r7 += d7 * d7
+            } else {
+                r0 += d0
+                r1 += d1
+                r2 += d2
+                r3 += d3
+                r4 += d4
+                r5 += d5
+                r6 += d6
+                r7 += d7
+            }
+            i += 8
+        }
+        s F64 = ((r0 + r1) + (r2 + r3)) + ((r4 + r5) + (r6 + r7))
+        for i < hi {
+            d F64 = F64(a[i]) - m
+            s += d * d if square else d
+            i++
+        }
+        return s
+    }
+    mid I64 = lo + n / 2 / 8 * 8
+    return pairDev(a, lo, mid, m, square) + pairDev(a, mid, hi, m, square)
+}
+
+# a + (b - a) * t, as numpy computes it: from b's end when t is past the middle, so t = 1 gives b exactly, and a when
+# the two are equal
+fn lerp(a F64, b F64, t F64) F64 {
+    if a == b { return a }
+    d F64 = b - a
+    return b - d * (1.0 - t) if t >= 0.5 else a + d * t
+}
+
+# puts the value of rank k at v[k], everything before it no greater and everything after it no less - a quickselect,
+# the pivot the median of the first, middle and last, O(n) on average
+fn selectRank(v mut Array<F64>&, k I64) {
+    lo I64 = 0
+    hi I64 = v.Len() - 1
+    for hi > lo {
+        mid I64 = lo + (hi - lo) / 2
+        if v[mid] < v[lo] { v[mid], v[lo] = v[lo], v[mid] }
+        if v[hi] < v[lo] { v[hi], v[lo] = v[lo], v[hi] }
+        if v[hi] < v[mid] { v[hi], v[mid] = v[mid], v[hi] }
+        pivot F64 = v[mid]
+        i I64 = lo
+        j I64 = hi
+        for i <= j {                         # Hoare's partition around the pivot's value
+            for v[i] < pivot { i++ }
+            for pivot < v[j] { j-- }
+            if i <= j {
+                v[i], v[j] = v[j], v[i]
+                i++
+                j--
+            }
+        }
+        if k <= j {
+            hi = j
+        } else if k >= i {
+            lo = i
+        } else {
+            return                           # between the two parts: every value there is the pivot
+        }
+    }
+}
+
+test "Sum, Mean, Variance and StdDev" {
+    a := F64[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    assert Sum(a) == 40.0 and Sum(Array<F64>(0)) == 0.0
+    assert (try Mean(a) catch default -1.0) == 5.0
+    assert (try PopulationVariance(a) catch default -1.0) == 4.0
+    assert (try PopulationStdDev(a) catch default -1.0) == 2.0
+    assert (try Variance(a) catch default -1.0) == 32.0 / 7.0
+    assert (try Mean(I32[1, 2, 3, 4]) catch default -1.0) == 2.5           # integers too, in F64
+    assert (try Mean(F16[0.5, 1.5]) catch default -1.0) == 1.0
+    assert (try Mean(Array<F64>(0)) catch StatsError.TOO_FEW default -1.0) == -1.0
+    assert (try Variance(F64[3.0]) catch StatsError.TOO_FEW default -1.0) == -1.0
+    assert (try PopulationVariance(F64[3.0]) catch default -1.0) == 0.0
+    # values large and close together: the two-pass variance keeps them, a sum of squares would lose every digit
+    big := F64[1e9 + 4.0, 1e9 + 7.0, 1e9 + 13.0, 1e9 + 16.0]
+    assert (try Variance(big) catch default -1.0) == 30.0
+    nan := F64[1.0, math.NaN, 3.0]
+    assert math.IsNan(try Mean(nan) catch default 0.0) and math.IsNan(try Variance(nan) catch default 0.0)
+}
+
+test "pairwise sums keep their error small" {
+    # a million tenths: a plain running sum drifts by about 1e-6, the pairwise one by far less
+    a := Array<F64>(1000000, 0.1)
+    plain F64 = 0.0
+    for x in a { plain += x }
+    assert math.Abs(Sum(a) - 100000.0) < 1e-8 and math.Abs(plain - 100000.0) > 1e-7
+    f := Array<F32>(1000000, F32(0.1))
+    assert math.Abs(Sum(f) - 100000.00149011612) < 1e-6                     # each F32 exactly, summed in F64
+}
+
+test "Median and Percentile interpolate between the closest ranks, as numpy does" {
+    a := F64[15.0, 20.0, 35.0, 40.0, 50.0]
+    assert (try Median(a) catch default -1.0) == 35.0
+    assert (try Median(F64[4.0, 1.0, 3.0, 2.0]) catch default -1.0) == 2.5
+    assert (try Percentile(a, 0.0) catch default -1.0) == 15.0 and (try Percentile(a, 100.0) catch default -1.0) == 50.0
+    assert (try Percentile(a, 40.0) catch default -1.0) == 29.0                # numpy.percentile([15,20,35,40,50], 40)
+    assert (try Percentile(a, 30.0) catch default -1.0) == 23.0
+    assert (try Percentile(I64[7], 90.0) catch default -1.0) == 7.0
+    assert (try Median(Array<I32>(0)) catch StatsError.TOO_FEW default -1.0) == -1.0
+    assert math.IsNan(try Median(F64[1.0, math.NaN]) catch default 0.0)
+    ps := try Percentiles(a, F64[0.0, 30.0, 40.0, 50.0, 100.0]) catch { fail }
+    assert ps == F64[15.0, 23.0, 29.0, 35.0, 50.0]
+    # the selection agrees with sorting, on values with repeats, in any order
+    v := Array<F64>(1001)
+    for i in range 1001 { v[i] = F64((i * 7919) % 97) }
+    sorted := try Percentiles(v, F64[1.0, 25.0, 50.0, 62.5, 99.9]) catch { fail }
+    for j, p in F64[1.0, 25.0, 50.0, 62.5, 99.9] {
+        assert (try Percentile(v, p) catch default -1.0) == sorted[j]
+    }
+    assert v[0] == 0.0 and v[1] == F64(7919 % 97)                              # left as it was
+}
+
+test "Min, Max and Histogram" {
+    assert (try Min(I32[4, -2, 9]) catch default 0) == -2 and (try Max(I32[4, -2, 9]) catch default 0) == 9
+    assert (try Max(F32[1.5, 2.5]) catch default 0.0) == 2.5
+    assert math.IsNan(try Max(F64[1.0, math.NaN, 2.0]) catch default 0.0)
+    assert (try Min(Array<F64>(0)) catch StatsError.TOO_FEW default -1.0) == -1.0
+    h := Histogram(F64[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, -1.0, 9.0, math.NaN], F64[0.0, 1.0, 2.0, 3.0])
+    assert h == I64[2, 2, 3]                     # the last bin holds its right edge; -1, 9 and NaN in none
+    e := Edges(0.0, 1.0, 4)
+    assert e == F64[0.0, 0.25, 0.5, 0.75, 1.0]
+    assert Histogram(I32[1, 2, 2, 3, 3, 3], Edges(1.0, 3.0, 2)) == I64[1, 5]
+}
+
+# while compiling as at run time (K2)
+fn statsBaked() F64 {
+    a := Array<F64>(301)
+    for i in range 301 { a[i] = F64((i * 37) % 101) / 4.0 }
+    return (try Mean(a) catch default 0.0) + (try Variance(a) catch default 0.0) + (try Percentile(a, 37.5) catch default 0.0)
+}
+statsBakedValue F64 = statsBaked()
+
+test "the statistics computed while compiling equal the run time's" {
+    assert statsBaked() == statsBakedValue
+}

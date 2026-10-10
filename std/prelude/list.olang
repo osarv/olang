@@ -195,6 +195,27 @@ fn (l mut List<<T>>&) Clear() {
     }
 }
 
+# keeps the first n elements and removes the rest - nothing changes when the list holds n or fewer, so "l.Truncate(k)"
+# after a Sort leaves the top k whatever the length (Rust's Vec::truncate). Moves nothing; the chunks it empties are
+# kept for the Pushes that follow, as Pop's are. A negative n is a mistake in the program, which stops it. (A copy of
+# the first k is "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
+fn (l mut List<<T>>&) Truncate(n I64) {
+    assert n >= 0, "List.Truncate: a count, 0 or more"
+    s := l.s
+    if n >= s.count { return }
+    if n == 0 {
+        l.Clear()
+        return
+    }
+    p I64 = n - 1 + firstChunk               # where element n - 1 lives, as At finds it
+    k I64 = highBit(p) - firstChunkLog
+    s.nChunks = k + 1
+    s.tail = s.chunks[k]
+    s.room = s.tail.Len()
+    s.used = p - (firstChunk << k) + 1
+    s.count = n
+}
+
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
 # checked once per call, and stops it as a slice out of range does
@@ -286,11 +307,11 @@ fn (l mut List<<T>>&) Sort(less fn(x T, y T) Bool) {
 # so a List of references gives a list of the same references
 fn (l List<<T>>&) Clone() List<T> {
     c := List<T>()
-    at I64 = 0
-    for {
-        run := try l.RunFrom(at) catch Exhausted { break }
-        c.PushAll(run)
-        at += run.Len()
+    s := l.s
+    for k in range s.nChunks {
+        n I64 = s.chunks[k].Len()
+        if k == s.nChunks - 1 { n = s.used }
+        c.PushAll(s.chunks[k][:n])
     }
     return c
 }

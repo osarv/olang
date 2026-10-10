@@ -1,0 +1,8 @@
+# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
+# T25c: At on a read-only List of Lists gives a read-only copy of the inner List, as a loop over it does - pushing to it
+# would change what the read-only place holds
+fn look(ls List<List<I32>>&) {
+    ls[0].Push(9)
+}
+fn main() ? {
+}

@@ -1,0 +1,16 @@
+# check: fail error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed
+# O17a: a view ("as Array<T, N>&") of such a value is refused as a slice is
+type Node struct() {
+    next mut Node& = null
+}
+type Box struct() {
+    items Array<mut Node&, 2>
+}
+type W struct(b Box) { b }
+fn f(src mut W&) {
+    b := src.b
+    v := b.items as Array<mut Node&, 2>&
+    v[1].next = Node()
+}
+fn main() ? {
+}
