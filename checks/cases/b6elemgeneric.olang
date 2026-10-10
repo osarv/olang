@@ -1,0 +1,19 @@
+# check: fail error[O20]: the container outlives what this refers to
+# O18c (the batch 6 review): ...through a program's own generic At giving its element type
+type Cell struct() {
+    s String& = ""
+}
+type Bx<T> struct() {
+    l mut List<T>& = List<T>()
+}
+fn (c Bx<<T>>&) At(i I64) T {
+    return c.l[i]
+}
+fn main() ? {
+    cells mut Bx<mut Cell&>& = Bx<mut Cell&>()
+    for i in range 3 { cells.l.Push(Cell()) }
+    for i in range 3 {
+        x String& = "w" $i
+        cells[i].s = x
+    }
+}

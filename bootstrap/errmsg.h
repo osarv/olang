@@ -542,6 +542,7 @@ struct type;
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
     X(NOTE_LOOP_COPY_LENT,              "",      "'%S' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") \
     X(NOTE_HELD_INDEX_WHERE,            "",      "the index is held here, for both the read and the write, in a block that closes first - make it where '%S' lives first, then index with it") \
+    X(NOTE_COND_VALUE,                  "",      "this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)") \
     X(NOTE_SLICE_OF_TEMPORARY,          "",      "this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that") \
     X(NOTE_TEXT_COPY_WHERE,             "",      "this text lives in a block that closes first - pass a copy, which is made where '%S' lives: write '$' before it") \
     X(NOTE_LOOP_COPY,                   "",      "'%S' is the loop's copy of an element, made in the loop's block - lend the element itself: '%S[i]', with 'for i in range %S.Len()'") \

@@ -4744,6 +4744,41 @@ and literals made only of such, never existing storage anywhere in it) - it is
   error, D10a, an early `done`), std/chan's cancelled `RecvUntil`, 17 `checks/cases/p4*`, and the `spawnerr` scenario
   comparing `-b`, `-b -d -s` and `-i` on one program (and its unhandled error); `-r` run by hand, clean.
 
+- **The batch 6 review, fixed: stores through a collection's element, conditionals of references, a destructor's tasks,
+  five over-rejections (O18c, O12/E28, O25e, C9a/P2, S18, C10, S4c, E31a, O1b, P4a, 2026-10-10; decisions mine).**
+  **O18c, a use-after-free from checker batch 5**: `cells[i].s = x` (`List<mut Cell&>`, `x` a loop body's text) - and
+  through `Map.Get`, `List.First`, a parallel or destructuring target, a program's own generic `At`, `rows[i][0] = x`, a
+  value field - was judged while the element's call was still landing (so not at all), and the end of the statement then
+  landed the call at the list's scope without judging the store again. **Decided**: the store lands the call it is read
+  through first, where the statement's end would (`storeLandsContainer`, the same obligations test), then judges itself
+  against that - sound and precise, where leaving the call unlanded (the other way) refuses every such store with O10c,
+  a literal or the list's own text included; the call is marked (`storeRelied`) so nothing lands it again. A temporary
+  stored there is now built where the list lives too. **O12/E28, pre-existing**: a conditional or a match of references
+  whose values live in different scopes was given no scope by `RefExactScope` - the answer it gives a temporary - so a
+  store into a field skipped every check, and an argument determined its parameter's scope from garbage (`keep(b, x if c
+  else outer)` compiled too, the review's "arguments already refuse it" held for one spelling only). **Decided**: such a
+  value's scope is **not known here** (O12) - no temporary, nothing built for it, shown to outlive nothing - so an
+  argument, an array literal's element, a global and a local's exact scope refuse it; a store into a field or an element
+  judges **each value as though stored alone** (E28's "each value must fit"), accepting `b.last = G if c else outer`, with
+  a note at the value that does not fit; a declaration with `:=` or a bare `&` holds it where it is declared, read there,
+  never built into (E28's "held where it is declared", which the old behaviour kept by accident). A new value that has
+  already landed (a declaration lands it in its block) lives where it landed; written text is constant data or a copy
+  made where the conditional lands - which is why `q SfNode& = n if c else SfNode(7)` in a loop stays accepted.
+  **C9a/P2, from tonight9's C9a**: a task a destructor spawned built into a part of the closing scope made during the walk,
+  which `__olang_scope_close` never folded - its storage leaked and its destructors never ran. **Decided**: the parts are
+  folded as each destructor returns, their destructors ahead of what the destructor registered itself (the order the parts
+  at entry already had), rather than refusing the part. **S18, pre-existing**: each destructor is now taken off the list
+  before it runs, so one leaving by a failed check while a test runs leaves the rest in the header, and the test's unwind
+  closes the scope and runs them - each once (the walk had the list in a register). **Over-rejections**: a method on a
+  field read bare in a destructor (M10, C10); two counters naming `$par` locals (S4c); `try c(4)` on a fallible `Call`
+  (E31a - `operatorCallArgs` admitted only Try forms); a parallel assignment of a whole global value (O1b now takes a
+  value whose references live in the program's scope); a task default holding a lambda capturing only values (P4a/D16d).
+  **Found on the way, pre-existing**: written text in a parallel assignment held in a hidden local lost its `String`-ness
+  (`s, k = "a" $i, 1` was E12) - made a `String` before it is held. The scope fuzzer now generates conditionals and
+  matches of references, element and field stores through At, First, Last and Get, destructors that build and spawn (a
+  program in four, checked against `-b` since `-i` runs none, ending `dtors 0`), and failing spawns; the old compiler
+  gives 24 findings on 40 seeds, this one none (and none on 300 more).
+
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

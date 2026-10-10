@@ -1,0 +1,16 @@
+# check: fail error[O12]: where this place's references live is not known here
+# E28/O12 (the batch 6 review): a conditional whose values live in different scopes, declared with a written type, is held
+# where it is declared and read there - nothing is built through it, which would be built in its block and kept where
+# the outer node really is
+type Nd struct(v I64) {
+    v
+    next mut Nd& = null
+}
+fn main() ? {
+    n mut Nd& = Nd(5)
+    for i in range 2 {
+        q mut Nd& = n if i == 1 else Nd(7)
+        q.next = Nd(100 + i)
+    }
+    println($n.next.v)
+}
