@@ -12716,3 +12716,44 @@ of every `make test` file (the root's harness object and every imported module's
 runner.olang, `-c -r` of worker.olang, and `-c` of every checks case and fixture, bench and fuzz program - 743 IR files
 and every diagnostic those builds printed: identical after the move and the split, after the cleanup, and from the
 `-O2` stage 0. `make verify` passes.
+
+### Every numeric primitive has its own alias tags (T36, 2026-10-10)
+
+Found in oann (`repro/narrowtbaa.olang`) while measuring mixed precision: a GELU pass over a 1024 x 512 BF16 matrix
+through `std/linalg`'s `Map` took 22 ns an element, 1.5 with the rows taken into locals, where F32 took the same either
+way; `nn.SyncParams`, rounding the F32 masters into the BF16 arena, tripled an MNIST step's optimizer time. LLVM's remark
+said "cannot identify array bounds", and the IR said why: T36's tags had been written for "the six primitives" of the
+day (Bool, Byte, Int32, Int64, Float32, Float64), and the numeric rename (T4) added I8, I16, U16, U32, U64, F16 and BF16
+without giving them any. Their element stores were untagged, so to LLVM a `store bfloat` through `dst.Data[i]` might
+have changed the `{ i64, ptr }` descriptor it came from - the descriptor was loaded again at every element and the loop
+never vectorized. The very bug T36 was first written to fix, back for seven types.
+
+**The fix**: `cgTbaa` is a table now (`cgTbaaLeaves`), one row per tagged scalar with its field and element tags, and
+`emitTbaaTypeTree` writes both leaves of every row - the seven new types as siblings under the same root, each with a
+field family and an element family as the first six have. Bool and the first six keep their metadata numbers. Nothing
+else changed: every access already asked `cgTbaa`, so the new types are tagged on exactly the paths the old ones were -
+`cgStoreInto`, the loads, `++`/`--`, an array fill, a comprehension's push, deep equality.
+
+**Soundness, checked rather than assumed** - two types whose storage can be reached through each other must share a
+tag. (1) A declared type over a number (`type Char extends U8`, `type Meters I32`) keeps its base's `bType`, so it has its
+base's tag, which is what T29h's view of an `Array<Char>` as an `Array<U8>` needs; every array conversion and flow
+(T29a's `Name(x)`, T29h's base view, E32b's `as Array<T, N>&`) compares element `bType`s, so no view reaches one
+primitive's storage as another's - in particular `U8` and `I8`, or `F16`, `BF16` and `U16`, which share an LLVM shape,
+are never views of each other. (2) E33's `Bits`/`FromBits`, the BF16 widening by an integer shift and the inline F32 ->
+BF16 narrowing all move values, never storage. (3) An enum payload is the one place two types share bytes: it is built in
+a fresh slot (`cgChoiceValue` - an untagged zero store, the tag, the case's fields, then one untagged aggregate load) and
+stored as one untagged aggregate, and never assigned field by field (O25g), so a tagged read of one case's field cannot
+move past a store of another's - the argument does not depend on the field types, and a corpus test now alternates F16,
+I16, BF16 and U32 cases over one payload. (4) Atomics, the runtime's own IR, `memcpy` and every foreign call (X3) stay
+untagged. The source comment's claim that payloads were "excluded rather than reasoned about" was stale (the earlier
+entry in this file corrected it in prose, not in the code); it now gives the argument.
+
+**Measured** (the oann repro and a version adding F16, I16 and U32, `-b`, interleaved, the machine loaded): through the
+struct, BF16 2.1-5.1 -> 0.30-0.78 ns an element, F16 1.7-2.5 -> 0.28-0.42, I16 0.95-1.5 -> 0.25-0.66, U32 1.0-1.6 ->
+0.55-1.0, each now level with its local loop (BF16 0.28-0.37, U32 0.55-1.0, memory-bound like F32's 0.5-1.1).
+
+**Tests**: two corpus tests in shared.olang (narrow enum cases over one payload's bytes; F16, BF16, I16 and U32 arrays
+written through a struct, a narrow count bumped beside them), and a checks scenario (`tbaa`) building
+`checks/fixtures/tbaa/narrow.olang` - every narrow type's array written through a struct, and a `Code extends U16` array
+written beside its `Array<U16>` view of the same storage - at `-O3` and at `-d` with the same answers, reading off the IR
+that a BF16 and an F16 store carry a tag and that the BF16 element leaf exists (it fails on the previous compiler).
