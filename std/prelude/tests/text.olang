@@ -337,3 +337,19 @@ test "Format, evaluated while compiling as at run time" {
     assert formatBaked.StartsWith("11111111 11111111;-11111111 ")
     assert (255).Format(16) == "ff"                               # an assert the evaluator decides (S18c)
 }
+
+# E11c: "$" renders a StringBuilder as the text it holds, as ToString gives it - not as the List it keeps it in
+fn builderRendered() String {
+    b := StringBuilder()
+    b.Push("one ")
+    b.PushChar('2')
+    l := List<StringBuilder>()
+    l.Push(b)
+    return $b "|" $l "|" $StringBuilder()
+}
+builderRenderedBaked := builderRendered()
+
+test "$ renders a StringBuilder as its text" {
+    assert builderRendered() == "one 2|List<StringBuilder>[one 2]|"
+    assert builderRenderedBaked == builderRendered()
+}

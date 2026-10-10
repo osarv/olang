@@ -555,6 +555,83 @@ fn (l List<<T>>&) Has(x T) Bool {
     return false
 }
 
+# the position of the first element equal to x, compared with "==" - failing with the default error when there is
+# none, as Find does: "try l.IndexOf(x) catch default -1" gives a fallback
+fn (l List<<T>>&) IndexOf(x T) I64 ? {
+    for i, y in l {
+        if y == x { return i }
+    }
+    error
+}
+
+# removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
+# moves them - and says whether there was one, as Map's Remove does
+fn (l mut List<<T>>&) Remove(x T) Bool {
+    i := try l.IndexOf(x) catch { return false }
+    l.RemoveAt(i)
+    return true
+}
+
+# removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
+# the length, where RemoveAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
+# one that is not is a mistake in the program, checked once per call, as RemoveAt checks it
+fn (l mut List<<T>>&) SwapRemove(i I64) T {
+    s := l.s
+    assert i >= 0 and i < s.count
+    x := l.At(i)
+    s.dropLast()
+    if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
+    return x
+}
+
+# how "$" renders a List (E11c): as an array of its elements renders, with the List named in front - "List<I64>[1, 2, 3]",
+# "List<String&>["a", "b"]", "List<I64>[]" - so a List prints apart from an array of the same elements, and each element
+# renders as it does inside any other value: text quoted, a Char as a character literal, a value whose type declares
+# Str as its Str says. Rendered run by run from the list's own storage, so nothing is copied but the text
+fn (l List<<T>>&) Str() String {
+    b := StringBuilder()
+    match T {
+        case Char {                                            # an array of Char renders as text, so these are written here
+            b.Push("List<Char>[")
+            for i, c in l {
+                if i > 0 { b.Push(", ") }
+                b.Push(charLiteral(c))
+            }
+        }
+        nomatch {
+            b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+            at I64 = 0
+            for {
+                run := try l.RunFrom(at) catch Exhausted { break }
+                r := $run                                      # "T[...]": the element type as written, then the items
+                o := try r.FindByte('[') catch { unreachable }
+                if at > 0 { b.Push(", ") }
+                b.Push($r[o + 1:r.Len() - 1])
+                at += run.Len()
+            }
+        }
+    }
+    b.PushChar(']')
+    return b.ToString()
+}
+
+# T as written - what "$" puts before an array's items
+fn typeWritten(a Array<<T>>&) String {
+    r := $a[0:0]                                               # "T[]"
+    return $r[:r.Len() - 2]
+}
+
+# c as a character literal writes it - how "$" renders a Char inside another value (E11a)
+fn charLiteral(c Char) String {
+    if c == '\n' { return "'\\n'" }
+    if c == '\t' { return "'\\t'" }
+    if c == '\r' { return "'\\r'" }
+    if c == '\0' { return "'\\0'" }
+    if c == '\\' { return "'\\\\'" }
+    if c == '\'' { return "'\\''" }
+    return "'" $c "'"
+}
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 

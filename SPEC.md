@@ -1729,8 +1729,14 @@ empty are kept and filled again by the `Push`es that follow. `RemoveAt(i)` remov
 puts `x` at `i` (`Insert(Len(), x)` is `Push(x)`); each moves the elements after `i` one place, so costs their
 number, and takes `i` from `0` to `Len() - 1` (`RemoveAt`) or `Len()` (`Insert`) - another is a mistake in the
 program, checked once per call, and stops it as an `assert` does. `Reverse()` reverses the elements in place, and
-`Sort(less)` sorts them as an array's `Sort` does, stably, through one contiguous copy. A `List` of texts has
-`Join(sep)`, as an array of texts does. Changing a `List` other than by `Push` while a walk of it is under way
+`Sort(less)` sorts them as an array's `Sort` does, stably, through one contiguous copy. `IndexOf(x)` gives the position
+of the first element equal to `x` by `==` (E10a), failing with the default error (R15) when there is none; `Remove(x)`
+removes that element as `RemoveAt` would and says whether there was one; `SwapRemove(i)` removes the element at `i` and
+gives it, the last element taking its place - one element moved whatever the length, the order not kept - and takes
+`i` as `RemoveAt` does. A `List` of texts has
+`Join(sep)`, as an array of texts does. `$` renders a `List` (E11c) as an array of its elements renders, with the `List`
+named in front: `List<I64>[1, 2, 3]`, `List<String&>["a"]`, `List<I64>[]` - each element as it renders inside any other
+value. Changing a `List` other than by `Push` while a walk of it is under way
 leaves which elements the rest of the walk gives unspecified - but a walk only ever gives elements the list holds or
 held, and it ends: once the list holds no more than the walk has given (after a `Clear()`, or `Pop()`s below its
 position) the next step is its end.
@@ -1753,13 +1759,15 @@ put - so a map whose keys come and go stays the size of what it holds. `Keys()` 
 one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk; `Clear()` removes every
 key, keeping the slots and buckets for the keys put next. A `Map` is a **handle**, as a `List` is: a copy of a `Map`
 value is a second name for the same map, and `Clone()` is a new one with the same keys and values (walked in the same
-order) and storage of its own, built where its result lands.
+order) and storage of its own, built where its result lands. `$` renders a `Map` (E11c) as its entries in `Iter()`'s
+order, each `key: value` with the key and the value rendered as inside any other value, in braces after its type:
+`Map<String&, I64>{"a": 1, "b": 2}`, `Map<I64, Bool>{}`.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
 new `String` in the caller's scope, independent of the builder afterwards. A value goes in as its rendering,
 `b.Push($n)`. It holds its text in a `List`, so a copy of a `StringBuilder` value names the same text, as a copy of a
-`List` names the same list.
+`List` names the same list. `$` renders a `StringBuilder` (E11c) as the text it holds.
 
 Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, counted from the start without overlapping
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
