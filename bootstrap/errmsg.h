@@ -253,6 +253,7 @@ struct type;
     X(ERR_READ_ONLY_TO_BUILT_RESULT,    "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '%S'") \
     X(ERR_READ_ONLY_TO_BUILT_RESULT_NO, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through") \
     X(ERR_READ_ONLY_COPY_DECL,          "T25c",  "this copies a read-only %t, and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own %s") \
+    X(ERR_READ_ONLY_COPY_GLOBAL,        "T25c",  "a mutable global holds no copy of a read-only %t - give it one of its own, made %s, or drop its 'mut'") \
     X(ERR_READ_ONLY_COPY_STORED,        "T25c",  "a copy of a read-only %t cannot be stored where it can be written - store one of its own, made %s") \
     X(ERR_READ_ONLY_COPY_RETURNED,      "T25c",  "a copy of a read-only %t cannot be returned as a writable value - return one of its own, made %s, or a read-only reference") \
     X(ERR_READ_ONLY_COPY_ARG,           "T25c",  "'%S' writes through or keeps its parameter '%S', and this %t is a read-only copy - pass one of its own, made %s") \

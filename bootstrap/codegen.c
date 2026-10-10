@@ -1801,8 +1801,10 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
             cgParamEntry(&params, ((struct var*)ListGetIdx(&dstT.vars, k))->type, k, true);
         }
         fprintf(ctx->out, "%s) {\nentry:\n", params.len ? cgBufStr(&params) : "");
-        fputs("  %inst = load ptr, ptr %closure, !tbaa !28\n"
-              "  %sp = getelementptr { ptr, ptr }, ptr %closure, i32 0, i32 1\n  %iscope = load ptr, ptr %sp, !tbaa !28\n", ctx->out);
+        //its environment as every one opens (cgClosureType): one scope - the instance's - no function value, its size;
+        //then the instance
+        fputs("  %ip = getelementptr { i64, i64, i64, ptr, ptr }, ptr %closure, i32 0, i32 4\n  %inst = load ptr, ptr %ip, !tbaa !28\n"
+              "  %sp = getelementptr { i64, i64, i64, ptr, ptr }, ptr %closure, i32 0, i32 3\n  %iscope = load ptr, ptr %sp, !tbaa !28\n", ctx->out);
         struct cgBuf args = {0};
         if (outFirst) cgBufAdd(&args, "ptr %%out");
         //the receiver's own scope comes first among Call's, where it has one (a reference receiver, O4b)
@@ -1850,11 +1852,20 @@ static char* cgCallAdapterValue(struct cgCtx* ctx, struct operand* op, struct ty
         instScope = where;
     }
     char* obj = cgNewTmp(ctx);
-    cgArenaAlloc(ctx, obj, where, "16", 8);
-    char* p2 = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", inst, obj, cgCaptureTbaa);
-    fprintf(ctx->fnOut, "  %s = getelementptr { ptr, ptr }, ptr %s, i32 0, i32 1\n  store ptr %s, ptr %s%s\n", p2, obj, instScope, p2,
-            cgCaptureTbaa);
+    cgArenaAlloc(ctx, obj, where, "40", 8);
+    fprintf(ctx->fnOut, "  store i64 1, ptr %s%s\n", obj, cgCaptureTbaa);
+    long long hdr[2] = { 0, 40 };
+    for (int h = 1; h < 3; h++) {
+        char* hp = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr { i64, i64, i64, ptr, ptr }, ptr %s, i32 0, i32 %d\n  store i64 %lld, ptr %s%s\n",
+                hp, obj, h, hdr[h - 1], hp, cgCaptureTbaa);
+    }
+    char* p3 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr { i64, i64, i64, ptr, ptr }, ptr %s, i32 0, i32 3\n  store ptr %s, ptr %s%s\n", p3, obj,
+            instScope, p3, cgCaptureTbaa);
+    char* p4 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr { i64, i64, i64, ptr, ptr }, ptr %s, i32 0, i32 4\n  store ptr %s, ptr %s%s\n", p4, obj,
+            inst, p4, cgCaptureTbaa);
     char* adapterSym = MallocOrCrash(strlen(adapter) + 1);
     strcpy(adapterSym, adapter);
     return cgFnPair(ctx, adapterSym, obj);
@@ -3105,15 +3116,51 @@ static char* cgNamedTarget(struct cgCtx* ctx, struct var* func, char** closureOu
 //the environment; one capturing nothing has none either.
 //D16c: a capturing lambda's environment - each capture's value and, for a reference, its scope. It is written once,
 //where the lambda is made, and read only by the lambda's own prologue, so its accesses carry a TBAA family of their
-//own (cgCaptureTbaa) and never alias a program's fields or elements
+//own (cgCaptureTbaa) and never alias a program's fields or elements.
+//P2: it opens with a header the runtime reads - how many scope pointers it holds, how many function values, its size
+//in bytes - then the scopes, then the function values, then the other captures, so a task, and a stack RunOnStack
+//makes, can be handed a copy whose every scope is a stand-in of its own (__olang_env_standin), recursively through the
+//function values it captured. Every environment has the header: a Call adapter's (cgCallAdapterValue) too
+static int cgEnvScopeCount(struct var* L) {
+    int n = 0;
+    for (int i = 0; i < L->lambdaCaptures.len; i++)
+        if (((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner->type.scopeParam) n++;
+    return n;
+}
+static bool cgCaptureIsFn(struct var* in) { return in->type.bType == BASETYPE_FUNC && !cgViaMemory(in->type); }
+static int cgEnvFnCount(struct var* L) {
+    int n = 0;
+    for (int i = 0; i < L->lambdaCaptures.len; i++)
+        if (cgCaptureIsFn(((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner)) n++;
+    return n;
+}
+//the field of capture i's value, and of its scope
+static int cgEnvValueField(struct var* L, int i) {
+    int nS = cgEnvScopeCount(L), nF = cgEnvFnCount(L);
+    bool fn = cgCaptureIsFn(((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner);
+    int before = 0;
+    for (int j = 0; j < i; j++)
+        if (cgCaptureIsFn(((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, j))->inner) == fn) before++;
+    return 3 + nS + (fn ? 0 : nF) + before;
+}
+static int cgEnvScopeField(struct var* L, int i) {
+    int before = 0;
+    for (int j = 0; j < i; j++)
+        if (((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, j))->inner->type.scopeParam) before++;
+    return 3 + before;
+}
 static char* cgClosureType(struct var* L) {
     struct cgBuf b = {0};
-    cgBufAdd(&b, "{ ");
-    for (int i = 0; i < L->lambdaCaptures.len; i++) {
-        struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
-        char cty[256];
-        llvmType(in->type, cty, sizeof(cty));
-        cgBufAdd(&b, "%s%s%s", i ? ", " : "", cty, in->type.scopeParam ? ", ptr" : "");
+    cgBufAdd(&b, "{ i64, i64, i64");
+    for (int i = 0; i < cgEnvScopeCount(L); i++) cgBufAdd(&b, ", ptr");
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < L->lambdaCaptures.len; i++) {
+            struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
+            if (cgCaptureIsFn(in) != (pass == 0)) continue;
+            char cty[256];
+            llvmType(in->type, cty, sizeof(cty));
+            cgBufAdd(&b, ", %s", cty);
+        }
     }
     cgBufAdd(&b, " }");
     return cgBufStr(&b);
@@ -3130,7 +3177,15 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
         char* scope = op->lambdaHomeSet ? cgResolveScope(ctx, op->lambdaHome, op->lambdaHomeDepth) : cgWhereBuilt(ctx, op);
         cgArenaAlloc(ctx, obj, scope, StrFmt("ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64)", envTy), 8);
     }
-    int field = 0;
+    //P2: the header - the scopes it holds, the function values it holds, and its size
+    long long header[2] = { cgEnvScopeCount(L), cgEnvFnCount(L) };
+    for (int h = 0; h < 3; h++) {
+        char* hp = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", hp, envTy, obj, h);
+        if (h < 2) fprintf(ctx->fnOut, "  store i64 %lld, ptr %s%s\n", header[h], hp, cgCaptureTbaa);
+        else fprintf(ctx->fnOut, "  store i64 ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i64), ptr %s%s\n", envTy, hp,
+                     cgCaptureTbaa);
+    }
     for (int i = 0; i < L->lambdaCaptures.len && i < op->args.len; i++) {
         struct var* in = ((struct lambdaCapture*)ListGetIdx(&L->lambdaCaptures, i))->inner;
         struct operand* capOp = *(struct operand**)ListGetIdx(&op->args, i);
@@ -3139,20 +3194,20 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
         if (cgViaMemory(in->type)) { //copied as memory, not as one first-class value (cgViaMemory)
             char* src = cgValue(ctx, capOp);
             char* fp = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, cgEnvValueField(L, i));
             fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", fp, src,
                     TypeGetSize(in->type));
         } else {
             char* v = cgBoundaryValue(ctx, capOp, in->type, NULL);
             char* fp = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, field++);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", fp, envTy, obj, cgEnvValueField(L, i));
             fprintf(ctx->fnOut, "  store %s %s, ptr %s%s\n", cty, v, fp, cgCaptureTbaa);
         }
         if (!in->type.scopeParam) continue;
         struct var* sv = in->type.scopeParam;
         char* sval = cgBoundScopeArg(ctx, op, sv);
         char* sp = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", sp, envTy, obj, field++);
+        fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %s, i32 0, i32 %d\n", sp, envTy, obj, cgEnvScopeField(L, i));
         fprintf(ctx->fnOut, "  store ptr %s, ptr %s%s\n", sval, sp, cgCaptureTbaa);
     }
     return cgFnPair(ctx, sym, obj);
@@ -3217,6 +3272,30 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
     return m.sub;
 }
 
+//P2: a function value's environment as a task holds it - the closure it calls through, or one it is handed: a copy,
+//made at the spawn in the join block's arena, whose every captured scope is a stand-in of the task's own, folded back at
+//the join like the stand-ins above (__olang_env_standin; its merges go on a chain kept in one slot per task, recorded
+//in `merges` as an entry with no sub-scope). A closure made by the spawner holds the spawner's block's scope, which the
+//task would otherwise bump from its own thread, beside the spawner and every other task
+static char* cgSpawnEnv(struct cgCtx* ctx, struct list* merges, char* env) {
+    char* slot = NULL;
+    for (int i = 0; i < merges->len && !slot; i++) {
+        struct cgScopeMerge* m = ListGetIdx(merges, i);
+        if (!m->sub) slot = m->parent;
+    }
+    if (!slot) {
+        slot = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca ptr\n", slot);
+        fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", slot);
+        struct cgScopeMerge m = { NULL, slot };
+        ListAdd(merges, &m);
+    }
+    char* c = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_env_standin(ptr %s, ptr %s, ptr %s)\n", c, env,
+            cgScopeSlotAt(ctx, ctx->joinDepth), slot);
+    return c;
+}
+
 
 //a call's target and its arguments in order - the closure of a call through a function value, a constructor's
 //instance scope, the callee's scope variables, then the parameters - shared by an ordinary call and a task (P1),
@@ -3233,6 +3312,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
     if (op->callee) { //E13b: the function value is computed, then called as a variable holding it is
         target = cgFnCode(ctx, cgValue(ctx, op->callee), &closure);
     } else target = cgNamedTarget(ctx, func, &closure);
+    if (closure && spawnMerges) closure = cgSpawnEnv(ctx, spawnMerges, closure); //P2
     if (closure) cgArgAdd(args, "ptr", closure);
 
     bool ctor = cgIsCtor(func);
@@ -3303,6 +3383,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
             char* code;
             char* clo;
             code = cgFnCode(ctx, av, &clo);
+            if (spawnMerges) clo = cgSpawnEnv(ctx, spawnMerges, clo); //P2: a function value a task is handed
             cgArgAdd(args, "ptr", code);
             cgArgAdd(args, "ptr", clo);
             continue;
@@ -5383,8 +5464,15 @@ void cgSpawnTask(struct cgCtx* ctx, struct operand* op, struct list* merges, str
     cgArenaAlloc(ctx, node, joinScope, "24", 8);
     char* mergeHead = MallocOrCrash(8);
     strcpy(mergeHead, "null");
+    for (int i = 0; i < merges->len; i++) { //the environments' stand-ins, chained at run time (cgSpawnEnv)
+        struct cgScopeMerge* m = ListGetIdx(merges, i);
+        if (m->sub) continue;
+        mergeHead = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", mergeHead, m->parent);
+    }
     for (int i = 0; i < merges->len; i++) {
         struct cgScopeMerge* m = ListGetIdx(merges, i);
+        if (!m->sub) continue;
         char* mn = cgNewTmp(ctx);
         cgArenaAlloc(ctx, mn, joinScope, "24", 8);
         char* slot0 = cgNewTmp(ctx);
@@ -7029,13 +7117,12 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     //D16c: a lambda's captures, and their scopes, as the closure carries them
     if (func->isLambda && func->lambdaCaptures.len) {
         char* envTy = cgClosureType(func);
-        int field = 0;
         for (int i = 0; i < func->lambdaCaptures.len; i++) {
             struct var* in = ((struct lambdaCapture*)ListGetIdx(&func->lambdaCaptures, i))->inner;
             char cty[256];
             llvmType(in->type, cty, sizeof(cty));
             char* fp = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", fp, envTy, field++);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", fp, envTy, cgEnvValueField(func, i));
             char* slot = cgDeclareLocal(ctx, in->name, in->type);
             fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, cty);
             if (cgViaMemory(in->type)) {
@@ -7048,7 +7135,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
             }
             if (!in->type.scopeParam) continue;
             char* sp = cgNewTmp(ctx);
-            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", sp, envTy, field++);
+            fprintf(ctx->fnOut, "  %s = getelementptr %s, ptr %%closure, i32 0, i32 %d\n", sp, envTy, cgEnvScopeField(func, i));
             char* sval = cgNewTmp(ctx);
             fprintf(ctx->fnOut, "  %s = load ptr, ptr %s%s\n", sval, sp, cgCaptureTbaa);
             char* sslot = cgDeclareLocal(ctx, in->type.scopeParam->name, in->type.scopeParam->type);

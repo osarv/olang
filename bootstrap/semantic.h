@@ -339,6 +339,11 @@ struct var {
     //(regionStored); or returns a reference or value carrying it through which a store is possible (regionHandedOut)
     bool regionStored;
     bool regionHandedOut;
+    //E11c: on a function, that it may write storage that was there before it was called - through a reference whose
+    //scope is a parameter's, a capture's, the program's or one not known here, a global's own, or by calling what does
+    //with such an argument, or through a function value it did not make. effTok: where it was first found
+    bool effWrites;
+    struct token effTok;
     bool scopeUnnamed; //O25: a local reference adopted a scope this function cannot name - see RefExactScope
     bool elemsStatic;  //T25d: a read-only array reference holding a literal whose elements are all constant text - each
                        //element is constant data, which lives as long as the program
