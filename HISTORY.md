@@ -12716,3 +12716,114 @@ of every `make test` file (the root's harness object and every imported module's
 runner.olang, `-c -r` of worker.olang, and `-c` of every checks case and fixture, bench and fuzz program - 743 IR files
 and every diagnostic those builds printed: identical after the move and the split, after the cleanup, and from the
 `-O2` stage 0. `make verify` passes.
+
+### A soundness review of the night's merges, fixed (P2, O25h, O17a, O12, E4a/E6d, T25c, E11c, S4d, O18a, B11, 2026-10-10)
+
+A read-only review of rvfix, rv2fix and qc reproduced ten findings, each with a program reading memory back after an
+arena churn or comparing `-b`, `-d` and `-i` (valgrind sees none of them: a dead block's chunk goes back to the pool,
+not to malloc). All are fixed, with corpus tests in shared.olang (the `rv3` section, each baked while compiling and
+compared with the run time), must-fail programs in checks/cases (`rv3*.olang`) and two `-d` run cases.
+
+1. **A spawned lambda built into the spawner's arena from the task's thread** (pre-existing). P2 gave a spawned *call*
+   a stand-in for every scope variable it was handed, but `spawn fn() { ... a.Push(N(i)) ... }` reached `a`'s scope
+   through its closure, whose environment held the spawner's block scope - four tasks bumped one arena: segfaults, or
+   thousands of overwritten elements; `-r` reported races in `listState.grow`. The fix is in the runtime, where the
+   closure is: an environment now starts with a header - how many scope pointers it holds, how many function values,
+   its size - followed by the scopes, then the captured function values, then the other captures
+   (`cgEnvScopeField`/`cgEnvValueField`), and `__olang_env_standin` copies an environment into the join block's arena
+   with a fresh sub-scope for each scope pointer (recursively for captured function values), chaining each onto the
+   spawn's merge list, which `__olang_join_tasks` folds into the scope it stands for after the join. A spawn records
+   the environment's chain in a slot of its own, since a lambda's scope count is not known where the spawn's static
+   merge list is built. `os.RunOnStack` stands in the same way, folding when its thread is joined. `E31`'s Call adapter
+   environment took the header too. The review's other shapes - a closure made inside a task capturing a spawner's
+   reference, RunOnStack inside tasks - are clean under `-r` now. **Left, found while testing**: a closure *held in a
+   struct* a task is given (`spawn work(h)`, `work` calling `h.f(i)`) still builds into its captured scope from the
+   task's thread - the environment is reached only inside the task, through storage that cannot be copied at the spawn.
+   Closing it needs either the allocator to know which thread owns a scope (a compare per allocation, and a stand-in
+   made on a mismatch) or a P2 rule refusing a task argument that holds a function value; neither was built here.
+
+2. **A copy out of a reference was placed right only from an lvalue reference** (pre-existing, four shapes). O25h
+   says a value copied out of a reference keeps its references where the referent's are, and `copyRefsHome` honoured it
+   only for `d Box = r`. A call's borrowed result (`d Box = pick(r)`, also a method's, under `try`), a conditional or a
+   match of references, a loop's initializer and an assignment's value all left the copy's references in its block, so
+   building through `d.head.next` built there and the caller read freed memory. One predicate now says whether a value
+   copies existing references (`copiesExistingRefs`: a value lvalue, a slice, an `as` of a payload, anything
+   reference-shaped naming existing storage, a conditional or match any of whose values does) and one says where they
+   are (`copiedRefsScope`: a reference's exact scope, a value's refs home, and for a conditional or match the scope its
+   values share or, where they differ, one not known here). Every O25h site reads them: declarations, assignments, a
+   by-value argument binding its parameter's scope variable (O4b - `build(r)` with `fn build(b Box)` bound it as for a
+   temporary, passing the callee's own scope), a constructor's or an enum case's argument (C2d/T17c now hold the instance
+   to it, so `H(r)` and `E.A(r)` building in this block are errors), a match binding or an `as` of a payload held by
+   value (the payload's refs home; differing alternatives give one not known here). **O12** gained the consequence: a
+   value place whose references are in a scope not known here takes no temporary - only something that already lives
+   somewhere (`ERR_STORE_INTO_UNKNOWN_SCOPE`).
+
+3. **A slice or a view of a split value** (pre-existing; O17a incomplete). `b := src.b; s := b.items[0:2]` borrowed the
+   copy's inline array as a reference whose elements read at the copy's storage scope, so `s[0].next = Node()` built in
+   the block. Decided: refused where something can be stored through it (O25g by the type) - the elements are indexed
+   in place instead, which O25h already gets right. `as Array<T, N>&` is the same operation (E32b) and is refused alike.
+
+4. **A conditional of literals hid an undefined shift** (regression from rvfix). `OperandBinary` took a conditional of
+   literals as fitting without folding it and then marked everything under it folded away, so E8a never saw
+   `1 << 40` inside `b + (1 if c else (1 << 40))`: `-b` printed 4, `-d` 3, `-i` stopped; and `0 if c else (2000000000 +
+   2000000000)` wrapped in `I32`. Now each value is folded exactly as E4a folds one (`condOfLiteralsFold`, nested
+   conditionals included), the widest of their own types is taken, every value adapts to it, and only values actually
+   folded are marked. Both shapes give the exact answer in every mode.
+
+5. **T25c and mutable globals.** `M mut List<I32> = G` shared G's record, so `M.Push(9)` changed an immutable global's
+   list. A mutable global's initializer is stored where it can be written: `roStoreCheck` with
+   `ERR_READ_ONLY_COPY_GLOBAL`, which names the fix (`G.Clone()`, or drop the `mut`).
+
+6. **A read-only copy's references came back writable through a slice, a view or a loop.** `roRefOf` followed an
+   element read through a reference as shallow, so `x.arr[0:2][0].v += 1`, the view and `for e in x.arr` wrote through
+   a read-only copy of a global. A reference made from a value - a slice, a view, a for-in's hidden borrow, a local
+   declared from one - now reads that value (`roViewedValue`): what it gives is read-only where the value is, and a
+   by-value parameter writing through its loop's elements needs a writable argument (`look(G)` is an error).
+
+7. **`Str` writing through a reference** (pre-existing). E11c's purity was K1a evaluability, which refuses a global
+   write but not a write through a reference, so a `Str` bumping a counter it reached through its receiver ran twice
+   per `$` at run time and once under `-i`. A function now records whether it writes storage that was there before it
+   ran (`effWrites`): an assignment, an increment or an atomic whose place is reached through a reference not in this
+   call's own storage (a parameter's scope, a capture's, the program's, one not known here) or is a global; a call
+   passing such storage to a parameter the callee may write through (a writable reference, or one reaching writable
+   references), settled as a fixed point over call edges once every body is checked; and a call through a function
+   value whose body is not known there (a lambda made in the function is judged by its own body). A `Str` with that
+   effect is an error with a note at the write (`ERR_STR_WRITES`); a `Str` building a local list or a `StringBuilder` is
+   fine - the corpus test bakes one while compiling. The T25c half: a by-value receiver of `Str` that needs a writable
+   argument is an error too (`ERR_STR_RECEIVER_WRITABLE`), since `$` renders read-only copies.
+
+8. **S4d missed compound assignments and increments** (rv2fix). Only a plain `=` collected the places it writes over,
+   so `x += E.Lit(2)` with a `Plus` keeping its receiver built a value holding `x` itself. `buildAssignStmnt` collects the
+   place for every operator, and `buildAssignCore`'s compound branch and `buildIncDec` set it around the operator call,
+   so `copyOldBorrows` copies the old value. **Found on the way, pre-existing**: the compound branch never landed the
+   operator's result at the target (O18a's assignment row - the plain branch did), so `y += E.Lit(i)` in a loop built
+   the new value in the loop body's arena and stored it in `y`, outside: wrong answers after a churn. It lands now.
+
+9. **S4d through an alias** (low). The place is told by the names written; `p.a = E.Neg(q.a)` with `q` and `p` one
+   instance is the program's cycle. The spec now promises only "no value holds the storage it names".
+
+10. **The prelude's generic code over collections of handles** (qc). With elements holding writable references - a
+   `List`, a `Map`, any handle - `Map.Get`, `List.Clone`, `Array.ToList` and `Array.Filter` no longer compiled, while
+   `ls[0].Push(9)` through `At` on a read-only `List<List<I32>>&` was accepted (a call's result was fresh) where `for x in
+   ls` gives read-only copies: one element, three answers. Neither "make the receivers `mut`" (refusing a read-only
+   `List<I64>.Clone()`) nor "elements read through `At` are fresh" works, because a generic's declaration cannot say
+   `mut` for some instantiations and not others. **Decided (mine)**: in an instantiation, a read-only reference
+   parameter is as read-only as its argument (`roByArg`, set on the signature by `instantiateFunc`). Copies out of what
+   it reaches are judged by **deep provenance** (`roDeepParams`): following a value back through members, elements,
+   slices and payloads, through references too, through locals by their initializer and every value later assigned to
+   them (`roAssigns`), and through calls that hand back what their own such parameters reach. A by-value **result**
+   copied out of one makes that parameter `roToResult`, settled at the end of the instantiation's body so callers find
+   it: at a call, the result is a read-only copy exactly where that argument is read-only (`roValueOf`'s call case), so
+   `ls[0].Push(9)` on a read-only list is refused with a note at `ls`, and `Map.Get` on a read-only map gives a read-only
+   value. A copy **kept writable** - stored, lent writably, passed to a callee that keeps it - makes the parameter need a
+   writable argument, checked at each call (`ERR_READ_ONLY_REF_KEPT`) once every body is checked, through the existing
+   fixed point. A read-only borrowed result an instantiation hands back from such a parameter (`RunFrom`'s run) and a
+   loop's hidden borrow follow their source. Two prelude edits: `Map.Get`'s cursor is `f mut mapSlot` (the buckets hold
+   writable slots; the read-only local made every value a definite read-only copy), and `Clone` copies the chunks
+   directly rather than through `RunFrom`'s read-only runs, which a declared read-only local makes definitely read-only.
+   **B11**: errors settled after the instantiations' bodies are checked keep the instantiation context they were found
+   in (`ErrMsgSaveContext`), so `PushAll`'s and `grow`'s errors are reported at the program's call. The corpus, std and
+   checks needed no change beyond those two prelude functions.
+   **Recorded limit**: an iterator a read-only collection hands out (`ro.Iter()`, and so `for e in m` over a read-only
+   `Map`) still gives writable copies: it holds a writable reference to the state by shallow permission, and making its
+   elements read-only would make every iteration of a writable collection read-only too.
