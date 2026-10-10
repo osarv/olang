@@ -241,6 +241,17 @@ rule and where it is recorded; the morning report lists them all, then they move
    method, pairwise sums; Array.Sort a stable O(n log n) merge with an n/2 scratch for numbers, blocks of positions for
    the rest; List.Truncate(n) changes nothing past the length.
 
+39. (wt-rv3fix) a spawned lambda's captured scopes get P2 stand-ins folded at the join (RunOnStack too); O25h holds a
+   copy out of whatever expression gives the reference; a conditional of references from different scopes is "not known
+   here" (building into it is O12); slices/views of split values refused; an instantiation's read-only reference
+   parameter is as read-only as its argument, so `ro.Clone()` on a read-only `List<List<I64>>&` is an error; a `Str` may
+   not write through a reference to anything that existed before it ran; S4d covers `+=`/`++`; a binding an argument
+   determines at depth 0 means the body's top level (in a constructor, the instance's scope).
+40. (mine, rv3fix's open item 1) a closure held in a struct given to a task builds into its captured scope from the
+   task's thread (heap corruption): decided to REFUSE it statically under P2 - a task argument may not reach a function
+   value that captures a writable reference (it could build into that scope off-thread); read-only captures stay
+   allowed. Chosen over a per-allocation owner check (a run-time cost on every allocation). To be built next batch.
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
