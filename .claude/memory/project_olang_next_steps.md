@@ -497,6 +497,18 @@ because what it finds about structure feeds the refactor.
   structContainsBareScopeField, stale comments) with the same IR comparison (scripts in the scratchpad: collect.sh,
   fakebin/, all.sh). Started wt-scopesan (poison + quarantine closed chunks under a debug mode, validate on the review
   repros, scope-stress fuzzer). Running: s4sem, rv3fix, oann-p7, scopesan.
+- 02:05 CEST (2026-10-10): the container restarted; worktrees and commits survived, processes did not. Resumed by
+  message: s4sem (clean at 096df0f, re-verifying), rv3fix (uncommitted WIP), scopesan (uncommitted WIP), oann-p7 (4
+  commits on wt-oann-p7: catch-up on db2af5d, BF16 as fast as F32, FastExp softmax, consolidator; QC migration was in
+  progress). Started a read-only soundness review of s4sem's diff (/home/user/wt/rv4 @ 096df0f ->
+  /home/user/review/tonight4) - merge s4sem only after it. Usage 00:05 UTC: five-hour 0.34 (reset 03:00 UTC), weekly
+  0.81 (reset 04:00 UTC = 06:00 CEST): flat out until then.
+- 02:35 CEST: oann phase 7 pushed (a341a68): caught up to db2af5d, BF16 as fast as F32 (transformer step 215 -> 115 ms),
+  softmax by FastExp, a consolidator in the agent (settling question 11; open question 14: what nights are for), QC
+  migration (oann's OLANG = /home/user/wt/oannc3, 121 tests). Review4 of s4sem: one NEW UAF (O17b decides "handle used
+  only through its reference" by a token scan that skips `& h`, binary BitAnd) - s4sem told to decide it from the
+  checked body. Started: study5 (data science/numeric, /home/user/wt/s5c @ 35175f1 -> /home/user/review/study5) and
+  wt-tbaa (TBAA tags for every numeric type, oann repro/narrowtbaa). Running: s4sem, rv3fix, scopesan, study5, tbaa.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
