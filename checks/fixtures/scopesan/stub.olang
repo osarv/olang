@@ -1,0 +1,9 @@
+# the scope sanitizer's runtime for drive.c (B2f): built with -b -d -s, its objects linked with drive.c in place of main
+fn Touch(n I64) I64 {
+    a := Array<I64>(n, 1)
+    l := List<I64>()
+    for x in a { l.Push(x) }
+    return l.Len()
+}
+
+fn main() ? { }

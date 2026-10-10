@@ -111,12 +111,27 @@ fuzz: build/out
 	nice -n 19 build/out -b -d fuzz/fuzz.olang
 	nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
 
+# the suite under the scope sanitizer (B2f): every use of storage after its scope closed stops the program, or fails the
+# test it happens in. Not part of "verify" - shared.olang alone takes a minute and a half under it - and not a race-style
+# expected count either: a correct run passes every test, and a failure is a use after free the static check (section
+# 8) let through. checks.olang is left out: what it checks is the compiler, and it runs its own sanitized builds.
+scopesan: build/out
+	build/out -t -d -s $(filter-out checks/checks.olang, $(OLANG_TESTS))
+
+# the scope fuzzer (fuzz/scopegen.olang, B2f): random programs storing, lending, copying and returning where scopes close,
+# built under the scope sanitizer and interpreted, the two outputs compared. "make scopefuzz SEED=1 COUNT=300 SCENARIOS=12";
+# findings land in build/fz/scope, a line each in build/fz/scope/findings.txt.
+SCENARIOS ?= 12
+scopefuzz: build/out
+	nice -n 19 build/out -b -d fuzz/fuzz.olang
+	nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
+
 all: clean build run
 
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir race fuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.

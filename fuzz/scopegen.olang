@@ -18,6 +18,12 @@
 # error is traced to its scenario by line and that scenario left out (Program's mask): a refused construct is safe,
 # and the rest of the program is still run.
 
+# leaves out the shapes of the use-after-frees known and open when this was written (the 2026-10-09 review's 02, 02b,
+# 02c, 02d: copies out of a call's reference, a reference for a by-value parameter or kept by a constructor or a
+# payload, and copies of an enum's payload passed on), so that a run finds what is not known yet; set by "fuzz scope ...
+# avoid". Built without it, a program is the whole of what the generator writes
+AvoidKnown mut Bool = false
+
 # the types and helpers every program has
 Prelude := (
     "extern fn getpid() I32\n"
@@ -172,6 +178,7 @@ type SG struct(seed U64) {
     k I64 = 0                          # the scenario being made
     n I64 = 0                          # names made in it so far
     helpers mut String& = ""           # its helper functions
+    boxKind I64 = 0                    # what boxOp's box is: 0 a value, 1 a reference, 2 a copy of an enum's payload
 }
 
 # xorshift64
@@ -258,6 +265,10 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
 # a statement storing a new node through the box b (a writable Box place)
 fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
     k := g.r(13)
+    if AvoidKnown {
+        if g.boxKind == 2 or k == 3 or k == 7 { k = 0 }
+        if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11) { k = 0 }
+    }
     if k == 1 {    # a copy of the box: its references are the box's
         c := g.name("c")
         return $ind $c " Box = " $b "\n" $ind $c ".head.next = " $g.newNode() "\n"
@@ -289,13 +300,19 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
     if k == 9 { return g.nodeOp($b ".head", ind, d) }
     if k == 10 and d > 0 {    # a helper taking the box by reference
         f := g.name("opBox")
+        was := g.boxKind
+        g.boxKind = 1
         body := g.stmts(1, "y", d - 1, "    ")
+        g.boxKind = was
         g.addHelper("fn " $f "(y mut Box&) {\n" $body "}\n")
         return $ind $f "(" $b ")\n"
     }
     if k == 11 and d > 0 {    # a helper taking the box by value: its references are still the caller's
         f := g.name("opVal")
+        was := g.boxKind
+        g.boxKind = 0
         body := g.stmts(1, "y", d - 1, "    ")
+        g.boxKind = was
         g.addHelper("fn " $f "(y Box) {\n" $body "}\n")
         return $ind $f "(" $b ")\n"
     }
@@ -405,10 +422,13 @@ fn (g mut SG&) twoOp(t String&, ind String&, d I64) String& {
 # a statement storing into the enum e (holding a box)
 fn (g mut SG&) enumOp(e String&, ind String&, d I64) String& {
     k := g.r(3)
-    if k == 1 { return $ind "byAs(" $e ")\n" }
+    if k == 1 and not AvoidKnown { return $ind "byAs(" $e ")\n" }
     y := g.name("y")
-    return ($ind "match " $e " {\n" $ind "    case E.A(" $y ") {\n" $g.boxOp(y, $ind "        ", d) $ind "    }\n" $ind
-            "    case _ { }\n" $ind "}\n")
+    was := g.boxKind
+    g.boxKind = 2
+    op := g.boxOp(y, $ind "        ", d)
+    g.boxKind = was
+    return $ind "match " $e " {\n" $ind "    case E.A(" $y ") {\n" $op $ind "    }\n" $ind "    case _ { }\n" $ind "}\n"
 }
 
 # a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own

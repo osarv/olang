@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir", "crash"]
+                     "target", "lazytype", "updir", "crash", "scopesan"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -249,6 +249,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "lazytype" { try lazytype(r) }
         case "updir" { try updir(r) }
         case "crash" { try crashes(r) }
+        case "scopesan" { try scopesan(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -1231,10 +1232,60 @@ test "the differential fuzzer finds nothing on its fixed seeds" { assert passed(
 
 fn fuzz(r mut report&) ? Failed {
     dir := fresh("fuzz")
-    os.Run("cp fuzz/fuzz.olang fuzz/gen.olang " $os.Quote(dir))
+    os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
+    # B2f: scope-stress programs built under the scope sanitizer and interpreted give one output (seeds that ran clean)
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug scope 3 2 1 12 > out.txt 2>&1") == 0,
+                 "fuzz scope found something (build/checks/fuzz/build/fz/scope)", dir)
+}
+
+# B2f: the scope sanitizer. Its runtime, driven from C: storage a closed scope gave back, read or written - a small chunk
+# and a large one - a reference read out of it followed, a length read out of it allocated, each stopped with its message
+# and status 134, as a failed check is; a fault that is not the sanitizer's ends the program as it would without it; a
+# program's own os.OnCrash message is kept for those, and more scopes closed than are held back leave the newest still
+# caught. Then tests that churn arenas pass under it (no use is reported that is not one), and only a -s build carries it
+test "the scope sanitizer reports a use after a scope closed, and nothing else" { assert passed("scopesan") }
+
+fn scopesan(r mut report&) ? Failed {
+    dir := fresh("scopesan")
+    os.Run("cp checks/fixtures/scopesan/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b -d -s stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
+    try r.expect(sh(dir, ("objcopy --redefine-sym main=olang_main build/stub.*.main.debug.san.o > out.txt 2>&1"
+                          " && clang -O0 drive.c build/*.debug.san.o -o drive -lpthread -ldl -lm >> out.txt 2>&1")) == 0,
+                 "drive.c did not link", dir)
+    try r.expect(sh(dir, "./drive ok > out.txt 2>&1") == 0 and outOf(dir) == "ok 1499500\n", "drive ok", dir)
+    mem String& = "use after scope closed: storage a closed scope gave back was read or written\n"
+    ref String& = "use after scope closed: a reference read from storage a closed scope gave back was followed\n"
+    len String& = "use after scope closed: an allocation of more than 2^60 bytes - a length read from storage a closed scope gave back\n"
+    try driven(r, dir, "read", 134, mem)
+    try driven(r, dir, "write", 134, mem)
+    try driven(r, dir, "big", 134, mem)
+    try driven(r, dir, "ref", 134, ref)
+    try driven(r, dir, "len", 134, len)
+    try driven(r, dir, "foreign", 139, "")
+    try driven(r, dir, "churn", 134, "1499500\n" $mem)
+    try driven(r, dir, "read crash", 134, $mem "crashed\n")
+    try driven(r, dir, "foreign crash", 139, "crashed\n")
+    # no use reported that is not one: arena-churning tests pass under it
+    tests String& = " " $os.Quote($root() "/std/prelude/tests/list.olang") " " $os.Quote($root() "/std/prelude/tests/map.olang")
+    try r.expect(sh(dir, "\"$OLANG\" -t -d -s" $tests " > out.txt 2>&1") == 0, "the tests under -d -s", dir)
+    try r.expect(sh(dir, "grep -c ' 0 failed' out.txt | grep -qx 2") == 0, "the tests under -d -s did not all pass", dir)
+    # zero cost outside -s: nothing of it in a plain build's IR, all of it in a -s build's
+    try r.expect(sh(dir, "\"$OLANG\" -b -d stub.olang > out.txt 2>&1") == 0, "stub.olang did not build plainly", dir)
+    try r.expect(sh(dir, "grep -q '__olang_san' build/stub.main.debug.ll") != 0, "a plain build carries the sanitizer", dir)
+    try r.expect(sh(dir, "grep -q 'call void @__olang_san_quarantine_list' build/stub.main.debug.san.ll") == 0,
+                 "a -s build does not quarantine what a scope closes", dir)
+}
+
+# runs drive.c's mode: it must end with status, its output (stdout and stderr together) beginning with want - after
+# which the shell may say how it ended - and report no use after a scope closed unless want does
+fn driven(r mut report&, dir String&, mode String&, status I32, want String&) ? Failed {
+    st := sh(dir, "./drive " $mode " > out.txt 2>&1")
+    out := outOf(dir)
+    ok := st == status and out.StartsWith(want) and (want.Contains("use after") or not out.Contains("use after"))
+    try r.expect(ok, "drive " $mode " ended " $st, dir)
 }
 
 # S1, S2: os.OnCrash's message is what the program writes when it crashes - on the main thread, on RunOnStack's and on

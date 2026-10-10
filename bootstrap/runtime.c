@@ -28,7 +28,7 @@
 static void emitScopeRuntime(FILE* out, bool san);
 static void emitScopeSanRuntime(FILE* out, const char* arch);
 static void emitOsRuntime(FILE* out, const char* arch);
-static void emitStackRuntime(FILE* out, const char* arch);
+static void emitStackRuntime(FILE* out, const char* arch, bool san);
 
 /* runtime support, always emitted (harmless if unused): assert()'s failure path can either longjmp back
  * to a test harness's recovery point (when @__olang_jmp_target is set) or hard-abort (outside test mode,
@@ -221,7 +221,7 @@ void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan) {
         "}\n\n", out);
     emitScopeRuntime(out, scopeSan);
     emitOsRuntime(out, arch);
-    emitStackRuntime(out, arch);
+    emitStackRuntime(out, arch, scopeSan);
     if (scopeSan) emitScopeSanRuntime(out, arch);
 }
 
@@ -2397,7 +2397,7 @@ static void emitOsRuntime(FILE* out, const char* arch) {
  * when a thread the runtime runs olang code on starts after OnCrash, or at OnCrash for the thread calling it - so even
  * a stack overflow is reported; the handler writes the message with write() and nothing else, then raises the signal
  * again with the default action restored, so the process ends as it would have, status and core dump included. */
-static void emitStackRuntime(FILE* out, const char* arch) {
+static void emitStackRuntime(FILE* out, const char* arch, bool san) {
     const struct cgLibcLayout* L = cgLibcLayoutFor(arch);
     fprintf(out,
         "declare i32 @pthread_attr_init(ptr)\n"
@@ -2631,7 +2631,12 @@ static void emitStackRuntime(FILE* out, const char* arch) {
         L->sigactionSize, L->sigactionSize, L->saFlags, (int)(SA_ONSTACK | SA_RESETHAND | SA_NODEFER));
     int sigs[] = { SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT };
     for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++) {
-        fprintf(out, "  %%s%zu = call i32 @sigaction(i32 %d, ptr %%sa, ptr null)\n", i, sigs[i]);
+        //B2f: under -s the sanitizer's handler keeps SIGSEGV, and this action becomes what it falls back to for a fault
+        //that is not its own - so a use after a scope closed is still reported as one, and any other fault as before
+        if (san && sigs[i] == SIGSEGV)
+            fprintf(out, "  call void @llvm.memcpy.p0.p0.i64(ptr @__olang_san_old, ptr %%sa, i64 %zu, i1 false)\n",
+                    L->sigactionSize);
+        else fprintf(out, "  %%s%zu = call i32 @sigaction(i32 %d, ptr %%sa, ptr null)\n", i, sigs[i]);
     }
     fputs("  ret void\n}\n\n", out);
 }
