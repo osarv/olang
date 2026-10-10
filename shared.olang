@@ -14913,6 +14913,7 @@ Rv3PayloadBaked := rv3PayloadCopies(2)
 test "O25h: copies of a local enum's payload build where the enum's references live" {
     k I64 = I64(ctRuntimeZero)
     assert rv3PayloadCopies(300 + k) == 424344 and Rv3PayloadBaked == 424344
+}
 
 # ---- study 5: a call's result passed on, writes through x[i], O17 per instantiation, loop copies ----
 
