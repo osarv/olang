@@ -4422,6 +4422,18 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   first n (none removed when it holds fewer, Rust's); a Map in key order is `m.Iter().ToList()` then `Sort` (documented,
   not added). No prelude conversion helper for `T(x)` through a type variable (r10): the fix is `T(x)` itself, a
   checker change, and a helper would be one more spelling to retire then.
+- **Collections render as their contents; short Lists are cheap (E11c, S9f, E31, E10a, 2026-10-10; study 6's r11, r12,
+  details mine).** `$l` is `List<I64>[1, 2, 3]` - an array's rendering with the List named in front, so a List prints
+  apart from an array - `$m` is `Map<String&, I64>{"a": 1}` (entries in walk order, braces as Go and JSON write a
+  mapping), a StringBuilder its text; elements, keys and values render as inside any other value. They printed the
+  private record before, spare chunk slots as elements. Rendered in place (List run by run, a Map entry split at its
+  key), since copying elements out is O10c's error for elements that can be stored through and copying them where the
+  collection lives would leak. **A List's first chunk is held on its own**: a list within 8 elements is one allocation,
+  `l[i]` below 8 and a one-chunk walk skip the chunk arithmetic, and `RunFrom` no longer has number locals for r02's
+  O26a bug to move into the arena - a 3-element walk 195 -> 66 instructions, building one 207 -> 123, study 6's ECS
+  1.27-1.40 -> 1.15-1.20 s, long Lists unchanged. `IndexOf(x)` fails on a miss, `Remove(x)` says whether it removed
+  (as `Map.Remove`), `SwapRemove(i)` moves one element. `chan.Chan(cap I64)`. Found, not fixed (compiler): a declared
+  type over `Char` renders as a number.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
