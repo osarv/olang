@@ -652,6 +652,16 @@ because what it finds about structure feeds the refactor.
   The scope fuzzer gained conditionals of references, At/Get/First element stores, failing spawns and destructors: it
   finds 24 on 6af6a4e and 0 on the fix over seeds 1-40 and 100-399. Running: str1 (round 4) only. When it merges: `own`
   + `take` + liveness-checked local borrows, then Vec.
+- 18:00 CEST: str4 review (/home/user/review/str4): round 4's over-rejection removals opened holes:
+  - callback deps miss cycles and reassigned callbacks;
+  - raw task scopes miss clause defaults;
+  - an mbiTransient ICE, even outside Str;
+  - a builder unwind node points at a dead slot;
+  - frame Call adapters.
+  Pre-existing: a Call adapter keeping its callback (PE1) and a copy of a &p field read built through (PE2, a UAF).
+  Round 5 sent: REVERT deps, raw task scopes and frame adapters (over-rejections are fine until the port's section-8
+  pass); fix C5, C9, C6, PE1, PE2; keep the rest. LESSON: removing over-rejections in the C checker keeps opening
+  holes - leave the remaining over-rejections to the port.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
