@@ -77,6 +77,17 @@ length Vec<T> again right?"):**
   2. Should Vec sit beside List, or replace it as the growable type? Recommended beside for now: List keeps stable
      addresses and no copy on growth; decide after measuring.
   In effect: nothing; order is failing spawns, owned + take, then Vec.
+  ANSWERED 12:40 CEST, the user:
+  1. "is that a general principle? If so yes ... Not sure about the comptime carveout, I guess its fine too" -> YES.
+     It is general: every borrow of an owned object lasts from where it is taken to its last use (Rust's non-lexical
+     lifetimes), and anything that may free what it points into is refused inside that span. It is checked at compile
+     time only, which is not a carve-out.
+  2. "vec is the natural growable array; if there is a case for list do both with Vec as the default" -> Vec is the
+     default growable type, and List stays only where it earns its place (stable element addresses, no copy on
+     growth).
+- QI. "Can we find another name than owned for this rule?" Proposed, recommended first: `unique` (C++'s unique_ptr is
+  the same concept: one owner, moved not copied, freed when the owner lets go), `box` (Rust's Box), `sole`. In effect:
+  `owned` until answered.
 
 **Asked 2026-10-10 08:55 CEST:**
 - QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
