@@ -1,0 +1,26 @@
+# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect - it writes, through a reference
+# E11c: a Str stepping a cursor it made is pure only while a step writes the cursor - this step, through the helper
+# the cursor is handed to, writes what the cursor reaches: the value being rendered
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Cur struct(of Bag&) {
+    c mut Cell&of = of.c
+    n I64 = 0
+}
+fn poke(p mut Cur&) {
+    p.n++
+    p.c.v++
+}
+fn poke2(p mut Cur&) { poke(p) }
+fn (b Bag&) Str() String {
+    cur := Cur(b)
+    poke2(cur)
+    return "b"
+}
+fn main() ? {
+    println($Bag(Cell()))
+}

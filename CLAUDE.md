@@ -4542,6 +4542,17 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   1.27-1.40 -> 1.15-1.20 s, long Lists unchanged. `IndexOf(x)` fails on a miss, `Remove(x)` says whether it removed
   (as `Map.Remove`), `SwapRemove(i)` moves one element. `chan.Chan(cap I64)`. Found, not fixed (compiler): a declared
   type over `Char` renders as a number.
+- **Merging wt-s6std onto the soundness fixes: `List.Clone` and E11c (E11c, O23a, 2026-10-10).** The merge took
+  rv3fix's `Clone`, reading `chunks[k]` directly, beside s6std's first chunk held on its own (`chunks` null until a
+  second is made), so every one-chunk Clone read through null (segfaults in the corpus, std and checks); it walks
+  `chunk(k)` now. **E11c refined (mine)**: a write of a reference parameter's referent's own storage - the first
+  reference down from the place is the parameter itself, never repointed in its function - is kept apart per parameter
+  (`effShallow`) and is a caller's effect only where the argument's own storage was there before that caller ran; a
+  local or temporary the caller made, such as the iterator `for e in m` walks, is the caller's own. So `Map.Str` (which
+  rv3fix's E11c refused) compiles, and every deeper write is an effect as before. **Pre-existing hole closed**: a value
+  or referent a `Str` made, holding writable references in `&p` fields (a cursor over the value), was taken to reach
+  nothing - `cur := Cur(b); poke(cur)` writing `cur.c.v` changed the rendered value; such an argument now counts as
+  reaching storage that was there (where an `&p` field refers is its instance's binding, O23a, not known there).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

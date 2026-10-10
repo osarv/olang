@@ -2365,11 +2365,14 @@ no call that writes such storage through an argument it is given or through a fu
 there (settled over every call once every body is checked). A lambda the function makes is judged as part of it: calling
 it does what its body does, a write through one of its captures counting where what the capture copies reaches such
 storage. A `Str` that does either is a compile-time error naming
-what stops it. What `Str` builds for itself - a local list, a `StringBuilder` - it may change freely. That is what lets
-a rendering call it as often as building the text needs - once to measure, once to write, or not at all when the text
-is computed while compiling - with nothing to tell the difference. And since `$` renders read-only values too (an
-immutable global, a part of a read-only reference, T25c), a by-value receiver of `Str` is one that takes a read-only
-copy: one whose body lends what it holds writably, or keeps it, is a compile-time error.
+what stops it. What `Str` builds for itself - a local list, a `StringBuilder`, an iterator or cursor over the value it
+renders (a `for` over a `Map` makes one) - it may change freely, through a callee it hands it to as well; what such a
+value's references reach is not its own, so a write through them is the effect above (a reference in a field written
+`&p` counts as reaching storage that was there: where it refers is its instance's binding, not known there, O23a).
+That is what lets a rendering call it as often as building the text needs - once to measure, once to write, or not at
+all when the text is computed while compiling - with nothing to tell the difference. And since `$` renders read-only
+values too (an immutable global, a part of a read-only reference, T25c), a by-value receiver of `Str` is one that takes
+a read-only copy: one whose body lends what it holds writably, or keeps it, is a compile-time error.
 
 ### 5.3 Assignability ("fits")
 

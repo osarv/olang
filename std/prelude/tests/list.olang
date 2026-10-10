@@ -290,6 +290,26 @@ test "a List's Clone outlives the list it copies, across chunk boundaries" {
     assert copy.Len() == 3 and copy[2] is words[2]
 }
 
+# Clone of a List of every length around the first chunk's edge - held on its own, with no array of chunks until a second
+# is made - and the next chunks': the clone holds the same elements and grows apart from the list
+fn listCloneEdges() I64 {
+    s I64 = 0
+    for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 56, 57] {
+        l := listUpTo(n)
+        c := l.Clone()
+        c.Push(1000)
+        l.Push(2000)
+        assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "Clone of " $n
+        for i, x in c { s += x * (i + 1) }
+    }
+    return s
+}
+listCloneEdgesBaked := listCloneEdges()
+
+test "Clone at every chunk boundary, evaluated while compiling as at run time" {
+    assert listCloneEdges() == listCloneEdgesBaked
+}
+
 test "Truncate keeps the first n, across chunk boundaries, and Push carries on after them" {
     for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 100] {
         l := listUpTo(100)

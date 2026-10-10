@@ -335,9 +335,9 @@ fn (l List<<T>>&) Clone() List<T> {
     c := List<T>()
     s := l.s
     for k in range s.nChunks {
-        n I64 = s.chunks[k].Len()
+        n I64 = s.chunk(k).Len()
         if k == s.nChunks - 1 { n = s.used }
-        c.PushAll(s.chunks[k][:n])
+        c.PushAll(s.chunk(k)[:n])
     }
     return c
 }

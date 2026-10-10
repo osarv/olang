@@ -1,0 +1,18 @@
+# check: fail error[E11c]: Str runs as often as '$' needs, so it must have no effect - it writes, through a reference
+# E11c: a helper writing only its parameter's own fields still writes what it is handed - here a reference the value
+# being rendered holds, handed on through a second helper
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn bump(c mut Cell&) { c.v++ }
+fn bump2(c mut Cell&) { bump(c) }
+fn (b Bag&) Str() String {
+    bump2(b.c)
+    return "b"
+}
+fn main() ? {
+    println($Bag(Cell()))
+}
