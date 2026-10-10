@@ -62,7 +62,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   decision 51 below. Queued after decision 50 (QE).
 
 **Answered 2026-10-10 12:15 CEST (the user: "1) good .2) yes. 3. Okay."):**
-- Decision 50 (failing spawns, the design as given) - APPROVED; built next.
+- Decision 50 (failing spawns, the design as given) - APPROVED; BUILT 9802fc3 (P4-P4d, `try join`), merged 40fb1c5.
 - QG question 2: owned objects may also move out with an explicit `take` - YES. QG question 1 was answered earlier by
   the user's own no-borrowing refinement (compile-time, strict start).
 - Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted.

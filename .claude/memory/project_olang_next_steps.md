@@ -610,6 +610,14 @@ because what it finds about structure feeds the refactor.
   `SemanticMayBuild` walk and `cgCheckMayBuild`, one predicate for both. The reviewer's structural point, for the port:
   "where is this built" must be ONE predicate that the checker and codegen share. Running: str1 (round 3), decision 50
   (wt-spawnerr).
+- 14:45 CEST: decision 50 merged and pushed (9802fc3 via 40fb1c5, full verify on the same code):
+  - `spawn try f(a)`; task clauses as lambdas run on the task's thread;
+  - `try join`, which fails with the earliest-spawned failure on every way out of the block;
+  - P4d: a target left unwritten forces the clauses to leave;
+  - D10a counts a leaving join.
+  Also fixed: P1g, where a String value spawn target was built in the join block. A combined soundness review runs
+  next (/home/user/review/batch6) over chk5 round 2, rv9fix C9a and the parallel global, and decision 50. Then
+  `own`/`take`, liveness-checked local borrows, and Vec.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
