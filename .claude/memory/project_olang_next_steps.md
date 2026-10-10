@@ -546,6 +546,10 @@ because what it finds about structure feeds the refactor.
   `acc.DotAdd4(a, b)`, or LLVM 19's partial.reduce.add - recorded future work), element-wise kernels back on linalg Map.
   QUEUED for the checker batch: oann repro/lambdalend.olang (O17 refuses lending a value Matrix view to a function
   writing it from a lambda run by linalg.ParallelRows; fine without tasks).
+- 05:15 CEST: s6std done (wt-s6std 8b1ff5c, merge after rv3fix). oann phase 9 done (wt-oann-p9 fcb89d7: nights pay for
+  noisy cues, similar new observations, transfer, a forgetting store; cost conflicting surroundings; open questions
+  15-17), make test running before push. QUEUED (compiler, found by s6std): `type Letter extends Char` renders as a
+  number; `List<Array<I64, 3>>` renders its element type as I64; `mut` dropped from rendered type names.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

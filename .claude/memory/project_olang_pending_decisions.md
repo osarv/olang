@@ -280,6 +280,11 @@ rule and where it is recorded; the morning report lists them all, then they move
    argument on x[i] is a compile-time error naming `t := l[i]; t.M(); l[i] = t` (the callee could reach the collection
    another way - heap corruption, lost writes; exclusivity checking would be needed). Being built in wt-s5scope.
 
+43. (wt-s6std) `$` renders a List as `List<I64>[1, 2, 3]`, a Map as `Map<K, V>{k: v}` (walk order), a StringBuilder as
+   its text; a List's first chunk held on its own (a list up to 8 elements is one allocation; 3-element walk 195 -> 66
+   instructions); `IndexOf` fails on a miss, `Remove(x)` returns a Bool like Map.Remove, `SwapRemove(i)` returns the
+   element; `chan.Chan(cap I64)`. Merge only after rv3fix (its c3Holder test needs rv3fix's C2g fix).
+
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
