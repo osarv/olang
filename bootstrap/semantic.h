@@ -303,6 +303,15 @@ struct scopeBinding {
 struct ctVal; //comptime.h
 //D8a: a parameter's default - its syntax, kept until the default is built (after every signature and global is
 //known: a default may name a global declared anywhere), and the checked operand once it is
+//D8a: a lambda a parameter's default holds, as made for the calls in one host function (or, with none, one module's
+//global initializers, tests or destructors)
+struct defaultLambda {
+    struct syntax* node;
+    struct var* host;
+    bool inTest;
+    struct semaModule* object;
+    struct var* L;
+};
 struct paramDefault {
     struct syntax* syntax;
     struct semaModule* mod;
@@ -311,6 +320,8 @@ struct paramDefault {
     bool building;
     bool readsVars;      //G23: it reads a constant (or type) variable of its declaration - built per instantiation,
     struct list bindings; //with that instantiation's bindings (struct typeBinding); empty in the generic's own
+    struct list lambdas; //D8a: each lambda it holds, as made for the code calls stand in (struct defaultLambda) - one per
+                         //host function, emitted with that host, which every call of it there shares
 };
 
 struct var {
@@ -341,7 +352,6 @@ struct var {
     //(roNeedsWritable). Its declaration cannot say "mut" for some instantiations and not others
     bool roByArg;
     bool roToResult;
-    bool callsFnThrough; //P2: on a parameter (or a lambda's capture): its body calls a function value reached through it
     struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
     //O17: on a function, for each of its scope variables, what its body does with the region the variable names - stores
     //into a slot reached through it something not read out of that region (built, or handed in), itself or through a
@@ -395,9 +405,17 @@ struct var {
     struct list codeBlock; //for functions
     struct operand* initExpr; //for module-level globals only: the checked initializer, used by codegen
     struct operand* declInit; //a local's initializer, as checked - B11: what a scope diagnostic traces a value back to
+    //B11/T6a: an integer local typed by its literal's own type, I64 - declared by ":=" from a literal or a literal-only
+    //expression (litOwnDecl, at tok), or a range's value or counter whose bounds are all literals (litOwnRange, the
+    //range's end argument): where it does not flow into a narrower integer, a note names the declaration to change
+    bool litOwnDecl;
+    bool litOwnRange;
+    struct operand* litOwnRangeEnd;
     bool bodyUnparsed;        //its body did not parse (the error reported): declared by its signature, never checked
     bool bodyIncomplete;      //S8b: a branch in this body is still being decided (it was skipped unparsed),
                               //so its body is not yet the program's and must not be evaluated
+    bool obligUnsettled;      //O10c/O26a: its body called one still being checked (a cycle) or one so marked - its
+                              //obligations may still grow (dischargeLateObligations), so what it keeps is not known yet
     bool isLambda;            //D16: a lambda's hidden function - emitted with the function it is written in
     struct list lambdaCaptures; //D16: struct lambdaCapture - what the lambda reads from the body around it
     struct var* paramOf;      //O23a: a parameter's copy in its function's body - that function (NULL for every other var)
@@ -409,6 +427,8 @@ struct var {
     struct var* capturesOf;   //O17/D16c: on the callee binding a lambda's captures where it is made, that lambda
     struct var* lambdaHost;   //D16: the function the lambda is written in, NULL in a test or a global initializer
     bool lambdaInTest;        //D16: written in a test block, so emitted with the test harness
+    struct semaModule* lambdaObject; //D8a: a parameter default's lambda, made for calls in this module's code - the
+                                     //object emitting it, with no host (NULL: its owner's)
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
     bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through
     int bodyState;            //O10b: 0 while this function's body is unchecked, 1 while it is being checked, 2 once
@@ -416,6 +436,8 @@ struct var {
                               //callee's body first (ensureBodyChecked) and only a cycle sees a partial set
     bool bodyHadErrors;       //K3: checking this function's body reported errors, so its body is not the
                               //program's and must never be evaluated
+    char mayBuild;            //P2: SemanticMayBuild's answer - 0 not known, 1 being found, 2 no, 3 yes
+    int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
                               //value, which codegen writes out as the global's data instead of setting it
                               //at startup. NULL when it could not be.
@@ -898,6 +920,11 @@ int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15)
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticParamTransient(struct var* func, int j);
+//P2: whether func's body may build into a scope it is handed - allocate anything, or register a destructor - read off
+//the checked body, conservatively; codegen asks it of a callee a captured scope is passed to (cgCapScopesRead)
+bool SemanticMayBuild(struct var* func);
+bool SemanticMayBuildInto(struct var* func, struct var* v); //E11c/O12: the walk above, asked of one scope variable
+bool SemanticReliesNoBuild(struct var* func, struct var* v);  //...whose answer of no codegen holds the body to
 bool SemanticBindingIsLanding(struct operand* callOp, struct var* sv);
 bool SemanticBindingIsUnnamed(struct operand* callOp, struct var* sv);
 //M23c: "-u" - every remote repository the compilation reaches is resolved to its ref's current commit

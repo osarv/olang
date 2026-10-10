@@ -134,8 +134,7 @@ C2a). Anywhere else - a parameter, a local, a function, a type - the words stay 
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
 `decimal-int ::= digit { digit-sep digit }`. No unary minus is
 part of the literal itself (negation is the unary `-` operator, §5). An `INT_LIT`'s own type follows its
-written value: `I32` where it fits one, `I64` where it fits that, and `U64` for a decimal value above `I64`'s maximum
-(T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
+written value: `I64`, and `U64` for a decimal value above `I64`'s maximum (T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
 saturated or wrapped - and so is a hexadecimal or binary one needing more than 64 bits.
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
@@ -426,8 +425,10 @@ Adaptation is therefore never a silent truncation or overflow, and never turns a
 it is not restricted to widening either: `x U8 = 65` and `b == 'a'` are as valid as `n I64 = 1`, because the literal
 has no representation of its own yet and the value written fits. A **literal-only expression** (E4a) adapts exactly
 as the one literal holding its value would. Where both operands of a same-type-requiring binary operator are literals
-(or literal-only expressions) of differing numeric types, the narrower adapts to the wider (`Char` < `I32` < `I64` <
-`F64`, the types T6a gives them), subject to the same representability rule. Beside an operand whose type cannot
+(or literal-only expressions) of differing numeric types, the narrower adapts to the wider (`Char` < `I64` < `U64` <
+`F64`, the types T6a gives them), subject to the same representability rule - so beside a `U64` literal an `I64` one
+adapts to `U64` where it is not negative (`18446744073709551615 & 7` is `U64` arithmetic), and a negative one does not
+fit, which is an error. Beside an operand whose type cannot
 represent its value, a literal does not adapt: the two meet at the literal's own type (E6d). A non-literal value of a
 different numeric type requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
 
@@ -448,14 +449,16 @@ base, an integer and a float - do not meet, and that is a compile-time error. A 
 to meet with: beside a number it adapts (T6), or, where that number's type cannot hold it, meets it at the literal's
 own type (E6d).
 
-**T6a.** Where nothing adapts it, a literal's own type is: `I32` for an integer literal whose value is representable in
-`I32`, `I64` for one representable in `I64` but not `I32`, `U64` for a decimal one above `I64`'s maximum (L10; a
-hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned type, L10a), `F64` for a float literal,
-`Char` for a character literal, and `Bool` for `true`/`false`. This is the type `:=` infers (§6.2 D15) and
-the type such a literal carries into a context that requires no particular type of it - a type variable only
-literals reach (G9a), a `-D` build constant (B10). It follows that an
-integer literal too large for `I32` is never silently truncated by an `I32` target: its own type is
-already `I64`, so T6 must adapt it, and the value does not fit. A literal-only expression (E4a) that nothing adapts
+**T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal, `U64` for a decimal one above
+`I64`'s maximum (L10; a hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned
+type, L10a), `F64` for a float literal, `Char` for a character literal, and `Bool` for `true`/`false` - the widest
+signed integer and the widest float, so a value nothing types is never narrowed or wrapped by a type nobody chose. This
+is the type `:=` infers (§6.2 D15: `x := 0` is an `I64`) and the type such a literal carries into a context that
+requires no particular type of it - a range of literals (S9b), a type variable only literals reach (G9a), a `-D` build
+constant (B10). A literal written against a typed target still adapts to it (T6): `b U8 = 3`, an `I32` argument `5`,
+`i32 + 1` and `case 5` against an `I32` are as before. Where an `I64` made so meets a narrower integer it does not flow
+into (T6b) - `x := 0` handed to an `I32` parameter - the type it should have is declared (`x I32 = 0`), or the value
+converted (`I32(x)`). A literal-only expression (E4a) that nothing adapts
 is an ordinary expression of its literals' own types, computed as it is written (E6c's wrapping included).
 
 ### 2.3 Array types
@@ -502,8 +505,9 @@ as C lays out `T x[N]` in a struct. Unlike an `Array<T>` (T7a) it is held by val
 which is all a fixed-size matrix needs. `Array<T, N>&` is a reference to one: a single pointer, the length its
 type's (T11a). As a parameter it is that reference (D9a), and a lambda borrows it as it borrows any value array
 (D16c). A local's storage - a fixed array's, or a struct's holding one - larger than a stack frame should hold (64KB) is
-taken from its block's arena instead, reclaimed when the block closes as the frame's would be: a local of any size is
-declarable, and nothing else about it differs.
+taken from its block's arena instead, reclaimed when the block closes as the frame's would be (a constructor's from its
+own scope, closed as it returns, never its instance's - §9.1 C2g): a local of any size is declarable, and nothing else
+about it differs.
 
 Everything an array does, an `Array<T, N>` does - indexing, slicing (to an `Array<T>&`, E16a), `for ... in`, `$`,
 `Len()`, the prelude's methods (M19d), `extern` marshalling (X3) - and what its type knows is used while compiling:
@@ -918,7 +922,9 @@ its parts. A fresh value - a call's result, a literal, an instance - is writable
 below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
 written, so it is never a read-only copy (`Copy mut List<I32> = G` is an error; an immutable global may hold one). A
 **slice** or a **view** (`as Array<T, N>&`) of a read-only copy, and a loop's walk over one, read the copy: what they
-give is read-only, as indexing it is.
+give is read-only, as indexing it is. So does a walk over a reference a read-only copy holds (`for d in mods[i].deps`,
+`mods` read-only): the loop borrows it read-only, and a collection whose walk writes - a `mut` `At`, `Len`, `RunFrom` or
+`Iter` - is refused at that call.
 
 A **by-value parameter** is the callee's own copy (D9), and whether that copy must be writable is read off the
 callee's **body**: a parameter whose copy the body writes through, lends writably or stores - or passes to a callee
@@ -1084,7 +1090,7 @@ between two such arrays as it does between a declared type and its base (`String
 **T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<Char>`, the text type, and
 the text operations are its methods. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
-literal's is `I32` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
+literal's is `I64` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
 bound to a type variable (G9a), as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`), and as an
 operand of an operator a type declares (E31), so `"a" < s` calls `String`'s `Less` as `s > "a"` does.
 Like a literal (T29a) it is a temporary with no type worth defending, so it still **adapts** to any other array of
@@ -1322,7 +1328,12 @@ as a literal argument does (G18), and a call whose instantiation it does not fit
 constant (and type) variables its declaration introduced before it - a constructor's type's own (`struct(k I64 = N *
 10)`), a function's (`F(x I64 = N + 1)`, G22): it is then each instantiation's, computed with that instantiation's
 values (G23) and checked where a call omits it. A `null` default refers to nothing, so it fits whatever scope a call
-binds its parameter to.
+binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
+it builds is built where that call builds its argument (§8 O18a). Its names still mean what they mean at the
+declaration, whichever call it stands in: a name the declaration's module gives a meaning - a global, a type - is
+never one the calling code has in scope, so a caller's own constant variable of that name (G22) is not the default's.
+A lambda in a default captures nothing (a default has no locals); the calls of one module (or of one instantiation,
+G16) share the one made for them, which is a function of that module's code wherever the default was declared.
 
 **D8b.** Defaulted parameters must be **trailing**: once one parameter declares a default, every
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
@@ -1533,8 +1544,9 @@ slice, arithmetic, a comparison, a conditional, a `match`, a conversion, text. T
 compile-time errors: `null`, which has none until it meets one (T2a) - and so any expression whose type is null's,
 `null if c else null` - and a call that returns nothing. A call's several results are destructured instead (D8c).
 An expression of numeric literals alone (E4a), `x := 1 + 2`, is computed while compiling and declares what its value
-written as one literal would (T6a: `I32`, else `I64`, else `U64` for an integer; `F64` for a float) - so `x :=
-2147483647 + 1` is the `I64` 2147483648, exactly as `x := 2147483648` is; one whose value no type holds is an error.
+written as one literal would (T6a: `I64`, else `U64` for an integer; `F64` for a float) - so `x := 1 + 2` is the `I64` 3
+and `x := 9223372036854775807 + 1` the `U64` 9223372036854775808, exactly as `x := 9223372036854775808` is; one whose
+value no type holds is an error.
 Text declares a `String` (T29c). An array literal declares an
 `Array<T>` (T7) - as a conditional or a `match` all of whose values are array literals does: its length is not part of
 the type, and a later assignment may change it; a fixed length is written, `x Array<I32, 3> = I32[1, 2, 3]` (T7d), and
@@ -2143,13 +2155,14 @@ would be a cost the code does not show. Division is the exception, by E6a.
 
 **E6d (a literal another operand cannot hold).** Beside an operand whose numeric type cannot represent its value
 (T6), a literal - or a literal-only expression, E4a, taken as the one literal holding its value, or a conditional of
-literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I32`, `I64` or `U64` for an integer, by its value; `F64` for a
+literals (E4a), every value of which must fit - does not adapt; the two **meet at the literal's own type** (T6a: `I64`, or `U64` for one above `I64`'s maximum, for an integer; `F64` for a
 float; for a conditional, the widest of its values' own types, each value - a literal-only expression, a shift among
 them, computed exactly as E4a computes it - then adapting to that type) as two numbers meet (T6b), losing nothing: the other operand flows into that type and the operation is that
-type's. So with `b` a `U8`, `b + 300` is an `I32` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
-`I32`, `0x7FF0000000000001 * one` is an `I64`; with `g` an `F32`, `g + 1e300` is an `F64`. Where the other operand's
-type does not flow into the literal's own type - `u - (-1)` with `u` a `U32`, since a `U32` flows only into an `I64`;
-an integer beside a float literal - the two do not meet, and that is a compile-time error: one is converted.
+type's. So with `b` a `U8`, `b + 300` is an `I64` (and `b + 3` stays a `U8`, the literal fitting); with `one` an
+`I32`, `0x7FF0000000000001 * one` is an `I64`; with `u` a `U32`, `u - (-1)` is an `I64`; with `g` an `F32`,
+`g + 1e300` is an `F64`. Where the other operand's type does not flow into the literal's own type - `u - (-1)` with `u` a
+`U64`, since a `U64` flows into no signed type; an integer beside a float literal - the two do not meet, and that is a
+compile-time error: one is converted.
 
 **E6b (withdrawn).** `+` does not apply to arrays; no arithmetic operator does. Text is joined by writing
 its pieces side by side (E11b). `+` with two array operands is a compile-time error that says so.
@@ -2191,7 +2204,7 @@ operand of one in a binary operator (T6's adaptation to the other operand), the 
 shift is computed at its width. So `x I64 = 1 << s` and `i64 + (1 << s)` shift an `I64`, as their `1` alone would have
 been one. The same holds through arithmetic of such shifts with literals - `mask I64 = (1 << s) - 1` - every literal in
 it adapting together. With nothing adapting it, the literal keeps its own type (T6a): in `y := 1 << s` the shift is an
-`I32`'s. The literals must hold values of the type they adapt to, as T6 requires of any literal; only a primitive
+`I64`'s. The literals must hold values of the type they adapt to, as T6 requires of any literal; only a primitive
 integer type is adapted to (a declared type is entered through its constructor, T29d).
 
 **E9.** `< <= > >=` require both operands to be of one numeric type (subject to T6's numeric-literal
@@ -2211,7 +2224,8 @@ the type, and a type may say it itself:
 - for a **reference to an array** (`Array<T>&`, `Array<T, N>&`, or a declared array type with no `Eq` of its own):
   the arrays the two name, compared as values are - lengths first, then each element by this same rule - except
   that a null equals only a null. A null array reference is one with **no storage**, as an array value's zero value
-  has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null. Two
+  has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null, and so
+  does an `Array<T, 0>`, a place of no bytes - a reference to one, or a slice of one, is not null. Two
   references to arrays are compared for what they hold however they were made, so `l.ToArray() == m.ToArray()` asks
   whether two lists hold the same elements; whether they are one array is `a is b` (E10c).
 - for any other **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly
@@ -2388,7 +2402,10 @@ result's scope (one `$` opens for the call and closes once the text is copied), 
 where its receiver reaches - no new value built into such a scope, nothing it built or was handed stored into what the
 receiver reaches (O17's region; a reference or a value holding references read out of that region being all it may put
 there) - and may require nothing of such a scope (an obligation, O10b, naming one). Each is a compile-time error at
-`Str`, which `$` hands no scope for its receiver to build into.
+`Str`, which `$` hands no scope for its receiver to build into. The same holds through whatever `Str` does with a part
+of what its receiver reaches: a function it passes the part to, a closure capturing it (D16d), a task handed it (P2), a
+function value adapting it (E31), a conditional's or a match's new value, or a catch default, placed with it (E28,
+S12b, R9a) - each is judged by what is built where that part lives, and building there is the error, at `Str`.
 And since `$` renders read-only values too (an immutable global, a part of a read-only reference, T25c), a by-value
 receiver of `Str` is one that takes a read-only copy: one whose body lends what it holds writably, or keeps it, is a
 compile-time error.
@@ -2449,8 +2466,9 @@ behind it — and for an array it is also what keeps a copy proportional to the 
 inferred from a marker rather than written down. The borrow is therefore a claim about lifetime, and the
 claim is checked: the scope the borrowed storage belongs to must outlive the target's own scope (§8 O10),
 which is derived as the declaring block's for a local, the function's own for a value parameter, as the enclosing reference's scope for a field or
-element reached through one - through a writable reference field or element with no scope of its own, where its
-container lives (O20), when that container is reached through a reference in turn - and as unbounded for a global. Handing storage in this function's own scope to
+element reached through one - where that reference is itself a field or an element with no scope of its own, the scope
+of the container it is read through (O20: `g.arr[0]`, `arr` a bare reference field of a reference parameter `g`, lives
+where `g`'s instance does) - and as unbounded for a global. Handing storage in this function's own scope to
 a reference tagged to a longer-lived scope is a compile-time error — that, and not the absence of a copy, is
 the defect in such a program. A value that is *not* an lvalue (a literal, a call's result) has no storage to
 borrow and is allocated in the target's scope instead (§8 O6), which is construction rather than copying and
@@ -2569,7 +2587,17 @@ length adjusted — never a copy and never an allocation — so its type is a ru
 `String&`, with every method a `String` has - those it inherits by `extends` included, T29f), tagged (§8) to the
 scope `base`'s storage belongs to: slicing a
 local yields a reference in that local's block, slicing an array reference yields one in its referent's scope. The result has
-length `hi - lo`, and writing through it writes `base`.
+length `hi - lo`, and writing through it writes `base`. Slicing a local borrows its storage as a reference to it does
+(E12c): a constructor's field kept a slice or a view of (E32b) is stored where the instance lands (C2d).
+
+Slicing a value with no storage of its own - an inline array of a call's result held by value (`mk(n).a[0:2]`), of a
+constructor's instance, a literal, a new array (`Array<T>(n)[0:2]`), a payload read with `as` from an enum held by value
+(a copy, E32) - borrows the **temporary** that value is made as,
+which is made in the block the slice is written in: the slice lives in that block, and goes nowhere that outlives it
+(at a constructor's top level, in the constructor's own frame, which its instance outlives). Two values are not
+temporaries made there: a call's run-time-length array result, whose storage the call builds in its result scope, which
+lands where the slice is put (O18a) - `h.r = mk(n)[0:2]`, `mk` giving an `Array<I64>` - and text written in the program,
+which is constant data as long-lived as the program (T25d) and read-only.
 
 A slice is not an lvalue and may not be assigned to. It does carry `base`'s **mutability**: a slice of an
 immutable array is itself immutable, and so cannot bind to a `mut` reference parameter (E12a) — without
@@ -2668,7 +2696,8 @@ O18) to where that variable lives (O4a); `return` binds it to the calling functi
 holding a global's referent — is a compile-time error here: a result reaches that scope by being put there,
 assigning it to a global or into something reached from one (O1b), not by a scope argument. So is a variable whose
 scope is not known (O12). On a constructor call it is where
-the instance lands (C2c). Without one, the result scope follows the result (O18a). A call whose several results are
+the instance lands (C2c), and what the instance holds is judged there (C2d) - `local := Env&c(c.env)` as `local mut
+Env&c = Env(c.env)` is. Without one, the result scope follows the result (O18a). A call whose several results are
 destructured (S4b) is the same: `rec, next := mk2&rows(k)` builds the results where `rows` lives, and what each target
 holds lives there, so `rows.Push(rec)` keeps it.
 
@@ -3070,7 +3099,10 @@ target written `_` discards its result. The call is evaluated once, before any t
 "," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
 `a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4, in order - its place
 evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
-the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. With `:=` each name is
+the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. A value with
+no storage of its own (§5.3 E12c) going into a reference target is built, when it is evaluated, where that target's
+referent lives - where S4 alone would build it: the program's scope for a global, or a field reached from one (O1b),
+so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each name is
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
@@ -3178,7 +3210,8 @@ being built.
 (no parentheses) names a sequence of integers. One argument is its **end**, with start `0`; two are its
 **start** and **end**; three are **start**, **end** and **step** (default `1`). All are integers; the first
 argument that is not a literal gives the type of the range, of the loop's value and of its counter `i`, and
-literals adapt to it (T6). Each is evaluated once, in the order written, before the first iteration.
+literals adapt to it (T6); literals alone give the widest of their own types (T6a), so `for i in range 10` counts in
+`I64`, and `range I32(10)` in `I32`. Each is evaluated once, in the order written, before the first iteration.
 
 The values run **upward** from start, **included**, to end, **excluded**, `step` apart. A range only counts
 upward: when start is not below end, or the step is not positive, the loop runs no times.
@@ -3572,27 +3605,33 @@ function call does.
 A scope a task is handed as a scope variable (§8 O3) is **not** shared with the task that was handed it: the task
 allocates into a private arena of its own standing in for that scope, and the spawner folds each one back
 into the scope it stands for after the join - the scope the call bound that variable to, exactly as for an ordinary
-call (§8 O17, O18a), never the join block merely because the spawn is written in it. The program's scope (§8 O1b) is
-such a scope for every task: whatever a task builds there - a result borrowed from a global, a value assigned to one -
-goes into its own stand-in for it, folded into the spawner's at the join. So is the scope of every reference a **function
-value** a task is handed captured (D16c): a spawned lambda (D16e), or a lambda passed as an argument, builds through what
-it captured into the task's own stand-in for that reference's scope, never into the spawner's arena from the task's
-thread. `os.RunOnStack` runs its function the same way, its thread building into stand-ins folded in when the function
-returns. What a task makes or is handed may outlive it - a closure capturing a reference it was handed, a function value
-it returns through a spawn target or stores - so a stand-in lives as long as the scope it stands in for and, once folded,
-**forwards** to it: whatever builds through it afterwards builds in that scope, on whichever thread then owns it, and a
-later task's stand-in whose parent is such a stand-in is folded into the scope it forwards to. The
-function value a task is handed is the same value it was (`is` holds between the two), and one spawn hands one function
-value once however many of its arguments reach it. A capture living in the program's scope is that scope as the thread
-calling the closure reaches it. A task **calls no function value held in what it is handed** - in a field, an element or
-a payload, through references too - nor does a spawned lambda through one held in what it captured: such a function
-value is called on the task's thread with the scopes it captured as they are, and would build into them beside the
-thread that owns them. Handing the function value itself as an argument stands it in. Whether a task calls one is read
-off its body, and the bodies it hands such a value to, once every body is checked. A value a task allocates through such
-a scope therefore lives
-exactly as long as that scope, and is reachable from the spawner once the block ends, while no arena is
-ever bumped by more than one thread. Destructors registered on a task thread run when the scope they were
-registered with closes, ahead of those registered before the spawn.
+call (§8 O17, O18a), never the join block merely because the spawn is written in it. What a task makes or is handed may
+outlive it - a closure capturing a reference it was handed, a function value it returns through a spawn target or
+stores - so a stand-in lives as long as the scope it stands in for and, once folded, **forwards** to it: whatever builds
+through it afterwards builds in that scope, and a later task's stand-in whose parent is such a stand-in is folded into
+the scope it forwards to.
+
+Every other scope a thread builds into belongs to one thread, its **owner** - the thread that opened it, or for a
+stand-in the task it was made for - and no thread but its owner ever allocates there. A scope reaches another thread in
+two ways only, and each is answered where it is reached:
+- **The program's scope** (§8 O1b): every thread has a **part** of it of its own - the main thread the scope itself, each
+  worker a part made when the worker starts and kept for every task it runs - and whatever a task builds there - a
+  result borrowed from a global, a value assigned to one - goes into that part. The program's scope never closes, so its
+  parts are never folded.
+- **A function value's captures** (D16c): a closure - or a value whose type declares `Call`, given as a function value
+  (E31) - may be called on any thread: a task calls one it is handed, or one held in what it is handed (a field, an
+  element, a payload, through references too), and a closure a task made may be called after the join. A closure whose
+  body may build into a scope it captured - allocate there, register a destructor there, or hand the scope to a callee
+  that may - builds, on a thread that is not that scope's owner, into that thread's own part of it: made the first time
+  that thread builds there and closed with the scope. A closure that only reads through what it captured builds nowhere
+  and asks for nothing. `os.RunOnStack` runs its function on a thread that builds as its caller would, its caller
+  waiting for it.
+
+So a value a task allocates lives exactly as long as the scope it was built for, and is reachable from the spawner once
+the block ends, while no arena is ever bumped by more than one thread - and nothing is checked per allocation, only once
+per call of a closure that may build into what it captured. Destructors registered from another thread run when the
+scope they were registered with closes: a stand-in's ahead of those registered before the spawn, and a part's ahead of
+every destructor the scope's owner registered there.
 
 A task handed no scope variable allocates into its caller's own block, which inside a `join` block is the **join
 block's** arena (O2) — so such a value, and any destructor it registers, lives until the block closes and
@@ -4034,7 +4073,7 @@ already living somewhere that is stored there must live there too: a global's, o
 anything shorter-lived is a compile-time error - a function value is never shorter-lived when it names a function
 or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
 determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
-there. Each task reaches the program's scope through a stand-in of its own (§6.8 P2). Destructors registered in it do
+there. Each thread reaches the program's scope through a part of it of its own (§6.8 P2). Destructors registered in it do
 not run at exit. `&g`, for a global `g`, names
 it (O4a).
 
@@ -4489,8 +4528,13 @@ here, its zero value (D13c), a result destructured into it (S4b) - when it holds
 function's result is a built reference it is returned through (`fn f() Point& { p := Point(1, 2); return p }`). A
 local holding references is also returned when a returned value reads it where what is built from it can be what is
 handed back - as an argument or a receiver (`return Node.Many(l.ToArray())`, `return wrap(l)`), but not through a
-method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new:
-what is built from it holds what it holds, which must live where the result does. Where the result is put is the
+method whose result holds no reference (`l.Len()`), a field holding none, or a rendering (`$l`), whose text is new,
+nor as an argument of a call - of a function, of a method of a local, a parameter or a global, or of an imported
+module's function - that can keep it nowhere: not in its result, nor in its receiver or another argument, which its
+body's obligations (O10b) say, once they are all known (a callee in a cycle of calls, whose obligations grow until every
+body is checked, O10c, keeps it) (`i := g.infos[k]; return View(g.mem, g.count(i))` leaves the copy `i` in the frame):
+what is built from it holds what it holds, which must live where the result does. A local that can hold nothing and
+whose storage nothing can name - a number, a `Bool` - is never moved, whatever the result is. Where the result is put is the
 result scope for a built result, and for a borrowed one (`T&p`, `p` a reference parameter, O14) the scope `p`'s
 referent lives in, which the function builds into (O4b).
 
@@ -4715,7 +4759,19 @@ determined scope is the program's (a global argument, O25e), the temporary is bu
 the result lands at the **shortest** of the scopes the callee's obligations require the result scope to be outlived by,
 where those are ordered here and none is the program's or a derived one - otherwise in the local's block (or, for a
 value holding references, as O18a says). `w := it.Next()` thus lives where the collection `it` reads lives (O23a, O14b),
-not in the loop body. A value local so declared keeps its references where its result scope landed: a reference read
+not in the loop body. It lands there only where that costs nothing or is needed: the callee builds nothing (what it
+gives is an element or a borrowed part), one of its obligations requires the result scope to **outlive**, or to be, one an
+argument gives (an element that can be stored through, O25g), or the local is **kept beyond its block** - put into a local
+of an outer block, a parameter, a global or what a reference points to, handed to a call that can keep it there, or
+returned - read off the rest of its block as O26a reads a flow. Otherwise the result scope is the local's block: in
+`for ... { t := lx.next().text; total += t.Len() }`, `next` building new text, each turn's text is the loop body's and
+is reclaimed with it, where landed where the lexer lives every turn's would stay until that scope closes; with
+`toks.Push(tk)` after `tk := lx.next()`, `toks` outside the loop, `tk` is kept and lands where its obligations say. A
+callee whose body is not checked, or whose obligations are not all known yet (O10c), is taken to build. A `for ... in`'s
+element is a local of the loop body and is judged the same way, from the body's statements (`for k in m.Keys() {
+l.Push(k) }` keeps `k`, which lands where the map's keys are; an element its `Next` builds and the body does not keep is
+the body's); a comprehension's element is kept, in what the comprehension builds. A value local
+so declared keeps its references where its result scope landed: a reference read
 out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storage - what borrowing it hands over -
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
 `for ... in`, lands the same way before anything else is bound - `adj[a].Push(v)` and `for x in adj[a]` are
@@ -4727,7 +4783,14 @@ with `t` in a loop's block and `bs` outside it the call is an error, as is `rows
 - never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
 element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
 result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
-`p := pair(t); bs.Push(p.a)`, an error on the same terms. A statement
+`p := pair(t); bs.Push(p.a)`, an error on the same terms; a reference read out of one and passed on (`sum(g.params().Data)`)
+has the scope its result landed in, as `p := g.params(); sum(p.Data)` gives it. A `:=` declared from a field, an element, a
+slice or a payload of a call's result (`t := p.next().text`, `l := args[0] as V.Items`, `x := st.get(i).inner`) lands the
+call the same way, on the same terms, and the local has its scope - or, for a value, its references there - as through a local named for
+the result. A call whose result nothing puts anywhere - read by an operator, a rendering or a condition (`$mods[i].name`)
+- is in the block it is written in, unless its callee requires its result scope to **outlive** one an argument gives
+(exactly where the copy of an element holding writable references is, O25g): it then lands by its obligations as above,
+the one place satisfying them. A statement
 nested in another - in a catch clause's block, a
 lambda's body - discharges its own obligations at its end and leaves the enclosing statement's to its end, so
 `n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.
@@ -4856,12 +4919,15 @@ whose body is being checked when its call is (a call inside its own body) binds 
 (C2a), so what its body allocates at its top level is allocated where the instance lands (C2c), never in a scope that
 closes at its return: a field's referent, what a call through a field builds while the constructor runs (`items.Push(6)`
 growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
-own storage where a reference to it is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
+own storage where a reference to it, a slice of it or a view of it (E16a, E32b) is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
 its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
 given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
-is a copy into the instance, which a reference field may be given.
+is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
+T7c, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
+before it closes - and so does a temporary made at its top level, so a field keeping a slice of one
+(`r Array<I64>& = Big(n).a[0:2]`) is a compile-time error (E16a).
 What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
 
 ```
@@ -4934,6 +5000,13 @@ allocated into closes (§8.3, §8.6 O15), regardless of which function allocated
 happens to be executing at that point. Because a destructor-declaring type is reference-only (C11),
 an instance always has a scope of its own and this is the only case; the enclosing function's return
 governs nothing here beyond closing that function's own scope (O1).
+
+**C9a.** A destructor runs as part of closing its instance's scope, and that scope is its own: what its body
+allocates at its top level is allocated in the scope being closed, where the instance lives, which stays alive until
+every destructor of it has run and is then reclaimed whole. So a destructor may build through its instance's fields
+what they hold (`n.next = Node(k)`, `n` a field living with the instance): the next destructor of that scope reads it.
+A value with a destructor that a destructor builds there is destructed as that destructor returns, before the scope's
+next one, as one in a function's own scope would be. Its nested blocks keep scopes of their own (O2).
 
 **C10.** A destructor never runs for a struct type that declares no `destruct` block, never runs more
 than once for the same instance, and never runs for storage no constructor call ever produced an
@@ -5225,7 +5298,7 @@ compares here as it does everywhere else: a `String` by content, through its `Eq
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
 that is - after an optional `-` - one whole integer literal (L10) is an integer, and one whole float literal (L12) an
-`F64` (each typed by T6a); anything else — or anything in double quotes — is text, a `String` (T29c), so it
+`F64` (each typed by T6a: `-D N=5` is an `I64`); anything else — or anything in double quotes — is text, a `String` (T29c), so it
 compares, renders and passes as any other text does: `-D Version=1.2.3` is text. A value beginning `0x` or `0b` is
 always a number and must be a valid one (`-D X=0x` is an error), and a number must be one a literal can be (L10): a
 decimal integer at most `U64`'s largest - above `I64`'s maximum it is a `U64`, as its literal would be, so
@@ -5251,7 +5324,7 @@ S8b) says it may be a build constant `-D` did not define.
 **B10a.** Every build defines eight build constants of its own, and `-D` may not redefine them. Five describe its
 target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
-`TargetVectorBits`, an integer, the width in bits of the vectors the generated code computes with - `512` where the
+`TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
 `Bool`, whether the target has fused multiply-add instructions - whether `math.Fma` (X8) is one instruction or a call.
 Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-d`, `-r` and
@@ -5326,6 +5399,8 @@ the same form with `note` in place of `error[RULE]`, followed by its source. The
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
 order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).
+An error identical to one already reported - the same message about the same token, found again by another check that
+reads the same thing - is reported once, and counted once.
 A statement reports at most **one error about where something lives** - a rule of §8, C2d's or T17c's - since a scope
 found wrong is wrong for every check that reads it after, and the first says what to change; a statement nested in it
 (a clause's block, a lambda's body) is one of its own. Where such an error is about an argument or a value made in a
@@ -5601,8 +5676,8 @@ different types, the call is a compile-time error.
 that matching while any other argument binds the same variable: the variable is determined by the other
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
-literal operands (§5.4). So `Pick(v, 7)` with `v I64` instantiates `Pick` at `I64`, and `Pick(1, 2.5)`
-at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
+literal operands (§5.4). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
+`Pick(1, 2.5)` at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
 such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
 at `I64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
 
@@ -5612,8 +5687,8 @@ while another argument binds the variable, and is then built as a temporary of t
 the variable is the text's own type (`String`).
 
 A lambda argument whose parameters or result are **written** counts as an argument that binds: its written types are
-matched against its parameter's function type before any literal is, so `a.Fold(0, fn(acc I64, x I32) I64 { ... })`
-binds the accumulator's variable to `I64` and the `0` adapts to it, where the literal alone would have bound `I32`.
+matched against its parameter's function type before any literal is, so `a.Fold(0, fn(acc I32, x I32) I32 { ... })`
+binds the accumulator's variable to `I32` and the `0` adapts to it, where the literal alone would have bound `I64`.
 Parts of a lambda left unwritten are taken from the function type once its variables are bound (D16a).
 
 `null` (T2a) takes no part in the matching at all, whatever its parameter's type: it is checked against that type
@@ -5631,6 +5706,12 @@ that application's variables through the methods that make it satisfy the trait 
 parameter types and result are matched against those of the method the type supplies under the same name. So a
 `ListIter<I32>` bound to `I` binds `T` to `I32`. Whether the type then satisfies the trait the bindings give is the
 constraint's check (G19).
+
+**G9d.** A value of a struct type declaring a destructor (C11) that reaches a bare type-variable parameter binds the
+variable to a reference to its type, writable (T25c) - never to the value type. C11 holds no value of such a type
+anywhere else, so the argument is a temporary: it is promoted into the parameter (E12), built where the parameter's
+scope says (O18b), and its destructor registered there, once (O16). `fn id(x <T>) T` called as `id(Res(1))` is `id`
+at `Res&`.
 
 **G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<I32>`
 and `Vec<I64>` are different types (T27); two instantiations are the same type exactly when the

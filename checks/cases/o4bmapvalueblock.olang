@@ -1,0 +1,17 @@
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive
+# O4b/T17c: a Map whose values hold Maps of themselves (study 6's r04) still keeps its values where it lives - one
+# holding a loop body's map is refused
+type Value enum {
+    Nil
+    Num(n F64)
+    Obj(fields Map<String&, Value>&)
+}
+fn main() ? {
+    outer := Map<String&, Value>()
+    for i in range 3 {
+        inner := Map<String&, Value>()
+        inner.Put("x", Value.Num(F64(i)))
+        outer.Put("k" $i, Value.Obj(inner))
+    }
+    println($outer.Len())
+}

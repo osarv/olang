@@ -176,3 +176,24 @@ test "calling across the worker/runner import cycle" {
 fn GenericEcho(x <T>) T {
     return x
 }
+
+# D8a: shared.olang's default reads its own global "rv9Base" - inside these instantiations, whose constant variable has that
+# name too, it read the caller's (6 for 4; and a Bool's "+" was two errors reported in shared.olang)
+fn rv9ViaConst(a Array<I64, <rv9Base>>&) I64 { return sh.Rv9Plus() }
+type Rv9Flag<rv9Base Bool> struct(k I64) {
+    k
+}
+fn (f Rv9Flag<<rv9Base>>&) Get() I64 { return sh.Rv9Plus() + f.k }
+test "D8a: another module's default reads its own global, never a caller's constant variable of that name" {
+    b := Array<I64, 5>()
+    assert rv9ViaConst(b) == 4
+    f := Rv9Flag<true>(2)
+    assert f.Get() == 6
+}
+# D8a/D16: shared.olang's lambda default, called from here - its lambda had been emitted only in shared's object
+fn rv9Twice() I64 { return sh.Rv9Apply(1) + sh.Rv9Apply(2) }
+test "D8a/D16: a lambda default from another module" {
+    assert rv9Twice() == 5 + 7
+    g := fn(i I64) I64 { return sh.Rv9Apply(i) }
+    assert g(3) == 9
+}

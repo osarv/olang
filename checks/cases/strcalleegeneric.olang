@@ -1,0 +1,27 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: the lambda of strcalleelambda in a generic function and in a trait's default (G19): refused
+type Sized trait {
+    Len() I64
+}
+fn (x <T Sized>&) Twice() I64 {
+    f := fn() I64 { return x.Len() * 2 }
+    return f()
+}
+fn count(xs Array<<T>>&) I64 {
+    f := fn() I64 { return xs.Len() }
+    return f()
+}
+type Box struct(n I64) {
+    n
+}
+fn (b Box&) Len() I64 { return b.n }
+type Bag struct(arr Array<I64>&, box Box&) {
+    arr
+    box
+}
+fn (b Bag&) Str() String {
+    return $count(b.arr) " " $b.box.Twice()
+}
+fn main() ? {
+    println($Bag(I64[1, 2, 3], Box(5)))
+}

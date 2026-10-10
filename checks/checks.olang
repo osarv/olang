@@ -31,7 +31,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
-                     "target", "lazytype", "updir", "crash", "scopesan"]
+                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -254,6 +254,8 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "updir" { try updir(r) }
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
+        case "capscope" { try capscope(r) }
+        case "strheld" { try strheld(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -280,13 +282,29 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
     try r.expect(outOf(dir) == "22\n", "numberflow output", dir)
     #E11b: a join left part way leaves nothing behind (a builder freed only at its end lost 1.5GB), and one recursing
-    #through its later piece holds nothing across the call (100,000 deep overflowed the stack)
+    #through its later piece holds nothing across the call (60,000 deep overflowed the stack)
     try r.expect(sh(dir, "\"$OLANG\" -b joinleak.olang > out.txt 2>&1") == 0, "joinleak build", dir)
     try r.expect(sh(dir, "(ulimit -v 150000 && ./build/joinleak) > out.txt 2>&1") == 0, "joinleak", dir)
     try r.expect(outOf(dir) == "805138895\n", "joinleak output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b joindepth.olang > out.txt 2>&1 && ./build/joindepth > out.txt 2>&1") == 0,
                  "joindepth", dir)
     try r.expect(outOf(dir) == "1\n", "joindepth output", dir)
+    #...and one in a loop's condition leaves only its text in the block the loop stands in, never what its builder outgrew
+    #(200 MB here where the builder grew in that block)
+    try r.expect(sh(dir, "\"$OLANG\" -b joincond.olang > out.txt 2>&1") == 0, "joincond build", dir)
+    try r.expect(sh(dir, "(ulimit -v 110000 && ./build/joincond) > out.txt 2>&1") == 0, "joincond", dir)
+    try r.expect(outOf(dir) == "50000\n", "joincond output", dir)
+    #O26a: a view's function keeps no local in the structure's scope that what it returns cannot hold - a copy handed to
+    #a method or another module's function giving a number, numbers for a slice (the master compiler: out of memory)
+    try r.expect(sh(dir, "\"$OLANG\" -b resultviews.olang > out.txt 2>&1") == 0, "resultviews build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/resultviews) > out.txt 2>&1") == 0, "resultviews", dir)
+    try r.expect(outOf(dir) == "10000000 28000000\n", "resultviews output", dir)
+    #O18c: a call building new text or a new array is its loop body's, reached whole, through a part of its result or
+    #as a for-in's element
+    #(the review's lexer and mk loops: 206 MB and 1 GB where the result landed where the lexer, or base, lives)
+    try r.expect(sh(dir, "\"$OLANG\" -b callparts.olang > out.txt 2>&1") == 0, "callparts build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/callparts) > out.txt 2>&1") == 0, "callparts", dir)
+    try r.expect(outOf(dir) == "43444445 47000000 11000000 43444445\n", "callparts output", dir)
     #O17b: handles lent as their references - built, built -d and interpreted, read back after the arena churned
     try r.expect(sh(dir, "\"$OLANG\" -b handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b -d handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0,
@@ -460,7 +478,7 @@ fn ttolerant(r mut report&) ? Failed {
 
 # B3a: each listed file is built in a process of its own, so the compiler ending on one - here a crash, forced as the
 # check below forces one, on a small stack with nesting that overflows it - ends that file's build alone, and the files
-# after it still run
+# after it still run. The stack is 1MB: the prelude's own tests, which every test build checks, need about 260KB of it
 test "-t goes on past a file the compiler crashed on" { assert passed("tcrash") }
 
 fn tcrash(r mut report&) ? Failed {
@@ -469,7 +487,7 @@ fn tcrash(r mut report&) ? Failed {
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
     try os.WriteFile($dir "/deep.olang", deep) catch { }
     # (the status is kept in a file, so the shell that saw a crash is not the one that reports it)
-    run String& = "( (ulimit -v 800000 && ulimit -s 256 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
+    run String& = "( (ulimit -v 800000 && ulimit -s 1024 && \"$OLANG\" -t t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
     try r.expect(sh(dir, $run " && test $(cat rc.txt) -eq 1") == 0,
                  "-t did not fail for the crash, or crashed itself", dir)
     out := outOf(dir)
@@ -927,7 +945,7 @@ test "a function of many local ifs compiles in time linear in their number" { as
 
 fn manyifs(r mut report&) ? Failed {
     dir := fresh("manyifs")
-    many String& = nested("fn g(x I32) I32 { return x }\nfn f(x I32) I32 {\n    s := 0\n",
+    many String& = nested("fn g(x I32) I32 { return x }\nfn f(x I32) I64 {\n    s := 0\n",
                           "    if g(x) > 5 { s += 1 }\n", "", "", "    return s\n}\nfn main() ? { assert f(9) == 20000 }\n", 20000)
     try os.WriteFile($dir "/many.olang", many) catch { }
     try r.expect(sh(dir, "timeout 60 \"$OLANG\" -i many.olang > out.txt 2>&1") == 0, "20000 local ifs", dir)
@@ -1384,4 +1402,50 @@ fn crashes(r mut report&) ? Failed {
     ll := try os.ReadFile($dir "/build/nullpeek.race.ll") catch default ""
     try r.expect(ll.Contains("@__olang_crash_handler(i32 %sig) #1 {") and ll.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread")
                  and ll.Contains("attributes #1 = { null_pointer_is_valid \"target-cpu\""), "crash handler instrumented under -r", dir)
+}
+
+# P2 (decision 48): a closure that may build into a scope it captured asks for it as its call starts - this thread's part
+# of it on another thread's (__olang_capture_scope), as a Call adapter asks for its instance's (__olang_scope_mine). Each
+# shape building a temporary where a conditional, a match value or a "catch default" lands - in the lambda, in a callee it
+# calls, in a Call method, a borrowed result, a ":=" local, an argument, a destructured result, a value call's result -
+# was missed by the walk deciding it (SemanticMayBuild), so the closure asked for nothing and its tasks bumped the main
+# thread's arena (TSan: 24-32 reports each). The fixture calls them on two tasks while the main thread builds into the
+# same scope; the code generator now stops on any build the walk did not foresee, and every lambda here asks
+test "a closure that may build asks for the scopes it captured" { assert passed("capscope") }
+
+fn capscope(r mut report&) ? Failed {
+    dir := fresh("capscope")
+    os.Run("cp checks/fixtures/capscope/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b capscope.olang > out.txt 2>&1 && ./build/capscope > out.txt 2>&1") == 0, "capscope", dir)
+    try r.expect(outOf(dir) == "capscope: ok\n", "capscope output", dir)
+    ll String& = " build/capscope.main.ll"
+    asks String& = ("awk '/^define internal .*lambda[$]/ { n++; inl = 1; has = 0 } inl && /call ptr @__olang_capture_scope/ { has = 1 }"
+                    " inl && /^}/ { if (has) ok++; inl = 0 } END { exit !(n == 24 && ok == 24) }'")
+    try r.expect(sh(dir, $asks $ll) == 0, "a lambda building into its captured scope does not ask for it", dir)
+    try r.expect(sh(dir, "grep -q '__olang_scope_mine(ptr %iscope0)'" $ll) == 0, "the Call adapter does not ask for its scope", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -D N=200 -i capscope.olang > out.txt 2>&1") == 0, "capscope -i", dir)
+    try r.expect(outOf(dir) == "capscope: ok\n", "capscope -i output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d -s capscope.olang > out.txt 2>&1 && ./build/capscope.debug.san > out.txt 2>&1") == 0,
+                 "capscope -d -s", dir)
+}
+
+# E11b/E11c: joins reaching a Str - Go's order, left part way, in deferred code, tasks, a Map's Str through a helper, a
+# conditional of one scope's values - each built and built -s, and interpreted where -i runs it (not a destructor's, nor
+# 20,000 joins: -i reclaims nothing), giving what it was reviewed to give
+test "joins reaching a Str give what they did when reviewed" { assert passed("strheld") }
+
+fn strheld(r mut report&) ? Failed {
+    dir := fresh("strheld")
+    os.Run("cp checks/fixtures/strheld/* " $os.Quote(dir))
+    for n in String&["concurrent", "deferred", "earlyexits", "eqwrites", "globals", "manyplaces", "mapalone", "opmethods",
+                     "order", "samescope", "shrinks", "strchanges"] {
+        try r.expect(sh(dir, "\"$OLANG\" -b " $n ".olang > out.txt 2>&1 && ./build/" $n " > b.txt 2>&1 && cmp -s b.txt " $n ".want")
+                     == 0, n, dir)
+        try r.expect(sh(dir, "\"$OLANG\" -b -s " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > s.txt 2>&1 && cmp -s s.txt "
+                        $n ".want") == 0, $n " -s", dir)
+        if n == "earlyexits" or n == "manyplaces" { continue }
+        try r.expect(sh(dir, "\"$OLANG\" -i " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
+    }
+    try r.expect(sh(dir, "\"$OLANG\" -t donenested.olang > out.txt 2>&1") == 0, "donenested", dir)
+    try r.expect(outOf(dir).Contains("3 passed, 0 failed"), "donenested output", dir)
 }

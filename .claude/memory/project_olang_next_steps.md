@@ -563,6 +563,53 @@ because what it finds about structure feeds the refactor.
   read-only soundness review of that E11c change runs (/home/user/wt/rv7 -> /home/user/review/tonight7). Decision 47
   failed its gate (+10%); round 3 builds decision 48 (closure-call check) in wt-rv3fix. oann phase 10 started (catch-up
   to ada716d via /home/user/wt/oannc5, settling open questions 15-17). Morning report posted 06:10 CEST.
+- 09:30 CEST (2026-10-10): oann phase 10 pushed (334f338 catch-up to ada716d, 0ed5de3 settling Q15-17: recall alone
+  at gain 2, partial cues completed, familiarity-weighted generalization; 138 tests; open question 18). It found
+  oann repro/resultgrowth (O26a keeps a local in a structure's scope on every call - unbounded growth),
+  fieldofresult (O10d regression since efdb82c) and membercascade (a cascade) -> wt-chk5, together with study6 r02, r04,
+  r05, r07, r10 and r13-r15. Decision 48's review (/home/user/review/tonight8) found F1: the may-build walk misses
+  temporaries built where a conditional, match value or catch default lands, plus a Call adapter loading the raw scope.
+  Also found: 02, a crash on a reference default temporary used from two functions, and 03, an over-rejection. All sent
+  to a fix agent on wt-rv3fix. Decision 49 (wt-str1 d6c7f52) review (/home/user/review/str1): 3 new UAFs (a read-only
+  capture skipping O17, destructors storing after Str's temporary scope, item 3's C2d skip), a builder leak, and 6x
+  stack per frame. Sent back to the str1 agent with direction: Str's receiver scope is O12's unknown, nothing built
+  there; revert item 3; fix P1; the builder overflow comes from the arena. It needs a second review before merging.
+  Running: rv3fix (F1), i64lit (QD), chk5, str1 (round 2).
+- 09:55 CEST: i64lit merged and pushed (43ce396): an integer literal's own type is I64 (T6a). The agent's single full
+  verify had shared.olang OOM-killed beside other agents; it then passed on its own (658 tests), with everything else
+  passing too. oann must run `tools/int_literal_i64.py` when its compiler next moves.
+- 10:30 CEST: decision 48 merged and pushed (91ab3ba via 5ebd16f): scope owners and parts, plus the tonight8 fixes. Those
+  are F1, where the may-build walk now covers conditional, match and default landings, with codegen holding every body to
+  the walk (an ICE on a miss); 02, a default rebuilt per call (D8a); and 03 (S4c holdForRefTarget). Verified in pieces:
+  checks.olang was OOM-killed beside other agents and passed when rerun. A narrow follow-up review runs
+  (/home/user/wt/rv9 -> /home/user/review/tonight9). Decision 50 (failing spawns) can start now that 48 is on master.
+- 10:55 CEST: tonight9, the follow-up review of 91ab3ba (/home/user/review/tonight9), found three new problems:
+  - a false ICE: a catch default in a closure built into a scope resolved read-only;
+  - D8a's per-call default rebuild reading the caller's constant variables, giving a wrong value;
+  - a constructor field keeping a view in frame storage that now dies at the return, above 64KB (older below).
+  Four older finds: a slice of a value temporary stored, a destructor building into its own frame, a lambda default
+  across modules, and `$` of an empty fixed slice rendering `null` in the evaluator. All go to wt-rv9fix (master
+  04f4a4d). chk5 (771a922) is done and under soundness review (/home/user/wt/rv10 -> /home/user/review/chk5). str1 is
+  on round 2. Decision 50 waits for capacity: this week's pace is about one agent at a time.
+- 12:00 CEST: rv9fix merged and pushed (8f085c4 via 0bf3921, full verify on the same code). Fixed: tonight9's false
+  ICE (the catch default marks its captured scope), D8a defaults rebuilt in their own declaration's context (a pending
+  lambda carries its context too), slices and views in a constructor marked borrowed, and a slice of a value
+  temporary stored past its block now refused (E16a). C9a: a destructor's top level is the scope being closed, which
+  the runtime passes in. Also: one lambda per default per calling module; the evaluator's empty fixed slice; the
+  parallel global target. C9a and the parallel global form were not reviewed - include them in the next review.
+- 13:40 CEST: chk5 merged and pushed (623b9d8 via 116fb31; I resolved conflicts in semantic.c and shared.olang; the
+  full verify passed on the merged tip). It fixes resultgrowth/r02, fieldofresult, the cascades and study6, plus its
+  review's growth and cycle regressions. O18c now lands a `:=` call only where something is kept or an obligation forces
+  it; an unsettled callee keeps its argument. This round is unreviewed: include it in the next review with rv9fix's C9a
+  and the parallel global. The user (13:25 CEST): slow down early in the week, 1-2 agents. Next: decision 50 (failing
+  spawns), then `own` + `take` + liveness-checked local borrows, then Vec<T> as the default growable array.
+- 14:10 CEST: str1's second review (/home/user/review/str2) found no silent use-after-free. It did find five build sites
+  missed by the `noBuild` receiver rule's hand-kept list (a segfault in a callee, an ICE in Str), a lambda's null
+  capture read as the program scope (a leak), and P2 destructing twice. Also: builder growth in a for condition, and
+  helper/iterator over-rejections. Sent back (round 3): merge master, then express `noBuild` through decision 48's
+  `SemanticMayBuild` walk and `cgCheckMayBuild`, one predicate for both. The reviewer's structural point, for the port:
+  "where is this built" must be ONE predicate that the checker and codegen share. Running: str1 (round 3), decision 50
+  (wt-spawnerr).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

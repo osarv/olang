@@ -1,6 +1,7 @@
 # E11b: a join left part way - a piece's catch clause continuing the loop - leaves nothing behind: its operands are
-# evaluated before anything is rendered, and a rendering reaching a Str grows in its block's arena (a builder that
-# malloc'd past 256 bytes and freed only at its end lost it on every such exit: 1.5GB at 2M passes)
+# evaluated before anything is rendered, and a rendering reaching a Str grows in an arena of its own, on the unwind chain
+# while a test runs (a builder that malloc'd past 256 bytes and freed only at its end lost it on every such exit: 1.5GB at
+# 2M passes)
 fn g(i I64) I64 ? {
     if i % 2 == 0 { error }
     return i

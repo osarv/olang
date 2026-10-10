@@ -764,7 +764,14 @@ Go through this for every change to what olang means - a rule added, revised or 
   never a call: it is evaluated on behalf of callers the declaration cannot see, so it must have a value
   and no other behaviour - no allocation, no scope to name, nothing that can fail. That restriction is
   also what lets a single checked operand, built once in the declaring module's own context, serve every
-  call site. **Named arguments were considered and rejected**, and `default` is what replaced them: they
+  call site (**no longer, 2026-10-10**: a default that is no plain literal is checked once and built again for each call,
+  since where its temporaries land is that call's - one shared operand kept the first call's landing, and a second
+  caller crashed the code generator; HISTORY.md, decision 48's review; **its review (tonight9)**: that rebuild ran inside
+  the caller's check with the caller's constant variables, so a caller's `N` stood for the declaring module's global `N`
+  (a wrong value, or errors reported in the library) - it is built in the declaration's own context now, and a lambda
+  finished there too (a pending lambda carries the context it was written in); a lambda in a default is made once for
+  each module whose code calls it, or each instantiation, and emitted there - it was emitted only in the declaring
+  module's object, which a caller in another module named, and one per call site). **Named arguments were considered and rejected**, and `default` is what replaced them: they
   would make every parameter name of every exported function part of its API permanently (renaming one
   becomes a breaking change), where parameter names are currently internal. The readability they buy is
   better served here by distinct types, which the compiler verifies, than by argument names, which it
@@ -1539,7 +1546,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   again for a reason that was not the problem - `v.data[0]` across a module boundary said "this struct
   member is private" and then "operand is not an array", which points at a non-problem. The member exists
   and its type is known; only its visibility is wrong, so the type is kept and the one real error stands
-  alone. `UNKNOWN_STRUCT_MEMBER` still recovers as `int32`, correctly - there is no type to carry there.
+  alone. An unknown member recovers as the unknown stand-in, which fits anything (B11, 2026-10-10 - it recovered as
+  `int32`, so `if s.flag {` added "a condition is a Bool, found I32").
 - **Two use-after-frees found by writing the first realistic `Vec`, both in code the design record already
   claimed was safe (O2d, D13a).**
   **O2d - a call inside a block allocated into that block, not into the scope its argument named.** Where an
@@ -3012,7 +3020,7 @@ Go through this for every change to what olang means - a rule added, revised or 
   if nothing folded it (`$(1 << 40)`). Integer `/` `%` by a literal-only zero is an error anywhere; **a float division
   by zero stays an infinity/NaN** (IEEE; the prelude writes them that way) - my call against the literal wording,
   flagged. **E6d (the coordinator's addition)**: beside an operand whose type cannot hold it, a literal meets it at the
-  literal's own type by T6b - `b + 300` (b `U8`) is an `I32`, `f32 + 1e300` an `F64` - and where that operand does not
+  literal's own type by T6b - `b + 300` (b `U8`) is an `I32` (an `I64` since 2026-10-10, T6a), `f32 + 1e300` an `F64` - and where that operand does not
   flow there (`u32 - (-1)`, an integer beside `1.5`) it is an error naming the fix. **T6/L12b**: a value overflowing a
   narrower float when rounded (`f F32 = 1e39`, `F16` given `70000` or `65520.0`; `65519.99` rounds to 65504 and fits)
   is an error; underflow to zero or a subnormal fits (flagged); a literal beyond `F64` (`1e400`) is an error.
@@ -4438,22 +4446,23 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   once folded, **forwards** to it (a sentinel chunk; the allocator's slow path follows it - no fast-path cost); an
   environment copy is made where the closure lives (its first captured scope), once per spawn, and remembers its
   original, so `is`/`==` canonicalize and a function value keeps its identity; a capture in the program's scope is held
-  as null and read as the calling thread's program scope (or its task stand-in). **P2, older**: a closure a task makes
-  captured the task's stand-in and was kept past the join - closed by the same forwarding. **Decision 40 (as asked,
-  narrowed by what can be seen)**: a task, or a spawned lambda, **calling** a function value held in what it is handed
-  (a field, element or payload, through references too) is refused - read off the bodies (`callsFnThrough`, a fixed point
-  over calls once every body is checked); one only carried, stored or handed on is allowed. Read-only captures cannot be
-  allowed separately: a function type does not say what its value captured, and a read-only capture can still build
-  through a borrowed result. **S13b (new)**: a match binding lives in its clause's block, not the matching block.
-  **C2g/C2d (older)**: a constructor keeping a borrow of its by-value parameter in a reference field kept the dying
-  frame's slot - a constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with
-  "outside the body", depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the
-  instance. **O25h (older)**: a member, element or `as` of a conditional or match copies the references the way the
-  conditional does. **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling
-  a capturing lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee
-  that can build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a
-  stand-in header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task,
-  not borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
+  as null and read as the calling thread's program scope (or its task stand-in; environment copies removed by decision
+  48). **P2, older**: a closure a task makes captured the task's stand-in and was kept past the join - closed by the
+  same forwarding. **Decision 40 (as asked, narrowed by what can be seen; removed by decision 48, below)**: a task, or a
+  spawned lambda, **calling** a function value held in what it is handed (a field, element or payload, through
+  references too) is refused - read off the bodies (`callsFnThrough`, a fixed point over calls once every body is
+  checked); one only carried, stored or handed on is allowed. Read-only captures cannot be allowed separately: a
+  function type does not say what its value captured, and a read-only capture can still build through a borrowed result.
+  **S13b (new)**: a match binding lives in its clause's block, not the matching block. **C2g/C2d (older)**: a
+  constructor keeping a borrow of its by-value parameter in a reference field kept the dying frame's slot - a
+  constructor's top level is depth 1 to the checker now (it conflated "the body's top level" with "outside the body",
+  depth 0), its by-value parameters depth 2, and a reference field's value must live as long as the instance. **O25h
+  (older)**: a member, element or `as` of a conditional or match copies the references the way the conditional does.
+  **E11c (older)**: a lambda the function makes is judged through what it captured, so a `Str` calling a capturing
+  lambda through a local is refused. **O23a (older)**: a copy out of a `&p` field handed by value to a callee that can
+  build through it is refused (`ERR_BUILD_THROUGH_UNKNOWN_SCOPE`), as the reference path is. **Costs**: a stand-in
+  header is 24 bytes per spawn in the bound scope until it closes; function values are still copied into a task, not
+  borrowed (identity kept by `__olang_env_canon`). **A follow-up review** of that tip found the forwarding's own hole
   (new): a fold into a stand-in folded already spliced into the forwarder, which no one closes - destructors lost; the
   merge now resolves its destination. And an over-rejection: a `:=` field copying a by-value parameter took the
   parameter's depth (2), so `keep P& = q` was O10; a field's local is the top level whatever it copies.
@@ -4555,6 +4564,146 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   or referent a `Str` made, holding writable references in `&p` fields (a cursor over the value), was taken to reach
   nothing - `cur := Cur(b); poke(cur)` writing `cur.c.v` changed the rendered value; such an argument now counts as
   reaching storage that was there (where an `&p` field refers is its instance's binding, O23a, not known there).
+- **A view's function keeps nothing it cannot hand back; a field of a call's result passed on; study 6's checker
+  findings (O26a, O18c, O20, O4b, C2d/E25, T25c, O25, S12b, T17c, B11, 2026-10-10; oann's three and study 6, details
+  mine).** **O26a**: a dotted call (`g.count(i)`, `g.infos[k].size(i)`, `linalg.View(...)`) is resolved where its
+  receiver's type is known and lets an argument go only when the callee can keep it nowhere - not in its result, nor in
+  its receiver or another argument, which its checked body's obligations say (a generic or unchecked callee keeps
+  everything); and a number or `Bool` is never moved, whatever the result is. oann's `resultgrowth` (a copy of a List
+  element handed to a method, kept in the graph's scope at every view: 64 MB over 4M calls) is flat, as is study 6's r02.
+  **O18c/O20**: a reference read out of a call's value result and passed on (`sum(g.params().Data)`) leads where that
+  result landed - a regression since study 5's batch read the empty slot tag as this function's scope (O10d). A `:=`
+  from a field, element, slice or payload of a call's result (`t := p.next().text`, `l := args[0] as V.Items`) lands the
+  call as `:=` from the call does; a call whose result nothing puts anywhere (`$mods[i].name`) lands by its obligations
+  only where its callee needs its result scope to outlive an argument's (r05). **O4b**: an instantiation's constructor
+  gets its by-value parameters' scope variables once the type is finished (`Map<String&, Value>`, `Value` holding a Map
+  of itself - r04). **C2d/E25**: `x := Env&c(c.env)` is judged where the scope argument puts the instance (r07).
+  **T25c, pre-existing hole**: a for-in over a reference a read-only copy holds borrows it read-only. **Diagnostics
+  (B11)**: an unknown member is one error (oann's membercascade); O25 names the local and offers refilling the one kept
+  (`w.alive.Clear()`, r10); `case X => return v` gets S12b's hint whatever `v` starts with (r13); O10c's note names every
+  argument made in a block (r14); T17c's headline says to make the storage where the value is kept (r15). Each
+  relaxation has a must-fail case; `checks` runs `resultviews` under `ulimit -v`.
+- **That batch's review, fixed: a call lands where it costs nothing (O18c, O26a, O10c, B11, E12c/O20, 2026-10-10; the
+  review /home/user/review/chk5, details mine).** **O18c, unbounded growth**: `t := lx.next().text` and `x := mk(base,
+  64).p` in a loop kept every turn's new text (206 MB) or array (1 GB) where the lexer, or base, lives - and `tk :=
+  lx.next()` already did on base. The cause: landing by obligations takes the shortest scope the obligations say must
+  outlive the result scope, which is the LONGEST legal place for it (they are upper bounds), so everything the callee
+  builds lived there. **Decided (mine)**: a `:=` from a call or a part of one lands by its obligations only where the
+  callee builds nothing (an element, a borrowed part), an obligation needs the result scope to outlive, or be, one an
+  argument gives (O25g), or the local is kept beyond its block (pushed outside, stored through a reference, returned,
+  handed to a call that can keep it - read off the rest of the block as O26a reads flows, a store through a local not
+  declared yet counting); else it is the block's. A for-in's element is judged from the loop body's statements, a
+  comprehension's is kept. A callee unchecked or in an unsettled cycle is taken to build. `checks` runs `callparts`
+  (four shapes, a for-in's included) under `ulimit -v`: 1.6 MB where it was 213 MB-1 GB. **O26a/O10c**: a callee whose
+  obligations are not all known yet (a cycle of calls: `obligUnsettled`, propagated to every caller in the cycle) or
+  unchecked is taken to keep its argument - mutually recursive methods returning through a local were refused (plain
+  calls already on base); and a method called on a local declared later in the block, its type not known yet, counts as
+  reading it (`toks := lex(src); p := Parser(toks); return p.expr(1)`). **B11**: an identical error found twice (C2d by
+  E25's scope argument and by the declaration) is reported, and counted, once. **E12c/O20, pre-existing O10d**:
+  `sizeFn(g.arr[0])`, `arr` a bare reference field of a reference parameter, read the element's storage as this
+  function's; it is where `g`'s instance is. **Found on the way**: the may-build walk took a returned array REFERENCE for
+  T7b's value copy, so every function returning `String&` "built" (a Map's `Keys()` element then landed in the loop
+  body); `callAround`'s `isMethod` was read uninitialized. Not changed: a for-in element its `Next` builds and the body
+  keeps is still O10c's "loop's copy" error (pre-existing; write `$x`, as io.Lines says).
+- **An integer literal's own type is `I64` (T6a, L10, T6, D15, E4a, E6d, E8b, S9b, G9a, B9a, B10/B10a, B11,
+  2026-10-10, the user: "yes" to QD).** Where nothing adapts it an integer literal is an `I64` (a decimal one above
+  `I64`'s maximum a `U64`), as a float literal is an `F64`: `x := 0` and `x := 1 + 2` declare `I64`s, `for i in range
+  10` counts in `I64`, a type variable only literals reach binds `I64` (`Pick(1, 2)`), `-D N=5` and `TargetVectorBits`
+  are `I64`s, `b + 300` (b `U8`) and `'a' + 1` are `I64`s. A literal written against a typed target still adapts (T6):
+  `x I32 = 0`, an `I32` argument, `range I32(10)` (S9b: a range's first argument that is no literal gives its type).
+  Why: every length, count and position is an `I64` (`Len()`, `Find`, a for-in index), so `n := 0; n += a.Len()` failed,
+  and an `I32` counter wrapped at 2^31 unseen. **Diagnostics (B11)**: where a value a literal made an `I64` is handed to
+  something narrower (T6b, a spawn target, P1g), a note at its declaration says `declare the type it should have, 'n I32
+  = ...'`, or at a range's end `write 'I32(10)' here`. **Decided (mine)**: two literals of one width meet unsigned above
+  signed (`numericTypeRank`), so `18446744073709551615 & 7` is a `U64` computation (it was an error once both were
+  64-bit); the migration writes the type the old rule gave (`x I32 = 0`, `range I32(n)`) and keeps `I64` where it is the
+  better type (sums, counts, `TargetVectorBits` locals); the B9a token evaluator's literal width is 64. The evaluator
+  needed nothing (it reads the literal's type) - shown by baked globals (`100000 * 100000`, a wrap at `I64`) and a
+  top-level condition beside the run time. `tools/int_literal_i64.py` migrates from the notes, re-runnable (oann:
+  `python3 /home/user/olang/tools/int_literal_i64.py --olang /home/user/olang/build/out /home/user/oann`): std 7 lines,
+  shared.olang 20 locals and 23 ranges plus ~12 assertions about literal types by hand, checks 8 programs and 13
+  expected texts, fuzz 3 plus the generator's range type; bench and compiler/DESIGN.md none. Measured (callgrind, bench
+  suite at `-a x86-64-v3`): every program within 0.01% of its instructions, same output - the benches declare their
+  types. **Found on the way, pre-existing**: O26a read a rendering's operand as a flow of what it renders, so `x5 = x3;
+  return $(x5)` was O25's error (the fuzzer, master too) - a rendering holds nothing of what it renders; and the `tcrash`
+  check's 256KB stack was already at the edge of what the prelude's test build needs (1MB now).
+- **A scope belongs to one thread; a closure called elsewhere builds into that thread's part of it (P2, decision 48,
+  2026-10-10, the coordinator's choice of option 2 with its refinement; details mine).** Decision 40's static refusal was
+  evadable (a helper, a lambda, the task's own list - `h1`, `h1b`, `h1c`) and decision 47's per-allocation owner check
+  cost ~10% on allocation-heavy code (prototype kept on `wt-rv3fix-p2b`). A scope reaches another thread only as a task's
+  scope argument (a stand-in, as before), through a function value's captures, or as the program's scope - so the check
+  sits in the prologue of a closure that may build into what it captured: every scope header has an owner (a thread
+  number; null until it first reaches another thread, i.e. its opener's), parts and a parent, and
+  `__olang_capture_scope` gives the scope itself on its owner's thread, else the calling thread's **part** of the scope at
+  the top of what it stands in for - made once per thread, linked lock-free, folded in as that scope closes (its
+  destructors ahead of the scope's own, its chunks with it). A Call adapter does the same for its instance's scope.
+  **"May build"** is codegen's mark on a captured scope resolved for anything but reading (not a nested closure's
+  capture, not a hidden argument to a callee building nothing, not a parameter scope where the argument builds nothing)
+  AND the checker's `SemanticMayBuild` - a coarse body walk (any allocation anywhere, a promotion, an O26a or C2d slot, a
+  task, a closure made, a call through a function value or to an unchecked body), a greatest fixed point over calls; the
+  permission-based may-build O4b uses is unsound for this (`g(r, N(5))` builds into a read-only `r`'s scope). Reading
+  lambdas (Fold, Count, Map predicates) emit nothing - 0.000% instructions; a lambda building a node per element pays two
+  instructions a call (+7%); binarytrees, a churn loop, List push within +0.05%. **Program scope: each worker has a part
+  of its own, made when it starts and kept for every task - never folded** (a deviation from "folded before the worker
+  reports done, under a lock": the program's scope never closes, so a fold changes nothing, and not folding needs no lock).
+  **Gone**: environment copies and the env header (a task is handed a function value as it is), the per-spawn program
+  stand-in, **decision 40** (`callsFnThrough`, `ERR_SPAWN_ARG_HOLDS_FUNC` - its two cases now run). **RunOnStack's thread is
+  its caller** (takes its identity; the caller waits). **Found on the way**: a thread identity that is an address of its
+  own (TLS) is reused by the next thread on the same stack, which would take a dead worker's unfolded stand-in claim -
+  identities are numbers from a counter.
+  **Its soundness review (tonight8) found the walk missing what codegen builds where an expression lands, fixed.** A
+  conditional's or a match's value, or a `catch default`, is converted to the whole expression's type on its own path
+  (`cgCond`, `cgMatchValue`, `cgTryDefaultStore`), so a temporary promoted there is built where the expression lands - the
+  captured scope - while the expression itself is reference-typed and the walk saw no promotion: `x.next = x.next if c else
+  Node(i)` in a closure (or in a callee, a `Call` method, a borrowed result, a `:=` local, an argument, a destructured
+  result) bumped the owner's arena from a task (TSan 24-32 reports each, wrong values and segfaults under `-b`). The walk
+  now applies its boundary test to each value at the expression's type, and to a struct value's fields, an inline
+  array's zero fill and a declaration's per-element fill. **Decided (mine): the code generator holds every body to the
+  walk.** Every value it loads from a scope the body was handed - a parameter's, the result's, a capture's, a
+  constructor's instance - is recorded, and so is each allocation and destructor registration into one; as the body
+  ends, one into a scope the walk said it never builds in (or, for a closure, into a captured scope its prologue does
+  not ask for) is an internal compiler error (`cgCheckMayBuild`). Keying the walk on the checker's landing records, the
+  review's preferred route, would have missed a value call's result (only constructor calls are landed); a check of
+  codegen's own output cannot drift from it. On the corpus it found one more: a constructor's storage over 64KB (T7c)
+  came from its instance's scope - it is its own frame's now. **Found on the way, pre-existing**: a value call's result
+  as a conditional's or a match's value promoted into its reference type was built in the block the
+  expression stood in, not where it landed - a use-after-free, single-threaded too (`a.next = a.next if c else mk(i)`,
+  the scope sanitizer's report; codegen now builds it at the target as it does fresh text); a non-literal parameter
+  default was one operand shared by every call, landed by the first, so a second caller in another function crashed
+  codegen (D8a: built again for each call); and a parallel assignment's temporary going into a reference was held as a
+  value copy the target then borrowed - refused on a parameter's or a capture's field (O17a, O25), a pointer into the
+  frame at a function's top level (S4c: it is held as that reference, built where the target's referent lives). Not
+  done: a per-thread cache of a foreign thread's part - keyed on a scope's address it needs an epoch bumped at every
+  fold to be sound (headers are reused), to save only a scan of the parts list.
+  **Its second review (tonight9) found a false internal error**: a closure's `x := try find(a) catch default Node(i)`
+  (or one as an argument or a condition), `find` building nothing - the walk saw the default, but codegen had resolved the
+  captured scope only for reading (handed to a callee that builds nothing) and built the default where that value said,
+  so the prologue never asked for it and `cgCheckMayBuild` stopped a correct program. **Decided (mine)**: a build into a
+  captured scope marks it for the prologue however the value it went through was resolved (`cgNoteBuildInto`), so the
+  internal error is only ever a build the walk says cannot happen - which its message now says, rather than blaming
+  the walk for what was codegen's own bookkeeping.
+- **Tonight9's review, fixed: slices of temporaries, constructor views, destructors' own scope, `Array<T, 0>`, a
+  parallel global (E16a, C2d/C2g, C9a, E10, K1, S4c/O1b, 2026-10-10; decisions mine).** **E16a/C2d**: a slice or an `as`
+  view of a local borrows its storage as a reference to it does, so a constructor field kept a view of is stored where
+  the instance lands (`slotBorrowed`) - it stayed frame storage, the stack (a dead frame read back) or, over 64KB, the
+  constructor's own scope. **E16a, decided**: a slice of a value with no storage of its own - an inline array of a call's
+  value result, of a constructor's instance, a literal, a new array - borrows the temporary it is made as, **in the
+  block the slice is written in** (a constructor's frame at its top level), so it goes nowhere that outlives that block:
+  `h.r = mk(n).a[0:2]` is O20's error with a note at the slice, where it pointed into a dead frame (nine shapes, all
+  reproduced; a payload read with `as` from an enum value is such a copy too). Refused, not built where it lands: E16a tags a slice with its base's storage, the declaration form was
+  already refused (O10d), and building a whole value elsewhere to keep part of it would be an allocation the program never
+  wrote. Two are not such temporaries: a call's run-time-length array result, built in its result scope, which lands
+  where the slice is put (O18a, unchanged), and text written in the program, constant data (T25d). **C9a, decided**: a
+  destructor's top level is the scope being closed - passed by the runtime - so what it builds through its instance's
+  fields lives where they lead until that scope's destructors have all run, and is reclaimed with it; a value with a
+  destructor it builds there is destructed as it returns, before the next (its node put ahead of the rest of the walk),
+  as one in a function's own scope was. It allocated from a scope of its own, closed as it returned, and the next
+  destructor read freed memory. Chosen over refusing such builds, which would have needed the checker to tell the
+  instance's scope from the destructor's own - the two the checker already took for one. **E10/K1**: an `Array<T, 0>` has
+  storage of its own, a slot of no bytes, so a slice of it is not null - the evaluator and `-i` said `null` where the
+  program said `I16[]`. **S4c/O1b**: a parallel assignment's temporary for a global's reference field is held, and built,
+  in the program's scope, as `G.next = Node(i)` builds it - it was refused. Not done: a parallel target through a `&p`
+  field is refused with O17a/O25 where the single form says C2d - correct, worded worse.
 - **`$` calls a Str exactly once per rendering, in order; Str may have effects (E11c, E11a, E11b, O17, O20/E12c,
   2026-10-10; decision 49, the coordinator's, under the revisit rule - my reasoning, not the user's).** **Reverses E11c's
   purity half**: Str no longer has to be K1a-evaluable or write nothing that was there before it ran, and the effect
@@ -4562,7 +4711,7 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   cause was the run time calling Str twice per rendering (measure, then write) where the evaluator called it once, and a
   review found three new and about twelve older holes in the analysis plus over-rejections (`r.l.Iter().Fold(...)`).
   Now a rendering reaching a Str is built **in one pass**, in order, onto text that grows (`@olang.rdb.*` helpers,
-  `@__olang_sb_*`: a 64-byte room beside it, then the arena of the block the `$` stands in), and the evaluator agrees (it always rendered in one
+  `@__olang_sb_*`: a 64-byte room beside it, then a scope of the join's own, closed once the text is copied where it lands), and the evaluator agrees (it always rendered in one
   pass): once per `$`, joins left to right, depth first through fields/elements/payloads, once per List element and Map
   key and value (`Map.Str` rendered every key twice). Skipping a call while compiling stays sound because K1 refuses
   every effect skipping would show (globals, externs). **Decided (mine)**: (1) an array's length and storage are read
@@ -4571,8 +4720,8 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   Str's receiver lives is not known in its body (O12)**: it may read and walk what the receiver reaches, build in its
   own blocks and its result scope (one `$` opens and closes once the text is copied, on the test unwind chain), but
   build or store nothing where the receiver reaches and require nothing of it (`ERR_STR_STORES_IN_RECEIVER`) - the
-  receiver's scope variables are `noBuild`, and codegen passes `null` for them, an IR check (`cgCheckNoNullScope`)
-  making sure nothing allocates there; (3) a join's operands are evaluated left to right **before** any piece is
+  receiver's scope variables are `noBuild` - a walk finding nothing built there, by Str's body or anything it hands a
+  part of the receiver to (round 3, below) - and codegen passes `null` for them; (3) a join's operands are evaluated left to right **before** any piece is
   rendered, Go's rule (a struct or a number as it is then, an array's elements and what a reference names read when the
   piece renders) - **a pre-existing heap overflow**: `$G $bump()` measured G, let bump lengthen its numbers, then wrote
   past the allocation (`checks/cases/joinwritesafter`); (4) a lambda made where it is called is judged by its body for
@@ -4595,6 +4744,27 @@ pre-existing)**: the evaluator let a try *statement's* clauses take an error its
   fixed: O17 skipped read-only captures (P1), a destructor-bearing constructor call no promotion took (a statement,
   `Wrap(x).a.v`, `$Wrap(x)`) was never destructed (P2, O16), a `$` operand was built where the text lands (P3), and a
   reference read out of a conditional of values from two scopes was built through in a temporary's block (P4, O12).
+  **Revised again after the second review** (`/home/user/review/str2`): the hand-kept places a build into the receiver
+  was looked for missed five - a closure (D16d), a task's stand-in (P2), a `Call` adapter (E31), a conditional's or
+  match's new value (E28/S12b), a catch default (R9a) - a segfault in a callee handed a part of the receiver, an
+  internal error in Str's own body; and a lambda read the null scope as the program's, a leak (F3). **`noBuild` now
+  means a walk** (`SemanticMayBuildInto`): master's per-function may-build walk (decision 48) asked of one scope
+  variable - a site counts where codegen places it (`cgWhereBuilt`'s order), a call where it binds its callee's
+  variable there and the callee may build into that one (a fixed point), a body not known where it binds anything
+  there, a closure where it lives there or builds into a capture bound there. The coarse walk could not be used as it
+  is: it says whether a function builds anything, and a Str's helpers build in their own blocks (iterators, text) -
+  asking that refused helpers walking the receiver's Map or List (the review's O1/O2, which now run). Every answer "no"
+  a build relied on is held to by codegen (`SemanticReliesNoBuild`): a body building into such a variable is an
+  internal error at compile time, never a null scope at run time - so the hand-kept checks, `cgCheckNoNullScope`
+  included, are gone. **F4** (P2's own): an instance a conditional or match chose, or one passed to a generic's bare
+  `<T>`, was registered twice - the arms are now promoted with the value, and **G9d (mine)**: a value of a destructor
+  type reaching a bare `<T>` binds `T` to the reference, as C11 leaves it no other form (by value it was copied in and
+  out, each copy registered, and `y := x` in the generic destructed it at the return) - `ctortempdestruct` had pinned
+  the double count. **F5**: a join's builder grows in a scope of its own, closed once the text is copied where the join
+  lands - in a loop's condition what it outgrew stayed in the block every iteration (827MB -> 208MB, d0abfe8's). **O4**:
+  the note for a local that cannot live where the receiver does no longer proposes declaring it there. Left: O3 (by
+  design), and two natural shapes refused rather than built - a helper making a lambda over a node it was handed, and a
+  conditional of the receiver's text and a literal (constant data, but T25d does not reach a conditional's values).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

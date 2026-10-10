@@ -1,0 +1,27 @@
+# check: run
+# O18c: a for-in's element its Next builds nothing for - a Map's key or value, a borrow of what the map holds - lands
+# where its obligations say, so pushing it into a list outside the loop keeps what the map keeps (a reference result
+# is no value array to copy into the result scope: T7b's copy is a value's)
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, k * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    m := Map<String&, I64>()
+    for i in range 4 { m.Put($i, i) }
+    l := List<String&>()
+    for k in m.Keys() { l.Push(k) }
+    vm := Map<I64, String&>()
+    vm.Put(1, "a" $l.Len())
+    vl := List<String&>()
+    for v in vm.Values() { vl.Push(v) }
+    churn()
+    t I64 = 0
+    for k in l { t += try k.ParseInt() catch default 0 }
+    assert t == 6
+    assert vl[0] == "a4"
+}

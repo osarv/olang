@@ -1,0 +1,24 @@
+# E11b/E11c: a later '==' reaching a declared Eq that writes a global struct an earlier piece holds
+type Cnt struct(n I64) {
+    n
+}
+G mut Cnt = Cnt(0)
+type K struct(v I64) {
+    v
+}
+fn (a K&) Eq(b K&) Bool {
+    G.n = G.n + 1
+    return a.v == b.v
+}
+fn (a K&) Hash() I64 { return a.v }
+type P struct(k K) {
+    k
+}
+fn main() ? {
+    p1 := P(K(1))
+    p2 := P(K(1))
+    s := $G " " $(p1 == p2)
+    println(s)
+    t := $G " " $(K(1) == K(2))
+    println(t)
+}

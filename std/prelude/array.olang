@@ -470,7 +470,7 @@ if TestBuild {
         return a.Filter(fn(x) { return x > 10 })
     }
     arraySortedBaked := arraySorted()                     # computed while compiling (K2): calls through lambdas
-    arraySumBaked I32 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
+    arraySumBaked I64 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
 
     test "the array methods take what to do as a lambda" {
         a := I32[5, 3, 8, 1, 9, 2]

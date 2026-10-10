@@ -1,0 +1,32 @@
+# E11b/E11c: later operands running At, Slice, Less, a chain and a conditional, each writing a global an earlier piece holds
+type Cnt struct(n I64) {
+    n
+}
+G mut Cnt = Cnt(0)
+type C struct(k I64) {
+    k
+}
+fn (c C&) At(i I64) I64 {
+    G.n = G.n + 1
+    return c.k + i
+}
+fn (c C&) Len() I64 { return 3 }
+fn (c C&) Slice(lo I64, hi I64) I64 {
+    G.n = G.n + 10
+    return lo
+}
+fn (c C&) Less(d C&) Bool {
+    G.n = G.n + 100
+    return c.k < d.k
+}
+fn main() ? {
+    c := C(5)
+    d := C(6)
+    println($G " " $c[1])
+    println($G " " $c[1:2])
+    println($G " " $(c < d))
+    println($G " " $(1 < c[0] < 9))
+    println($G " " $(c[0] if c.k > 0 else 0))
+    a := I64[1, 2, 3]
+    println($G " " $a[c[0] - 5])
+}

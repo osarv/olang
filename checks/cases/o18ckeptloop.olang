@@ -1,0 +1,44 @@
+# check: run
+# O18c: a call building new text, its result (or a part of it) kept beyond the loop body - pushed into a list outside
+# it, directly or through a function that keeps it - is landed where its obligations say, so the text lives there; one
+# not kept is the body's own (checks' landing scenario, callparts, holds that under an address-space limit)
+type Token struct(kind I64, text String&) {
+    kind
+    text
+}
+type Lexer struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (lx mut Lexer&) next() Token {
+    lx.at++
+    if lx.at % 2 == 0 { return Token(1, lx.src[0:3]) }
+    return Token(2, "n" $lx.at)
+}
+fn keep(n mut List<String&>&, s String&) { n.Push(s) }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, k * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    lx := Lexer("abcdef")
+    toks := List<Token>()
+    names := List<String&>()
+    for k in range 2 {
+        tk := lx.next()
+        toks.Push(tk)
+        t := lx.next().text
+        names.Push(t)
+        u := lx.next()
+        keep(names, u.text)
+        w := lx.next().text
+        assert w.Len() == 3
+    }
+    churn()
+    assert $toks == "List<Token>[Token(2, \"n1\"), Token(2, \"n5\")]"
+    assert $names == "List<String&>[\"abc\", \"n3\", \"abc\", \"n7\"]"
+}

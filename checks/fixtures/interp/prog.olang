@@ -62,7 +62,7 @@ fn main() ? Oops + io.IoError + os.OsError {
     try io.Print("steps " $steps() "\n")
     tree Expr& = Expr.Add(Expr.Add(Expr.Lit(1), Expr.Lit(2)), Expr.Neg(Expr.Add(Expr.Lit(3), Expr.Neg(Expr.Lit(4)))))
     try io.Print("tree " $tree " folds to " $fold(tree) "\n")
-    try io.Print("sqrt " $sqrt(2.0) " evens " $I32[x for x in range 10 if x % 2 == 0] "\n")
+    try io.Print("sqrt " $sqrt(2.0) " evens " $I32[x for x in range I32(10) if x % 2 == 0] "\n")
     hits I64 = 0
     hits.AtomicAdd(5)
     found := hits.AtomicCompareSwap(5, 7)

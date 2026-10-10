@@ -3776,8 +3776,8 @@ static bool intFits(long long v, int bits, bool uns) {
     return v >= -lim && v < lim;
 }
 
-//T6a: a literal's own type - I32 where its value fits one, I64 otherwise
-static int literalBits(long long v) { return intFits(v, 32, false) ? 32 : 64; }
+//T6a: an integer literal's own type is an I64 (a U64 one never reaches this evaluator, B9a)
+enum { LITERAL_INT_BITS = 64 };
 
 //T6b: an integer type flows into a wider one of its signedness, and an unsigned one into a strictly wider signed one
 static bool intFlows(struct condVal from, struct condVal to) {
@@ -3797,7 +3797,7 @@ static bool intMeet(struct condVal a, struct condVal b, int* bits, bool* uns) {
     if (a.bits || b.bits) {
         struct condVal typed = a.bits ? a : b, lit = a.bits ? b : a;
         if (intFits(lit.i, typed.bits, typed.uns)) { *bits = typed.bits; *uns = typed.uns; return true; }
-        struct condVal own = (struct condVal){ .kind = BUILD_INT, .bits = literalBits(lit.i) };
+        struct condVal own = (struct condVal){ .kind = BUILD_INT, .bits = LITERAL_INT_BITS };
         if (!intFlows(typed, own) && !(typed.bits == own.bits && !typed.uns)) return false;
         *bits = own.bits;
         *uns = false;
@@ -3867,8 +3867,8 @@ static struct condVal condPrimary(struct condCtx* c) {
                 v.i = b->i;
                 v.f = b->f;
                 v.s = b->text;
-                //B10: typed as its literal would be (T6a) - an integer is an I32 or an I64, a float an F64
-                if (b->kind == BUILD_INT) v.bits = literalBits(b->i);
+                //B10: typed as its literal would be (T6a) - an integer is an I64, a float an F64
+                if (b->kind == BUILD_INT) v.bits = LITERAL_INT_BITS;
                 if (b->kind == BUILD_FLOAT) v.bits = 64;
                 if (!c->skip) c->usedBuild = true;
                 return v;
@@ -3932,7 +3932,7 @@ static struct condVal condArith(struct condCtx* c, struct token op, struct condV
         }
         //E6c: a result its type cannot hold wraps in the program - not a value this evaluator has (a literal-only one
         //is computed in its literals' own type, T6a)
-        int bits = r.bits ? r.bits : literalBits(a.i) > literalBits(b.i) ? literalBits(a.i) : literalBits(b.i);
+        int bits = r.bits ? r.bits : LITERAL_INT_BITS;
         if (over || !intFits(r.i, bits, r.uns)) return condDefer(c, op);
         return r;
     }
@@ -4148,7 +4148,7 @@ static struct condGlobalIndex* condIndexFor(TokenCtx tc) {
 static struct condVal condAsDeclared(struct condCtx* c, struct token name, struct condGlobalDecl* d, struct condVal v) {
     if (v.anyKind) return v;
     if (d->declared == DECLARED_NONE) { //":=": its initializer's own type (T6a)
-        if (v.kind == BUILD_INT && !v.bits) v.bits = literalBits(v.i);
+        if (v.kind == BUILD_INT && !v.bits) v.bits = LITERAL_INT_BITS;
         if (v.kind == BUILD_FLOAT) v.bits = 64;
         return v;
     }
@@ -4722,15 +4722,8 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(prev, ERR_KEYWORD_AS_NAME, prev);
         return true;
     }
-    //"fn join(", "x I32, done I32" - a keyword where a name was wanted
-    if (isKeywordTok(found) && found.type != TOK_MUT && expected && (!strcmp(expected, TokenStrFromType(TOK_IDEN))
-                                            || (TokenAfter(found).lineNr == found.lineNr
-                                                && (TokenAfter(found).type == TOK_IDEN || TokenAfter(found).type == TOK_MUT
-                                                    || TokenAfter(found).type == TOK_ASS_INFER)))) {
-        ErrSyntax(found, ERR_KEYWORD_AS_NAME, found);
-        return true;
-    }
-    //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
+    //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block (before L9's keyword-as-name:
+    //"case X => return f(x)" is the same mistake as "=> return 1", not a name)
     if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_ABORT || found.type == TOK_RET
             || found.type == TOK_FAIL || found.type == TOK_DONE || found.type == TOK_BREAK || found.type == TOK_CONTINUE
             || found.type == TOK_ERROR)) {
@@ -4743,6 +4736,14 @@ static bool syntaxHint(struct token found, char* expected) {
         while (n > 0 && (what[n - 1] == ' ' || what[n - 1] == '\t')) n--;
         what[n] = '\0';
         ErrSyntax(found, ERR_ARROW_LEAVES, found, StrFromCStr(strdup(what)));
+        return true;
+    }
+    //"fn join(", "x I32, done I32" - a keyword where a name was wanted
+    if (isKeywordTok(found) && found.type != TOK_MUT && expected && (!strcmp(expected, TokenStrFromType(TOK_IDEN))
+                                            || (TokenAfter(found).lineNr == found.lineNr
+                                                && (TokenAfter(found).type == TOK_IDEN || TokenAfter(found).type == TOK_MUT
+                                                    || TokenAfter(found).type == TOK_ASS_INFER)))) {
+        ErrSyntax(found, ERR_KEYWORD_AS_NAME, found);
         return true;
     }
     //L18: "s := a + b" then "    + c" - a line beginning with an operator that only joins two values; the end of the

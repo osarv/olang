@@ -1,0 +1,54 @@
+# E11b/E11c: Go's join rule on locals, baked (K2), asserted and run alike
+type S struct(n I64) {
+    n
+    a Array<I64, 3> = I64[1, 2, 3]
+}
+type E enum {
+    One(x I64)
+    Two(x I64, y I64)
+}
+type H struct(s S, v mut Array<I64>&) {
+    s
+    v
+}
+fn bumpS(s mut S&) I64 {
+    s.n = s.n + 1
+    s.a[0] = s.a[0] + 10
+    return 0
+}
+fn bumpE(e mut E&) I64 {
+    e = E.Two(7, 8)
+    return 0
+}
+fn growArr(a mut Array<I64>&) I64 {
+    a = I64[9, 9, 9, 9]
+    return 0
+}
+fn sameArr(a mut Array<I64>&) I64 {
+    a[0] = 42
+    return 0
+}
+fn bumpH(h mut H&) I64 {
+    h.s.n = 99
+    h.v[0] = 77
+    return 0
+}
+fn joins() String {
+    s := S(1)
+    e := E.One(1)
+    a Array<I64> = I64[1, 2]
+    b Array<I64> = I64[1, 2]
+    f Array<I64, 2> = I64[5, 6]
+    h mut H& = H(S(1), I64[3, 3])
+    return $s " " $bumpS(s) " " $e $bumpE(e) " " $a $growArr(a) " " $b $sameArr(b) " " $h.s $h.v $f $bumpH(h) $bumpF(f) " " $s $e $a $b $h.s $f
+}
+fn bumpF(f mut Array<I64, 2>&) I64 {
+    f[1] = 66
+    return 0
+}
+Baked String& = joins()
+fn main() ? {
+    println(joins())
+    println(Baked)
+    assert Baked == joins()
+}

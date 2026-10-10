@@ -2,7 +2,7 @@
 # S19b: a break in deferred code may leave only a loop written in that deferred code
 fn f() I32 {
     t I32 = 0
-    for i in range 3 {
+    for i in range I32(3) {
         defer {
             for j in range 2 {
                 if j == 1 { break }

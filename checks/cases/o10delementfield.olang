@@ -1,0 +1,27 @@
+# check: run
+# O20/O10d: an element of an array held in a reference field of a reference parameter lives where that field's array
+# does, which is where the parameter's instance lives - borrowed for a call, a method or a result there ("sizeFn(g.arr[0])",
+# "g.arr[0].size()" were "this value lives in this function's own scope")
+type Elem struct() { n I64 = 0 }
+fn (e Elem&) size() I64 { return e.n }
+fn sizeFn(e Elem&) I64 { return e.n }
+type G struct() { arr mut Array<Elem>& = Array<Elem>(3) }
+fn f1(g G&) I64 { return sizeFn(g.arr[0]) }
+fn f3(g mut G&) I64 { return g.arr[1].size() }
+fn second(g G&) Elem&g { return g.arr[1] }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, k * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := G()
+    g.arr[0].n = 4
+    g.arr[1].n = 9
+    e := second(g)
+    churn()
+    assert f1(g) == 4 and f3(g) == 9 and e.n == 9
+}

@@ -432,7 +432,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
     join {
         for w in range 3 { spawn walkCount(c, seen) }
         spawn waitClosed(c, tok, seen, got)
-        for i in range 10 { Send(c, i) }
+        for i in range I32(10) { Send(c, i) }
         Close(c)
     }
     assert seen.v.AtomicLoad() == 10 and got.v == 1

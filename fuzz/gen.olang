@@ -410,12 +410,12 @@ fn (g mut Gen&) ex(t I32, d I64) String& {
 fn (g mut Gen&) fit(t I32, d I64) String& {
     if isNum(t) and g.chance(25) {
         n I64 = 0
-        for s in range 12 {
+        for s in range I32(12) {
             if s != t and flows(s, t) { n += 1 }
         }
         if n > 0 {
             w := g.r(n)
-            for s in range 12 {
+            for s in range I32(12) {
                 if s != t and flows(s, t) {
                     if w == 0 { return g.ex(s, d) }
                     w -= 1
@@ -784,7 +784,7 @@ fn (g mut Gen&) piece(d I64) String& {
     if p == 9 {                                     # a comprehension
         t := g.primT()
         n := g.r(6)
-        x := g.push(2, -1, false, true)
+        x := g.push(3, -1, false, true)
         e := g.fit(t, d - 1)
         c String& = ""
         if g.chance(40) { c = " if " $g.ex(TBool, d - 1) }
@@ -1105,7 +1105,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
     }
     if k == 8 and d > 0 {
         n String& = $g.r(6)
-        lt I32 = 2
+        lt I32 = 3
         if g.chance(40) {
             lt = g.intT()
             n = "(" $g.solid(lt, 2) " & 7)"
@@ -1291,7 +1291,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             return $ind "for x" $i ", x" $x " in " $src " {\n" $body $ind "}\n"
         }
         lo I64 = g.r(5) - 2
-        x := g.push(2, -1, false, true)
+        x := g.push(3, -1, false, true)
         body := g.block(1 + g.r(2), d - 1, in2)
         g.nv = save
         los String& = $lo
@@ -1363,7 +1363,7 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
             b.Push($Prims[t] "[" $g.fit(t, 3) " for x" $y " in " $srcName)
         } else {
             n = g.r(7)
-            y := g.push(2, -1, false, true)
+            y := g.push(3, -1, false, true)
             b.Push($Prims[t] "[" $g.fit(t, 3) " for x" $y " in range " $n)
         }
         if g.chance(40) {
@@ -1533,7 +1533,7 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
 # removing from) Map x keyed by et - a value of the counter, so keys repeat and slots are reused
 fn (g mut Gen&) bulk(x String&, et I32, vty I32, ind String&) String& {
     save := g.nv
-    i := g.push(2, -1, false, true)                # "range n" counts in its literal's I32
+    i := g.push(3, -1, false, true)                # "range n" counts in its literal's I64 (T6a)
     n I64 = 9 + g.r(40)
     m I64 = 1 + g.r(5)
     v String& = $Prims[et] "(x" $i " * " $m ")" if isNum(et) else "(x" $i " % " $(1 + g.r(3)) " == 0)"

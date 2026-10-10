@@ -1,0 +1,26 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: a lambda a Str makes calls a helper that makes a closure over the receiver's node: refused (the closure read the
+# null scope as the program's and was never reclaimed)
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn peek(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    return f()
+}
+fn (b Bag&) Str() String {
+    g := fn() I64 { return peek(b.head) }
+    return $g()
+}
+fn main() ? {
+    b := Bag(Node(4))
+    t I64 = 0
+    for i in range 2000000 {
+        s := $b
+        t += s.Len()
+    }
+    println($t)
+}

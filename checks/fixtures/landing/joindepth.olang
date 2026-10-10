@@ -1,7 +1,8 @@
 # E11b: a join whose later piece recurses holds nothing across the call - its operands are evaluated first, then it is
 # rendered - so a recursion through one goes as deep as any other (a builder held across the call cost 4KB of arena
-# and 32 bytes of stack a frame: 100,000 deep overflowed the stack)
-Depth mut I64 = 100000
+# and 32 bytes of stack a frame: 60,000 deep overflowed an 8MB stack, which a frame of 112 bytes, this one's at -O3,
+# does not)
+Depth mut I64 = 60000
 fn r(n I64, name String&) I64 {
     if n == 0 { return 0 }
     s := $name $r(n - 1, name)

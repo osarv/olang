@@ -1,0 +1,22 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# O18c: a field read off a call's result lands by the callee's obligations, as ':=' from the call does - and a call
+# whose result holds new text has none, so it is the loop body's: kept in a longer-lived list it is refused
+type Token struct(kind I32, text String&) {
+    kind
+    text
+}
+type P struct() {
+    at I64 = 0
+}
+fn (p mut P&) mk() Token { return Token(1, "t" $p.at) }
+fn grab(p mut P&, keep mut List<String&>&) {
+    for i in range 3 {
+        t := p.mk().text
+        keep.Push(t)
+    }
+}
+fn main() ? {
+    p := P()
+    keep := List<String&>()
+    grab(p, keep)
+}

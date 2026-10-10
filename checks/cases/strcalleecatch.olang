@@ -1,0 +1,37 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: a helper handed the receiver's node gives a new node as a catch default for a call borrowing from it, built where
+# the call's result lives (R9a): refused
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn find(n Node&, k I64) Node&n ? {
+    if k > 0 { error }
+    return n
+}
+fn pick(n Node&) I64 {
+    x := try find(n, 1) catch default Node(1, null)
+    return x.v
+}
+fn (b Bag&) Str() String {
+    return $pick(b.head)
+}
+fn main() ? {
+    b := Bag(Node(4, null))
+    s := $b
+    churn()
+    println(s)
+}

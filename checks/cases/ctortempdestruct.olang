@@ -2,7 +2,8 @@
 # flags: -s
 # C11/O16: every constructor call of a type declaring a destructor is one instance, destructed once when the scope it
 # was built in closes - a call standing as a statement, read through, rendered, passed, stored, kept in a conditional
-# or pushed alike (the first three were never destructed)
+# or pushed alike (the first three were never destructed), and an instance a conditional or a match chooses, or one passed
+# to a generic's bare type variable, once (they were destructed twice)
 type Node struct(v I64) {
     v
 }
@@ -14,6 +15,11 @@ type Box struct(w Wrap&) {
     w
 }
 fn take(w Wrap&) I64 { return w.a.v }
+fn id(x <T>) T { return x }
+fn kept(x <T>) T {
+    y := x
+    return y
+}
 fn main() ? {
     local := Node(42)
     {
@@ -29,8 +35,16 @@ fn main() ? {
         z := (Wrap(local) if c else Wrap(local)).a.v
         l := List<Wrap&>()
         l.Push(Wrap(local))
+        g := id(Wrap(local))
+        id(Wrap(local))
+        h := kept(Wrap(local))
+        m := match k {
+            case 42 => Wrap(local)
+            nomatch => Wrap(local)
+        }
+        t := take(Wrap(local) if c else Wrap(local))
         assert Count == 0
         assert k + n + z == 126 and s == "Wrap(Node(42))"
     }
-    assert Count == 11
+    assert Count == 15
 }

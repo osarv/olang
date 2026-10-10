@@ -1,0 +1,58 @@
+# check: fail error[O17]
+# O17/D16c: a reading lambda over a read-only capture is allowed; storing through one - directly, through a helper or a
+# nested lambda - is refused
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct(n I64) {
+    head mut Node& = Node(n, null)
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) sum() I64 {
+    f := fn() I64 { return b.head.v }
+    return f()
+}
+fn apply(f fn()) { f() }
+fn (b Box&) grow2() {
+    apply(fn() { b.head.next = Node(7, null) })
+}
+fn (b Box&) grow3() {
+    f := fn() {
+        g := fn() { b.head.next = Node(8, null) }
+        g()
+    }
+    f()
+}
+fn readIt(src mut W&) I64 {
+    b := src.b
+    return b.sum()
+}
+fn bump2(src mut W&) {
+    b := src.b
+    b.grow2()
+}
+fn bump3(src mut W&) {
+    b := src.b
+    b.grow3()
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box(3))
+    println($readIt(w))
+    bump2(w)
+    churn()
+    println($w.b.head.next.v)
+    bump3(w)
+    churn()
+    println($w.b.head.next.v)
+}

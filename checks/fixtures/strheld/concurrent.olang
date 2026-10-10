@@ -1,0 +1,38 @@
+# E11b/E11c: four tasks rendering Strs, Lists and Maps through joins at once (clean under -r)
+type P struct(x I64, name String&) {
+    x
+    name
+}
+fn (p P&) Str() String { return "P<" $p.x ":" $p.name ">" }
+type Box struct(items List<P&>, m Map<I64, P&>) {
+    items
+    m
+}
+fn (b Box&) Str() String {
+    n I64 = 0
+    for p in b.items { n += p.x }
+    return "Box(" $n " " $b.items " " $b.m ")"
+}
+fn work(b Box&, k I64) I64 {
+    t I64 = 0
+    for i in range 4 {
+        s := $b " " $k " " $b.items
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    items := List<P&>()
+    m := Map<I64, P&>()
+    for i in range 4 {
+        p P&m = P(i, "name-" $i)
+        items.Push(p)
+        m.Put(i, p)
+    }
+    b := Box(items, m)
+    out := Array<I64>(4)
+    join {
+        for k in range 4 { spawn out[k] = work(b, k) }
+    }
+    println($out)
+}

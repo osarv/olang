@@ -1,0 +1,32 @@
+# E11b/E11c: done inside a Str reached through a List element and a struct field, in a test
+type Res struct(k I64) {
+    k
+} destruct { println("Res destructed " $k) }
+type Bag struct(n I64) {
+    n
+}
+fn (b Bag&) Str() String {
+    r Res&return = Res(b.n)
+    if b.n == 7 { done }
+    return "b-" $b.n
+}
+type Outer struct(a Bag, b Bag) {
+    a
+    b
+}
+test "done inside a List element's Str" {
+    l := List<Bag>()
+    l.Push(Bag(1))
+    l.Push(Bag(7))
+    l.Push(Bag(3))
+    s := $l
+    println("not reached " $s)
+}
+test "done inside a field's Str" {
+    o := Outer(Bag(2), Bag(7))
+    s := "x" $o "y"
+    println("not reached " $s)
+}
+test "after" {
+    println("third test runs")
+}

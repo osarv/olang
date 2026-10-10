@@ -1,0 +1,57 @@
+# O26a: a function returning a view of a long-lived structure - a value whose references are borrowed from it, its
+# result scope landing where that structure lives (O18c) - keeps none of its locals there unless what it returns can
+# hold them. A copy of an element handed to a method, or to another module's function, whose result is a number (oann's
+# nn.Graph.Value, repro/resultgrowth: the copy was moved into the result scope at every call, 16 bytes a call), and
+# numbers computed for a slice of a parameter (study 6's r02: two I64 locals a call), stay in the function's frame.
+# Each shape runs four million times under an address-space limit far below what keeping them would take
+import "infos"
+
+type View struct(Data Array<F64>&, Off I64, N I64) {
+    Data
+    Off
+    N
+}
+
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+    entries mut List<infos.Info>& = List<infos.Info>()
+}
+
+fn (g G&) count(i infos.Info&) I64 { return i.Len }
+
+# the copy of an element passed to a method of g
+fn (g G&) view(k I64) View {
+    i := g.entries[k]
+    return View(g.mem, i.Offset, g.count(i))
+}
+
+# ...to another module's function
+fn (g G&) viewOf(k I64) View {
+    i := g.entries[k]
+    return View(g.mem, i.Offset, infos.Size(i))
+}
+
+# numbers computed for a slice of a parameter
+fn window(a Array<I64>&, at I64) Array<I64>&a {
+    from I64 = at + 1
+    to I64 = from + 2
+    return a[from:to]
+}
+
+fn main() ? {
+    g := G(4)
+    g.entries.Push(infos.Info(0, 2))
+    g.mem[0] = 0.5
+    sum F64 = 0.0
+    for t in range 4000000 {
+        v := g.view(0)
+        w := g.viewOf(0)
+        sum += v.Data[v.Off] + F64(w.N)
+    }
+    a := Array<I64>(100, 7)
+    total I64 = 0
+    for c in range 4000000 {
+        total += window(a, c % 90)[0]
+    }
+    println($sum " " $total)
+}

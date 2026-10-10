@@ -155,7 +155,7 @@ test "an array, and an iterator, made into a List" {
     f := Array<I64>(100, 7).ToList()                    # n copies of one value
     assert f.Len() == 100 and f[99] == 7 and f[8] == 7
     assert Array<I32>(0).ToList().Len() == 0
-    m := I32[x * x for x in range 10].Iter().ToList()
+    m := I32[x * x for x in range I32(10)].Iter().ToList()
     assert m.Len() == 10 and m[9] == 81
     evens := listUpTo(30).Iter().Filter(fn(x) { return x % 2 == 0 })
     assert evens.Iter().ToList().Len() == 15

@@ -1,5 +1,5 @@
 # check: fail error: a condition is a Bool, found I32
 # E27: the filter after "if" is a condition
 fn main() ? {
-    a := I32[x for x in range 3 if x]
+    a := I32[x for x in range I32(3) if x]
 }

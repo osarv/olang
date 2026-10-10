@@ -277,14 +277,18 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //free-list lock below be a plain zeroinitializer; a worker's own pair is explicitly init'd.
         //state: 0 fresh, 1 has work, 2 finished and waiting to be handed more.
         "%olang.worker = type { ptr, ptr, ptr, i64, ptr, [40 x i8], [48 x i8] }\n"
-        "%olang.merge = type { ptr, ptr, ptr }\n"        "%olang.envmap = type { ptr, ptr, ptr, ptr }\n" //P2: next, null (no scope to fold), original env, its copy
-  //next, dst scope, src sub-scope //next, instance, dtorFn - see __olang_scope_register_dtor
-        "%olang.scope = type { ptr, ptr, ptr }\n"  //head chunk, head dtor-list node, TAIL chunk (all null
-                                                    //if unused). The tail is tracked so a task's sub-scope
-                                                    //can be spliced into its parent in O(1) (P2) - chunks are
-                                                    //PREPENDED, so the tail is whichever chunk this scope
-                                                    //allocated first, set once when the list goes from empty
-                                                    //to non-empty and never touched again.
+        "%olang.merge = type { ptr, ptr }\n" //P2: next, a task's stand-in to fold back at the join (null: none)
+        //head chunk, head dtor-list node, TAIL chunk (all null if unused), owner, parts, parent. The tail is tracked so a
+        //task's stand-in can be spliced into what it stands in for in O(1) (P2) - chunks are PREPENDED, so the tail is
+        //whichever chunk this scope allocated first, set once when the list goes from empty to non-empty and never
+        //touched again. The owner, parts and parent are P2's, for a scope another thread reaches through a closure:
+        //  owner - the thread that builds into this scope itself (@__olang_self's value there); null until the scope is
+        //          first reached from another thread, so it is its opener's; @__olang_global_scope for a part of the
+        //          program's scope; @__olang_fwd_chunk once a stand-in has been folded and forwards
+        //  parts - on a scope with no parent, the PARTS other threads build into it through, one per thread, each a
+        //          scope of its own linked here and closed with it; on a part, the next part
+        //  parent - what a stand-in stands in for, or the scope a part is part of; null on any other scope
+        "%olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr }\n"
         //P1: a thread's pool is thread_local, so two threads never take from or give to the same one. A scope belongs to
         //exactly one thread, and so do the chunks it takes and gives back, which is what makes a per-thread pool
         //correct rather than merely faster
@@ -304,11 +308,18 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //allocation's fast path is the same as ever and fails on it, and the slow path finds the scope in its tail slot
         "@__olang_fwd_chunk = linkonce_odr global %olang.chunk zeroinitializer\n"
         //O1b: the program's own scope - what a global's initializer allocates into. Never closed, so what
-        //it holds lives as long as the program
-        "@__olang_global_scope = linkonce_odr global %olang.scope zeroinitializer\n"
-        //O1b/P2: the program's scope as this thread reaches it - the scope itself on the main thread, and a task's
-        //private stand-in while a task runs, folded back at its join - so no two threads ever bump it at once
+        //it holds lives as long as the program. Its owner word marks it, and every part of it, as the program's
+        "@__olang_global_scope = linkonce_odr global %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null }\n"
+        //O1b/P2: the program's scope as this thread reaches it - the scope itself on the main thread, and on a worker a part
+        //of its own, made when the worker starts and kept for every task it runs (never closed, as the program's scope is
+        //not) - so no two threads ever bump one at once. A thread RunOnStack makes reaches it as its caller does
         "@__olang_prog_scope = linkonce_odr thread_local(initialexec) global ptr @__olang_global_scope\n"
+        //P2: who this thread is, to a scope's owner word - a number no other thread has had (an odd one, so never the
+        //address of anything), set as the thread starts; a thread RunOnStack makes is its caller, which waits for it.
+        //Not an address of the thread's own: a thread's storage is reused for the next one, which would then take a part
+        //made for the one before, or a stand-in it claimed, for its own
+        "@__olang_self = linkonce_odr thread_local(initialexec) global ptr null\n"
+        "@__olang_thread_next = linkonce_odr global i64 1\n"
         "\n"
         "", out);
     fputs(
@@ -1214,6 +1225,12 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //which is why the chunk pool is not drained per task - the next task on this worker reuses what it keeps.
         "define internal ptr @__olang_worker_loop(ptr %w) {\n"
         "entry:\n"
+        "  call void @__olang_thread_init()\n"
+        //O1b/P2: this worker's part of the program's scope - every task it runs builds there, and it outlives the worker
+        "  %prog = call ptr @malloc(i64 48)\n"
+        "  call void @__olang_alloc_check(ptr %prog)\n"
+        "  store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null }, ptr %prog\n"
+        "  store ptr %prog, ptr @__olang_prog_scope\n"
         "  %m = getelementptr %olang.worker, ptr %w, i32 0, i32 5\n"
         "  %c = getelementptr %olang.worker, ptr %w, i32 0, i32 6\n"
         "  %st = getelementptr %olang.worker, ptr %w, i32 0, i32 3\n"
@@ -1373,17 +1390,10 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  %nomerge = icmp eq ptr %mhead, null\n"
         "  br i1 %nomerge, label %aftermerge, label %merge\n"
         "merge:\n"
-        "  %m = phi ptr [ %mhead, %task ], [ %mnext, %mstep ]\n"
-        "  %dstptr = getelementptr %olang.merge, ptr %m, i32 0, i32 1\n"
-        "  %dst = load ptr, ptr %dstptr\n"
-        "  %srcptr = getelementptr %olang.merge, ptr %m, i32 0, i32 2\n"
+        "  %m = phi ptr [ %mhead, %task ], [ %mnext, %merge ]\n"
+        "  %srcptr = getelementptr %olang.merge, ptr %m, i32 0, i32 1\n"
         "  %src = load ptr, ptr %srcptr\n"
-        "  %isfold = icmp ne ptr %dst, null\n" //(a node recording an environment's copy folds nothing, __olang_env_standin)
-        "  br i1 %isfold, label %fold, label %mstep\n"
-        "fold:\n"
-        "  call void @__olang_scope_merge(ptr %dst, ptr %src)\n"
-        "  br label %mstep\n"
-        "mstep:\n"
+        "  call void @__olang_scope_merge(ptr %src)\n"
         "  %mnextptr = getelementptr %olang.merge, ptr %m, i32 0, i32 0\n"
         "  %mnext = load ptr, ptr %mnextptr\n"
         "  %matend = icmp eq ptr %mnext, null\n"
@@ -1397,183 +1407,231 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  ret void\n"
         "}\n\n", out);
     fputs(
-        //P2: a function value's environment as a task - or the thread RunOnStack makes - reaches it: a copy whose every
-        //scope is a stand-in of its own, each recorded on the merge chain at %chain to be folded back into the scope it
-        //stands in for, and whose every function value is given the same, recursively. An environment opens with how
-        //many scopes it holds, how many function values, and its size (cgClosureType); one reaching no scope is used as
-        //it is. The task may keep what it is handed - return it, store it - so the copy is made where the closure lives
-        //no longer than: the first scope it captured (__olang_env_home, D16d), and each stand-in where the scope it
-        //stands in for is, which it forwards to once folded (__olang_scope_merge). A copy keeps the original's identity -
-        //word 0 is marked, and the original is kept after its bytes (__olang_env_canon) - and one spawn copies an
-        //environment once, however many of its arguments reach it (a node on the chain with no destination records it)
-        "define linkonce_odr ptr @__olang_env_home(ptr %env) {\n"
+        //P2: a scope belongs to the thread that builds into it (its owner word). Every scope another thread can reach reaches
+        //it through a function value - a closure's captured scopes, a Call adapter's instance - or is the program's: a
+        //task's own scopes are stand-ins, and a scope it is handed is a stand-in too. So a closure that may build into a
+        //scope it captured asks for it here as its call starts, and builds into what it is given: the scope itself on its
+        //owner's thread, and anywhere else this thread's own PART of it - a scope linked to the one it is part of and closed
+        //with it, made the first time this thread builds there (__olang_scope_part). Nothing is checked per allocation, and
+        //a closure that only reads what it captured asks nothing. The program's scope, or a part of it, is this thread's
+        //own part of it (@__olang_prog_scope); a stand-in folded already is followed to what it forwards to
+        "define linkonce_odr void @__olang_thread_init() {\n"
         "entry:\n"
-        "  %none = icmp eq ptr %env, null\n"
-        "  br i1 %none, label %null, label %hdr\n"
-        "hdr:\n"
-        "  %n0 = load i64, ptr %env\n"
-        "  %n = and i64 %n0, 4611686018427387903\n"
-        "  %fp = getelementptr i64, ptr %env, i64 1\n"
-        "  %nf = load i64, ptr %fp\n"
-        "  %anys = icmp ne i64 %n, 0\n"
-        "  br i1 %anys, label %first, label %fns\n"
-        "first:\n" //(a null scope is the program's, which the calling thread reaches as its own - cgClosure)
-        "  %si = phi i64 [ 0, %hdr ], [ %si1, %snext ]\n"
-        "  %sk = add i64 %si, 3\n"
-        "  %sp = getelementptr ptr, ptr %env, i64 %sk\n"
-        "  %s = load ptr, ptr %sp\n"
-        "  %snull = icmp eq ptr %s, null\n"
-        "  br i1 %snull, label %snext, label %sgot\n"
-        "sgot:\n"
+        "  %n = atomicrmw add ptr @__olang_thread_next, i64 2 monotonic, align 8\n"
+        "  %id = inttoptr i64 %n to ptr\n"
+        "  store ptr %id, ptr @__olang_self\n"
+        "  ret void\n"
+        "}\n\n"
+        "define linkonce_odr ptr @__olang_scope_mine(ptr %s) alwaysinline {\n"
+        "entry:\n"
+        "  %op = getelementptr %olang.scope, ptr %s, i32 0, i32 3\n"
+        "  %o = load atomic ptr, ptr %op monotonic, align 8\n"
+        "  %me = load ptr, ptr @__olang_self\n"
+        "  %own = icmp eq ptr %o, %me\n"
+        "  br i1 %own, label %mine, label %slow\n"
+        "mine:\n"
         "  ret ptr %s\n"
-        "snext:\n"
-        "  %si1 = add i64 %si, 1\n"
-        "  %smore = icmp ult i64 %si1, %n\n"
-        "  br i1 %smore, label %first, label %fns\n"
-        "fns:\n"
-        "  %anyf = icmp eq i64 %nf, 0\n"
-        "  br i1 %anyf, label %null, label %fn\n"
-        "fn:\n"
-        "  %j = phi i64 [ 0, %fns ], [ %j1, %next ]\n"
-        "  %w = mul i64 %j, 2\n"
-        "  %w2 = add i64 %w, 4\n"
-        "  %ep = getelementptr ptr, ptr %env, i64 %w2\n"
-        "  %inner = load ptr, ptr %ep\n"
-        "  %h = call ptr @__olang_env_home(ptr %inner)\n"
-        "  %found = icmp ne ptr %h, null\n"
-        "  br i1 %found, label %got, label %next\n"
-        "got:\n"
-        "  ret ptr %h\n"
-        "next:\n"
-        "  %j1 = add i64 %j, 1\n"
-        "  %fmore = icmp ult i64 %j1, %nf\n"
-        "  br i1 %fmore, label %fn, label %null\n"
-        "null:\n"
-        "  ret ptr null\n"
+        "slow:\n"
+        "  %r = call ptr @__olang_scope_mine_slow(ptr %s)\n"
+        "  ret ptr %r\n"
+        "}\n\n"
+        //a closure's captured scope as its call starts (cgFunctionIn): null is the program's (cgClosure)
+        "define linkonce_odr ptr @__olang_capture_scope(ptr %s) alwaysinline {\n"
+        "entry:\n"
+        "  %isprog = icmp eq ptr %s, null\n"
+        "  br i1 %isprog, label %prog, label %mine\n"
+        "prog:\n"
+        "  %p = load ptr, ptr @__olang_prog_scope\n"
+        "  ret ptr %p\n"
+        "mine:\n"
+        "  %m = call ptr @__olang_scope_mine(ptr %s)\n"
+        "  ret ptr %m\n"
         "}\n\n", out);
     fputs(
-        "define linkonce_odr ptr @__olang_env_canon(ptr %env) {\n"
+        "define linkonce_odr ptr @__olang_scope_mine_slow(ptr %s0) noinline {\n"
         "entry:\n"
-        "  %none = icmp eq ptr %env, null\n"
-        "  br i1 %none, label %same, label %hdr\n"
-        "hdr:\n"
-        "  %n0 = load i64, ptr %env\n"
-        "  %mark = and i64 %n0, 4611686018427387904\n"
-        "  %iscopy = icmp ne i64 %mark, 0\n"
-        "  br i1 %iscopy, label %orig, label %same\n"
-        "orig:\n"
-        "  %bp = getelementptr i64, ptr %env, i64 2\n"
-        "  %bytes = load i64, ptr %bp\n"
-        "  %op = getelementptr i8, ptr %env, i64 %bytes\n"
-        "  %o = load ptr, ptr %op\n"
-        "  ret ptr %o\n"
-        "same:\n"
-        "  ret ptr %env\n"
+        "  %me = load ptr, ptr @__olang_self\n"
+        "  br label %loop\n"
+        "loop:\n"
+        "  %s = phi ptr [ %s0, %entry ], [ %fwd, %forward ]\n"
+        "  %op = getelementptr %olang.scope, ptr %s, i32 0, i32 3\n"
+        "  %o = load atomic ptr, ptr %op acquire, align 8\n"
+        "  %own = icmp eq ptr %o, %me\n"
+        "  br i1 %own, label %mine, label %c1\n"
+        "mine:\n"
+        "  ret ptr %s\n"
+        //reached from no other thread yet: its opener's, which is this one - a scope only ever reaches another thread
+        //once its owner is set (__olang_scope_escape, __olang_standin)
+        "c1:\n"
+        "  %unclaimed = icmp eq ptr %o, null\n"
+        "  br i1 %unclaimed, label %claim, label %c2\n"
+        "claim:\n"
+        "  store atomic ptr %me, ptr %op monotonic, align 8\n"
+        "  ret ptr %s\n"
+        "c2:\n"
+        "  %isprog = icmp eq ptr %o, @__olang_global_scope\n"
+        "  br i1 %isprog, label %prog, label %c3\n"
+        "prog:\n"
+        "  %p = load ptr, ptr @__olang_prog_scope\n"
+        "  ret ptr %p\n"
+        "c3:\n"
+        "  %isfwd = icmp eq ptr %o, @__olang_fwd_chunk\n"
+        "  br i1 %isfwd, label %forward, label %up\n"
+        "forward:\n"
+        "  %tp = getelementptr %olang.scope, ptr %s, i32 0, i32 2\n"
+        "  %fwd = load ptr, ptr %tp\n"
+        "  br label %loop\n"
+        //another thread's: the scope at the top of what it stands in for or is part of, which is closed last
+        "up:\n"
+        "  %r = phi ptr [ %s, %c3 ], [ %rp, %up ]\n"
+        "  %pp = getelementptr %olang.scope, ptr %r, i32 0, i32 5\n"
+        "  %rp = load ptr, ptr %pp\n"
+        "  %top = icmp eq ptr %rp, null\n"
+        "  br i1 %top, label %atroot, label %up\n"
+        "atroot:\n"
+        "  %rop = getelementptr %olang.scope, ptr %r, i32 0, i32 3\n"
+        "  %ro = load atomic ptr, ptr %rop acquire, align 8\n"
+        "  %rown = icmp eq ptr %ro, %me\n"
+        "  br i1 %rown, label %rootmine, label %rootprog\n"
+        "rootmine:\n"
+        "  ret ptr %r\n"
+        "rootprog:\n" //(no stand-in is made for the program's scope - __olang_standin - so none is reached here)
+        "  %risprog = icmp eq ptr %ro, @__olang_global_scope\n"
+        "  br i1 %risprog, label %prog, label %part\n"
+        "part:\n"
+        "  %f = call ptr @__olang_scope_part(ptr %r, ptr %me)\n"
+        "  ret ptr %f\n"
         "}\n\n", out);
     fputs(
-        "define linkonce_odr ptr @__olang_env_standin(ptr %env, ptr %arena, ptr %chain) {\n"
+        //this thread's part of r, made and linked the first time: the parts are a list only ever pushed onto until r closes,
+        //so finding one takes no lock
+        "define linkonce_odr ptr @__olang_scope_part(ptr %r, ptr %me) noinline {\n"
         "entry:\n"
-        "  %home = call ptr @__olang_env_home(ptr %env)\n"
-        "  %nohome = icmp eq ptr %home, null\n"
-        "  br i1 %nohome, label %same, label %memo\n"
-        //copied already by this spawn: the same copy, so two arguments naming one closure name one copy
-        "memo:\n"
-        "  %first = load ptr, ptr %chain\n"
+        "  %lp = getelementptr %olang.scope, ptr %r, i32 0, i32 4\n"
+        "  %first = load atomic ptr, ptr %lp acquire, align 8\n"
         "  br label %look\n"
         "look:\n"
-        "  %node = phi ptr [ %first, %memo ], [ %nnext, %lnext ]\n"
-        "  %atend = icmp eq ptr %node, null\n"
-        "  br i1 %atend, label %copy, label %lcheck\n"
-        "lcheck:\n"
-        "  %ndstp = getelementptr %olang.envmap, ptr %node, i32 0, i32 1\n"
-        "  %ndst = load ptr, ptr %ndstp\n"
-        "  %ismap = icmp eq ptr %ndst, null\n"
-        "  br i1 %ismap, label %lorig, label %lnext\n"
-        "lorig:\n"
-        "  %norigp = getelementptr %olang.envmap, ptr %node, i32 0, i32 2\n"
-        "  %norig = load ptr, ptr %norigp\n"
-        "  %hit = icmp eq ptr %norig, %env\n"
-        "  br i1 %hit, label %reuse, label %lnext\n"
-        "reuse:\n"
-        "  %ncopyp = getelementptr %olang.envmap, ptr %node, i32 0, i32 3\n"
-        "  %ncopy = load ptr, ptr %ncopyp\n"
-        "  ret ptr %ncopy\n"
-        "lnext:\n"
-        "  %nnextp = getelementptr %olang.envmap, ptr %node, i32 0, i32 0\n"
-        "  %nnext = load ptr, ptr %nnextp\n"
+        "  %n = phi ptr [ %first, %entry ], [ %nn, %next ]\n"
+        "  %end = icmp eq ptr %n, null\n"
+        "  br i1 %end, label %make, label %check\n"
+        "check:\n"
+        "  %nop = getelementptr %olang.scope, ptr %n, i32 0, i32 3\n"
+        "  %no = load atomic ptr, ptr %nop monotonic, align 8\n"
+        "  %hit = icmp eq ptr %no, %me\n"
+        "  br i1 %hit, label %found, label %next\n"
+        "found:\n"
+        "  ret ptr %n\n"
+        "next:\n"
+        "  %nlp = getelementptr %olang.scope, ptr %n, i32 0, i32 4\n"
+        "  %nn = load ptr, ptr %nlp\n"
         "  br label %look\n"
-        "copy:\n"
-        "  %n0 = load i64, ptr %env\n"
-        "  %n = and i64 %n0, 4611686018427387903\n"
-        "  %fp = getelementptr i64, ptr %env, i64 1\n"
-        "  %nf = load i64, ptr %fp\n"
-        "  %bp = getelementptr i64, ptr %env, i64 2\n"
-        "  %bytes = load i64, ptr %bp\n"
-        "  %room = add i64 %bytes, 8\n"
-        "  %c = call ptr @__olang_scope_alloc_a(ptr %home, i64 %room, i64 8)\n"
-        "  call void @llvm.memcpy.p0.p0.i64(ptr %c, ptr %env, i64 %bytes, i1 false)\n"
-        "  %marked = or i64 %n0, 4611686018427387904\n"
-        "  store i64 %marked, ptr %c\n"
-        "  %orig = call ptr @__olang_env_canon(ptr %env)\n"
-        "  %origp = getelementptr i8, ptr %c, i64 %bytes\n"
-        "  store ptr %orig, ptr %origp\n"
-        "  %map = call ptr @__olang_scope_alloc_a(ptr %arena, i64 32, i64 8)\n"
-        "  %mapold = load ptr, ptr %chain\n"
-        "  %map0 = getelementptr %olang.envmap, ptr %map, i32 0, i32 0\n"
-        "  store ptr %mapold, ptr %map0\n"
-        "  %map1 = getelementptr %olang.envmap, ptr %map, i32 0, i32 1\n"
-        "  store ptr null, ptr %map1\n"
-        "  %map2 = getelementptr %olang.envmap, ptr %map, i32 0, i32 2\n"
-        "  store ptr %env, ptr %map2\n"
-        "  %map3 = getelementptr %olang.envmap, ptr %map, i32 0, i32 3\n"
-        "  store ptr %c, ptr %map3\n"
-        "  store ptr %map, ptr %chain\n"
-        "  %anys = icmp eq i64 %n, 0\n"
-        "  br i1 %anys, label %fns, label %scope\n"
-        "scope:\n"
-        "  %i = phi i64 [ 0, %copy ], [ %i1, %snext ]\n"
-        "  %k = add i64 %i, 3\n"
-        "  %sp = getelementptr ptr, ptr %c, i64 %k\n"
-        "  %parent = load ptr, ptr %sp\n"
-        "  %isprog = icmp eq ptr %parent, null\n" //(the program's: the task's own reaches it - cgClosure)
-        "  br i1 %isprog, label %snext, label %stand\n"
-        "stand:\n"
-        "  %sub = call ptr @__olang_scope_alloc_a(ptr %parent, i64 24, i64 8)\n"
+        "make:\n"
+        "  %f = call ptr @malloc(i64 48)\n"
+        "  call void @__olang_alloc_check(ptr %f)\n"
+        "  store %olang.scope zeroinitializer, ptr %f\n"
+        "  %fo = getelementptr %olang.scope, ptr %f, i32 0, i32 3\n"
+        "  store atomic ptr %me, ptr %fo monotonic, align 8\n"
+        "  %fp = getelementptr %olang.scope, ptr %f, i32 0, i32 5\n"
+        "  store ptr %r, ptr %fp\n"
+        "  %fl = getelementptr %olang.scope, ptr %f, i32 0, i32 4\n"
+        "  br label %push\n"
+        "push:\n"
+        "  %old = load atomic ptr, ptr %lp monotonic, align 8\n"
+        "  store ptr %old, ptr %fl\n"
+        "  %pair = cmpxchg ptr %lp, ptr %old, ptr %f release monotonic\n"
+        "  %ok = extractvalue { ptr, i1 } %pair, 1\n"
+        "  br i1 %ok, label %done, label %push\n"
+        "done:\n"
+        "  ret ptr %f\n"
+        "}\n\n"
+        //a closure is being made capturing s, or a Call adapter for an instance in it (cgClosure): s may now reach
+        //another thread, so it is claimed for this one - its opener, or the task a stand-in was made for
+        "define linkonce_odr void @__olang_scope_escape(ptr %s) alwaysinline {\n"
+        "entry:\n"
+        "  %op = getelementptr %olang.scope, ptr %s, i32 0, i32 3\n"
+        "  %o = load atomic ptr, ptr %op monotonic, align 8\n"
+        "  %un = icmp eq ptr %o, null\n"
+        "  br i1 %un, label %claim, label %done\n"
+        "claim:\n"
+        "  %me = load ptr, ptr @__olang_self\n"
+        "  store atomic ptr %me, ptr %op monotonic, align 8\n"
+        "  br label %done\n"
+        "done:\n"
+        "  ret void\n"
+        "}\n\n", out);
+    fputs(
+        //a task's private stand-in for parent, made in parent itself on the spawner's thread: a closure the task makes may
+        //hold it past the join, where it forwards to parent (__olang_scope_merge), so it lives as long as parent does.
+        //None for the program's scope: a task builds into its worker's own part of that (null, which the task's
+        //trampoline reads as the program's scope as the worker reaches it)
+        "define linkonce_odr ptr @__olang_standin(ptr %parent0) {\n"
+        "entry:\n"
+        "  %p = call ptr @__olang_scope_mine(ptr %parent0)\n"
+        "  %op = getelementptr %olang.scope, ptr %p, i32 0, i32 3\n"
+        "  %o = load atomic ptr, ptr %op monotonic, align 8\n"
+        "  %isprog = icmp eq ptr %o, @__olang_global_scope\n"
+        "  br i1 %isprog, label %prog, label %make\n"
+        "prog:\n"
+        "  ret ptr null\n"
+        "make:\n"
+        "  %sub = call ptr @__olang_scope_alloc_a(ptr %p, i64 48, i64 8)\n"
         "  store %olang.scope zeroinitializer, ptr %sub\n"
-        "  store ptr %sub, ptr %sp\n"
-        "  %m = call ptr @__olang_scope_alloc_a(ptr %arena, i64 24, i64 8)\n"
-        "  %old = load ptr, ptr %chain\n"
-        "  %m0 = getelementptr %olang.merge, ptr %m, i32 0, i32 0\n"
-        "  store ptr %old, ptr %m0\n"
-        "  %m1 = getelementptr %olang.merge, ptr %m, i32 0, i32 1\n"
-        "  store ptr %parent, ptr %m1\n"
-        "  %m2 = getelementptr %olang.merge, ptr %m, i32 0, i32 2\n"
-        "  store ptr %sub, ptr %m2\n"
-        "  store ptr %m, ptr %chain\n"
-        "  br label %snext\n"
-        "snext:\n"
-        "  %i1 = add i64 %i, 1\n"
-        "  %smore = icmp ult i64 %i1, %n\n"
-        "  br i1 %smore, label %scope, label %fns\n"
-        "fns:\n"
-        "  %anyf = icmp eq i64 %nf, 0\n"
-        "  br i1 %anyf, label %out, label %fn\n"
-        "fn:\n"
-        "  %j = phi i64 [ 0, %fns ], [ %j1, %fn ]\n"
-        "  %w = mul i64 %j, 2\n"
-        "  %w1 = add i64 %w, %n\n"
-        "  %w2 = add i64 %w1, 4\n"
-        "  %ep = getelementptr ptr, ptr %c, i64 %w2\n"
-        "  %inner = load ptr, ptr %ep\n"
-        "  %innerc = call ptr @__olang_env_standin(ptr %inner, ptr %arena, ptr %chain)\n"
-        "  store ptr %innerc, ptr %ep\n"
-        "  %j1 = add i64 %j, 1\n"
-        "  %fmore = icmp ult i64 %j1, %nf\n"
-        "  br i1 %fmore, label %fn, label %out\n"
+        "  %pp = getelementptr %olang.scope, ptr %sub, i32 0, i32 5\n"
+        "  store ptr %p, ptr %pp\n"
+        "  ret ptr %sub\n"
+        "}\n\n", out);
+    fputs(
+        //P2: every part other threads made of a scope closing - their destructors ahead of the scope's own, their chunks
+        //with its: spliced into what the scope holds (which it then reclaims as ever), each part's header freed. Takes and
+        //gives back the scope's lists as values, so that the scope's header never escapes into the call
+        "define linkonce_odr { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr %first, ptr %dh0, ptr %h0, ptr %t0) noinline {\n"
+        "entry:\n"
+        "  br label %part\n"
+        "part:\n"
+        "  %n = phi ptr [ %first, %entry ], [ %nn, %chunked ]\n"
+        "  %dh = phi ptr [ %dh0, %entry ], [ %dh2, %chunked ]\n"
+        "  %h = phi ptr [ %h0, %entry ], [ %h2, %chunked ]\n"
+        "  %t = phi ptr [ %t0, %entry ], [ %t2, %chunked ]\n"
+        "  %nlp = getelementptr %olang.scope, ptr %n, i32 0, i32 4\n"
+        "  %nn = load ptr, ptr %nlp\n"
+        "  %ndp = getelementptr %olang.scope, ptr %n, i32 0, i32 1\n"
+        "  %nd = load ptr, ptr %ndp\n"
+        "  %nodt = icmp eq ptr %nd, null\n"
+        "  br i1 %nodt, label %dtored, label %dwalk\n"
+        "dwalk:\n"
+        "  %dc = phi ptr [ %nd, %part ], [ %dnx, %dwalk ]\n"
+        "  %dnp = getelementptr %olang.dtornode, ptr %dc, i32 0, i32 0\n"
+        "  %dnx = load ptr, ptr %dnp\n"
+        "  %dend = icmp eq ptr %dnx, null\n"
+        "  br i1 %dend, label %dsplice, label %dwalk\n"
+        "dsplice:\n"
+        "  store ptr %dh, ptr %dnp\n"
+        "  br label %dtored\n"
+        "dtored:\n"
+        "  %dh2 = phi ptr [ %dh, %part ], [ %nd, %dsplice ]\n"
+        "  %nhp = getelementptr %olang.scope, ptr %n, i32 0, i32 0\n"
+        "  %nh = load ptr, ptr %nhp\n"
+        "  %noch = icmp eq ptr %nh, null\n"
+        "  br i1 %noch, label %chunked, label %csplice\n"
+        "csplice:\n"
+        "  %ntp = getelementptr %olang.scope, ptr %n, i32 0, i32 2\n"
+        "  %nt = load ptr, ptr %ntp\n"
+        "  %ntn = getelementptr %olang.chunk, ptr %nt, i32 0, i32 0\n"
+        "  store ptr %h, ptr %ntn\n"
+        "  %wasempty = icmp eq ptr %h, null\n"
+        "  %tn = select i1 %wasempty, ptr %nt, ptr %t\n"
+        "  br label %chunked\n"
+        "chunked:\n"
+        "  %h2 = phi ptr [ %h, %dtored ], [ %nh, %csplice ]\n"
+        "  %t2 = phi ptr [ %t, %dtored ], [ %tn, %csplice ]\n"
+        "  call void @free(ptr %n)\n"
+        "  %more = icmp ne ptr %nn, null\n"
+        "  br i1 %more, label %part, label %out\n"
         "out:\n"
-        "  ret ptr %c\n"
-        "same:\n"
-        "  ret ptr %env\n"
+        "  %r0 = insertvalue { ptr, ptr, ptr } undef, ptr %dh2, 0\n"
+        "  %r1 = insertvalue { ptr, ptr, ptr } %r0, ptr %h2, 1\n"
+        "  %r2 = insertvalue { ptr, ptr, ptr } %r1, ptr %t2, 2\n"
+        "  ret { ptr, ptr, ptr } %r2\n"
         "}\n\n", out);
     fputs(
         //walks the open-scope chain down to %mark, waiting for each join block's tasks before reclaiming
@@ -1618,7 +1676,7 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //itself - the node escapes into a list reachable from the scope, so it can prove nothing about it.
         "define linkonce_odr void @__olang_scope_register_dtor(ptr %scope0, ptr %instance, ptr %dtorFn) {\n"
         "entry:\n"
-        "  %scope = call ptr @__olang_scope_resolve(ptr %scope0)\n"
+        "  %scope = call ptr @__olang_scope_mine(ptr %scope0)\n"
         "  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 24, i64 8)\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %oldhead = load ptr, ptr %dheadptr\n"
@@ -1631,23 +1689,6 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  store ptr %node, ptr %dheadptr\n"
         "  ret void\n"
         "}\n\n"
-        //P2: the scope a folded stand-in forwards to, followed as far as it goes (__olang_fwd_chunk)
-        "define linkonce_odr ptr @__olang_scope_resolve(ptr %scope) {\n"
-        "entry:\n"
-        "  br label %loop\n"
-        "loop:\n"
-        "  %s = phi ptr [ %scope, %entry ], [ %next, %step ]\n"
-        "  %headptr = getelementptr %olang.scope, ptr %s, i32 0, i32 0\n"
-        "  %head = load ptr, ptr %headptr\n"
-        "  %isfwd = icmp eq ptr %head, @__olang_fwd_chunk\n"
-        "  br i1 %isfwd, label %step, label %done\n"
-        "step:\n"
-        "  %nextptr = getelementptr %olang.scope, ptr %s, i32 0, i32 2\n"
-        "  %next = load ptr, ptr %nextptr\n"
-        "  br label %loop\n"
-        "done:\n"
-        "  ret ptr %s\n"
-        "}\n\n"
         //P2: folds a task's sub-scope back into the scope it stands for, on the spawner's thread, after
         //the join - so the only thread that ever bumps a given arena is the one that owns it. Nothing is
         //copied or moved: the two chunk lists are relinked, and the sub-scope's dtor nodes (which live in
@@ -1655,18 +1696,26 @@ static void emitScopeRuntime(FILE* out, bool san) {
         //ones that were already there when it was spawned - the same LIFO order a sequential call gives.
         //The chunk splice is O(1) off the recorded tail; the dtor splice walks the sub-scope's own nodes
         //only, of which there is one per destructor-bearing instance the task constructed.
-        //A dst that was itself a stand-in folded already is followed to what it forwards to (a closure a task handed back
-        //may hold one, and a later task's stand-in then has it for its parent): spliced into the forwarder, the chunks and
-        //destructors would sit in a header no one closes, and it would stop forwarding.
-        "define linkonce_odr void @__olang_scope_merge(ptr %dst0, ptr %src) {\n"
+        //What it folds into is what it stands in for as this thread reaches it now: one that was itself a stand-in folded
+        //already is followed to what it forwards to (a closure a task handed back may hold one, and a later task's
+        //stand-in then has it for its parent) - spliced into the forwarder, the chunks and destructors would sit in a
+        //header no one closes, and it would stop forwarding. Null: no stand-in (the program's scope, __olang_standin)
+        "define linkonce_odr void @__olang_scope_merge(ptr %src) {\n"
         "entry:\n"
-        "  %dst = call ptr @__olang_scope_resolve(ptr %dst0)\n"
+        "  %none = icmp eq ptr %src, null\n"
+        "  br i1 %none, label %ret, label %go\n"
+        "ret:\n"
+        "  ret void\n"
+        "go:\n"
+        "  %parentp = getelementptr %olang.scope, ptr %src, i32 0, i32 5\n"
+        "  %parent = load ptr, ptr %parentp\n"
+        "  %dst = call ptr @__olang_scope_mine(ptr %parent)\n"
         "  %sdheadptr = getelementptr %olang.scope, ptr %src, i32 0, i32 1\n"
         "  %sdhead = load ptr, ptr %sdheadptr\n"
         "  %nodtors = icmp eq ptr %sdhead, null\n"
         "  br i1 %nodtors, label %chunks, label %dwalk\n"
         "dwalk:\n"
-        "  %dcur = phi ptr [ %sdhead, %entry ], [ %dnext, %dwalk ]\n"
+        "  %dcur = phi ptr [ %sdhead, %go ], [ %dnext, %dwalk ]\n"
         "  %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0\n"
         "  %dnext = load ptr, ptr %dnextptr\n"
         "  %dattail = icmp eq ptr %dnext, null\n"
@@ -1708,28 +1757,73 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  store ptr @__olang_fwd_chunk, ptr %fheadptr\n"
         "  %ftailptr = getelementptr %olang.scope, ptr %src, i32 0, i32 2\n"
         "  store ptr %dst, ptr %ftailptr\n"
+        "  %fownp = getelementptr %olang.scope, ptr %src, i32 0, i32 3\n"
+        "  store atomic ptr @__olang_fwd_chunk, ptr %fownp release, align 8\n"
         "  ret void\n"
         "}\n\n"
         //walks and calls this scope's own dtor-node list first, LIFO - most-recently-registered first, the order a stack
         //unwind would give - then gives each of its chunks to the pool (O8b) and resets the scope to empty
+        "", out);
+    fputs(
+        //(P2: first, every part other threads made of it - __olang_scope_fold_parts)
         "define linkonce_odr void @__olang_scope_close(ptr %scope) alwaysinline {\n"
         "entry:\n"
+        "  %fptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 4\n"
+        "  %f = load ptr, ptr %fptr\n"
+        "  %hasf = icmp ne ptr %f, null\n"
+        "  br i1 %hasf, label %parts, label %start\n"
+        "parts:\n"
+        "  %pdp = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
+        "  %pd = load ptr, ptr %pdp\n"
+        "  %php = getelementptr %olang.scope, ptr %scope, i32 0, i32 0\n"
+        "  %ph = load ptr, ptr %php\n"
+        "  %ptp = getelementptr %olang.scope, ptr %scope, i32 0, i32 2\n"
+        "  %pt = load ptr, ptr %ptp\n"
+        "  %folded = call { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr %f, ptr %pd, ptr %ph, ptr %pt)\n"
+        "  %fd = extractvalue { ptr, ptr, ptr } %folded, 0\n"
+        "  store ptr %fd, ptr %pdp\n"
+        "  %fh = extractvalue { ptr, ptr, ptr } %folded, 1\n"
+        "  store ptr %fh, ptr %php\n"
+        "  %ft = extractvalue { ptr, ptr, ptr } %folded, 2\n"
+        "  store ptr %ft, ptr %ptp\n"
+        "  store ptr null, ptr %fptr\n"
+        "  br label %start\n"
+        "start:\n"
         "  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1\n"
         "  %dhead = load ptr, ptr %dheadptr\n"
         "  store ptr null, ptr %dheadptr\n"
         "  %dempty = icmp eq ptr %dhead, null\n"
         "  br i1 %dempty, label %chunks, label %dwalk\n"
+        //C9a: a destructor's own top level is this scope - its instance's, alive until every destructor has run - so
+        //what it builds through its instance's fields lives where they lead, and is reclaimed with the rest below. A
+        //destructor it registered there (a value it built) runs as it returns, as one in a function's own scope would,
+        //before the next of this scope's: those nodes are put in front of the rest of the walk
         "dwalk:\n"
-        "  %dcur = phi ptr [ %dhead, %entry ], [ %dnext, %dwalk ]\n"
+        "  %dcur = phi ptr [ %dhead, %start ], [ %dnext, %dcont ], [ %dmore, %dlink ]\n"
         "  %instptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 1\n"
         "  %inst = load ptr, ptr %instptr\n"
         "  %fnptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 2\n"
         "  %fn = load ptr, ptr %fnptr\n"
-        "  call void %fn(ptr %inst)\n"
+        "  call void %fn(ptr %inst, ptr %scope)\n"
         "  %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0\n"
         "  %dnext = load ptr, ptr %dnextptr\n"
         //no free: the node lives in this scope's own arena and goes back to the pool with its chunk below
-
+        "  %dmore = load ptr, ptr %dheadptr\n"
+        "  %dnone = icmp eq ptr %dmore, null\n"
+        "  br i1 %dnone, label %dcont, label %dsplice\n"
+        "dsplice:\n"
+        "  store ptr null, ptr %dheadptr\n"
+        "  br label %dtail\n"
+        "dtail:\n"
+        "  %dt = phi ptr [ %dmore, %dsplice ], [ %dtn, %dtail ]\n"
+        "  %dtnp = getelementptr %olang.dtornode, ptr %dt, i32 0, i32 0\n"
+        "  %dtn = load ptr, ptr %dtnp\n"
+        "  %dtend = icmp eq ptr %dtn, null\n"
+        "  br i1 %dtend, label %dlink, label %dtail\n"
+        "dlink:\n"
+        "  store ptr %dnext, ptr %dtnp\n"
+        "  br label %dwalk\n"
+        "dcont:\n"
         "  %datend = icmp eq ptr %dnext, null\n"
         "  br i1 %datend, label %chunks, label %dwalk\n"
         "chunks:\n"
@@ -2700,9 +2794,9 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san) {
         "declare i32 @raise(i32)\n"
         "declare i64 @write(i32, ptr, i64)\n"
         "declare ptr @dlsym(ptr, ptr)\n"
-        //code, environment, whether a test is running, the value a jump out of the thread carried (0: none), and the
-        //program's scope as the caller reaches it (O1b/P2: a task's private stand-in)
-        "%%olang.stackrun = type { ptr, ptr, i32, i32, ptr }\n"
+        //code, environment, whether a test is running, the value a jump out of the thread carried (0: none), the
+        //program's scope as the caller reaches it (O1b: a worker's part of it), and who the caller is (P2)
+        "%%olang.stackrun = type { ptr, ptr, i32, i32, ptr, ptr }\n"
         //glibc's own answer to the least stack a thread may have - its guard, its static TLS and PTHREAD_STACK_MIN
         //- found at run time, as Rust's std finds it: a private symbol, so never linked against
         "@__olang_minstack_name = linkonce_odr unnamed_addr constant [23 x i8] c\"__pthread_get_minstack\\00\"\n"
@@ -2714,17 +2808,14 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san) {
         "  %%attr = alloca [%zu x i8], align 16\n"
         "  %%tid = alloca i64\n"
         "  %%run = alloca %%olang.stackrun, align 8\n"
-        //P2: f's environment as its thread reaches it - a copy whose every captured scope is a stand-in, folded back
-        //once the thread has finished (__olang_env_standin): made from, and gone with, a scope of this call's own
-        "  %%tmp = alloca %%olang.scope, align 8\n"
-        "  store %%olang.scope zeroinitializer, ptr %%tmp\n"
-        "  %%chain = alloca ptr, align 8\n"
-        "  store ptr null, ptr %%chain\n"
-        "  %%env2 = call ptr @__olang_env_standin(ptr %%env, ptr %%tmp, ptr %%chain)\n"
         "  %%codep = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 0\n"
         "  store ptr %%code, ptr %%codep\n"
         "  %%envp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 1\n"
-        "  store ptr %%env2, ptr %%envp\n"
+        "  store ptr %%env, ptr %%envp\n"
+        //P2: the thread is the caller as far as any scope can tell - the caller waits for it, so the two never build at once
+        "  %%selfp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 5\n"
+        "  %%me = load ptr, ptr @__olang_self\n"
+        "  store ptr %%me, ptr %%selfp\n"
         "  %%tgt = load ptr, ptr @__olang_jmp_target\n"
         "  %%intest = icmp ne ptr %%tgt, null\n"
         "  %%t = zext i1 %%intest to i32\n"
@@ -2771,27 +2862,6 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san) {
         "started:\n"
         "  %%tv = load i64, ptr %%tid\n"
         "  %%jr = call i32 @pthread_join(i64 %%tv, ptr null)\n"
-        "  %%mh = load ptr, ptr %%chain\n"
-        "  %%nom = icmp eq ptr %%mh, null\n"
-        "  br i1 %%nom, label %%folded, label %%fold\n"
-        "fold:\n"
-        "  %%m = phi ptr [ %%mh, %%started ], [ %%mn, %%mstep ]\n"
-        "  %%mdp = getelementptr %%olang.merge, ptr %%m, i32 0, i32 1\n"
-        "  %%md = load ptr, ptr %%mdp\n"
-        "  %%msp = getelementptr %%olang.merge, ptr %%m, i32 0, i32 2\n"
-        "  %%ms = load ptr, ptr %%msp\n"
-        "  %%isfold = icmp ne ptr %%md, null\n" //(a node recording an environment's copy folds nothing)
-        "  br i1 %%isfold, label %%foldone, label %%mstep\n"
-        "foldone:\n"
-        "  call void @__olang_scope_merge(ptr %%md, ptr %%ms)\n"
-        "  br label %%mstep\n"
-        "mstep:\n"
-        "  %%mnp = getelementptr %%olang.merge, ptr %%m, i32 0, i32 0\n"
-        "  %%mn = load ptr, ptr %%mnp\n"
-        "  %%mend = icmp eq ptr %%mn, null\n"
-        "  br i1 %%mend, label %%folded, label %%fold\n"
-        "folded:\n"
-        "  call void @__olang_scope_close(ptr %%tmp)\n"
         "  %%left = load i32, ptr %%leftp\n"
         "  %%stayed = icmp eq i32 %%left, 0\n"
         "  br i1 %%stayed, label %%done, label %%onward\n"
@@ -2813,11 +2883,15 @@ static void emitStackRuntime(FILE* out, const char* arch, bool san) {
         "entry:\n"
         "  %%jb = alloca [%zu x i8], align 16\n"
         "  call void @__olang_alt_stack()\n"
-        //the program's scope is reached as the caller reaches it - through a task's stand-in when a task called (P2):
-        //this thread starts with the real one, which another task, or the thread the join lets go on, may be using
+        //the program's scope is reached as the caller reaches it - through a worker's part of it when a task called (O1b):
+        //this thread starts with the real one, which another task, or the thread the join lets go on, may be using - and
+        //every scope as the caller would (P2): the caller is parked until this thread is done
         "  %%progp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 4\n"
         "  %%prog = load ptr, ptr %%progp\n"
         "  store ptr %%prog, ptr @__olang_prog_scope\n"
+        "  %%selfp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 5\n"
+        "  %%caller = load ptr, ptr %%selfp\n"
+        "  store ptr %%caller, ptr @__olang_self\n"
         "  %%codep = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 0\n"
         "  %%code = load ptr, ptr %%codep\n"
         "  %%envp = getelementptr %%olang.stackrun, ptr %%run, i32 0, i32 1\n"

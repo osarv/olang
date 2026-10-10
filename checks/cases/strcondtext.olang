@@ -1,0 +1,14 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: a conditional of the receiver's text and a literal builds the literal where the text lives (E28): refused in
+# Str's own body, where codegen held a null scope
+type Bag struct(name String&) {
+    name
+}
+fn (b Bag&) Str() String {
+    name := b.name if b.name.Len() > 0 else "anon"
+    return $name
+}
+fn main() ? {
+    println($Bag(""))
+    println($Bag("x"))
+}

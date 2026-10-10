@@ -1,0 +1,24 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# also: compilation failed with 1 error
+# B11: one error per cause - a ':=' judging where a scope argument puts its instance, then the statement storing it
+# there, reached the same fault at the same argument and reported it twice (review chk5)
+type Info struct(n I64) { n }
+type Env struct(r Info&) {
+    r
+}
+type Holder struct(e Env) {
+    e
+}
+fn build(c mut Holder&) {
+    for k in range 3 {
+        local := Info(k + 100)
+        x := Env&c(local)
+        c.e = x
+    }
+}
+fn main() ? {
+    g := Info(1)
+    c mut Holder& = Holder(Env(g))
+    build(c)
+    println($c.e.r.n)
+}

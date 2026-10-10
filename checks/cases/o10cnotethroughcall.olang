@@ -1,0 +1,22 @@
+# check: fail note: 'base' is declared here, in a block that closes first - declare it where 'keep' lives
+# also: 'path' is declared here, in a block that closes first - declare it where 'keep' lives
+# B11/O10c: a value reaching a longer-lived list through a call that keeps its arguments names every argument made in
+# a block that closes first - each is a fault (study 6's r14: one note, for the first argument only)
+type Module struct(name String&, path String&) {
+    name
+    path
+}
+fn parse(name String&, path String&) Module { return Module(name, path) }
+fn load(dir String&, keep mut List<Module>&) {
+    base := $dir "/"
+    for i in range 2 {
+        path := $base $i
+        m := parse(base, path)
+        keep.Push(m)
+    }
+}
+fn main() ? {
+    keep := List<Module>()
+    load("src", keep)
+    println($keep.Len())
+}

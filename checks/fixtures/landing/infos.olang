@@ -1,0 +1,6 @@
+# for resultviews.olang: a module whose function is called module-qualified
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+fn Size(i Info&) I64 { return i.Len }

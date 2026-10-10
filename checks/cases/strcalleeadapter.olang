@@ -1,0 +1,36 @@
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# E11c/O12: a helper handed a part of the receiver with a Call method passes it where a function value is wanted, and the
+# adapter (E31) is made where the part lives: refused
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type Getter struct(k I64) {
+    k
+}
+fn (g Getter&) Call() I64 { return g.k * 2 }
+fn applyI(f fn() I64) I64 { return f() }
+fn peek(g Getter&) I64 { return applyI(g) }
+type Bag struct(head mut Node&) {
+    head
+    g Getter& = Getter(21)
+}
+fn (b Bag&) Str() String {
+    return $peek(b.g)
+}
+fn main() ? {
+    b := Bag(Node(4, null))
+    s := $b
+    churn()
+    println(s)
+}
