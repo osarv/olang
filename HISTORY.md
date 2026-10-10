@@ -13167,7 +13167,12 @@ native): a 3-element walk 195 -> 66 instructions (for-in), 178 -> 63 (indexed); 
 1.27-1.40 -> 1.15-1.20 s, the same output. Long Lists unchanged: `bench/sum` push 1M 14,722,441 -> 14,722,313
 instructions, a walk 3,134,428 -> 3,123,535, `Iter().Fold` 3,114,072 -> 3,116,108; timed 20M pushes 269-291 -> 262-293
 ms. What is left of the gap to C is the compiler's: a 24-byte scope header cleared and closed per loop turn, and the
-outer `lists[r & 63]` taking the bit-position path past the first chunk.
+outer `lists[r & 63]` taking the bit-position path past the first chunk. **It turned a silent use-after-free into a crash**: shared.olang's
+C2d/C2g test (`c3Holder`, a constructor pushing onto its field's List inside a `for`) has the shape of the scope
+sanitizer's `fuzz/repro/scopectornested.olang` - the chunks a nested block's Push makes are built in that block and
+reclaimed at its end - and passed by luck; with the array of chunks now made by the second chunk, inside the loop, the
+reclaimed storage is the chunk array itself, and the test segfaults. The fix is the compiler's (wt-rv3fix's C2g: a
+constructor's nested blocks build into the instance), with which the test passes, `-d -s` included.
 
 **`List.IndexOf(x)`, `Remove(x)`, `SwapRemove(i)`** (detaching an item from its carrier's list was a hand loop and a
 `RemoveAt`). By `==` (E10a). **Decided**: `IndexOf` fails with the default error on a miss, as `Find` and `FindIndex` do
