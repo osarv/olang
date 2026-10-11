@@ -47,6 +47,9 @@ stronger and more efficient." Any method is fair. The measure is capability per 
 Refined the same day: "the differentiation and pruning part is maybe incorrectly phrased. Use any method. Do more with
 less, continuously." So the goal is that sentence. Differentiation and pruning are examples of methods, not the
 definition.
+And: "you may grow it in size and use more compute, it's not like the amount of compute has to stay constant. Any
+good organism will grow in resource usage." Total size and compute may grow. Both capability and capability per unit of
+compute should keep rising.
 **The long-term plan (the user, 2026-10-11):** "a settling network with recursive self improvement for
 superintelligence". How I approach it, as told to the user: oversight is designed in from the start, not added later.
 - A self-improvement step is a proposal: evaluated in a sandbox against fixed benchmarks, kept only when it is better.
