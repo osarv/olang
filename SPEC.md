@@ -5147,9 +5147,10 @@ owner whose reach outlives the slot's or is it:
 slot it declares a borrow or a borrowed copy (O32).
 
 A conditional (E28) or a `match` (S12b) whose values are of an owning type held by value is a compile-time error
-wherever it stands: it gives the value it chooses as a copy (E28), a second owner of what that value owns - or, given
-to a reference, a copy built where the reference lands, while what it was chosen from still owns the same objects. A
-reference to one of them, repointed in a branch, says which: `r mut T& = a`, then `if not c { r = b }`.
+wherever it stands. Owners made there are given to nothing yet - each case's owner is assigned in its own branch. An
+existing one would be given as a copy (E28), a second owner of what it owns - or, given to a reference, a copy built
+where the reference lands, while what it was chosen from still owns the same objects; a reference to one of them,
+repointed in a branch, says which: `r mut T& = a`, then `if not c { r = b }`.
 
 An own array slot's owner is a new array: `Array<T>(n)` - its elements zero values, or a fill that is `null`, zero bits,
 or, for elements referring nowhere (numbers, values holding no reference), any value - and, for elements referring
@@ -5251,7 +5252,11 @@ owned result is an owner only in a move position (`x := f()`, an own slot, an ow
 `x := f(...)`. A `catch default` giving a value of an owning type held by value is a compile-time error.)*
 
 **O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), and by each call giving a
-borrowed result (O37). It is **on** the objects read - a borrow's object, each object a borrowed copy's own references
+borrowed result (O37). A part of an owned object - an inline field or array, an own array's element - **borrowed where
+it is** reads the slot as well, whatever the part's type holds: lent by reference (E12c - to a reference parameter, a
+receiver, a reference local or field, a task's argument), sliced or viewed (E16a, E32b), walked by `for` (S9), or
+rendered by a join (E11b) after a later operand that runs code - a join reads its pieces once every operand is evaluated.
+Only a value read out of the part - a copy, a number - is read at once and carries nothing. It is **on** the objects read - a borrow's object, each object a borrowed copy's own references
 hold - and so on their types, and it has **roots** (O39). It lasts from where it is made to the last use, along every
 path from there, of anything **derived** from it: the borrow or the borrowed copy, a reference read out of it, a value
 holding such a reference, a closure capturing one, and each local holding one of these, until that local is given

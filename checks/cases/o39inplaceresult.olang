@@ -1,0 +1,19 @@
+# check: fail error[O39]: assigning 'h.cur' may release the In3 borrowed on line 16
+# O39 (own7 F1): a result borrowed from an inline field lent where it is holds the loan on the owned object
+type Plain struct(k I64) {
+    k
+}
+type In3 struct(k I64) {
+    pl Plain = Plain(k)
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn same(p Plain&) Plain&p { return p }
+fn main() ? {
+    h mut H3& = H3()
+    h.cur = In3(5)
+    x := same(h.cur.pl)
+    h.cur = null
+    println($x.k)
+}

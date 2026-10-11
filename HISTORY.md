@@ -15388,3 +15388,29 @@ and e3ded09's 1,441M (whose rule held for a later argument that ran code, which 
 with destructors carry two N3b test blocks. On 79bf11c, own seeds 9000-9059 give 22 findings, every one an own6 shape;
 fixed, none. Left as they are, listed in section 17.7: `x = v.Me()` into an existing local, C2d against O34's reach, and
 the O10c note's wording in the review's `e3`.
+
+### own7: a part borrowed where it is (§8.8 O38, O34, E12c, E16a, E32b, E11b, 2026-10-11)
+
+The fifth review (`/home/user/review/own7`, at d8c942b) found the previous round holding and one defect class that had
+been there all along: a part of an owned object borrowed where it is took no loan. The loan walk asked the part's type -
+"a part that holds no reference carries nothing of its base" - which is the rule for a part read as a copy, and was
+applied as well to a part whose storage is lent: to a reference parameter or a receiver, sliced or viewed into a local,
+walked by `for`, handed to a task, and an own array's element lent the same way. Releasing the owner under such a
+borrow was accepted; the sanitizer, valgrind and TSan all saw freed memory read, and the task's case also wrote a freed
+region when its stand-in was folded in at the join.
+
+The coordinator's decision was that the consumer decides: where a part's storage is borrowed in place, the operand is
+walked as a place, and a value read stays transient. E12c already had one function every borrow of a value into a
+reference passes through, so the mark is set there; slices and views are their own operations and walk their base as a
+place. The place walk also had to pass item 5 of the previous round, which returned early for an operand whose type holds
+no reference - right for a value, wrong for a part lent by reference; without that the slice into a local was still
+accepted. The task's join needed nothing of its own: with the argument's loan held until the join, no release can free
+the region before the fold, which TSan confirmed on the legal variants.
+
+Writing the cases turned up the same mistake one level out: a join's pieces are rendered once every operand is evaluated
+(decision 49), so `$h.cur " " $f(h)` reads the object after `f` released it, while the walk treated the piece as a lone
+`$x`, rendered at once. A piece reading a reference or an array is now held across the later operands that run code, and
+one released before it is evaluated still compiles. The conditional message the review flagged now says what is wrong
+for owners made there. Everything here only adds loans; one shape accepted before is refused now, a part borrowed after a
+releasing call in the same statement, because a statement's loans are not ordered - recorded with the other
+over-rejections.

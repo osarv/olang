@@ -493,6 +493,46 @@ Prelude := (
     "}\n"
     "fn oholder(x OPlain&) OHolder { return OHolder(x) }\n"
     "fn otwo(x OPlain&) (OPlain&x, I64) { return x, 7 }\n"
+    "# own7 F1: an owned object's inline parts, and an own array's plain elements, lent where they are\n"
+    "type OPart struct(k I64) {\n"
+    "    k\n"
+    "}\n"
+    "type OIn struct(k I64) {\n"
+    "    pl OPart = OPart(k)\n"
+    "    data Array<I64, 8> = Array<I64, 8>()\n"
+    "}\n"
+    "type OH7 struct() {\n"
+    "    cur own mut OIn&\n"
+    "    buf own mut Array<OPart>&\n"
+    "}\n"
+    "fn o7f(h mut OH7&, p mut OPart&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return p.k\n"
+    "}\n"
+    "fn o7g(h mut OH7&, a mut Array<I64>&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return a[0] + a[7]\n"
+    "}\n"
+    "fn (p mut OPart&) O7Bump(h mut OH7&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return p.k\n"
+    "}\n"
+    "fn o7b(h mut OH7&, p mut OPart&) I64 {\n"
+    "    h.buf = null\n"
+    "    churn()\n"
+    "    return p.k\n"
+    "}\n"
+    "fn o7rel(h mut OH7&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return 1\n"
+    "}\n"
+    "fn o7rd(p mut OPart&) I64 { return p.k }\n"
+    "fn o7use(p OPart&, out mut Array<I64>&) { out[0] = p.k }\n"
+    "fn o7same(p OPart&) OPart&p { return p }\n"
     "fn omkf(x OPlain&) fn() I64 { return fn() I64 { return opl(x) } }\n"
     "fn owithFirst(x OPlain&) own mut Array<OHolder&>& {\n"
     "    a own mut Array<OHolder&>& = Array<OHolder&>(1)\n"
@@ -1066,10 +1106,11 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
     e := g.name("e")
     back := ($ind "if " $n ".Len() > 0 and " $n "[0] != null {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n
              " = Array<mut Node&>(1)\n" $ind "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
-    if g.chance(55) {
-        w := g.r(10)
+    if g.chance(60) {
+        w := g.r(12)
         if w < 4 { return g.own4Op(h, ind, v) }
-        return g.own5Op(h, ind, v) if w < 6 else g.own6Op(h, ind, v)
+        if w < 6 { return g.own5Op(h, ind, v) }
+        return g.own6Op(h, ind, v) if w < 9 else g.own7Op(h, ind, v)
     }
     k := g.r(15 if g.dtors else 11)
     if k == 0 { return $ind "ofillAt(" $n ", " $v ")\n" $back }
@@ -1299,6 +1340,56 @@ fn (g mut SG&) own6Op(h String&, ind String&, v I64) String& {
     }
     call := "ojoinOwned" if k == 8 else "ojoinValue"
     return $ind "for i in range 1 {\n" $ind "    " $x " := try " $call "(" $v " + i) catch { break }\n" $ind "}\n"
+}
+
+# the shape the review of own6's fixes found (own7 F1): an owned object's inline field or array, or an own array's plain
+# element, lent where it is - to a reference parameter, a receiver, a slice or a view kept in a local, a for-in, a task,
+# a borrowed result, a join's piece rendered after a later operand ran - while the owner is released (refused: O39,
+# O41); and accepted, copies and numbers read out of the same parts, and lends no release meets
+fn (g mut SG&) own7Op(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    hh := g.name("hh")
+    x := g.name("x")
+    k := g.r(13)
+    mk := ($ind $hh " mut OH7& = OH7()\n" $ind $hh ".cur = OIn(" $v ")\n" $ind $hh ".cur.data[0] = " $v " + 1\n" $ind $hh
+           ".cur.data[7] = " $v " + 2\n" $ind $hh ".buf = Array<OPart>(300, OPart(" $v " + 3))\n")
+    rel := $ind $hh ".cur = null\n" $ind "churn()\n"
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    if k == 0 { return $ind "{\n" $mk $ind $x " := o7f(" $hh ", " $hh ".cur.pl)\n" $use $ind "}\n" }
+    if k == 1 { return $ind "{\n" $mk $ind $x " := o7g(" $hh ", " $hh ".cur.data)\n" $use $ind "}\n" }
+    if k == 2 { return $ind "{\n" $mk $ind $x " := " $hh ".cur.pl.O7Bump(" $hh ")\n" $use $ind "}\n" }
+    s := g.name("s")
+    if k == 3 or k == 4 {
+        view := $hh ".cur.data[0:8]" if k == 3 else $hh ".cur.data as Array<I64, 8>&"
+        return $ind "{\n" $mk $ind $s " := " $view "\n" $rel $ind $x " := " $s "[0] + " $s "[7]\n" $use $ind "}\n"
+    }
+    if k == 5 {
+        return ($ind "{\n" $mk $ind $x " := 0\n" $ind "for y in " $hh ".cur.data {\n" $ind "    " $hh ".cur = null\n" $ind
+                "    churn()\n" $ind "    " $x " += y\n" $ind "}\n" $use $ind "}\n")
+    }
+    if k == 6 { return $ind "{\n" $mk $ind $x " := o7b(" $hh ", " $hh ".buf[3])\n" $use $ind "}\n" }
+    if k == 7 {
+        out := g.name("out")
+        return ($ind "{\n" $mk $ind $out " := Array<I64>(1)\n" $ind "join {\n" $ind "    spawn o7use(" $hh ".cur.pl, " $out ")\n"
+                $ind "    " $hh ".cur = null\n" $ind "    churn()\n" $ind "}\n" $ind $x " := " $out "[0]\n" $use $ind "}\n")
+    }
+    if k == 8 {
+        return ($ind "{\n" $mk $ind $s " := o7same(" $hh ".cur.pl)\n" $rel $ind $x " := " $s ".k\n" $use $ind "}\n")
+    }
+    if k == 9 {    # copies and numbers read out of the parts, and slices used before the release: accepted
+        return ($ind "{\n" $mk $ind $s " := " $hh ".cur.pl\n" $ind $x " := " $hh ".cur.pl.k + o7rd(" $hh ".cur.pl) + " $hh
+                ".cur.data[0:8][7]\n" $rel $ind $x " += " $s ".k\n" $use $ind "}\n")
+    }
+    t := g.name("t")
+    if k == 11 {    # a join's piece rendered after a later operand released what it reads (refused: O39)
+        return ($ind "{\n" $mk $ind $t " := $" $hh ".cur.data \" \" $o7rel(" $hh ")\n" $ind $x " := " $t ".Len()\n" $use $ind
+                "}\n")
+    }
+    if k == 12 {    # ...released before the piece is evaluated: accepted, it renders the null
+        return ($ind "{\n" $mk $ind $t " := $o7rel(" $hh ") \" \" $" $hh ".cur\n" $ind $x " := " $t ".Len()\n" $use $ind "}\n")
+    }
+    return ($ind "{\n" $mk $ind $x " := o7rd(" $hh ".buf[2])\n" $ind "for y in " $hh ".cur.data { " $x " += y }\n" $ind $hh
+            ".buf = null\n" $rel $use $ind "}\n")
 }
 
 # a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a

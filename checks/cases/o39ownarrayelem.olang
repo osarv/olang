@@ -1,0 +1,18 @@
+# check: fail error[O39]: calling 'f' may release the Array<Plain> borrowed on line 17
+# O39 (own7 F1): an element of an own array lent where it is borrows the buffer - a callee replacing or releasing the
+# buffer under it is refused. This is the hazard of a growable array's element lent to a function that grows it
+type Plain struct(k I64) {
+    k
+}
+type HB struct() {
+    buf own mut Array<Plain>&
+}
+fn f(h mut HB&, p mut Plain&) I64 {
+    h.buf = null
+    return p.k
+}
+fn main() ? {
+    h mut HB& = HB()
+    h.buf = Array<Plain>(300, Plain(9))
+    println($f(h, h.buf[3]))
+}

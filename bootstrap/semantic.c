@@ -7784,6 +7784,7 @@ bool valueRefsAdmitStores(struct type t);
 static bool splitBorrowJudgedElsewhere = false;
 enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct type target) {
     if (!target.structMAlloc || op->type.structMAlloc || !OperandIsLvalue(op)) return TYPE_FIT_OK;
+    op->inPlaceBorrow = true; //O38 (own7 F1): borrowed where it is, not read as a copy
     if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
@@ -10929,6 +10930,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             bool borrowed = !argDeterminesScope(arg) && OperandIsLvalue(arg) && ctx && ctx->hasOwnScope;
             if (!argDeterminesScope(arg) && !borrowed) continue;
             if (borrowed) { //C2d: the callee is handed the very storage
+                if (!arg->type.structMAlloc) arg->inPlaceBorrow = true; //O38 (own7 F1)
                 struct var* root = lvalueRootVar(arg);
                 if (root && !root->owner) root->slotBorrowed = true;
                 if (root && canonicalVar(root)->ownValue) arg->ownValueBorrow = canonicalVar(root); //O38 (own5 F2)
@@ -14872,6 +14874,7 @@ static bool refAndTemporary(struct operand* ref, struct operand* v) {
 //E28: "a if c else b" - c decides which one is evaluated; both must have one type, a literal adapting to the other
 static int constCondValue(struct operand* cond, struct syntax* condNode);
 static bool syntaxReadsConstVar(struct syntax* s);
+static void ownCondValuesCheck(struct operand* op, struct list* vals);
 static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     //G26: a condition reading a constant variable picks its value per instantiation - the other is not checked
     if (currentBindings && syntaxReadsConstVar(partSntx(s, 2))) {
@@ -14923,14 +14926,35 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
             Err(ifTok, ERR_COND_BRANCH_TYPES, &a->type, &b->type);
         }
     }
-    //O34 (own6 N2): values owning objects are chosen by copying one, which would be a second owner (or a borrow built as
-    //a copy) - a reference to one, repointed in a branch, says which
-    if (TypeIsOwnValue(t)) Err(ifTok, ERR_OWN_VALUE_IN_COND, &t, &t);
     struct operand* op = operandNew(ifTok, OPERATION_COND, t);
     ListAdd(&op->args, &c);
     ListAdd(&op->args, &a);
     ListAdd(&op->args, &b);
+    struct list vals = ListInit(sizeof(struct operand*));
+    ListAdd(&vals, &a);
+    ListAdd(&vals, &b);
+    ownCondValuesCheck(op, &vals);
+    ListDestroy(vals);
     return op;
+}
+
+//O34 (own6 N2): a conditional's or a match's values of an owning type held by value - existing owners are chosen by
+//copying one, a second owner of what it owns (or a borrow built as a copy): a reference to one, repointed in a branch,
+//says which; owners made there (own7: a constructor call, an owned result, an enum case) are given nowhere yet - each
+//case's owner is assigned in its own branch. A "take" among them is the own walk's to name (ERR_OWN_IN_COND at it)
+static bool opIsCtorCall(struct operand* op);
+static bool opIsEnumCtor(struct operand* op);
+static bool ownResultCall(struct operand* op);
+static void ownCondValuesCheck(struct operand* op, struct list* vals) {
+    if (!TypeIsOwnValue(op->type)) return;
+    bool made = true;
+    for (int i = 0; i < vals->len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(vals, i);
+        if (v->opType == OPERATION_TAKE) return;
+        if (!(opIsCtorCall(v) || opIsEnumCtor(v) || ownResultCall(v) || ownValueCall(v))) made = false;
+    }
+    if (made) Err(op->tok, ERR_OWN_IN_COND);
+    else Err(op->tok, ERR_OWN_VALUE_IN_COND, &op->type, &op->type);
 }
 
 //a hidden local holding x, declared by a statement appended to out - x evaluated where that statement runs. A
@@ -23465,7 +23489,7 @@ struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s) {
     ListAdd(&op->comprBody, &m);
     struct list vals = SemanticMatchValues(op);
     op->type = matchValueType(ctx, &vals);
-    if (TypeIsOwnValue(op->type)) Err(op->tok, ERR_OWN_VALUE_IN_COND, &op->type, &op->type); //O34 (own6 N2), as a conditional
+    ownCondValuesCheck(op, &vals); //O34 (own6 N2), as a conditional's
     return op;
 }
 
@@ -27032,11 +27056,33 @@ static void ownLoansOfBlockDeep(struct list* block, struct list* out);
 //rendering). place: op is where an assignment stores, used until the store whatever it reads
 //(own5: only what a value keeps - see ownLoansIn's arguments)
 static bool ownKeptOnly;
+//(a join's pieces, in order - its nested joins' flattened)
+static void ownJoinPieces(struct operand* op, struct list* out) {
+    if (op->opType != OPERATION_CONCAT) {
+        ListAdd(out, &op);
+        return;
+    }
+    for (int i = 0; i < op->args.len; i++) ownJoinPieces(*(struct operand**)ListGetIdx(&op->args, i), out);
+}
+//(whether evaluating op runs a call - a function's, a method's, an operator's, a function value's - anywhere in it)
+static bool ownOpCalls(struct operand* op) {
+    if (!op) return false;
+    if (op->opType == OPERATION_FUNCCALL || op->callee) return true;
+    for (int i = 0; i < op->args.len; i++) if (ownOpCalls(*(struct operand**)ListGetIdx(&op->args, i))) return true;
+    for (int i = 0; i < op->chainOperands.len; i++) if (ownOpCalls(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
+    return op->comprBody.len > 0 || op->catchClauses.len > 0;
+}
 static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
     if (!op) return;
     //(own6: a value whose type can hold no reference keeps nothing of what it was made from - a count, a flag, a number
     //read through a borrow, "return b.buf.Len()" - whatever it borrowed while it was computed)
-    if (ownKeptOnly && !op->type.unknown && !typeCarriesScopes(op->type) && !TypeIsGeneric(op->type)) return;
+    //(own7 F1: not a part borrowed where it is - E12c's reference to it, a slice or a view of it, leads into what it is a
+    //part of)
+    if (ownKeptOnly && !place && !op->inPlaceBorrow && !op->type.unknown && !typeCarriesScopes(op->type) && !TypeIsGeneric(op->type))
+        return;
+    //(own7 F1: a value lvalue borrowed where it is - by a reference parameter, a receiver, a reference local, a task - is a
+    //place: what it is a part of is borrowed, whatever the part's type holds; only a value read out of it is transient)
+    if (op->inPlaceBorrow) place = true;
     if (!transient) {
         for (int i = 0; i < op->ownCopyReads.len; i++) { //O32: a borrowed copy made - a borrow of each object it holds
             struct operand* r = *(struct operand**)ListGetIdx(&op->ownCopyReads, i);
@@ -27074,7 +27120,7 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
     case OPERATION_MEMBER:
         if (op->args.len)
             ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out,
-                       !place && (transient || !typeCarriesScopes(op->type)), place);
+                       transient || (!place && !typeCarriesScopes(op->type)), place);
         return;
     case OPERATION_INDEX:
         //(a reference element of an own array refers where the slot's container keeps it, not into the buffer: what is
@@ -27083,7 +27129,7 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
             struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
             struct var* R = ownArrayRegionOf(b);
             bool outside = R && (op->type.structMAlloc || op->type.bType == BASETYPE_FUNC);
-            ownLoansIn(b, out, !place && (transient || outside || !typeCarriesScopes(op->type)), place);
+            ownLoansIn(b, out, transient || (!place && (outside || !typeCarriesScopes(op->type))), place);
         }
         for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
         return;
@@ -27092,6 +27138,40 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
     case OPERATION_IS:
     case OPERATION_STR_OF:
         transient = true;
+        break;
+    case OPERATION_CONCAT: { //(own7: a join's pieces are rendered once every operand is evaluated, E11b - a reference's, or
+        //an array's elements, read then: held across the later operands that run code as a borrow is, an array value where
+        //it is; one no later operand runs code past is rendered as soon as it would be alone)
+        struct list pieces = ListInit(sizeof(struct operand*));
+        ownJoinPieces(op, &pieces);
+        for (int i = 0; i < pieces.len; i++) {
+            struct operand* a = *(struct operand**)ListGetIdx(&pieces, i);
+            struct operand* x = a->opType == OPERATION_STR_OF && a->args.len ? *(struct operand**)ListGetIdx(&a->args, 0) : NULL;
+            bool later = false;
+            for (int j = i + 1; x && j < pieces.len && !later; j++) later = ownOpCalls(*(struct operand**)ListGetIdx(&pieces, j));
+            if (later && (typeCarriesScopes(x->type) || x->type.bType == BASETYPE_ARRAY)) {
+                ownLoansIn(x, out, false, !x->type.structMAlloc && x->type.bType == BASETYPE_ARRAY);
+                continue;
+            }
+            ownLoansIn(a, out, false, false);
+        }
+        ListDestroy(pieces);
+        return;
+    }
+    case OPERATION_SLICE: //(own7 F1: a slice, or an "as" view, borrows its base where it is - a place, as transient as it is)
+    case OPERATION_AS:
+        if (op->args.len && (op->opType == OPERATION_SLICE || op->type.structMAlloc)) {
+            struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+            if (!b->type.structMAlloc) {
+                ownLoansIn(b, out, transient, true);
+                for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
+                ownLoansIn(op->callee, out, false, false);
+                for (int i = 0; i < op->catchClauses.len; i++)
+                    ownLoansIn(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt, out, false, false);
+                return;
+            }
+        }
+        transient = false;
         break;
     default:
         transient = false;

@@ -774,6 +774,9 @@ struct operand {
     bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
     struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
                                 //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
+    bool inPlaceBorrow; //O38 (own7 F1): this value lvalue is borrowed where it is (E12c) - by a reference parameter, a
+                        //receiver, a reference local or field, a task's argument - not read as a copy: a part of an owned
+                        //object borrowed so borrows the object, whatever the part's type holds
     struct list ownCopyReads; //O32/O38: a borrowed copy's initializer - a read of each own field of what it copies, made
                               //borrows, whose loans the copy holds (checker only: never evaluated)
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in

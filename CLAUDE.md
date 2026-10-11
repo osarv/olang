@@ -5008,6 +5008,17 @@ and literals made only of such, never existing storage anywhere in it) - it is
   `try`, a catch clause or a clause's statements leave - the owner-passing loop 1,570M -> 1,223M instructions (e3ded09
   1,441M). Scope fuzzer: 79bf11c 22 findings in 60 own seeds (all own6 shapes), now none. Left as they are, listed:
   `x = v.Me()` into a local, C2d against O34's reach, O10c's note in `e3`.
+- **own7: a part borrowed where it is (§8.8 O38, O34, E12c, E16a, E32b, E11b, 2026-10-11; the coordinator's decision,
+  details mine, docs/own.md section 18).** **F1** (older than the own work's reviews): an owned object's inline field or
+  array, or an own array's plain element, borrowed in place - by reference (E12c: a reference parameter, a receiver, a
+  reference local, a task's argument), sliced or viewed, walked by `for` - took no loan, since a member's base was walked
+  as transient whenever the part's type held no reference; releasing the owner under it was accepted. The consumer now
+  decides: E12c marks the lvalue it borrows (`inPlaceBorrow`), a slice's or a view's base is a place, and a place walk
+  keeps the base's loans (item 5 does not cut it); only a value read stays transient. Found on the way, the same class: a
+  join renders its pieces after every operand is evaluated, so a piece reading a reference or an array is held across
+  the later operands that run code. Owners made in a conditional get O34's "gives an own slot nothing yet". Only
+  tightens; one new over-rejection, a part borrowed after a releasing call in one statement. Fuzzer: d8c942b 13 findings
+  in 60 own seeds (all own7 shapes), now none.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

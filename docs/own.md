@@ -1397,3 +1397,70 @@ rebuilt under it; that seed again: none).
 - C2d refuses an own-reference owner made from a reference to an owner value local even where O34's reach would allow
   it (the review's `c1`, `c2`, `c4`, `c6`).
 - The O10c note "the index is held here" points at the wrong cause in the review's `e3`.
+
+## 18. own7: a part borrowed where it is (2026-10-11)
+
+The fifth review (`/home/user/review/own7`, at d8c942b) found everything section 17 added holding, and one older defect
+class, present on e3ded09 too.
+
+### 18.1 F1: an inline part of an owned object, borrowed in place, took no loan (O38, E12c)
+
+`f(h, h.cur.pl)` and `g(h, h.cur.data)` to a reference parameter, `h.cur.pl.Bump(h)` as a receiver, `s :=
+h.cur.data[0:8]` and `v := h.cur.data as Array<I64, 8>&`, `for x in h.cur.data`, `spawn useP(h.cur.pl, out)` - and an
+own array's plain element, `f(h, h.buf[3])` - each with the owner released under it: by the callee, the loop's body, the
+spawner inside the join. `ownLoansIn` walked a member's or an element's base as transient whenever the part's type held
+no reference, which is right for a part read as a copy (`r := h.cur.pl`, a number) and wrong for one whose storage is
+borrowed where it is: no loan on `h.cur`'s object reached the statement's loans, O39 or the task's (O41).
+
+**Decided** (the coordinator's call): the consumer decides. A value lvalue is marked where E12c borrows it
+(`inPlaceBorrow`, set in `borrowLifetimeFits` - every fit of a value into a reference target: an argument, a receiver,
+a reference local, field or element, a task's argument, the hidden reference a `for` walks - and where an argument binds
+a callee's scope variable by borrowing); the base of a slice and of an `as` view whose result is a reference is walked as
+a place. A place walk keeps the base of a member or an element (`place`), and item 5's early return (17.2) does not cut
+it - a part borrowed where it is is a reference in all but its type. Only a value read stays transient, so `r :=
+h.cur.pl` and numbers compile as before. The five reproducers are refused (O39, O41 for the task), and so are a result
+borrowed from such a part (`x := same(h.cur.pl)`, which item 5 had let through) and an array literal of references to one.
+
+**The join in f1e** (TSan's second report, `__olang_join_tasks` writing into the freed region): the task's stand-in for
+the In3's region is folded into that region at the join, so the region freed inside the join block was written. With the
+argument's loan held until the join (O41), every release inside the block - directly, in deferred code run before the
+wait, through another name - is refused, and the region lives past the fold. Checked rather than assumed: the legal
+variants (the release after the join; a loop breaking out of the join) run clean under `-r` and `-s`, and the illegal
+ones (inside the block, in deferred code, in a nested block) are refused.
+
+**Found on the way, the same class, older:** a join's pieces are rendered once every operand is evaluated (E11b, decision
+49 - Go's rule), so `$h.cur " " $f(h)` read `h.cur`'s object after `f` released it - the rendering's operand was walked as
+transient like a lone `$x`, which is rendered at once. A piece reading a reference, or an array's elements, is now a
+borrow across the later operands that run code (`ownJoinPieces`, `ownOpCalls`); one no later operand runs code past -
+`$f(h) " " $h.cur` - is rendered as soon as it would be alone, and stays accepted.
+
+**The message (the coordinator's small fix):** `h.cur = Inner(1) if c else Inner(2)` was refused with 17.3's "chosen by
+copying" wording, which is for existing owner values. Owners made there - constructor calls, enum cases, owned results -
+get O34's "gives an own slot nothing yet - assign each case's owner in its own branch"; a `take` among the values is left
+to the own walk, which names it at the take.
+
+**Nothing accepted before is accepted now that was refused** - the change only adds loans; item 5 now applies to fewer
+operands, never more. One over-rejection is new: a statement's loans are not ordered, so a slice or view argument after a
+releasing call in the same statement (`g(f(h), h.cur.data[0:8])`) is refused, as any loan in it already was.
+
+### 18.2 Tests and the fuzzer
+
+`checks/cases`: `o39inplacearg`, `o39inplacereceiver`, `o39inplaceslice`, `o39inplaceview`, `o39inplaceforin`,
+`o39ownarrayelem` (the growable array's shape: an element lent to a function that replaces the buffer), `o41inplacetask`,
+`o39inplaceresult`, `o39joinpiece`, and `o34condmade` for the message - every F1 case compiles on d8c942b.
+
+The fuzzer's own mode writes the shapes (`own7Op`): a part lent to a releasing callee by reference, as a receiver and as
+an array, a slice and a view kept across a release, a for-in releasing in its body, an own array's element lent, a
+task, a borrowed result, a join's piece before a releasing operand - and, accepted, copies and numbers read out of the
+parts, lends no release meets, and a join releasing before its piece. On d8c942b, own seeds 9400-9459: 180 scenarios run,
+540 refused, **13 findings**, every one an own7 shape (one of them the join's piece). Fixed, the same seeds: 164 run,
+556 refused, **none**; own seeds 9500-9699: 554 run, 1846 refused, none; mixed seeds 9800-9879 (before the join's
+shapes were added): 375 run, 585 refused, none.
+
+### 18.3 Over-rejections left as they are
+
+- A `take` swap, `a, b = take b, take a` and `x.c, x.d = take x.d, take x.c`, is refused (O34).
+- `return pass(a, 0, take x)` is O10c's error: an owner local's reach is its block.
+- From 17.7: `x = v.Me()` into an existing local, C2d against O34's reach, O10c's note in the review's `e3`.
+- New (18.1): a statement's loans are not ordered, so a part borrowed after a releasing call in the same statement is
+  refused.
