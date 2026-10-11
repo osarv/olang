@@ -708,6 +708,16 @@ because what it finds about structure feeds the refactor.
   in the prelude. The scanner (port M1) still waits.
   Usage: weekly 0.41 at 01:07 CEST, about 1.5%/h with one agent against a target of about 0.6%/h. So keep one agent
   and leave gaps.
+- 04:45 CEST (2026-10-11): own phase 2a is done on wt-own (079921e, verified). It covers:
+  - own arrays;
+  - small regions: a single allocation for 2 KB or less, and releases bounded at 256 deep;
+  - O36/O37: owning parameters and owned results;
+  - owner value locals with borrowed copies (QJ1);
+  - O31 narrowed to locals and results;
+  - per-run fuzz directories.
+  The fuzzer found nothing before or after. A soundness review runs (/home/user/wt/rvown3 @ 079921e ->
+  /home/user/review/own3). Merge only if it is clean. Usage: weekly 0.47 at 04:36 CEST, about 1.7%/h, far above the
+  ~0.6%/h target. So after this review, leave a gap before phase 2b.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
