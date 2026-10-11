@@ -336,7 +336,8 @@ test "P4: a task cancelled in RecvUntil fails into its join, or takes its own de
         tok.Cancel()
         Close(c)                             # what is buffered is still taken, then a Recv fails
     }
-    assert (v == 7 and w == -3) or (v == -1 and w == 7)
+    # Recv may take the 7 first; RecvUntil then sees the cancel or the close, whichever it notices first
+    assert (v == 7 and w == -3) or ((v == -1 or v == -2) and w == 7)
 }
 
 # a channel of any element type - here a struct, carried by value, and text, each across tasks
