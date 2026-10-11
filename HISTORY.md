@@ -15543,9 +15543,13 @@ split. Syntax errors go through M2's `diag`/`msgs`, with the line table `source`
   so its branch has a group as an `else if` does.
 - **An error that ends an item is not held.** L21's limit and a block never closed abandon the item, and whatever held
   group they were met in goes with it, so they are reported outside every group (`diag.ErrorUnheld`).
-- **L21 counts as stage 0 counts it** - a level per block, per operand, per `not`, and per binary link once its node is
-  built - and a statement met at the limit is reported at its first token, so the 20,000th level is reported where
-  stage 0 reports it. The parser runs inside `os.RunOnStack` with 1 GB, as the compiler will.
+- **L21 counts as stage 0 counts it**: a level per block, per operand (entered before its first token is read), per
+  `not`, per text piece, per binary link once its node is built, and per comparison of a chain; a prefix operator
+  other than `not` costs none. A clause-less `try` statement asks two levels at its start, as stage 0's reading of it
+  as an expression does, and one with clauses or a store target one. A statement met at the limit is reported at its
+  first token, but only one that nests nothing further is dropped with its item; `break`, `return`, `error` and the
+  like keep their item, as in stage 0. So which items the limit ends is stage 0's. Where in the item the L21 is said is
+  not compared (below). The parser runs inside `os.RunOnStack` with 1 GB, as the compiler will.
 - A trait method's `mut` is a nameless receiver whose type is only the permission.
 
 **Acceptance.** `bootstrap/oracle/astdump.c` walks stage 0's tree with every build-decided branch parsed
@@ -15554,12 +15558,23 @@ the diagnostics; `compiler/tools/dump.olang ast` prints the new tree the same wa
 tree back as source (`compiler/tools/unparse.olang`: no parentheses added, a branch that had held diagnostics written
 as its own text), checks that the text holds the file's tokens, parses it again and requires the same tree.
 `compiler/tools/astdiff.sh` runs both over every `.olang` file of the repository - `make astdiff`, part of `make
-verify`, about 5 seconds once the tools are built. Normalized, and only this: each file's rows sorted (the trees hold
-the same nodes in different shapes); stage 0's diagnostics reduced to `error RULE LINE:COL` and each item's first; in
-the round trip, statement ends, a trailing comma before `)` or `]`, and the split of `<<`/`>>`/`>=`/`>>=` into single
-angles. Clean on all 1,260 files of the repository, study2's data (`big.olang`, the deep files up to 300,000 levels)
-and generated files nesting blocks, operands and statements of every kind at and around 20,000 levels: every syntax
-error of every `checks/cases` program has stage 0's rule and position. The modules' own tests (operators, list
+verify`, about 5 seconds once the tools are built. A tool that is missing, or prints fewer files than it was given,
+is a failure (a first version passed with the oracle unbuilt, since a pipeline's status is its last command's), and a
+diagnostic's rule is read as several (`T17, T19, C2`) or none (a parse error) on both sides.
+Normalized, and only this: each file's rows sorted (the trees hold the same nodes in different shapes); stage 0's
+diagnostics reduced to `error RULE LINE:COL` and each item's first; an L21 inside an item kept whole dropped, and an
+L21 that ends an item compared without its position - stage 0 says L21 where the first form it tries reaches the
+limit, often an expression reading of a statement it then drops, so its position records stage 0's backtracking, not
+the program; in the round trip, statement ends, a trailing comma before `)` or `]`, and the split of
+`<<`/`>>`/`>=`/`>>=` into single angles. Clean on all 1,262 files of the repository and study2's data: every syntax
+error of every `checks/cases` program has stage 0's rule and position. **Nesting, checked at the limit with both
+parsers built for a limit of 40** (the oracle from a copy of stage 0 with `MAX_NESTING` 40, the dump with `-D
+MaxNesting=40`): 38 statement forms, 33 expression forms and 25 more statement forms, each at 36 to 40 levels -
+clean; and 19 statement forms nested 1,000 and 4,000 levels under the real limit - clean. At 20,000 levels stage 0
+is too slow to compare (it is superlinear in depth: the 4,000-level files took 10 minutes), so the new parser alone
+was checked on the same 19 forms at, one past and two past 20,000 levels: 16 files parse with no L21 and their trees
+written back read as themselves; 41 end their item with one L21 (each form past the limit, and the three whose
+statement costs more levels than its nesting - `(x)`, `not`, `try` - at it). The modules' own tests (operators, list
 grammar, angle splitting, recovery, salvage, L21 on a 1 GB stack, held branches, the trait receiver) run under `make
 test`. Measured on `big.olang` (4.6 MB, the machine loaded): scanning 97-103 MB/s, scanning and parsing 41-44 MB/s,
 106-113 ms, against stage 0's tokenizer and parser at about 7 s.
@@ -15572,6 +15587,21 @@ test`. Measured on `big.olang` (4.6 MB, the machine loaded): scanning 97-103 MB/
   churn.
 - **The oracle segfaulted on deep files** - stage 0's parser on the default 8 MB stack. It runs on a 1 GB thread now,
   as the compiler's `main` does.
+- **Stage 0's parse memo was poisoned by the limit (L21), fixed.** syntax.c memoizes `parseExprPostfix` and
+  `parseBlock` by position, and reads a statement in several forms, some a level deeper than others (`try X` and
+  `match X` read first as expressions). A parse the limit cut short in a deeper form - failed, or ended early - was
+  reused at a shallower depth where the text nests within the limit, so `try x[0] = f()` at 37 levels was read as an
+  assignment to `try x[0]`, and a `match` with a guard at 37 levels lost its whole function. A memo slot now records
+  its depth and whether a level was refused inside it (counted through memo hits too), and is not reused shallower.
+  Only programs nesting about 20,000 levels deep could see it; the 40-level comparison found it and pins it (a checks
+  case would need stage 0 to parse 20,000 levels, tens of minutes).
+- **The round trip's writer was quadratic in nesting**: four spaces of indentation a level on every line made the text
+  grow with the square of the depth - 648 MB at 4,000 levels, and killed for memory at 20,000. Indentation stops at 64
+  levels now (`unparse.MaxIndent`), meaningless to a reader of the tree: 36 MB at 4,000, 92 MB at 10,000.
+- **Recorded, not changed (stage 0)**: its parser is superlinear in nesting depth (about k^2.2: 19 files of 1,000
+  and 4,000 levels took 10 minutes, so a 20,000-level file would take tens of minutes), from re-reading statements in
+  several forms; the self-hosted parser is
+  linear. Stage 0 takes fixes only (QB), and no real program nests that deep.
 - **Found, not fixed (stage 0, semantic.c, not minimized).** In `Parser.varDecl`, `a, b T,` in a constructor (a comma
   where a field ends) returns `ast.Stmt.Var(span, ast.VarDecl(Array<NameId>(1, name), Array<Span>(1, sp), v.Ty, ...))`
   from inside an `if` of a method whose result is borrowed from its receiver (`ast.Stmt&p`), `v` from a `try` call. Built

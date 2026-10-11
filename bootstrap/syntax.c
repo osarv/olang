@@ -25,7 +25,9 @@ typedef struct syntaxContext* SyntaxCtx;
 //expression - and every block and lambda inside it - again, which nests: an expression statement holding a lambda
 //holding one ... was parsed 3^depth times. Positions are only meaningful for one shape of the token list, so an entry
 //records the list's version (+1, so a zeroed slot is empty) and is ignored once the parser has split a token since.
-struct memoSlot { int version; int end; struct syntax* result; };
+//depth and limited: where the parse was read, and whether the nesting limit refused a level in it - such a result is
+//not the answer at a shallower depth, where the same text may nest within the limit (L21)
+struct memoSlot { int version; int end; int depth; bool limited; struct syntax* result; };
 struct parseMemo { struct memoSlot* slots; int cap; };
 
 struct syntaxContext {
@@ -49,6 +51,7 @@ struct syntaxContext {
     struct parseMemo postfixMemo; //parseExprPostfix's results, by position
     struct parseMemo blockMemo;   //parseBlock's
     int depth;                    //nesting of expressions and blocks being parsed - see nestEnter
+    int limitRefusals;            //how many levels nestEnter has refused - a memoized parse one cut short is kept apart
     bool tooDeep;                 //the current top-level item went past MAX_NESTING, and that was reported
     bool noAngleOps;              //G21: a constant argument is being read inside a type-argument list, where a bare
                                   //comparison or shift would be read across the list's own ">" - they end it there
@@ -85,6 +88,7 @@ static struct syntax* attempt(SyntaxCtx sc, struct syntax* (*parse)(SyntaxCtx)) 
 struct token peekTok(SyntaxCtx sc);
 static bool nestEnter(SyntaxCtx sc, int levels) {
     if (sc->depth + levels <= MAX_NESTING) { sc->depth += levels; return true; }
+    sc->limitRefusals++;
     if (!sc->tooDeep) ErrSyntax(peekTok(sc), ERR_NESTING, MAX_NESTING);
     sc->tooDeep = true;
     return false;
@@ -106,14 +110,21 @@ static struct memoSlot* memoSlotAt(struct parseMemo* m, int pos) {
 static struct syntax* memoized(SyntaxCtx sc, struct parseMemo* m, struct syntax* (*parse)(SyntaxCtx)) {
     int pos = TokenGetCursor(sc->tc);
     struct memoSlot* slot = memoSlotAt(m, pos);
-    if (slot->version == TokenListVersion(sc->tc) + 1) {
+    //a statement is read in several forms, some a level deeper than others (an expression's "try" or "match"): a
+    //parse the limit cut short there - failed, or ended early - is read again here, where the text may nest within it
+    if (slot->version == TokenListVersion(sc->tc) + 1 && !(slot->limited && sc->depth < slot->depth)) {
+        if (slot->limited) sc->limitRefusals++; //the parse that reads this answer was limited too
         TokenSetCursor(sc->tc, slot->end);
         return slot->result;
     }
+    int refusals = sc->limitRefusals;
+    int depth = sc->depth;
     struct syntax* s = attempt(sc, parse);
     slot = memoSlotAt(m, pos); //the parse may have grown the table
     slot->version = TokenListVersion(sc->tc) + 1;
     slot->end = TokenGetCursor(sc->tc);
+    slot->depth = depth;
+    slot->limited = sc->limitRefusals != refusals;
     slot->result = s;
     return s;
 }

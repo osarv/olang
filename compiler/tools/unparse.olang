@@ -6,6 +6,7 @@ import "../source"
 import "../token"
 import "../ast"
 import "../diag"
+import "std/math"
 
 # the declarations of a file, written as source; a branch the build may decide that met a syntax error (diags holds it)
 # is written as the text it was
@@ -32,9 +33,14 @@ fn (w mut writer&) name(n source.NameId) { w.b.Push(w.names.Text(n)) }
 
 fn (w mut writer&) span(sp source.Span) { w.b.Push(w.text[sp.Start:sp.End]) }
 
+# a line is indented four spaces a level up to MaxIndent levels, and no further: the text of a deep nesting would
+# otherwise grow with the square of its depth (1.6 GB at L21's 20,000 levels), and indentation means nothing to a reader
+# of the tree
+MaxIndent I64 = 64
+
 fn (w mut writer&) nl() {
     w.b.PushChar('\n')
-    for i in range w.ind { w.b.Push("    ") }
+    for i in range math.Min(w.ind, MaxIndent) { w.b.Push("    ") }
 }
 
 # ---- declarations ----

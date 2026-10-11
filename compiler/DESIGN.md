@@ -618,8 +618,10 @@ with the installed one; `make bootstrap` is section 5.
      it normalizes: each file's rows are sorted (the two trees hold the same nodes in different shapes); stage 0's
      diagnostics are reduced to `error RULE LINE:COL`, its notes dropped, and only each item's first is compared; in
      the round trip, statement ends, a trailing comma before `)` or `]`, and the split of `<<`, `>>`, `>=`, `>>=` into
-     single angles are not compared. Clean on all 1,260 files, study2's data and generated nestings at and around
-     20,000 levels.
+     single angles are not compared; an L21 inside an item kept whole is dropped, and one that ends an item is compared
+     without its position. A missing tool or a short output is a failure. Clean on all 1,262 files and study2's data;
+     nesting is checked against stage 0 with both built for a limit of 40 (96 forms at 36-40 levels) and at 1,000 and
+     4,000 levels, and the new parser alone at 20,000 (stage 0 is superlinear in depth).
 3. **Diagnostic goldens.**
    - Stage 0's output on every `checks/cases` program is captured: its `path:line:col: error[RULE]: text` rows.
    - The new compiler must match the rule and position everywhere, and the text wherever a case pins it.

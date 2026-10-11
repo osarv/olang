@@ -5062,11 +5062,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   `bootstrap/oracle/astdump.c` and `compiler/tools/dump.olang ast|roundtrip` (`compiler/tools/unparse.olang` writes a
   tree back as source), compared by `compiler/tools/astdiff.sh` (`make astdiff`, in `make verify`): every declaration
   and statement by kind and span, each item's first syntax error by rule and position, and each tree written back
-  reading as itself - clean on all 1,260 files, study2's data and nestings at 20,000 levels. 41-44 MB/s scan and parse
+  reading as itself - clean on all 1,262 files and study2's data; nesting checked against stage 0 at a limit of 40 for
+  96 statement and expression forms and at 1,000 and 4,000 levels, and the new parser alone at 20,000 (stage 0 is
+  superlinear in depth); an L21 that ends an item is compared without its position (stage 0's comes from forms it tried
+  and dropped); a missing tool or a short output fails. 41-44 MB/s scan and parse
   on study2's `big.olang`. **Found on the way**: stage 0's code generator crashed on a conditional whose values are
   calls giving a `String` value (E28, fixed, `checks/cases/condcallvalue`); the oracle segfaulted on deep files (it runs
   on a 1 GB thread now); a stage 0 constructor temporary built inside an `if` and returned through a borrowed result
-  came back as garbage in the parser - worked around (a helper method), not minimized (HISTORY.md).
+  came back as garbage in the parser - worked around (a helper method), not minimized (HISTORY.md); stage 0's parse
+  memo reused a parse the limit had cut short at a shallower depth, misreading statements near the limit (L21, fixed).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

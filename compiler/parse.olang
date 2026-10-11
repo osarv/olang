@@ -55,10 +55,12 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     depth I64 = 0                      # L21
     tooDeep Bool = false
+    limitAt I64 = -1                   # in a try statement, the token where a level first took the last one (L21)
     unclosed Bool = false              # an unclosed block ended at a declaration: the item ends where it stands
     listTry I32 = -1                   # where a try stands that is a whole destructuring's, return's or spawn's value: its
                                        # clause may give one default a result (R9a)
     ItemStarts List<I32>               # where each top-level item begins, in order - nested ones in an if's branches too
+    ItemKept List<Bool>                # beside ItemStarts: whether the item parsed whole (an L21 may be said in one that did)
     vars List<source.NameId>           # the current item's introduced type variables (G8b), which "match T" takes
     exprs List<ast.Expr&>              # nodes being gathered into lists, nested lists on top
     stmts List<ast.Stmt&>
@@ -207,22 +209,25 @@ fn (p mut Parser&) enter() ? Fail {
         }
         error Fail.SYNTAX
     }
+    if p.depth + 1 == MaxNesting and p.limitAt < 0 { p.limitAt = p.pos }
     p.depth++
 }
 
 fn (p mut Parser&) leave() { p.depth-- }
 
-# L21 where a statement starts: one that starts with a word reads an operand there, the one after "try" past it, so the
-# level it needs is wanted - and the limit said - at that token
-fn (p mut Parser&) stmtRoom() ? Fail {
-    if p.depth < MaxNesting or p.peek() == token.Tok.Iden { return }
-    i I64 = 1 if p.peek() == token.Tok.Try else 0
-    if not p.tooDeep {
-        p.tooDeep = true
-        t := p.lookTok(i)
-        p.diags.ErrorUnheld(diag.Where.Span(p.file, I64(t.Start), I64(t.End)), msgs.Nesting(MaxNesting))
-    }
-    error Fail.SYNTAX
+# L21 where a statement starts: every statement is first tried as one that reads an operand there, so a statement met
+# at the limit is said to be too deep at its first token. It is still read: what in it nests (an operand, a block) is
+# refused by enter(), and one that nests nothing (break, error E.A, a bare return) is kept, its item with it
+fn (p mut Parser&) stmtRoom() {
+    if p.depth >= MaxNesting { p.tooDeepAt(p.pos) }
+}
+
+# the one L21 diagnostic, said at the token with that index
+fn (p mut Parser&) tooDeepAt(i I64) {
+    if p.tooDeep { return }
+    p.tooDeep = true
+    t := p.ts.Toks[i]
+    p.diags.ErrorUnheld(diag.Where.Span(p.file, I64(t.Start), I64(t.End)), msgs.Nesting(MaxNesting))
 }
 
 # ---- lists, gathered on the parser's stacks ----
@@ -387,7 +392,9 @@ fn (p mut Parser&) File() Array<ast.Decl&>&p {
 # one top-level item, onto the decls stack, or its diagnostic
 fn (p mut Parser&) item() {
     start := p.pos
+    k := p.ItemKept.Len()
     p.ItemStarts.Push(p.here())
+    p.ItemKept.Push(true)
     p.vars.Truncate(0)
     p.inCtor = false
     p.brackets = 0
@@ -396,6 +403,7 @@ fn (p mut Parser&) item() {
     p.unclosed = false
     p.salvage.Truncate(0)
     d := try p.decl() catch {
+        p.ItemKept[k] = false
         # a function or type whose body did not parse stays declared by its signature or its name, its body never
         # checked - so a use of it is not reported again (SNTX_BODY_UNPARSED)
         for x in p.salvage { p.decls.Push(x) }
@@ -986,7 +994,7 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
 fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
     at := p.here()
     if p.inCtor and p.keywordFieldHere() { return try p.fieldDecl() }
-    try p.stmtRoom()
+    p.stmtRoom()
     match p.peek() {
         case token.Tok.If {
             s := try p.ifStmt()
@@ -1347,8 +1355,15 @@ fn (p mut Parser&) namesOf(targets Array<ast.Expr&>&) NameList&p ? Fail {
 }
 
 # "try" leading a statement: a guarded call, a checked store (R21), or a join that can fail (P4c)
+# L21 in a try statement, as stage 0 counts it: read as an expression, "try X" is the try's level and X's, so with fewer
+# than two levels left the limit is said at X first; a store's target and a call with clauses are read at one level, a
+# try with no clause (an expression) at two
 fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
     at := try p.want(token.Tok.Try)
+    if p.depth + 2 > MaxNesting { p.tooDeepAt(p.pos) }
+    was := p.limitAt
+    defer { p.limitAt = was }
+    p.limitAt = -1
     if p.sees(token.Tok.Join) {
         j := try p.joinRest(true)
         return ast.Stmt.Join(p.from(at), j)
@@ -1384,7 +1399,12 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         }
         nomatch { }
     }
+    reached := p.limitAt
     cl := try p.clauses(false)
+    if cl.Len() == 0 and reached >= 0 {
+        p.tooDeepAt(reached)
+        error Fail.SYNTAX
+    }
     e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
     if cl.Len() == 0 {
         e = try p.postfixFrom(e)
@@ -1795,14 +1815,17 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
             from := p.exprs.Len()
             p.exprs.Push(left)
             p.exprs.Push(right)
+            # each comparison of the chain is a level, as each operator of a + b + c is (L21)
+            try p.enter()
+            links++
             for isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
                 ops.Push(p.peek())
                 p.advance()
                 p.exprs.Push(try p.binary(pr + 1))
+                try p.enter()
+                links++
             }
             left = ast.Expr.Chain(source.Span(start, p.prevEnd), ast.Chain(ops.ToArray(), gather(p.exprs, from)))
-            try p.enter()
-            links++
             continue
         }
         left = ast.Expr.Binary(source.Span(start, p.prevEnd), k, left, right)
@@ -1837,13 +1860,15 @@ fn (p mut Parser&) isTypePath(n I64) Bool {
 }
 
 # unary: "not" binary | text | prefix-op unary | postfix
+# a prefix operator adds no level of its own, as text pieces do not: what nests is the operand postfix reads, and "not"
+# (L21, as stage 0 counts)
 fn (p mut Parser&) unary() ast.Expr&p ? Fail {
     at := p.here()
-    try p.enter()
-    defer p.leave()
     match p.peek() {
         case token.Tok.Not {
             p.advance()
+            try p.enter()
+            defer p.leave()
             x := try p.binary(4)
             return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
         }
@@ -1875,6 +1900,9 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
 fn (p mut Parser&) piece() ast.Expr&p ? Fail {
     at := p.here()
     if p.sees(token.Tok.StrLit) {
+        # a literal piece is an operand, a level as any is
+        try p.enter()
+        p.leave()
         p.advance()
         return ast.Expr.Lit(p.from(at), token.Tok.StrLit)
     }
@@ -1890,7 +1918,10 @@ fn (p mut Parser&) piece() ast.Expr&p ? Fail {
     return ast.Expr.Unary(p.from(at), token.Tok.Dollar, x)
 }
 
+# an operand and what follows it: one level (L21)
 fn (p mut Parser&) postfix() ast.Expr&p ? Fail {
+    try p.enter()
+    defer p.leave()
     x := try p.primary()
     return try p.postfixFrom(x)
 }
@@ -2710,6 +2741,33 @@ test "nesting past the limit is one diagnostic (L21), never a crash" {
         s := shapeOf(deep.ToString())
         # f stays declared by its signature (its body is the item the limit ended)
         assert s == "fn f: -; fn g: !L21", s
+    })
+}
+
+test "a statement met at the limit is too deep at its first token, and one that nests nothing keeps its item (L21)" {
+    atLimit := fn(stmt String&) String {
+        b := StringBuilder()
+        b.Push("fn f() {\n    x := 1\n")
+        for i in range 19999 { b.Push("    if x > 0 {") }
+        b.Push("\n")
+        b.Push(stmt)
+        b.Push("\n")
+        for i in range 19999 { b.PushChar('}') }
+        b.Push("\n}\nfn g() {\n}\n")
+        return shapeOf(b.ToString())
+    }
+    os.RunOnStack(1 << 30, fn() {
+        # every statement is first read as one starting with an operand, so the limit is said at its first token;
+        # break, error E.A and return nest nothing and are read whole; the others nest an operand or a block and end
+        # the item
+        for stmt in String&["break", "error E.A", "return"] {
+            s := atLimit(stmt)
+            assert s == "fn f: var1 := if; fn g: !L21", s
+        }
+        for stmt in String&["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
+            s := atLimit(stmt)
+            assert s == "fn f: -; fn g: !L21", $stmt ": " $s
+        }
     })
 }
 

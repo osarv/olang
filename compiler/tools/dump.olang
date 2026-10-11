@@ -571,7 +571,11 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
     }
     w.failed.Push(false)
     for s in said {
-        if s.File == file and s.Start >= 0 and not leavesWhole(s.Rule) { w.failed[itemOfSaid(w.starts, s)] = true }
+        if s.File != file or s.Start < 0 or leavesWhole(s.Rule) { continue }
+        i := itemOfSaid(w.starts, s)
+        # L21 is said at a statement met at the limit, and stage 0 keeps the item when that statement nests nothing
+        if s.Rule == "L21" and i < p.ItemKept.Len() and p.ItemKept[i] { continue }
+        w.failed[i] = true
     }
     for d in decls { w.decl(d) }
     out.Write(w.b.ToString())
