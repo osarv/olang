@@ -30,6 +30,7 @@ with this file: a new standing rule or correction from the user gets a `feedback
 and every question put to the user goes into the pending-decisions ledger when it is asked.
 
 @.claude/memory/MEMORY.md
+@.claude/memory/feedback_agent_effort.md
 @.claude/memory/feedback_decide_details.md
 @.claude/memory/feedback_errors_are_errors.md
 @.claude/memory/feedback_keep_evaluator_current.md
