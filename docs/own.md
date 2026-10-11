@@ -917,7 +917,9 @@ everything `v` owns until `b`'s last use; `take v` moves `v`'s owners out, leavi
 whose type can refer outside what it owns, moves out of that block only through a call's owned result (decision 4); a
 `Vec` of references grown with an own local and `take` reaches the local's block (13.1's rule for an own array local) -
 growing it through a call's owned result (`v.data = grownFrom(take v.data, n)`) is the form that works; a borrowed copy
-is not lent to a generic's `<T>`, which binds a writable reference (decision 9).
+is not lent to a generic's `<T>`, which binds a writable reference (decision 9). Not built: an owner value moved into an
+own reference to its type (`h.b = take a`, `b own mut Buf&`) is E12's mismatch - it would need a region made around
+the moved value.
 
 **Measured**: 200,000 turns each building an owner value local of 20 elements, copying it, moving the copy into
 another and letting a copy go ran at a 2 MB peak - every buffer released as its owner lets go.
