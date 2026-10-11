@@ -1753,7 +1753,21 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
 //global) around their type's resolution only, and never inside it: a type argument, a function type's parameter or a
 //payload resolved within sees it cleared
 static bool ownAllowed;
+//O36/O37: "own" on a declared function's parameters and result. resolveFuncSig reads the first two for the signature
+//it resolves next, and hands resolveParamList where owning may begin (-1: nowhere - a receiver is parameter 0)
+static bool ownSigAllowed;
+static bool ownSigReceiver;
+static int ownParamsFrom = -1;
+static int ownDenied = -1; //what "own" written where it may not be says, when not ERR_OWN_POSITION_NOT_YET
+static bool ownSigListIsFunc; //resolveParamList's list is a function signature's (resolveFuncSig)
+static bool ownSigTrait; //the signature resolveFuncSig reads next is a trait method's - "own" there is not supported yet
 static bool ownUsed; //O39: an own reference is written somewhere in the program - else the borrow pass has nothing to do
+static bool ownResultCall(struct operand* op);
+static bool ownMoveFits(struct operand* val, struct type slotT);
+static bool ownArrayKindOk(struct type t);
+static bool ownSignature(struct var* f);
+static struct str ownQuoted(struct var* f);
+static struct str ownFuncName(struct var* f);
 struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
 static struct paramDefault* boundParamDefault(struct paramDefault* d, struct type paramType, struct list* bindings);
 struct operand* paramDefaultOp(struct var* param);
@@ -2132,6 +2146,7 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
             return false;
         }
         arg = unifyTempAsRef(param, arg);
+        arg.refOwn = false; //O36/T25e: a variable binds the borrow - an owner reaching one is borrowed, never owned there
         if (bound) {
             //G9d/T25c: two references of one type that differ in permission meet at the read-only one, whichever comes
             //first - as two numbers meet at the wider (T6b) - so the order of the arguments decides nothing. Never a
@@ -2772,6 +2787,19 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     bool unmet = false;
     for (int i = 0; i < spec->type.vars.len && !unmet; i++)
         unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
+    //T25e/G18: what an own array's elements may be, asked again once its type variables are bound - an owning
+    //parameter's or an owned result's, as a field's is (instantiateType)
+    for (int i = 0; i <= spec->type.vars.len; i++) {
+        struct type* t = i < spec->type.vars.len ? &((struct var*)ListGetIdx(&spec->type.vars, i))->type
+                         : spec->type.hasRetType ? spec->type.retType : NULL;
+        if (!t || !t->refOwn || t->bType != BASETYPE_ARRAY || ownArrayKindOk(*t)) continue;
+        struct type shown = *t;
+        shown.refOwn = shown.refMut = shown.scopeWritten = false;
+        shown.scopeParam = NULL;
+        Err(instSite.type != TOK_NONE ? instSite : generic->tok, ERR_OWN_KIND_NOT_YET, &shown);
+        unmet = true;
+        break;
+    }
     //G4: nor the body of a generic whose signature names a variable no call can give a value - reported once, at its
     //declaration, its body unchecked there and in every instantiation
     if (unmet || tooDeep || generic->type.sigUninferable) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
@@ -4626,6 +4654,7 @@ struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, s
         v.name = name;
         v.tok = mTok;
         v.mut = hasTokOfType(m, TOK_MUT); //"needs a mutable receiver", not "this entry is writable"
+        ownSigTrait = true; //"own" in a trait's method: not supported yet (T25e)
         v.type = resolveFuncSig(mod, firstPartOfType(m, SNTX_FUNC_SIG));
         //T35: a method signature may not be generic in a type of its own - a type satisfies a trait with one method
         //per name. T35a: a variable the TRAIT declares ("type Iterator<T> trait") is fixed per application.
@@ -4909,6 +4938,10 @@ static void giveImplicitScope(struct var* p, struct list* scopeVars);
 void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out,
                       struct list* scopeVars) {
     *out = ListInit(sizeof(struct var));
+    int ownFrom = ownParamsFrom; //O36: this list's own, never a function type's inside it
+    bool funcSig = ownSigListIsFunc;
+    ownParamsFrom = -1;
+    ownSigListIsFunc = false;
     struct list* prevTagParams = scopeTagParams;
     scopeTagParams = out; //O3c: a parameter's type may name an earlier parameter ("b N&a")
     struct list params = allPartsOfType(paramListNode, SNTX_PARAM);
@@ -4925,7 +4958,13 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         v.tok = nameTok;
         //O3: a "&name" tag declares its scope variable by appearing, into the signature's own shared
         //scopeVars list - so order among parameters no longer matters, unlike the old scope-parameter form
+        //O36: a declared function's parameter may own - not a method's receiver, nor a function type's parameter
+        ownAllowed = ownFrom >= 0 && i >= ownFrom;
+        if (funcSig && ownFrom < 0) ownDenied = ERR_OWN_IN_FUNC_TYPE;
+        else if (ownFrom > 0 && i < ownFrom) ownDenied = ERR_OWN_RECEIVER;
         v.type = resolveTypeExpr(mod, typeExprNode, scopeVars);
+        ownAllowed = false;
+        ownDenied = -1;
         //D9/T25b: "mut" says the reference is writable; a by-value parameter is the callee's own copy, always writable -
         //an enum's payload is no parameter of anyone's, so its "mut" is the plain T25b error
         declTypePermission(&v, p, resolvingPayload ? ERR_MUT_ON_VALUE_TYPE : ERR_MUT_ON_VALUE_PARAM);
@@ -5097,7 +5136,8 @@ static void assignImplicitParamScopes(struct type* ft) {
 static void finishResultScope(struct type* t, struct token tok) {
     //T25b: a BUILT result is new storage only the caller holds, so it is writable, as a fresh value is; a result
     //borrowed from a parameter ("T&p") has the permission written on it
-    if (TypeIsPermRef(*t->retType) && !t->retType->scopeParam) t->retType->refMut = true;
+    //(an owned result is the owner the function gives, with the permission written on it - O37)
+    if (TypeIsPermRef(*t->retType) && !t->retType->scopeParam && !t->retType->refOwn) t->retType->refMut = true;
     if (t->retType->isTuple) {
         for (int i = 0; i < t->retType->vars.len; i++) {
             struct var* el = ListGetIdx(&t->retType->vars, i);
@@ -5299,8 +5339,18 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             if (strListHas(prevTPN, strFromTok(*(struct token*)ListGetIdx(&sigIntros, i)))) ListRemoveIdx(&sigIntros, i);
         currentSigIntros = &sigIntros;
     }
+    //O36/O37: a declared function's parameters and result may own - a method's receiver never, nor anything of a
+    //function type, which this signature may be (and which a parameter's type inside it is)
+    bool ownSig = ownSigAllowed;
+    bool trait = ownSigTrait;
+    int ownFrom = ownSigReceiver ? 1 : 0;
+    ownSigAllowed = false;
+    ownSigReceiver = false;
+    ownSigTrait = false;
     bool prevImplicit = implicitParamScopes;
     implicitParamScopes = true;
+    ownParamsFrom = ownSig ? ownFrom : -1;
+    ownSigListIsFunc = !trait;
     resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars, &t.scopeVars);
     implicitParamScopes = prevImplicit;
     assignImplicitParamScopes(&t);
@@ -5346,7 +5396,11 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             }
             *t.retType = TypeTuple(&elems);
         } else {
+            ownAllowed = ownSig; //O37: a declared function's result may be owned
+            if (!ownSig && !trait) ownDenied = ERR_OWN_IN_FUNC_TYPE;
             *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.scopeVars);
+            ownAllowed = false;
+            ownDenied = -1;
         }
         //G4: a variable reachable only through the return type could never be determined at a call, since
         //inference matches arguments against parameters and nothing else. Reported here, at the
@@ -5498,9 +5552,12 @@ static bool ownArrayKindOk(struct type t) {
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
     bool ownHere = ownAllowed;
+    int deniedHere = ownDenied;
     ownAllowed = false;
+    ownDenied = -1;
     struct type t = resolveTypeExprShape(mod, typeExprNode, scopeParams);
     ownAllowed = ownHere;
+    ownDenied = deniedHere;
     //T20: an error type names no value - it is raised and caught, so a parameter, local, field, result, element or type
     //argument of one could never be given anything. Said here, where it is written; afterwards it fits anything
     if (t.bType == BASETYPE_ERROR && !t.unknown) {
@@ -5532,7 +5589,7 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
         } else if (t.scopeParam || t.scopeWritten) {
             Err(ot, ERR_OWN_SCOPE_MARKER);
         } else if (!ownHere) {
-            Err(ot, ERR_OWN_POSITION_NOT_YET);
+            Err(ot, deniedHere >= 0 ? (enum diag)deniedHere : ERR_OWN_POSITION_NOT_YET);
         } else {
             t.refOwn = true;
             ownUsed = true;
@@ -6378,6 +6435,8 @@ void semaResolveModule(struct semaModule* mod) {
             struct token nameTok = firstTokOfType(actual, TOK_IDEN);
             struct var* v = varForDecl(mod, nameTok);
             struct syntax* sigNode = firstPartOfType(actual, SNTX_FUNC_SIG);
+            ownSigAllowed = true; //O36/O37
+            ownSigReceiver = firstPartOfType(actual, SNTX_RECEIVER) != NULL;
             v->type = resolveFuncSig(mod, sigNode);
             writtenAgainInBody(&v->type, sigNode, firstPartOfType(actual, SNTX_BLOCK));
             //G16: kept here, in the SIGNATURE pass, and not where the body is checked - an instantiation
@@ -8616,6 +8675,8 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
     else if (fit == TYPE_FIT_MISMATCH && op->opType == OPERATION_TAKE && op->type.refOwn && !want.refOwn)
         Err(op->tok, ERR_OWN_OWNER_USE); //O34: an owner goes into an own slot, never into a plain reference
+    else if (fit == TYPE_FIT_MISMATCH && ownResultCall(op) && !want.refOwn) //O37: nor does a call's owned result
+        Err(op->tok, ERR_OWN_RESULT_USE, ownQuoted(op->readVar), ownFuncName(op->readVar));
     else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
     else if (fit == TYPE_FIT_NUMBER) { Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want); noteLiteralOwnType(op, want); }
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
@@ -8997,12 +9058,17 @@ static struct operand* ownBorrowRead(struct operand* op) {
         struct var* v = canonicalVar(op->readVar);
         if (op->readVar->owner && !op->readVar->isFuncDecl) ru = lu = true; //a global's: the program's
         else {
-            if (v->ownReachSet) { //an owner local's: what its object is known to need (buildOwnDecl)
+            bool ownParam = ctx->func && varIsParamOf(v, ctx->func);
+            if (ownParam) { //O34/O36: an owning parameter's - its scope variable, bound at each call to its argument's reach
+                rv = op->readVar->type.scopeParam;
+                ru = !rv;
+            } else if (v->ownReachSet) { //an owner local's: what its object is known to need (buildOwnDecl)
                 rv = v->ownReach;
                 rd = v->ownReachDepth;
                 ru = v->ownReachUnnamed;
             } else rd = op->readVar->type.scopeDepth;
-            ld = op->readVar->type.scopeDepth; //...and it is released at its block's end at the latest
+            //...and it is released at its block's end at the latest - an owning parameter's, the body's
+            ld = ownParam ? 1 : op->readVar->type.scopeDepth;
             root = OWN_ROOT_LOCAL;
             rootLocal = v;
         }
@@ -10650,6 +10716,9 @@ static bool condOfRefs(struct operand* op) {
     if (heldResult(op)) return condOfRefs(heldResult(op));
     return (op->opType == OPERATION_COND && op->args.len == 3) || op->opType == OPERATION_MATCH;
 }
+static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type slotT, struct var* rv, int rd, bool ru);
+static void ownDeclReach(struct checkCtx* ctx, struct type declType, struct operand* rhs, struct var** reach,
+                         int* reachDepth, bool* reachUnnamed);
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                        struct token tok, struct list scopeArgNodes) {
     bool instanceArg = scopeArgNodes.len > 0 && firstScopeVarIndex(func) < 0;
@@ -10661,8 +10730,10 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         //...and so does one a field, an element or a slice is read out of: "r.mods[0].top.Get(n)" is
         //"m := r.mods[0]; m.top.Get(n)"
         while (projectionBase(arg)) arg = projectionBase(arg);
+        //(an owning parameter's argument is an owner, landed where the parameter reaches - below)
         if (arg->opType == OPERATION_FUNCCALL && !spreadSourceOf(arg) && callIsLanding(arg)
-                && (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam)
+                && (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam
+                && !(*(struct var*)ListGetIdx(&func->type.vars, j)).type.refOwn)
             landDeclByObligations(ctx, arg);
     }
     if (scopeArgNodes.len > func->type.scopeVars.len && !instanceArg) Err(tok, ERR_SCOPE_ARG_NOT_ACCEPTED, func->name);
@@ -10679,6 +10750,33 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
             if (!paramTypeNamesScope(pt, sv)) continue;
             struct operand* arg = *(struct operand**)ListGetIdx(&args, j);
+            //O36/O34: an owning parameter's scope is its reach - the reach of the owner its argument gives, found as an
+            //owner local's is from its initializer (ownDeclReach): what a constructor made here refers to outside it, the
+            //caller's block for a call's owned result, p's reach for "take p" - and the argument is a move position there
+            if (pt.refOwn && ctx && ctx->hasOwnScope) {
+                //O37/O18a: an owned result made for an owning parameter lands with that parameter's scope - where another
+                //argument binds it, else where this call's own result lands - as any call made for a parameter does
+                if (ownResultCall(arg) && callIsLanding(arg)) { if (ownMoveFits(arg, pt)) arg->ownMoved = true; continue; }
+                struct var* ov;
+                int od;
+                bool ou;
+                ownDeclReach(ctx, pt, arg, &ov, &od, &ou);
+                ownMoveInto(ctx, arg, pt, ov, od, ou);
+                if (ov && ov != SCOPE_AMBIGUOUS) ov = canonicalVar(ov);
+                if (ov) od = 0;
+                if (ou) { ov = NULL; od = 0; }
+                if (determined && (!sameExactScope(ov, od, boundTo, boundDepth) || ou != unnamed)) {
+                    Err(tok, ERR_SCOPE_ARGS_DISAGREE);
+                    boundTo = SCOPE_AMBIGUOUS;
+                    break;
+                }
+                boundTo = ov;
+                boundDepth = od;
+                unnamed = ou;
+                determined = true;
+                detArg = arg;
+                continue;
+            }
             //D8d: one result of a call still landing determines nothing - the call lands with the parameter (below)
             struct operand* src = spreadSourceOf(arg);
             if (src && callIsLanding(src)) continue;
@@ -12624,6 +12722,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+        if (paramType.refOwn && ctx && ctx->hasOwnScope) continue; //O36: a move position, judged as one (bindCallScopeVars)
         //a parameter's own "&name" tag names one of THIS SAME signature's earlier scope variables
         //(D9/O4), never anything in callerFunc's own frame - resolve it through this call's own
         //just-built binding map (above) before checking fit, so scopeCanFlowInto compares against what
@@ -15721,6 +15820,8 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
         struct operand* d = *(struct operand**)ListGetIdx(&vals, i);
         struct type* et = rt.isTuple ? &((struct var*)ListGetIdx(&view.vars, i))->type : &view;
         if (d->type.isTuple) { Err(d->tok, ERR_TUPLE_NOT_A_VALUE); continue; }
+        //O34: an owned result's default stands for an owner, which only null is yet
+        if (et->refOwn && !d->isNullLiteral) { if (!d->type.unknown) Err(d->tok, ERR_OWN_RESULT_DEFAULT); continue; }
         bool isRef = et->structMAlloc;
         //R11: a by-value default holding references is admitted when it holds none it did not build - a constructor
         //call or a literal made only of numbers, text written in the program and such values again - since it is built
@@ -16519,7 +16620,10 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                     Err(tok, ERR_GENERIC_NOT_A_VALUE, tok);
                     return unknownPlaceholder(tok);
                 }
-                if (v->isFuncDecl) noteFuncValueUse(v, tok); //T22a
+                if (v->isFuncDecl) {
+                    noteFuncValueUse(v, tok); //T22a
+                    if (ownSignature(v)) return unknownPlaceholder(tok); //O36, reported: one error, not a misfit too
+                }
                 return OperandReadVar(v, tok);
             }
             default: ErrorBugFound(); return NULL;
@@ -17929,6 +18033,17 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         if (asRef && !base->type.structMAlloc && ((base->opType == OPERATION_COND && base->args.len == 3)
                                                  || base->opType == OPERATION_MATCH))
             return condValueRefsHome(ctx, base, outVar, outDepth, unnamed);
+        //O33: a reference element of an own array refers where the slot's container keeps it - its region's reach, as
+        //operandIndexAt writes on a field's read - whatever the array was read from: an owner local, an owning
+        //parameter. Read off the borrow itself it was the region, which outlives nothing - so no element could be copied
+        //out of one own array into another
+        struct var* RA = op->opType == OPERATION_INDEX ? ownRegionOf(base) : NULL;
+        if (asRef && RA && RA->regionArray) {
+            if (RA->regionReachUnnamed) { *unnamed = true; return true; }
+            *outVar = RA->regionReach;
+            *outDepth = RA->regionReach ? 0 : RA->regionReachDepth;
+            return true;
+        }
         return RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed);
     }
     if (op->opType == OPERATION_SLICE) {
@@ -19398,11 +19513,45 @@ static bool ownFreshArray(struct operand* val, struct type slotT) {
            || val->opType == OPERATION_CONCAT || val->opType == OPERATION_COMPREHENSION;
 }
 
+//O34/T25b: whether an owner of type v may go into an own slot of type slotT - an object of the slot's type, and writable
+//wherever the slot is: an owner of a read-only own type gives no writable one
+static bool ownFitsSlot(struct type v, struct type slotT) {
+    if (slotT.bType == BASETYPE_ARRAY ? !ownSameArray(v, slotT) : !ownSameStruct(v, slotT)) return false;
+    return !slotT.refMut || v.refMut;
+}
+
+//O37: a call giving an owned result
+static bool ownResultCall(struct operand* op) {
+    return op && op->opType == OPERATION_FUNCCALL && op->type.refOwn && !op->type.unknown;
+}
+
 //O34: what a move position receives, its slot's reach (rv, rd, ru) - an owner, or null. An owner is a constructor call
-//made here, built in a new region of its own whose reach is the slot's (so what it refers to outlives the slot, C2d), or
-//one taken from another own slot whose reach outlives this one's. A borrow owns nothing: it is taken from its slot
+//made here, built in a new region of its own whose reach is the slot's (so what it refers to outlives the slot, C2d),
+//one taken from another own slot whose reach outlives this one's, or a call's owned result, landed at the slot's reach
+//(O37). A borrow owns nothing: it is taken from its slot
+//O34: the type half of a move - an owner taken or given by a call fits the slot it goes into (false, reported, if not)
+static bool ownMoveFits(struct operand* val, struct type slotT) {
+    if (!(val->opType == OPERATION_TAKE || ownResultCall(val)) || ownFitsSlot(val->type, slotT)) return true;
+    Err(val->tok, ERR_TYPE_MISMATCH, &slotT, &val->type);
+    val->ownMoved = true;
+    return false;
+}
+
 static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type slotT, struct var* rv, int rd, bool ru) {
-    if (val->type.unknown || val->isNullLiteral) return;
+    if (val->type.unknown || val->isNullLiteral || !ownMoveFits(val, slotT)) return;
+    if (ownResultCall(val)) {
+        val->ownMoved = true; //(a "catch default" standing for it is null, buildTryDefault says - O34)
+        struct var* rs = val->readVar ? val->readVar->type.resultScope : NULL;
+        struct scopeBinding* b = rs ? callBinding(val, rs) : NULL;
+        if (!b || b->landing) { //O18a: the result scope follows the result - to the slot's reach
+            if (rv == SCOPE_AMBIGUOUS && !ru) Err(val->tok, ERR_OWN_REACH);
+            else landCallIn(val, ru ? NULL : rv, ru ? 0 : rd, ru);
+        } else if (!b->boundUnnamed //(E25: a scope argument put it - where it must outlive the slot)
+                   && (ru || rv == SCOPE_AMBIGUOUS || b->boundTo == SCOPE_AMBIGUOUS
+                       || !scopeCanFlowInto(ctx->func, b->boundTo, b->boundTo ? 0 : b->boundDepth, rv, rv ? 0 : rd)))
+            Err(val->tok, ERR_OWN_REACH);
+        return;
+    }
     if (val->opType == OPERATION_TAKE) {
         struct var* S = val->ownRegion;
         val->ownMoved = true;
@@ -19509,6 +19658,7 @@ static void ownDeclReach(struct checkCtx* ctx, struct type declType, struct oper
         *reach = rhs->ownRegion->regionReach;
         *reachDepth = rhs->ownRegion->regionReachDepth;
         *reachUnnamed = rhs->ownRegion->regionReachUnnamed;
+    } else if (ownResultCall(rhs)) { //O37: what it refers to is where its result scope lands - the block
     } else if (declType.bType == BASETYPE_ARRAY)
         *reachUnnamed = !ctx->func || !declType.arrElem || !typeCarriesScopes(*declType.arrElem);
     else if (!rhs || rhs->isNullLiteral || (opIsCtorCall(rhs) && ownCtorPlain(rhs, 0))) *reachUnnamed = true;
@@ -19530,6 +19680,18 @@ static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok,
     int reachDepth;
     bool reachUnnamed;
     ownDeclReach(ctx, declType, rhs, &reach, &reachDepth, &reachUnnamed);
+    //O37/O34: one an owned result's "return" gives whole, later in its block, reaches the result scope - what it is
+    //given then refers to what the result outlives, as O26a moves a returned value local
+    if (ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->refOwn && ctx->func->type.resultScope
+            && ctx->hasOwnScope && !ctx->inDefer) {
+        for (int i = ctx->blockStmtIdx + 1; i < ctx->blockStmts.len; i++) {
+            if (!syntaxReturnsName(*(struct syntax**)ListGetIdx(&ctx->blockStmts, i), strFromTok(nameTok))) continue;
+            reach = ctx->func->type.resultScope;
+            reachDepth = 0;
+            reachUnnamed = false;
+            break;
+        }
+    }
     if (rhs) ownMoveInto(ctx, rhs, declType, reach, reachDepth, reachUnnamed);
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
     v->ownReachSet = true;
@@ -19613,7 +19775,8 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         } else { // ":=" - type read straight off the initializer (D15)
             roInheritDecl = true;
             rhs = buildExprFromSyntax(ctx, exprNode);
-            if (rhs->opType == OPERATION_TAKE) return buildOwnDecl(ctx, nameTok, rhs->type, rhs, NULL); //O34: an owner local
+            //O34/O37: an owner local - from "take", or a call's owned result
+            if (rhs->opType == OPERATION_TAKE || ownResultCall(rhs)) return buildOwnDecl(ctx, nameTok, rhs->type, rhs, NULL);
             declType = inferredDeclType(ctx->func, rhs);
             //":=" writes no scope tag, so the local is a bare "&" one and takes its initializer's exact
             //scope (O25a) - the initializer's own tag may be a callee's scope variable, meaningless here
@@ -20697,7 +20860,7 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
-    if (op->opType == OPERATION_TAKE) op->ownDiscard = true; //S3/O35: "take p" alone - the owner taken is released
+    if (op->opType == OPERATION_TAKE || ownResultCall(op)) op->ownDiscard = true; //S3/O35: an owner alone - released
     //...text on a line of its own most often meant to continue the join on the line before (E11b)
     if (!exprCanStandAsStatement(op) && !op->type.unknown && op->opType != OPERATION_TAKE) {
         if (s == ctx->clauseLastStmt) { //R11: a value ending a catch clause's block is meant as the clause's value
@@ -23468,7 +23631,16 @@ static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, s
     else if (ctx->inTest && !ctx->func) Err(tok, ERR_RETURN_IN_TEST); //S15: a test is not a function
     else if (val && ctx->func && !ctx->func->type.hasRetType) Err(tok, ERR_RETURN_VALUE_IN_VOID);
     else if (!val && ctx->func && ctx->func->type.hasRetType) Err(tok, ERR_RETURN_NEEDS_VALUE, ctx->func->type.retType);
-    else if (val && ctx->func && ctx->func->type.hasRetType) {
+    else if (val && ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->refOwn) {
+        //O37: an owned result - the return a move position, its reach the result scope. An owner local or an owning
+        //parameter given whole is moved, as by "take" (O34): what reads it after, deferred code, is refused (ownOpWalk)
+        if (val->opType == OPERATION_READ_VAR && val->ownOrig && val->readVar && !val->readVar->owner
+                && !val->readVar->isCapture) {
+            val = buildTake(ctx, val, val->tok);
+            val->ownByReturn = true;
+        }
+        ownMoveInto(ctx, val, *ctx->func->type.retType, ctx->func->type.resultScope, 0, false);
+    } else if (val && ctx->func && ctx->func->type.hasRetType) {
         //O18a: a call whose result's scope follows the result is built in the scope the return type names
         struct var* resultHome = ctx->func->type.retType->scopeParam ? ctx->func->type.retType->scopeParam
                                                                      : ctx->func->type.resultScope;
@@ -24118,6 +24290,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(tok, ERR_SPAWN_NOT_CALL);
         return stmt;
     }
+    if (ownSignature(call->readVar)) { Err(call->tok, ERR_OWN_SPAWN_SIG); return stmt; } //O41: not yet
     //P4: a call that can fail is spawned with "try", and a "try" before one that cannot is an error, as anywhere (R8)
     if (call->readVar->type.errors.len != 0 && !stmt.tried) {
         Err(call->tok, ERR_SPAWN_FALLIBLE);
@@ -24346,12 +24519,22 @@ struct funcValueUse { struct var* f; struct token tok; bool viaTypeVarResult; st
 struct list* SemanticAllLambdas(void) { return &allLambdas; }
 static void lambdaRegister(struct var* L) { ListAdd(&allLambdas, &L); }
 
+//O36/O37: whether a function owns a parameter or gives an owned result - which a function type never does
+static bool ownSignature(struct var* f) {
+    if (!f) return false;
+    for (int i = 0; i < f->type.vars.len; i++)
+        if (((struct var*)ListGetIdx(&f->type.vars, i))->type.refOwn) return true;
+    return f->type.hasRetType && f->type.retType && f->type.retType->refOwn;
+}
+
 static void noteFuncValueUse(struct var* f, struct token tok) {
+    if (ownSignature(f)) Err(tok, ERR_OWN_FUNC_VALUE_SIG, ownQuoted(f)); //O36: called by name only
     struct funcValueUse u = { f, tok, false, NULL };
     ListAdd(&funcValueUses, &u);
 }
 //E31: a value adapted to a function type through its Call - Call is then called as that function value is (T22a)
 static void noteCallValueUse(struct var* call, struct type t, struct token tok) {
+    if (ownSignature(call)) Err(tok, ERR_OWN_FUNC_VALUE_SIG, ownQuoted(call)); //O36
     struct type* tt = MallocOrCrash(sizeof(struct type));
     *tt = t;
     tt->structMAlloc = false;
@@ -24631,7 +24814,9 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
         struct var* ep = exp ? ListGetIdx(&exp->vars, i) : NULL;
         struct syntax* typeNode = firstPartOfType(p, SNTX_TYPE_EXPR);
         if (typeNode) {
+            ownDenied = ERR_OWN_IN_FUNC_TYPE; //O36: a lambda is a function value
             v.type = resolveTypeExpr(octx->mod, typeNode, &t.scopeVars);
+            ownDenied = -1;
             declTypePermission(&v, p, ERR_MUT_ON_VALUE_PARAM); //D9/T25b
             if (ep && !TypeIsGeneric(ep->type) && !TypeIsSame(v.type, ep->type)) {
                 Err(nameTok, ERR_LAMBDA_SIGNATURE, exp);
@@ -24687,7 +24872,9 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
             }
             *t.retType = TypeTuple(&elems);
         } else {
+            ownDenied = ERR_OWN_IN_FUNC_TYPE; //O37
             *t.retType = resolveTypeExpr(octx->mod, firstPartOfType(retNode, SNTX_TYPE_EXPR), &t.scopeVars);
+            ownDenied = -1;
         }
         finishResultScope(&t, kw);
         if (exp && exp->hasRetType && !TypeIsGeneric(*exp->retType) && !TypeIsSame(*t.retType, *exp->retType)) {
@@ -26393,15 +26580,16 @@ static int ownEvRoot(struct operand* op, int* param, struct var** local) {
         return R->regionRoot;
     }
     if (op->opType == OPERATION_READ_VAR && op->readVar) {
-        int i = ownParamIndex(ow.func, op->readVar);
-        if (i >= 0) {
-            *param = i;
-            return OWN_ROOT_PARAM;
-        }
+        //(an owning parameter holds owners, as an owner local does: it alone reaches what it owns - O39)
         struct var* v = canonicalVar(op->readVar);
         if (v->type.refOwn && !v->owner) {
             *local = v;
             return OWN_ROOT_LOCAL;
+        }
+        int i = ownParamIndex(ow.func, op->readVar);
+        if (i >= 0) {
+            *param = i;
+            return OWN_ROOT_PARAM;
         }
         return OWN_ROOT_ANY;
     }
@@ -27070,6 +27258,25 @@ static void ownArgOrder(struct operand* op) {
     }
 }
 
+//O34: a "return" giving an owner local or an owning parameter whole moves it - nothing may read it after but deferred
+//code run on the way out, which would find it null: an error naming "take", which says so
+static void ownReturnMoveCheck(struct operand* op) {
+    struct operand* place = op->args.len ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+    if (!place || place->opType != OPERATION_READ_VAR || !place->readVar) return;
+    struct var* v = canonicalVar(place->readVar);
+    for (int k = ow.frames.len - 1; k >= 0; k--) {
+        struct ownFrame* F = ListGetIdx(&ow.frames, k);
+        for (int i = 0; i < F->idx && i < F->block->len; i++) {
+            struct statement* d = ListGetIdx(F->block, i);
+            if (d->sType != STATEMENT_DEFER || !ownStmtReads(d, v) || ownReportedAt(op->tok)) continue;
+            const char* t = ownPlaceText(place);
+            Err(op->tok, ERR_OWN_MOVED_READ_AGAIN, t, t, t);
+            if (ow.useTok.owner) Note(ow.useTok, NOTE_OWN_USED_AFTER);
+            return;
+        }
+    }
+}
+
 static void ownOpWalk(struct operand* op) {
     if (!op) return;
     if (ow.check && op->opType == OPERATION_FUNCCALL) ownArgOrder(op);
@@ -27077,6 +27284,12 @@ static void ownOpWalk(struct operand* op) {
     //own it. A conditional or a match giving an owner is not supported yet
     if (ow.check && op->opType == OPERATION_TAKE && !op->ownMoved && !op->ownDiscard && !ownReportedAt(op->tok))
         Err(op->tok, ERR_OWN_OWNER_USE);
+    //O37: and so does a call's owned result
+    if (ow.check && ownResultCall(op) && !op->ownMoved && !op->ownDiscard && !ownReportedAt(op->tok)) {
+        struct str nm = ownFuncName(op->readVar);
+        Err(op->tok, ERR_OWN_RESULT_USE, ownQuoted(op->readVar), nm);
+    }
+    if (ow.check && op->opType == OPERATION_TAKE && op->ownByReturn) ownReturnMoveCheck(op);
     if (ow.check && (op->opType == OPERATION_COND || op->opType == OPERATION_MATCH)) {
         struct list vs = op->opType == OPERATION_MATCH ? SemanticMatchValues(op) : op->args;
         for (int i = 0; i < vs.len; i++) {

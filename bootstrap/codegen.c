@@ -1192,6 +1192,9 @@ static void cgNoteHandedOn(struct cgCtx* ctx, struct operand* op, struct var* fu
 
 static char* cgRegionSlot(struct cgCtx* ctx, struct var* R);
 static void cgOwnBorrowHeader(struct cgCtx* ctx, struct operand* op, const char* val);
+static const char* cgOwnTy(struct type t);
+static char* cgOwnValue(struct cgCtx* ctx, struct operand* op, struct type slotT);
+static bool cgOwnIsArray(struct type t);
 static char* cgTake(struct cgCtx* ctx, struct operand* op);
 char* cgOwnArrayBuffer(struct cgCtx* ctx, struct operand* op, const char* bytes);
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
@@ -3597,6 +3600,10 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
             cgArgAdd(args, "ptr", copy);
             continue;
         }
+        if (paramT.refOwn) { //O36: an owning parameter's argument - the owner moved in, made, or a call's owned result
+            cgArgAdd(args, cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT));
+            continue;
+        }
         bool argBuilds = cgArgMayBuild(argOp, paramT);
         if (!argBuilds) ctx->capReadOnly++; //P2: where a temporary would be built, and nothing is
         char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
@@ -4745,9 +4752,10 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
         struct var* p = ListGetIdx(&f.vars, i);
         //T25b: "mut" is a reference's permission - a type variable's "mut" bound to a value renders nothing
         bool pm = p->type.structMAlloc && p->type.bType != BASETYPE_FUNC && p->type.refMut;
-        cgBufAdd(b, "%s%.*s %s", i ? ", " : "", p->name.len, p->name.ptr, pm ? "mut " : "");
+        cgBufAdd(b, "%s%.*s %s%s", i ? ", " : "", p->name.len, p->name.ptr, p->type.refOwn ? "own " : "", pm ? "mut " : "");
         struct type pt = p->type;
         pt.refMut = false; //written once, before the name's type, as the parameter's own "mut"
+        pt.refOwn = false; //T25e: and "own" before it, as written
         const struct var* outer = rdOwnScope;
         struct str own = pt.scopeParam ? pt.scopeParam->name : (struct str){0}; //"&p" is p's own
         bool isOwn = own.len == p->name.len + 1 && own.ptr[0] == '&' && !memcmp(own.ptr + 1, p->name.ptr, (size_t)p->name.len);
@@ -7128,7 +7136,8 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
         ctx->terminated = true;
         return;
     }
-    char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
+    //O37: an owned result is the owner the return gives - moved out of a slot, made here, or a call's owned result
+    char* val = retT.refOwn ? cgOwnValue(ctx, s->op, retT) : cgBoundaryValue(ctx, s->op, retT, NULL);
     ctx->targetScopeOverride = prevTarget;
     //T7b: an array value result is a new array built where the call's result is put - the result scope - which the
     //caller then takes as it is. One that is not already there (a local, a parameter's array, a field's) is copied
@@ -7322,7 +7331,7 @@ static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_ASSIGN: cgAssign(ctx, s); return;
         case STATEMENT_EXPR: {
             char* v = cgValue(ctx, s->op);
-            if (s->op->opType == OPERATION_TAKE && s->op->ownDiscard) //O35: an owner no slot receives
+            if ((s->op->opType == OPERATION_TAKE || s->op->type.refOwn) && s->op->ownDiscard) //O35: an owner no slot receives
                 fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", cgOwnPtr(ctx, s->op->type, v));
             return;
         }
@@ -8228,6 +8237,16 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->joinPool.len = 0;
     cgSetupUnwind(ctx);
     cgPushOwnUnwind(ctx);
+    //O35/O36: what an owning parameter still owns as the function returns is released, last of all (registered first)
+    for (int i = 0; i < func->type.vars.len; i++) {
+        struct var* p = ListGetIdx(&func->type.vars, i);
+        if (!p->type.refOwn || cgIsDtor(func)) continue;
+        struct cgLocal* l = cgFindLocal(ctx, p->name);
+        char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+        cgNoteBuildInto(ctx, scope);
+        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope,
+                l->llvmVal, cgOwnIsArray(p->type) ? "aslot" : "slot");
+    }
     if (cgIsDtor(func)) {
         ctx->ownScopeSlot = "%dscope";
         ctx->ownScopeBorrowed = true;

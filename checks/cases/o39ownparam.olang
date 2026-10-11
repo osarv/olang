@@ -1,0 +1,20 @@
+# check: fail error[O39]: assigning 'c' may release the Conn borrowed on line
+# an owning parameter is an owner local of its callee: a release under its loan
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn churn(c own mut Conn&) I64 {
+    d := c
+    c = null
+    return d.fd
+}
+fn main() ? { }

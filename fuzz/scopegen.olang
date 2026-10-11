@@ -268,6 +268,7 @@ Prelude := (
     "    buf own mut Array<I64>&                # own arrays: a buffer in a region of its own, its elements living where h does\n"
     "    nodes own mut Array<mut Node&>&\n"
     "    text own mut String& = \"t\"\n"
+    "    w own mut OWrap&\n"
     "}\n"
     "fn onode(o ONode&) I64 {\n"
     "    if o == null { return 0 }\n"
@@ -283,6 +284,7 @@ Prelude := (
     "    if h.cur != null { t = t * 31 + onode(h.cur.sub) }\n"
     "    t = t * 31 + osum(h.buf)\n"
     "    for n in h.nodes { t = t * 31 + chain(n) }\n"
+    "    if h.w != null { t = t * 31 + chain(h.w.m) }\n"
     "    return t * 31 + h.text.Len() + I64(h.text[h.text.Len() - 1])\n"
     "}\n"
     "fn ofill(h mut OHold&, v I64) {\n"
@@ -308,6 +310,38 @@ Prelude := (
     "    h.other = take t\n"
     "}\n"
     "fn osetN(x mut Node&, o mut ONode&) { o.n = x }\n"
+    "# owning parameters and owned results (O36, O37): an owner handed to a call, released there or moved on, or handed back\n"
+    "fn oconsume(o own mut ONode&) I64 { return onode(o) % 997 }\n"
+    "fn ostash(h mut OHold&, o own mut ONode&) { h.other = take o }\n"
+    "fn omk(v I64) own mut ONode& {\n"
+    "    o own mut ONode& = ONode(v)\n"
+    "    o.n.next = Node(v + 1)\n"
+    "    churn()\n"
+    "    return o\n"
+    "}\n"
+    "fn opass(o own mut ONode&) own mut ONode& { return o }\n"
+    "fn otail(o own mut ONode&) own mut ONode& {\n"
+    "    if o == null { return null }\n"
+    "    return take o.sub\n"
+    "}\n"
+    "fn ogrownBuf(old Array<I64>&, n I64) own mut Array<I64>& {\n"
+    "    a own mut Array<I64>& = Array<I64>(n)\n"
+    "    for i in range old.Len() { if i < n { a[i] = old[i] } }\n"
+    "    return a\n"
+    "}\n"
+    "fn ogrownNodes(old own mut Array<mut Node&>&, n I64) own mut Array<mut Node&>& {\n"
+    "    a own mut Array<mut Node&>& = Array<mut Node&>(n)\n"
+    "    for i in range old.Len() { if i < n { a[i] = old[i] } }\n"
+    "    return a\n"
+    "}\n"
+    "# an owned object viewing a node outside its region - a \"&p\" field keeps the argument's own scope (C2d)\n"
+    "type OWrap struct(n Node&) {\n"
+    "    m Node&n = n\n"
+    "}\n"
+    "fn owrap(n Node&) own mut OWrap& {\n"
+    "    o own mut OWrap& = OWrap(n)\n"
+    "    return o\n"
+    "}\n"
     "# a flag set atomically; owait waits for it 2 ms at most (-i runs a task only at its join, so there it never comes)\n"
     "type OFlag struct() {\n"
     "    v I64 = 0\n"
@@ -759,9 +793,10 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
 fn (g mut SG&) ownOp(h String&, ind String&) String& {
     v := g.val()
-    k := g.r(37)
+    k := g.r(50)
     c := $h ".cur"
     o := $h ".other"
+    if k >= 37 { return g.ownCallOp(h, ind, k - 37, v) }
     if k >= 27 { return g.ownArrOp(h, ind, k - 27, v) }
     if k == 26 {    # a chain of owners deeper than a release nests (O35), built through owner locals and released later
         x := g.name("x")
@@ -845,6 +880,37 @@ fn (g mut SG&) ownOp(h String&, ind String&) String& {
     }
     if g.chance(50) { return $ind "if " $c " != null and " $c ".sub != null { ogrow(" $c ".sub, " $v ") }\n" }
     return $ind "if " $c " != null { osetN(Node(" $v "), " $c ") }\n"    # built before its region is read (O33: refused)
+}
+
+# a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a
+# call into a slot, an owner local or an owning parameter, a buffer replaced by a call given a borrow of it or given it -
+# and a borrow kept across a move into a call, or an owned result holding a borrow of what is then released, which the
+# checker must refuse (O39, O10c)
+fn (g mut SG&) ownCallOp(h String&, ind String&, k I64, v I64) String& {
+    c := $h ".cur"
+    o := $h ".other"
+    if k == 0 { return $ind "if " $c " != null { " $o " = ONode(oconsume(take " $c ") + " $v ") }\n" }
+    if k == 1 { return $ind "ostash(" $h ", take " $c ")\n" }
+    if k == 2 { return $ind $c " = omk(" $v ")\n" }
+    if k == 3 { return $ind $c " = opass(take " $o ")\n" }
+    if k == 4 { return $ind "omk(" $v ")\n" }
+    if k == 5 {    # an owner local an owned result made, moved into a slot
+        x := g.name("x")
+        return $ind $x " := omk(" $v ")\n" $ind "churn()\n" $ind $c " = take " $x "\n"
+    }
+    if k == 6 { return $ind $c " = otail(take " $c ")\n" }
+    if k == 7 { return $ind "ostash(" $h ", omk(" $v "))\n" }
+    if k == 8 { return $ind $h ".buf = ogrownBuf(" $h ".buf, " $(v % 6 + 1) ")\n" }
+    if k == 9 { return $ind $h ".nodes = ogrownNodes(take " $h ".nodes, " $(v % 4 + 1) ")\n" }
+    if k == 10 {    # a borrow kept across a move into a call (O39: refused)
+        b := g.name("b")
+        return ($ind $b " := " $c "\n" $ind "ostash(" $h ", take " $c ")\n" $ind "churn()\n" $ind "if " $b " != null { " $o
+                " = ONode(onode(" $b ") % 997) }\n")
+    }
+    if k == 11 { return $ind $h ".w = owrap(" $g.newNode() ")\n" }    # an owned result holding what lives where h does
+    if k == 12 { return $ind "if " $h ".w != null { " $h ".w = owrap(" $h ".w.m) }\n" }    # ...and rewrapped, R1
+    #(an owned result holding a node in what is then released: O10c, refused)
+    return $ind "if " $c " != null {\n" $ind "    " $h ".w = owrap(" $c ".n)\n" $ind "    " $c " = null\n" $ind "}\n"
 }
 
 # a statement on h's own arrays: new buffers, writes, a buffer moved through an owner local and back, elements kept

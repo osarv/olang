@@ -782,6 +782,80 @@ local and back, elements kept across a release, text joined into an own `String`
 and a slice kept across a release (refused); own-only seeds 1-40 ran 252 scenarios (228 refused by the checker) and
 mixed seeds 100-139 ran 203 (277 refused), no findings.
 
+### 13.2 Owning parameters and owned results
+
+`fn grownFrom(old own mut Array<T>&, cap I64) own mut Array<T>&`: a parameter written `own` owns what it is handed - the
+caller gives it up (`take`, a constructor call, a call's owned result) and the callee releases it as it returns unless it
+moves it on; a result written `own` hands the caller the owner. With them a `Vec`'s growth is one statement:
+`v.data = grown(v.data, cap * 2)` (the value borrows what its store then releases, O39) or
+`v.data = grownFrom(take v.data, cap * 2)` (the old buffer handed over and released in the callee).
+
+**Decided**
+1. **Only a declared function's parameter or single result owns.** `own` on a constructor's, a trait method's or an enum
+   payload's parameter, and on one of several results, stays T25e's "not supported yet"; on a receiver, a function
+   type's parameter or result and a lambda's it is O36's error, as the design said.
+2. **An owning parameter is an owner local of its callee.** Its reach is its implicit scope variable `&p` (O4b), bound at
+   each call from its argument as an owner local's initializer gives its reach (`ownDeclReach`): `take x` - x's region's
+   reach; a constructor made for it - the program's scope if it holds nothing from outside, else the caller's block; a
+   call's owned result - **it lands with `&p`** (O18a), where another argument binds it, else where the call's own result
+   lands, as any call made for a parameter does. The callee registers the parameter's slot on its own scope at entry
+   (`__olang_own_drop_slot`, the destructor node an owner local gets), so it is released as the callee returns, on every
+   way out, unless `take` or a `return` emptied the slot. Inside the callee its loans are an owner local's (its root is
+   the parameter itself, not the caller's argument), and the callee's release of it is no release effect on its caller's
+   roots: the caller gave it up, so no loan of the caller's can be on it (a `take` under a live loan is C1's error).
+3. **An owned result is the caller's**, and is an owner only in a move position - `x := f()`, an own slot, an owning
+   parameter, a `return` of an owned result - or standing as a statement, which releases it at once (as `take` alone
+   does, O35). Anywhere else (`f().fd`, a borrowing parameter, a `$` operand) it is O37's error naming `x := f(...)`: read
+   in place it would be owned by nothing. Its result scope lands at the slot's reach (O18a), so what the callee refers to
+   from the object outlives the slot; a scope argument (E25) must outlive it instead.
+4. **`return x` of an owner local or an owning parameter moves it**: in a function with an owned result it is `return take
+   x`, its slot emptied so its registration releases nothing. Deferred code reading `x` after that `return` is an error
+   naming `return take x` - it would read null where the program says `x`.
+5. **An owner local the function returns whole lives for the result.** Declared in a block whose later statements
+   `return` it (D3a makes the name one variable there), its reach is the result scope - `r own mut Node& = Node(n);
+   r.next = build(n - 1); return r` builds what `r` refers to where the caller puts the result - as O26a moves a returned
+   value local.
+6. **Function values and tasks never own.** A function owning a parameter or giving an owned result is called by name
+   only: made a value it is O36's error, reported once - the read becomes the unknown stand-in, so no misfit follows it;
+   a `Call` method owning a parameter never fits a function type at all. A task's call may not own or give an owned result
+   (O41's "not yet"): the owner would have to cross the join.
+7. **A type variable binds the borrow.** `TypeUnify` drops `own` from what it binds, so an owner never reaches a generic
+   by inference - `id(take x)` is O34's "take gives an owner, which only an own slot receives", and an own type argument
+   stays T25e's "not supported yet".
+8. **An owned result's `catch default` is `null`** for now (O34), reported once, where the default is built.
+9. **A read-only owned result keeps its permission.** A built result is made writable (T25c: only the caller holds it);
+   one written `own Node&` stays read-only.
+10. **An element read out of an own array refers where its slot's would - the region's reach - in every scope walk**:
+    `RefExactScope` read the borrow's region for an element, so `a[i] = old[i]` from one own array into another was O20.
+    It now answers the reach, as `operandIndexAt` already did for a field's read (13.1, decision 2).
+
+**Found and fixed on the way (pre-existing)**
+- **`take` moved an owner of any type into any own slot**: `s.other = take s.cur.sock` put a `Sock` into a `Conn` slot
+  (the first cut compiled it). A move now fits the slot's type and permission (`ownFitsSlot`): E12's "expected own Conn&,
+  found own Sock&".
+- A function type's parameter was rendered `c mut own Conn&`; `own` is written before `mut`, as in source.
+
+**Over-rejections left** (each refused, never unsound): an owner local made by a call's owned result reaches its block
+(`x := mk(); s.cur = take x` with `s` outliving the block is O10c, though `mk` may refer to nothing outside - the
+direct `s.cur = mk()` works); a constructor made for an owning parameter with an argument from outside reaches the
+caller's block; growing a buffer of references through a *borrowing* parameter (`v.data = grown(v.data, n)` with
+`String&` elements) is O10c - an obligation cannot tell the buffer's storage, in the region, from what its elements refer
+to, outside it (r06's limit) - and the owning form (`grownFrom(take v.data, n)`) is the one that works; a conditional
+or a match is still no move position.
+
+**Measured**: two million turns each building three short lists by owned results and cutting them through owning
+parameters ran in 11 MB peak (`m1`) - every region released as its owner lets go.
+
+**Tests**: shared.olang's section "owning parameters and owned results": released at the callee's end, moved on into a
+holder, handed in and back, let go as a statement, made for an owning parameter (released there, or landing with it and
+moved on), read back after the arena churns; a list built by owned results and cut by an owning parameter and a
+`Vec`-shaped buffer grown both ways, each baked by K2 and decided by an assert (S18c) beside the run time; text elements
+of a buffer grown by moving it, read back after a churn. checks cases: t25eparam (a constructor's parameter), t25etrait,
+t25eresults, o36receiver, o36functype, o36lambda, o36funcvalue, o36resultvalue, o37use, o37borrowparam, o37default,
+o34deferread, o34borrowtoown, o34localtoown, o34taketype, o34takegeneric, o39ownparam, o39takeandborrow, o41ownsig,
+o10cownresult (an owned result holding a borrow of what its caller then releases) and o10cownlanding (an owned result
+landing with an owning parameter where a loop body's text may not reach). Scope fuzzer: `ownCallOp`'s twelve shapes.
+
 ### 13.4 Small regions, and releases that do not nest without bound
 
 **Decided**

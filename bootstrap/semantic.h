@@ -760,6 +760,7 @@ struct operand {
     bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
     bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
     bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
+    bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.

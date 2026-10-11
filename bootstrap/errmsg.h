@@ -189,7 +189,9 @@ struct type;
     X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
     X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')") \
     X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
-    X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type - here it is not supported yet") \
+    X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type, or a declared function's parameter or result - here it is not supported yet") \
+    X(ERR_OWN_RECEIVER,                 "O36",   "a method is called on a borrow, so its receiver never owns - drop 'own', or take the owner as another parameter") \
+    X(ERR_OWN_IN_FUNC_TYPE,             "O36",   "a function value's parameters and result never own - only a declared function's do; drop 'own'") \
     X(ERR_OWN_BUILT_BEFORE_BORROW,      "O33",   "this value would be built where the object of '%s' lives, which a later argument reads - read it first, 'o := %s'") \
     X(ERR_OWN_TAKE_NEEDED,              "O34",   "moving out of '%s' would leave it empty - write 'take %s'") \
     X(ERR_OWN_NOT_AN_OWNER,             "O34",   "an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this %s") \
@@ -197,7 +199,12 @@ struct type;
     X(ERR_OWN_REACH_EXACT,              "O34",   "the array's elements can be stored through, so they must refer exactly where this slot's elements do - move it into a slot whose container lives where the source's does") \
     X(ERR_OWN_REACH,                    "O34",   "the owner refers to what lives shorter than the slot it is moved into - move it where that lives") \
     X(ERR_OWN_COMPOUND,                 "O34",   "an own slot is given an owner with '=', not '%s'") \
-    X(ERR_OWN_OWNER_USE,                "O34",   "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field or an own global") \
+    X(ERR_OWN_OWNER_USE,                "O34",   "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field, an own global or an owning parameter") \
+    X(ERR_OWN_RESULT_USE,               "O37",   "%S gives an owner, which only an own slot receives - 'x := %S(...)', an own field or global, an owning parameter, or a statement of its own") \
+    X(ERR_OWN_RESULT_DEFAULT,           "O34",   "an owned result's 'catch default' is 'null' for now - or a clause that leaves") \
+    X(ERR_OWN_MOVED_READ_AGAIN,         "O34",   "'return %s' moves '%s', which deferred code reads afterwards - write 'return take %s' to leave it null there") \
+    X(ERR_OWN_FUNC_VALUE_SIG,           "O36",   "%S owns a parameter or gives an owned result, so it is called by name only - a function value never owns") \
+    X(ERR_OWN_SPAWN_SIG,                "O41",   "a task's call may not own a parameter or give an owned result yet - spawn a function that borrows, and move the owner after the join") \
     X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
     X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
     X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \

@@ -1,0 +1,19 @@
+# check: fail error[O34]: 'return c' moves 'c', which deferred code reads afterwards - write 'return take c'
+# a return giving an owner whole moves it before deferred code runs
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn pass(c own mut Conn&) own mut Conn& {
+    defer { println($c.fd) }
+    return c
+}
+fn main() ? { }

@@ -1,0 +1,20 @@
+# check: fail error[E12]: expected own Conn&, found own Sock&
+# take moves an owner of the slot's type only
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    s.cur.sock = Sock(2)
+    s.other = take s.cur.sock
+}

@@ -17087,3 +17087,121 @@ test "O30/O35: a chain of owners of any length is released, each destructor in t
     assert ownForkRelease(0) == 14523           # the object's destructor, then its fields' owners, last declared first
     assert ownForkRelease(300) == 14523         # the same order where 256 releases are already under way
 }
+
+# ---- owning parameters and owned results (§8.8, O36, O37): an owner handed to a call, or handed back by one ----
+fn ownConsume(c own mut OwnConn&) I64 { return c.fd }       # c released as ownConsume returns
+fn ownStash(s mut OwnServer&, c own mut OwnConn&) { s.other = take c }  # moved on into s.other: not released
+fn ownMkConn(fd I64) own mut OwnConn& { return OwnConn(fd) }
+fn ownMkSock(fd I64) own mut OwnConn& {
+    c own mut OwnConn& = OwnConn(fd)            # an owner local the return gives whole - built for the result
+    c.sock = OwnSock(fd + 1)
+    return c                                    # moved out by the return, not released
+}
+fn ownPass(c own mut OwnConn&) own mut OwnConn& { return c }
+test "O36: an owning parameter is released as its callee returns, unless moved on" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(3 * OwnRun)
+    s.cur.sock = OwnSock(1)
+    assert ownConsume(take s.cur) == 3 and s.cur == null and OwnDropped == 2
+    s.cur = OwnConn(4 * OwnRun)
+    ownStash(s, take s.cur)
+    assert s.cur == null and s.other.fd == 4 and OwnDropped == 2
+    x own mut OwnConn& = OwnConn(5 * OwnRun)
+    assert ownConsume(take x) == 5 and x == null and OwnDropped == 3
+}
+test "O37: an owned result is the caller's - an own slot, an owner local, an owning parameter, or let go at once" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = ownMkSock(7 * OwnRun)
+    sbChurn()
+    assert s.cur.name == "c7" and s.cur.sock.n == 8 and OwnDropped == 0
+    s.cur = ownPass(take s.cur)                 # handed in and back: nothing released
+    assert s.cur.fd == 7 and OwnDropped == 0
+    s.cur = ownMkConn(9 * OwnRun)               # the old Conn and its Sock released
+    assert OwnDropped == 2
+    ownMkSock(1 * OwnRun)                       # let go at once: a Conn and a Sock
+    assert OwnDropped == 4
+    {
+        y := ownMkConn(2 * OwnRun)              # an owner local, released at its block's end
+        assert y.name == "c2"
+    }
+    assert OwnDropped == 5
+    assert ownConsume(ownMkConn(6 * OwnRun)) == 6 and OwnDropped == 6   # made for an owning parameter, released there
+    ownStash(s, ownMkSock(8 * OwnRun))          # ...or moved on, into s.other: it lands where that parameter's scope is
+    sbChurn()
+    assert s.other.name == "c8" and s.other.sock.n == 9 and OwnDropped == 6
+}
+fn ownBuild(n I64) own mut OwnList& {
+    if n == 0 { return null }
+    r own mut OwnList& = OwnList(n)
+    r.next = ownBuild(n - 1)                    # an owned result moved into an own field of an owner local
+    return r
+}
+fn ownTail(l own mut OwnList&) own mut OwnList& {
+    if l == null { return null }
+    return take l.next                          # the rest moved out; the head released with l
+}
+fn ownBuilt(n I64) I64 {
+    l := ownBuild(n)
+    t := ownSumOf(l)
+    m := ownTail(take l)
+    return t * 100 + ownSumOf(m) + (1 if l == null else 0)
+}
+OwnBuiltBaked I64 = ownBuilt(10)                # K2: computed while compiling
+test "O36/O37: a list built by owned results and cut by an owning parameter - while compiling and at run time" {
+    assert OwnBuiltBaked == ownBuilt(10 * OwnRun) and OwnBuiltBaked == 5546
+    assert ownBuilt(4) == 1007                  # S18c: decided while compiling
+    l := ownBuild(300 * OwnRun)
+    sbChurn()
+    m := ownTail(take l)
+    sbChurn()
+    assert ownSumOf(m) == 44850 and l == null
+}
+type OwnVec<T> struct() {
+    data own mut Array<T>& = Array<T>(2)
+    n I64 = 0
+}
+fn ownGrown(old Array<<T>>&, cap I64) own mut Array<T>& {
+    a own mut Array<T>& = Array<T>(cap)
+    for i in range old.Len() { a[i] = old[i] }
+    return a
+}
+fn ownGrownFrom(old own mut Array<<T>>&, cap I64) own mut Array<T>& {
+    a own mut Array<T>& = Array<T>(cap)
+    for i in range old.Len() { a[i] = old[i] } # old's elements refer where old's slot's would - its reach (O33)
+    return a                                    # old released as this returns
+}
+fn (v mut OwnVec<<T>>&) Push(x T) {
+    if v.n == v.data.Len() { v.data = ownGrown(v.data, v.n * 2) }   # the value borrows what its store releases
+    v.data[v.n] = x
+    v.n++
+}
+fn (v mut OwnVec<<T>>&) PushMoved(x T) {
+    if v.n == v.data.Len() { v.data = ownGrownFrom(take v.data, v.n * 2) }
+    v.data[v.n] = x
+    v.n++
+}
+fn ownVecWork(k I64) I64 {
+    v := OwnVec<I64>()
+    for i in range 100 { v.Push(i * k) }
+    w := OwnVec<I64>()
+    for i in range 50 { w.PushMoved(i) }
+    t := 0
+    for i in range v.n { t += v.data[i] }
+    for i in range w.n { t += w.data[i] }
+    return t + v.data.Len() + w.data.Len()
+}
+OwnVecBaked I64 = ownVecWork(2)                 # K2: computed while compiling
+test "O37: a buffer replaced by a call given a borrow of it, or given it - while compiling and at run time" {
+    assert OwnVecBaked == ownVecWork(2 * OwnRun) and OwnVecBaked == 11317
+    assert ownVecWork(1) == 6367                # S18c: decided while compiling
+}
+test "O33/O37: a buffer of text grown by moving it through a call - its elements read back after the arena churns" {
+    v := OwnVec<String&>()
+    for i in range 40 { v.PushMoved($i) }       # each text built where v lives - the elements' reach, not the buffer
+    sbChurn()
+    t := 0
+    for i in range v.n { t += v.data[i].Len() }
+    assert v.n == 40 and t == 70 and v.data[37] == "37" and v.data.Len() == 64
+}

@@ -1,0 +1,20 @@
+# check: fail error[O34]: moving out of 's.cur' would leave it empty - write 'take s.cur'
+# a borrow passed for an owning parameter
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn consume(c own mut Conn&) I64 { return c.fd }
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    println($consume(s.cur))
+}

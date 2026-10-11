@@ -1,0 +1,20 @@
+# check: fail error[O36]: 'consume' owns a parameter or gives an owned result, so it is called by name only
+# a function that owns a parameter is not a value - one error, not a misfit as well
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn consume(c own mut Conn&) I64 { return c.fd }
+fn apply(f fn(c Conn&) I64) I64 { return 0 }
+fn main() ? {
+    n := apply(consume)
+    println($n)
+}
