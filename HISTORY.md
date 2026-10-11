@@ -15490,3 +15490,37 @@ The checks gained the six programs (vec13-vec18), the List case (vec19) and a ru
 scope fuzzer's own mode writes the shapes - a conversion of an own field's buffer used after its release, a Vec's view
 converted inside a function taking the Vec by reference and growing it, and a conversion called through a function
 value - and on own seeds 1-100 the reviewed compiler gives three findings where this one gives none.
+
+### Vec phase 1's second review, fixed (§8.8 O37, O38, G12, T22a, O36, O40, 2026-10-11)
+
+The second review of Vec phase 1 (`/home/user/review/vec2`) found two use-after-frees. One was made by the fix round it
+reviewed; the other went through a gap old enough to explain two earlier use-after-frees and a compiler crash.
+
+The first was a matter of when. The fix round had a function record the type of the owned object its borrowed result
+borrows, and a function returning another's borrowed result copy the callee's type and parameter at the return. But a
+callee is sometimes checked from inside its caller's body: `a`'s second return calls `b`, whose body is checked then
+and copies what `a` had recorded so far, and `a`'s last return borrows an object of a different type. `b` kept the
+stale type, so its callers held a loan on the wrong type and a release of the right one went through. Copying at check
+time was the mistake, not the type key. Each return now records only what it borrows - a parameter and a type, or a
+call whose callee will say - and once every body is checked the answers are settled together, a least fixed point over
+the calls between them, before the own walk makes any loan. The parameter a result is borrowed from became a set at the
+same time: it was whichever return was checked last, which the review could not turn into a hole but called fragile.
+Mutual recursion through borrowed own results, which the review listed as refused, now simply works, since each
+function is marked through the other.
+
+The second was a path. A function made a value by its bare name went through the checks a function value needs - a
+generic is not one (G12), a scope-relating function is not one (T22a), an owning or a borrowed-own-result or a
+releasing function is not one (O36, O37, O40) - but the same function made a value through an import alias went
+through none of them, and the alias path returned a plain read. So `f := lib.View` held no loan, `f := lib.Stash`
+skipped its scope obligation, `f := lib.Drop` released under a borrow, and `f := lib.Id` crashed the compiler. Both
+paths now call one function, so they cannot drift again.
+
+Two over-rejections the review listed went with it, each kept only after must-fail cases showed the hazard is still
+refused. Cloning a `Vec` of references failed because Clone lent the whole buffer to a helper whose one scope variable
+stood for both the buffer and its elements' referents; copying element by element, where an element's referent is
+where the Vec keeps it, makes the obligation Clone's own. And `v.ToArray()` kept a loan on the buffer because its result
+type could have named it - but a built result's own top is new storage, which a region outliving nothing cannot be, and
+an own reference refers only to what it owns; neither is now taken for the buffer, while what the result holds still is.
+
+The scope fuzzer's own mode now imports a small library module it writes beside each program, so it can make a function
+a value through an alias, and writes the recursion shape.

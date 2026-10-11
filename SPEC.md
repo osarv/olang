@@ -5263,11 +5263,15 @@ an owned object reached from `p` by own fields only, or a slice of one, or one c
 `String(v.View())`) - `fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }`, `fn (v Outer&) First() Inner&v {
 return v.o }`, or another function's borrowed own result given `p` or a borrow so reached.
 The result is where `p`'s referent lives, but it is good only while the object is not released: each call makes a loan
-(O38) on the objects below the argument given for `p` of the type of the owned object the result borrows - the buffer's
-`Array<Char>` for a result `String&v` converted from it - rooted where that argument is (O39), and what it gives is
-confined to the caller's locals as a borrowed copy's is (O38). Only a call by name makes that loan, so a function giving a
-borrowed own result is called by name only: made a value (D16, E31) - a named function, a lambda, a type whose `Call`
-gives one adapted to a function type - it is a compile-time error. So `d := v.View()` followed by
+(O38) on the objects below each argument given for a parameter it may be borrowed from (`p`, and any other parameter
+whose referent lives where `p`'s does) of the type of the owned object the result borrows - the buffer's `Array<Char>`
+for a result `String&v` converted from it; any type, where its returns borrow objects of several - rooted where that
+argument is (O39), and what it gives is confined to the caller's locals as a borrowed copy's is (O38). Which functions
+give a borrowed own result, from which parameters and of which objects' types, is decided once every body is checked,
+through the calls between them - so mutually recursive functions agree. Only a call by name makes that loan, so a
+function giving a borrowed own result is called by name only: made a value (D16, E31) - a named function, by its own
+name or through an import alias (`f := lib.View`), a lambda, a type whose `Call` gives one adapted to a function type -
+it is a compile-time error. So `d := v.View()` followed by
 `v.Push(x)` is a compile-time error while `d` is used after it. *(Not yet implemented: a borrow reached through
 another call's borrowed own result and then an own field - `return v.First().deep` - is not one, and is O10's error.)*
 *(Not yet implemented: only a result written `own`, or of an owning type held by value, is owned - one of several
@@ -5313,7 +5317,11 @@ several results (D8c), a type argument's, an array's elements, a function value'
 reference derives from nothing. An own array's elements refer outside its buffer (O33), so a result that can refer
 neither to the argument's own storage, nor to an own array the argument's loans are on, nor to an element such an array
 holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
-from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Through a function value
+from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Two references are none
+of those: a **built** result's own top (`T&` or `T&return`, not borrowed from a parameter), which is new storage in the
+result scope an owned object's region, outliving nothing (O33), never is; and an own reference in a result, which refers
+only to the object it owns. So `a := v.ToArray()` and `c := v.Clone()` of a `Vec<String&>` keep their elements' text,
+and nothing of the buffer, across `v.Push(x)`. Through a function value
 nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
 
 A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference

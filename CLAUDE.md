@@ -5043,6 +5043,18 @@ and literals made only of such, never existing storage anywhere in it) - it is
   is kept (`l.Push(String(v.View()))` was accepted, a use-after-free found beside the review's). A function giving a
   borrowed own result is called by name only: made a value, or a type whose `Call` gives one adapted to a function type,
   it is a compile-time error (O37) - only a call by name makes the loan. Nothing relaxed.
+  **Its second review (vec2), fixed (the coordinator's calls, docs/own.md section 21)**: N1, a use-after-free 2d1aabf made -
+  a caller copied its callee's object type while the callee's body was still being checked, so mutual recursion kept a
+  stale type: which functions give a borrowed own result, from which parameters (a set now, not the last return's) and of
+  which types is settled as a least fixed point over the returns once every body is checked, before any loan is made
+  (`ownBorrowResultsSettle`); N2 and three older ones (T22a, O40, a G12 crash) - a function made a value through an import
+  alias (`f := lib.View`) skipped every check a bare name gets: both go through one function now (`buildFuncValueRead`).
+  **Decided (mine)**: two over-rejections removed - a built result (`T&`) is new storage at its top and an own reference
+  refers only to what it owns, so neither keeps a loan on a buffer (`v.ToArray()`, `v.Clone()` of a `Vec<String&>`, O38),
+  and `Vec.Clone` copies element by element (lending the whole buffer to a helper conflated its elements' scope with the
+  region's, O10c); mutually recursive borrowed own results now compile (marked through each other). Found on the way:
+  O17's deferred split-lend errors lost their instantiation (B11 - reported at the program's use now); left recorded,
+  `Sort` of a `Vec<mut T&>` is still O17's over-rejection.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

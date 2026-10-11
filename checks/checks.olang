@@ -32,7 +32,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr",
-                     "frameenv", "ownleave"]
+                     "frameenv", "ownleave", "vecalias"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -256,6 +256,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
         case "ownleave" { try ownleave(r) }
+        case "vecalias" { try vecalias(r) }
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
@@ -1017,6 +1018,25 @@ fn typereview(r mut report&) ? Failed {
     try oneError(r, dir, "privmethod", "error[M6]: method")
     try oneError(r, dir, "privtype", "error[M6]: type")
     try oneError(r, dir, "lambdaalias", "is an import's alias in this module")
+}
+
+# vec2 N2: a function made a value through an import alias ("f := lib.F") is checked as one named bare is - G12, T22a,
+# O36, O37 (a borrowed own result is called by name only) and O40 - where it once skipped them all; one error each, and
+# what stays legal through an alias the same built and interpreted
+test "a function value through an import alias is checked as one named bare" { assert passed("vecalias") }
+
+fn vecalias(r mut report&) ? Failed {
+    dir := fresh("vecalias")
+    os.Run("cp checks/fixtures/vecalias/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
+    try r.expect(outOf(dir) == "30 60 7 9\n", "good output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -i good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7 9\n", "good under -i", dir)
+    try oneError(r, dir, "n2", "error[O37]: 'View2' gives a borrowed own result")
+    try oneError(r, dir, "p1", "error[T22a]: 'Stash' relates its arguments' scopes")
+    try oneError(r, dir, "p2", "error[O40]: 'Drop' releases owned objects")
+    try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
+    try oneError(r, dir, "p4", "error[O36]: 'Eat' owns a parameter")
+    try oneError(r, dir, "p5", "error[O37]: 'View2' gives a borrowed own result")
 }
 
 # P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land

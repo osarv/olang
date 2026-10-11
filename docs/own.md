@@ -1624,3 +1624,64 @@ result's function still a value.
 Vec's view converted inside a function taking the Vec by reference and growing it (refused, O39 - the shape a local
 Vec's owner structure would have caught); a conversion called through a function value (refused, O37); both used before
 their release (accepted). Own seeds 1-100: 91ff37e finds three (seeds 39, 65, 94), this tip none.
+
+## 21. Vec phase 1's second review, fixed (2026-10-11)
+
+The review of 2d1aabf (`/home/user/review/vec2`) found two use-after-frees, N1 new in that commit and N2 through an older
+gap that also explained two older use-after-frees (P1, P2) and a compiler crash (P3). Fixed as the coordinator decided.
+
+1. **What a function's borrowed own result borrows is settled once every body is checked** (N1). `ownBorrowedOwnResult`
+   resolved each return at once: a return borrowing an own field marked the function with the field's object type; a
+   return of another function's borrowed own result copied that function's type and parameter. A caller checked while
+   its callee's body was still being checked - `a` checks `b` through `ensureBodyChecked` from its second return, `b`
+   copies `a`'s state at that moment, and `a`'s third return then borrows an object of another type - kept the stale
+   type, so `t := b(c, 2)` held a loan on `Array<Char>` while it borrowed `c.text`, a `String`, and `c.text = "..."` was
+   accepted. Each return is now recorded as a source (`struct ownBorrowSrc`: a parameter and the object's type, or a call
+   whose callee decides), and `ownBorrowResultsSettle`, the first step of `settleOwnBorrows`, computes a least fixed
+   point over them: a call's source adds, for each parameter its callee is settled to borrow from, the caller's parameter
+   that argument is rooted at (scope-checked as before) with the callee's type; two types, or one not known, give any
+   type. Every loan is made in the own walk after it (`ownResultRegionsOf`), so none is keyed by an unsettled answer -
+   and one made before would be on any type (`ownBorrowSettled`). Least is sound: a function the fixed point leaves
+   unmarked makes no loan at its calls, and its own return of a loan-carrying value is the O38 return check's error.
+   **The parameter index is a set** (`ownBorrowParams`): a function whose returns borrow below two parameters sharing
+   the result's scope makes a loan below each argument (`ownResultRegionsOf` gives one region per parameter); it was the
+   last return's. **Found beside it**: a borrowed own result returned through a callee unmarked when it was checked -
+   mutual recursion, the review's or6 - was refused (O38); it is marked through the fixed point now and compiles.
+2. **A function is made a value on one path** (N2, P1-P3). `tryBuildCrossModuleVarRead` returned a function read
+   through an import alias as a bare operand, skipping G12 (a crash on a generic), `noteFuncValueUse` (T22a, O36, O37,
+   O40) and the O36 placeholder. Both it and the bare-name path in `buildPrimary` call `buildFuncValueRead` now. The other
+   ways a function becomes a value were checked: a method is never one (M19), a generic is G12's error, a `Call` adapter
+   has its own note (`noteCallValueUse`), a lambda is noted where it is made, a default parameter value is built through
+   `buildPrimary`, and a constant argument naming a function is not read as one.
+3. **Two over-rejections removed** (the review's 1 and 2), each with must-fail cases for the hazard kept refused.
+   - `c := w.Clone()` of a `Vec<String&>` was O10c: Clone lent the whole buffer to `vecCopy`, whose single scope
+     variable stands for both the buffer and its elements' referents, and the buffer's region outlives nothing. Clone
+     now copies element by element (`c.data[i] = v.data[i]`), where an element read's referent is the region's reach,
+     so the obligation is Clone's own (`v`'s scope outlives its result) and discharged at the call. The hazard still
+     refused: a clone kept past the block its elements were made in (`vec27cloneshort`, O10c).
+   - `a := v.ToArray()` (and the clone) of a `Vec<String&>` kept a loan on the buffer, since the result's type could
+     name it. Two references are never the buffer: a **built** result's top (`T&`, `T&return`) is new storage in the
+     result scope, which a region outliving nothing cannot be (O33; `ownResultBuilt`), and an **own** reference refers
+     only to the object it owns (a moved one leaves its slot; `take` is refused under a loan) - so `ownMayReferTo` skips
+     both, and what the result holds is still looked at. The hazards still refused: a built result that is the buffer or
+     a slice of it is O10 at its return (`vec28builtleak`), and a built result holding a reference to it keeps the loan
+     (`vec29builtholds`, O38 at the callee and O39 at the caller).
+   The rest of the review's list stays as recorded there: an element read through a view keeps the loan (3), a
+   borrowed own result through two layers of conversion and slice is O10d (4), one of several results is O38 (5), and a
+   generic `Call` is not adapted (7, E12). **Found by the fuzzer, recorded too**: `Sort` of a Vec whose elements are
+   writable references (`Vec<mut Node&>`) is O17's error in the prelude - the permutation reading counts the comparison
+   function's writable parameters as stores into the buffer (sorting `Vec<Node&>` or `Vec<String&>` compiles). It was
+   never reached before, since the fuzzer's shape cloned the Vec first, which over-rejection 1 refused.
+4. **Found on the way (B11)**: O17's deferred split-lend errors (`lendChecks`, judged once every body is checked) lost
+   the instantiation they were met in, so an error inside the prelude's `Vec.Sort` named no line of the program; they
+   now keep the context and are reported at the program's use, with the library's line as a note.
+
+**Tests**: `vec21stalerec` (N1, O39), `vec22recrun` (mutual recursion that compiles, run), `vec23recpush` (or6's
+use-after-free, O39), `vec24twoparams` (the parameter set), `vec25cloneref` and `vec26toarray` (runs), `vec27`-`vec29`
+(must-fail); the `vecalias` scenario builds N2, P1-P3, an owning function and a parenthesized alias value against a
+library module (one error each) and a program of what stays legal through an alias, built and interpreted.
+
+**Fuzzer**: own mode imports a library module the fuzzer writes beside each program (`OwnLib`, `oalib.olang`), and
+`vec2Op` writes N1's shape (two borrowed own result functions of different objects' types recursing through each other,
+used after a release - refused, O39 - or before it) and N2's (a borrowed own result function or a releasing one made a
+value through the alias - refused, O37 and O40 - and the same called by name, used before the release).

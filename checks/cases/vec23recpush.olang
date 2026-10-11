@@ -1,0 +1,18 @@
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 9
+# vec2 (or6): a mutually recursive borrowed own result keeps its loan - b is marked through a, settled after both bodies
+fn a(v Vec<I64>&, n I64) Array<I64>&v {
+    if n > 0 { return b(v, n - 1) }
+    return v.View()
+}
+fn b(v Vec<I64>&, n I64) Array<I64>&v { return a(v, n) }
+fn grow(w mut Vec<I64>&) {
+    d := b(w, 1)
+    for i in range 1000 { w.Push(i + 100) }
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    grow(v)
+}

@@ -171,20 +171,13 @@ fn (v Vec<<T>>&) Has(x T) Bool {
     return false
 }
 
-# a buffer of n elements copied from old's first n, an owned result
-fn vecCopy(old Array<<T>>&, n I64) own mut Array<T>& {
-    nb own mut Array<T>& = Array<T>(n)
-    for i in range n { nb[i] = old[i] }
-    return nb
-}
-
 # the texts one after another with sep between each two, as an array of texts joins (Array<String&>.Join)
 fn (v Vec<String&>&) Join(sep String&) String { return v.data[:v.n].Join(sep) }
 
 # a new Vec - an owned result - holding the same elements in the same order, with a buffer of its own
 fn (v Vec<<T>>&) Clone() Vec<T> {
-    c := Vec<T>()
-    c.data = vecCopy(v.data, v.n)
+    c := Vec<T>(v.n)
+    for i in range v.n { c.data[i] = v.data[i] }
     c.n = v.n
     return c
 }

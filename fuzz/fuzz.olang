@@ -291,6 +291,7 @@ fn scopeSeed(seed I64, dir String&) {
     built := false
     for attempt in range 6 {
         src := scopegen.Program(U64(seed), Scenarios, keep)
+        if scopegen.OwnOnly { try os.WriteFile($dir "/oalib.olang", scopegen.OwnLib) catch { } }
         try os.WriteFile($dir "/p.olang", src) catch {
             scopeFinding(dir, seed, -1, "cannot write the program", "")
             return
@@ -400,6 +401,7 @@ fn scopeFinding(dir String&, seed I64, k I64, what String&, detail String&) {
     Found.AtomicAdd(1)
     to String& = $Run "/scope/" $seed
     os.Run("mkdir -p " $os.Quote(to) " && cp " $os.Quote(dir) "/p.olang " $os.Quote(dir) "/*.txt " $os.Quote(to) " 2> /dev/null")
+    if scopegen.OwnOnly { os.Run("cp " $os.Quote(dir) "/oalib.olang " $os.Quote(to) " 2> /dev/null") }
     if k >= 0 {
         keep := Array<Bool>(Scenarios)
         keep[k] = true

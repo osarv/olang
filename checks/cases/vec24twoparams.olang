@@ -1,0 +1,20 @@
+# check: fail error[O39]: assigning 'y.text' may release the String borrowed on line 12
+# vec2 N1: the parameters a borrowed own result is borrowed from are a set - a loan below each argument, not only the
+# last return's
+type CB struct() {
+    text own mut String& = "bb"
+}
+fn pick(a CB&, b CB&a, k Bool) String&a {
+    if k { return b.text }
+    return a.text
+}
+fn use(x mut CB&, y mut CB&x) {
+    t := pick(x, y, true)
+    y.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    println(t)
+}
+fn main() ? {
+    x := CB()
+    y := CB()
+    use(x, y)
+}

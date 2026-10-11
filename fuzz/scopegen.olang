@@ -203,6 +203,22 @@ AvoidKnown mut Bool = false
 # every scenario an own one (§8.8), set by "fuzz scope ... own"
 OwnOnly mut Bool = false
 
+# the module an own program imports (vec2 N2: a function made a value through an import alias is checked as one named
+# bare - O37, O40), written beside it as oalib.olang by the fuzzer
+OwnLib := (
+    "type LBox struct() {\n"
+    "    Buf own mut Array<I64>& = Array<I64>(4, 7)\n"
+    "}\n"
+    "G own mut LBox& = LBox()\n"
+    "fn View(b LBox&) Array<I64>&b { return b.Buf }\n"
+    "fn Drop() { G = LBox() }\n"
+    "fn Sum(a Array<I64>&) I64 {\n"
+    "    t := 0\n"
+    "    for x in a { t += x }\n"
+    "    return t\n"
+    "}\n"
+)
+
 # the types and helpers every program has
 Prelude := (
     "import \"std/time\"\n"
@@ -1107,10 +1123,11 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
     back := ($ind "if " $n ".Len() > 0 and " $n "[0] != null {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n
              " = Array<mut Node&>(1)\n" $ind "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
     if g.chance(60) {
-        w := g.r(14)
+        w := g.r(16)
         if w < 4 { return g.own4Op(h, ind, v) }
         if w < 6 { return g.own5Op(h, ind, v) }
         if w < 9 { return g.own6Op(h, ind, v) }
+        if w >= 14 { return g.vec2Op(h, ind, v, g.r(4)) }
         return g.own7Op(h, ind, v) if w < 11 else g.vecOp(h, ind, v)
     }
     k := g.r(15 if g.dtors else 11)
@@ -1402,7 +1419,8 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
     x := g.name("x")
     s := g.name("s")
     use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
-    k := g.r(16)
+    k := g.r(20)
+    if k >= 16 { return g.vec2Op(h, ind, v, k - 16) }
     if k >= 12 {    # vec1: a borrowed own result converted to a declared array type, of an own field or of a Vec's view -
                     # used before the release (accepted), after it (refused: O39), or through a function value (refused: O37)
         ix := g.name("OIx")
@@ -1495,6 +1513,51 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
     # a view of a Vec used before a push, and the elements walked after (accepted)
     return ($ind "{\n" $ind $s " := Vec<I64>()\n" $ind $s ".Push(" $v ")\n" $ind $x " := " $s ".View()[0]\n" $ind "for i in range 40 { "
             $s ".Push(i) }\n" $ind "churn()\n" $ind "for " $x "y in " $s " { " $x " += " $x "y }\n" $use $ind "}\n")
+}
+
+# vec2 (the review of 2d1aabf): a recursion through two borrowed own result functions of different objects' types, whose
+# loan must meet a release of either type (N1: used after the release, refused O39; before it, accepted); a function made
+# a value through an import alias, called through the value with the owner released after (N2: refused O37, O40), or
+# called by name and used before the release (accepted)
+fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    if k <= 1 {
+        rc := g.name("ORC")
+        ra := g.name("ora")
+        rb := g.name("orb")
+        g.addHelper("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
+                    "fn " $ra "(c " $rc "&, n I64) String&c {\n    if n == 0 { return String(c.data) }\n"
+                    "    if n == 1 { return " $rb "(c, n - 1) }\n    return c.text\n}\n"
+                    "fn " $rb "(c " $rc "&, n I64) String&c { return " $ra "(c, n) }\n")
+        c := g.name("c")
+        t := g.name("t")
+        mk := $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n"
+        if k == 0 {    # used after the String it borrows is released (refused: O39)
+            return ($ind "{\n" $mk $ind $t " := " $rb "(" $c ", 2)\n" $ind $c ".text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind
+                    "churn()\n" $ind $x " := " $t ".Len() + I64(" $t "[0])\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $t " := " $rb "(" $c ", 2)\n" $ind $x " := " $t ".Len() + I64(" $t "[0]) + " $rb "(" $c
+                ", 0).Len()\n" $ind $c ".text = \"zz\"\n" $ind $c ".data = Array<Char>(3, 'q')\n" $ind "churn()\n" $ind $x " += " $ra "("
+                $c ", 2).Len()\n" $use $ind "}\n")
+    }
+    b := g.name("b")
+    s := g.name("s")
+    f := g.name("f")
+    mk := $ind $b " := oalib.LBox()\n" $ind $b ".Buf[2] = " $v "\n"
+    if k == 2 {    # through the value, the box's buffer released after (refused: O37)
+        return ($ind "{\n" $mk $ind $f " := oalib.View\n" $ind $s " := " $f "(" $b ")\n" $ind $b ".Buf = Array<I64>(4, 1)\n"
+                $ind "churn()\n" $ind $x " := " $s "[2]\n" $use $ind "}\n")
+    }
+    if g.chance(50) {    # a releasing function through the value, the global's buffer borrowed (refused: O40)
+        return ($ind "{\n" $ind $f " := oalib.Drop\n" $ind $s " := oalib.G.Buf\n" $ind $f "()\n" $ind "churn()\n" $ind $x " := "
+                $s "[0] + " $v "\n" $use $ind "}\n")
+    }
+    # by name, used before the release; a plain function through the value (accepted)
+    return ($ind "{\n" $mk $ind $f " := oalib.Sum\n" $ind $s " := oalib.View(" $b ")\n" $ind $x " := " $s "[2] + " $f "(" $s
+            ")\n" $ind $b ".Buf = Array<I64>(4, 1)\n" $ind "oalib.Drop()\n" $ind "churn()\n" $ind $x " += oalib.G.Buf[1]\n" $use
+            $ind "}\n")
 }
 
 # a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a
@@ -1793,6 +1856,7 @@ fn Scenario(seed U64, k I64) String& {
 fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     b := StringBuilder()
     b.Push("# scope fuzz seed " $seed "\n")
+    if OwnOnly { b.Push("import \"oalib\"\n") }
     b.Push(Prelude)
     if HasDtors(seed) { b.Push(DtorPrelude) }
     for k in range n {

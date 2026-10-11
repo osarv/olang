@@ -463,7 +463,9 @@ struct var {
     bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
     bool regionAnyType;         //...of objects of any own type (a borrowed own result whose object's type is not one known)
     int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
-                                //parameter i by own fields, as a result borrowed from it (T&p): i + 1, else 0
+                                //parameters by own fields, as a result borrowed from them (T&p): the first one's index + 1,
+                                //else 0 - settled once every body is checked (ownBorrowResultsSettle, vec2 N1)
+    struct list ownBorrowParams; //...every parameter (int) it may be borrowed from (vec2: a set, not the last return's)
     struct type* ownBorrowResultType; //...the type of the own object it borrows (OwnTypeKey of its slot - never the result's
                                 //own type, which a conversion may have renamed: "String(v.View())"), what its loan is on
     bool ownBorrowResultAnyType; //...it may borrow objects of several types, or one not known: its loan meets any release
@@ -783,7 +785,9 @@ struct operand {
     bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
     struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
                                 //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
-    struct var* ownResultRegion; //O38 (Vec phase 1): the loan a call giving a borrowed own result makes (regionOfResult)
+    struct list ownResultRegions; //O38 (Vec phase 1): the loans a call giving a borrowed own result makes (regionOfResult),
+                                  //one per parameter it may be borrowed from (struct var*)
+    bool ownResultRegionsMade;
     bool inPlaceBorrow; //O38 (own7 F1): this value lvalue is borrowed where it is (E12c) - by a reference parameter, a
                         //receiver, a reference local or field, a task's argument - not read as a copy: a part of an owned
                         //object borrowed so borrows the object, whatever the part's type holds
