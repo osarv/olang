@@ -1587,6 +1587,9 @@ no scope tag into the declaration: the local takes its
 initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
 (C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
 destructed when that scope closes.
+A global declared with `:=` has its initializer's type wherever it is read - above its declaration too, which B5a
+allows, since the global is set after the globals its initializer reads; `:=` globals whose initializers read each
+other are B5a's cycle, reported as one.
 
 **D15a.** An `Array<T>` declared by either form holds its length beside its storage, so a later assignment may
 give it an array of any length: a value `Array<T>` gets its own copy of the new elements, a reference
@@ -5460,7 +5463,9 @@ IDEN                               # bare pun (§9.2) — valid only when no typ
 ```
 
 A field's declared type (explicit, or inferred by `:=`) may carry a reference marker (T24): bare, or
-naming a parameter or an earlier field of this same constructor (C2d).
+naming a parameter or an earlier field of this same constructor (C2d). An inferred field's type is part of the type's
+declaration like a written one: code anywhere the field is reachable reads it as its initializer's type - a function or
+method written above the type, another module's code, a global's initializer.
 
 The `STMNT_END` terminating a `ctor-field` follows §1's own rules for any other statement, L20
 included, so a whole constructor may be written on one line (`type Point struct(x I32) { x }`).

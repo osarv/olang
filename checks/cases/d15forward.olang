@@ -1,0 +1,19 @@
+# check: run
+# D15/B5a: a ':=' global's type is its initializer's, and B5a sets a global after the globals it reads - so one read above
+# its declaration is built first, for the reader, where it was "?" ("'+' takes numbers, found ?"). A ':=' field read by
+# a global's initializer (C2) likewise: its constructor's body is built for it, before any function body is checked
+Total := Base + Step * 2
+Base := 10
+Step := Base / 5
+Count := S().xs.Len() + S().n
+Gen := Box<I64>().vs.Len()
+type S struct() {
+    xs := List<I64>()
+    n := Step + 1
+}
+type Box<T> struct() {
+    vs := List<T>()
+}
+fn main() ? {
+    assert Total == 14 and Count == 3 and Gen == 0
+}

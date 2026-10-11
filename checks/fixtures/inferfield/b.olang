@@ -1,0 +1,16 @@
+# the root: its bodies are checked before a.olang's, so a.S's and a.Box<I64>'s constructors are first built for them
+import "a"
+
+Baked := a.Three()
+
+test "a ':=' field of another module's type" {
+    s := a.S()
+    s.Add(3)
+    s.Add(4)
+    assert a.Total(s) == 9
+    b := a.Box<I64>()
+    b.Put(7)
+    assert b.Count() == 1
+    assert a.Three() == 5
+    assert Baked == 5
+}

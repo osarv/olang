@@ -15872,3 +15872,47 @@ test`. Measured on `big.olang` (4.6 MB, the machine loaded): scanning 97-103 MB/
   so the last field's span was wrong. Moving the constructor call into a method of its own (`lastField`) gives the right
   result. A small program of the same shape did not reproduce it, under `-s` either; semantic.c being other work's,
   it is left for a fix there with this description.
+### A `:=` field or global read before its turn, and a BF16's sign bit (C2, D15, B5a, E33, T4, 2026-10-11)
+
+**`:=` fields (C2).** The M2 diagnostics work found it (above): a struct whose constructor declares a field with `:=`
+had that field typed `?` in a body checked before the constructor's - `s.xs.Push(x)` was "? has no method 'Push'". It
+was never about modules: a field's `:=` type is its initializer's, settled as the constructor's body is built, and bodies
+are built in declaration order - so a method written above its type failed in one file too, and another module's code
+reached it first because the importer's bodies are checked before the imported module's. Nothing asked for the
+constructor's body ahead of its turn, though the machinery to do so (`ensureCtorBodyBuilt`, C2d's) was there. Now a
+member read whose field has no type yet builds the constructor's body first (`ensureFieldTypesKnown`, in
+`OperandMember`), for a declared type or a generic type's instantiation - which the drain builds later still, so
+`Box<I64>().vs.Len()` failed the same way; an instantiation is found in a list kept of every one made
+(`typeInstsMade`) and built with its bindings and context as the drain would. It is asked for from a global's
+initializer too, which runs before any body is checked (`G := S().xs.Len()`), so it is not tied to the bodies phase.
+
+**`:=` globals (D15, B5a), the same order.** B5a sets a global after the globals its initializer reads, so `Total := Base
++ 1` above `Base := 10` is a correct program - but a `:=` global's type was read off its initializer in declaration
+order, so the first was "'+' takes numbers, found ?" and D15's "a call returning nothing has none", a message about
+something else. A read of a `:=` global whose initializer is not built (`OperandReadVar`) now builds it first
+(`ensureGlobalBuilt`); a global read again while its own initializer is being built is a cycle, reported as the
+evaluator's ordering reports a typed one (B5a's two messages, the cycle written out). Decided (mine): the error is at the
+first global of the cycle, as for a typed one, so `:=` and typed globals say the same thing.
+
+**compiler/diag.olang** had typed its `Diagnostics` lists to avoid the bug; they are `:=` again, as first written.
+
+**BF16's sign bit (E33, T4).** std/math's "sign and size" failed under `-d` and `-r` on `SignBit(BF16(-2.0))`. Not
+the test, std, or the sanitizers: LLVM 18's x86 selection, on a target without AVX512-BF16 (B12c), takes the sign bit of
+`bitcast bfloat to i16` for a known zero wherever the bfloat is not an argument in a register - a load, a value stored as
+well as read, a select or a phi - so any test of that bit folded to false: `x.Bits() >> 15 == 1`, `& 0x8000`, and
+`F32(x).Bits() >> 31` through the widening every BF16 operation starts with (a shift of those bits). Every other bit is
+computed right, which is why nothing else noticed. With the bfloat also stored, selection crashed instead
+(`SimplifyDemandedBits`, a segfault in the `-O3` link of an ordinary loop). `-b` and `-b -s` passed only because InstCombine
+had turned a load's single bitcast into an `i16` load first; the `-s` failure was `make scopesan`'s, which builds `-d -s`. Measured over the shapes in `fuzz/repro/bf16signbit.ll`: plain bitcasts 12-16 wrong of 21 at every `llc` level;
+`fpext` plus shifts and a `<2 x bfloat>` bitcast right before `opt` and wrong after it (InstCombine rewrites both into the
+bitcast); a `freeze` no help; an empty asm on the `i16` right everywhere. So `Bits()` of a BF16 goes through one always
+(`cgBF16Bits`) - one scalar value, nothing to vectorize, as an F16's already does - and the widening only in `-d` and
+`-r` builds, where nothing vectorizes; under `-O3` an asm there would stop every BF16 loop vectorizing (std/linalg's
+BF16 products), and the shapes left (a BF16 chosen by a conditional, or stored and read, then widened and its bits
+tested as an integer) did not miscompile in any program tried. Recorded as LLVM 18's, not fixed below it. E33's comment
+that a BF16's bits are left plain for vectorization is reversed for `Bits()`.
+
+**Tests.** checks: the `inferfield` scenario (a module with a method and a function above its types, a generic type's
+instantiation, an evaluator-baked global and an assert it decides; tested alone and from an importing module), cases
+`d15forward` (forward `:=` globals and fields read from a global initializer), `d15forwardcycle` and `d15forwardself`;
+the `bits` scenario builds `bf16sign.olang` with `-b` and `-d` (it failed under `-d` before). `fuzz/repro/bf16signbit.*`.

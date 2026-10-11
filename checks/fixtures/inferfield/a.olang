@@ -1,0 +1,40 @@
+# C2: a ":=" field's type is settled as its constructor's body is built. Each body here reads such a field before its
+# type's turn - a function and a method declared above the types, and (b.olang) a module importing this one, whose
+# bodies are checked first - and the field's type is built for it, not "?"
+fn Total(s S&) I64 {
+    n := 0
+    for x in s.xs { n += x }
+    return n + s.ys.Len() + Box<I64>().vs.Len()
+}
+
+fn (s mut S&) Add(x I64) {
+    s.xs.Push(x)
+    s.ys.Push($x)
+}
+
+fn (b mut Box<<T>>&) Put(x T) { b.vs.Push(x) }
+fn (b Box<<T>>&) Count() I64 { return b.vs.Len() }
+
+# evaluable while compiling: an assert on it is decided there (S18c), and the same call runs in b.olang's test
+fn Three() I64 {
+    s := S()
+    s.Add(1)
+    s.Add(2)
+    return Total(s)
+}
+
+type S struct() {
+    xs := List<I64>()
+    ys := List<String&>()
+}
+
+type Box<T> struct() {
+    vs := List<T>()
+}
+
+test "a body reads a ':=' field before its type's turn" {
+    assert Three() == 5
+    b := Box<String&>()
+    b.Put("x")
+    assert b.Count() == 1
+}

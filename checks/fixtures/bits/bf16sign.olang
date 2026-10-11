@@ -1,0 +1,18 @@
+# E33/T4: the sign bit of a BF16 read from memory (an element, a value also stored, a choice of two) - which LLVM 18's
+# x86 selection took for a known zero, so each test was false under -d and -r, and the stored one crashed the -O3 link
+# (fuzz/repro/bf16signbit.ll). Built -b and -d; the globals are mutable so nothing is decided while compiling
+import "std/math"
+A mut Array<BF16>& = BF16[1.0, -2.0]
+Pick mut Bool = false
+fn stored(a Array<BF16>&, b mut Array<BF16>&) Bool {
+    x := a[1]
+    b[0] = x
+    return x.Bits() >> 15 == 1
+}
+fn main() ? {
+    b := Array<BF16>(2)
+    chosen := A[0] if Pick else A[1]
+    assert math.SignBit(A[1]) and not math.SignBit(A[0]) and (A[1].Bits() & 0x8000) != 0
+    assert F32(A[1]).Bits() >> 31 == 1 and F64(A[1]).Bits() >> 63 == 1
+    assert stored(A, b) and chosen.Bits() >> 15 == 1 and (-A[1]).Bits() >> 15 == 0
+}

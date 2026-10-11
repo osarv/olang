@@ -57,18 +57,18 @@ type context struct(at Where, text String&) {
 # the diagnostics of one compilation. color: write the terminal's colours (ColorWanted says whether to)
 type Diagnostics struct(Color Bool) {
     Color
-    paths List<String&>
-    texts List<String&>
-    library List<Bool>
-    starts List<I64>                # every file's line starts, one file's after another's, made when first needed
-    startsFrom List<I64>            # per file: where its line starts begin in starts, or -1 until they are made
-    startsLen List<I64>
-    records List<record>
-    notes List<note>
-    groupParent List<I64>           # per group: the group it was opened inside, or -1
-    groupState List<I64>            # per group: Pending, Chosen or Dropped
-    held List<I64>                  # the groups open now, innermost last
-    contexts List<context>          # the contexts open now, innermost last
+    paths := List<String&>()
+    texts := List<String&>()
+    library := List<Bool>()
+    starts := List<I64>()           # every file's line starts, one file's after another's, made when first needed
+    startsFrom := List<I64>()       # per file: where its line starts begin in starts, or -1 until they are made
+    startsLen := List<I64>()
+    records := List<record>()
+    notes := List<note>()
+    groupParent := List<I64>()      # per group: the group it was opened inside, or -1
+    groupState := List<I64>()       # per group: Pending, Chosen or Dropped
+    held := List<I64>()             # the groups open now, innermost last
+    contexts := List<context>()     # the contexts open now, innermost last
     scopeOn Bool = false            # inside a statement's group of errors about where things live (ScopeGroupStart)
     scopeSeen Bool = false
     fatalAt Where = Where.Nowhere

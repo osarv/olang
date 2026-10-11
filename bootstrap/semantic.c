@@ -2610,6 +2610,7 @@ static bool signaturesResolved;
 static struct token instSite;
 
 static struct list pendingTypeInsts; //struct pendingTypeInst
+static struct list typeInstsMade; //struct pendingTypeInst: every generic type's instantiation, drained or not (C2)
 void buildTypeBodies(struct semaModule* mod, struct type* t);
 
 bool bindingsMatch(struct list* a, struct list* b) {
@@ -3260,7 +3261,10 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         p.site = instSite;
         p.chain = instChain + 1;
         if (p.chain > INSTANTIATION_CHAIN_LIMIT) reportUnbounded(generic->tok); //G17
-        else ListAdd(&pendingTypeInsts, &p);
+        else {
+            ListAdd(&pendingTypeInsts, &p);
+            ListAdd(&typeInstsMade, &p);
+        }
     }
     return spec;
 }
@@ -9303,7 +9307,9 @@ static void ownRestore(struct operand* op) {
     op->ownRegion = NULL;
 }
 
+static bool ensureGlobalBuilt(struct var* v);
 struct operand* OperandReadVar(struct var* v, struct token tok) {
+    if (!ensureGlobalBuilt(v)) return unknownPlaceholder(tok);
     struct operand* op = operandNew(tok, OPERATION_READ_VAR, v->type);
     canonicalVar(v)->valueEscapes = true; //D16c: every read the checker makes of a variable as a value goes through here
     //D16: a function value is reference-shaped - it names what its captures live in - while a declaration's own
@@ -13384,6 +13390,7 @@ bool scopeViaFallback(struct operand* op) { return scopeViaFallbackAt(op, true);
 //scope of the function (O23a): exact for what it is, a scope nothing is built into
 static bool scopeViaUnderestimate(struct operand* op) { return scopeViaFallbackAt(op, false); }
 
+static void ensureFieldTypesKnown(struct type* t);
 struct operand* OperandMember(struct semaModule* referencingMod, struct operand* base, struct str member, struct token tok) {
     if (base->type.unknown) return unknownPlaceholder(tok); //an unknown name or type, reported where it is written
     //B11: a member that does not exist recovers as the unknown stand-in, which fits anything - one error per cause, not
@@ -13396,6 +13403,12 @@ struct operand* OperandMember(struct semaModule* referencingMod, struct operand*
     if (!memberVar) {
         Err(tok, ERR_NO_SUCH_MEMBER, &base->type, member);
         return unknownPlaceholder(tok);
+    }
+    //C2: a ":=" field's type is its initializer's, settled as the constructor's body is built - which a body read in
+    //another order (a method declared before its type, or reached from another module) needs first
+    if (memberVar->type.bType == BASETYPE_VOID && !memberVar->type.unknown && base->type.ctorFunc) {
+        ensureFieldTypesKnown(base->type.ctorFunc->type.retType);
+        memberVar = VarGetList(&base->type.vars, member);
     }
     //M6a. Report and CARRY ON with the member's real type: the member exists and its type is known, only
     //its visibility is wrong, so recovering as int32 made every later check on the expression fail again
@@ -26758,14 +26771,60 @@ static void buildTypeBodiesDtor(struct semaModule* mod, struct type* t) {
 //read the global first - which saw a length-less "T[]" - and the length was never adopted at all, so the
 //global stayed runtime-length and its initializer tried to allocate from a scope no global has.
 static void buildDefaultFor(struct semaModule* mod, struct var* v, struct token nameTok);
+//D15/B5a: a ":=" global's type is its initializer's, built in declaration order - or first, where an initializer read
+//first needs it ("A := B + 1" above "B := 3": B5a sets B first, so its type is there to know). The ones being built,
+//innermost last: one read again while it is being built reads itself, a cycle
+static struct list globalsBuilding; //struct var*
+static int onDemandDepth;
+static void onDemand(void (*check)(void*), void* arg);
+static bool bodiesPhase;
+static void buildGlobalInit(struct semaModule* mod, struct syntax* actual);
+struct globalInitArg { struct semaModule* mod; struct syntax* actual; };
+static void buildGlobalInitOnDemand(void* arg) {
+    struct globalInitArg* a = arg;
+    SemanticMethodScope = a->mod;
+    buildGlobalInit(a->mod, a->actual);
+}
+//v read before its initializer is built: built now, or - read again while it is - the cycle reported (B5a); false where
+//its type is still not known
+static bool ensureGlobalBuilt(struct var* v) {
+    if (!signaturesResolved || bodiesPhase || !v->owner || v->isFuncDecl || v->initExpr || v->type.unknown
+            || v->type.bType != BASETYPE_VOID || onDemandDepth >= 48 || ErrMsgMuted()) return true;
+    for (int i = 0; i < globalsBuilding.len; i++) {
+        if (*(struct var**)ListGetIdx(&globalsBuilding, i) != v) continue;
+        //(reported as K's ordering reports a typed global's: at the first global, the cycle written out)
+        if (i == globalsBuilding.len - 1) { Err(v->tok, ERR_GLOBAL_READS_ITSELF, v->name, v->name); return false; }
+        char buf[1200] = {0};
+        int at = 0;
+        for (int k = i; k <= globalsBuilding.len && at < (int)sizeof(buf) - 80; k++) {
+            struct var* g = *(struct var**)ListGetIdx(&globalsBuilding, k < globalsBuilding.len ? k : i);
+            at += snprintf(buf + at, sizeof(buf) - at, "%s%.*s", k > i ? " -> " : "", (int)g->name.len, g->name.ptr);
+        }
+        Err(v->tok, ERR_GLOBALS_CYCLE, buf);
+        return false;
+    }
+    struct syntax* decl = cfGlobalDecl(v->owner, v->name);
+    if (!decl || firstPartOfType(decl, SNTX_TYPE_EXPR)) return true;
+    struct globalInitArg a = { v->owner, decl };
+    onDemand(buildGlobalInitOnDemand, &a);
+    return !v->type.unknown && v->type.bType != BASETYPE_VOID;
+}
+
 void semaBuildGlobalInits(struct semaModule* mod) {
     SemanticMethodScope = mod;
     for (int i = 0; i < mod->syn.decls.len; i++) {
         struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
         struct syntax* actual = partSntx(decl, 0);
         if (actual->type != SNTX_VAR_DECL) continue;
+        buildGlobalInit(mod, actual);
+    }
+}
+static void buildGlobalInit(struct semaModule* mod, struct syntax* actual) {
+    {
         struct token nameTok = firstTokOfType(actual, TOK_IDEN);
         struct var* v = VarGetList(&mod->vars, strFromTok(nameTok));
+        if (v->initExpr) return; //built already, on demand (ensureGlobalBuilt)
+        ListAdd(&globalsBuilding, &v);
         struct checkCtx ctx = {0};
         ctx.mod = mod;
         struct syntax* exprNode = firstPartOfType(actual, SNTX_EXPR);
@@ -26787,7 +26846,8 @@ void semaBuildGlobalInits(struct semaModule* mod) {
                 ownMoveInto(&ctx, rhs, v->type, NULL, 0, true);
                 v->initExpr = rhs;
                 buildDefaultFor(mod, v, nameTok);
-                continue;
+                ListRemoveIdx(&globalsBuilding, globalsBuilding.len - 1);
+                return;
             }
             if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
                 reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
@@ -26804,6 +26864,7 @@ void semaBuildGlobalInits(struct semaModule* mod) {
             v->initExpr = rhs;
         }
         buildDefaultFor(mod, v, nameTok);
+        ListRemoveIdx(&globalsBuilding, globalsBuilding.len - 1);
     }
 }
 
@@ -27081,6 +27142,36 @@ static void ensureCtorBodyBuilt(struct type* t) {
             || t->genericOrigin || ctorIsGeneric(t) || !t->owner || !t->ctorFunc || onDemandDepth >= 48 || ErrMsgMuted())
         return;
     onDemand(buildTypeBodiesOnDemand, t);
+}
+static void buildInstBodiesOnDemand(void* arg) {
+    struct pendingTypeInst* p = arg;
+    currentBindings = &p->bindings;
+    ErrMsgPushContext(p->site, instantiationNote(&p->spec->genericOrigin->typeParams, &p->bindings)); //G16
+    int prevChain = instChain;
+    instChain = p->chain; //G17
+    buildTypeBodies(p->spec->owner, p->spec);
+    instChain = prevChain;
+    ErrMsgPopContext();
+}
+//C2: a ":=" field's type is known once its constructor's body is built - ahead of its turn where a body reads the field
+//first: a declaration's own (ensureCtorBodyBuilt), or a generic type's instantiation, built as drainTypeInstantiations
+//would build it
+//(and a global's initializer, built before every body - "G := S().xs.Len()" - may need it too)
+static void ensureFieldTypesKnown(struct type* t) {
+    if (!t || !signaturesResolved || t->ctorBodyState || onDemandDepth >= 48 || ErrMsgMuted()) return;
+    if (!t->genericOrigin) {
+        if (!t->hasCtor || t->bType != BASETYPE_STRUCT || t->typeParams.len || ctorIsGeneric(t) || !t->owner || !t->ctorFunc)
+            return;
+        onDemand(buildTypeBodiesOnDemand, t);
+        return;
+    }
+    for (int i = 0; i < unmetTypeInsts.len; i++) if (*(struct type**)ListGetIdx(&unmetTypeInsts, i) == t) return;
+    for (int i = 0; i < typeInstsMade.len; i++) {
+        struct pendingTypeInst p = *(struct pendingTypeInst*)ListGetIdx(&typeInstsMade, i); //(the list may grow)
+        if (p.spec != t) continue;
+        onDemand(buildInstBodiesOnDemand, &p);
+        return;
+    }
 }
 
 // ---- entry point ----
@@ -29172,10 +29263,12 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     writtenApplies = ListInit(sizeof(struct writtenApply)); //B11/D13c
     ctorTwins = ListInit(sizeof(struct type*)); //G10d
     ctorTwinInsts = ListInit(sizeof(struct pendingTypeInst));
+    globalsBuilding = ListInit(sizeof(struct var*));
     unmetTypeInsts = ListInit(sizeof(struct type*));
     unboundedReported = ListInit(sizeof(struct token)); //G17
     pendingInstances = ListInit(sizeof(int));
     pendingTypeInsts = ListInit(sizeof(struct pendingTypeInst));
+    typeInstsMade = ListInit(sizeof(struct pendingTypeInst));
     deferredConstraints = ListInit(sizeof(struct deferredConstraint));
     constParamEqChecks = ListInit(sizeof(struct constParamEqCheck));
     signaturesResolved = false;
