@@ -746,6 +746,13 @@ because what it finds about structure feeds the refactor.
   Anything that would keep it elsewhere is refused, with "Clone() what must be kept". N3, N6 and M1 get direct fixes.
   Sent to the own agent (afe0b23). Another review follows.
   Lesson, again: extending loans to wherever a value is kept is whack-a-mole. Confinement is the design that holds.
+- 09:00 CEST: N1-N6 and M1 are fixed on wt-own (e3ded09, verified). Borrowed copies are confined to this function's
+  locals (F2's extension reversed). The fixes:
+  - N3: cgMayLeave.
+  - N6: a constructor's own fields are registered until assembly.
+  - M1: a {owner, registered} slot; 4M turns at 1.6 MB.
+  The fuzzer found 67 problems on 67cb5b1 and 0 after the fix. New over-rejection: `l.Push(b)` of a borrowed copy
+  (Clone it). A third review runs (/home/user/wt/rvown5 @ e3ded09 -> /home/user/review/own5). Weekly 0.52 at 08:50 CEST.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
