@@ -2,7 +2,9 @@
 
 Status: M1 (`source`, `token`, `scan`) built 2026-10-11 - the token diff is clean on every file of the repository and
 study2's data, at 93-102 MB/s; M2 (`diag`, `msgs`) and M3 (`ast`, `parse`) built the same day - the structure diff and
-the round trip are clean on every file and on study2's data, scan and parse together at 41-44 MB/s; the rest is design.
+the round trip are clean on every file and on study2's data, scan and parse together at 41-44 MB/s; M4 (`load`, `fetch`,
+`names`, with `cond`) built the same day - every root's module graph is stage 0's, and every checks case gives the load
+and name errors stage 0 gives; the rest is design.
 `SPEC.md` says what olang means; this file says how the compiler written in olang computes it. The C compiler
 (`bootstrap/`) is the reference for behaviour only: its diagnostics, edge cases and test results, never its structure.
 Where the C compiler and `SPEC.md` disagree, the port follows `SPEC.md`, and the disagreement is fixed in C as well (or
@@ -216,6 +218,23 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   The pre-scan is token-level: it reads the import declarations and the declared type and error names, including
   those in every conditional branch, for the parser's one oracle (section 2, point 1).
 - **Parsing in parallel.** Each module's parse is pure, so modules may be parsed by parallel tasks in a `join`.
+- **Built (M4).** `compiler/load.olang`, `compiler/fetch.olang` and `compiler/cond.olang`. What was decided while
+  building it:
+  - **Parsing is not parallel yet.** Every parser interns into one `source.Names`, which is mutable shared state; a
+    parse per task would need an interner per task merged afterwards, or a locked one. Measured, parsing the whole
+    corpus closure is not where the time goes (the checker will be), so it waits for M10's measurements.
+  - **B9a is decided in the loader, over the AST** (`cond.Eval`), not over tokens: a chain of top-level ifs is decided
+    once its conditions' globals are known, its chosen branch's imports loaded, the others' never. A condition B9a
+    cannot decide (a call, a computed global, another module's name) leaves its chain **pending**: its imports wait
+    and its branches' diagnostics stay held. `PendingIfs()` lists them and `Decide(module, condition, branch)` takes
+    the checker's decision (M5/M8 evaluate the condition) - the loader never guesses. Stage 0 checks a first attempt
+    with every such chain taking its else and then checks again; the port loads only what is decided, so a module
+    reached only through a pending branch is not in the graph until it is decided.
+  - **What load reports**: M1, M4, M5, M14, M16, M17, M22, M22a, M23, M23a and M23b, the lexical and syntax
+    diagnostics of the branches chosen, and B9a/B10's errors in a condition. A missing root is one error at the file.
+  - **Remote imports** run git through `os.Exec` with every part validated (`fetch.NamePart`, `IsCommit`); a fetch
+    goes into a temporary directory renamed into the cache at `host/owner/repo/<commit>`; the lock file and `-u`
+    behave as stage 0's (the same lines, the same "updated ... (was ...)" report).
 
 ### 1.5 Names (`names`)
 
@@ -235,6 +254,22 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
 
   This replaces both the token evaluator of B9a and B9c's loop that checked the whole program again. B9a's results
   are by definition identical to B9c's. Messages that checks cases pin are kept.
+- **Built (M4).** `compiler/names.olang`: a `Table` per module (entries; values, types and aliases by `NameId`), a
+  `Resolver` recording what each name written is (`Use(file, offset)`, `Member(file, end)` for `alias.Name`, as a
+  `Ref` of kind, module and index), parameters and locals in one map with an undo log, and `DecideTop` for a pending
+  top-level if (it calls `Decide`, then enters and resolves the branch's declarations). What was decided while
+  building it:
+  - **Names reports the rules about declarations and imports only**: D2, D3 (declared twice), D3a (shadowing a
+    global, a function, a build constant, a type, a prelude name; a for-in name, E29), D8c (`_`), M10 (an unknown
+    alias, naming the std module where one exists), M14, M19f, M20, B10/B10c (an unknown or redeclared build
+    constant, a `mut` default) and G22's constant names. **An unknown name is recorded as `None` and left to the
+    checker** (M5), which knows a type's members and reports one error per name with its suggestion - two passes
+    reporting it would say it twice, and only the checker can tell `x.f` on a value from `alias.f`.
+  - **A name a pending top-level branch declares waits** (`Table.waiting`): it is no unknown name and no clash until
+    the branch is decided.
+  - **A local if (S8b)** whose condition `cond.Eval` decides has its chosen branch's diagnostics reported and the
+    others' dropped; one it cannot decide has its branches' diagnostics reported only where they hold no syntax error
+    - a branch with one may still be dropped by the checker's evaluation (S8c, B9c), as stage 0 drops it.
 
 ### 1.6 Types and checking (`types`, `generic`, `typed`, `check`)
 
@@ -641,7 +676,24 @@ with the installed one; `make bootstrap` is section 5.
      without its position. A missing tool or a short output is a failure. Clean on all 1,262 files and study2's data;
      nesting is checked against stage 0 with both built for a limit of 40 (96 forms at 36-40 levels) and at 1,000 and
      4,000 levels, and the new parser alone at 20,000 (stage 0 is superlinear in depth).
-3. **Diagnostic goldens.**
+3. **Module graphs and name errors (M4).**
+   - Tools: `bootstrap/oracle/modgraph.c` links stage 0 without its driver and analyzes a root as `olang -c` does (its
+     build-decided branches decided), printing every module's identity and its imports, sorted;
+     `dump.olang modules` prints the self-hosted loader's graph the same way (`Loader.Graph()`).
+   - `compiler/tools/modgraph.sh` (`make modgraph`) compares them on every root of the repository - the corpus, std,
+     `compiler/` and its tools, checks, fuzz and bench, each as an ordinary and as a test build - and on a program
+     importing a remote repository made in a scratch directory (identities, edges and the lock file's lines). A root
+     whose top-level conditions only B9c decides would differ until M5 decides them; there is none. Not in `make
+     verify`: stage 0 checks every root whole, minutes in all.
+   - `compiler/tools/namesdiff.sh` (`make namesdiff`, part of `make verify`, about 25 s) runs `dump.olang names` on
+     every `checks/cases` program, with its `# flags:` (`-D`, `-t`), and requires the errors of load's and names'
+     rules to be exactly those stage 0 gave in `compiler/goldens/diag.txt`, by rule and position - and none where it
+     gave none of them. All 1,132 cases agree (40 such errors). Every file of the repository outside the failing cases
+     loads and resolves with no error, plainly and as a test build.
+   - The remote, lock and `-u` scenarios are unit tests: `fetch.olang` (locking, a locked offline build, a refetch by
+     hash, `-u`, deleting a line, bad names) and `load.olang` (a remote import and its relative imports), each over a
+     local git repository.
+4. **Diagnostic goldens.**
    - Stage 0's output on every `checks/cases` program is captured: its `path:line:col: error[RULE]: text` rows.
    - The new compiler must match the rule and position everywhere, and the text wherever a case pins it.
    - Unpinned text differences are listed for review, not failed.
@@ -652,19 +704,19 @@ with the installed one; `make bootstrap` is section 5.
      every rule a message names, a lowercase one and a missing one. Limit: until the new compiler makes its own records,
      a span's end is read from the golden's own caret, so a caret's width is checked for consistency only; from M3 the
      records come from the parser's spans and the widths are compared for real.
-4. **Typed tree and MIR.** These are not compared with C; their representations differ by design.
+5. **Typed tree and MIR.** These are not compared with C; their representations differ by design.
    - The MIR verifier runs on every function of the corpus.
    - `dump.olang mir` serves review.
    - Unit `test` blocks live in the compiler's own modules (scanner cases, interning, the pattern converter), and
      `make test` runs them.
-5. **Behaviour against stage 1.**
+6. **Behaviour against stage 1.**
    - P0 parametrizes the compiler under test: the makefile gets `OLANG ?= build/out` (done). `checks/checks.olang`
      (which today hard-codes `build/out`), `fuzz/` and `bench/` read `$OLANG`.
    - `make verify OLANG=build/stage1`.
    - `make race OLANG=build/stage1` must report exactly the one known race.
-6. **Fuzz across compilers.** Each seed is built by stage 0 and by stage 1 and the printed results compared. The
+7. **Fuzz across compilers.** Each seed is built by stage 0 and by stage 1 and the printed results compared. The
    fuzzer's own three-way agreement within stage 1 (compile time, `-O3`, `-i`) is also required.
-7. **Benchmarks.** `bench/run.sh` runs with two compilers. Stage 1's programs must be within 5% of stage 0's
+8. **Benchmarks.** `bench/run.sh` runs with two compilers. Stage 1's programs must be within 5% of stage 0's
    geometric mean, and none more than 15% slower.
 
 | stage | acceptance |
@@ -759,7 +811,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M1 | `source`, `token`, `scan` | P0 | token diff clean on every file; 50 MB/s on `big.olang` idle |
 | M2 | `diag`, `msgs` | P0 | renders stage 0's diagnostic goldens identically from records; `-e` works (done 2026-10-11) |
 | M3 | `ast`, `parse` (study2's parser is the start) | M1, M2 | parse acceptance (section 4); recovery gives one error per item on every syntax-error case (done 2026-10-11) |
-| M4 | `load`, `fetch`, `names` | M3 | load + names acceptance; the remote, lock and `-u` scenarios pass through a test driver |
+| M4 | `load`, `fetch`, `names` | M3 | load + names acceptance; the remote, lock and `-u` scenarios pass through a test driver (done 2026-10-11) |
 | M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) |
 | M5b | `check`: expressions | M5a | together with M5c, the check acceptance |
 | M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b) |

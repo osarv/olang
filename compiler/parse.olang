@@ -389,6 +389,23 @@ fn (p mut Parser&) File() Array<ast.Decl&>&p {
     return gather(p.decls, from)
 }
 
+# one expression from the token with index at - a top-level condition, or the initializer of a global one reads, which
+# the loader decides before the module is parsed (DESIGN.md 1.4). The cursor is left after it (Pos)
+fn (p mut Parser&) ExprAt(at I64) ast.Expr&p ? Fail {
+    p.pos = at
+    p.half = token.Tok.Eof
+    p.noGt = false
+    p.inCtor = false
+    p.brackets = 0
+    p.depth = 0
+    p.tooDeep = false
+    p.vars.Truncate(0)
+    return try p.expr()
+}
+
+# the index of the next token to read
+fn (p Parser&) Pos() I64 { return p.pos }
+
 # one top-level item, onto the decls stack, or its diagnostic
 fn (p mut Parser&) item() {
     start := p.pos

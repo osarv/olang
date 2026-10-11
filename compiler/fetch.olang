@@ -1,0 +1,322 @@
+# fetch - remote imports: the repository a "host/owner/repo[@ref]/path" import names, at the commit the lock file
+# says (M23a, M23b, M23c; compiler/DESIGN.md 1.4).
+#
+# A repository is fetched once with git and kept in the cache by commit (OLANG_CACHE, default ~/.cache/olang:
+# HOST/OWNER/REPO/COMMIT), so a locked build needs no network. Its host, owner, repository and ref are checked before
+# anything runs, and git is run directly, never through a shell: an argument is only ever an argument. A fetch goes
+# into a temporary directory renamed into place once it holds the right commit, so an interrupted one is never taken
+# for a repository later.
+#
+# The lock file, olang.lock beside the root module, has one line per repository - its key and commit. A locked
+# repository is that commit; an unlocked one is its ref's current commit, which is then written in, the file kept
+# sorted. -u resolves every repository the build reaches as if unlocked, once each.
+import "std/os"
+import "std/filepath"
+
+error FetchError {
+    BAD_NAME        # M23a: a part of the path git and the cache cannot be trusted with
+    NOT_A_COMMIT    # M23b: the lock line names no commit
+    FAILED          # M23a: git could not fetch it
+    LOCKED_FAILED   # M23b: the commit the lock names could not be fetched
+}
+
+# the remote repositories of one compilation: the lock file it reads and writes, whether -u is given, and what it
+# says on the way (the lines stage 0 writes to stderr), kept in Said and printed unless Quiet
+type Fetcher struct(LockPath String&, Cache String&, Base String&, Update Bool, Quiet Bool) {
+    LockPath
+    Cache
+    Base
+    Update
+    Quiet
+    loaded Bool = false
+    keys List<String&>
+    commits List<String&>
+    updated List<String&>
+    Said List<String&>
+}
+
+# M23a: a host, owner, repository or ref - letters, digits, '.', '_' and '-', not beginning with '.' or '-' (no option,
+# no hidden or parent directory) and holding no ".."
+fn NamePart(s String&) Bool {
+    if s.Len() == 0 or s[0] == '.' or s[0] == '-' or s.Contains("..") { return false }
+    for c in s {
+        if not (c.IsLetter() or c.IsDigit() or c == '.' or c == '_' or c == '-') { return false }
+    }
+    return true
+}
+
+# M23b: a commit as git names one - 40 hexadecimal digits, or 64 in a repository using SHA-256
+fn IsCommit(c String&) Bool {
+    if c.Len() != 40 and c.Len() != 64 { return false }
+    for ch in c {
+        if not (ch.IsDigit() or (ch >= 'a' and ch <= 'f')) { return false }
+    }
+    return true
+}
+
+fn (f mut Fetcher&) say(line String&) {
+    f.Said.Push($line)
+    if not f.Quiet { eprintln(line) }
+}
+
+fn (f mut Fetcher&) load() {
+    if f.loaded { return }
+    f.loaded = true
+    text := try os.ReadFile(f.LockPath) catch os.OsError { return }
+    for line in text.Lines() {
+        if line.StartsWith("#") { continue }
+        parts := line.Trim().Split(" ")
+        k := ""
+        c := ""
+        for part in parts {
+            if part == "" { continue }
+            if k == "" { k = $part } else if c == "" { c = $part }
+        }
+        if c == "" { continue }
+        f.keys.Push($k)
+        f.commits.Push($c)
+    }
+}
+
+# the commit the lock file names for key, or a miss
+fn (f mut Fetcher&) Locked(key String&) String&f ? {
+    f.load()
+    for i in range f.keys.Len() {
+        if f.keys[i] == key { return f.commits[i] }
+    }
+    error
+}
+
+# records key at commit and writes the whole file back, sorted, so it reads the same however it was built up - a line
+# already saying commit is left alone, file and all
+fn (f mut Fetcher&) lock(key String&, commit String&) {
+    f.load()
+    at I64 = -1
+    for i in range f.keys.Len() {
+        if f.keys[i] == key { at = i }
+    }
+    if at >= 0 and f.commits[at] == commit { return }
+    if at >= 0 {
+        f.commits[at] = $commit
+    } else {
+        f.keys.Push($key)
+        f.commits.Push($commit)
+    }
+    order := Array<I64>(f.keys.Len())
+    for i in range order.Len() { order[i] = i }
+    order.Sort(fn(a I64, b I64) Bool { return f.keys[a] < f.keys[b] })
+    b := StringBuilder()
+    b.Push("# olang.lock - the commit each remote repository is built from (M23b). Delete a line to update that\n")
+    b.Push("# repository, or build with -u to update every one the build reaches (M23c).\n")
+    for i in order {
+        b.Push(f.keys[i])
+        b.PushChar(' ')
+        b.Push(f.commits[i])
+        b.PushChar('\n')
+    }
+    try os.WriteFile(f.LockPath, b.ToString()) catch os.OsError { }
+}
+
+# M23c: whether -u has updated key already in this compilation, marking it when mark
+fn (f mut Fetcher&) updatedNow(key String&, mark Bool) Bool {
+    for k in f.updated {
+        if k == key { return true }
+    }
+    if mark { f.updated.Push($key) }
+    return false
+}
+
+# git, run quietly; whether it succeeded
+fn git(args Array<String&>&) Bool {
+    out := try os.Exec(args) catch os.OsError { return false }
+    return out.Status == 0
+}
+
+# the commit a checked-out repository is at, or "" when it cannot be read
+fn head(dir String&) String {
+    d := $dir
+    out := try os.Exec(String&["git", "-C", d, "rev-parse", "HEAD"]) catch os.OsError { return "" }
+    if out.Status != 0 { return "" }
+    c := out.Stdout.Trim()
+    return $c if IsCommit(c) else ""
+}
+
+# the cache (OLANG_CACHE), and the base git's URLs are made from - OLANG_GIT_BASE replaces "https://", for a mirror or
+# a test's local repositories
+fn CacheDir() String {
+    c := try os.Env("OLANG_CACHE") catch default ""
+    if c != "" { return $c }
+    home := try os.Env("HOME") catch default "."
+    return $home "/.cache/olang"
+}
+
+fn GitBase() String {
+    b := try os.Env("OLANG_GIT_BASE") catch default ""
+    return $b if b != "" else "https://"
+}
+
+# a repository's local directory: host/owner/repo[@ref] at the commit the lock file names, or - with no line for it,
+# or under -u - at its ref's current commit, which is then locked
+fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? FetchError {
+    at := try repoAt.FindByte('@') catch default repoAt.Len()
+    repo := repoAt[:at]
+    ref := repoAt[at + 1:] if at < repoAt.Len() else repoAt[repoAt.Len():]
+    if not NamePart(host) or not NamePart(owner) or not NamePart(repo) or (at < repoAt.Len() and not NamePart(ref)) {
+        error FetchError.BAD_NAME
+    }
+    cache := f.Cache
+    key := $host "/" $owner "/" $repoAt
+    url := $f.Base $host "/" $owner "/" $repo
+    parent := $cache "/" $host "/" $owner "/" $repo
+    hasLine := true
+    locked := $(try f.Locked(key) catch { hasLine = false } default "")
+    was := ""
+    wasLocked := false
+    # M23c: under -u a locked line is set aside the first time its repository is reached
+    if hasLine and f.Update and not f.updatedNow(key, false) {
+        was = $locked if IsCommit(locked) else ""
+        wasLocked = true
+        hasLine = false
+    }
+    if hasLine and not IsCommit(locked) { error FetchError.NOT_A_COMMIT }
+    if hasLine {
+        dir := $parent "/" $locked
+        if os.IsDir(dir) { return dir }
+    }
+    try os.MkDirAll(parent) catch os.OsError { error FetchError.FAILED }
+    tmp := try os.MkTemp(parent, ".fetch-") catch os.OsError { error FetchError.FAILED }
+    if hasLine {
+        f.say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
+        dir := $parent "/" $locked
+        # a shallow fetch of the one commit where the server allows it, else the whole history and a checkout
+        shallow := git(String&["git", "init", "-q", tmp]) and
+                   git(String&["git", "-C", tmp, "fetch", "-q", "--depth", "1", "--", url, locked]) and
+                   git(String&["git", "-C", tmp, "checkout", "-q", "FETCH_HEAD"])
+        if not shallow {
+            try os.RemoveAll(tmp) catch os.OsError { }
+            if git(String&["git", "clone", "-q", "--", url, tmp]) {
+                git(String&["git", "-C", tmp, "checkout", "-q", locked])
+            }
+        }
+        if head(tmp) != locked {
+            try os.RemoveAll(tmp) catch os.OsError { }
+            error FetchError.LOCKED_FAILED
+        }
+        if not os.IsDir(dir) {
+            try os.Rename(tmp, dir) catch os.OsError {
+                try os.RemoveAll(tmp) catch os.OsError { }
+                error FetchError.LOCKED_FAILED
+            }
+        }
+        try os.RemoveAll(tmp) catch os.OsError { }   # another build placed it first
+        return dir
+    }
+    f.say("olang: fetching " $key " into " $cache)
+    branch := "--branch=" $ref if at < repoAt.Len() else "--quiet"
+    try os.RemoveAll(tmp) catch os.OsError { }
+    h := ""
+    if git(String&["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }
+    if h == "" {
+        try os.RemoveAll(tmp) catch os.OsError { }
+        error FetchError.FAILED
+    }
+    dir := $parent "/" $h
+    if os.IsDir(dir) {
+        try os.RemoveAll(tmp) catch os.OsError { }   # fetched before, under another ref
+    } else {
+        try os.Rename(tmp, dir) catch os.OsError {
+            try os.RemoveAll(tmp) catch os.OsError { }
+            error FetchError.FAILED
+        }
+    }
+    f.lock(key, h)
+    if f.Update {
+        f.updatedNow(key, true)
+        if wasLocked and was == "" {
+            f.say("olang: updated " $key " to " $h[:12])     # its line named no commit
+        } else if wasLocked and was != h {
+            f.say("olang: updated " $key " to " $h[:12] " (was " $was[:12] ")")
+        } else if wasLocked {
+            f.say("olang: " $key " is already at " $h[:12])
+        }
+    }
+    return dir
+}
+
+# ---- tests: local repositories in a scratch directory, served through OLANG_GIT_BASE ----
+
+fn sh(dir String&, args Array<String&>&) Bool {
+    out := try os.Exec(args, "", true, dir) catch os.OsError { return false }
+    return out.Status == 0
+}
+
+# a repository at base/host/owner/name holding one file, committed; its commit, or "" where git is missing
+fn makeRepo(base String&, name String&, text String&) String {
+    dir := $base "/example.com/me/" $name
+    try os.MkDirAll(dir) catch os.OsError { return "" }
+    try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
+    ok := sh(dir, String&["git", "init", "-q"]) and
+          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
+          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+                          "-m", "x"])
+    return head(dir) if ok else ""
+}
+
+fn commitAgain(base String&, name String&, text String&) String {
+    dir := $base "/example.com/me/" $name
+    try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
+    ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+                          "-a", "-m", "y"])
+    return head(dir) if ok else ""
+}
+
+test "a remote's name parts are checked, and a commit is 40 or 64 hex digits" {
+    assert NamePart("example.com") and NamePart("tools-1_2") and not NamePart("") and not NamePart(".git")
+    assert not NamePart("-x") and not NamePart("a..b") and not NamePart("x'$(y)") and not NamePart("a/b")
+    assert IsCommit("0123456789abcdef0123456789abcdef01234567") and not IsCommit("0123")
+    assert not IsCommit("0123456789ABCDEF0123456789abcdef01234567")
+}
+
+test "fetching locks a commit, a locked build is offline, deleting a line or -u updates" {
+    scratch := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(scratch) catch os.OsError { } }
+    base := $scratch "/remote"
+    c1 := makeRepo(base, "tools", "fn F() I64 { return 1 }\n")
+    if c1 == "" { done }   # no git here: nothing to fetch with
+    cache := $scratch "/cache"
+    lockPath := $scratch "/olang.lock"
+    f := Fetcher(lockPath, cache, "file://" $base "/", false, true)
+    dir := try f.Fetch("example.com", "me", "tools") catch { unreachable }
+    assert dir == $cache "/example.com/me/tools/" $c1
+    assert (try os.ReadFile($dir "/lib.olang") catch default "") == "fn F() I64 { return 1 }\n"
+    lock := try os.ReadFile(lockPath) catch default ""
+    assert lock.Contains("example.com/me/tools " $c1)
+    # a new commit upstream changes nothing while the line stands - and the cache is enough
+    c2 := commitAgain(base, "tools", "fn F() I64 { return 2 }\n")
+    g := Fetcher(lockPath, cache, "file:///nowhere/", false, true)
+    dir2 := try g.Fetch("example.com", "me", "tools") catch { unreachable }
+    assert dir2 == dir and g.Said.Len() == 0
+    # with the cache gone, the locked commit is fetched again by hash
+    try os.RemoveAll(cache) catch os.OsError { }
+    h := Fetcher(lockPath, cache, "file://" $base "/", false, true)
+    dir3 := try h.Fetch("example.com", "me", "tools") catch { unreachable }
+    assert dir3 == dir and h.Said[0].Contains("as olang.lock says")
+    # -u resolves it afresh
+    u := Fetcher(lockPath, cache, "file://" $base "/", true, true)
+    dir4 := try u.Fetch("example.com", "me", "tools") catch { unreachable }
+    assert dir4 == $cache "/example.com/me/tools/" $c2
+    assert u.Said[u.Said.Len() - 1] == "olang: updated example.com/me/tools to " $c2[:12] " (was " $c1[:12] ")"
+    lock2 := try os.ReadFile(lockPath) catch default ""
+    assert lock2.Contains("example.com/me/tools " $c2) and not lock2.Contains($c1)
+    # a lock line naming no commit, a bad name, and a repository that is not there
+    try os.WriteFile(lockPath, "example.com/me/tools nonsense\n") catch os.OsError { unreachable }
+    v := Fetcher(lockPath, cache, "file://" $base "/", false, true)
+    bad := 0
+    try v.Fetch("example.com", "me", "tools") catch FetchError.NOT_A_COMMIT { bad++ }
+        catch { unreachable }
+    try v.Fetch("example.com", "me", "x'y") catch FetchError.BAD_NAME { bad++ }
+        catch { unreachable }
+    try v.Fetch("example.com", "me", "absent") catch FetchError.FAILED { bad++ }
+        catch { unreachable }
+    assert bad == 3
+}

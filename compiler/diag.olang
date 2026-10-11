@@ -241,6 +241,10 @@ fn (d mut Diagnostics&) Hold() I64 {
 # closes the group opened last
 fn (d mut Diagnostics&) EndHold() { try d.held.Pop() catch { } }
 
+# opens group g again: what is reported until EndHold belongs to it, as what the parser met in a branch does - a later
+# pass reporting inside a branch the build decides
+fn (d mut Diagnostics&) Reopen(g I64) { d.held.Push(g) }
+
 # an error held by no group, whatever groups are open: what ends more than the branch it is met in (a nesting limit, a
 # block left open) is reported whichever branch is taken
 fn (d mut Diagnostics&) ErrorUnheld(at Where, m msgs.Msg) I64 {
