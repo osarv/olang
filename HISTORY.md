@@ -15414,3 +15414,53 @@ one released before it is evaluated still compiles. The conditional message the 
 for owners made there. Everything here only adds loans; one shape accepted before is refused now, a part borrowed after a
 releasing call in the same statement, because a statement's loans are not ordered - recorded with the other
 over-rejections.
+
+### Port M2: the diagnostics modules (B11, B11a, 2026-10-11)
+
+The second milestone of the port (compiler/DESIGN.md section 6) is the compiler's diagnostics, written in olang:
+`compiler/msgs.olang` and `compiler/diag.olang`. The C compiler stays the reference for what a diagnostic says and how it
+is shown (bootstrap/errmsg.c), and none of its structure was copied: errmsg.c writes each record into a `memstream` as
+it is reported, holds attempts back with a buffer and a mute counter, and sorts the finished text; diag keeps records as
+data and decides everything at `Render`.
+
+**msgs.** errmsg.h's X-macro table has 562 entries now, not the 424 the design counted. A table of printf formats was
+right for C, where a message and its argument count could only be held together by a check that counts directives at
+every call (checks.olang's oldest diagnostic check); in olang each message is a function whose parameters are typed, so
+the compiler checks every call. `compiler/tools/genmsgs.py` writes the file from the table, so each C message has its
+olang twin under the same id - written above it as a comment - and a new check holds the two together, rule by rule,
+counting both sides. A message's kind is an enum, `Diag`, so the once-per-line rule compares kinds. C's `%n` and `%t`
+take a token and a type, which do not exist in olang yet: until M3 and M5 they are `String&` - the token already spelled
+(`Tok`, `EndOfLine`, `EndOfFile`), the type already written - and then the generator is retired and the file is edited by
+hand. Python rather than olang for the generator: it runs only while errmsg.h is the source of the texts, which ends with
+M5.
+
+**diag.** A diagnostic is about a `Where`: a span of a file's text (offsets, the line and column computed from a line
+table made per file on first need - one function, `lineStarts`, to replace with M1's table), a line known only by its
+number, a whole file, or the compilation. Records are kept in report order and sorted at `Render` exactly as stage 0
+sorts (file in the order first reported against, line, report order); deduplication of an identical error at one place,
+and once-per-line, are decided there among the records reported, so a dropped group never hides one that is reported.
+The held groups of design point 12 replace stage 0's buffering (B9c's attempts) and muting: `Hold` opens one, `Choose`
+or `Drop` decides it, groups nest, and an undecided one reports nothing. The library redirect (an error met in the
+standard library reported at the program's use, with a note at the library's line) and the instantiation contexts
+(the innermost three, or two and the outermost) are ported; G16b's replacement of a weakly spelled record by a later
+instantiation's is not, being the checker's to settle before it reports. Colour is a constructor argument, chosen by
+`ColorWanted()` (stdout a terminal, `NO_COLOR` unset, `TERM` set and not `dumb`), and `-e` is `Explain(spec, rule)`, so
+both are tested without a terminal or a file, and diag prints nothing: the driver will.
+
+**The goldens.** `compiler/tools/diaggold_capture.sh` runs stage 0 on every `checks/cases` program that must fail, each
+in a directory of its own as checks.olang runs them, and keeps its stdout in `compiler/goldens/diag.txt` (842 cases,
+280KB, the repository's path written `$ROOT`). `compiler/tools/diaggold.olang` reads each row back - location, rule or
+note, text, the span's end from its caret - reports it to diag, and requires the case's output byte for byte: rows,
+order, the source lines, the carets, the notes, the summary. All 842 match, the first time it ran, including tabs,
+windows over long lines, UTF-8, the library's notes and the fatal and command-line rows. Its second test runs stage 0's
+`-e` on each of the ~200 rules a message names, a lowercase one and a missing one, and compares `Explain`. The caret's
+width is read from the golden itself, so it is checked for consistency only until M3 produces records from real spans.
+`make diagtest` runs these and the modules' own tests (about 40s, mostly clang on msgs.olang's 562 functions), and they
+are part of `make test`.
+
+**Found, not fixed (stage 0).** A struct whose constructor declares a field with `:=` (`xs := List<I64>()`) has that
+field typed `?` in its own module's methods when another module imports the struct first - `s.xs.Push(x)` is "? has no
+method 'Push'" - while the same module tested alone compiles: the method's body is checked on demand before the
+constructor's body has inferred the field. diag first wrote its fields that way; they are typed now. The reproducer is
+two files, `a.olang` with `type S struct() { xs := List<I64>() }` and `fn (s mut S&) Add(x I64) { s.xs.Push(x) }`, and
+`b.olang` importing it and calling `a.S().Add(3)` in a test. Left for a semantic.c fix (QB: bootstrap/ takes fixes).

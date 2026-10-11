@@ -129,6 +129,17 @@ scopefuzz: build/out
 	nice -n 19 build/out -b -d fuzz/fuzz.olang
 	nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
 
+# M2 of the port (compiler/DESIGN.md section 6): the self-hosted compiler's diagnostics - msgs.olang's and diag.olang's own
+# tests, and compiler/tools/diaggold.olang rendering stage 0's diagnostics on every failing checks/cases program again,
+# byte for byte, and its -e on every rule a message names. Part of "make test"; "make diaggold" captures the goldens
+# again from build/out (compiler/goldens/diag.txt), after a message or a case changes.
+DIAG_TESTS = compiler/msgs.olang compiler/diag.olang compiler/tools/diaggold.olang
+OLANG_TESTS += $(DIAG_TESTS)
+diagtest: build/out
+	build/out -t $(DIAG_TESTS)
+diaggold: build/out
+	compiler/tools/diaggold_capture.sh build/out
+
 all: clean build run
 
 clean:
