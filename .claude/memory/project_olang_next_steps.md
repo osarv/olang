@@ -786,6 +786,11 @@ because what it finds about structure feeds the refactor.
   - N3/N3b: a hidden hold slot for an owned result in flight.
   - F3's whitelist in test builds only.
   - A value whose type holds no reference carries no loan, which lifts `return b.buf.Len()`.
+- 12:15 CEST: own6's four defects are fixed on wt-own (d8c942b, verified).
+  - Fuzzer: 22 findings on 79bf11c, 0 after the fix.
+  - The owner-passing loop is 1,223M instructions, below e3ded09's 1,441M.
+  - A fifth review runs (/home/user/wt/rvown7 -> /home/user/review/own7).
+  - Weekly 0.56 at 12:04 CEST.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
