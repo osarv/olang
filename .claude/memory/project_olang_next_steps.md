@@ -753,6 +753,16 @@ because what it finds about structure feeds the refactor.
   - M1: a {owner, registered} slot; 4M turns at 1.6 MB.
   The fuzzer found 67 problems on 67cb5b1 and 0 after the fix. New over-rejection: `l.Push(b)` of a borrowed copy
   (Clone it). A third review runs (/home/user/wt/rvown5 @ e3ded09 -> /home/user/review/own5). Weekly 0.52 at 08:50 CEST.
+- 10:00 CEST: the third review (/home/user/review/own5) found three defects, all present since 079921e. Sent to the own
+  agent:
+  - F1 (use-after-free): a callee keeps an &p field of its argument, and derived scope variables are not matched. Fix: a
+    derived variable counts as its parameter.
+  - F2: an owner value local moved by O26a is released at the return, so the result reads a null slot and the evaluator
+    disagrees. Fix: a reference to an owner value local's storage is a borrow, so O26a never moves one. Return it as an
+    owned value result instead. A destructor-bearing holder declared earlier is refused.
+  - F3 (leak, tests only): cgMayLeave misses guaranteed checks. Fix: make it a whitelist.
+  NEXT PHASE's first items: a borrowed result of an own field (`View() Array<T>&v`, refused today with O10) and Sort's
+  precise O17 reading. Both are needed for Vec, and both need a review.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
