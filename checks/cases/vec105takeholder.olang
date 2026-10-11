@@ -1,0 +1,14 @@
+# check: fail error[O39]: taking 'm' moves the Array<I64> borrowed on line 11
+# Vec phase 2a (E34/O39): a struct holding a Vec is not moved while a view of its buffer is used
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn main() ? {
+    l := Lexer(1)
+    l.toks.Push(1)
+    m := take l
+    d := m.toks.View()
+    l = take m
+    println($d[0])
+}

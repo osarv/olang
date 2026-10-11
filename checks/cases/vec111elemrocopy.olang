@@ -1,0 +1,17 @@
+# check: fail error[T25c]: this writes through a reference a read-only copy holds
+# Vec phase 2a (T25c): a borrowed copy of a Vec of values holding writable references writes nothing through them
+type Box struct(n I64) {
+    n
+}
+type Link struct(name String&, to mut Box&) {
+    name
+    to
+}
+fn main() ? {
+    b := Box(1)
+    v := Vec<Link>()
+    v.Push(Link("a", b))
+    c := v
+    c[0].to.n = 5
+    println($b.n)
+}

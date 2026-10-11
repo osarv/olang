@@ -1,0 +1,23 @@
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
+# Vec phase 2a (O38): an element borrowed where it is, in the buffer, is kept only by this function's locals
+type Node struct(n I64) {
+    n
+}
+type Link struct(name String&, to mut Node&) {
+    name
+    to
+}
+type Hold struct() {
+    l Link& = null
+}
+fn main() ? {
+    nd := Node(1)
+    keep := List<Link&>()
+    v := Vec<Link>()
+    v.Push(Link("a", nd))
+    m := v.ViewMut()
+    r Link& = m[0]
+    keep.Push(r)
+    for i in range 40 { v.Push(Link("b", nd)) }
+    println($keep[0].name)
+}

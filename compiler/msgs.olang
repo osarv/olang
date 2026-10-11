@@ -1085,13 +1085,13 @@ fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "
 fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
 
 # ERR_OWNING_TYPE_BY_VALUE
-fn OwningTypeByValue(ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.OwningTypeByValue, "O31", $ty1 " owns objects - a field of it is 'own' - so only a local or a result holds one by value: write " $ty2 "&, or 'own mut " $ty3 "&' to own one") }
+fn OwningTypeByValue(ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.OwningTypeByValue, "O31", $ty1 " owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write " $ty2 "&, or 'own mut " $ty3 "&' to own one") }
 
 # ERR_OWN_ON_VALUE
 fn OwnOnValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.OwnOnValue, "T25e", "'own' marks a reference, and " $ty1 " is none - write 'own " $ty2 "&'") }
 
 # ERR_OWN_KIND_NOT_YET
-fn OwnKindNotYet(ty String&) Msg { return Msg(Diag.OwnKindNotYet, "T25e", "'own' on " $ty " is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')") }
+fn OwnKindNotYet(ty String&) Msg { return Msg(Diag.OwnKindNotYet, "T25e", "'own' on " $ty " is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')") }
 
 # ERR_OWN_SCOPE_MARKER
 fn OwnScopeMarker() Msg { return Msg(Diag.OwnScopeMarker, "T25e", "an own reference lives in its own region, not where a variable does - drop the name after '&'") }

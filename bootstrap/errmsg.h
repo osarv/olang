@@ -185,9 +185,9 @@ struct type;
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
-    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
+    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
     X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
-    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')") \
+    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')") \
     X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
     X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type, or a declared function's parameter or result - here it is not supported yet") \
     X(ERR_OWN_RECEIVER,                 "O36",   "a method is called on a borrow, so its receiver never owns - drop 'own', or take the owner as another parameter") \

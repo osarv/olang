@@ -1,0 +1,17 @@
+# check: fail error[O20]: the container outlives what this refers to
+# Vec phase 2a (O33/O20): an element's field written through a view keeps what lives where the Vec does - not a
+# loop turn's text
+type Tok struct(text String&, line I64) {
+    text
+    line
+}
+fn main() ? {
+    v := Vec<Tok>()
+    v.Push(Tok("a", 1))
+    for i in range 3 {
+        t := "w" $i
+        m := v.ViewMut()
+        m[0].text = t
+    }
+    println($v[0].text)
+}

@@ -1,0 +1,18 @@
+# check: fail error[O39]: assigning 'b.data' may release the Array<Q> borrowed on line 15, which is used after it
+# Vec phase 2a (O38): ...and a reference to one handed back by a call
+type Q struct(n I64, s String&) {
+    n
+    s
+    arr Array<I64, 4> = Array<I64, 4>()
+}
+type B struct() {
+    data own mut Array<Q>& = null
+}
+fn pick(q Q&) Q&q { return q }
+fn main() ? {
+    b := B()
+    b.data = Array<Q>(2)
+    x := pick(b.data[0])
+    b.data = Array<Q>(1)
+    println($x.n)
+}

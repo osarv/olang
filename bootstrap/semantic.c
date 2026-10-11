@@ -27926,7 +27926,9 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
         if (op->args.len) {
             struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
             struct var* R = ownArrayRegionOf(b);
-            bool outside = R && (op->type.structMAlloc || op->type.bType == BASETYPE_FUNC);
+            //(Vec phase 2a: and so does a value element holding references - a split value, O17a - read out of it: what it
+            //holds is in the reach too, only the element's own storage is the buffer's, borrowed where it is - place)
+            bool outside = R && (op->type.structMAlloc || op->type.bType == BASETYPE_FUNC || op->ownElemRegion);
             ownLoansIn(b, out, transient || (!place && (outside || !typeCarriesScopes(op->type))), place);
         }
         for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
