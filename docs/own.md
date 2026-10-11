@@ -1747,3 +1747,5 @@ pushes) and `vec49byname` (a view used before a push, a borrowed own result func
 O39 - and one returning `v.ToArray()` through a local, kept across a growth - accepted), F2 (a mixed-type borrowed own
 result function - refused, O38), F3 (a spawn target given `View()` - refused, O38) and F4 (a global given a borrow of a
 global's own object - refused, O1b - and a number read out of it - accepted).
+Own seeds 1-200: 280ef76 6 findings (all F1's wrapper shape; 597 scenarios run, 1803 refused), this tip none (590 run,
+1810 refused).
