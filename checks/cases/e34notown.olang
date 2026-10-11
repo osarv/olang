@@ -13,6 +13,6 @@ type Server struct() {
     other own mut Conn&
 }
 fn main() ? {
-    c := Conn(1)
+    c := Sock(1)
     d := take c
 }

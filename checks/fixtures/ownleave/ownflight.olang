@@ -1,0 +1,101 @@
+# own6 N3: an owned result in flight - computed, its function not returned yet - is held while the code its return
+# runs first runs. A join failing in the return's place (P4b) gives the result to nobody, and releases it: an owned
+# result, an owner value local moved into the result, one returned through memory (over 128 bytes), and an own array.
+# The joins that do not fail return each result as usual. Every object made is released.
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Res struct(n I64) {
+    n
+    Made.AtomicAdd(1)
+} destruct {
+    Dropped.AtomicAdd(1)
+}
+type Hold struct() {
+    r own mut Res&
+}
+type BigHold struct() {
+    r own mut Res&
+    pad Array<I64, 20>
+}
+error Bad {
+    NO
+}
+fn fails(k I64) ? Bad {
+    if k > 0 { error Bad.NO }
+}
+fn mkOwned(k I64) own mut Res& ? Bad {
+    try join {
+        spawn try fails(k)
+        return Res(1)
+    }
+    return Res(2)
+}
+fn mkValue(k I64) Hold ? Bad {
+    h := Hold()
+    h.r = Res(3)
+    try join {
+        spawn try fails(k)
+        return h
+    }
+    return h
+}
+fn mkBig(k I64) BigHold ? Bad {
+    h := BigHold()
+    h.r = Res(4)
+    h.pad[19] = k
+    try join {
+        spawn try fails(k)
+        return h
+    }
+    return h
+}
+fn mkArr(k I64) own mut Array<I64>& ? Bad {
+    try join {
+        spawn try fails(k)
+        return Array<I64>(64, k)
+    }
+    return Array<I64>(1)
+}
+fn mkCaught(k I64) own mut Res& {
+    for i in range 3 {
+        try join {
+            spawn try fails(k - i)
+            return Res(10 + i)
+        } catch Bad { }
+    }
+    return null
+}
+fn main() ? {
+    for k in range 2 {
+        x := try mkOwned(k) catch Bad { println("mkOwned failed") } default null
+        if x != null { println("owned " $x.n) }
+        y := try mkValue(k) catch Bad {
+            println("mkValue failed")
+            continue
+        }
+        println("value " $y.r.n)
+        z := try mkBig(k) catch Bad {
+            println("mkBig failed")
+            continue
+        }
+        println("big " $z.r.n " " $z.pad[19])
+        a := try mkArr(k) catch Bad {
+            println("mkArr failed")
+            continue
+        }
+        println("array " $a.Len())
+    }
+    for k in range 1 {
+        a := try mkArr(1) catch Bad { println("mkArr failed") } default null
+        println($(a == null))
+        z := try mkBig(1) catch Bad {
+            println("mkBig failed")
+            continue
+        }
+        println("big " $z.r.n)
+    }
+    c := mkCaught(2)
+    println("caught " $c.n)
+    c = null
+    println("made " $Made.AtomicLoad() " dropped " $Dropped.AtomicLoad())
+}

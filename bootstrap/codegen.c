@@ -118,6 +118,8 @@ struct cgStaticLit { struct operand* op; char* name; };
 //blockJoins), the label of its failure handler and the slot the error code is passed to it in
 struct cgJoinFail { char* head; char* lbl; char* slot; };
 
+struct cgCtorOwner { char* slot; struct type t; }; //O35/N6: a constructor's own field, held by its frame until assembly
+
 struct cgCtx {
     struct list fnValues; //D16: struct var* - named functions used as values, each needing a static closure
     //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
@@ -220,6 +222,14 @@ struct cgCtx {
     struct list handed;
     bool hereBuilt;
     bool ownScopeBorrowed; //C9a: ownScopeSlot is a destructor's scope being closed - its caller's to close, not its own
+    //O35: the frame's own private scope, whatever ownScopeSlot became (a destructor's closing scope, C9a) and whatever a
+    //constructor's top level builds into (its instance scope): where an owner held in this frame's own storage is
+    //registered for release at the body's top level, so the release runs while the frame is still there (cgOwnReleaseScope)
+    char* ownFrameScope;
+    //O35 (own6 N3/N3b): the owned result being returned, held in its slot while the return's exit code runs (cgRetHold)
+    char* retHeld;
+    char* retHeldNode; //...and, while a test runs, the unwind node it is registered in, below the frame's own
+    struct type retHeldT;
     //a function returning an aggregate returns it through one slot and one exit block, written by every return
     //site: so once the function is inlined, its result's fields reach the caller as separate values, which LLVM
     //can reason about - a merged aggregate value it cannot see into, and a loop testing a Bool from one (an
@@ -241,6 +251,9 @@ struct cgCtx {
     //C2d: inside a constructor, the scope its instance lands in - the hidden leading parameter every
     //constructor takes. NULL in any other function.
     char* ctorHere;
+    //O35/N6: a constructor's own fields and owner value fields made so far - each registered for release on its frame
+    //until the instance is assembled, which takes them (cgCtorTakeOwners). struct cgCtorOwner
+    struct list ctorOwners;
     int tmpCtr;
     int lblCtr;
     int strCtr;
@@ -638,7 +651,10 @@ static void cgEmitDeferred(struct cgCtx* ctx, struct cgDefer d) {
     ctx->tdOp = NULL;
     bool leaving = ctx->leavingWithError; //P4b: a join inside the deferred code fails as anywhere else
     ctx->leavingWithError = false;
+    char* retHeld = ctx->retHeld; //(own6 N3: and replaces no return the deferred code runs for - its own clauses take it)
+    ctx->retHeld = NULL;
     cgBlock(ctx, &d.s->block);
+    ctx->retHeld = retHeld;
     ctx->leavingWithError = leaving;
     if (ctx->terminated) cgDeadLabel(ctx); //it ended the test or the process (S19c)
     ListDestroy(ctx->defers);
@@ -688,6 +704,85 @@ static struct cgJoinFail* cgJoinFailOf(struct cgCtx* ctx, char* jh) {
     return NULL;
 }
 
+//O35 (own6 N3/N3b): an owned result in flight - computed, its function not returned yet - is held in a hidden owner slot
+//while the code its return runs first (deferred code, joins, scope closes) runs. Outside a test only a join failing in
+//the return's place (P4b) can keep it from the caller, and releases it (cgLeaveJoin); while a test runs, a failed check
+//leaving the test can too (S18), so the slot is also registered in a scope of its own on the unwind chain, above every
+//block the return closes and the frame's own scope - an unwind releases it, the frame's normal end pops it unrun.
+//t is the result's type, v its value (or with addr its address); NULL where nothing can keep it from the caller
+static bool cgOwnIsArray(struct type t);
+static const char* cgOwnTy(struct type t);
+static char* cgOwnDropFn(struct cgCtx* ctx, struct type t);
+static FILE* cgAllocaOut(struct cgCtx* ctx);
+static char* cgRetHold(struct cgCtx* ctx, struct type t, char* v, bool addr) {
+    if (!t.refOwn && !TypeIsOwnValue(t)) return NULL;
+    bool crossesJoin = false;
+    for (int i = 0; i < ctx->blockJoins.len && !crossesJoin; i++) {
+        char* jh = *(char**)ListGetIdx(&ctx->blockJoins, i);
+        crossesJoin = jh && cgJoinFailOf(ctx, jh);
+    }
+    if (!crossesJoin && !ctx->emitUnwind) return NULL;
+    char* slot = cgNewTmp(ctx);
+    if (t.refOwn) { //(an owner's slot, as cgOwnHoldSlot's: { owner, mark }, which __olang_own_drop_held clears whole)
+        fprintf(cgAllocaOut(ctx), "  %s = alloca { %s, i64 }\n", slot, cgOwnTy(t));
+        fprintf(ctx->fnOut, "  store { %s, i64 } zeroinitializer, ptr %s\n", cgOwnTy(t), slot);
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), v, slot);
+    } else {
+        char ty[256];
+        llvmType(t, ty, sizeof(ty));
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
+        if (addr) fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", slot, v,
+                          TypeGetSize(t));
+        else fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, v, slot);
+    }
+    ctx->retHeldNode = NULL;
+    if (ctx->ownUnwindNode) {
+        //(linked just below the frame's own node, which every block's node leads down to: what an unwind walks after the
+        //frame's scope. The scope and its node are in this frame - the scope takes no chunk, and is left unrun as the
+        //frame ends normally, cgCloseOwnScope restoring the chain to what was below it)
+        char* scope = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", scope);
+        fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", scope);
+        char* node = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.unwind\n", node);
+        char* fp = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", fp, ctx->ownUnwindNode);
+        char* below = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", below, fp);
+        fprintf(ctx->fnOut, "  store { ptr, ptr, ptr } { ptr null, ptr null, ptr null }, ptr %s\n", node);
+        char* np = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", np, node);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", below, np);
+        char* ns = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 1\n", ns, node);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", scope, ns);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", node, fp);
+        char* dn = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.dtornode\n", dn);
+        const char* fn = t.refOwn ? (cgOwnIsArray(t) ? "@__olang_own_drop_aheld" : "@__olang_own_drop_held")
+                                  : cgOwnDropFn(ctx, t);
+        fprintf(ctx->fnOut, "  call void @__olang_scope_push_dtor(ptr %s, ptr %s, ptr %s, ptr %s)\n", scope, dn, slot, fn);
+        ctx->retHeldNode = node;
+    }
+    return slot;
+}
+//...released where a join failing takes the return's place
+static void cgRetHeldRelease(struct cgCtx* ctx) {
+    if (!ctx->retHeld) return;
+    struct type t = ctx->retHeldT;
+    const char* fn = t.refOwn ? (cgOwnIsArray(t) ? "@__olang_own_drop_aheld" : "@__olang_own_drop_held") : cgOwnDropFn(ctx, t);
+    fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr null)\n", fn, ctx->retHeld);
+    if (!ctx->retHeldNode) return;
+    //(and its node taken back out from below the frame's: the frame goes on, and may end by another way)
+    char* fp = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", fp, ctx->ownUnwindNode);
+    char* hp = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", hp, ctx->retHeldNode);
+    char* below = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", below, hp);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", below, fp);
+}
+
 //P4b: a join block left - its tasks waited for (the code returned: the earliest failure, 0 for none) and its scope
 //closed, slot i of blockSlots. When the join can fail, a failure goes to its handler (cgJoin) in place of the way out
 //being taken, which goes on only when every task succeeded; an error already leaving goes on regardless
@@ -704,6 +799,7 @@ static void cgLeaveJoin(struct cgCtx* ctx, char* jh, char* slot, int i) {
     int id = ctx->lblCtr++;
     fprintf(ctx->fnOut, "  br i1 %s, label %%joinleave.fail.%d, label %%joinleave.ok.%d\n", failed, id, id);
     fprintf(ctx->fnOut, "joinleave.fail.%d:\n", id);
+    cgRetHeldRelease(ctx); //(own6 N3: a return it replaces gives its result to nobody - released here)
     //back at the join's own level: everything inside it is closed, what is around it still open
     if (ctx->ownUnwindNode && slot) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", cgUnwindBelow(ctx, i));
     fprintf(ctx->fnOut, "  br label %%%s\n", f->lbl);
@@ -744,10 +840,15 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
     cgLeaveBlocks(ctx, 0);
     if (ctx->ownScopeSlot && !ctx->ownScopeBorrowed)
         fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
+    //O35: a destructor's own owners - its top-level owner locals - released as it returns (its private scope)
+    else if (ctx->ownScopeBorrowed && ctx->ownFrameScope)
+        fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownFrameScope);
     //and take this whole frame back off the unwind chain in one store - every node in it is gone now
     if (ctx->ownUnwindNode) {
+        //(an owned result held below it, cgRetHold, goes too - the caller's now)
         char* ps = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", ps, ctx->ownUnwindNode);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", ps,
+                ctx->retHeld && ctx->retHeldNode ? ctx->retHeldNode : ctx->ownUnwindNode);
         char* pv = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", pv, ps);
         fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", pv);
@@ -1139,6 +1240,16 @@ static char* cgOwnAllocSlot(struct cgCtx* ctx) {
     return ctx->ownScopeSlot;
 }
 
+//O35: where an owner held in this frame's own storage - an owner local, an owner value local, an owning parameter, a
+//hidden owner slot - is registered for release: its block's scope, or at the body's top level the frame's private
+//scope. Never a constructor's instance scope or a destructor's closing scope: both close after the frame is gone, and
+//the release would read the slot from a dead stack (F4)
+static char* cgOwnReleaseScope(struct cgCtx* ctx) {
+    int idx = ctx->blockDepth - 2;
+    if (idx >= 0 && idx < ctx->blockSlots.len) return *(char**)ListGetIdx(&ctx->blockSlots, idx);
+    return ctx->ownFrameScope ? ctx->ownFrameScope : cgOwnAllocSlot(ctx);
+}
+
 char* cgScopeSlotAt(struct cgCtx* ctx, int depth) {
     int idx = depth - 2;
     if (idx < 0 || idx >= ctx->blockSlots.len) return cgOwnAllocSlot(ctx);
@@ -1192,7 +1303,11 @@ static void cgNoteHandedOn(struct cgCtx* ctx, struct operand* op, struct var* fu
 
 static char* cgRegionSlot(struct cgCtx* ctx, struct var* R);
 static void cgOwnBorrowHeader(struct cgCtx* ctx, struct operand* op, const char* val);
+static const char* cgOwnTy(struct type t);
+static char* cgOwnValue(struct cgCtx* ctx, struct operand* op, struct type slotT);
+static bool cgOwnIsArray(struct type t);
 static char* cgTake(struct cgCtx* ctx, struct operand* op);
+char* cgOwnArrayBuffer(struct cgCtx* ctx, struct operand* op, const char* bytes);
 char* cgResolveScope(struct cgCtx* ctx, struct var* scopeParam, int depth) {
     scopeParam = SemanticRuntimeScope(scopeParam, &depth); //O23a: a derived scope passes the one it was read through
     if (!scopeParam) return cgScopeSlotAt(ctx, depth);
@@ -1407,23 +1522,42 @@ char* cgBoundScopeArg(struct cgCtx* ctx, struct operand* callOp, struct var* sv)
 //is reference-only (C11), so it is never an array element or an embedded field and this never needs to
 //walk into an aggregate - one instance, one allocation, one registration.
 static char* cgOwnDropFn(struct cgCtx* ctx, struct type t);
-void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr) {
+//one node: allocated in the scope, or (reserved) the k-th of the nodes __olang_own_new made before the object's word
+static void cgRegisterOneDtor(struct cgCtx* ctx, char* scopeVal, char* heapPtr, const char* fn, int reserved) {
+    cgNoteBuildInto(ctx, scopeVal);
+    if (!reserved) {
+        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, fn);
+        return;
+    }
+    char* node = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr i8, ptr %s, i64 %d\n", node, heapPtr, -8 - 24 * reserved);
+    fprintf(ctx->fnOut, "  call void @__olang_scope_push_dtor(ptr %s, ptr %s, ptr %s, ptr %s)\n", scopeVal, node, heapPtr, fn);
+}
+
+//the nodes a struct of type t registers when built (cgRegisterDtors), as __olang_own_new reserves them
+static int cgDtorNodes(struct type t) {
+    if (t.bType != BASETYPE_STRUCT) return 0;
+    return (TypeIsOwning(t) ? 1 : 0) + (t.hasDestruct ? 1 : 0);
+}
+
+//reserved: heapPtr is an own reference's object with cgDtorNodes(t) nodes made before its word
+static void cgRegisterDtors(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr, bool reserved) {
     if (t.bType == BASETYPE_STRUCT) {
-        if (TypeIsOwning(t)) { //O35: its own fields released as its scope closes - after its destructor, registered next
-            cgNoteBuildInto(ctx, scopeVal);
-            fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr,
-                    cgOwnDropFn(ctx, t));
-        }
+        int k = 0;
+        if (TypeIsOwning(t)) //O35: its own fields released as its scope closes - after its destructor, registered next
+            cgRegisterOneDtor(ctx, scopeVal, heapPtr, cgOwnDropFn(ctx, t), reserved ? ++k : 0);
         if (!t.hasDestruct) return;
         char dtorSym[256];
         mangleFuncSym(t.destructFunc, dtorSym, sizeof(dtorSym));
-        cgNoteBuildInto(ctx, scopeVal);
-        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scopeVal, heapPtr, dtorSym);
+        cgRegisterOneDtor(ctx, scopeVal, heapPtr, dtorSym, reserved ? ++k : 0);
         return;
     }
     //no array walk, and no struct-field walk: a destructor-declaring type is reference-only (C11), so it
     //can never be an element or an embedded field in the first place. Every instance has its own
     //allocation and registers itself here, once, at its own construction (O16).
+}
+void cgRegisterDtorIfNeeded(struct cgCtx* ctx, struct type t, char* scopeVal, char* heapPtr) {
+    cgRegisterDtors(ctx, t, scopeVal, heapPtr, false);
 }
 
 
@@ -2083,16 +2217,17 @@ char* cgValueForTarget(struct cgCtx* ctx, struct operand* op, struct type dstT, 
 //address an instance gets is not observable; its destructor is registered once its constructor has completed (O16),
 //exactly as before, so destructors still run in the order O15 gives. A value whose building fails leaves its slot to
 //the scope, reclaimed when that closes.
-static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap);
+static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap, bool reserved);
 static char* cgPromote(struct cgCtx* ctx, struct operand* op, char* scopeVal) {
     char* heap = cgNewTmp(ctx);
     cgArenaAllocFor(ctx, heap, scopeVal, op->type);
-    cgPromoteAt(ctx, op, scopeVal, heap);
+    cgPromoteAt(ctx, op, scopeVal, heap, false);
     return heap;
 }
 
-//...op built into heap, storage already made for it in scopeVal (an own reference's region, cgOwnNew)
-static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap) {
+//...op built into heap, storage already made for it in scopeVal (an own reference's region, cgOwnNew: reserved, its
+//destructor nodes made with it)
+static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap, bool reserved) {
     char storTy[256];
     llvmType(op->type, storTy, sizeof(storTy));
     char* prev = ctx->targetScopeOverride;
@@ -2112,7 +2247,7 @@ static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, c
         }
         fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", storTy, loaded, heap);
     }
-    cgRegisterDtorIfNeeded(ctx, op->type, scopeVal, heap);
+    cgRegisterDtors(ctx, op->type, scopeVal, heap, reserved);
 }
 
 //op's value stored into dstAddr, a slot of type dstT: cgValueForTarget then cgStoreInto, except where the value is new
@@ -3487,10 +3622,67 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
 //`spawnMerges`, for a task, receives one sub-arena per scope the task allocates into (P2): the arguments are still
 //evaluated here, in the spawner, where they are built into the real scopes.
 struct cgRegionArg { int idx; struct var* region; bool task; bool result; };
+static bool cgRunsCode(struct operand* op);
+static bool cgMayLeave(struct cgCtx* ctx, struct operand* op);
+static const char* cgOwnNull(struct type t);
+//O36/O30 (F3): an owner made or moved here that code run before anything takes it could leave (a later argument's
+//"try", a constructor's own arguments, a fill): held in a hidden owner slot of this frame, registered for release
+//before it is filled, so a way out between releases it. Whatever takes it empties the slot first (cgOwnHoldTake)
+//(an own array's owner is its { len, ptr }; an object's, or a region a buffer starts, the pointer)
+static char* cgOwnHoldSlot(struct cgCtx* ctx, bool arr, char* v) {
+    const char* ty = arr ? "{ i64, ptr }" : "ptr";
+    //M1: the slot carries whether it is registered on its scope now - a hold evaluated again and again in one open
+    //scope (a loop's condition or post clause) registers once, and the release clears the mark for the scope's next run
+    char* slot = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca { %s, i64 }\n", slot, ty);
+    fprintf(cgAllocaOut(ctx), "  store { %s, i64 } zeroinitializer, ptr %s\n", ty, slot);
+    char* flag = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr { %s, i64 }, ptr %s, i32 0, i32 1\n", flag, ty, slot);
+    char* fl = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load i64, ptr %s\n", fl, flag);
+    char* none = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp eq i64 %s, 0\n", none, fl);
+    int id = ctx->lblCtr++;
+    fprintf(ctx->fnOut, "  br i1 %s, label %%hold.reg.%d, label %%hold.go.%d\nhold.reg.%d:\n", none, id, id, id);
+    fprintf(ctx->fnOut, "  store i64 1, ptr %s\n", flag);
+    char* scope = cgOwnReleaseScope(ctx);
+    cgNoteBuildInto(ctx, scope);
+    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope, slot,
+            arr ? "aheld" : "held");
+    fprintf(ctx->fnOut, "  br label %%hold.go.%d\nhold.go.%d:\n", id, id);
+    //what an earlier evaluation left behind when it left before the call took it is released before the slot is reused
+    char* old = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", old, ty, slot);
+    char* oldObj = old;
+    if (arr) {
+        oldObj = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", oldObj, old);
+    }
+    char* left = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ne ptr %s, null\n", left, oldObj);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%hold.left.%d, label %%hold.fill.%d, !prof !{!\"branch_weights\", i32 1, i32 2000}\nhold.left.%d:\n",
+            left, id, id, id);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, arr ? "zeroinitializer" : "null", slot);
+    fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", oldObj);
+    fprintf(ctx->fnOut, "  br label %%hold.fill.%d\nhold.fill.%d:\n", id, id);
+    if (v) fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, v, slot);
+    return slot;
+}
+
+static char* cgOwnHoldTake(struct cgCtx* ctx, struct type t, char* slot) {
+    char* v = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, cgOwnTy(t), slot);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), cgOwnNull(t), slot);
+    return v;
+}
+
+struct cgHeldOwner { int idx; char* slot; struct type t; };
+
 static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct list* args, struct list* spawnMerges,
                                  char* outSlot) {
     struct var* func = op->readVar;
     struct list regionArgs = ListInit(sizeof(struct cgRegionArg));
+    struct list heldOwners = ListInit(sizeof(struct cgHeldOwner));
     char* closure = NULL;
     char* target;
     if (outSlot) cgArgAdd(args, "ptr", outSlot); //a result through memory (cgRetViaMemory) - its storage comes first
@@ -3576,6 +3768,21 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
             cgArgAdd(args, "ptr", copy);
             continue;
         }
+        if (paramT.refOwn) { //O36: an owning parameter's argument - the owner moved in, made, or a call's owned result
+            bool laterRuns = false; //F3: held until the call takes it where a later argument could leave first
+            for (int j = i + 1; j < op->args.len && !laterRuns; j++)
+                laterRuns = cgMayLeave(ctx, *(struct operand**)ListGetIdx(&op->args, j));
+            if (!laterRuns) {
+                cgArgAdd(args, cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT));
+                continue;
+            }
+            char* slot = cgOwnHoldSlot(ctx, cgOwnIsArray(paramT), NULL);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT), slot);
+            struct cgHeldOwner h = { args->len, slot, paramT };
+            ListAdd(&heldOwners, &h);
+            cgArgAdd(args, cgOwnTy(paramT), "undef");
+            continue;
+        }
         bool argBuilds = cgArgMayBuild(argOp, paramT);
         if (!argBuilds) ctx->capReadOnly++; //P2: where a temporary would be built, and nothing is
         char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
@@ -3604,6 +3811,11 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         llvmType(paramT, aty, sizeof(aty));
         cgArgAdd(args, aty, av);
     }
+    for (int i = 0; i < heldOwners.len; i++) { //F3: every argument evaluated - the call takes its held owners
+        struct cgHeldOwner* h = ListGetIdx(&heldOwners, i);
+        ((struct cgArg*)ListGetIdx(args, h->idx))->val = cgOwnHoldTake(ctx, h->t, h->slot);
+    }
+    ListDestroy(heldOwners);
     for (int i = 0; i < regionArgs.len; i++) { //O32: the regions the arguments' borrows have now recorded
         struct cgRegionArg* ra = ListGetIdx(&regionArgs, i);
         char* v = cgNewTmp(ctx);
@@ -3626,7 +3838,10 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     if (promoted) ctx->promotedOp = NULL;
     char* v = cgFuncCallValue(ctx, op);
     struct var* func = op->readVar;
-    if (promoted || !cgIsCtor(func) || op->type.bType != BASETYPE_STRUCT || op->type.structMAlloc || !op->type.hasDestruct)
+    //O35: an owning type's instance no promotion and no owner value local takes ("$Buf(4)", "Buf(4).n") likewise, its
+    //owners released as that scope closes - one moved to an owner (ownMoved) is that owner's
+    if (promoted || !cgIsCtor(func) || op->type.bType != BASETYPE_STRUCT || op->type.structMAlloc
+            || !(op->type.hasDestruct || (TypeIsOwning(op->type) && !op->ownMoved)))
         return v;
     char* scopeVal = cgCtorHereArg(ctx, op);
     char* heap = cgNewTmp(ctx);
@@ -4118,14 +4333,25 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
 
     //T7: "Array<T>(n)" is a temporary - built in the scope of whatever it lands in when that is known
     //(E12c), otherwise in the block it is written in
-    char* scopeVal = cgWhereBuilt(ctx, op);
-    char* bytes = cgNewTmp(ctx);
     //D13c: zero-filled storage comes from the allocator's zeroed path, which skips the clearing for a large array the
     //system has just handed over (__olang_scope_alloc_zeroed)
     bool zeroed = !(op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) && !op->noZeroFill;
-    cgNoteBuildInto(ctx, scopeVal);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "", scopeVal,
-            byteSize);
+    char* scopeVal;
+    char* bytes;
+    char* heldBuf = NULL;
+    if (op->ownNewRegion) { //O30: an own array's buffer, a region of its own - its fill refers nowhere (O34)
+        scopeVal = NULL;
+        bytes = cgOwnArrayBuffer(ctx, op, byteSize);
+        //F3: a fill evaluated after the buffer's region is made - one leaving releases the region
+        if (op->args.len > 1 && cgMayLeave(ctx, *(struct operand**)ListGetIdx(&op->args, 1))) heldBuf = cgOwnHoldSlot(ctx, false, bytes);
+        if (zeroed) fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
+    } else {
+        scopeVal = cgWhereBuilt(ctx, op);
+        bytes = cgNewTmp(ctx);
+        cgNoteBuildInto(ctx, scopeVal);
+        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "",
+                scopeVal, byteSize);
+    }
     //D15b: a local "Array<T>(n)" is left as the arena hands it over - chunk memory is recycled, so that is
     //genuinely whatever was there before. A D14a constructor field still zero-fills (noZeroFill is set
     //only at the local var-decl), since a field has no "= v" form to ask for a fill with.
@@ -4140,6 +4366,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         char* fillVal = promote ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal) : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
         cgFillLoop(ctx, elemT, bytes, count, fillVal);
     }
+    if (heldBuf) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", heldBuf);
 
     //register every one of this array's N slots for destruction up front, at allocation time - not
     //deferred until (or gated on) individual elements actually being assigned later. Each destructor call
@@ -4716,9 +4943,10 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
         struct var* p = ListGetIdx(&f.vars, i);
         //T25b: "mut" is a reference's permission - a type variable's "mut" bound to a value renders nothing
         bool pm = p->type.structMAlloc && p->type.bType != BASETYPE_FUNC && p->type.refMut;
-        cgBufAdd(b, "%s%.*s %s", i ? ", " : "", p->name.len, p->name.ptr, pm ? "mut " : "");
+        cgBufAdd(b, "%s%.*s %s%s", i ? ", " : "", p->name.len, p->name.ptr, p->type.refOwn ? "own " : "", pm ? "mut " : "");
         struct type pt = p->type;
         pt.refMut = false; //written once, before the name's type, as the parameter's own "mut"
+        pt.refOwn = false; //T25e: and "own" before it, as written
         const struct var* outer = rdOwnScope;
         struct str own = pt.scopeParam ? pt.scopeParam->name : (struct str){0}; //"&p" is p's own
         bool isOwn = own.len == p->name.len + 1 && own.ptr[0] == '&' && !memcmp(own.ptr + 1, p->name.ptr, (size_t)p->name.len);
@@ -5416,6 +5644,58 @@ static bool cgRunsCode(struct operand* op) {
     for (int i = 0; i < op->args.len; i++) if (cgRunsCode(*(struct operand**)ListGetIdx(&op->args, i))) return true;
     for (int i = 0; i < op->chainOperands.len; i++) if (cgRunsCode(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
     return false;
+}
+
+//F3/N3/own5 F3: whether evaluating op may leave the expression before what was made beside it is taken. A whitelist:
+//it cannot only where it is built from literals, "null", reads of locals, parameters, globals and fields, unchecked
+//numeric operators and comparisons on primitives - nothing that runs code, nothing a check guards (a slice's bounds, an
+//array's length, "as", which abort a program but abandon a test, S18/P1d), nothing under "try", no catch clause.
+//Anything else holds the owner in its slot: one store more for such a call
+static bool cgPrimitiveOperand(struct operand* op) {
+    return op && !op->type.structMAlloc && (TypeIsNumeric(op->type) || op->type.bType == BASETYPE_BOOL);
+}
+static bool cgCannotLeave(struct operand* op) {
+    if (!op) return true;
+    if (op->isTried || op->checkRoot || op->catchClauses.len || op->isAtCall || op->callee || op->comprBody.len) return false;
+    if (op->isNullLiteral) return true;
+    switch (op->opType) {
+        case OPERATION_NONE:
+            return op->isLiteral && !op->args.len;
+        case OPERATION_READ_VAR:
+            return true;
+        case OPERATION_MEMBER: case OPERATION_LEN: //a field read - through a reference too: a null traps (T2b), it never leaves
+            return op->args.len == 1 && cgCannotLeave(*(struct operand**)ListGetIdx(&op->args, 0));
+        case OPERATION_INDEX: //unchecked (E16)
+        case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL: case OPERATION_DIV: case OPERATION_MOD:
+        case OPERATION_MINUS: case OPERATION_NOT: case OPERATION_BTWSE_INV:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR: case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
+        case OPERATION_AND: case OPERATION_OR: case OPERATION_XOR:
+        case OPERATION_LST: case OPERATION_LSE: case OPERATION_GRT: case OPERATION_GRE: case OPERATION_EQ: case OPERATION_NEQ:
+        case OPERATION_NUMERIC_CONVERT:
+            for (int i = 0; i < op->args.len; i++) {
+                struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+                //(an operator on anything but primitives may run a method - "==" a declared Eq, E10a)
+                if (op->opType != OPERATION_INDEX && !cgPrimitiveOperand(a)) return false;
+                if (!cgCannotLeave(a)) return false;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+//...outside a test (own6): a failed check ends the process, which leaves no frame to release anything, and a call not
+//tried returns or ends it - so only what leaves to this program's own code can: a "try" (a check under one, a call's
+//error), a catch clause, a match's or a sequence's statements (a clause that returns, breaks or continues)
+static bool cgLeavesToProgram(struct operand* op) {
+    if (!op) return false;
+    if (op->isTried || op->checkRoot || op->catchClauses.len || op->comprBody.len) return true;
+    for (int i = 0; i < op->args.len; i++) if (cgLeavesToProgram(*(struct operand**)ListGetIdx(&op->args, i))) return true;
+    for (int i = 0; i < op->chainOperands.len; i++)
+        if (cgLeavesToProgram(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
+    return cgLeavesToProgram(op->callee);
+}
+static bool cgMayLeave(struct cgCtx* ctx, struct operand* op) {
+    return ctx->emitUnwind ? !cgCannotLeave(op) : cgLeavesToProgram(op);
 }
 
 //E11a/E11b: a join's operands, evaluated left to right - each to its value, as any expression's is - before any piece
@@ -6474,6 +6754,11 @@ static char* cgRegionSlot(struct cgCtx* ctx, struct var* R) {
 //O32: a borrow just read - val the object's address - records its region, the word before the object; a null borrow's
 //from a word holding null, so reading it is no fault (only a build into it would be one, as reading through the null is)
 static void cgOwnBorrowHeader(struct cgCtx* ctx, struct operand* op, const char* val) {
+    if (op->ownRegion->regionArray) { //an own array's buffer: the pointer half of its { len, ptr }
+        char* p = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", p, val);
+        val = p;
+    }
     char* isNull = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp eq ptr %s, null\n", isNull, val);
     char* word = cgNewTmp(ctx);
@@ -6485,57 +6770,140 @@ static void cgOwnBorrowHeader(struct cgCtx* ctx, struct operand* op, const char*
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
 }
 
-static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap);
+static void cgPromoteAt(struct cgCtx* ctx, struct operand* op, char* scopeVal, char* heap, bool reserved);
 
 //O30: an owner made here - its object the first allocation of a new region, which is its constructor's %here (so what
 //it builds into itself lands there too), recorded in the region's slot before anything is built
 static char* cgOwnNew(struct cgCtx* ctx, struct operand* op) {
     char* obj = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call ptr @__olang_own_new(i64 %lld, i64 %lld)\n", obj, TypeGetSize(op->type),
-            cgAllocAlign(op->type));
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_own_new(i64 %lld, i64 %lld, i64 %d)\n", obj, TypeGetSize(op->type),
+            cgAllocAlign(op->type), cgDtorNodes(op->type));
     char* word = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = getelementptr i8, ptr %s, i64 -8\n", word, obj);
     char* hdr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", hdr, word);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
-    cgPromoteAt(ctx, op, hdr, obj);
+    //F3: its constructor's arguments are evaluated after the region is made - one leaving releases the region
+    bool argsRun = false;
+    for (int i = 0; i < op->args.len && !argsRun; i++) argsRun = cgMayLeave(ctx, *(struct operand**)ListGetIdx(&op->args, i));
+    char* held = argsRun ? cgOwnHoldSlot(ctx, false, obj) : NULL;
+    cgPromoteAt(ctx, op, hdr, obj, true);
+    if (held) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", held);
     return obj;
 }
 
+//O30: an own array made here - a new region holding its buffer, filled as "Array<T>(n[, v])" says or copied from the array
+//value made (a literal, text, a join, a comprehension), its region recorded in the region's slot
+static char* cgOwnNewArray(struct cgCtx* ctx, struct operand* op) {
+    if (op->opType == OPERATION_SIZED_ARRAY_ALLOC) return cgSizedArrayAlloc(ctx, op);
+    char* v = cgValue(ctx, op);
+    long long es = TypeGetSize(*op->type.arrElem);
+    char* len;
+    char* src;
+    if (!op->type.arrMalloc && op->type.arrLen) { //a literal or text of its own length: its value is its storage's address
+        len = MallocOrCrash(32);
+        snprintf(len, 32, "%lld", op->type.arrLen->intLiteralVal);
+        src = v;
+    } else {
+        len = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", len, v);
+        src = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", src, v);
+    }
+    char* bytes = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", bytes, len, es);
+    char* obj = cgOwnArrayBuffer(ctx, op, bytes);
+    fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %s, i1 false)\n", obj, src, bytes);
+    char* a1 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } undef, i64 %s, 0\n", a1, len);
+    char* a2 = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = insertvalue { i64, ptr } %s, ptr %s, 1\n", a2, a1, obj);
+    return a2;
+}
+
+//O30: an own array's buffer of `bytes` bytes, the first allocation of a new region - aligned for SIMD from 64 bytes up,
+//as an arena array is (O8a) - its region recorded in the region's slot
+char* cgOwnArrayBuffer(struct cgCtx* ctx, struct operand* op, const char* bytes) {
+    char* big = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp uge i64 %s, 64\n", big, bytes);
+    char* aln = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = select i1 %s, i64 64, i64 16\n", aln, big);
+    char* obj = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call ptr @__olang_own_new(i64 %s, i64 %s, i64 0)\n", obj, bytes, aln);
+    char* word = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr i8, ptr %s, i64 -8\n", word, obj);
+    char* hdr = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", hdr, word);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
+    return obj;
+}
+
+static bool cgOwnIsArray(struct type t) { return t.bType == BASETYPE_ARRAY; }
+//an own slot's LLVM type, and the value it holds when empty
+static const char* cgOwnTy(struct type t) { return cgOwnIsArray(t) ? "{ i64, ptr }" : "ptr"; }
+static const char* cgOwnNull(struct type t) { return cgOwnIsArray(t) ? "zeroinitializer" : "null"; }
+//the object pointer an own value of type t holds - an own array's buffer, the pointer half of its { len, ptr }
+static char* cgOwnPtr(struct cgCtx* ctx, struct type t, char* v) {
+    if (!cgOwnIsArray(t)) return v;
+    char* p = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", p, v);
+    return p;
+}
+
 //O34: what a move position receives - null, the owner "take" gives, or one made here
-static char* cgOwnValue(struct cgCtx* ctx, struct operand* op) {
-    if (!op || op->isNullLiteral) return "null";
-    if (op->ownNewRegion) return cgOwnNew(ctx, op);
+static char* cgOwnValue(struct cgCtx* ctx, struct operand* op, struct type slotT) {
+    if (!op || op->isNullLiteral) return (char*)cgOwnNull(slotT);
+    if (op->ownNewRegion) return cgOwnIsArray(slotT) ? cgOwnNewArray(ctx, op) : cgOwnNew(ctx, op);
     return cgValue(ctx, op);
 }
 
 //E34: the owner a slot holds, the slot left null
 static char* cgTake(struct cgCtx* ctx, struct operand* op) {
-    char* addr = cgAddr(ctx, *(struct operand**)ListGetIdx(&op->args, 0));
+    struct operand* place = *(struct operand**)ListGetIdx(&op->args, 0);
+    char* addr = cgAddr(ctx, place);
+    if (TypeIsOwnValue(op->type)) { //O31: an owner value local's value, moved into storage of its own; it is left its type's zero value
+        char ty[256];
+        llvmType(op->type, ty, sizeof(ty));
+        char* moved = cgValueSlot(ctx, op->type, ty);
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", moved, addr,
+                TypeGetSize(op->type));
+        struct operand* zero = op->args.len > 1 ? *(struct operand**)ListGetIdx(&op->args, 1) : NULL;
+        if (!zero || zero->zeroBits || zero->opType == OPERATION_ZERO)
+            fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", addr, TypeGetSize(op->type));
+        else cgStoreOperand(ctx, op->type, zero, addr, NULL, false, false);
+        return moved;
+    }
     char* v = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", v, addr);
-    fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", addr);
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, cgOwnTy(place->type), addr);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(place->type), cgOwnNull(place->type), addr);
     return v;
 }
 
 //O35: "slot = owner" - the place first (S4), then the owner, then the one the slot held released
 static void cgOwnAssign(struct cgCtx* ctx, struct statement* s) {
+    struct type t = s->target->type;
     char* addr = cgAddr(ctx, s->target);
-    char* v = cgOwnValue(ctx, s->op);
+    char* v = cgOwnValue(ctx, s->op, t);
     char* old = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", old, addr);
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", v, addr);
-    fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", old);
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", old, cgOwnTy(t), addr);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), v, addr);
+    fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", cgOwnPtr(ctx, t, old));
 }
 
 //O35: an owner local - released as its block's scope closes, unless moved on before (its slot then null). A
-//constructor's field is moved into the instance, which releases it (cgOwnDropFn)
+//constructor's field is released by its frame the same way until the instance is assembled, which takes it (N6: a
+//constructor failing first releases it); the instance releases it from then on (cgOwnDropFn)
 static void cgOwnDecl(struct cgCtx* ctx, struct statement* s, char* slot) {
-    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", cgOwnValue(ctx, s->op), slot);
-    if (s->ctorField) return;
-    char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+    struct type t = s->var.type;
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), cgOwnValue(ctx, s->op, t), slot);
+    if (s->ctorField) {
+        struct cgCtorOwner o = { slot, t };
+        ListAdd(&ctx->ctorOwners, &o);
+    }
+    char* scope = cgOwnReleaseScope(ctx);
     cgNoteBuildInto(ctx, scope);
-    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_slot)\n", scope, slot);
+    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope, slot,
+            cgOwnIsArray(t) ? "aslot" : "slot");
 }
 
 //O35: "ptr @olang.owndrop.<T>(ptr inst, ptr scope)" - an owning struct's own fields released, the last first, as its
@@ -6559,7 +6927,10 @@ static char* cgOwnDropFn(struct cgCtx* ctx, struct type t) {
         struct var* f = ListGetIdx(&t.vars, i);
         if (!f->type.refOwn) continue;
         fprintf(ctx->out, "  %%f%d = getelementptr %s, ptr %%inst, i32 0, i32 %d\n", i, agg, i);
-        fprintf(ctx->out, "  %%o%d = load ptr, ptr %%f%d\n  store ptr null, ptr %%f%d\n", i, i, i);
+        if (cgOwnIsArray(f->type)) { //an own array: its buffer, the pointer half of the field's { len, ptr }
+            fprintf(ctx->out, "  %%a%d = load { i64, ptr }, ptr %%f%d\n  store { i64, ptr } zeroinitializer, ptr %%f%d\n", i, i, i);
+            fprintf(ctx->out, "  %%o%d = extractvalue { i64, ptr } %%a%d, 1\n", i, i);
+        } else fprintf(ctx->out, "  %%o%d = load ptr, ptr %%f%d\n  store ptr null, ptr %%f%d\n", i, i, i);
         fprintf(ctx->out, "  call void @__olang_own_free(ptr %%o%d)\n", i);
     }
     fprintf(ctx->out, "  ret void\n}\n\n");
@@ -6592,6 +6963,20 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     if (s->var.type.refOwn) { //O34/O35
         cgOwnDecl(ctx, s, slot);
         return;
+    }
+    //O35: an owner value local's owners are released as its block's scope closes, unless moved on before (its slot then
+    //its type's zero value) - registered before its value is stored, on the slot, which a zero holds until then
+    if (s->var.ownValue) {
+        if (s->ctorField) {
+            struct cgCtorOwner o = { slot, s->var.type };
+            ListAdd(&ctx->ctorOwners, &o);
+        }
+        if (!cgViaMemory(s->var.type)) fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+        else fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(s->var.type));
+        char* scope = cgOwnReleaseScope(ctx);
+        cgNoteBuildInto(ctx, scope);
+        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scope, slot,
+                cgOwnDropFn(ctx, s->var.type));
     }
     //D15c: "Array<T>(n, v)" - every element gets v
     if (s->fillValue) {
@@ -6655,6 +7040,19 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
     if (s->target->type.refOwn) { //O35
         cgOwnAssign(ctx, s);
+        return;
+    }
+    if (OwnValueLocalOf(s->target)) { //O35: an owner value local - the place, the new owner, the old owners released, the store
+        struct type t = s->target->type;
+        char* addr = cgAddr(ctx, s->target);
+        struct var* tv = canonicalVar(s->target->readVar);
+        char* scopeOverride = tv->valueHomeSet && !tv->refsHomeSet ? cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth) : NULL;
+        char ty[256];
+        llvmType(t, ty, sizeof(ty));
+        char* fresh = cgValueSlot(ctx, t, ty);
+        cgStoreOperand(ctx, t, s->op, fresh, scopeOverride, false, false);
+        fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr null)\n", cgOwnDropFn(ctx, t), addr);
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", addr, fresh, TypeGetSize(t));
         return;
     }
     //a bare "&" struct field or array element has no declared scope of its own (neither a field nor an
@@ -6995,6 +7393,18 @@ static bool cgBuiltInResult(struct cgCtx* ctx, struct operand* op, struct type r
     return false;
 }
 
+//O35/N6: a constructor's instance, assembled, takes its own fields - their slots are left empty, so the frame's close
+//releases none of them; on any other way out (an error, a failed check) the frame releases what was made
+static void cgCtorTakeOwners(struct cgCtx* ctx) {
+    if (!ctx->ctorHere) return;
+    for (int i = 0; i < ctx->ctorOwners.len; i++) {
+        struct cgCtorOwner* o = ListGetIdx(&ctx->ctorOwners, i);
+        if (o->t.refOwn) fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(o->t), cgOwnNull(o->t), o->slot);
+        else fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", o->slot,
+                     TypeGetSize(o->t));
+    }
+}
+
 //a fallible function's success return wraps the value as { i32 0, T val } (or, with no success type at
 //all, just `ret i32 0`) - see llvmFuncRetType. ctx->curFunc is NULL in a context with no real error-union
 //semantics (global initializers, test bodies), where a fallible-style wrap never applies.
@@ -7022,14 +7432,22 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
         //value's own storage, or the reference it was read through
         char* src = cgValue(ctx, s->op);
         ctx->targetScopeOverride = prevTarget;
-        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", src,
-                TypeGetSize(retT));
+        char* held = cgRetHold(ctx, retT, src, true); //(own6 N3: held here, given to the caller once nothing can keep it)
+        if (!held) fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", src,
+                           TypeGetSize(retT));
+        cgCtorTakeOwners(ctx);
+        ctx->retHeld = held;
+        ctx->retHeldT = retT;
         cgCloseOwnScope(ctx);
+        ctx->retHeld = NULL;
+        if (held) fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", held,
+                          TypeGetSize(retT));
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
         return;
     }
-    char* val = cgBoundaryValue(ctx, s->op, retT, NULL);
+    //O37: an owned result is the owner the return gives - moved out of a slot, made here, or a call's owned result
+    char* val = retT.refOwn ? cgOwnValue(ctx, s->op, retT) : cgBoundaryValue(ctx, s->op, retT, NULL);
     ctx->targetScopeOverride = prevTarget;
     //T7b: an array value result is a new array built where the call's result is put - the result scope - which the
     //caller then takes as it is. One that is not already there (a local, a parameter's array, a field's) is copied
@@ -7038,7 +7456,16 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     if (retT.bType == BASETYPE_ARRAY && retT.arrMalloc && !retT.structMAlloc && !cgBuiltInResult(ctx, s->op, retT)) {
         val = cgCopyRuntimeLengthArray(ctx, retT, val, cgResolveScope(ctx, retT.scopeParam, retT.scopeDepth), NULL);
     }
+    char* held = cgRetHold(ctx, retT, val, false); //O35 (own6 N3/N3b): held while the return's exit code runs
+    cgCtorTakeOwners(ctx);
+    ctx->retHeld = held;
+    ctx->retHeldT = retT;
     cgCloseOwnScope(ctx);
+    ctx->retHeld = NULL;
+    if (held) { //(the caller's now - the slot, and any unwind node it was registered in, are left as they are)
+        val = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", val, retT.refOwn ? cgOwnTy(retT) : ty, held);
+    }
     if (!fallible) {
         cgEmitRet(ctx, ty, val);
         ctx->terminated = true;
@@ -7223,8 +7650,10 @@ static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_ASSIGN: cgAssign(ctx, s); return;
         case STATEMENT_EXPR: {
             char* v = cgValue(ctx, s->op);
-            if (s->op->opType == OPERATION_TAKE && s->op->ownDiscard) //O35: an owner no slot receives
-                fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", v);
+            if (s->op->ownDiscard && TypeIsOwnValue(s->op->type)) //O35: ...an owning value's owners, the value at v
+                fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr null)\n", cgOwnDropFn(ctx, s->op->type), v);
+            else if ((s->op->opType == OPERATION_TAKE || s->op->type.refOwn) && s->op->ownDiscard) //O35: an owner no slot receives
+                fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", cgOwnPtr(ctx, s->op->type, v));
             return;
         }
         case STATEMENT_IF: cgIf(ctx, s); return;
@@ -7798,6 +8227,10 @@ void cgInitGlobalsFunc(struct cgCtx* ctx, struct semaModule* emitMod) {
         if (cgIsBaked(v)) continue; //K2: already the global's data
         char gaddr[256];
         mangleGlobal(emitMod, v->name, gaddr, sizeof(gaddr));
+        if (v->type.refOwn) { //O34: an owner, its region made here - never released, the program's scope never closing
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(v->type), cgOwnValue(ctx, v->initExpr, v->type), gaddr);
+            continue;
+        }
         char* val = cgValueForTarget(ctx, v->initExpr, v->type, NULL);
         cgStoreInto(ctx, v->type, v->initExpr->type, val, gaddr, NULL, false, OperandIsLvalue(v->initExpr), false);
     }
@@ -7990,6 +8423,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->curFunc = func;
     ctx->scope = NULL;
     ctx->ctorHere = cgIsCtor(func) ? "%here" : NULL;
+    ctx->ctorOwners.len = 0;
     ctx->targetScopeOverride = NULL;
     cgPushScope(ctx);
 
@@ -8106,6 +8540,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
     ctx->ownScopeSlot = ownScope;
     ctx->ownScopeBorrowed = false;
+    ctx->ownFrameScope = ownScope;
     for (int k = 0; k < ownCopies.len; k++) {
         struct var* p = ListGetIdx(&func->type.vars, *(int*)ListGetIdx(&ownCopies, k));
         struct cgLocal* l = cgFindLocal(ctx, p->name);
@@ -8125,6 +8560,16 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->joinPool.len = 0;
     cgSetupUnwind(ctx);
     cgPushOwnUnwind(ctx);
+    //O35/O36: what an owning parameter still owns as the function returns is released, last of all (registered first)
+    for (int i = 0; i < func->type.vars.len; i++) {
+        struct var* p = ListGetIdx(&func->type.vars, i);
+        if (!p->type.refOwn || cgIsDtor(func)) continue;
+        struct cgLocal* l = cgFindLocal(ctx, p->name);
+        char* scope = cgOwnReleaseScope(ctx);
+        cgNoteBuildInto(ctx, scope);
+        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope,
+                l->llvmVal, cgOwnIsArray(p->type) ? "aslot" : "slot");
+    }
     if (cgIsDtor(func)) {
         ctx->ownScopeSlot = "%dscope";
         ctx->ownScopeBorrowed = true;
@@ -8170,6 +8615,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->curFunc = NULL;
     ctx->ownScopeSlot = NULL;
     ctx->ownScopeBorrowed = false;
+    ctx->ownFrameScope = NULL;
     cgPopScope(ctx);
 }
 
@@ -8565,6 +9011,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     ctx.joinFails = ListInit(sizeof(struct cgJoinFail));
     ctx.loops = ListInit(sizeof(struct cgLoop));
     ctx.defers = ListInit(sizeof(struct cgDefer));
+    ctx.ctorOwners = ListInit(sizeof(struct cgCtorOwner));
 
     ctx.debug = debug;
     ctx.fnValues = ListInit(sizeof(struct var*));

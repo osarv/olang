@@ -4934,6 +4934,91 @@ and literals made only of such, never existing storage anywhere in it) - it is
   **P1 (pre-existing codegen)**: `a.kid = Node(5)` built in the function's scope, not where `a` lives or in a borrow's
   region - destructors ran late (O16) or not at the region's release (O30). Fuzzer: the review's shapes, 56 findings in
   60 all-own programs on 42efc87, none after.
+- **Owned references, phase 2a: what `Vec<T>` needs (§8.8 O30-O37, O42, T25e, E34, K1, K2, 2026-10-11; the
+  user's QJ1, details mine, docs/own.md section 13).** **Own arrays**: `own mut Array<T>&` holds a buffer in a region of
+  its own - the region holds the buffer alone, the elements' referents living where a plain array in that slot would
+  keep them, so an element may be kept while its buffer is replaced. **Owning parameters and owned results**: a declared
+  function's parameter or single result written `own` (or, for a result, of an owning type held by value) owns; a
+  parameter is released as its callee returns unless moved on, a result is an owner only in a move position or as a
+  statement, `return x` moves an owner local, and such a function is never a value or a task's call. **Owner value
+  locals and borrowed copies (QJ1)**: `v := Vec<I64>()` is a value owning what its own fields hold, released as its
+  block closes, when it is given another (`v = take w`) or as an owned result let go; `b := v` is a borrowed copy -
+  read-only, owning nothing, a loan on each object `v` owns until `b`'s last use, so a `Push` on `v` or `take v` then is
+  O39's error; `take v` moves, leaving the zero value; `v.Clone()` is an owned result. O31 narrows: a field, element,
+  parameter, global or type argument still may not hold one by value (additive later); a lambda does not capture one; a
+  type variable it reaches binds the reference (G9d). Its reach is the program's scope when nothing it holds can refer
+  outside what it owns, else its storage's - conservative, recorded. **Small regions**: an object of 2 KB or less is one
+  allocation, and a release nests at most 256 deep (a million chained owners: 4.2 GB and a crash -> 111 MB). **Found on
+  the way**: an owning constructor temporary no promotion took was never released (now registered as O16 registers a
+  destructor-bearing one), `take` moved an owner of any type into any slot, a variable's read was taken for a landing
+  call (a null result scope, a segfault), and fuzz runs now work in directories of their own (B2f). Scope fuzzer: own
+  seeds 1-40, the same generator under both compilers, no findings (b50019d 206 run / 274 refused, now 181 / 299 - the
+  difference the borrowed-copy shapes that must be refused).
+- **Phase 2a's soundness review, fixed (§8.8 O17, O17a, O33, O35, O36, O38, C9a, 2026-10-11; the coordinator's
+  decisions, details mine, docs/own.md section 14).** **F1**: an own array's borrow is a split value - its buffer in its
+  region, its elements' referents where the slot's container keeps them - so lending it to a callee that can store into
+  it (a function, a generic, a lambda capturing a local holding it, a task, a slice of it) is O17's error naming the fixes
+  that compile: lend what holds the array, or hand it over as an owner (`b.names = f(take b.names)`); an element store
+  through a slice of the borrow was not retagged (a use-after-free, fixed). Over-rejection recorded: a callee that only
+  permutes (`Reverse`, `Sort`) is refused too. **F2**: a call that may keep a loan-derived argument in another argument
+  (its obligations say so) holds the loans until the end of the block the destination lives in - **not** its last use,
+  as asked: a holder by last use is unsound where the storage has another name (a reference taken before, a handle's
+  copy), reproduced; a destination that cannot be followed is refused; a store through a reference, or into a local a
+  reference was taken to, likewise (both pre-existing holes). **F3**: an owner for an owning parameter, a constructor's
+  region and an own array's buffer are held in a hidden owner slot while a later argument that can leave runs. **F4**: a
+  frame's owners are registered on its own block's scope, a destructor's top-level ones on its private scope, closed as
+  it returns. Scope fuzzer's own mode writes the shapes: 079921e 41 findings in 120 seeds, now none in 400.
+- **own4: borrows are confined - F2's extension reversed (§8.8 O33, O35, O36, O38, R20, C2a, 2026-10-11; the
+  coordinator's decisions, details mine, docs/own.md section 15).** The review of the phase-2a fixes found four more
+  use-after-frees from one cause: a value carrying a borrowed copy's loan was allowed to be **kept**, and the checker
+  chased its holders - and missed a destructor in the same block reading it (N1), a spawn target set from the task's
+  result (N2), owners given it (N4), and a handle's copy in an inner block (N5). **Reversed**: such a value is held only
+  by this function's locals - the `:=` locals holding the copy or a borrow out of it, and value locals built directly
+  from one - each to its last use (to its block's end where its storage has another name); a call that may keep it (its
+  body's obligations say so, or its body is not known), a store through a reference or into a handle, a global, a
+  capture, a spawn target, an owner or a destructor-bearing value made from it are compile-time errors saying to keep a
+  `Clone()`. `ownCallKeeps`/`ownDestFrame` and the `kept` loan are gone. **N3**: F3's hold keys on any operation that
+  can leave - a checked one under `try`, a catch clause - not on "runs code" (`cgMayLeave`). **N6**: a constructor's own
+  fields are registered on its frame until assembly takes them, so a failing constructor releases them. **M1**: a hold
+  in a loop condition registers once per opening of its scope (`{ owner, registered }` slot), flat over 4M turns.
+  Scope fuzzer's own mode writes all six shapes: 67cb5b1 67 findings in 100 own seeds, now none in 300.
+- **own5: derived fields, references to an owner value local, every way out of a test (§8.8 O38, O39, O35, O26a,
+  O23a, S18, 2026-10-11; the coordinator's decisions, details mine, docs/own.md section 16).** **F1**: a callee keeping
+  an `&p` field of its argument (read at O23a's derived scope) escaped O38 - a derived scope variable now counts as its
+  parameter wherever "can this callee keep this argument" is asked (`scopeIsParams`). **F2**: an owner value local O26a
+  moved was released at the return under a reference to it - a reference to an owner value local's storage is a borrow
+  of that owner (a loan on everything it owns, confined as a borrowed copy, never returned: the error names `fn f() T`,
+  where `return v` moves the owner); the owner releases nothing through its own name while it is used, a release through
+  the borrow is its own. O26a still moves owner value locals (the move form needs it) - the return rule is what closes F2;
+  owners made from such a borrow are held to O34's reach, destructors refused. Found on the way: the own walk read a
+  stale `obligUnsettled`, and a call's result took every argument's loans - `a.Clone()` was refused. **F3**: `cgMayLeave`
+  is a whitelist (literals, reads, unchecked operators on numbers); measured +9% on a loop of owner-passing calls, ~65
+  instructions per newly held call. Scope fuzzer: e3ded09 52 findings in 100 own seeds (all three shapes), now none in 300.
+- **own6: one of several results, conditionals of owners, a result in flight (§8.8 O34, O35, O38, O42, D8c, E28, P4b,
+  S18, 2026-10-11; the coordinator's decisions, details mine, docs/own.md section 17).** **N1** (new in own5): a borrow
+  handed back as one of several results carried no loan - `calleeMayKeepArg` read only a result's own scope, and a tuple
+  has none; it now walks every scope variable the result type names, at any depth, and answers "kept" for a kind it does
+  not know. The other one-result readers (O26a's home, O14/O14c, T22a, D8c's landing, B11's notes) are conservative or
+  diagnostic only. **A value whose type holds no reference carries no loan** (`return b.buf.Len()` through a borrow).
+  **N2**: a conditional or a match of owning values was checked as a borrow and built as a copy - it is O34's error
+  wherever it stands, naming `r mut T& = a` then `if not c { r = b }`. **N3/N3b**: an owned result in flight is held in
+  a hidden slot until its function returns - a join failing in the return's place releases it; in a test its slot is
+  registered in a scope whose unwind node sits just below the frame's (block nodes' links are fixed at frame entry), so a
+  failed check in deferred code or any close releases it. **F3's whitelist in test builds only**: outside them only
+  `try`, a catch clause or a clause's statements leave - the owner-passing loop 1,570M -> 1,223M instructions (e3ded09
+  1,441M). Scope fuzzer: 79bf11c 22 findings in 60 own seeds (all own6 shapes), now none. Left as they are, listed:
+  `x = v.Me()` into a local, C2d against O34's reach, O10c's note in `e3`.
+- **own7: a part borrowed where it is (§8.8 O38, O34, E12c, E16a, E32b, E11b, 2026-10-11; the coordinator's decision,
+  details mine, docs/own.md section 18).** **F1** (older than the own work's reviews): an owned object's inline field or
+  array, or an own array's plain element, borrowed in place - by reference (E12c: a reference parameter, a receiver, a
+  reference local, a task's argument), sliced or viewed, walked by `for` - took no loan, since a member's base was walked
+  as transient whenever the part's type held no reference; releasing the owner under it was accepted. The consumer now
+  decides: E12c marks the lvalue it borrows (`inPlaceBorrow`), a slice's or a view's base is a place, and a place walk
+  keeps the base's loans (item 5 does not cut it); only a value read stays transient. Found on the way, the same class: a
+  join renders its pieces after every operand is evaluated, so a piece reading a reference or an array is held across
+  the later operands that run code. Owners made in a conditional get O34's "gives an own slot nothing yet". Only
+  tightens; one new over-rejection, a part borrowed after a releasing call in one statement. Fuzzer: d8c942b 13 findings
+  in 60 own seeds (all own7 shapes), now none.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

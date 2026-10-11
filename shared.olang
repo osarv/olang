@@ -16964,3 +16964,547 @@ test "O39: moves and releases beside a borrow, a value using what its store rele
     assert OwnBesideBaked == ownBeside(3 * OwnRun) and OwnBesideBaked == 8
     assert ownBeside(4) == 10                   # S18c: decided while compiling
 }
+
+# ---- own arrays (§8.8, T25e, O33, O34): a buffer in a region of its own, replaced and released at will ----
+type OwnBuf struct(n I64) {
+    nums own mut Array<I64>& = Array<I64>(n)    # a constructor's own field: an owner local moved into the instance
+    names own mut Array<String&>& = Array<String&>(n)
+    text own mut String& = "start"
+}
+fn (b mut OwnBuf&) label(i I64) {
+    b.names[i] = $i "-" $b.nums[i]              # built where b lives - the elements' scope - not in the buffer's region
+}
+fn ownArrSum(a Array<I64>&) I64 {
+    t := 0
+    for x in a { t += x }
+    return t
+}
+OwnArrG own mut Array<I64>& = Array<I64>(3, 7)  # a global owner, assignable through its "mut" (T2)
+fn ownArrWork(k I64) I64 {
+    b := OwnBuf(4)
+    for i in range 4 { b.nums[i] = i * k }
+    for i in range 4 { b.label(i) }
+    kept := b.names[2]                          # an element: it lives where b does, not in the buffer
+    b.names = Array<String&>(2)                 # the old buffer released
+    b.names[0] = kept
+    b.text = $b.text "+" $kept.Len()
+    moved own mut Array<I64>& = I64[x * k for x in range 5]
+    other := take moved                         # moved: nothing released, moved left empty
+    t := ownArrSum(b.nums) + ownArrSum(b.nums[1:3]) + ownArrSum(other) + moved.Len() + b.text.Len()
+    b.nums = take other                         # the old buffer released, other left empty
+    return t + ownArrSum(b.nums) + other.Len() + (1 if b.names[0] == kept else 0)
+}
+OwnArrBaked I64 = ownArrWork(3)                 # K2: computed while compiling
+test "O33/O34: own arrays built, read through borrows, replaced, moved and released - while compiling and at run time" {
+    assert OwnArrBaked == ownArrWork(3 * OwnRun) and OwnArrBaked == 95
+    assert ownArrWork(2) == 66                  # S18c: decided while compiling
+}
+test "O33: an own array's elements live where its slot's would - read back after the buffer is replaced and the arena churns" {
+    b := OwnBuf(3)
+    for i in range 3 { b.nums[i] = 10 + i }
+    for i in range 3 { b.label(i) }
+    e := b.names[1]
+    b.names = Array<String&>(1)                 # releases the buffer, not what its elements referred to
+    assert sbChurn() > 0
+    assert e == "1-11" and b.names.Len() == 1 and b.names[0] == null
+    assert ownArrSum(b.nums) == 33 and b.text == "start"
+}
+test "O34: a global own array is replaced, and a slice of one read through a borrow" {
+    assert ownArrSum(OwnArrG) == 21
+    OwnArrG = Array<I64>(2, 5)
+    assert ownArrSum(OwnArrG) == 10 and ownArrSum(OwnArrG[1:]) == 5
+    OwnArrG = null
+    assert OwnArrG.Len() == 0
+    OwnArrG = Array<I64>(3, 7)
+}
+type OwnArrHolder struct(s String&, h mut OwnKidHolder&) {
+    inner own mut OwnList& = OwnList(s.Len())   # an own field given an owner made here
+    words own mut Array<String&>& = Array<String&>(2)
+    words[0] = s
+    moved own mut OwnKid& = take h.cur          # ...or moved out of a parameter's slot
+}
+test "O34: a constructor's own fields take an owner made there or moved in - read back after the arena churns" {
+    x := $5 "abc"
+    h := OwnKidHolder()
+    h.cur = OwnKid(7)
+    w := OwnArrHolder(x, h)
+    assert sbChurn() > 0
+    assert w.inner.v == 4 and w.words[0] == "5abc" and w.words[1] == null and w.moved.n == 7 and h.cur == null
+}
+fn ownMkNode(v I64) mut OwnNode& { return OwnNode(v) }
+test "O33: a call's built result stored into an owned object's field is built in its region - read back after the arena churns" {
+    s := OwnHolder()
+    s.cur = OwnHold(1 * OwnRun)
+    s.cur.n.next = ownMkNode(6)                 # built where s.cur's object lives
+    sbChurn()
+    assert s.cur.n.next.v == 6
+}
+OwnRelNext mut I64 = 0
+OwnRelBad mut I64 = 0
+type OwnDeep struct(v I64) {
+    v
+    next own mut OwnDeep&
+} destruct {
+    if v != OwnRelNext { OwnRelBad++ }
+    OwnRelNext--
+}
+OwnForkLog mut I64 = 0
+type OwnFork struct(v I64) {
+    v
+    a own mut OwnFork&
+    b own mut OwnFork&
+} destruct {
+    if v > 0 { OwnForkLog = OwnForkLog * 10 + v }
+}
+fn ownForkRelease(depth I64) I64 {
+    OwnForkLog = 0
+    {
+        root own mut OwnFork& = OwnFork(1)
+        root.a = OwnFork(2)
+        root.a.a = OwnFork(3)
+        root.b = OwnFork(4)
+        root.b.a = OwnFork(5)
+        for i in range depth {
+            n own mut OwnFork& = OwnFork(0)
+            n.a = take root
+            root = take n
+        }
+    }
+    return OwnForkLog
+}
+test "O30/O35: a chain of owners of any length is released, each destructor in turn, its regions one small allocation each" {
+    OwnRelBad = 0
+    {
+        head own mut OwnDeep& = null
+        for i in range 300000 {
+            n own mut OwnDeep& = OwnDeep(i)
+            n.next = take head
+            head = take n
+        }
+        OwnRelNext = 299999
+    }                                           # head released: a chain far deeper than a release may nest
+    assert OwnRelNext == -1 and OwnRelBad == 0
+    assert ownForkRelease(0) == 14523           # the object's destructor, then its fields' owners, last declared first
+    assert ownForkRelease(300) == 14523         # the same order where 256 releases are already under way
+}
+
+# ---- owning parameters and owned results (§8.8, O36, O37): an owner handed to a call, or handed back by one ----
+fn ownConsume(c own mut OwnConn&) I64 { return c.fd }       # c released as ownConsume returns
+fn ownStash(s mut OwnServer&, c own mut OwnConn&) { s.other = take c }  # moved on into s.other: not released
+fn ownMkConn(fd I64) own mut OwnConn& { return OwnConn(fd) }
+fn ownMkSock(fd I64) own mut OwnConn& {
+    c own mut OwnConn& = OwnConn(fd)            # an owner local the return gives whole - built for the result
+    c.sock = OwnSock(fd + 1)
+    return c                                    # moved out by the return, not released
+}
+fn ownPass(c own mut OwnConn&) own mut OwnConn& { return c }
+test "O36: an owning parameter is released as its callee returns, unless moved on" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(3 * OwnRun)
+    s.cur.sock = OwnSock(1)
+    assert ownConsume(take s.cur) == 3 and s.cur == null and OwnDropped == 2
+    s.cur = OwnConn(4 * OwnRun)
+    ownStash(s, take s.cur)
+    assert s.cur == null and s.other.fd == 4 and OwnDropped == 2
+    x own mut OwnConn& = OwnConn(5 * OwnRun)
+    assert ownConsume(take x) == 5 and x == null and OwnDropped == 3
+}
+test "O37: an owned result is the caller's - an own slot, an owner local, an owning parameter, or let go at once" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = ownMkSock(7 * OwnRun)
+    sbChurn()
+    assert s.cur.name == "c7" and s.cur.sock.n == 8 and OwnDropped == 0
+    s.cur = ownPass(take s.cur)                 # handed in and back: nothing released
+    assert s.cur.fd == 7 and OwnDropped == 0
+    s.cur = ownMkConn(9 * OwnRun)               # the old Conn and its Sock released
+    assert OwnDropped == 2
+    ownMkSock(1 * OwnRun)                       # let go at once: a Conn and a Sock
+    assert OwnDropped == 4
+    {
+        y := ownMkConn(2 * OwnRun)              # an owner local, released at its block's end
+        assert y.name == "c2"
+    }
+    assert OwnDropped == 5
+    assert ownConsume(ownMkConn(6 * OwnRun)) == 6 and OwnDropped == 6   # made for an owning parameter, released there
+    ownStash(s, ownMkSock(8 * OwnRun))          # ...or moved on, into s.other: it lands where that parameter's scope is
+    sbChurn()
+    assert s.other.name == "c8" and s.other.sock.n == 9 and OwnDropped == 6
+}
+fn ownBuild(n I64) own mut OwnList& {
+    if n == 0 { return null }
+    r own mut OwnList& = OwnList(n)
+    r.next = ownBuild(n - 1)                    # an owned result moved into an own field of an owner local
+    return r
+}
+fn ownTail(l own mut OwnList&) own mut OwnList& {
+    if l == null { return null }
+    return take l.next                          # the rest moved out; the head released with l
+}
+fn ownBuilt(n I64) I64 {
+    l := ownBuild(n)
+    t := ownSumOf(l)
+    m := ownTail(take l)
+    return t * 100 + ownSumOf(m) + (1 if l == null else 0)
+}
+OwnBuiltBaked I64 = ownBuilt(10)                # K2: computed while compiling
+test "O36/O37: a list built by owned results and cut by an owning parameter - while compiling and at run time" {
+    assert OwnBuiltBaked == ownBuilt(10 * OwnRun) and OwnBuiltBaked == 5546
+    assert ownBuilt(4) == 1007                  # S18c: decided while compiling
+    l := ownBuild(300 * OwnRun)
+    sbChurn()
+    m := ownTail(take l)
+    sbChurn()
+    assert ownSumOf(m) == 44850 and l == null
+}
+type OwnVec<T> struct() {
+    data own mut Array<T>& = Array<T>(2)
+    n I64 = 0
+}
+fn ownGrown(old Array<<T>>&, cap I64) own mut Array<T>& {
+    a own mut Array<T>& = Array<T>(cap)
+    for i in range old.Len() { a[i] = old[i] }
+    return a
+}
+fn ownGrownFrom(old own mut Array<<T>>&, cap I64) own mut Array<T>& {
+    a own mut Array<T>& = Array<T>(cap)
+    for i in range old.Len() { a[i] = old[i] } # old's elements refer where old's slot's would - its reach (O33)
+    return a                                    # old released as this returns
+}
+fn (v mut OwnVec<<T>>&) Push(x T) {
+    if v.n == v.data.Len() { v.data = ownGrown(v.data, v.n * 2) }   # the value borrows what its store releases
+    v.data[v.n] = x
+    v.n++
+}
+fn (v mut OwnVec<<T>>&) PushMoved(x T) {
+    if v.n == v.data.Len() { v.data = ownGrownFrom(take v.data, v.n * 2) }
+    v.data[v.n] = x
+    v.n++
+}
+fn ownVecWork(k I64) I64 {
+    v := OwnVec<I64>()
+    for i in range 100 { v.Push(i * k) }
+    w := OwnVec<I64>()
+    for i in range 50 { w.PushMoved(i) }
+    t := 0
+    for i in range v.n { t += v.data[i] }
+    for i in range w.n { t += w.data[i] }
+    return t + v.data.Len() + w.data.Len()
+}
+OwnVecBaked I64 = ownVecWork(2)                 # K2: computed while compiling
+test "O37: a buffer replaced by a call given a borrow of it, or given it - while compiling and at run time" {
+    assert OwnVecBaked == ownVecWork(2 * OwnRun) and OwnVecBaked == 11317
+    assert ownVecWork(1) == 6367                # S18c: decided while compiling
+}
+test "O33/O37: a buffer of text grown by moving it through a call - its elements read back after the arena churns" {
+    v := OwnVec<String&>()
+    for i in range 40 { v.PushMoved($i) }       # each text built where v lives - the elements' reach, not the buffer
+    sbChurn()
+    t := 0
+    for i in range v.n { t += v.data[i].Len() }
+    assert v.n == 40 and t == 70 and v.data[37] == "37" and v.data.Len() == 64
+}
+# O31/O32: an owning type held by value, as a local or a result - a copy of one is a borrowed copy, owning nothing
+fn (v OwnVec<<T>>&) Clone() OwnVec<T> {
+    c := OwnVec<T>()
+    for i in range v.n { c.Push(v.data[i]) }
+    return c                                    # an owner local returned is moved (O37)
+}
+fn ownVecSum(v OwnVec<I64>&) I64 {
+    t := 0
+    for i in range v.n { t += v.data[i] }
+    return t
+}
+fn ownValues(k I64) I64 {
+    a := OwnVec<I64>()
+    for i in range 10 { a.Push(i * k) }
+    b := a                                      # a borrowed copy: a loan on a's buffer until its last use
+    t := ownVecSum(b) + b.n
+    c := a.Clone()                              # an owner of its own
+    c.Push(100)
+    d := take c                                 # c left its zero value
+    t += ownVecSum(d) * 10 + c.n
+    a = take d                                  # a's buffer released, d left empty
+    t += ownVecSum(a) * 100 + d.n
+    a = OwnVec<I64>()                           # released again
+    a.Clone()                                   # an owned result let go at once
+    return t + a.n
+}
+OwnValuesBaked I64 = ownValues(1)               # K2: computed while compiling
+test "O31/O32/E34: an owning value held by a local - borrowed copies, take, Clone - while compiling and at run time" {
+    assert OwnValuesBaked == ownValues(OwnRun) and OwnValuesBaked == 16005
+    assert ownValues(2) == 21000                # S18c: decided while compiling
+}
+type OwnSockBox struct() {
+    s own mut OwnSock& = null
+}
+fn ownSockBoxOf(n I64) OwnSockBox {
+    b := OwnSockBox()
+    b.s = OwnSock(n)
+    return b
+}
+test "O35: an owner value's objects are released as its block closes, when it is given another, and when a result is let go" {
+    before := OwnDropped
+    {
+        b := OwnSockBox()
+        b.s = OwnSock(1)
+        c := OwnSockBox()
+        c.s = OwnSock(2)
+        b = take c                              # b's sock released, c left holding none
+        assert OwnDropped == before + 1 and b.s.n == 2 and c.s == null
+    }
+    assert OwnDropped == before + 2             # b's sock, as the block closed
+    ownSockBoxOf(3)                             # an owned result let go at once
+    assert OwnDropped == before + 3
+    for i in range 5 {
+        x := ownSockBoxOf(i)                    # each released as its iteration ends
+        assert x.s.n == i
+    }
+    assert OwnDropped == before + 8
+    y := ownSockBoxOf(9)
+    take y                                      # released where it stands
+    assert OwnDropped == before + 9 and y.s == null
+}
+fn ownTexts(n I64) OwnVec<String&> {
+    v := OwnVec<String&>()
+    for i in range n { v.PushMoved($i "!") }    # built where v lives - the result's scope, since v is returned
+    return v
+}
+test "O37: an owning value returned, and one moved out of an inner block - read back after the arena churns" {
+    v := ownTexts(30)
+    sbChurn()
+    w := ownTexts(5)
+    sbChurn()
+    assert v.n == 30 and v.data[29] == "29!" and w.data[4] == "4!"
+    a := OwnVec<I64>()
+    for k in range 3 {
+        b := OwnVec<I64>()
+        for i in range 5 { b.Push(i + k) }
+        if k == 1 { a = take b }                # numbers only, so b reaches nowhere and may move out
+        sbChurn()
+    }
+    sbChurn()
+    assert ownVecSum(a) == 15 and a.n == 5
+}
+# the review of own phase 2a (own3): an own array of references lent to a call that stores into it is refused (O17/O33,
+# checks/cases/o33ownarr*), a borrowed copy kept by a call is borrowed until the end of the block it is kept in (O38,
+# checks/cases/o38kept*), an owner a later argument leaves past is released (O36) and a destructor's own owner locals as it
+# returns (O35) - the forms that work, read back after the arena churns
+fn (b mut OwnBuf&) labelAll(k I64) {
+    for i in range b.names.Len() { b.names[i] = $k "-" $i }   # lent the holder: built where b lives, the elements' reach
+}
+fn ownFillOwned(a own mut Array<String&>&, k I64) own mut Array<String&>& {
+    for i in range a.Len() { a[i] = $k "/" $i } # an owning parameter's elements: built at its reach, the caller's
+    return a
+}
+fn ownNamesLen(a Array<String&>&) I64 {          # a read-only lend: nothing is stored into it
+    t := 0
+    for x in a { if x != null { t += x.Len() } }
+    return t
+}
+fn ownLendWork(k I64) I64 {
+    b := OwnBuf(3)
+    b.labelAll(k)
+    e := b.names[1]
+    b.names = ownFillOwned(take b.names, k + 1)
+    b.names[0:2][0] = $k "s"                    # through a slice of it: built where b lives too
+    g := b.names[0]
+    t := ownNamesLen(b.names) * 100 + e.Len() * 10 + g.Len()
+    b.names = Array<String&>(1)                 # the buffer released - not what its elements referred to
+    return t + e.Len() + g.Len()
+}
+OwnLendBaked I64 = ownLendWork(4)               # K2: computed while compiling
+test "O17/O33: an own array of references filled through its holder, as an owner and through a slice - while compiling and at run time" {
+    assert OwnLendBaked == ownLendWork(4 * OwnRun) and OwnLendBaked == 837
+    b := OwnBuf(3)
+    b.labelAll(7)
+    e := b.names[1]
+    b.names = ownFillOwned(take b.names, 8)
+    f := b.names[2]
+    b.names[0:2][0] = $9 "s"
+    g := b.names[0]
+    n := ownNamesLen(b.names)
+    b.names = Array<String&>(1)
+    assert sbChurn() > 0
+    assert e == "7-1" and f == "8/2" and g == "9s" and n == 8 and b.names[0] == null
+}
+type OwnKeep struct() {
+    s OwnServer& = null
+}
+fn ownKeep(k mut OwnKeep&, s OwnServer&) { k.s = s }
+test "O38: a borrowed copy is held by this function's locals - a copy of it, a struct local, a lambda local - read back after a churn" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(4 * OwnRun)
+    s.cur.sock = OwnSock(9)
+    t := OwnServer()
+    t.cur = OwnConn(5)
+    b := s                                      # a borrowed copy: its loans on s's objects last while a local holds it
+    c := b                                      # a copy of it holds them too
+    k := OwnKeep()
+    k.s = b                                     # into a local's own storage: k holds them
+    f := fn() I64 { return b.cur.fd }           # a closure held in a local, and called
+    t.cur = null                                # another owner's object: nothing here borrows it
+    assert sbChurn() > 0
+    assert c.cur.name == "c4" and c.cur.sock.n == 9 and k.s.cur.fd == 4 and f() == 4 and OwnDropped == 1
+    s.cur = null                                # once nothing holding the copy is used again
+    assert OwnDropped == 3
+}
+type OwnKeepCtor struct(s OwnServer&) {
+    s
+}
+test "O38: a borrowed copy a constructor keeps in its instance is borrowed while the instance is used - released after it" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(6 * OwnRun)
+    b := s
+    k := OwnKeepCtor(b)                         # kept in the result: the local holding it holds the loans
+    sbChurn()
+    n := k.s.cur.fd + k.s.cur.name.Len()
+    s.cur = null                                # after k's last use: allowed
+    assert n == 8 and OwnDropped == 1
+}
+fn ownFails(k I64) I64 ? {
+    if k > 0 { error }
+    return k
+}
+fn ownTake2(c own mut OwnConn&, k I64) I64 { return c.fd + k }
+test "O36: an owner handed to a call, or a constructor's region, is released when a later argument leaves first" {
+    OwnDropped = 0
+    s := OwnServer()
+    for i in range 3 {
+        s.cur = OwnConn(i * OwnRun)
+        x := ownTake2(take s.cur, try ownFails(i) catch { continue })    # i > 0: the call never runs - released here
+        assert x == 0
+    }
+    for i in range 2 {
+        x := ownTake2(OwnConn(10 + i), try ownFails(i + 1) catch { break })
+    }
+    for i in range 2 {
+        s.other = OwnConn(try ownFails(i + 1) catch { break })          # its region made before its argument fails
+    }
+    assert sbChurn() > 0
+    assert OwnDropped == 4 and s.cur == null and s.other == null
+}
+OwnDtorLocals mut I64 = 0
+type OwnDtorChain struct(v I64) {
+    v
+    next own mut OwnDtorChain&
+} destruct {
+    x := OwnServer()                            # an owner value local of the destructor's own
+    x.cur = OwnConn(v)
+    y own mut OwnSock& = OwnSock(v)             # an own reference local
+    OwnDtorLocals++
+}
+test "O35: a destructor's own owner locals are released as it returns - every destructor of a chain of 1000" {
+    OwnDropped = 0
+    OwnDtorLocals = 0
+    {
+        hd own mut OwnDtorChain& = null
+        for i in range 1000 {
+            n own mut OwnDtorChain& = OwnDtorChain(i * OwnRun)
+            n.next = take hd
+            hd = take n
+        }
+    }
+    assert sbChurn() > 0
+    assert OwnDtorLocals == 1000 and OwnDropped == 2000
+}
+type OwnPart struct(k I64) {
+    k
+}
+type OwnNamed struct() {
+    cur own mut OwnPart&
+    name String& = ""
+}
+#(own5 F2: returned by value, the owner moves - text built into its own storage lives where O26a put it, the result)
+fn ownNamedOf(k I64) OwnNamed {
+    v := OwnNamed()
+    v.cur = OwnPart(k)
+    v.name = "n" $k
+    return v
+}
+fn ownNamedSum(k I64) I64 {
+    x := ownNamedOf(k)
+    return x.cur.k * 100 + x.name.Len()
+}
+OwnNamedBaked I64 = ownNamedSum(7)               # K2: computed while compiling, as the run time computes it
+fn ownBorrowedRead(k I64) I64 {
+    v := OwnServer()
+    v.cur = OwnConn(k)
+    r mut OwnServer& = v                         # a borrow of the owner: released through, not around, while it is used
+    r.cur = OwnConn(k + 1)
+    t := r.cur.fd
+    v.cur = OwnConn(k + 2)                       # r is not used after: the owner may release again
+    return t * 10 + v.cur.fd
+}
+test "O38, O26a: an owner value local returned by value moves its owners, and a borrow of one releases through itself" {
+    OwnDropped = 0
+    assert ownNamedSum(7 * OwnRun) == OwnNamedBaked and OwnNamedBaked == 702
+    x := ownNamedOf(3 * OwnRun)
+    assert sbChurn() > 0
+    assert x.cur.k == 3 and x.name == "n3"
+    assert ownBorrowedRead(4 * OwnRun) == 56 and OwnDropped == 3
+}
+#(own6: a value whose type can hold no reference keeps nothing of what it was read through - a count read through a
+#borrowed copy, kept across a release of what the copy borrows, or returned through a borrow of an owner value local)
+fn ownNamedCount(k I64) I64 {
+    v := ownNamedOf(k)
+    b := v                                       # a borrowed copy (O32)
+    n := b.name.Len()                            # a count: it holds no loan
+    v.cur = OwnPart(k + 1)                       # released while n is still to be used
+    return n * 100 + v.cur.k
+}
+fn ownNamedThrough(k I64) I64 {
+    v := ownNamedOf(k)
+    r OwnNamed& = v
+    return r.name.Len() * 10 + r.cur.k           # numbers returned through a borrow of the owner value local
+}
+fn ownCopyLen(k I64) I64 {
+    v := ownNamedOf(k)
+    b := v
+    return b.name.Len()
+}
+OwnCountBaked I64 = ownNamedCount(7)             # K2: computed while compiling, as the run time computes it
+OwnThroughBaked I64 = ownNamedThrough(5) + ownCopyLen(123)
+test "O38: a number read through a borrow holds nothing of it - kept across a release, or returned through the borrow" {
+    assert ownNamedCount(7 * OwnRun) == OwnCountBaked and OwnCountBaked == 208
+    assert ownNamedThrough(5 * OwnRun) + ownCopyLen(123 * OwnRun) == OwnThroughBaked and OwnThroughBaked == 29
+    assert sbChurn() > 0
+}
+fn ownViaIndex(a Array<I64>&, i I64) I64 ? { return ownTake2(OwnConn(30), try a[i]) }
+fn ownViaDiv(z I64) I64 ? { return ownTake2(OwnConn(31), try (10 / z)) }
+fn ownViaSlice(a Array<I64>&, n I64) I64 ? { return ownTake2(OwnConn(32), (try a[1:n]).Len()) }
+type OwnFailing struct(n I64) ? {
+    n
+    c own mut OwnConn& = OwnConn(n)
+    c.sock = OwnSock(n)
+    k := try ownFails(n)
+}
+type OwnFailingOwn struct(n I64) ? {
+    n
+    c own mut OwnConn& = OwnConn(n)
+    if n > 0 { error }
+}
+test "O35, O36: an owner left behind by a checked operation under try, and a failing constructor's own fields, are released" {
+    OwnDropped = 0
+    a := I64[1, 2, 3]
+    x := try ownViaIndex(a, 8 * OwnRun) catch default -1        # OUT_OF_BOUNDS leaves before the call takes the owner
+    y := try ownViaDiv(OwnRun - 1) catch default -1             # DIVIDE_BY_ZERO
+    z := try ownViaSlice(a, 9 * OwnRun) catch default -1        # a slice out of range
+    assert x == -1 and y == -1 and z == -1 and OwnDropped == 3
+    for i in range 1 {
+        f := try OwnFailing(5 * OwnRun) catch { break }        # fails after making its field and the field's socket
+    }
+    for i in range 1 {
+        g := try OwnFailingOwn(6 * OwnRun) catch { break }     # its own error, after making its field
+    }
+    assert sbChurn() > 0
+    assert OwnDropped == 6
+    {
+        h := try OwnFailing(0) catch { unreachable }            # built: its fields go with the instance
+        assert h.c.fd == 0 and h.c.sock.n == 0 and OwnDropped == 6
+    }
+    assert OwnDropped == 8
+}

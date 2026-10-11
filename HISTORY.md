@@ -15124,3 +15124,293 @@ All-own, seeds 1-60:
 |---|---|---|---|
 | 42efc87 | 56 | 567 | 153 |
 | fixed | 0 | 294 | 426 |
+
+### Owned references, phase 2a: what `Vec<T>` needs (§8.8 O30-O37, O42, T25e, E34, K1, K2, B2f, 2026-10-11)
+
+The coordinator's list for this round was everything a `Vec<T>` written in the prelude stands on: an own array for its
+buffer, owning parameters and owned results, an owning type held by value with borrowed copies (the user's QJ1 answer),
+small regions, and a fuzz harness that cannot be written into by a leftover run. Each piece is in docs/own.md section
+13 with its decisions; this is the short story.
+
+**Own arrays (13.1).** `own mut Array<T>&` holds a buffer in a region of its own. The one real decision was where an
+element's referent lives. Putting it in the buffer's region would make every element a borrow of the region, so keeping
+one element while the buffer is replaced - the commonest thing a growable array does - would be O39's error, and growth
+would have to copy the referents too. So the region holds the buffer alone, and what the elements refer to lives where a
+plain array in that slot would keep it. One place retags an index of the borrow to that scope, and the thirty-odd
+container walks see a plain array. Found on the way: a variable's read was taken for a landing call, so `w := mk()`
+followed by a `w.inner.t` handed to `println` called `mk` with a null result scope - a segfault on the first cut too.
+
+**Owning parameters and owned results (13.2).** Only a declared function's parameter or single result owns. An owning
+parameter is an owner local of its callee: registered at entry, released as the callee returns unless moved on. An owned
+result is an owner only in a move position or as a statement. `return x` of an owner local moves it. A function owning a
+parameter or giving an owned result is never a value, and a type variable binds the borrow, not the owner. Found on the
+way: `take` moved an owner of any type into any own slot - `s.other = take s.cur.sock` put a `Sock` into a `Conn` slot.
+
+**Owning value types and borrowed copies (13.3).** `v := Vec<I64>()` is a value now, an **owner value local**: it owns
+what its own fields hold and releases it as its block closes, when it is given another owner, or when an owned value
+result is let go. `b := v` is a **borrowed copy**: read-only, owning nothing, rooted where `v` is, with a synthetic read
+of each of `v`'s own fields held as a loan until `b`'s last use. So a `Push` on `v` while `b` is in use is O39's error,
+and so is `take v`. A copy of a copy borrows from the first source. `take v` copies the value out and leaves the zero
+value. O31 narrowed rather than went: a field, an element, a parameter, a global or a type argument still may not hold
+one by value. A field holding a `Vec` by value needs the drop function to walk value fields and a borrowed copy read out
+of a member path; a parameter by value needs a borrowed copy made at each call. Both are additive. The reach rule is the
+conservative one - the block, unless the type can refer to nothing outside what it owns - because a store into an owner
+value local's non-own fields is judged against its storage, so its reach may not be longer than that while such fields
+exist.
+
+What it found: an owning constructor's temporary that no promotion took (`$OwnBuf(4)`, a constructor argument) was never
+registered, so its own fields were never released - codegen now registers it as a destructor-bearing temporary is (O16).
+`List<Vec<I64>>` gave O31 and two cascading E12s, and `Array<In, 2>` gave O31 twice. Four checks cases changed meaning,
+since `s := Server()` now declares a value, and were migrated to keep testing what they test.
+
+**Small regions (13.4).** A region of one object of 2 KB or less is one allocation from the C allocator, holding the
+header, its destructor nodes and the object. A release nests at most 256 deep, the rest deferred to a per-thread stack:
+a million owners linked through own fields went from 4.2 GB, 3.45 s and a crash to 111 MB, 0.18 s and a clean exit.
+
+**Fuzz runs in directories of their own (B2f).** A `fuzz scope` run works in `build/fz/runXXXXXX` (os.MkTemp), removed
+when nothing was found. The second own review's 36-70 false findings came from a backgrounded earlier run writing into
+the shared tree.
+
+**Fuzzer, item 3.** `ownValOp` adds twelve shapes on the holder as an owner value. Some must be refused: a borrowed copy
+kept across a release, a move or a reassignment, and one made in an inner block moved out. The rest must run: the
+holder moved out and back, given an owned value result, one let go, and parts of one moved in. The lambda shape now
+captures a borrowed copy, since a lambda does not capture an owner value local (O32). The same generator under both
+compilers:
+
+| compiler | seeds | findings | scenarios run | refused |
+|---|---|---|---|---|
+| b50019d | own 1-40 | 0 | 206 | 274 |
+| item 3 | own 1-40 | 0 | 181 | 299 |
+| b50019d | mixed 100-139 | 0 | 201 | 279 |
+| item 3 | mixed 100-139 | 0 | 199 | 281 |
+
+Most of the extra refusals are the borrowed-copy shapes that must be refused. On b50019d the holder is a reference, so
+`b := h` is a second reference and nothing dangles.
+
+### Phase 2a's soundness review, fixed (§8.8 O17, O17a, O33, O35, O36, O38, C9a, 2026-10-11)
+
+The read-only review of phase 2a (`/home/user/review/own3`, at 079921e) reproduced four bugs, every one accepted by the
+compiler: F1 and F2 use-after-frees, F3 a leak of regions and destructors, F4 a use-after-return. The coordinator decided
+each fix; how they were built, and the three places the build departed from the decision, follow. The full write-up is
+docs/own.md section 14.
+
+**F1 - an own array lent to a callee that stores into it.** An index read through an own array's borrow is retagged to
+the slot's reach, where its elements' referents live; lent whole, though, the callee's variable was bound to the buffer's
+region, and what it stored into an element was built there and freed with the buffer. The decision: an own array's
+borrow is a split value, so O17/O17a refuse the lend where the callee can store into it - the same body-read
+(`calleeStoresRegion`, deferred through `lendChecks` to `settleRegions` for a body not settled yet), with a lambda judged
+by its own region facts for its capture's scope variable (`lendStores`), since `calleeStoresRegion` takes any lambda's
+body to be unknown. Detected at the call by the argument's exact scope being an array's region, so a local holding the
+borrow and a slice of it are caught too. Two departures. The suggested diagnostic, "build the new array in a local, then
+move it in", names a fix that does not compile - an own local lent is the same split value, and a plain array cannot be
+moved into an own slot (O34) - so the message names the two that do: lend the holder (`fill(b)`, which builds where `b`
+lives) or hand the array over as an owner (`b.names = f(take b.names)`, an owning parameter's elements built at its
+reach). And writing the slice case found a second hole: an element stored through a slice of the borrow
+(`b.names[0:2][0] = t`) was not retagged at all, since the retag looked only at a read of the slot or a local holding
+it - `ownArrayRegionOf` sees through slices now, for the retag, `RefExactScope` and the loan walk. The cost is an
+over-rejection: O17's reading treats a local copy of an element stored back, and any call through a function value with
+an element, as a store from outside, so `Reverse`, `Sort` and a swap through a callee are refused on an own array of
+references. It is O17's existing imprecision, shared by every split value; lifting it - a local holding only reads of
+the region, and T22a's guarantee that a function value keeps its arguments only in its result - is recorded for when
+`Vec<String&>` needs to sort.
+
+**F2 - a borrowed copy kept by a call.** Holders gained loans only by declaration and assignment, so a call keeping its
+argument (`l.Push(b)`, `put(g, b)`) let the copy's loans end at the call. The decision: a call that can keep an argument
+makes the destination's root a holder, like `ownHoldMore`, and a destination that cannot be followed refuses the call.
+Built: the destinations are read off the callee's checked obligations - those relating the kept parameter's scope to
+another argument's, and a derived obligation's parameter (O22) - which are all known when the walk runs, after
+`dischargeLateObligations`; a self-obligation, the result scope and a constructor's instance scope are not destinations
+(a local given the result holds it already) - a constructor's body is known once it is built, which a first version
+took for unknown, refusing `k := Keep(b)`. The departure: holding by the destination local's **last use** is unsound, and building it showed why -
+the storage can have names the holder does not see. A reference to the local taken before the store (`gr mut Big& = g;
+g.x = b; v.o = null; gr.x...`) and a handle copied before (`l2 := l` shares the list's state) both read the kept copy
+after the release; the first reproduced under `-s` through the existing direct-store path, a hole older than this phase.
+So the loans are held until the end of the block the destination lives in (an `always` holder at that frame,
+`ownHoldUntil`): every other name of that storage is gone by then (§8.4). The direct-store path got the same treatment
+where it was unsound - a store through a reference, which had no holder at all (`gr.x = b`, reproduced), and a store into
+a local a reference has been taken to - while a plain local keeps its last-use holder. Two exclusions keep the rule from
+reaching what cannot escape: a borrow of an owned object is kept only in its region (O33), so `osetN(Node(5), b)` with
+`b := h.cur` holds nothing; and an owner moved into an own slot or an owning parameter holds no loan (`s.cur.sock = take
+s.other.sock` broke two corpus tests before that exclusion). A call through a function value needs no rule: T22a already
+refuses making a value of a function that keeps an argument beyond its result. `ownFramePop` had popped holders only from
+the end of the list, stopping at the first one held for an outer frame; holders added for an outer block's end while an
+inner one is walked (and a task's) left inner holders alive, so it now removes every holder of the frames it pops.
+
+**F3 - an owner left behind by an argument that leaves.** `cgCallTargetAndArgs` held an owning argument in a register
+until the call, and `cgOwnNew` made a constructor's region before evaluating its arguments. As decided, each is held in a
+hidden owner slot registered for release before it is filled and emptied when the call (or the store) takes it - only
+where something evaluated after it runs code (`cgRunsCode`), so most calls are unchanged. Writing the test found the same
+gap for an own array's buffer made before its fill (`Array<I64>(8, try g())`), held the same way.
+
+**F4 - a destructor's owner locals.** Registered on `%dscope`, the scope being closed, with a slot in the destructor's
+frame. As decided, an owner held in a frame's storage is registered on its own block's scope, and at a body's top level
+on the frame's private scope (`cgOwnReleaseScope`, `ownFrameScope`), which a destructor now closes as it returns. The same
+helper registers owning parameters and owner value locals; a constructor's top-level owners would have hit the same
+dead-slot release through its instance scope, but a constructor's top-level locals are its fields, and an owning
+constructor parameter is not supported yet (T25e).
+
+**Fuzzer.** `ownReviewOp` writes the review's shapes in own mode. The same generator: 079921e, own seeds 1-120, 41
+findings, each holding one of the shapes; fixed, own seeds 1-400 and mixed seeds 100-179, none. Comparing each scenario of
+own seeds 1-40 compiled alone under both compilers, every scenario newly refused holds a review shape or the existing
+`ogrowAt` lend, which was the same F1 hole one field further (a callee storing a node built in the buffer's region into an
+element's `next`).
+
+### own4: borrows are confined, F2's extension reversed (§8.8 O33, O35, O36, O38, R20, C2a, 2026-10-11)
+
+The review of phase 2a's fixes (`/home/user/review/own4`, at 67cb5b1) reproduced six bugs and a growth: N1, N2, N4 and N5
+use-after-frees, N3 and N6 leaks of regions and destructors, M1 memory growing in a loop condition. All six also
+reproduce on 079921e. The coordinator decided each; docs/own.md section 15 has the details.
+
+**The pattern, and why F2 is reversed.** F2 (own3) answered "a call keeps a borrowed copy" by holding the copy's loans to
+the end of the block the destination lives in, extending a chase that began with direct stores: every place a value
+carrying a loan could be kept had to be found and its holder kept alive as long. Four of the review's six were holders
+the chase did not see. N1 is a resource destructed after the owner value local beside it - destructors run in reverse
+order, so one made earlier in the block runs last, after the owners were released, and reads the copy. N2 is a spawn
+target, set on the task's thread from the call's result. N4 is an owner (an own local, an owning parameter) given an
+owned result holding the copy; owners never held loans. N5 is a handle's copy made in an inner block, sharing state
+that lives in an outer one. Each could have had its own patch, and each would have been the next review's finding
+again. The coordinator went back to the user's strict start for borrows: a value carrying a borrowed copy's loan is held
+only by locals of the function it is made in - the `:=` locals holding the copy or a borrow out of it, and value locals
+built directly from those - and everything that would keep it anywhere else is refused with a message to keep a
+`Clone()`. Confinement needs no holder search, because the only holders it admits are ones the checker already tracks.
+
+**How it was built.** A loan records whether a borrowed copy made it (`copied`); a borrow of an owned object itself is
+already kept in its region by §8 (O33) and needs nothing. `ownCallConfined` replaces `ownCallKeeps`: an argument
+carrying a copied loan is refused where the callee is handed it as an owner, where the callee's body may keep it beyond
+the call - its obligations relate the parameter to another argument's scope, or the body is not known - and where the
+result is an owner or has a destructor and may keep it. `ownHoldMore` refuses the same value stored through a reference,
+into a global or a capture, and keeps the "hold to the block's end" only for a local a reference was taken to, which is
+still a local of this function. A spawn target is refused when the task's call is given a copy and its result can hold a
+reference, a tuple's element included. Three things were found building it. A constructor keeping a copy in its plain
+instance must stay legal (it is a local given the result), and ownKeepDests had read a constructor's body through the
+wrong state: constructors have their own body state, so it now builds the body on demand. A destination that is the
+parameter itself (a self-obligation) is not a destination. And `TypeIsOwning` counts references, so an `Outer&` result
+looked like an owner until the check asked for a value of an owning type.
+
+**N3.** F3's hidden owner slot was made only where a later argument "runs code". That test (`cgRunsCode`) was written
+for E11a's joins, and it treats a checked index, slice, division, conversion or `as` as a plain operation, while under
+`try` each can leave the expression. `cgMayLeave` adds a tried operation, a checked one (`checkRoot`) and a catch clause,
+and the three F3 sites use it.
+
+**N6.** A constructor's own fields were registered for release nowhere, since the instance releases them once
+assembled; a body failing before assembly left them to nobody. They are registered on the frame as any owner local, and
+the constructor's return takes them - emptying their slots after the instance's value is computed and before the frame
+closes - so only a failing constructor's frame releases anything.
+
+**M1.** A hold evaluated in a loop's condition registered a release node on the enclosing scope every turn. The slot now
+carries a mark: registered once per opening of its scope, cleared by the release. An owner an earlier evaluation left in
+the slot is released before the slot is reused.
+
+**Fuzzer.** `own4Op` writes the six shapes in the scope fuzzer's own mode, over an owner value of a plain type: the first
+version used the fuzzer's holder, whose own arrays of `mut` references make a borrowed copy of it a split value O17
+refuses to lend at all, so most shapes never reached the own walk; and N3's first version caught its checked operation
+with a clause, which F3 already held for. On 67cb5b1, own seeds 4200-4299 give 67 findings, every one holding an own4
+shape; fixed, own seeds 4000-4299 give none.
+
+### own5: derived fields, references to an owner value local, every way out of a test (§8.8 O38, O39, O35, O26a, O23a, S18, 2026-10-11)
+
+The third review of the own work (`/home/user/review/own5`, at e3ded09) found confinement holding almost everywhere and
+three defects, all present on 079921e too. The coordinator decided each; docs/own.md section 16 has the details.
+
+**F1 - a derived field kept.** O23a reads a field of a parameter at a scope variable of its own, standing for where the
+argument bound that field - so a callee keeping `w.f` records an obligation on that derived variable, and the questions
+"can this callee keep argument i" compared obligations with parameter i's own variable only. One predicate
+(`scopeIsParams`) now says whether a scope variable is a parameter's, its own or derived from it, and every such question
+asks it: the keep destinations, both keep predicates, the transient-parameter test and the O10c note. O17's region facts
+were checked and need nothing: they are keyed on regions, and a derived region is resolved by each caller exactly.
+
+**F2 - a reference past the release.** An owner value local's owners are released as its block ends; O26a may put its
+storage in the result scope; a reference to that storage returned, or held by a returned value, then outlived the
+release - a null trap at run time, while the evaluator, which gives a release no meaning, baked the value. The decision
+was to make such a reference a borrow of the owner, confined, and to stop O26a moving the owner. The first half was
+built as decided: the owner's own fields are read once as it is declared, and every operand borrowing its storage
+(E12c, a slice) carries a loan on those reads, confined like a borrowed copy's, with a new rule that a return reaching it
+is refused - naming the owned value result as the decision asked. The second half was not: the move form the error
+recommends (`fn mk3() Outer`) needs O26a whenever the owner holds text or anything else built into its own storage, and
+once nothing reaching the storage by reference can be returned, the move is harmless. Building the loans as decided
+also showed how they meet releases. As a copy's would, they refused `ownStash(s, take s.cur)` and every release through a
+`Hold` given the owner; but a reference reads through the owner's slots, so a release only changes what it sees, never
+frees what it reads. The loans therefore meet only releases made through the owner's own name, not releases through the
+borrow itself or through an argument evaluated beside it (Rust's two-phase borrows). That is what `r mut Outer& = v;
+v.o = x; r.o` - refused - and `r.o = x` through the borrow - allowed - show. And owners made from such a borrow are held
+to O34's reach rather than refused: the corpus's `OwnArrHolder(x, h)` moves an owner out of `h`, which `ctorHeld` cannot
+tell from keeping `h`. Two latent imprecisions surfaced: the own walk still saw `obligUnsettled` on functions once in a
+call cycle (it runs after every obligation is known), and a value made by a call took the loans of every argument, not
+only of those its callee may keep in its result - together they made `c := a.Clone()` hold `a`'s buffer.
+
+**F3 - the next entry of a list.** `cgMayLeave` listed what can leave an expression, and each review found the next
+entry; a guaranteed check (a slice's bounds, `as`, an array's length) aborts a program but abandons a test. It is a
+whitelist now: literals, `null`, reads, unchecked operators on numbers. The cost is real, not one store: about 65
+instructions per call that newly holds, most of it registering the hold on its scope once per opening - +9% on a loop
+of nothing but owner-passing calls with a slice or `as` after the owner. Outside tests only `try` and clauses leave an
+expression, so holding by the whitelist in test builds alone would cost production nothing; recorded.
+
+**Fuzzer.** `own5Op` writes F1's and F2's shapes, and programs with destructors carry test blocks with F3's, run by
+`-t -d -s` - the harness's first test-mode check. On e3ded09, own seeds 7000-7099 give 52 findings, every one an own5 shape;
+fixed, own seeds 7000-7299 give none.
+
+### own6: one of several results, conditionals of owners, a result in flight (§8.8 O34, O35, O38, O42, D8c, E28, P4b, S18, 2026-10-11)
+
+The fourth review (`/home/user/review/own6`, at 79bf11c) found section 16's relaxations holding everywhere but one
+place, and four defects. The coordinator decided each; docs/own.md section 17 has the details.
+
+**N1 - the fix's own hole.** own5 made a call's result carry only what its callee may keep in its result, and asked
+that of the result's own scope and the result scope. A function returning several values (D8c) returns an anonymous
+tuple whose elements carry the scopes, so `fn two(x Inner&) (Inner&x, I64)` looked like it kept nothing, the loan was
+dropped, and every own check downstream passed - three use-after-frees and F2 again. The question now walks every scope
+the result type names, at any depth, and a kind it does not know means "kept". The coordinator also asked for every
+other place that reads one result scope to be checked; they were (section 17.1): each is conservative for a tuple or only
+words a note. Beside it, the decision's fifth item: a value whose type holds no reference carries no loan - what O38 had
+always said - which lifted own5's over-rejection of numbers returned through a borrow.
+
+**N2 - checked as one thing, built as another.** `r mut Outer& = v if c else w` was a borrow of `v` to the own walk and
+a copy of `v` to codegen (E28 builds a conditional's value where it lands), so a release through `r` freed what `v`
+still held. Pre-existing. Decided: a conditional or a match of owning values is O34's error anywhere, naming the
+reference repointed in a branch.
+
+**N3/N3b - between the return and the caller.** A `return` computes its owned result before the code the return runs
+first - deferred code, a join's wait, the scopes it closes - and a join failing there replaces the return (P4b), while in
+a test a failed check there abandons the test: either way the result went to nobody. Decided: it is held, as own5's F3
+holds an owner for a call. Outside a test only a join failing in the return's place can keep it, so only a return that
+crosses one holds it, and that join's failing branch releases it. In a test the slot needs a registration an unwind
+finds, and the obvious one - a node pushed on the chain at the return - does not work: a block's unwind node is linked
+to the block outside it once, when the frame starts, so a block opened after the return (the deferred code's own)
+leads past a node pushed above it. The hold node is linked just below the frame's own node instead, which every block
+reaches; the frame's normal end restores the chain from below it, unrun. A join failing in deferred code is not one the
+return leaves, and must not release the result - found by writing the case, and pinned.
+
+**F3's cost, and the reason for it.** own5 recorded that holding owners by the whitelist outside tests buys nothing:
+there a failed check ends the process. The decision made it so - the whitelist in test builds, `try`, catch clauses and
+clauses' statements elsewhere - and the loop own5 measured at +9% now runs 1,223M instructions against 79bf11c's 1,570M
+and e3ded09's 1,441M (whose rule held for a later argument that ran code, which cannot leave outside a test either).
+
+**Fuzzer.** `own6Op` writes N1's three shapes, N2's two, numbers kept across a release, and N3's failing joins; programs
+with destructors carry two N3b test blocks. On 79bf11c, own seeds 9000-9059 give 22 findings, every one an own6 shape;
+fixed, none. Left as they are, listed in section 17.7: `x = v.Me()` into an existing local, C2d against O34's reach, and
+the O10c note's wording in the review's `e3`.
+
+### own7: a part borrowed where it is (§8.8 O38, O34, E12c, E16a, E32b, E11b, 2026-10-11)
+
+The fifth review (`/home/user/review/own7`, at d8c942b) found the previous round holding and one defect class that had
+been there all along: a part of an owned object borrowed where it is took no loan. The loan walk asked the part's type -
+"a part that holds no reference carries nothing of its base" - which is the rule for a part read as a copy, and was
+applied as well to a part whose storage is lent: to a reference parameter or a receiver, sliced or viewed into a local,
+walked by `for`, handed to a task, and an own array's element lent the same way. Releasing the owner under such a
+borrow was accepted; the sanitizer, valgrind and TSan all saw freed memory read, and the task's case also wrote a freed
+region when its stand-in was folded in at the join.
+
+The coordinator's decision was that the consumer decides: where a part's storage is borrowed in place, the operand is
+walked as a place, and a value read stays transient. E12c already had one function every borrow of a value into a
+reference passes through, so the mark is set there; slices and views are their own operations and walk their base as a
+place. The place walk also had to pass item 5 of the previous round, which returned early for an operand whose type holds
+no reference - right for a value, wrong for a part lent by reference; without that the slice into a local was still
+accepted. The task's join needed nothing of its own: with the argument's loan held until the join, no release can free
+the region before the fold, which TSan confirmed on the legal variants.
+
+Writing the cases turned up the same mistake one level out: a join's pieces are rendered once every operand is evaluated
+(decision 49), so `$h.cur " " $f(h)` reads the object after `f` released it, while the walk treated the piece as a lone
+`$x`, rendered at once. A piece reading a reference or an array is now held across the later operands that run code, and
+one released before it is evaluated still compiles. The conditional message the review flagged now says what is wrong
+for owners made there. Everything here only adds loans; one shape accepted before is refused now, a part borrowed after a
+releasing call in the same statement, because a statement's loans are not ordered - recorded with the other
+over-rejections.

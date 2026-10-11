@@ -1,0 +1,168 @@
+# O36/O30 (own3 F3): an owner handed to an owning parameter, made for one, or a constructor's region, is released when
+# an argument after it leaves the expression first - by an error propagated, a clause's break, continue or return - and
+# O35 (own3 F4): a destructor's own owner locals are released as it returns, every destructor of a chain of 1000.
+# own4 N3: the argument after it may leave by a checked operation under "try" - an index, a slice, a division, a
+# conversion, "as" - or a catch clause; N6: a constructor failing after making its own fields releases them.
+# Built, built -s, built -d and, where valgrind is installed, run under it: every object made is released, nothing is
+# lost and no slot is read after its frame is gone
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+    Made = Made + 1
+} destruct { Dropped = Dropped + 1 }
+type H struct() {
+    a own mut Leaf&
+}
+type Buf struct() {
+    nums own mut Array<I64>&
+}
+fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
+fn fails(k I64) I64 ? {
+    if k >= 0 { error }
+    return k
+}
+fn mkl(k I64) own mut Leaf& { return Leaf(k) }
+fn viaMade() ? {
+    x := take2(Leaf(1), try fails(1))
+}
+fn viaTake(s mut H&) ? {
+    x := take2(take s.a, try fails(2))
+}
+fn viaResult() ? {
+    x := take2(mkl(3), try fails(3))
+}
+fn viaRegion(s mut H&) ? {
+    s.a = Leaf(try fails(4))
+}
+fn viaFill(b mut Buf&) ? {
+    b.nums = Array<I64>(8, try fails(5))
+}
+fn viaReturn(s mut H&) I64 {
+    for i in range 3 {
+        s.a = Leaf(i)
+        x := take2(take s.a, try fails(i) catch { return i })
+    }
+    return -1
+}
+type Deep struct(v I64) {
+    v
+    next own mut Deep&
+} destruct {
+    x := H()                                 # an owner value local of the destructor's own
+    x.a = Leaf(v)
+    y own mut Leaf& = Leaf(v + 1)            # an own reference local
+}
+# N3: checked operations under "try" as the later argument
+type Pick enum {
+    One(n I64)
+    Two(n I64)
+}
+fn viaIndex(arr Array<I64>&, i I64) ? {
+    x := take2(Leaf(30), try arr[i])
+}
+fn viaDiv(z I64) ? {
+    x := take2(Leaf(31), try (10 / z))
+}
+fn viaConv(big I64) ? {
+    x := take2(Leaf(32), I64(try I32(big)))
+}
+fn viaSlice(arr Array<I64>&) ? {
+    x := take2(Leaf(33), (try arr[3:9]).Len())
+}
+fn viaAs(p Pick) ? {
+    x := take2(Leaf(34), try (p as Pick.Two))
+}
+fn viaCheckedRegion(s mut H&, arr Array<I64>&) ? {
+    s.a = Leaf(try arr[9])
+}
+fn viaCheckedFill(b mut Buf&, z I64) ? {
+    b.nums = Array<I64>(8, try (5 / z))
+}
+fn viaCatchBreak(arr Array<I64>&) I64 {
+    for i in range 3 {
+        x := take2(Leaf(35), try arr[i + 7] catch { break })
+    }
+    return 0
+}
+# N6: a constructor failing after making its own fields - one, or two and an own array
+fn check(n I64) I64 ? {
+    if n > 2 { error }
+    return n
+}
+type FailTry struct(n I64) ? {
+    n
+    a own mut Leaf& = Leaf(n)
+    k := try check(n)
+}
+type FailOwn struct(n I64) ? {
+    n
+    a own mut Leaf& = Leaf(n)
+    if n > 2 { error }
+}
+type FailMany struct(n I64) ? {
+    n
+    a own mut Leaf& = Leaf(n)
+    b own mut Leaf& = Leaf(n + 100)
+    c own mut Array<I64>& = Array<I64>(16, n)
+    k := try check(n)
+}
+fn mkFail(n I64) ? {
+    a := try FailTry(n)
+    b := try FailOwn(n + 1)
+    c := try FailMany(n + 2)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    s := H()
+    b := Buf()
+    try viaMade() catch { }
+    s.a = Leaf(2)
+    try viaTake(s) catch { }
+    try viaResult() catch { }
+    try viaRegion(s) catch { }
+    try viaFill(b) catch { }
+    for i in range 2 {
+        s.a = Leaf(10 + i)
+        x := take2(take s.a, try fails(i) catch { continue })
+    }
+    for i in range 1 {
+        x := take2(Leaf(20), try fails(i) catch { break })
+    }
+    r := viaReturn(s)
+    println("made " $Made " dropped " $Dropped " return " $r)
+    {
+        head own mut Deep& = null
+        for i in range 1000 {
+            n own mut Deep& = Deep(i)
+            n.next = take head
+            head = take n
+        }
+    }
+    churn()
+    println("made " $Made " dropped " $Dropped)
+    arr := I64[1, 2, 3]
+    try viaIndex(arr, 9) catch { }
+    try viaDiv(0) catch { }
+    try viaConv(1 << 40) catch { }
+    try viaSlice(arr) catch { }
+    try viaAs(Pick.One(1)) catch { }
+    try viaCheckedRegion(s, arr) catch { }
+    try viaCheckedFill(b, 0) catch { }
+    r2 := viaCatchBreak(arr)
+    try mkFail(5) catch { }                 # FailTry fails after making its field
+    try mkFail(2) catch { }                 # FailOwn fails
+    try mkFail(0) catch { }                 # all three built
+    try mkFail(1) catch { }                 # FailMany fails after making its three
+    s.a = null
+    churn()
+    println("made " $Made " dropped " $Dropped)
+}

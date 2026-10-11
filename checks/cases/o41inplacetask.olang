@@ -1,0 +1,22 @@
+# check: fail error[O41]: assigning 'h.cur' may release the In3 the task spawned on line 18 may be using until the join
+# O41 (own7 F1): an inline field lent to a task borrows the owned object until the join
+type Plain struct(k I64) {
+    k
+}
+type In3 struct(k I64) {
+    pl Plain = Plain(k)
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn useP(p mut Plain&, out mut Array<I64>&) { out[0] = p.k }
+fn main() ? {
+    h mut H3& = H3()
+    h.cur = In3(5)
+    out := Array<I64>(1)
+    join {
+        spawn useP(h.cur.pl, out)
+        h.cur = null
+    }
+    println($out[0])
+}

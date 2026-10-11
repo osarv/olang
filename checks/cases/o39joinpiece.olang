@@ -1,0 +1,18 @@
+# check: fail error[O39]: calling 'f' may release the In3 borrowed on line 17
+# O39 (own7): a join renders its pieces once every operand is evaluated (E11b) - a reference's, or an array's elements,
+# read then: a piece reading an owned object is held across a later operand that may release it
+type In3 struct(k I64) {
+    k
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn f(h mut H3&) I64 {
+    h.cur = null
+    return 1
+}
+fn main() ? {
+    h mut H3& = H3()
+    h.cur = In3(5)
+    println($h.cur " " $f(h))
+}

@@ -1,5 +1,5 @@
-# check: fail error[T25e]: 'own' is written on a field's, a local's or a global's type - here it is not supported yet
-# own parameters are not supported yet
+# check: fail error[T25e]: 'own' is written on a field's, a local's or a global's type, or a declared function's parameter or result - here it is not supported yet
+# a constructor's parameter does not own yet
 type Sock struct(n I64) {
     n
 }
@@ -12,5 +12,7 @@ type Server struct() {
     cur own mut Conn&
     other own mut Conn&
 }
-fn f(c own Conn&) { }
+type Wrap struct(c own mut Conn&) {
+    c
+}
 fn main() ? { }

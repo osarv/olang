@@ -1,0 +1,22 @@
+# check: fail error[O38, O26a]: this result reaches the owner value local 'v' by reference
+# O38 (own6 N1): one of several results borrowed from an owner value local is not returned - its owners are released as
+# its block ends, whatever O26a moved its storage into (own5 F2 through a destructuring)
+type Inner struct(k I64) {
+    k
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type View struct(x Outer&) {
+    x
+}
+fn (a Outer&) Two() (View&a, I64) { return View(a), 1 }
+fn mk() View {
+    v := Outer()
+    v.o = Inner(6)
+    a, b := v.Two()
+    return a
+}
+fn main() ? {
+    println($mk().x.o.k)
+}

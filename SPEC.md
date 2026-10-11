@@ -977,8 +977,11 @@ reference's scope being its object's region (O33). A type holding an own referen
 of one, an `Array<own T&, N>` held by value, transitively - is an **owning type** (O31), copied only as §8.8 says.
 
 `own` may be written on a field's type, an element or type argument (`List<own Msg&>`, `Map<I64, own Conn&>`), a
-local, a parameter, a result and a global. *(§8.8, not yet implemented: only a reference to a struct type, as a field's,
-a local's or a global's type - anything else is a compile-time error saying it is not supported yet.)* It is a
+local, a parameter, a result and a global. *(§8.8, not yet implemented: only a reference to a struct type, or to an
+array of a run-time length whose elements are numbers, values holding no reference, references or function values
+(`own mut Array<I64>&`, `own Array<Node&>&`, `own mut String&`), as a field's, a local's or a global's type, or a
+declared function's parameter or single result - not a constructor's, a trait method's or an enum payload's - and
+anything else is a compile-time error saying it is not supported yet, re-checked for each instantiation (G18).)* It is a
 compile-time error before anything that is not a reference (`own
 I64`, `own Point`, a function type), on a receiver (a method is called on a borrow, O36), in a function type (O36), in
 an `extern` declaration (X2), and in an enum's payload - an enum value is copied freely and nothing can take a payload
@@ -4874,6 +4877,16 @@ reference of its own making, which it uses only to read the elements out and for
 judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
 lives where the value's references do.
 
+An **own array's borrow** (O33) - a read of the slot, a local holding one, a slice of either - is such a value too: its
+storage, the buffer, is its region, while its elements' referents live where the slot's container keeps them. Lent, the
+callee's variable is bound to the region, so a callee that can store into what it is lent (O17, read off its body: a
+function, a constructor, a lambda capturing a local holding the borrow, a task's call) would build what it stores in the
+buffer's region, released with the buffer while every read of the element says it lives on: lending it there is a
+compile-time error naming the fix - lend the callee what holds the array, or hand it the array as an owner (O36:
+`b.names = fill(take b.names)`). A callee that reads it, or writes numbers into it, may be lent it. *(Implemented as O17
+reads a body, so a callee that only permutes the elements - `Reverse`, `Sort`, a swap through a local - is refused as
+well.)*
+
 **O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
 exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
 by value - `List`, `Map` and `StringBuilder` are handles (T8), and so is any such struct a program declares. A copy of one
@@ -5007,13 +5020,15 @@ the scope it was built in (where its constructor's instance landed, C2d) and des
 
 ### 8.8 Owned references
 
-> **Partly implemented.** The compiler accepts `own` on a reference to a struct type as the type of a field, a local
-> or a global, and `take` of such a slot: O30-O35 and O38-O42 hold for these. Not yet: `own` anywhere else (T25e: a
-> compile-time error saying so) and with it owning parameters and owned results (O36, O37), M19d's own elements,
-> `TakeAt`, `SwapTake`, `Take` and `Vec`; an owning struct held by value, and so borrowed copies (O31, O32); an owner
-> local moved by its last use without `take`, and an owner given by a conditional, a match, an array literal, a
-> `spawn`'s target or a `catch default` (O34); releases through a function value, a destructor or a task (O40, O41);
-> and the rules elsewhere marked *(§8.8, not yet implemented)*. Each rule below says where it stops.
+> **Partly implemented.** The compiler accepts `own` on a reference to a struct type, or to an array of a run-time length
+> (T25e), as the type of a field, a local, a global, or a declared function's parameter or result, and `take` of such a
+> slot: O30-O42 hold for these as each says. Not yet: `own` anywhere else (T25e: a compile-time error saying so), and
+> with it M19d's own elements, `TakeAt`, `SwapTake`, `Take` and `Vec`; an owning type held by value anywhere but a
+> body's local or a function's result, and so parameters owning by another owning type (O31, O36); an owner local moved by its
+> last use without `take` other than by `return`, and an owner given by a conditional, a match, an array literal, a
+> `spawn`'s target or a `catch default` other than `null` (O34); releases through a function value, a destructor or a
+> task, and a task's call owning a parameter or giving an owned result (O40, O41); and the rules elsewhere marked
+> *(§8.8, not yet implemented)*. Each rule below says where it stops.
 
 An **owned reference** is the one reference that owns an object: the object lives in a **region** of its own and is
 freed as soon as its owner lets go of it, not when a scope closes (O8c). Nothing frees memory - an owner lets go, by
@@ -5042,9 +5057,12 @@ are owners. An owner is made only by:
 - `take p` (E34), which moves the owner out of the slot `p`;
 - an owner local or an owning parameter read for the last time in a move position (O34).
 
-*(Not yet implemented: an owning type other than an own reference is a struct holding one, held only by reference -
-`Server&`, `Server` by value being a compile-time error - and only an own reference is an owner local or a global;
-an owning parameter, element or `Array<T, N>` is a compile-time error (T25e).)*
+*(Not yet implemented: an owning type other than an own reference is a struct holding one, held by value only by a
+local of a function, test or lambda body - an **owner value local** - and by a function's result; held by value anywhere
+else - a field, an element, a parameter, a global, a type argument - it is a compile-time error naming its reference,
+`Server&`, or an own one. Only an own reference is an owning parameter or a global; an element or an `Array<T, N>` of an
+owning type is a compile-time error (T25e). A type variable a value of an owning type reaches binds the reference to it,
+as G9d binds one to a destructor-bearing value.)*
 
 **O32 (reading a slot: borrows and borrowed copies).** A slot read anywhere but in a move position (O34) keeps its
 owner:
@@ -5053,7 +5071,15 @@ owner:
   read is a `mut Conn&` - living in the object's region (O33);
 - a value of another owning type so read is a **borrowed copy**: the same type, owning nothing. Each own reference in
   it is read from it as from a slot, giving a borrow; none may be moved out of it (E34), assigned, or given where an
-  owner goes (O34); nothing in it is released when it ends. Its other parts are its own, as any copy's are.
+  owner goes (O34); nothing in it is released when it ends. It is read-only as a read-only copy is (T25c): it is not
+  lent where it may be written, and nothing is written through its references. Its other parts are its own, as any
+  copy's are. *(Not yet implemented: a borrowed copy is declared only by `x := y` from a local `y` holding a value of
+  an owning type - an owner value local, or a borrowed copy, whose source the new one borrows from too - and is not
+  assigned another value.)*
+
+An own array's object is its buffer, and its elements are not owned objects: an element read through a borrow of the
+array - indexed, walked by `for ... in` - is what a plain array in that slot would give, its references living where
+that array's elements' would (O33); a slice of the borrow is a borrow of the same object.
 
 An owned object is part of its owner, so **ownership is deep**: a borrow read from a slot reached read-only (T25c - an
 immutable global, through a read-only reference, a read-only or a borrowed copy, a capture) is read-only, whatever the
@@ -5069,7 +5095,8 @@ reference read out of the region through it, and every value holding one - in lo
 bind to the region, §8.6) and in the region itself: never in a field, an element or a global outside the region, never
 in a result but a borrowed one (O37), never in a closure that outlives the function. Distinct owned objects therefore
 never refer to one another except by owning: a borrow of one is stored neither into another nor into anything outside
-its own region.
+its own region. A borrowed copy (O32), whose own references are borrows, is confined to this function's
+locals (O38).
 
 Each read is a region of its own to the check, even when it reads an object read before. A borrow is held in a local
 declared with `:=`, which takes the read's region exactly (O25a); a local declared with a written type lives in its
@@ -5077,6 +5104,13 @@ block (O25a), where no borrow does. A reference local given borrows of different
 them where it is **not known** (O12): it may be read, walked, compared and lent, but nothing is built into or stored
 through it. *(Not yet implemented: a `:=` local holds the borrow it was declared with and no other - given a borrow of
 another read, it is O10's error.)*
+
+An own array's region holds its buffer alone. What its elements refer to lives in the slot's reach (O34), exactly
+where a plain array in that slot keeps its elements' referents: a temporary stored in an element is built there, not
+in the region, an element read out of it lives there - through a slice of the borrow too (`b.names[0:2][0] = t`) - and
+releasing the array releases its buffer and nothing its elements refer to. Lent to a call that can store into it, the
+borrow is a split value (O17a). *(Not yet implemented: an element that is a value holding a reference - a struct, an enum or an
+`Array<T, N>` by value - is a compile-time error (T25e).)*
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
 borrowed result that is the object (O37) - or through a reference this function read out of such a borrow. A borrow of
@@ -5112,11 +5146,35 @@ owner whose reach outlives the slot's or is it:
 `x := e` declares an owner local exactly when `e` is an owner - a value made there, an owned result, `take p`; from a
 slot it declares a borrow or a borrowed copy (O32).
 
+A conditional (E28) or a `match` (S12b) whose values are of an owning type held by value is a compile-time error
+wherever it stands. Owners made there are given to nothing yet - each case's owner is assigned in its own branch. An
+existing one would be given as a copy (E28), a second owner of what it owns - or, given to a reference, a copy built
+where the reference lands, while what it was chosen from still owns the same objects; a reference to one of them,
+repointed in a branch, says which: `r mut T& = a`, then `if not c { r = b }`.
+
+An own array slot's owner is a new array: `Array<T>(n)` - its elements zero values, or a fill that is `null`, zero bits,
+or, for elements referring nowhere (numbers, values holding no reference), any value - and, for elements referring
+nowhere, an array literal, written text, a join (E11b) or a comprehension (E27); or `take` from another own array slot,
+whose reach must be the slot's exactly where something can be stored through its elements (O25g), as a plain array of
+them would require. Any other array given there - a slice, an existing array, a conversion - owns nothing, and is a
+compile-time error.
+
 *(Not yet implemented as written: an owner local's reach is its initializer's - the program's scope for `null`, no
 initializer, or a constructor call given nothing but numbers, literals, written text, `null` and such calls; its
-block's for another value made there; `p`'s for `take p` - and an owner given to it later must reach as far. An owner
-local is moved only by `take`, and a conditional, a match, an array literal, a `spawn`'s target or a `catch default`
-in a move position is a compile-time error.)*
+block's for another value made there or a call's owned result; `p`'s for `take p` - except that an owner local a
+`return` of an owned result gives whole (O37), anywhere after its declaration in its block, reaches the result scope;
+and an owner given to it later must reach as far. An own array local's reach is the program's scope for elements
+referring nowhere, else its block. An owner value local's reach is the program's scope when nothing it holds can refer
+outside the objects it owns (its own references' objects referring nowhere, its other parts holding no reference),
+else its storage's - its block, or the result scope where O26a puts it. An owning parameter's reach is its scope variable, bound at each call to its
+argument's reach, found as an owner local's is from its initializer - so a constructor call made for it with an
+argument referring outside it reaches the caller's block - except that a call's owned result made for it lands with
+that scope variable, as any call made for a parameter does (O18a): where another argument binds it, else where the
+call's own result lands. A constructor's own field reaches
+the instance's scope (C2g), whatever its initializer. An owner local or an owning parameter is moved only by `take`
+and by a `return` giving it whole - deferred code reading it after that `return` is a compile-time error naming
+`take` - and a conditional, a match, an array literal, a `spawn`'s target or a `catch default` other than `null` in a
+move position is a compile-time error.)*
 
 An object can never be moved into its own region: reaching a slot inside the object borrows it (O32), and the move is
 then a release under that loan (O39). So owners form trees, and each object is released exactly once.
@@ -5129,13 +5187,30 @@ then a release under that loan (O39). So owners form trees, and each object is r
   `Remove` and `Clear` (M19d), whose bodies assign or `take` the slot;
 - an owner local or an owning parameter still holds it when its block is left, by whichever way (S11a, P1b) - after
   the block's deferred code (S19) and its join, in O15's order with the destructors of the block's scope, and when a
-  test is abandoned (P1d) as well;
+  test is abandoned (P1d) as well. A destructor's own owner locals are its own, released as it returns: its top level
+  is never the scope being closed for them (C9a);
+- it is an owner made, taken or given for an owning parameter (O36), or the region made for an object whose constructor
+  has not run yet, and an argument evaluated after it leaves the expression first - an error propagated, a checked
+  operation under `try` failing (R20), a clause's `break`, `continue` or `return`, or, while a test runs, a failed check
+  or assert abandoning the test (S18, P1d): the call is never made, and it is released where the expression is left;
+- it is an owned result being returned (O37) - held from where the `return` computes it until the function returns -
+  and a join failing in the return's place (P4b) gives it to nobody, or, while a test runs, a failed check or assert
+  in what the `return` runs first - deferred code, a join's wait, the destructors of the scopes it closes, its frame's
+  own included - abandons the test (S18, P1d): it is released there;
+- it is a constructor's own field (C2a) and the constructor fails before its instance is assembled - by its own
+  `error` (R3) or a `try` it does not catch: until then the constructor's frame holds it, as an owner local, and from
+  then on the instance does;
 - it is an owner no slot receives - a call's owned result left unused, a value made for a borrowing parameter (O36), a
   `take` standing as a statement (S3) - and is released at the end of its statement;
 - the scope holding its slot closes: an instance or an array holding owners releases them when its scope closes, in
   O15's order as a destructor would run - an instance's own destructor (C9) first, then its fields' owners in reverse
   declaration order; an array's elements last to first;
 - never, for a global's owners: the program's scope never closes (O1b).
+
+Releasing an object runs its region's destructors (O15), which release what it owns, each release finished before the
+next destructor runs - except where 256 releases are already under way on the thread: there a release is finished once
+the release it is made in has closed its region, those deferred finished in the order they were made, each with what it
+releases in turn. So a chain of owners of any length is released with the stack 256 nested releases take.
 
 Moving an owner (O34) releases nothing. A released owner's slot holds `null` or a new owner, never the old one.
 Releasing is observable only as storage reclaimed and destructors run. *(The prelude's collections hold no owners yet
@@ -5151,12 +5226,14 @@ parameter's argument is a move position (O34), and the callee releases what it s
 borrowing parameter's argument is read as O32 says, and a value made for it is released after the call. A reference
 parameter (`v mut Vec<F32>&`) is a reference to the caller's slot, through which the callee may release (O39).
 
-*(Not yet implemented: `own` on a parameter is a compile-time error (T25e), and no other owning type reaches one, so
-every parameter borrows - a reference parameter of an owning struct type, through which the callee may release.)*
+*(Not yet implemented: only a parameter written `own` owns - a parameter of an owning struct type is a reference to
+one, which borrows and through which the callee may release - and `own` on a constructor's, a trait method's or an enum
+payload's parameter is a compile-time error (T25e).)*
 
 A **function type**'s parameter never owns: an own reference reached there by substitution is a borrow, and `own`
-written there is a compile-time error, as is an owning type as a function type's result. A **receiver** never owns: a
-method is called on a borrow, and `own` before a receiver is a compile-time error.
+written there is a compile-time error, as is an owning type as a function type's result. So a function with an owning
+parameter or an owned result (O37) is called by name only: made a value (D16, E31) it is a compile-time error. A
+**receiver** never owns: a method is called on a borrow, and `own` before a receiver is a compile-time error.
 
 **O37 (owned and borrowed results).** A result written `own` is **owned**: the caller receives the owner. A result of
 another owning type - a value type holding own references, or a type variable bound to an owning type - is owned when
@@ -5168,16 +5245,61 @@ put (O18a); a borrowed result is a borrow or a borrowed copy, with a loan (O38) 
 reach, or on the globals, and is read-only exactly where a copy out of the same place would be (T25c) - through a
 generic's read-only reference parameter, as read-only as the argument. A borrowed result that is the owned object
 itself names its region (O33); one read out of an owned object - a field of it - lives where it is not known (O12).
-*(Not yet implemented: `own` on a result is a compile-time error (T25e), and no other owning type reaches one.)*
+*(Not yet implemented: only a result written `own`, or of an owning type held by value, is owned - one of several
+results never is (T25e), and a borrowed result of an owning type held by value is a compile-time error - and a call's
+owned result is an owner only in a move position (`x := f()`, an own slot, an owner value local, an owning parameter, a
+`return` of an owned result) or standing as a statement (O35); anywhere else it is a compile-time error naming
+`x := f(...)`. A `catch default` giving a value of an owning type held by value is a compile-time error.)*
 
 **O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), and by each call giving a
-borrowed result (O37). It is **on** the objects read - a borrow's object, each object a borrowed copy's own references
+borrowed result (O37). A part of an owned object - an inline field or array, an own array's element - **borrowed where
+it is** reads the slot as well, whatever the part's type holds: lent by reference (E12c - to a reference parameter, a
+receiver, a reference local or field, a task's argument), sliced or viewed (E16a, E32b), walked by `for` (S9), or
+rendered by a join (E11b) after a later operand that runs code - a join reads its pieces once every operand is evaluated.
+Only a value read out of the part - a copy, a number - is read at once and carries nothing. It is **on** the objects read - a borrow's object, each object a borrowed copy's own references
 hold - and so on their types, and it has **roots** (O39). It lasts from where it is made to the last use, along every
 path from there, of anything **derived** from it: the borrow or the borrowed copy, a reference read out of it, a value
 holding such a reference, a closure capturing one, and each local holding one of these, until that local is given
 something not derived from the loan. A number, a `Bool`, or any value holding no reference read out of it is not
 derived from it and carries nothing (O26a). A loan given as an argument lasts until its call returns, and one given to
-a task until its join (P2) - as does every loan a task's call may make (O41). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
+a task until its join (P2) - as does every loan a task's call may make (O41).
+
+What is derived from a borrowed copy is **confined** to this function's locals: the `:=` locals holding the copy, or
+a borrow read out of it, and the value locals built directly from one of those here - a struct or an enum made holding
+it, a lambda capturing it, a copy of either - each holding the loan to its own last use. Where such a local's storage
+has another name - a reference was taken to it (E12c), or it is a handle's copy (O17b), whose state lives where it was
+made - the loan lasts to the end of its block. Anything that would keep a value derived from a borrowed copy anywhere
+else is a compile-time error saying to keep a `Clone()` of it instead:
+
+- an argument a call may keep beyond the call - in another argument, its receiver or a collection (`l.Push(b)`,
+  `m.Put(k, b)`, `put(g, b)`, `g.set(b)`), what the callee's body requires of their scopes saying so (O10b), a field of
+  the argument read at its derived scope (O23a) counting as the argument - or one given to a call whose body is not
+  known (a generic one, an `extern`), a task's call that may keep it among them;
+- a store through a reference, into a handle, or into a global or a capture;
+- a spawn target given a call's result derived from it (P1g);
+- an owner made from it or holding it - an object built into an own slot, an owned result (O37), an owner given to an
+  owning parameter (O36) - or a value of a type with a destructor (C9), which would hold it past its loans;
+- a lambda capturing it, kept by any of the above.
+
+A borrow of an owned object is confined to its region already (O33). What a call keeps in its result - a constructor's
+instance, a borrowed result - is held by the local given it, as any value derived from a loan is: a call's result
+derives from an argument only where the callee may keep that argument in its result (O26a) - in any part of it, one of
+several results (D8c), a type argument's, an array's elements, a function value's - and a result whose type holds no
+reference derives from nothing. Through a function value
+nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
+
+A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference
+(E12c - given to a reference local, a reference parameter, a receiver or a field) or sliced (E16a) - is a borrow of
+that owner: a loan on every object it owns, confined to this function's locals as a
+borrowed copy's is, and held by them to their last use. While it is, the owner releases and moves nothing through its
+own name (O39); what is released through the borrow itself, or through any other reference, is the borrow's, read
+through the owner's own slots - which a release leaves `null` or holding the new owner - never freed memory. An
+argument's is used by its call alone, once every argument is evaluated, and meets no release made among them
+(`stash(s, take s.cur)`). It is never **returned**, nor anything holding it: the owner's objects are released as its
+block ends (O35), and its storage lives past that only where O26a puts it in the result scope, so such a return is a
+compile-time error naming the owned value result - `fn f() T`, where `return v` moves the owner (O37). An owner made
+from it is held to O34's reach, as one holding any reference to a block's storage; a value with a destructor (C9),
+which reads it as its scope closes, is refused. *(Implemented
 conservatively: a local holding a loan uses it wherever it is read after in its block, anywhere in a loop enclosing
 both inside its scope, and in deferred code, whichever path is taken.)*
 
@@ -5234,13 +5356,18 @@ borrows; it is so whether or not the program orders the two (a channel, an atomi
 pending from the `spawn` to the join: a loan live anywhere between on an object they may reach is O39's error. That is what O39 can see - one function and the tasks of its join blocks; a task
 releasing an object another thread uses through storage both reach (a global, a structure two tasks are given) is a
 data race (§6.8.1 P8b), undefined as every data race is. *(Not yet implemented as written: a spawned call that may
-release anything is a compile-time error.)*
+release anything, or that owns a parameter or gives an owned result, is a compile-time error.)*
 
 **O42 (cost).** An own reference is one reference: reading, borrowing and moving it cost what reading and storing a
-reference cost, and nothing is checked at run time. Building an object into a new region costs an allocation from the
-scopes' storage (O8b) sized to the object; releasing it runs its region's destructors and returns that storage at
-once; an instance or an array holding owners costs a registration where it is built, as an instance with a destructor
-does (O16). The compile-time evaluator (K1) gives owned references the same meaning, and a global holding one is set
+reference cost, and nothing is checked at run time. Building an object into a new region costs one allocation sized to
+the object - for an object of 2KB or less, from the C allocator, its region's header and destructor registrations in
+the same allocation; for a larger one, from the scopes' storage (O8b) - and what the object builds into its region
+later takes the scopes' storage as any scope does; releasing it runs its region's destructors and returns that storage
+at once; an instance or an array holding owners costs a registration where it is built, as an instance with a destructor
+does (O16). An owner held because something evaluated after it may leave (O35) - a later argument, a constructor's
+own, an owned result's `return` - costs a store into a hidden slot, and a registration where a test runs: outside a
+test only what leaves to the program's own code can - a `try`, a catch clause, a clause that leaves, a join failing in
+a return's place - since a failed check ends the process there. The compile-time evaluator (K1) gives owned references the same meaning, and a global holding one is set
 when the program starts (K2).
 
 ## 9. Constructors and Destructors
@@ -5463,7 +5590,7 @@ type happens to declare a destructor.
 
 A type holding an own reference (§8.8 O31) is not reference-only on that account, though what it owns is released
 too: a copy of one out of a place is a borrowed copy, which §8.8 tracks (O32), and only its owner releases (O35)
-*(§8.8, not yet implemented: until borrowed copies are, an owning struct is held only by reference, O31)*.
+*(§8.8, not yet implemented: an owning struct is held by value only by a local or a result, O31)*.
 
 ## 10. Compilation Model
 

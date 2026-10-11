@@ -452,6 +452,8 @@ struct var {
     struct var* regionReach;    //...its reach: a scope variable, or NULL for a block at regionReachDepth
     int regionReachDepth;
     bool regionReachUnnamed;    //...the program's scope (a global's slot)
+    bool regionArray;           //...of an own ARRAY's buffer, whose reach is where its elements' referents live - the
+                                //scope a plain array in that slot would have kept them in (O33), as an index reads it
     int regionRoot;
     int regionRootParam;
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
@@ -465,6 +467,17 @@ struct var {
     struct var* ownReach;
     int ownReachDepth;
     bool ownReachUnnamed;
+    //O31/O32: a local of an owning type held by value - an owner value local (ownValue), released at its block's end
+    //unless moved on, its reach above; or a borrowed copy of one (ownCopy), owning nothing and read-only, its own
+    //references borrows of the source's objects, rooted where the source is (ownCopyRoot, as regionRoot)
+    bool ownValue;
+    bool ownCopy;
+    int ownCopyRoot;
+    int ownCopyRootParam;
+    struct var* ownCopyRootLocal;
+    struct var* ownCopyFrom; //...the variable it was copied from, for a message
+    struct list ownValueReads; //O38 (own5 F2): an owner value local's own fields, read once as it is declared - what a
+                               //reference to its storage borrows (operand*, checker only: never evaluated)
     struct ownEffects* ownEff;  //O39: on a function, what its body may release (settleOwnEffects), NULL for nothing
     int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
@@ -758,6 +771,14 @@ struct operand {
     bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
     bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
     bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
+    bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
+    struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
+                                //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
+    bool inPlaceBorrow; //O38 (own7 F1): this value lvalue is borrowed where it is (E12c) - by a reference parameter, a
+                        //receiver, a reference local or field, a task's argument - not read as a copy: a part of an owned
+                        //object borrowed so borrows the object, whatever the part's type holds
+    struct list ownCopyReads; //O32/O38: a borrowed copy's initializer - a read of each own field of what it copies, made
+                              //borrows, whose loans the copy holds (checker only: never evaluated)
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
@@ -941,6 +962,8 @@ struct list* SemanticPreludeModules(void); //list of struct semaModule*: every f
 struct list* SemanticAllLambdas(void);
 bool TypeIsPermRef(struct type t); //T25b: a reference type carrying a permission
 bool TypeIsOwning(struct type t); //O31: a struct holding an own reference in a field
+bool TypeIsOwnValue(struct type t); //O31: ...held by value - an owner value local, a borrowed copy, an owned result
+struct var* OwnValueLocalOf(struct operand* op); //O31: the owner value local a read names, or NULL
 bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including the outermost permission //D16: every lambda's hidden function
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.

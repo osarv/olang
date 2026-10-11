@@ -1,5 +1,5 @@
 # check: fail error[T25e]: 'own' on 
-# own references are to structs for now
+# own references are to structs and to arrays of a run-time length for now - not to an array of a fixed one
 type Sock struct(n I64) {
     n
 }
@@ -13,6 +13,6 @@ type Server struct() {
     other own mut Conn&
 }
 type H struct() {
-    a own Array<I64>&
+    a own Array<I64, 4>&
 }
 fn main() ? { }

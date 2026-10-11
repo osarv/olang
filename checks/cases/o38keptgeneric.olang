@@ -1,0 +1,24 @@
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
+# O38: ...a generic function keeping it in a List it is handed
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn keep(l mut List<<T>>&, x T) { l.Push(x) }
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    l := List<Outer&>()
+    keep(l, b)
+    v.o = null
+    println($l[0].o.k)
+}

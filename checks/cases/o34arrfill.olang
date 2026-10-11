@@ -1,0 +1,9 @@
+# check: fail error[O34]: an own array slot takes an array made here - 'Array<T>(n)', or a literal, text or join of elements referring nowhere - 'take' from another own slot, or null
+# a fill that is a temporary: must fail (O34)
+type B struct() {
+    data own mut Array<String&>& = null
+}
+fn main() ? {
+    b := B()
+    b.data = Array<String&>(4, $3)
+}

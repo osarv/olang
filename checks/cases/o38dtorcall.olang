@@ -1,0 +1,27 @@
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
+# O38: ...nor kept by a call in a value a destructor reads (own4 N1)
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Watch struct() {
+    x Outer& = null
+} destruct {
+    if x != null { println($x.o.k) }
+}
+fn put(dst mut Watch&, x Outer&) { dst.x = x }
+fn main() ? {
+    w := Watch()
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    put(w, b)
+}

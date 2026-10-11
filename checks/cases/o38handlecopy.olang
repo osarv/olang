@@ -1,0 +1,26 @@
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
+# O38: ...nor kept by a call through a handle's copy made in an inner block, whose state lives outside it (own4 N5)
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    l := List<Outer&>()
+    {
+        l2 := l
+        l2.Push(b)
+    }
+    v.o = null
+    println($l[0].o.k)
+}

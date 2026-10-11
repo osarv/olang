@@ -32,7 +32,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr",
-                     "frameenv"]
+                     "frameenv", "ownleave"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -255,6 +255,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "updir" { try updir(r) }
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
+        case "ownleave" { try ownleave(r) }
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
@@ -1324,10 +1325,10 @@ fn fuzz(r mut report&) ? Failed {
     os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -b -d fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
-    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/found)", dir)
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/run*/found)", dir)
     # B2f: scope-stress programs built under the scope sanitizer and interpreted give one output (seeds that ran clean)
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug scope 3 2 1 12 > out.txt 2>&1") == 0,
-                 "fuzz scope found something (build/checks/fuzz/build/fz/scope)", dir)
+                 "fuzz scope found something (build/checks/fuzz/build/fz/run*/scope)", dir)
 }
 
 # B2f: the scope sanitizer. Its runtime, driven from C: storage a closed scope gave back, read or written - a small chunk
@@ -1513,4 +1514,56 @@ fn frameenv(r mut report&) ? Failed {
                  "frameonly's three environments in the frame", dir)
     try r.expect(sh(dir, "awk -f envcheck.awk build/frameescapes.main.ll > out.txt") == 0 and outOf(dir) == "0 8\n",
                  "no environment of a local that leaves the frame in it", dir)
+}
+
+# O36/O30, O35 (the reviews of own phase 2a, F3 and F4, and own4, N3, N6 and M1): an owner handed to a call, or a
+# constructor's region, is released when a later argument leaves first - by a call or by a checked operation under "try"
+# - a failing constructor's own fields as it fails, and a destructor's own owner locals as it returns - built, built -s
+# and built -d, every object made released, and under valgrind where it is installed (built for x86-64-v3, which it
+# decodes) nothing lost and no slot read after its frame is gone; a hold in a loop's condition stays in flat memory; an
+# owned result in flight is released by a join failing in its return's place, or by a test abandoned past it (own6 N3)
+test "owners a later argument leaves past, a failing constructor's and a destructor's own, are released" { assert passed("ownleave") }
+
+fn ownleave(r mut report&) ? Failed {
+    dir := fresh("ownleave")
+    os.Run("cp checks/fixtures/ownleave/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b ownleave.olang > out.txt 2>&1 && ./build/ownleave > b.txt 2>&1 && cmp -s b.txt ownleave.want")
+                 == 0, "ownleave", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -s ownleave.olang > out.txt 2>&1 && ./build/ownleave.san > s.txt 2>&1"
+                          " && cmp -s s.txt ownleave.want")) == 0, "ownleave -s", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -d ownleave.olang > out.txt 2>&1 && ./build/ownleave.debug > d.txt 2>&1"
+                          " && cmp -s d.txt ownleave.want")) == 0, "ownleave -d", dir)
+    # own5 F3: owners held while a later argument fails a guaranteed check in a test are released by its unwinder
+    try r.expect(sh(dir, ("\"$OLANG\" -t ownabort.olang > a.txt 2>&1; grep -q '^made 4 dropped 4$' a.txt"
+                          " && grep -q '^1 passed, 5 failed$' a.txt")) == 0, "ownabort", dir)
+    # own4 M1: a hold in a loop's condition and post clause, 4M turns in one open scope, in flat memory
+    try r.expect(sh(dir, ("\"$OLANG\" -b ownloop.olang > out.txt 2>&1 && (ulimit -v 50000 && ./build/ownloop) > l.txt 2>&1"
+                          " && grep -q '^4000000 4000000 made 8000001 dropped 8000001$' l.txt")) == 0, "ownloop", dir)
+    # own6 N3/N3b: an owned result in flight is held while its return's exit code runs - a join failing in the return's
+    # place releases it, built, built -s and built -d; while a test runs, so does a failed check in deferred code or in a
+    # destructor the frame's own close runs
+    try r.expect(sh(dir, "\"$OLANG\" -b ownflight.olang > out.txt 2>&1 && ./build/ownflight > f.txt 2>&1 && cmp -s f.txt ownflight.want")
+                 == 0, "ownflight", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -s ownflight.olang > out.txt 2>&1 && ./build/ownflight.san > fs.txt 2>&1"
+                          " && cmp -s fs.txt ownflight.want")) == 0, "ownflight -s", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -d ownflight.olang > out.txt 2>&1 && ./build/ownflight.debug > fd.txt 2>&1"
+                          " && cmp -s fd.txt ownflight.want")) == 0, "ownflight -d", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -t ownflightabort.olang > fa.txt 2>&1; grep -q '^made 10 dropped 10$' fa.txt"
+                          " && grep -q '^3 passed, 5 failed$' fa.txt")) == 0, "ownflightabort", dir)
+    if sh(dir, "command -v valgrind > /dev/null 2>&1") != 0 { return }
+    try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownflight.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
+                          " --show-leak-kinds=definite --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownflight"
+                          " > fv.txt 2> fvg.txt && cmp -s fv.txt ownflight.want && test ! -s fvg.txt")) == 0,
+                 "ownflight under valgrind", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -t -a x86-64-v3 ownflightabort.olang > out.txt 2>&1; valgrind -q --leak-check=full"
+                          " --show-leak-kinds=definite --errors-for-leak-kinds=definite --error-exitcode=9"
+                          " ./build/ownflightabort_test > fva.txt 2> fvga.txt; test $? -ne 9"
+                          " && grep -q '^made 10 dropped 10$' fva.txt && test ! -s fvga.txt")) == 0, "ownflightabort under valgrind", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownleave.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
+                          " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownleave > v.txt 2> vg.txt"
+                          " && cmp -s v.txt ownleave.want && test ! -s vg.txt")) == 0, "ownleave under valgrind", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -t -a x86-64-v3 ownabort.olang > out.txt 2>&1; valgrind -q --leak-check=full"
+                          " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownabort_test > va.txt 2> vga.txt;"
+                          " test $? -ne 9 && grep -q '^made 4 dropped 4$' va.txt && test ! -s vga.txt")) == 0,
+                 "ownabort under valgrind", dir)
 }

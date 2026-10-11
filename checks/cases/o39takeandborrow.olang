@@ -1,0 +1,19 @@
+# check: fail error[O39]: taking 'x' moves the Conn borrowed on line
+# one call borrowing an owner and taking it
+type Sock struct(n I64) {
+    n
+}
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+    sock own mut Sock&
+}
+type Server struct() {
+    cur own mut Conn&
+    other own mut Conn&
+}
+fn both(a Conn&, c own mut Conn&) I64 { return a.fd + c.fd }
+fn main() ? {
+    x own mut Conn& = Conn(1)
+    println($both(x, take x))
+}

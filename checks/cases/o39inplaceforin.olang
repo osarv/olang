@@ -1,0 +1,21 @@
+# check: fail error[O39]: assigning 'h.cur' may release the In3 borrowed on line 12
+# O39 (own7 F1): a for-in walks an owned object's inline array where it is: the body may not release the owner
+type In3 struct(k I64) {
+    data Array<I64, 8> = Array<I64, 8>()
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn fl(h mut H3&) I64 {
+    h.cur = In3(1)
+    t := 0
+    for x in h.cur.data {
+        h.cur = null
+        t += x
+    }
+    return t
+}
+fn main() ? {
+    h mut H3& = H3()
+    println($fl(h))
+}
