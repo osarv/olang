@@ -27,7 +27,8 @@
 #                                                   out the shapes of use-after-frees known when it was written
 #     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY (-1: all)
 #
-# Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/out under the working directory.
+# Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/out - relative to the working directory
+# when it is relative.
 import "std/io"
 import "std/os"
 import "std/chan"
@@ -49,7 +50,8 @@ fn main() ? {
     args := os.Args()
     if args.Len() < 3 { usage() }
     Root = try os.Cwd() catch default "."
-    Olang = try os.Env("OLANG") catch default $Root "/build/out"
+    Olang = try os.Env("OLANG") catch default "build/out"
+    if not Olang.StartsWith("/") { Olang = $Root "/" $Olang }
     if args[1] == "show" {
         seed := try args[2].ParseInt() catch default 1
         if args.Len() > 3 { Cases = try args[3].ParseInt() catch default 30 }

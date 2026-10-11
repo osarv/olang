@@ -7,10 +7,12 @@
 #   BENCH_LOCK=FILE         take this flock while timing, as run.sh does
 set -euo pipefail
 cd "$(dirname "$0")"
-OLANG=../build/out
-[ -x $OLANG ] || make -C .. build/out >/dev/null
+# the compiler: $OLANG (relative to the repository root when it is relative), else build/out - as the makefile's
+OLANG=${OLANG:-build/out}
+case $OLANG in /*) ;; *) OLANG=$(cd .. && pwd)/$OLANG ;; esac
+[ -x "$OLANG" ] || make -C .. build/out >/dev/null
 mkdir -p build/fused
-(cd build/fused && ../../$OLANG -b ../../fused.olang >/dev/null)
+(cd build/fused && $OLANG -b ../../fused.olang >/dev/null)
 if [ -n "${BENCH_LOCK:-}" ]; then
     exec 9>"$BENCH_LOCK"
     echo "waiting for $BENCH_LOCK ..." >&2

@@ -5021,6 +5021,24 @@ and literals made only of such, never existing storage anywhere in it) - it is
   the later operands that run code. Owners made in a conditional get O34's "gives an own slot nothing yet". Only
   tightens; one new over-rejection, a part borrowed after a releasing call in one statement. Fuzzer: d8c942b 13 findings
   in 60 own seeds (all own7 shapes), now none.
+- **The port starts: M1, the scanner (L1, L9a, L12, L12a, L13, L14, L18, B2b, 2026-10-11; compiler/DESIGN.md, details
+  mine).** `compiler/source.olang` (a file's text and line table), `compiler/token.olang` (`Tok`, `Token` by value with
+  `LineBreak`/`Space`/`LineStart` flags, keywords by a switch on the first letter and length) and `compiler/scan.olang`
+  (a hand-written maximal-munch scanner inserting statement ends as Go's lexer does, the brace table, lexical errors as
+  `Diag` records M2 takes over); `compiler/tools/dump.olang tokens|speed`. **Acceptance**: `compiler/tools/tokdiff.sh`
+  (`make tokdiff`, in `make verify`) compares the stream - tokens, statement ends, lexical errors' rule and position -
+  with the C tokenizer's (`bootstrap/oracle/tokdump.c`) on every `.olang` file of the repository, the lexical edge cases
+  in `compiler/testdata/lex` and study2's data: no difference, the C end before `catch` normalized. 93-102 MB/s on a
+  4.6 MB file (target 50). **Decided (mine)**: a word after `.` is always `Iden` (L9a); the third flag is `LineStart`
+  (column 1) rather than "first on its line", which only repeats `LineBreak`; the end of the file ends a statement
+  whatever is open, as the C tokenizer does. **C tokenizer bugs the diff found, fixed in `bootstrap/` with checks**: a
+  string or character literal stopped by a newline (after a `\` too) took the newline into itself, so no statement
+  ended and the next line was read as its continuation - a literal never crosses its line now (SPEC L13); a run of bytes
+  that begin no token after a line's end gave two statement ends, and a `;` on a line of its own likewise (L1, L18);
+  `1.5.Hash()` was reported as a second decimal point (L12); `1e_x` lexed as `1e` and `_x` with a separator error (L12a:
+  `1` and `e_x`). **P0**: the compiler under test is `OLANG ?= build/out` in the makefile, read from the environment by
+  checks, fuzz and bench (relative to the repository root), so `make test OLANG=build/stage1` will work; `make test`
+  runs `compiler/*.olang`'s tests.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

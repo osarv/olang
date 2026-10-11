@@ -1,6 +1,7 @@
 # The self-hosted olang compiler: design
 
-Status: design, 2026-10-09. No compiler code exists yet. `SPEC.md` says what olang means; this file says how the
+Status: M1 (`source`, `token`, `scan`) built 2026-10-11 - the token diff is clean on every file of the repository and
+study2's data, at 93-102 MB/s; the rest is design. `SPEC.md` says what olang means; this file says how the
 compiler written in olang computes it. The C compiler (moving to `bootstrap/`) is the reference for behaviour only:
 its diagnostics, edge cases and test results, never its structure. Where the C compiler and `SPEC.md` disagree, the
 port follows `SPEC.md`, and the disagreement is fixed in C as well (or the spec amended) and recorded.
@@ -67,22 +68,33 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   identifiers, then finds keywords with a switch on length and first letter; no table is built at run time. It reads
   number runs with their radix and separators (L10-L12), and validates string and character literals and their
   escapes (L13-L15). A literal's value is decoded later, from its span.
-- **Tokens.** `Token(Kind Tok, Flags U8, Start I32, End I32)` is stored by value in one `Array<Token>` per file.
-  `Flags` holds three bits:
-  - *line break before*: used by L18b, L20a and L18a's rule for declarations at a line start;
-  - *space before*: used by E25's adjacency rule;
-  - *first on its line*.
+- **Tokens.** `Token(Kind Tok, Flags U8, Start I32, End I32)` is stored by value in one `Array<Token>` per file,
+  ending in one `Eof`. A word after `.` is always `Iden`, whatever it spells (L9a), so the parser never meets a keyword
+  in a member's place. `Flags` holds three bits:
+  - `LineBreak`, a line ended since the previous token (a newline, a line comment, a block comment spanning one): used
+    by L18b and L20a;
+  - `Space`, anything at all stood between it and the previous token: used by E25's adjacency rule;
+  - `LineStart`, the token begins its line (column 1): L18a's rule for a declaration starting a line, as the C
+    tokenizer reads it. (Planned as "first on its line", which is `LineBreak` but for the file's first token.)
+- **Statement ends** are tokens of their own, `Start == End` just past the last token of the line they end (or at a
+  `;`, L18). A `;` is one error and at most one statement end; bytes that begin no token are passed over as though they
+  were not there, a pending line end waiting for the next token (L1); the end of the file ends a statement whatever is
+  open.
 - **Statement ends** are inserted by the scanner, following Go's lexer: L18's token list, L18a's bracket stack, and
   closing brackets when a declaration keyword starts a line. No end is inserted before `catch`. The C tokenizer
   inserts one there and its parser skips it, so the token diff normalizes that difference away.
 - **Side tables.**
-  - A *line table* holds line start offsets; a position's line and column are found by binary search.
-  - A *brace table* maps each `{` to its matching `}`, by braces alone as B9 states. It bounds the parsing of a
+  - A *line table* (`source.Source`) holds line start offsets; a position's line and column are found by binary search.
+  - A *brace table* maps each `{` to its matching `}`, by braces alone as B9 states: `Opens` (every `{`'s token
+    index, in order) and `Closes` (its `}`'s, or -1), searched by `Tokens.Match`. It bounds the parsing of a
     conditional branch and error recovery.
+- **Lexical errors** are records, `Diag(Kind LexError, Start, End, Byte)` with its rule and message as methods, in the
+  order found; M2's `diag` takes them over.
 - **What this replaces.** token.c matches a table of mini-pattern rules (`$a`, `$d`) at every position and reads its
   keywords out of that table at start-up.
 - **Measured.** study2's scanner reads 25-30 MB/s under load (72-90 MB/s idle). The C tokenizer reads 9.5 MB/s on the
-  same 4.6 MB file under the same load (483 ms).
+  same 4.6 MB file under the same load (483 ms). M1's scanner (`dump speed`, fastest of ten): 93-102 MB/s on `big.olang`
+  (763k tokens in 47-50 ms) at a load average of 0.7, a 48 MB peak scanning it ten times.
 
 ### 1.2 The parser (`ast`, `parse`)
 
@@ -530,11 +542,17 @@ with the installed one; `make bootstrap` is section 5.
 1. **Token diff.**
    - Tools: `bootstrap/oracle/tokdump.c`, moved from study2's `oracle/`, links `token.c`; `compiler/tools/dump.olang
      tokens` prints the new scanner's stream.
-   - Format: one `LINE TEXT` per token, with `;` for a statement end.
+   - Format: `== FILE`, one `LINE TEXT` per token, with `;` for a statement end, then one `error RULE LINE:COL` per
+     lexical error.
    - Normalization: drop the C tokenizer's statement end before `catch`.
-   - Inputs: all 518 `.olang` files (corpus, std, checks cases and fixtures, fuzz, bench) and study2's data
-     (`big.olang`, the deep nestings).
-   - Done when there is no difference.
+   - Inputs: every `.olang` file of the repository (1,232 with the checks cases; corpus, std, checks cases and fixtures,
+     fuzz, bench, and `compiler/testdata/lex`, the lexical edge cases) and study2's data (`big.olang`, the deep
+     nestings).
+   - `compiler/tools/tokdiff.sh` runs it; `make tokdiff`, part of `make verify`, builds both tools first (about 12 s).
+   - Done when there is no difference - and there is none (M1, 2026-10-11). Writing it found four C tokenizer bugs, fixed
+     in `bootstrap/` (HISTORY.md, "The port starts"): a literal stopped by a newline took the newline, a run of bytes
+     that begin no token after a line's end gave two statement ends (and a `;` there two), `1.5.Hash()` was "two
+     decimal points", and `1e_x` lexed as `1e` and `_x`.
 2. **Structure diff.**
    - Tools: `bootstrap/oracle/astdump.c` walks the C syntax tree, which is a generic tree of kind and parts.
      `dump.olang ast` walks the new one.
@@ -551,7 +569,7 @@ with the installed one; `make bootstrap` is section 5.
    - Unit `test` blocks live in the compiler's own modules (scanner cases, interning, the pattern converter), and
      `make test` runs them.
 5. **Behaviour against stage 1.**
-   - P0 parametrizes the compiler under test: the makefile gets `OLANG ?= build/olang`. `checks/checks.olang`
+   - P0 parametrizes the compiler under test: the makefile gets `OLANG ?= build/out` (done). `checks/checks.olang`
      (which today hard-codes `build/out`), `fuzz/` and `bench/` read `$OLANG`.
    - `make verify OLANG=build/stage1`.
    - `make race OLANG=build/stage1` must report exactly the one known race.
@@ -634,11 +652,12 @@ on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-ti
 
 - The C compiler moves to `bootstrap/` as part of the modest refactor. (Done: `make bootstrap` builds `build/stage0`;
   the runtime's IR is `bootstrap/runtime.c` until it moves to `std/runtime/runtime.ll`.)
-- `OLANG` is parametrized in the makefile, checks, fuzz and bench.
+- `OLANG` is parametrized in the makefile, checks, fuzz and bench. (Done with M1: a relative `OLANG` is read against the
+  repository root.)
 - The runtime is extracted to `std/runtime/runtime.ll` and linked as one object by the C compiler (section 1.10).
 - The std and runtime gaps S1-S6 (section 7) are closed.
 - The in-flight branches are merged: the permissions batch and checker batch 3 (study2's r01-r15).
-- The oracle tools move to `bootstrap/oracle`.
+- The oracle tools move to `bootstrap/oracle`. (`tokdump.c` done with M1; `astdump.c` comes with M3.)
 
 **Language changes during the port.** From M5 on, they land in C first and are ported to any module that already
 exists. Feature work waits where it can (question 2).

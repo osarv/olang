@@ -1,0 +1,94 @@
+# source - a source file: its path, its text and where each of its lines starts (compiler/DESIGN.md 1.1).
+#
+# A file is read whole into one String, and every span the compiler makes - a token's, a node's, a diagnostic's -
+# is a pair of byte offsets into it. A line and a column are found from an offset only when something is shown to a
+# person, by a binary search of the line table, so nothing else carries them.
+
+import "std/os"
+
+# a stretch of a file's text, [Start, End) as byte offsets
+type Span struct(Start I32, End I32) {
+    Start
+    End
+}
+
+# a source file: its path as written, its text, and where each line starts (line n starts at lines[n - 1])
+type Source struct(Path String&, Text String&) {
+    Path
+    Text
+    lines Array<I32>& = lineStarts(Text)
+}
+
+# reads the file at path whole. A file is at most 2 GB less one byte, so an offset fits an I32
+fn Read(path String&) Source ? os.OsError {
+    text := try os.ReadFile(path)
+    assert text.Len() < 2147483647, "source: " $path " is larger than 2 GB"
+    return Source(path, text)
+}
+
+# where each line of t starts: 0, and just past every newline
+fn lineStarts(t String&) Array<I32>& {
+    n I64 = 1
+    for c in t {
+        if c == '\n' { n++ }
+    }
+    starts := Array<I32>(n)
+    k I64 = 1
+    for i, c in t {
+        if c == '\n' {
+            starts[k] = I32(i + 1)
+            k++
+        }
+    }
+    return starts
+}
+
+# how many lines the file has; a text ending in a newline has an empty last line, as a text editor counts
+fn (s Source&) Lines() I64 { return s.lines.Len() }
+
+# the line (from 1) an offset is on
+fn (s Source&) Line(at I32) I32 {
+    lo I64 = 0
+    hi I64 = s.lines.Len() - 1
+    for lo < hi {
+        mid := (lo + hi + 1) / 2
+        if s.lines[mid] <= at { lo = mid } else { hi = mid - 1 }
+    }
+    return I32(lo + 1)
+}
+
+# the line and the column (both from 1, the column in bytes) an offset is at
+fn (s Source&) LineCol(at I32) (I32, I32) {
+    line := s.Line(at)
+    return line, at - s.lines[line - 1] + 1
+}
+
+# the offset where a line (from 1) starts
+fn (s Source&) LineStart(line I32) I32 { return s.lines[line - 1] }
+
+# the text of a span
+fn (s Source&) TextOf(sp Span) String&s { return s.Text[sp.Start:sp.End] }
+
+test "a source's line table finds every line and column" {
+    s := Source("t.olang", "ab\ncd\n\nefg")
+    assert s.Lines() == 4
+    l, c := s.LineCol(0)
+    assert l == 1 and c == 1
+    l2, c2 := s.LineCol(2)
+    assert l2 == 1 and c2 == 3
+    l3, c3 := s.LineCol(3)
+    assert l3 == 2 and c3 == 1
+    assert s.Line(6) == 3
+    l4, c4 := s.LineCol(9)
+    assert l4 == 4 and c4 == 3
+    assert s.Line(10) == 4
+    assert s.LineStart(4) == 7
+    assert s.TextOf(Span(3, 5)) == "cd"
+}
+
+test "an empty source has one line" {
+    s := Source("e.olang", "")
+    assert s.Lines() == 1 and s.Line(0) == 1
+    t := Source("n.olang", "\n")
+    assert t.Lines() == 2 and t.Line(1) == 2
+}

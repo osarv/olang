@@ -1,0 +1,70 @@
+# dump - what the self-hosted compiler's passes make of a file, as text to diff against the C compiler's oracles
+# (compiler/DESIGN.md section 4).
+#
+#     dump tokens FILE...
+#     dump speed FILE...
+#
+# For each file, "== FILE", then one line per token - its line and its text, ";" for a statement end - and then one
+# line per lexical error, "error RULE LINE:COL". bootstrap/oracle/tokdump prints the C tokenizer's stream the same way,
+# and compiler/tools/tokdiff.sh compares the two. "speed" scans each file ten times and prints the fastest, in MB/s.
+
+import "std/os"
+import "std/io"
+import "std/time"
+import "../source"
+import "../scan"
+import "../token"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 3 or (args[1] != "tokens" and args[1] != "speed") {
+        eprintln("usage: dump tokens|speed FILE...")
+        os.Exit(2)
+    }
+    out := io.Writer(1)
+    for k in range 2, args.Len() {
+        path := args[k]
+        out.Write("== " $path "\n")
+        src := try source.Read(path) catch {
+            out.Write("error IO 0:0\n")
+            continue
+        }
+        if args[1] == "tokens" { tokens(out, src) } else { speed(out, src) }
+    }
+    try out.Flush() catch io.IoError { os.Exit(1) }
+}
+
+# a file's tokens and lexical errors, as "dump tokens" prints them
+fn tokens(out mut io.Writer&, src source.Source&) {
+    ts := scan.Scan(src.Text)
+    for tk in ts.Toks {
+        if tk.Kind == token.Tok.Eof { break }
+        out.Write($src.Line(tk.Start))
+        out.WriteChar(' ')
+        if tk.Kind == token.Tok.StmtEnd {
+            out.WriteChar(';')
+        } else {
+            out.Write(src.Text[tk.Start:tk.End])
+        }
+        out.WriteChar('\n')
+    }
+    for d in ts.Diags {
+        line, col := src.LineCol(d.Start)
+        out.Write("error " $d.Rule() " " $line ":" $col "\n")
+    }
+}
+
+# how fast the file scans: the fastest of ten scans, in MB/s, and how many tokens it has
+fn speed(out mut io.Writer&, src source.Source&) {
+    best I64 = 0
+    count I64 = 0
+    for k in range 10 {
+        t := time.Now()
+        ts := scan.Scan(src.Text)
+        d := time.Since(t)
+        count = ts.Toks.Len()
+        if k == 0 or d < best { best = d }
+    }
+    mbs := F64(src.Text.Len()) / 1e6 / (F64(best) / 1e9)
+    out.Write($count " tokens, " $(F64(best) / 1e6).Fixed(1) " ms, " $mbs.Fixed(1) " MB/s\n")
+}

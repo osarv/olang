@@ -3,7 +3,9 @@
 # hands to code generation) to repro/build/NAME.opt.ll, for reading what a reproducer's loop became
 set -euo pipefail
 cd "$(dirname "$0")"
-../../build/out -b $1.olang >/dev/null
+OLANG=${OLANG:-build/out}                    # the compiler: $OLANG, relative to the repository root, else build/out
+case $OLANG in /*) ;; *) OLANG=$(cd ../.. && pwd)/$OLANG ;; esac
+$OLANG -b $1.olang >/dev/null
 others=$(ls build/*.ll | grep -v '\.main\.ll$' | grep -v '\.opt\.ll$')
 mkdir -p build/lto
 clang -O3 -flto -o build/lto/$1 build/$1.main.ll $others -lm -lpthread -Wl,-plugin-opt=save-temps
