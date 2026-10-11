@@ -44,6 +44,9 @@ commit (2d216f2, main) has the README (goal, stages, oversight) and CLAUDE.md (w
 and pruning. The settling network should become a general high-quality agent that can take on any task using as little
 compute as possible. It may use settling stuff, it may implement backprop, genetic algorithms, as long as it grows
 stronger and more efficient." Any method is fair. The measure is capability per unit of compute, rising over time.
+Refined the same day: "the differentiation and pruning part is maybe incorrectly phrased. Use any method. Do more with
+less, continuously." So the goal is that sentence. Differentiation and pruning are examples of methods, not the
+definition.
 **The long-term plan (the user, 2026-10-11):** "a settling network with recursive self improvement for
 superintelligence". How I approach it, as told to the user: oversight is designed in from the start, not added later.
 - A self-improvement step is a proposal: evaluated in a sandbox against fixed benchmarks, kept only when it is better.
