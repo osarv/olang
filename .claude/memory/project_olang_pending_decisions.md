@@ -37,6 +37,10 @@ self-hosted compiler is done.
 **Asked 2026-10-11 (contract work, [[project-outreach]]):**
 - QL1. The company's name. Recommended: Osarv (also offered: O Labs/Olab, Hotpath, Measured, Cycles, Kvick, Rask). In
   effect: `[company]` in the letters. Also offered: checking the name (Bolagsverket, .se/.com domains, EUIPO).
+  The user, 2026-10-11: "I want an English name, and preferably one that starts with O ... Olab or something like that
+  is really good too"; Hotpath maybe later, for a separate solution-specific company. Asked how to start a company in
+  Sweden (answered: enskild firma vs aktiebolag, F-skatt/moms via verksamt.se). Name still open; availability check
+  still offered.
 - QL2. The outreach doc's six "Before sending" decisions: the guarantee, prices, the AI-use line, the signature (company
   name and background line), quoting olang/oann results, and invoicing. In effect: the defaults written into the
   letters. Nothing is sent before the user OKs them.
