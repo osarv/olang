@@ -776,6 +776,16 @@ because what it finds about structure feeds the refactor.
   - F3's whitelist costs about 65 instructions per newly held call (+9% on an owner-passing loop). Decided for the next
     round: apply it only in test builds. Outside tests, guaranteed checks abort the process, so only `try` and
     catch/match clauses can leave; production pays only for those.
+- 11:20 CEST: the fourth review (/home/user/review/own6). All three relaxations held. It found:
+  - N1, a regression: tuple results drop the argument's loans, through calleeMayKeepArg.
+  - N2, pre-existing: a conditional of owner values built as a copy but checked as a borrow (use-after-free).
+  - N3/N3b, pre-existing: owned results in flight leak when a failing join or a test's deferred check discards them.
+  Decided and sent to the own agent:
+  - N1: walk every scope variable the result type names, defaulting to conservative.
+  - N2: O34, ERR_OWN_IN_COND for owning value types.
+  - N3/N3b: a hidden hold slot for an owned result in flight.
+  - F3's whitelist in test builds only.
+  - A value whose type holds no reference carries no loan, which lifts `return b.buf.Len()`.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
