@@ -19,6 +19,7 @@
 
 import "std/os"
 import "msgs"
+import "source"
 
 # what a diagnostic is about: a span of a file's text, a line of one known only by its number, a whole file, or the
 # compilation as a whole. A file is the number AddFile gave it
@@ -94,23 +95,12 @@ fn (d mut Diagnostics&) AddFile(path String&, text String&, library Bool = false
     return d.paths.Len() - 1
 }
 
-# the offset each line of text starts at, first line first - the one function to replace when the scanner's line table
-# (M1's source module) can be asked instead
-fn lineStarts(text String&) List<I64> {
-    starts List<I64>
-    starts.Push(0)
-    for i, c in text {
-        if c == '\n' { starts.Push(i + 1) }
-    }
-    return starts
-}
-
 # the line (from 1) offset at lies on in file, and the offset that line starts at
 fn (d mut Diagnostics&) lineOf(file I64, at I64) (I64, I64) {
     if d.startsFrom[file] < 0 {
         d.startsFrom[file] = d.starts.Len()
-        made := lineStarts(d.texts[file])
-        for s in made { d.starts.Push(s) }
+        made := source.LineStarts(d.texts[file])
+        for s in made { d.starts.Push(I64(s)) }
         d.startsLen[file] = made.Len()
     }
     from := d.startsFrom[file]

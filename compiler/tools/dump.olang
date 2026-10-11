@@ -3,10 +3,20 @@
 #
 #     dump tokens FILE...
 #     dump speed FILE...
+#     dump ast FILE...
+#     dump parse FILE...
 #
-# For each file, "== FILE", then one line per token - its line and its text, ";" for a statement end - and then one
-# line per lexical error, "error RULE LINE:COL". bootstrap/oracle/tokdump prints the C tokenizer's stream the same way,
-# and compiler/tools/tokdiff.sh compares the two. "speed" scans each file ten times and prints the fastest, in MB/s.
+# For each file, "== FILE", then:
+#
+# - tokens: one line per token - its line and its text, ";" for a statement end - and then one line per lexical error,
+#   "error RULE LINE:COL". bootstrap/oracle/tokdump prints the C tokenizer's stream the same way, and
+#   compiler/tools/tokdiff.sh compares the two.
+# - speed: the fastest of ten scans, in MB/s.
+# - ast: one line per declaration and statement, "KIND LINE:COL-LINE:COL", the span of its tokens - an item the parser
+#   met an error in prints none - then "-- diagnostics" and the first syntax error of each item, "error RULE LINE:COL".
+#   Every branch of an if is parsed and its diagnostics said, as if each were taken. bootstrap/oracle/astdump prints
+#   the C parser's tree the same way, and compiler/tools/astdiff.sh compares the two.
+# - parse: the fastest of ten scans and parses, in MB/s.
 
 import "std/os"
 import "std/io"
@@ -14,14 +24,26 @@ import "std/time"
 import "../source"
 import "../scan"
 import "../token"
+import "../ast"
+import "../parse"
+import "../diag"
+import "../msgs"
+import "std/filepath"
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 3 or (args[1] != "tokens" and args[1] != "speed") {
-        eprintln("usage: dump tokens|speed FILE...")
+    mode := args[1] if args.Len() >= 3 else ""
+    if mode != "tokens" and mode != "speed" and mode != "ast" and mode != "parse" {
+        eprintln("usage: dump tokens|speed|ast|parse FILE...")
         os.Exit(2)
     }
+    os.RunOnStack(1 << 30, fn() { run(mode, args) })
+}
+
+fn run(mode String&, args Array<String&>&) {
     out := io.Writer(1)
+    std := try os.Env("OLANG_STD") catch default "std"
+    prelude := preludeTypes(std)
     for k in range 2, args.Len() {
         path := args[k]
         out.Write("== " $path "\n")
@@ -29,7 +51,12 @@ fn main() ? {
             out.Write("error IO 0:0\n")
             continue
         }
-        if args[1] == "tokens" { tokens(out, src) } else { speed(out, src) }
+        match mode {
+            case "tokens" { tokens(out, src) }
+            case "speed" { speed(out, src) }
+            case "ast" { astDump(out, src, std, prelude) }
+            nomatch { parseSpeed(out, src, std, prelude) }
+        }
     }
     try out.Flush() catch io.IoError { os.Exit(1) }
 }

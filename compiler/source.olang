@@ -43,7 +43,7 @@ fn (n Names&) Text(id NameId) String&n { return n.texts[I64(id)] }
 type Source struct(Path String&, Text String&) {
     Path
     Text
-    lines Array<I32>& = lineStarts(Text)
+    lines Array<I32>& = LineStarts(Text)
 }
 
 # reads the file at path whole. A file is at most 2 GB less one byte, so an offset fits an I32
@@ -53,8 +53,8 @@ fn Read(path String&) Source ? os.OsError {
     return Source(path, text)
 }
 
-# where each line of t starts: 0, and just past every newline
-fn lineStarts(t String&) Array<I32>& {
+# where each line of t starts: 0, and just past every newline - the one line table, diag's too
+fn LineStarts(t String&) Array<I32>& {
     n I64 = 1
     for c in t {
         if c == '\n' { n++ }

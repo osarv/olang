@@ -3,7 +3,7 @@
 # Nodes are recursive enums held by reference (T17d), and nothing is written into a node once it is built (O25g), so
 # any part may be shared. Every node carries the span of its tokens, [Start, End) in its file's text - a diagnostic's
 # caret needs the end - and holds names as interned ids and literals as spans, never text: the tree keeps nothing of
-# the token array it was read from. A case holds at most about four words; a larger payload sits behind a reference
+# the token array it was read from. What could not be read is in the diagnostics (diag), not the tree. A case holds at most about four words; a larger payload sits behind a reference
 # to a struct, so the largest case does not size every node.
 import "source"
 import "token"
@@ -148,18 +148,18 @@ type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty
     Field      # a constructor's field
 }
 
-# an if: its condition and branches. A branch keeps the diagnostics its parse met, which are said only if the branch
-# is compiled: an if the build decides compiles one (B9, S8b, DESIGN.md point 12)
+# an if: its condition and branches. The diagnostics a branch's parse met are held in its group (diag.Hold), said only
+# if the branch is compiled: an if the build decides compiles one (B9, S8b, DESIGN.md point 12)
 type If struct(Cond Expr&, Then Branch&, Else Stmt&) {
     Cond
     Then
     Else       # null, an If, or a Block
 }
 
-type Branch struct(Sp source.Span, Body Array<Stmt&>&, Held Array<Diag>&) {
+type Branch struct(Sp source.Span, Body Array<Stmt&>&, Group I64) {
     Sp
-    Body
-    Held
+    Body       # null where it did not parse
+    Group
 }
 
 type For3 struct(Init Stmt&, Cond Expr&, Post Stmt&, Body Array<Stmt&>&) {
@@ -266,7 +266,7 @@ type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool
     Body
 }
 
-# a top-level if (B9): each branch's declarations and held diagnostics, the else a TopIf or a branch
+# a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch
 type TopIf struct(Cond Expr&, Then TopBranch&, ElseIf TopIf&, Else TopBranch&) {
     Cond
     Then
@@ -274,10 +274,10 @@ type TopIf struct(Cond Expr&, Then TopBranch&, ElseIf TopIf&, Else TopBranch&) {
     Else
 }
 
-type TopBranch struct(Sp source.Span, Decls Array<Decl&>&, Held Array<Diag>&) {
+type TopBranch struct(Sp source.Span, Decls Array<Decl&>&, Group I64) {
     Sp
     Decls
-    Held
+    Group
 }
 
 type Decl enum {
@@ -289,80 +289,6 @@ type Decl enum {
     Errors(sp source.Span, name source.NameId, words Array<source.NameId>&)
     Test(sp source.Span, name source.Span, body Array<Stmt&>&)
     If(sp source.Span, i TopIf&)
-}
-
-# what the parser could not read, with what it wanted. Kind names the rule (B11); Want and Found are a diagnostic's
-# arguments, the way msgs.olang will spell them
-type Diag struct(Kind SyntaxError, Start I32, End I32, Want String&, Found String&) {
-    Kind
-    Start
-    End
-    Want
-    Found
-}
-
-type SyntaxError enum {
-    Expected              # expected Want, found Found
-    Unclosed              # a block opened at Want's line has no "}"
-    Nesting               # L21
-    SeparatorComma        # T17, T19, C2
-    KeywordAsName         # L9
-    KeywordFieldRead      # L9a
-    DestructInBody        # C7
-    JoinPiece             # E11b
-    JoinPieceCalled       # E11b
-    TrailingComma         # L18a
-    VarListCount          # D12b
-    ErrorAfterQuestion    # R15
-    ValueAfterEq          # D12
-    ConstArgParen         # G21
-    ArrowLeaves           # S12b
-    LineStartsWithOperator   # L18
-    MatchValueOne         # S12b, D8c
-}
-
-# the rule a diagnostic names, "" for none (B11)
-fn (d Diag) Rule() String& {
-    return match d.Kind {
-        case SyntaxError.Expected, SyntaxError.Unclosed => ""
-        case SyntaxError.Nesting => "L21"
-        case SyntaxError.SeparatorComma => "T17, T19, C2"
-        case SyntaxError.KeywordAsName => "L9"
-        case SyntaxError.KeywordFieldRead => "L9a"
-        case SyntaxError.DestructInBody => "C7"
-        case SyntaxError.JoinPiece, SyntaxError.JoinPieceCalled => "E11b"
-        case SyntaxError.TrailingComma => "L18a"
-        case SyntaxError.VarListCount => "D12b"
-        case SyntaxError.ErrorAfterQuestion => "R15"
-        case SyntaxError.ValueAfterEq => "D12"
-        case SyntaxError.ConstArgParen => "G21"
-        case SyntaxError.ArrowLeaves => "S12b"
-        case SyntaxError.LineStartsWithOperator => "L18"
-        case SyntaxError.MatchValueOne => "S12b, D8c"
-    }
-}
-
-# the diagnostic's text, as the C compiler words it
-fn (d Diag) Message() String {
-    return match d.Kind {
-        case SyntaxError.Expected => "expected " $d.Want ", found " $d.Found
-        case SyntaxError.Unclosed => "the block opened on line " $d.Want " has no '}' - found " $d.Found
-        case SyntaxError.Nesting => "nested more than 20000 levels deep - split it into locals or functions"
-        case SyntaxError.SeparatorComma => "entries are separated by line ends, not commas"
-        case SyntaxError.KeywordAsName => $d.Found " is a keyword, not a name - choose another"
-        case SyntaxError.KeywordFieldRead => $d.Found " is a keyword, not a name - a field named by one is reached " "only after '.', never by the name alone"
-        case SyntaxError.DestructInBody => "'destruct' follows the constructor's body - close the body first: " "'type T struct(...) { ... } destruct { ... }'"
-        case SyntaxError.JoinPiece => "a join piece is a text literal or a '$' rendering - write '$" $d.Want "'"
-        case SyntaxError.JoinPieceCalled => "'(' after a piece of text calls it - to join the value inside, write '$(...)'"
-        case SyntaxError.TrailingComma => "a comma before " $d.Found " ends a list only where " $d.Found " begins a line of its own - remove it"
-        case SyntaxError.VarListCount => $d.Want " names need as many values, found " $d.Found
-        case SyntaxError.ErrorAfterQuestion => "'?' alone is the default error - write '?', or name the types: '? IoError'"
-        case SyntaxError.ValueAfterEq => "a declaration's value follows '=' - " $d.Want
-        case SyntaxError.ConstArgParen => $d.Found " in a type argument is written in parentheses, as '(1 << 12)' - a " "bare '<' or '>' there reads as the list's own"
-        case SyntaxError.ArrowLeaves => "'=>' gives a value, and " $d.Found " gives none - a clause that leaves is a " "block: '{ " $d.Want " }'"
-        case SyntaxError.LineStartsWithOperator => "a line cannot begin with " $d.Found " - the line before ended its " "statement; end that line with " $d.Found ", or put the expression in parentheses"
-        case SyntaxError.MatchValueOne => "a match gives one value - to give several, return them from each case of a " "match statement: 'case P { return a, b }'"
-    }
 }
 
 # where a node is
