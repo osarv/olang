@@ -1,0 +1,25 @@
+# check: fail error[O37]: 'copy' gives an owner, which only an own slot receives
+# an owned value result is moved or let go, not read in passing
+type Buf struct() {
+    data own mut Array<I64>& = Array<I64>(2)
+    n I64 = 0
+}
+fn grown(old Array<I64>&, cap I64) own mut Array<I64>& {
+    a own mut Array<I64>& = Array<I64>(cap)
+    for i in range old.Len() { a[i] = old[i] }
+    return a
+}
+fn (b mut Buf&) add(x I64) {
+    if b.n == b.data.Len() { b.data = grown(b.data, b.n * 2) }
+    b.data[b.n] = x
+    b.n++
+}
+fn (b Buf&) copy() Buf {
+    c := Buf()
+    for i in range b.n { c.add(b.data[i]) }
+    return c
+}
+fn main() ? {
+    a := Buf()
+    n := a.copy().n
+}

@@ -1,5 +1,6 @@
 # check: fail error[O31]: 
-# an owning type is held only by reference
+# an owning type is held by value only as a local or a result - a field holds a reference, owning or not
+# also: only a local or a result holds one by value
 type Sock struct(n I64) {
     n
 }
@@ -12,6 +13,9 @@ type Server struct() {
     cur own mut Conn&
     other own mut Conn&
 }
+type Shop struct() {
+    s Server
+}
 fn main() ? {
-    s Server = Server()
+    h := Shop()
 }

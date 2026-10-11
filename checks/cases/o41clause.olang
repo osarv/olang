@@ -11,7 +11,7 @@ type Holder struct() {
 fn look(n Node&) { println(n.name) }
 fn fails(h Holder&) ? { if h.cur == null { error } }
 fn main() ? {
-    s := Holder()
+    s mut Holder& = Holder()
     s.cur = Node(1)
     join {
         spawn try fails(s) catch { look(s.cur) }

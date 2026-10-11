@@ -185,7 +185,7 @@ struct type;
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
-    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so it is held only by reference: write %t&") \
+    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
     X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
     X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')") \
     X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
@@ -208,6 +208,12 @@ struct type;
     X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
     X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
     X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
+    X(ERR_TAKE_BORROWED_COPY,           "E34",   "'%S' is a borrowed copy and owns nothing - take from '%S', which owns what it holds, 'take %S'") \
+    X(ERR_OWN_COPY_ASSIGNED,            "O32",   "'%S' is a borrowed copy of '%S' and owns nothing, so it is not assigned - declare another with ':='") \
+    X(ERR_OWN_COPY_PART,                "O32",   "'%s' belongs to what '%S' was copied from - assign it there") \
+    X(ERR_OWN_VALUE_SOURCE,             "O32",   "%t owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local holding one ('b := a') - this is neither") \
+    X(ERR_OWN_VALUE_NOT_AN_OWNER,       "O34",   "a local of %t, which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one") \
+    X(ERR_OWN_VALUE_DEFAULT,            "O34",   "%t owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves") \
     X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
     X(ERR_OWN_MOVE_UNDER_LOAN,          "O39",   "%s moves the %t borrowed on line %d, which is used after it - a borrowed object is not moved until its borrow is done") \
     X(ERR_OWN_RELEASE_UNDER_TASK,       "O41",   "%s may release the %t the task spawned on line %d may be using until the join - release it after the join") \

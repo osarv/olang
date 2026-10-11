@@ -2073,6 +2073,14 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_TAKE: { //E34: the owner the slot held, the slot left null - a move, releasing nothing (O34)
             struct ctVal* node = ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), true);
             if (!node) return NULL;
+            if (TypeIsOwnValue(op->type)) { //O31: an owner value local's value, the local left its type's zero value
+                struct ctVal* moved = ctCopy(node);
+                struct operand* zop = op->args.len > 1 ? *(struct operand**)ListGetIdx(&op->args, 1) : NULL;
+                struct ctVal* zero = zop && !zop->zeroBits ? ctEval(st, zop) : ctZero(op->type);
+                if (!zero) return NULL;
+                ctAssign(node, ctDeref(zero));
+                return moved;
+            }
             struct ctVal* v = ctNew(CT_NULL, op->type);
             *v = *node;
             v->type = op->type;

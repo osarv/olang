@@ -856,6 +856,86 @@ o34deferread, o34borrowtoown, o34localtoown, o34taketype, o34takegeneric, o39own
 o10cownresult (an owned result holding a borrow of what its caller then releases) and o10cownlanding (an owned result
 landing with an owning parameter where a loop body's text may not reach). Scope fuzzer: `ownCallOp`'s twelve shapes.
 
+### 13.3 Owning value types and borrowed copies
+
+`v := Vec<I64>()` is a value: a local of an owning type held by value, an **owner value local**, whose own fields'
+objects it owns and releases as its block closes. `b := v` is a **borrowed copy** - read-only, owning nothing, a loan on
+everything `v` owns until `b`'s last use; `take v` moves `v`'s owners out, leaving `v` its type's zero value; and
+`v.Clone()` (a method returning `Vec<T>` by value, an owned result) copies. The user's QJ1 answer, as section 10 put it.
+
+**Decided**
+1. **O31 narrows to two places.** An owning type other than an own reference is held by value by a local of a function,
+   test or lambda body, and by a function's result - nowhere else yet: a field, an element, a parameter, a global or a
+   type argument holding one by value is O31's error, now naming `Server&` or `own mut Server&`. A field holding a `Vec`
+   by value would need the drop function to walk value fields and a borrowed copy read out of a member path; a
+   parameter by value, a borrowed copy made at each call. Both are additive. After the error the type is unknown, so one
+   cause is one error.
+2. **What makes an owner value local** (`ownValueDecl`, `ownValueGiven`): a value made there (a constructor call), its
+   type's zero value (no initializer), `take` of another owner value local, or a call's owned value result. `x := y` from
+   a local holding such a value is a borrowed copy instead; a typed `x T = y`, or an assignment `x = y`, without `take`
+   is O34's error naming `take y`; a conditional or a match is still no move position; a `catch default` giving one is
+   O34's "not supported yet". An owner value local is assigned only with `=` (`+=` is O34's error, one error).
+3. **A borrowed copy is rooted where its source is, and borrows each of its source's own fields** - one synthetic read
+   per own field (`ownCopyReads`), each a loan held until the copy's last use, so a release or a move of the source while
+   the copy is live is O39's error, and a copy of a copy borrows from the first source. It is a read-only copy (T25c), so
+   it is not lent writably and nothing is written through its references; its plain fields are its own to write. Taking
+   from it, or from a part of it, is E34's error naming its source; assigning it, O32's (`declare another with ':='`);
+   assigning one of its own fields, O32's naming the source.
+4. **Reach** (O33): an owner value local whose type can refer to nothing outside the objects it owns (`ownRefersOut`:
+   its own references' objects refer nowhere, its other parts hold no reference) reaches the program's scope and moves
+   anywhere; otherwise it reaches its storage's scope - its block, or the result scope O26a moves it to. The latter is
+   conservative: `{ x := take h; h = take x }` in an inner block is refused although `x` refers only where `h` did. The
+   own-reference local's finer rule (the source's reach for `take`) is not taken over, because a store into an owner
+   value local's own non-own fields is judged against its storage, not its reach - so the reach must not be longer than
+   the storage while such fields exist. Splitting those cases is additive.
+5. **A returned owner value local is moved** (`return x` is `return take x`, as for an own reference local), and it
+   lives in the result scope (O26a) - storage and all - so `c := Vec<T>(); ...; return c` is correct as written.
+6. **Releasing**: the declaration registers the local's slot with its block's scope, its zero value stored first, the
+   drop function `@olang.owndrop.<T>` releasing its own fields (the last first) as the block closes, on every way out;
+   an assignment releases what the local held after the value is computed (S4), then copies the new owner in; `take x`
+   copies the value out and stores the zero value; an owned value result used as a statement is released at once.
+   Codegen's constructor calls of an owning type made as temporaries are registered like destructor-bearing ones (O16) -
+   the first cut copied the instance into the arena only for destructors, so a temporary's own fields were never
+   released (`$OwnBuf(4)`, a constructor argument).
+7. **The evaluator** (K1): `take` of an owner value copies the value and stores its zero value, so a global computed
+   through owner value locals, borrowed copies, `take` and `Clone` bakes (shared.olang's `OwnValuesBaked`, the agree
+   fixture's `Bufs`) and agrees with the run time and `-i`.
+8. **A lambda does not capture an owner value local** (O32), as for an own reference local: it captures a borrowed copy
+   made before (`b := v`). An owned value result is an owner only in a move position or as a statement - `a.Clone().n`
+   is O37's error, as for an own reference.
+9. **A type variable a value of an owning type reaches binds the reference** (`unifyTempAsRef`, G9d's rule for
+   destructor-bearing values): `id(v)` lends `v`, and `id(take v)` is O34's error.
+
+**Found and fixed on the way**
+- `List<Vec<I64>>` gave O31 and then two E12 errors about the list; `Array<In, 2>` with `In` owning, O31 twice. The O31
+  type is unknown now, and the walk skips unknown types.
+- Four checks cases changed meaning, since `s := Server()` now declares an owner value local: `e34notown` takes from a
+  plain struct now, `o40lambda` and `o41clause` declare a reference (`s mut Server& = Server()`) to keep testing what
+  they test, and `o31byvalue` holds an owning type in a field.
+
+**Over-rejections left**: an owner value local made in an inner block, or by `take` or a call's owned result there,
+whose type can refer outside what it owns, moves out of that block only through a call's owned result (decision 4); a
+`Vec` of references grown with an own local and `take` reaches the local's block (13.1's rule for an own array local) -
+growing it through a call's owned result (`v.data = grownFrom(take v.data, n)`) is the form that works; a borrowed copy
+is not lent to a generic's `<T>`, which binds a writable reference (decision 9).
+
+**Measured**: 200,000 turns each building an owner value local of 20 elements, copying it, moving the copy into
+another and letting a copy go ran at a 2 MB peak - every buffer released as its owner lets go.
+
+**Tests**: shared.olang's section "an owning type held by value": owner value locals, borrowed copies, `take`, `Clone`,
+an owned result let go, baked by K2 and decided by an assert (S18c) beside the run time; destructor counts at a block's
+end, at an assignment, for an owned result let go, per loop iteration and for `take` as a statement; text in a returned
+owner value read back after a churn, and one moved out of an inner block (numbers only). The agree fixture's own part
+built, built `-d -s` and interpreted. checks cases: o32copypush, o32copywrite, o32copyassign, o32copypart,
+e34copytake, e34copytakepart, o39copyrelease, o39copymove, o39copychain, o39copylambda, o34valuecopied,
+o34valueassigned, o34valuenotowner, o34valuecond, o34valuedefault, o32valuecapture, o31valueparam, o37valueuse,
+o34valuecompound. Scope fuzzer: `ownValOp`'s twelve shapes - borrowed copies of the holder read before a release, or
+kept across a release, a move or a reassignment (refused); the holder moved out and back, given an owned value result,
+one let go, parts of one moved in; one made in an inner block and moved out (refused). The lambda shape captures a
+borrowed copy of the holder now (decision 8). Under b50019d and now, the same generator: own-only seeds 1-40 ran 206
+and 181 scenarios (274 and 299 refused), mixed seeds 100-139 ran 201 and 199 (279 and 281 refused), no findings - the
+extra refusals the borrowed-copy shapes that must be refused, which b50019d accepts with the holder a reference.
+
 ### 13.4 Small regions, and releases that do not nest without bound
 
 **Decided**

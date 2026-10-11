@@ -13,7 +13,7 @@ type Server struct() {
     other own mut Conn&
 }
 fn main() ? {
-    s := Server()
+    s mut Server& = Server()
     s.cur = Conn(3)
     f := fn() { s.cur = null }
     f()

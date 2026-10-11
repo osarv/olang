@@ -3654,7 +3654,10 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     if (promoted) ctx->promotedOp = NULL;
     char* v = cgFuncCallValue(ctx, op);
     struct var* func = op->readVar;
-    if (promoted || !cgIsCtor(func) || op->type.bType != BASETYPE_STRUCT || op->type.structMAlloc || !op->type.hasDestruct)
+    //O35: an owning type's instance no promotion and no owner value local takes ("$Buf(4)", "Buf(4).n") likewise, its
+    //owners released as that scope closes - one moved to an owner (ownMoved) is that owner's
+    if (promoted || !cgIsCtor(func) || op->type.bType != BASETYPE_STRUCT || op->type.structMAlloc
+            || !(op->type.hasDestruct || (TypeIsOwning(op->type) && !op->ownMoved)))
         return v;
     char* scopeVal = cgCtorHereArg(ctx, op);
     char* heap = cgNewTmp(ctx);
@@ -6613,6 +6616,18 @@ static char* cgOwnValue(struct cgCtx* ctx, struct operand* op, struct type slotT
 static char* cgTake(struct cgCtx* ctx, struct operand* op) {
     struct operand* place = *(struct operand**)ListGetIdx(&op->args, 0);
     char* addr = cgAddr(ctx, place);
+    if (TypeIsOwnValue(op->type)) { //O31: an owner value local's value, moved into storage of its own; it is left its type's zero value
+        char ty[256];
+        llvmType(op->type, ty, sizeof(ty));
+        char* moved = cgValueSlot(ctx, op->type, ty);
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", moved, addr,
+                TypeGetSize(op->type));
+        struct operand* zero = op->args.len > 1 ? *(struct operand**)ListGetIdx(&op->args, 1) : NULL;
+        if (!zero || zero->zeroBits || zero->opType == OPERATION_ZERO)
+            fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", addr, TypeGetSize(op->type));
+        else cgStoreOperand(ctx, op->type, zero, addr, NULL, false, false);
+        return moved;
+    }
     char* v = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, cgOwnTy(place->type), addr);
     fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(place->type), cgOwnNull(place->type), addr);
@@ -6700,6 +6715,16 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
         cgOwnDecl(ctx, s, slot);
         return;
     }
+    //O35: an owner value local's owners are released as its block's scope closes, unless moved on before (its slot then
+    //its type's zero value) - registered before its value is stored, on the slot, which a zero holds until then
+    if (s->var.ownValue && !s->ctorField) {
+        if (!cgViaMemory(s->var.type)) fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
+        else fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(s->var.type));
+        char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+        cgNoteBuildInto(ctx, scope);
+        fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scope, slot,
+                cgOwnDropFn(ctx, s->var.type));
+    }
     //D15c: "Array<T>(n, v)" - every element gets v
     if (s->fillValue) {
         struct type elemT = *s->var.type.arrElem;
@@ -6762,6 +6787,19 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
 void cgAssign(struct cgCtx* ctx, struct statement* s) {
     if (s->target->type.refOwn) { //O35
         cgOwnAssign(ctx, s);
+        return;
+    }
+    if (OwnValueLocalOf(s->target)) { //O35: an owner value local - the place, the new owner, the old owners released, the store
+        struct type t = s->target->type;
+        char* addr = cgAddr(ctx, s->target);
+        struct var* tv = canonicalVar(s->target->readVar);
+        char* scopeOverride = tv->valueHomeSet && !tv->refsHomeSet ? cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth) : NULL;
+        char ty[256];
+        llvmType(t, ty, sizeof(ty));
+        char* fresh = cgValueSlot(ctx, t, ty);
+        cgStoreOperand(ctx, t, s->op, fresh, scopeOverride, false, false);
+        fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr null)\n", cgOwnDropFn(ctx, t), addr);
+        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", addr, fresh, TypeGetSize(t));
         return;
     }
     //a bare "&" struct field or array element has no declared scope of its own (neither a field nor an
@@ -7331,7 +7369,9 @@ static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_ASSIGN: cgAssign(ctx, s); return;
         case STATEMENT_EXPR: {
             char* v = cgValue(ctx, s->op);
-            if ((s->op->opType == OPERATION_TAKE || s->op->type.refOwn) && s->op->ownDiscard) //O35: an owner no slot receives
+            if (s->op->ownDiscard && TypeIsOwnValue(s->op->type)) //O35: ...an owning value's owners, the value at v
+                fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr null)\n", cgOwnDropFn(ctx, s->op->type), v);
+            else if ((s->op->opType == OPERATION_TAKE || s->op->type.refOwn) && s->op->ownDiscard) //O35: an owner no slot receives
                 fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", cgOwnPtr(ctx, s->op->type, v));
             return;
         }

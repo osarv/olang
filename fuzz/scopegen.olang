@@ -793,9 +793,10 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
 fn (g mut SG&) ownOp(h String&, ind String&) String& {
     v := g.val()
-    k := g.r(50)
+    k := g.r(62)
     c := $h ".cur"
     o := $h ".other"
+    if k >= 50 { return g.ownValOp(h, ind, k - 50, v) }
     if k >= 37 { return g.ownCallOp(h, ind, k - 37, v) }
     if k >= 27 { return g.ownArrOp(h, ind, k - 27, v) }
     if k == 26 {    # a chain of owners deeper than a release nests (O35), built through owner locals and released later
@@ -829,9 +830,10 @@ fn (g mut SG&) ownOp(h String&, ind String&) String& {
         b := g.name("b")
         return $ind $b " := " $c "\n" $ind $c " = null\n" $ind "if " $b " != null { grow(" $b ".n, " $v ") }\n"
     }
-    if k == 15 {    # a lambda reading through the holder
+    if k == 15 {    # a lambda reading through a borrowed copy of the holder - it captures no owner (O32)
         f := g.name("f")
-        return $ind $f " := fn() I64 { return onode(" $c ") }\n" $ind $o " = ONode(" $f "())\n"
+        b := g.name("b")
+        return $ind $b " := " $h "\n" $ind $f " := fn() I64 { return onode(" $b ".cur) }\n" $ind $o " = ONode(" $f "())\n"
     }
     if k == 16 { return $ind "if " $o " != null { join { spawn ogrow(" $o ", " $v ") } }\n" }
     if k == 17 {    # an owner local made here, built into, moved into a slot
@@ -911,6 +913,55 @@ fn (g mut SG&) ownCallOp(h String&, ind String&, k I64, v I64) String& {
     if k == 12 { return $ind "if " $h ".w != null { " $h ".w = owrap(" $h ".w.m) }\n" }    # ...and rewrapped, R1
     #(an owned result holding a node in what is then released: O10c, refused)
     return $ind "if " $c " != null {\n" $ind "    " $h ".w = owrap(" $c ".n)\n" $ind "    " $c " = null\n" $ind "}\n"
+}
+
+# a statement on h as an owner value (O31, O32): a borrowed copy of it read before a release, or kept across one or
+# across a move (O39: refused); h moved out and back, given an owned value result, or one let go; parts of such a
+# result moved into h; one made in a block of its own moved out (O34: refused, what it holds may refer to the block)
+fn (g mut SG&) ownValOp(h String&, ind String&, k I64, v I64) String& {
+    c := $h ".cur"
+    o := $h ".other"
+    b := g.name("b")
+    x := g.name("x")
+    if k == 0 { return $ind $b " := " $h "\n" $ind $o " = ONode(ohash(" $b ") % 997 + " $v ")\n" }
+    if k == 1 {    # a borrowed copy kept across a release (O39: refused)
+        return $ind $b " := " $h "\n" $ind $c " = null\n" $ind "churn()\n" $ind $o " = ONode(ohash(" $b ") % 997)\n"
+    }
+    if k == 2 { return $ind "{\n" $ind "    " $x " := take " $h "\n" $ind "    churn()\n" $ind "    " $h " = take " $x "\n" $ind "}\n" }
+    if k == 3 or k == 4 or k == 5 {
+        mk := g.name("omkHold")
+        g.addHelper("fn " $mk "(v I64) OHold {\n    x := OHold()\n    x.cur = ONode(v)\n    x.cur.n.next = Node(v + 1)\n"
+                    "    x.buf = Array<I64>(2, v)\n    churn()\n    return x\n}\n")
+        if k == 3 { return $ind $h " = " $mk "(" $v ")\n" }
+        if k == 4 { return $ind $mk "(" $v ")\n" }
+        return ($ind "{\n" $ind "    " $x " := " $mk "(" $v ")\n" $ind "    churn()\n" $ind "    " $c " = take " $x ".cur\n" $ind
+                "    " $h ".buf = take " $x ".buf\n" $ind "}\n")
+    }
+    if k == 6 {    # an owner value a copying helper made, its part moved into h
+        cp := g.name("ocopyHold")
+        g.addHelper("fn " $cp "(h OHold&) OHold {\n    c := OHold()\n    if h.cur != null { c.cur = ONode(h.cur.v + 1) }\n"
+                    "    churn()\n    return c\n}\n")
+        return $ind "{\n" $ind "    " $x " := " $cp "(" $h ")\n" $ind "    churn()\n" $ind "    " $o " = take " $x ".cur\n" $ind "}\n"
+    }
+    if k == 7 {    # a borrowed copy kept across h given another (O39: refused)
+        return $ind $b " := " $h "\n" $ind $h " = OHold()\n" $ind "churn()\n" $ind $o " = ONode(ohash(" $b ") % 997)\n"
+    }
+    if k == 8 {    # an owner value made in a block of its own and moved out (O34: refused)
+        return ($ind "{\n" $ind "    " $x " := OHold()\n" $ind "    " $x ".cur = ONode(" $v ")\n" $ind "    churn()\n" $ind "    " $h
+                " = take " $x "\n" $ind "}\n")
+    }
+    if k == 9 {    # a lambda reading through a borrowed copy, called before h's slot is given another owner
+        f := g.name("f")
+        return ($ind $b " := " $h "\n" $ind $f " := fn() I64 { return ohash(" $b ") }\n" $ind $o " = ONode(" $f "() % 997 + " $v
+                ")\n")
+    }
+    if k == 10 {    # a borrowed copy kept across a move out of h (O39: refused)
+        return $ind $b " := " $h "\n" $ind $x " := take " $h "\n" $ind "churn()\n" $ind $o " = ONode(ohash(" $b ") % 997)\n"
+    }
+    # a borrowed copy of a borrowed copy, read after h's buffer is replaced (O39: refused)
+    y := g.name("y")
+    return ($ind $b " := " $h "\n" $ind $y " := " $b "\n" $ind $h ".buf = Array<I64>(1, " $v ")\n" $ind "churn()\n" $ind $o
+            " = ONode(osum(" $y ".buf) % 997)\n")
 }
 
 # a statement on h's own arrays: new buffers, writes, a buffer moved through an owner local and back, elements kept

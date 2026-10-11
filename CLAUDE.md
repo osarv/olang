@@ -4934,6 +4934,26 @@ and literals made only of such, never existing storage anywhere in it) - it is
   **P1 (pre-existing codegen)**: `a.kid = Node(5)` built in the function's scope, not where `a` lives or in a borrow's
   region - destructors ran late (O16) or not at the region's release (O30). Fuzzer: the review's shapes, 56 findings in
   60 all-own programs on 42efc87, none after.
+- **Owned references, phase 2a: what `Vec<T>` needs (§8.8 O30-O37, O42, T25e, E34, K1, K2, 2026-10-11; the
+  user's QJ1, details mine, docs/own.md section 13).** **Own arrays**: `own mut Array<T>&` holds a buffer in a region of
+  its own - the region holds the buffer alone, the elements' referents living where a plain array in that slot would
+  keep them, so an element may be kept while its buffer is replaced. **Owning parameters and owned results**: a declared
+  function's parameter or single result written `own` (or, for a result, of an owning type held by value) owns; a
+  parameter is released as its callee returns unless moved on, a result is an owner only in a move position or as a
+  statement, `return x` moves an owner local, and such a function is never a value or a task's call. **Owner value
+  locals and borrowed copies (QJ1)**: `v := Vec<I64>()` is a value owning what its own fields hold, released as its
+  block closes, when it is given another (`v = take w`) or as an owned result let go; `b := v` is a borrowed copy -
+  read-only, owning nothing, a loan on each object `v` owns until `b`'s last use, so a `Push` on `v` or `take v` then is
+  O39's error; `take v` moves, leaving the zero value; `v.Clone()` is an owned result. O31 narrows: a field, element,
+  parameter, global or type argument still may not hold one by value (additive later); a lambda does not capture one; a
+  type variable it reaches binds the reference (G9d). Its reach is the program's scope when nothing it holds can refer
+  outside what it owns, else its storage's - conservative, recorded. **Small regions**: an object of 2 KB or less is one
+  allocation, and a release nests at most 256 deep (a million chained owners: 4.2 GB and a crash -> 111 MB). **Found on
+  the way**: an owning constructor temporary no promotion took was never released (now registered as O16 registers a
+  destructor-bearing one), `take` moved an owner of any type into any slot, a variable's read was taken for a landing
+  call (a null result scope, a segfault), and fuzz runs now work in directories of their own (B2f). Scope fuzzer: own
+  seeds 1-40, the same generator under both compilers, no findings (b50019d 206 run / 274 refused, now 181 / 299 - the
+  difference the borrowed-copy shapes that must be refused).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

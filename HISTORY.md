@@ -15124,3 +15124,65 @@ All-own, seeds 1-60:
 |---|---|---|---|
 | 42efc87 | 56 | 567 | 153 |
 | fixed | 0 | 294 | 426 |
+
+### Owned references, phase 2a: what `Vec<T>` needs (§8.8 O30-O37, O42, T25e, E34, K1, K2, B2f, 2026-10-11)
+
+The coordinator's list for this round was everything a `Vec<T>` written in the prelude stands on: an own array for its
+buffer, owning parameters and owned results, an owning type held by value with borrowed copies (the user's QJ1 answer),
+small regions, and a fuzz harness that cannot be written into by a leftover run. Each piece is in docs/own.md section
+13 with its decisions; this is the short story.
+
+**Own arrays (13.1).** `own mut Array<T>&` holds a buffer in a region of its own. The one real decision was where an
+element's referent lives. Putting it in the buffer's region would make every element a borrow of the region, so keeping
+one element while the buffer is replaced - the commonest thing a growable array does - would be O39's error, and growth
+would have to copy the referents too. So the region holds the buffer alone, and what the elements refer to lives where a
+plain array in that slot would keep it. One place retags an index of the borrow to that scope, and the thirty-odd
+container walks see a plain array. Found on the way: a variable's read was taken for a landing call, so `w := mk()`
+followed by a `w.inner.t` handed to `println` called `mk` with a null result scope - a segfault on the first cut too.
+
+**Owning parameters and owned results (13.2).** Only a declared function's parameter or single result owns. An owning
+parameter is an owner local of its callee: registered at entry, released as the callee returns unless moved on. An owned
+result is an owner only in a move position or as a statement. `return x` of an owner local moves it. A function owning a
+parameter or giving an owned result is never a value, and a type variable binds the borrow, not the owner. Found on the
+way: `take` moved an owner of any type into any own slot - `s.other = take s.cur.sock` put a `Sock` into a `Conn` slot.
+
+**Owning value types and borrowed copies (13.3).** `v := Vec<I64>()` is a value now, an **owner value local**: it owns
+what its own fields hold and releases it as its block closes, when it is given another owner, or when an owned value
+result is let go. `b := v` is a **borrowed copy**: read-only, owning nothing, rooted where `v` is, with a synthetic read
+of each of `v`'s own fields held as a loan until `b`'s last use. So a `Push` on `v` while `b` is in use is O39's error,
+and so is `take v`. A copy of a copy borrows from the first source. `take v` copies the value out and leaves the zero
+value. O31 narrowed rather than went: a field, an element, a parameter, a global or a type argument still may not hold
+one by value. A field holding a `Vec` by value needs the drop function to walk value fields and a borrowed copy read out
+of a member path; a parameter by value needs a borrowed copy made at each call. Both are additive. The reach rule is the
+conservative one - the block, unless the type can refer to nothing outside what it owns - because a store into an owner
+value local's non-own fields is judged against its storage, so its reach may not be longer than that while such fields
+exist.
+
+What it found: an owning constructor's temporary that no promotion took (`$OwnBuf(4)`, a constructor argument) was never
+registered, so its own fields were never released - codegen now registers it as a destructor-bearing temporary is (O16).
+`List<Vec<I64>>` gave O31 and two cascading E12s, and `Array<In, 2>` gave O31 twice. Four checks cases changed meaning,
+since `s := Server()` now declares a value, and were migrated to keep testing what they test.
+
+**Small regions (13.4).** A region of one object of 2 KB or less is one allocation from the C allocator, holding the
+header, its destructor nodes and the object. A release nests at most 256 deep, the rest deferred to a per-thread stack:
+a million owners linked through own fields went from 4.2 GB, 3.45 s and a crash to 111 MB, 0.18 s and a clean exit.
+
+**Fuzz runs in directories of their own (B2f).** A `fuzz scope` run works in `build/fz/runXXXXXX` (os.MkTemp), removed
+when nothing was found. The second own review's 36-70 false findings came from a backgrounded earlier run writing into
+the shared tree.
+
+**Fuzzer, item 3.** `ownValOp` adds twelve shapes on the holder as an owner value. Some must be refused: a borrowed copy
+kept across a release, a move or a reassignment, and one made in an inner block moved out. The rest must run: the
+holder moved out and back, given an owned value result, one let go, and parts of one moved in. The lambda shape now
+captures a borrowed copy, since a lambda does not capture an owner value local (O32). The same generator under both
+compilers:
+
+| compiler | seeds | findings | scenarios run | refused |
+|---|---|---|---|---|
+| b50019d | own 1-40 | 0 | 206 | 274 |
+| item 3 | own 1-40 | 0 | 181 | 299 |
+| b50019d | mixed 100-139 | 0 | 201 | 279 |
+| item 3 | mixed 100-139 | 0 | 199 | 281 |
+
+Most of the extra refusals are the borrowed-copy shapes that must be refused. On b50019d the holder is a reference, so
+`b := h` is a second reference and nothing dangles.

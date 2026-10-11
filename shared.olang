@@ -17205,3 +17205,85 @@ test "O33/O37: a buffer of text grown by moving it through a call - its elements
     for i in range v.n { t += v.data[i].Len() }
     assert v.n == 40 and t == 70 and v.data[37] == "37" and v.data.Len() == 64
 }
+# O31/O32: an owning type held by value, as a local or a result - a copy of one is a borrowed copy, owning nothing
+fn (v OwnVec<<T>>&) Clone() OwnVec<T> {
+    c := OwnVec<T>()
+    for i in range v.n { c.Push(v.data[i]) }
+    return c                                    # an owner local returned is moved (O37)
+}
+fn ownVecSum(v OwnVec<I64>&) I64 {
+    t := 0
+    for i in range v.n { t += v.data[i] }
+    return t
+}
+fn ownValues(k I64) I64 {
+    a := OwnVec<I64>()
+    for i in range 10 { a.Push(i * k) }
+    b := a                                      # a borrowed copy: a loan on a's buffer until its last use
+    t := ownVecSum(b) + b.n
+    c := a.Clone()                              # an owner of its own
+    c.Push(100)
+    d := take c                                 # c left its zero value
+    t += ownVecSum(d) * 10 + c.n
+    a = take d                                  # a's buffer released, d left empty
+    t += ownVecSum(a) * 100 + d.n
+    a = OwnVec<I64>()                           # released again
+    a.Clone()                                   # an owned result let go at once
+    return t + a.n
+}
+OwnValuesBaked I64 = ownValues(1)               # K2: computed while compiling
+test "O31/O32/E34: an owning value held by a local - borrowed copies, take, Clone - while compiling and at run time" {
+    assert OwnValuesBaked == ownValues(OwnRun) and OwnValuesBaked == 16005
+    assert ownValues(2) == 21000                # S18c: decided while compiling
+}
+type OwnSockBox struct() {
+    s own mut OwnSock& = null
+}
+fn ownSockBoxOf(n I64) OwnSockBox {
+    b := OwnSockBox()
+    b.s = OwnSock(n)
+    return b
+}
+test "O35: an owner value's objects are released as its block closes, when it is given another, and when a result is let go" {
+    before := OwnDropped
+    {
+        b := OwnSockBox()
+        b.s = OwnSock(1)
+        c := OwnSockBox()
+        c.s = OwnSock(2)
+        b = take c                              # b's sock released, c left holding none
+        assert OwnDropped == before + 1 and b.s.n == 2 and c.s == null
+    }
+    assert OwnDropped == before + 2             # b's sock, as the block closed
+    ownSockBoxOf(3)                             # an owned result let go at once
+    assert OwnDropped == before + 3
+    for i in range 5 {
+        x := ownSockBoxOf(i)                    # each released as its iteration ends
+        assert x.s.n == i
+    }
+    assert OwnDropped == before + 8
+    y := ownSockBoxOf(9)
+    take y                                      # released where it stands
+    assert OwnDropped == before + 9 and y.s == null
+}
+fn ownTexts(n I64) OwnVec<String&> {
+    v := OwnVec<String&>()
+    for i in range n { v.PushMoved($i "!") }    # built where v lives - the result's scope, since v is returned
+    return v
+}
+test "O37: an owning value returned, and one moved out of an inner block - read back after the arena churns" {
+    v := ownTexts(30)
+    sbChurn()
+    w := ownTexts(5)
+    sbChurn()
+    assert v.n == 30 and v.data[29] == "29!" and w.data[4] == "4!"
+    a := OwnVec<I64>()
+    for k in range 3 {
+        b := OwnVec<I64>()
+        for i in range 5 { b.Push(i + k) }
+        if k == 1 { a = take b }                # numbers only, so b reaches nowhere and may move out
+        sbChurn()
+    }
+    sbChurn()
+    assert ownVecSum(a) == 15 and a.n == 5
+}
