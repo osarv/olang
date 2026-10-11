@@ -843,6 +843,11 @@ because what it finds about structure feeds the refactor.
   the port beside the Vec fixes: wt-portm1 (M1 scanner + oracle into bootstrap/oracle + OLANG parametrization) and
   wt-portm2 (M2 diag/msgs + diagnostic goldens). Still P0: the runtime to std/runtime/runtime.ll - after the own fix
   merges (it may touch bootstrap/runtime.c). Next in parallel when these land: M3 parser (needs M1+M2).
+- 17:10 CEST: M1 merged and pushed (1a001ef): compiler/source|token|scan.olang, tokdiff clean on 1,255 files and in
+  verify, 93-102 MB/s; bootstrap/oracle/tokdump.c; OLANG ?= build/out read by checks/fuzz/bench; four C tokenizer
+  fixes (L13 etc.). Vec review 2 (/home/user/review/vec2): N1 (stale loan type through mutual recursion) and N2 (a
+  function value through an import alias skips every value check, also P1-P3) - fix agent on wt-own. Two verifies
+  side by side were OOM-killed again: /home/user/vlock is ONE slot now. M3 parser started on wt-portm3.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
