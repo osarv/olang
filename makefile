@@ -48,7 +48,7 @@ build/tokdump: bootstrap/oracle/tokdump.c build/obj/token.o build/obj/util.o bui
 # the structure oracle (compiler/DESIGN.md section 4): every declaration and statement the C parser finds, with its span,
 # which the self-hosted parser's must equal (compiler/tools/astdiff.sh)
 build/astdump: bootstrap/oracle/astdump.c build/obj/syntax.o build/obj/token.o build/obj/util.o build/obj/errmsg.o
-	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm
+	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm -lpthread
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
@@ -57,6 +57,11 @@ build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard comp
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump
 	compiler/tools/tokdiff.sh
+
+# M3's acceptance: the self-hosted parser's tree and syntax errors are the C parser's on every file of the repository,
+# and each tree written back as source and read again is the same tree (compiler/tools/astdiff.sh)
+astdiff: build/astdump build/compiler_tools_dump
+	compiler/tools/astdiff.sh
 
 build/stage0.obj/%.o: bootstrap/%.c
 	mkdir -p build/stage0.obj
@@ -116,6 +121,7 @@ verify:
 	./build/runner
 	$(MAKE) checkir
 	$(MAKE) tokdiff
+	$(MAKE) astdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
@@ -169,7 +175,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.

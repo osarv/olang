@@ -5050,6 +5050,23 @@ and literals made only of such, never existing storage anywhere in it) - it is
   also holds `-e` to stage 0 on every rule a message names; checks.olang holds msgs.olang to errmsg.h entry by entry.
   `make diagtest`, and part of `make test`. Found, not fixed (stage 0, semantic.c): a struct's `:=` field is `?` in its
   own module's methods when another module imports it first (HISTORY.md).
+- **Port M3: the AST and the parser (L21, E28, 2026-10-11; compiler/DESIGN.md sections 1.2 and 4, details mine).**
+  `compiler/ast.olang` (recursive enums held by reference, a span on every node, names interned) and
+  `compiler/parse.olang` (recursive descent with Pratt precedence for expressions, one token of lookahead plus section
+  2's bounded peeks, no backtracking or memoizing; type-argument mode splits `<<`/`>>`). **Decided (mine)**: recovery
+  continues inside an item, statement by statement, where stage 0 stops at an item's first error; a function whose body
+  fails keeps its signature and a type its name and parameters; every branch of a build-decided `if` is parsed with its
+  diagnostics held in a diag group for the checker to choose (no token evaluator in the parser), a plain `else` being an
+  `If` with no condition so it has a group too; an error that ends the item (L21, an unclosed block) is reported outside
+  the held groups; L21 counted as stage 0 counts it; the parser runs inside `os.RunOnStack` with 1 GB. **Acceptance**:
+  `bootstrap/oracle/astdump.c` and `compiler/tools/dump.olang ast|roundtrip` (`compiler/tools/unparse.olang` writes a
+  tree back as source), compared by `compiler/tools/astdiff.sh` (`make astdiff`, in `make verify`): every declaration
+  and statement by kind and span, each item's first syntax error by rule and position, and each tree written back
+  reading as itself - clean on all 1,260 files, study2's data and nestings at 20,000 levels. 41-44 MB/s scan and parse
+  on study2's `big.olang`. **Found on the way**: stage 0's code generator crashed on a conditional whose values are
+  calls giving a `String` value (E28, fixed, `checks/cases/condcallvalue`); the oracle segfaulted on deep files (it runs
+  on a 1 GB thread now); a stage 0 constructor temporary built inside an `if` and returned through a borrowed result
+  came back as garbage in the parser - worked around (a helper method), not minimized (HISTORY.md).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -1,10 +1,12 @@
 # The self-hosted olang compiler: design
 
 Status: M1 (`source`, `token`, `scan`) built 2026-10-11 - the token diff is clean on every file of the repository and
-study2's data, at 93-102 MB/s; the rest is design. `SPEC.md` says what olang means; this file says how the
-compiler written in olang computes it. The C compiler (moving to `bootstrap/`) is the reference for behaviour only:
-its diagnostics, edge cases and test results, never its structure. Where the C compiler and `SPEC.md` disagree, the
-port follows `SPEC.md`, and the disagreement is fixed in C as well (or the spec amended) and recorded.
+study2's data, at 93-102 MB/s; M2 (`diag`, `msgs`) and M3 (`ast`, `parse`) built the same day - the structure diff and
+the round trip are clean on every file and on study2's data, scan and parse together at 41-44 MB/s; the rest is design.
+`SPEC.md` says what olang means; this file says how the compiler written in olang computes it. The C compiler
+(`bootstrap/`) is the reference for behaviour only: its diagnostics, edge cases and test results, never its structure.
+Where the C compiler and `SPEC.md` disagree, the port follows `SPEC.md`, and the disagreement is fixed in C as well (or
+the spec amended) and recorded.
 
 Measurements below were taken on 2026-10-09 on the shared 4-core machine while other work ran on it (load average
 10-13). The ratios between them are what matters, not the absolute numbers.
@@ -127,6 +129,24 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   `match`.
 - **Measured.** study2 scans and parses the 1 MB corpus in 110 ms (34 + 76) against about 790 ms for the C
   tokenizer and parser. On 4.6 MB it takes about 0.4 s against 7.3 s.
+- **As built (M3, 2026-10-11).**
+  - Recovery goes on inside an item: an error skips its statement (to the line's end at its bracket depth, or to its
+    block's `}`), so several errors of one item are recorded. Stage 0 stops an item at its first; the structure diff
+    compares each item's first error.
+  - A function whose body fails keeps its signature (`Decl.Fn` with no body) when its block was opened; a type whose
+    body fails keeps its name and parameters (`TypeDecl` with no body). Both are what `SNTX_BODY_UNPARSED` gives the
+    checker.
+  - Every branch of a build-decided `if` is parsed (point 12). Each branch's diagnostics are held in a diag group of its
+    own, which the checker chooses or drops when it decides the condition; the parser evaluates no condition. A plain
+    `else` is an `If` with no condition, so its branch has a group too. An error that ends the item - L21's limit, a
+    block never closed - is reported outside every held group, since what holds it is abandoned with the item.
+  - L21 counts as stage 0 does: a level per block, per operand, per `not` and per binary link once its node is built;
+    a statement met at the limit is reported at its first token. So the 20,000th level is reported where stage 0
+    reports it.
+  - A trait method's `mut` is kept as a nameless receiver whose type is just the permission.
+  - The parser runs inside `os.RunOnStack` with 1 GB, as the compiler will; `parse.olang`'s own L21 test does so too.
+  - Measured on study2's `big.olang` (4.6 MB, the machine loaded): scanning 97-103 MB/s, scanning and parsing 41-44
+    MB/s (106-113 ms), against stage 0's tokenizer and parser at about 7 s.
 
 ### 1.3 Diagnostics (`diag`, `msgs`)
 
@@ -589,7 +609,17 @@ with the installed one; `make bootstrap` is section 5.
      `dump.olang ast` walks the new one.
    - Both print every declaration and statement as `KIND line:col-line:col`.
    - Expression structure is covered by a round trip: print the AST as source, parse it again, compare.
-   - Branches decided by the build (point 12) are compared once M4 decides them.
+   - Branches decided by the build (point 12): both parsers parse every branch (stage 0 through
+     `SyntaxParseAllBranches`, set by the oracle only), so they are compared now; deciding them is compared with M4.
+   - Built (M3): `bootstrap/oracle/astdump.c` (run on a 1 GB thread, as the compiler runs), `dump.olang ast`, and
+     `dump.olang roundtrip`, whose writer is `compiler/tools/unparse.olang` - it writes every node as source with no
+     parentheses added, a branch that had held diagnostics as its own text. `compiler/tools/astdiff.sh` runs both over
+     every file of the repository (`make astdiff`, part of `make verify`, about 5 s once both tools are built). What
+     it normalizes: each file's rows are sorted (the two trees hold the same nodes in different shapes); stage 0's
+     diagnostics are reduced to `error RULE LINE:COL`, its notes dropped, and only each item's first is compared; in
+     the round trip, statement ends, a trailing comma before `)` or `]`, and the split of `<<`, `>>`, `>=`, `>>=` into
+     single angles are not compared. Clean on all 1,260 files, study2's data and generated nestings at and around
+     20,000 levels.
 3. **Diagnostic goldens.**
    - Stage 0's output on every `checks/cases` program is captured: its `path:line:col: error[RULE]: text` rows.
    - The new compiler must match the rule and position everywhere, and the text wherever a case pins it.
@@ -695,7 +725,7 @@ on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-ti
 - The runtime is extracted to `std/runtime/runtime.ll` and linked as one object by the C compiler (section 1.10).
 - The std and runtime gaps S1-S6 (section 7) are closed.
 - The in-flight branches are merged: the permissions batch and checker batch 3 (study2's r01-r15).
-- The oracle tools move to `bootstrap/oracle`. (`tokdump.c` done with M1; `astdump.c` comes with M3.)
+- The oracle tools move to `bootstrap/oracle`. (`tokdump.c` done with M1, `astdump.c` with M3.)
 
 **Language changes during the port.** From M5 on, they land in C first and are ported to any module that already
 exists. Feature work waits where it can (question 2).
@@ -707,7 +737,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 |---|---|---|---|
 | M1 | `source`, `token`, `scan` | P0 | token diff clean on every file; 50 MB/s on `big.olang` idle |
 | M2 | `diag`, `msgs` | P0 | renders stage 0's diagnostic goldens identically from records; `-e` works (done 2026-10-11) |
-| M3 | `ast`, `parse` (study2's parser is the start) | M1, M2 | parse acceptance (section 4); recovery gives one error per item on every syntax-error case |
+| M3 | `ast`, `parse` (study2's parser is the start) | M1, M2 | parse acceptance (section 4); recovery gives one error per item on every syntax-error case (done 2026-10-11) |
 | M4 | `load`, `fetch`, `names` | M3 | load + names acceptance; the remote, lock and `-u` scenarios pass through a test driver |
 | M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) |
 | M5b | `check`: expressions | M5a | together with M5c, the check acceptance |

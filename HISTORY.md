@@ -15516,3 +15516,66 @@ method 'Push'" - while the same module tested alone compiles: the method's body 
 constructor's body has inferred the field. diag first wrote its fields that way; they are typed now. The reproducer is
 two files, `a.olang` with `type S struct() { xs := List<I64>() }` and `fn (s mut S&) Add(x I64) { s.xs.Push(x) }`, and
 `b.olang` importing it and calling `a.S().Add(3)` in a test. Left for a semantic.c fix (QB: bootstrap/ takes fixes).
+
+### Port M3: the AST and the parser (L21, E28, 2026-10-11)
+
+**What it is.** `compiler/ast.olang` holds the tree: declarations, statements, expressions, types and patterns as
+recursive enums held by reference (T17d), never written after they are built, every node with its `Span`, every name a
+`NameId` interned once. Lists are gathered on the parser's own stacks and flattened into arrays when complete, as
+study2's parser did. `compiler/parse.olang` is recursive descent for declarations and statements and Pratt precedence
+climbing over E5's table for expressions - `not` at its own level, comparison chains, `is`/`is not`/`not in`, the
+conditional at the lowest level with L18b's rule about a line-initial `if`. It looks one token ahead, plus the bounded
+peeks DESIGN.md's section 2 lists; it never backtracks and never memoizes, where syntax.c does both (memoizing because
+backtracking had taken 3^depth time). Inside a type-argument list `>` closes the list and `<<`, `>>`, `>=`, `>>=` are
+split. Syntax errors go through M2's `diag`/`msgs`, with the line table `source` owns.
+
+**Decided while building (mine).**
+- **Recovery goes on inside an item.** An error skips its statement - to the line's end at the statement's bracket
+  depth, or to its block's `}` - and the next statement is read, so one item can record several errors. Stage 0 stops
+  an item at its first; the structure diff compares each item's first. The rule DESIGN.md asked for, one error per
+  item, holds for the comparison, and the parser says more where it can.
+- **What failed stays declared.** A function whose body did not parse keeps its signature (`Decl.Fn` with no body)
+  when its block was opened, and a type whose body did not parse keeps its name and parameters - what stage 0's
+  `SNTX_BODY_UNPARSED` gives its checker, so calls to them are not each "unknown".
+- **Build-decided branches are all parsed** (section 2, point 12). Each branch's diagnostics are held in a diag group,
+  and the checker chooses or drops the group when it decides the condition (M4); the parser evaluates nothing, so B9a's
+  token evaluator and S8b's parse-time reading have no counterpart here. A plain `else` is an `If` with no condition,
+  so its branch has a group as an `else if` does.
+- **An error that ends an item is not held.** L21's limit and a block never closed abandon the item, and whatever held
+  group they were met in goes with it, so they are reported outside every group (`diag.ErrorUnheld`).
+- **L21 counts as stage 0 counts it** - a level per block, per operand, per `not`, and per binary link once its node is
+  built - and a statement met at the limit is reported at its first token, so the 20,000th level is reported where
+  stage 0 reports it. The parser runs inside `os.RunOnStack` with 1 GB, as the compiler will.
+- A trait method's `mut` is a nameless receiver whose type is only the permission.
+
+**Acceptance.** `bootstrap/oracle/astdump.c` walks stage 0's tree with every build-decided branch parsed
+(`SyntaxParseAllBranches`, set only by the oracle) and prints each declaration and statement as its kind and span, then
+the diagnostics; `compiler/tools/dump.olang ast` prints the new tree the same way. `dump.olang roundtrip` writes each
+tree back as source (`compiler/tools/unparse.olang`: no parentheses added, a branch that had held diagnostics written
+as its own text), checks that the text holds the file's tokens, parses it again and requires the same tree.
+`compiler/tools/astdiff.sh` runs both over every `.olang` file of the repository - `make astdiff`, part of `make
+verify`, about 5 seconds once the tools are built. Normalized, and only this: each file's rows sorted (the trees hold
+the same nodes in different shapes); stage 0's diagnostics reduced to `error RULE LINE:COL` and each item's first; in
+the round trip, statement ends, a trailing comma before `)` or `]`, and the split of `<<`/`>>`/`>=`/`>>=` into single
+angles. Clean on all 1,260 files of the repository, study2's data (`big.olang`, the deep files up to 300,000 levels)
+and generated files nesting blocks, operands and statements of every kind at and around 20,000 levels: every syntax
+error of every `checks/cases` program has stage 0's rule and position. The modules' own tests (operators, list
+grammar, angle splitting, recovery, salvage, L21 on a 1 GB stack, held branches, the trait receiver) run under `make
+test`. Measured on `big.olang` (4.6 MB, the machine loaded): scanning 97-103 MB/s, scanning and parsing 41-44 MB/s,
+106-113 ms, against stage 0's tokenizer and parser at about 7 s.
+
+**Found on the way.**
+- **Stage 0's code generator crashed** on a conditional whose values are calls giving a run-time-length array value -
+  `w := lc(1) if k > 2 else lc(2)` with `lc` returning a `String`. `cgArmScope` resolved the arm's scope from the result
+  type's tag, which is the callee's scope variable and held by no frame here. A value array is copied into storage of
+  its own, so it is now built where the value as a whole lands. `checks/cases/condcallvalue` reads it back after a
+  churn.
+- **The oracle segfaulted on deep files** - stage 0's parser on the default 8 MB stack. It runs on a 1 GB thread now,
+  as the compiler's `main` does.
+- **Found, not fixed (stage 0, semantic.c, not minimized).** In `Parser.varDecl`, `a, b T,` in a constructor (a comma
+  where a field ends) returns `ast.Stmt.Var(span, ast.VarDecl(Array<NameId>(1, name), Array<Span>(1, sp), v.Ty, ...))`
+  from inside an `if` of a method whose result is borrowed from its receiver (`ast.Stmt&p`), `v` from a `try` call. Built
+  by stage 0, the two arrays came back holding garbage (the IR gave the constructor the `if` block's scope as `%here`),
+  so the last field's span was wrong. Moving the constructor call into a method of its own (`lastField`) gives the right
+  result. A small program of the same shape did not reproduce it, under `-s` either; semantic.c being other work's,
+  it is left for a fix there with this description.

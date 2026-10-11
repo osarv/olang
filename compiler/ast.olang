@@ -153,7 +153,7 @@ type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty
 type If struct(Cond Expr&, Then Branch&, Else Stmt&) {
     Cond
     Then
-    Else       # null, an If, or a Block
+    Else       # null, an If ("else if"), or an If with no condition: a plain else, its Branch holding its group
 }
 
 type Branch struct(Sp source.Span, Body Array<Stmt&>&, Group I64) {
@@ -217,8 +217,9 @@ type Stmt enum {
     Block(sp source.Span, body Array<Stmt&>&)
 }
 
-# a function, method, lambda, extern or trait method: receiver (null for none), name (0 for a lambda), signature, body
-# (null for an extern, a trait method, and a function whose body did not parse - declared by its signature alone)
+# a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
+# no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
+# function whose body did not parse - declared by its signature alone)
 type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body Array<Stmt&>&) {
     Sp
     Recv
@@ -263,7 +264,7 @@ type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool
     Name
     Params
     Extends
-    Body
+    Body       # null for a type whose declaration did not parse past its name - declared by its name alone
 }
 
 # a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch

@@ -12,6 +12,7 @@
 #include <string.h>
 #include <limits.h>
 #include <dirent.h>
+#include <pthread.h>
 #include "../token.h"
 #include "../syntax.h"
 #include "../errmsg.h"
@@ -72,8 +73,10 @@ static struct mod* loadMod(const char* path) {
     m->targets = ListInit(sizeof(struct mod*));
     ListAdd(&mods, &m);
     char* p = strdup(canon);
+    ErrMsgMuteStart(); //the file is tokenized again to be parsed, and says its lexical errors then
     TokenCtx tc = TokenizeFile(p);
     struct scanResult r = ScanTopLevelDecls(tc);
+    ErrMsgMuteEnd();
     ListAddList(&m->types, r.typeNames);
     for (int i = 0; i < r.imports.len; i++) {
         struct scannedImport* si = ListGetIdx(&r.imports, i);
@@ -170,24 +173,42 @@ static void lineCol(int at, int* line, int* col) {
 }
 
 //a token's [start, end) in the file. A string literal the parser joined with the ones after it (E11b) lives in a
-//buffer of its own: its span is that of the run of literals it was made from, found by its token id
+//buffer of its own: its span is that of the run of literals it was made from, found by where it starts or by its id
+//the index of the first token starting at or after at
+static int tokFrom(int at) {
+    int lo = 0, top = cur.nToks;
+    while (lo < top) {
+        int mid = (lo + top) / 2;
+        if (TokenGetStrStart(cur.toks[mid]) < at) lo = mid + 1; else top = mid;
+    }
+    return lo;
+}
+
 static bool tokSpan(struct token t, int* start, int* end) {
     if (t.type == TOK_STMNT_END || t.type == TOK_NONE) return false;
     int s = TokenGetStrStart(t);
-    if (s >= 0 && s <= cur.len) {
+    int i = -1;
+    if (t.type == TOK_STR_LIT && s >= 0 && s <= cur.len) {
+        i = tokFrom(s);
+        if (i >= cur.nToks || TokenGetStrStart(cur.toks[i]) != s || cur.toks[i].type != TOK_STR_LIT) i = -1;
+    } else if (s >= 0 && s <= cur.len) {
+        *start = s;
+        *end = s + TokenGetStrLen(t);
+        return true;
+    } else {
+        for (int k = 0; k < cur.nToks && i < 0; k++) if (cur.toks[k].tokId == t.tokId) i = k;
+    }
+    if (i < 0) {
+        if (s < 0 || s > cur.len) return false;
         *start = s;
         *end = s + TokenGetStrLen(t);
         return true;
     }
-    for (int i = 0; i < cur.nToks; i++) {
-        if (cur.toks[i].tokId != t.tokId) continue;
-        *start = TokenGetStrStart(cur.toks[i]);
-        int k = i;
-        while (k + 1 < cur.nToks && cur.toks[k + 1].type == TOK_STR_LIT) k++;
-        *end = TokenGetStrStart(cur.toks[k]) + TokenGetStrLen(cur.toks[k]);
-        return true;
-    }
-    return false;
+    *start = TokenGetStrStart(cur.toks[i]);
+    int k = i;
+    while (k + 1 < cur.nToks && cur.toks[k + 1].type == TOK_STR_LIT) k++;
+    *end = TokenGetStrStart(cur.toks[k]) + TokenGetStrLen(cur.toks[k]);
+    return true;
 }
 
 static void nodeSpan(struct syntax* s, int* lo, int* hi) {
@@ -198,6 +219,22 @@ static void nodeSpan(struct syntax* s, int* lo, int* hi) {
         if (!tokSpan(p->tok, &a, &b)) continue;
         if (*lo < 0 || a < *lo) *lo = a;
         if (b > *hi) *hi = b;
+    }
+}
+
+//the parser keeps no ">" closing a type-argument list in its tree, so a node ending with one would end a column early:
+//its span takes in the ">" and ">>" tokens that follow it with no space
+static void takeClosingAngles(int* hi) {
+    for (;;) {
+        int lo = 0, top = cur.nToks; //the first token starting at or after *hi
+        while (lo < top) {
+            int mid = (lo + top) / 2;
+            if (TokenGetStrStart(cur.toks[mid]) < *hi) lo = mid + 1; else top = mid;
+        }
+        if (lo >= cur.nToks) return;
+        struct token t = cur.toks[lo];
+        if (TokenGetStrStart(t) != *hi || (t.type != TOK_GRT && t.type != TOK_BTSFT_R)) return;
+        *hi = TokenGetStrStart(t) + TokenGetStrLen(t);
     }
 }
 
@@ -257,6 +294,7 @@ static void dump(struct syntax* s) {
         int lo = -1, hi = -1;
         nodeSpan(s, &lo, &hi);
         if (lo >= 0) {
+            takeClosingAngles(&hi);
             int l1, c1, l2, c2;
             lineCol(lo, &l1, &c1);
             lineCol(hi, &l2, &c2);
@@ -269,7 +307,7 @@ static void dump(struct syntax* s) {
     }
 }
 
-int main(int argc, char** argv) {
+static int oracleMain(int argc, char** argv) {
     const char* env = getenv("OLANG_STD");
     snprintf(stdDir, sizeof(stdDir), "%s", env ? env : "std");
     mods = ListInit(sizeof(struct mod*));
@@ -300,4 +338,25 @@ int main(int argc, char** argv) {
         free(cur.text);
     }
     return 0;
+}
+
+//the parser and dump() recurse over the program's nesting, so the oracle runs where the compiler does: on a thread with
+//a 1GB stack, reserved and touched only as it is used (stage 0's main.c)
+struct oracleJob { int argc; char** argv; int status; };
+static void* oracleThread(void* p) {
+    struct oracleJob* j = p;
+    j->status = oracleMain(j->argc, j->argv);
+    return NULL;
+}
+
+int main(int argc, char** argv) {
+    struct oracleJob job = { argc, argv, 1 };
+    pthread_attr_t attr;
+    pthread_t t;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, (size_t)1 << 30);
+    if (pthread_create(&t, &attr, oracleThread, &job) != 0) oracleThread(&job);
+    else pthread_join(t, NULL);
+    pthread_attr_destroy(&attr);
+    return job.status;
 }

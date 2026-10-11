@@ -1,0 +1,23 @@
+# check: run
+# E28: a conditional whose values are calls giving an array value - text here - is copied into storage of its own where
+# the conditional's value is built; the result type's tag is the callee's, which no frame holds (the compiler crashed)
+fn lc(n I64) String {
+    return $n ":" $(n + 1)
+}
+
+fn pick(k I64) String {
+    return lc(k) if k > 2 else lc(k * 10)
+}
+
+fn main() ? {
+    k := 3
+    w := lc(1) if k > 2 else lc(2)
+    assert w == "1:2"
+    assert pick(1) == "10:11" and pick(5) == "5:6"
+    churn := I64[0]
+    for i in range 1000 {
+        a := Array<I64>(64, i)
+        churn[0] += a[3]
+    }
+    assert w == "1:2"
+}
