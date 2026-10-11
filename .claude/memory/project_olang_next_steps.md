@@ -791,6 +791,12 @@ because what it finds about structure feeds the refactor.
   - The owner-passing loop is 1,223M instructions, below e3ded09's 1,441M.
   - A fifth review runs (/home/user/wt/rvown7 -> /home/user/review/own7).
   - Weekly 0.56 at 12:04 CEST.
+- 13:00 CEST: the fifth review (/home/user/review/own7) found one class, older than this round: F1, an in-place borrow
+  of an owned object's by-value part takes no loan. The cause is ownLoansIn's MEMBER/INDEX, which walks the base as
+  transient. It hits arguments, receivers, slices, views, for-in, spawn, and own-array elements, the last being
+  Vec<Plain>'s hazard. Everything else this round added held.
+  Sent to the own agent: the consumer decides, so a part borrowed in place is walked as a place. Since it only
+  tightens, phase 2a merges after this fix without a sixth full review, unless the agent reports a relaxation in it.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
