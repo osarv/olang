@@ -832,6 +832,13 @@ because what it finds about structure feeds the refactor.
   with gaps between.
 - 15:20 CEST: the outreach doc is filled: 14 targets and 8 letters ([[project-outreach]]). Its open questions are
   ledger QL.
+- Vec phase 1's review (/home/user/review/vec1) found six use-after-frees from two causes, both in relaxation 1
+  (borrowed own results, `ownResultRegionOf`):
+  - a declared-array result type (String, `type Ix Array<T>`) keys its loan by the nominal type, which a release of the
+    buffer type never meets (f1, f1b, f3, f3b). Fix: key by the buffer type underneath.
+  - a call through a function value or a Call adapter takes no loan (f2, f2b). Fix: such a function is never a value
+    (as O36 already does for owning parameters).
+  A fresh fix agent runs on wt-own (high effort); a follow-up soundness review comes before the merge.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
