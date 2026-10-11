@@ -718,6 +718,17 @@ because what it finds about structure feeds the refactor.
   The fuzzer found nothing before or after. A soundness review runs (/home/user/wt/rvown3 @ 079921e ->
   /home/user/review/own3). Merge only if it is clean. Usage: weekly 0.47 at 04:36 CEST, about 1.7%/h, far above the
   ~0.6%/h target. So after this review, leave a gap before phase 2b.
+- 05:30 CEST: phase 2a's review (/home/user/review/own3) found four bugs. Each was sent back to the own agent (afe0b23)
+  with the fix decided:
+  - F1 (use-after-free): a whole own array lent to a callee builds its elements in the buffer's region. Fix: an
+    own-array borrow is a split value, so O17/O17a apply.
+  - F2 (use-after-free): a call that keeps a borrowed copy does not extend the copy's loans. Fix: such a call is the
+    store it stands for, holding the copy's loans, and is refused where the holder cannot be followed.
+  - F3 (leak): owners for owning parameters, and constructor regions, are lost when a later argument leaves. Fix: hidden
+    owner slots registered for release.
+  - F4 (use-after-return): a destructor's owner locals are released through a dead stack slot. Fix: release them at
+    their block's exit.
+  A follow-up review runs before the merge.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
