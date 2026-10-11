@@ -97,3 +97,10 @@ At 15:40 CEST the same day the weekly window read 0.27 with status "allowed_warn
 used a quarter of the week, mostly on review-and-fix rounds of 2-3 agents. What is left (73% over ~158 h) allows less
 than one agent on average. So until about Monday: one agent at a time, gaps between, and reviews only for scope
 relaxations.
+
+**Speed over evenness (the user, 2026-10-11 ~16:00 CEST): "Using up the weekly limit faster than the entire week is not
+a problem in and of itself. Its only a problem if it lowers the effect/tokens ratio. Otherwise faster is better."** This
+supersedes the "one agent at a time, stay on the line" pacing above. Run as many agents in parallel as there is
+independent work that does not cost effect per token: no duplicated work, no merge-conflict churn (split by file/area),
+no agents queued idle on the verify slots, and the same quality bar (reviews before merging relaxations). Running out
+of the week early is fine; arm a send_later for just after the reset when it happens.

@@ -839,6 +839,10 @@ because what it finds about structure feeds the refactor.
   - a call through a function value or a Call adapter takes no loan (f2, f2b). Fix: such a function is never a value
     (as O36 already does for owning parameters).
   A fresh fix agent runs on wt-own (high effort); a follow-up soundness review comes before the merge.
+- 16:15 CEST: the user: faster is better as long as effect per token holds (feedback_usage_and_agents.md). Started
+  the port beside the Vec fixes: wt-portm1 (M1 scanner + oracle into bootstrap/oracle + OLANG parametrization) and
+  wt-portm2 (M2 diag/msgs + diagnostic goldens). Still P0: the runtime to std/runtime/runtime.ll - after the own fix
+  merges (it may touch bootstrap/runtime.c). Next in parallel when these land: M3 parser (needs M1+M2).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
