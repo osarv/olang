@@ -13,7 +13,7 @@ What the language means is `SPEC.md`; why is `CLAUDE.md` and `HISTORY.md`. The f
 | `semantic.c` | name resolution, type checking, generics, the scope checker (§8) |
 | `comptime.c` | the compile-time evaluator (K1), which is also `-i` |
 | `codegen.c` | LLVM IR for a module |
-| `runtime.c` | the runtime: the LLVM IR every object carries beside its module's code |
+| `runtime.c` | reads the runtime (`std/runtime/*.ll`): fills it in for a build, and derives what a module carries of it |
 | `errmsg.c` | diagnostics, and `-e RULE` |
 | `main.c` | the driver: modes, flags, objects, clang and the link |
 | `util.c` | strings, lists, running programs |
@@ -26,8 +26,8 @@ make bootstrap  # build/stage0, the same sources at -O2: the compiler a bootstra
 ```
 
 Both need gcc, libffi and libdl; the compiler then needs clang (18 or later) on `PATH` to build programs. The binary
-finds the standard library at `<binary>/../std` (or `$OLANG_STD`) and the specification at `<binary>/../SPEC.md`, so
-it stays in `build/`.
+finds the standard library at `<binary>/../std` (or `$OLANG_STD`) - the runtime's IR included, `std/runtime` - and
+the specification at `<binary>/../SPEC.md`, so it stays in `build/`.
 
 ## Fixes only, once the port starts
 

@@ -3826,9 +3826,9 @@ between threads without a lock, say — must annotate itself, or correct code wi
 share (§8 O8b) is guarded by a `pthread` mutex, which is intercepted like any other, so storage one thread reclaimed
 and another reuses is ordered for the detector exactly as it is for the program.
 
-`-r` is a whole-build mode rather than a per-file one, because the runtime (§8.7) is emitted
-`linkonce_odr` into every object: mixing an instrumented object with an uninstrumented one would leave the
-linker free to keep either copy. An instrumented object is therefore a distinct artifact from a clean one
+`-r` is a whole-build mode rather than a per-file one: every object of a program and the runtime's (§8.7, B3)
+are instrumented together, since an uninstrumented one would hide what it does from the detector, and a module's
+object inlines parts of the runtime. An instrumented object is therefore a distinct artifact from a clean one
 (§10 B4) and is named accordingly.
 
 Two limits are the detector's own. The handler `os.OnCrash` installs is never instrumented, since it may run while
@@ -5746,7 +5746,10 @@ identity and the real source path of every module it is compiled against - its o
 prelude's - so an object is only ever taken for the build of the files it was built from: two modules whose readable
 names coincide (`geom/rect`, `geom_rect`), two roots of one file name outside the working directory, and one module
 compiled against two commits of a remote repository (M23a's checkouts are different directories) or two standard
-libraries each have objects of their own, whatever the files' times are.
+libraries each have objects of their own, whatever the files' times are. The runtime (§8.7) is one object of its own,
+compiled from the standard library's `std/runtime` for the build's target and modes and linked into every program
+once; it is named by a hash of what it is compiled from, so a build reuses it exactly when that is unchanged, and every
+module's object name carries that hash too, since an object holds the runtime's declarations and the parts it inlines.
 
 **B3a.** `-t <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
 root module (transitively pulling in its own imports, exactly as `-b` would) and runs every

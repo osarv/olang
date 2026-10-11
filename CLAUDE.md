@@ -139,7 +139,8 @@ Go through this for every change to what olang means - a rule added, revised or 
   worked: symbols are mangled from the module's **identity** (for a local module the same base name M4
   derives an import alias from), never from its position in the current compilation's module list - an
   index means nothing to a separately-compiled object; and the runtime, which no single module owns, is
-  emitted by every object as `linkonce_odr`, leaving the linker to keep one. **Initialization order was wrong until
+  emitted by every object as `linkonce_odr`, leaving the linker to keep one (since 2026-10-11 it is `std/runtime/*.ll`,
+  compiled once per build configuration and linked once - the entry near the end). **Initialization order was wrong until
   2026-09-29 (B5a)**: the module list is in *discovery* order - a module is registered before its imports
   load, which is what lets a cycle close - so it put the root first, and a root's global initializer read
   its imports' globals before they were set (0). The init calls now follow a post-order walk of the import
@@ -5119,6 +5120,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   `LocalBuildScopes`, the predicate own's region loans read - a call with every one its bindings put something in).
   Plain functions, O17's region facts and `calleeMayKeepArg` were checked for the same gap: obligations and O17 already
   saw such builds.
+- **The runtime is `std/runtime/*.ll`, compiled once and linked once (B3, B2b, X7, 2026-10-11; DESIGN.md P0, details
+  mine).** `runtime.ll`, `san.ll` (`-s`) and `dyncall.ll` (S3) beside std, filled in for a build: `@@NAME@@` C-library
+  facts from a per-architecture table checked against the compiler's own headers, `; @if san|ARCH|!...` /
+  `; @else` / `; @end` lines, comments copied as written. Compiled into `build/olang_runtime.<hash>[.mode].o`, named
+  by its IR and flags, so it is current by construction. A module carries the derived declarations and, as
+  `available_externally`, every body marked `alwaysinline`/`inlinehint` (six) - without them the per-module optimizer
+  lost up to 7x (a List walk stopped vectorizing); with them every benchmark is equal or better (binary-trees -23%,
+  text -15%, push -6%). Every object's name hashes the runtime's text (an edit rebuilds them). Per object 65 KB less IR,
+  bitcode 6.8 -> 2.4 MB for the corpus, a clean `-b` -22% CPU, a clean `-t` -15%.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

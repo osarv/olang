@@ -349,7 +349,8 @@ static int floatShortestByTries(char* out, size_t cap, double v, enum floatKind 
 
 //E11a: the Eisel-Lemire powers of ten - for 10^e, e from -348 to 347, the top 128 bits of its binary mantissa rounded
 //down (normalized, the top bit set), high half then low; Go's strconv.detailedPowersOfTen. Schubfach's 126-bit powers
-//are made from them, here and in the runtime's "@__olang_pow10m", which codegen writes out from this very table
+//are made from them, here and in the runtime's "@__olang_pow10m" (std/runtime/runtime.ll), written out from this very
+//table and held to it by the compiler whenever it reads the runtime (runtime.c, rtCheckPow10)
 const unsigned long long FloatPow10[1392] = {
     0xFA8FD5A0081C0288ULL, 0x1732C869CD60E453ULL, 0x9C99E58405118195ULL, 0x0E7FBD42205C8EB4ULL,
     0xC3C05EE50655E1FAULL, 0x521FAC92A873B261ULL, 0xF4B0769E47EB5A78ULL, 0xE6A797B752909EF9ULL,
