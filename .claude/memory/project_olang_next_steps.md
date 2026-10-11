@@ -729,6 +729,15 @@ because what it finds about structure feeds the refactor.
   - F4 (use-after-return): a destructor's owner locals are released through a dead stack slot. Fix: release them at
     their block's exit.
   A follow-up review runs before the merge.
+- 07:35 CEST: F1-F4 are fixed on wt-own (67cb5b1, verified). The fuzzer found 41 problems in 120 programs on 079921e
+  and 0 in 400 after the fix. Where the agent departed from my brief, all safer:
+  - F2 holds loans to the end of the destination's block, not its last use, because the destination's storage may have
+    other names.
+  - Calls through function values are not refused (T22a).
+  - F1's diagnostic names forms that compile: `fill(b)` and `b.names = f(take b.names)`.
+  New over-rejection: a callee that only permutes an own array (Reverse, Sort, swap) is refused by O17's syntactic
+  reading. Vec<String&>.Sort will need the precise reading (docs/own.md 14.1); take it with Vec.
+  A follow-up review runs (/home/user/wt/rvown4 @ 67cb5b1 -> /home/user/review/own4). Weekly 0.50 at 07:30 CEST.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
