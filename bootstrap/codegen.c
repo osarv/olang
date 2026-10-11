@@ -3569,8 +3569,13 @@ static char* cgOwnHoldSlot(struct cgCtx* ctx, bool arr, char* v) {
         oldObj = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", oldObj, old);
     }
+    char* left = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = icmp ne ptr %s, null\n", left, oldObj);
+    fprintf(ctx->fnOut, "  br i1 %s, label %%hold.left.%d, label %%hold.fill.%d, !prof !{!\"branch_weights\", i32 1, i32 2000}\nhold.left.%d:\n",
+            left, id, id, id);
     fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, arr ? "zeroinitializer" : "null", slot);
     fprintf(ctx->fnOut, "  call void @__olang_own_free(ptr %s)\n", oldObj);
+    fprintf(ctx->fnOut, "  br label %%hold.fill.%d\nhold.fill.%d:\n", id, id);
     if (v) fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, v, slot);
     return slot;
 }
@@ -5552,17 +5557,44 @@ static bool cgRunsCode(struct operand* op) {
     return false;
 }
 
-//F3/N3: whether evaluating op may leave the expression before what was made beside it is taken - it runs code
-//(cgRunsCode), or holds an operation that fails under "try" (a checked index, slice, division, conversion, "as"), or a
-//catch clause, which may break, continue or return
-static bool cgMayLeave(struct operand* op) {
-    if (!op) return false;
-    if (op->isTried || op->checkRoot || op->catchClauses.len || cgRunsCode(op)) return true;
-    if (cgMayLeave(op->callee)) return true;
-    for (int i = 0; i < op->args.len; i++) if (cgMayLeave(*(struct operand**)ListGetIdx(&op->args, i))) return true;
-    for (int i = 0; i < op->chainOperands.len; i++) if (cgMayLeave(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
-    return false;
+//F3/N3/own5 F3: whether evaluating op may leave the expression before what was made beside it is taken. A whitelist:
+//it cannot only where it is built from literals, "null", reads of locals, parameters, globals and fields, unchecked
+//numeric operators and comparisons on primitives - nothing that runs code, nothing a check guards (a slice's bounds, an
+//array's length, "as", which abort a program but abandon a test, S18/P1d), nothing under "try", no catch clause.
+//Anything else holds the owner in its slot: one store more for such a call
+static bool cgPrimitiveOperand(struct operand* op) {
+    return op && !op->type.structMAlloc && (TypeIsNumeric(op->type) || op->type.bType == BASETYPE_BOOL);
 }
+static bool cgCannotLeave(struct operand* op) {
+    if (!op) return true;
+    if (op->isTried || op->checkRoot || op->catchClauses.len || op->isAtCall || op->callee || op->comprBody.len) return false;
+    if (op->isNullLiteral) return true;
+    switch (op->opType) {
+        case OPERATION_NONE:
+            return op->isLiteral && !op->args.len;
+        case OPERATION_READ_VAR:
+            return true;
+        case OPERATION_MEMBER: case OPERATION_LEN: //a field read - through a reference too: a null traps (T2b), it never leaves
+            return op->args.len == 1 && cgCannotLeave(*(struct operand**)ListGetIdx(&op->args, 0));
+        case OPERATION_INDEX: //unchecked (E16)
+        case OPERATION_ADD: case OPERATION_SUB: case OPERATION_MUL: case OPERATION_DIV: case OPERATION_MOD:
+        case OPERATION_MINUS: case OPERATION_NOT: case OPERATION_BTWSE_INV:
+        case OPERATION_BTWSE_AND: case OPERATION_BTWSE_OR: case OPERATION_BTWSE_XOR: case OPERATION_BTSFT_L: case OPERATION_BTSFT_R:
+        case OPERATION_AND: case OPERATION_OR: case OPERATION_XOR:
+        case OPERATION_LST: case OPERATION_LSE: case OPERATION_GRT: case OPERATION_GRE: case OPERATION_EQ: case OPERATION_NEQ:
+        case OPERATION_NUMERIC_CONVERT:
+            for (int i = 0; i < op->args.len; i++) {
+                struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+                //(an operator on anything but primitives may run a method - "==" a declared Eq, E10a)
+                if (op->opType != OPERATION_INDEX && !cgPrimitiveOperand(a)) return false;
+                if (!cgCannotLeave(a)) return false;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+static bool cgMayLeave(struct operand* op) { return !cgCannotLeave(op); }
 
 //E11a/E11b: a join's operands, evaluated left to right - each to its value, as any expression's is - before any piece
 //is rendered. An array is held by reference (T7b) and a reference names an instance, so what those hold is read when

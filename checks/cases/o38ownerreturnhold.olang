@@ -1,0 +1,27 @@
+# check: fail error[O38, O26a]: this result reaches the owner value local 'v' by reference
+# O38: ...nor a value holding one (own5 F2)
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Hold struct(x Outer&) {
+    x
+}
+fn mk() Hold {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    h := Hold(v)
+    return h
+}
+fn main() ? {
+    h := mk()
+    println($h.x.o.k)
+}

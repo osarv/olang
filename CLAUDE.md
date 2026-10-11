@@ -4982,6 +4982,18 @@ and literals made only of such, never existing storage anywhere in it) - it is
   fields are registered on its frame until assembly takes them, so a failing constructor releases them. **M1**: a hold
   in a loop condition registers once per opening of its scope (`{ owner, registered }` slot), flat over 4M turns.
   Scope fuzzer's own mode writes all six shapes: 67cb5b1 67 findings in 100 own seeds, now none in 300.
+- **own5: derived fields, references to an owner value local, every way out of a test (§8.8 O38, O39, O35, O26a,
+  O23a, S18, 2026-10-11; the coordinator's decisions, details mine, docs/own.md section 16).** **F1**: a callee keeping
+  an `&p` field of its argument (read at O23a's derived scope) escaped O38 - a derived scope variable now counts as its
+  parameter wherever "can this callee keep this argument" is asked (`scopeIsParams`). **F2**: an owner value local O26a
+  moved was released at the return under a reference to it - a reference to an owner value local's storage is a borrow
+  of that owner (a loan on everything it owns, confined as a borrowed copy, never returned: the error names `fn f() T`,
+  where `return v` moves the owner); the owner releases nothing through its own name while it is used, a release through
+  the borrow is its own. O26a still moves owner value locals (the move form needs it) - the return rule is what closes F2;
+  owners made from such a borrow are held to O34's reach, destructors refused. Found on the way: the own walk read a
+  stale `obligUnsettled`, and a call's result took every argument's loans - `a.Clone()` was refused. **F3**: `cgMayLeave`
+  is a whitelist (literals, reads, unchecked operators on numbers); measured +9% on a loop of owner-passing calls, ~65
+  instructions per newly held call. Scope fuzzer: e3ded09 52 findings in 100 own seeds (all three shapes), now none in 300.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

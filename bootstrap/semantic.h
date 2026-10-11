@@ -476,6 +476,8 @@ struct var {
     int ownCopyRootParam;
     struct var* ownCopyRootLocal;
     struct var* ownCopyFrom; //...the variable it was copied from, for a message
+    struct list ownValueReads; //O38 (own5 F2): an owner value local's own fields, read once as it is declared - what a
+                               //reference to its storage borrows (operand*, checker only: never evaluated)
     struct ownEffects* ownEff;  //O39: on a function, what its body may release (settleOwnEffects), NULL for nothing
     int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
@@ -770,6 +772,8 @@ struct operand {
     bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
     bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
     bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
+    struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
+                                //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
     struct list ownCopyReads; //O32/O38: a borrowed copy's initializer - a read of each own field of what it copies, made
                               //borrows, whose loans the copy holds (checker only: never evaluated)
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in

@@ -17411,6 +17411,42 @@ test "O35: a destructor's own owner locals are released as it returns - every de
     assert sbChurn() > 0
     assert OwnDtorLocals == 1000 and OwnDropped == 2000
 }
+type OwnPart struct(k I64) {
+    k
+}
+type OwnNamed struct() {
+    cur own mut OwnPart&
+    name String& = ""
+}
+#(own5 F2: returned by value, the owner moves - text built into its own storage lives where O26a put it, the result)
+fn ownNamedOf(k I64) OwnNamed {
+    v := OwnNamed()
+    v.cur = OwnPart(k)
+    v.name = "n" $k
+    return v
+}
+fn ownNamedSum(k I64) I64 {
+    x := ownNamedOf(k)
+    return x.cur.k * 100 + x.name.Len()
+}
+OwnNamedBaked I64 = ownNamedSum(7)               # K2: computed while compiling, as the run time computes it
+fn ownBorrowedRead(k I64) I64 {
+    v := OwnServer()
+    v.cur = OwnConn(k)
+    r mut OwnServer& = v                         # a borrow of the owner: released through, not around, while it is used
+    r.cur = OwnConn(k + 1)
+    t := r.cur.fd
+    v.cur = OwnConn(k + 2)                       # r is not used after: the owner may release again
+    return t * 10 + v.cur.fd
+}
+test "O38, O26a: an owner value local returned by value moves its owners, and a borrow of one releases through itself" {
+    OwnDropped = 0
+    assert ownNamedSum(7 * OwnRun) == OwnNamedBaked and OwnNamedBaked == 702
+    x := ownNamedOf(3 * OwnRun)
+    assert sbChurn() > 0
+    assert x.cur.k == 3 and x.name == "n3"
+    assert ownBorrowedRead(4 * OwnRun) == 56 and OwnDropped == 3
+}
 fn ownViaIndex(a Array<I64>&, i I64) I64 ? { return ownTake2(OwnConn(30), try a[i]) }
 fn ownViaDiv(z I64) I64 ? { return ownTake2(OwnConn(31), try (10 / z)) }
 fn ownViaSlice(a Array<I64>&, n I64) I64 ? { return ownTake2(OwnConn(32), (try a[1:n]).Len()) }

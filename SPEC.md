@@ -5185,8 +5185,8 @@ then a release under that loan (O39). So owners form trees, and each object is r
   is never the scope being closed for them (C9a);
 - it is an owner made, taken or given for an owning parameter (O36), or the region made for an object whose constructor
   has not run yet, and an argument evaluated after it leaves the expression first - an error propagated, a checked
-  operation under `try` failing (R20), a clause's `break`, `continue` or `return`: the call is never made, and it is
-  released where the expression is left;
+  operation under `try` failing (R20), a clause's `break`, `continue` or `return`, or, while a test runs, a failed check
+  or assert abandoning the test (S18, P1d): the call is never made, and it is released where the expression is left;
 - it is a constructor's own field (C2a) and the constructor fails before its instance is assembled - by its own
   `error` (R3) or a `try` it does not catch: until then the constructor's frame holds it, as an owner local, and from
   then on the instance does;
@@ -5258,8 +5258,9 @@ made - the loan lasts to the end of its block. Anything that would keep a value 
 else is a compile-time error saying to keep a `Clone()` of it instead:
 
 - an argument a call may keep beyond the call - in another argument, its receiver or a collection (`l.Push(b)`,
-  `m.Put(k, b)`, `put(g, b)`, `g.set(b)`), what the callee's body requires of their scopes saying so (O10b) - or one
-  given to a call whose body is not known (a generic one, an `extern`), a task's call that may keep it among them;
+  `m.Put(k, b)`, `put(g, b)`, `g.set(b)`), what the callee's body requires of their scopes saying so (O10b), a field of
+  the argument read at its derived scope (O23a) counting as the argument - or one given to a call whose body is not
+  known (a generic one, an `extern`), a task's call that may keep it among them;
 - a store through a reference, into a handle, or into a global or a capture;
 - a spawn target given a call's result derived from it (P1g);
 - an owner made from it or holding it - an object built into an own slot, an owned result (O37), an owner given to an
@@ -5267,8 +5268,22 @@ else is a compile-time error saying to keep a `Clone()` of it instead:
 - a lambda capturing it, kept by any of the above.
 
 A borrow of an owned object is confined to its region already (O33). What a call keeps in its result - a constructor's
-instance, a borrowed result - is held by the local given it, as any value derived from a loan is, and through a function
-value nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
+instance, a borrowed result - is held by the local given it, as any value derived from a loan is: a call's result
+derives from an argument only where the callee may keep that argument in its result (O26a). Through a function value
+nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
+
+A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference
+(E12c - given to a reference local, a reference parameter, a receiver or a field) or sliced (E16a) - is a borrow of
+that owner: a loan on every object it owns, confined to this function's locals as a
+borrowed copy's is, and held by them to their last use. While it is, the owner releases and moves nothing through its
+own name (O39); what is released through the borrow itself, or through any other reference, is the borrow's, read
+through the owner's own slots - which a release leaves `null` or holding the new owner - never freed memory. An
+argument's is used by its call alone, once every argument is evaluated, and meets no release made among them
+(`stash(s, take s.cur)`). It is never **returned**, nor anything holding it: the owner's objects are released as its
+block ends (O35), and its storage lives past that only where O26a puts it in the result scope, so such a return is a
+compile-time error naming the owned value result - `fn f() T`, where `return v` moves the owner (O37). An owner made
+from it is held to O34's reach, as one holding any reference to a block's storage; a value with a destructor (C9),
+which reads it as its scope closes, is refused. *(Implemented
 conservatively: a local holding a loan uses it wherever it is read after in its block, anywhere in a loop enclosing
 both inside its scope, and in deferred code, whichever path is taken.)*
 

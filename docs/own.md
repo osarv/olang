@@ -1189,3 +1189,101 @@ left by a checked operation propagated out of a helper or caught by a clause (N3
 making their own fields (N6). On 67cb5b1, own seeds 4200-4299: 355 scenarios run, 845 refused, **67 findings**, every
 one holding an own4 shape (N1 2, N2 26, N3 3, N4 17, N5 28, N6 1; some hold two). Fixed, own seeds 4000-4299: 765 run,
 2835 refused, **no findings**; mixed seeds 100-139 and the checks scenario's seeds: none.
+
+## 16. own5: derived fields, references to an owner value local, every way out of a test (2026-10-11)
+
+The review of own4's fixes (`/home/user/review/own5`, at e3ded09) found that confinement held almost everywhere, and
+reproduced three defects, each also present on 079921e.
+
+### 16.1 F1: a callee keeping an `&p` field of its argument (O38, O23a)
+
+`w := W(b)` with `W` holding `f Outer&o = o` (an `&p` field), then a callee given `w` that keeps `w.f` -
+`l.Push(w.f)` in a function taking `w` by value, in a method on it, or `g.x = w.f` into another argument. The field is
+read at a **derived** scope variable of the parameter (O23a), and the obligation "derived outlives `l`'s scope" was not
+attributed to the parameter: `ownKeepDests` and `calleeMayHoldArg` matched only the parameter's own variable.
+
+**Decided** (the coordinator's call): a derived scope variable counts as its parameter, at any depth, wherever "can
+this callee keep this argument" is asked. One predicate, `scopeIsParams`, now answers it for `ownKeepDests` (and the
+destination side: kept into another argument's derived scope is kept into that argument), `calleeMayHoldArg`,
+`calleeMayKeepArg` (O26a's question too), O17's `paramTransient` and the O10c note's `argForScope`. O17's region facts
+need nothing: a store or hand-out reaching a derived region is resolved exactly by each caller from the argument's own
+bindings (O23a) - nothing there asks which parameter an obligation names. Every other place matching an obligation
+against a variable compares it with the result scope, not a parameter.
+
+### 16.2 F2: an owner value local O26a moved, released at the return (O38, O26a, O35, K1)
+
+`fn mk3() mut Outer& { v := Outer(); v.o = Inner(3); return v }`, and `h := Hold(v); return h`: O26a puts `v`'s storage
+in the result scope, but its owners are released as its block ends, so the caller held nulled slots (a null trap at run
+time) while the evaluator, which gives a release no meaning, baked 3 and decided the assert.
+
+**Decided** (the coordinator's call; the mechanism mine): a reference to an owner value local's storage - borrowed by
+E12c (a reference local, a reference parameter, a receiver, a field), or sliced - is a borrow of that owner: a loan on
+every object it owns, made from reads of its own fields taken once as it is declared (`ownValueReads`) and marked on the
+borrowing operand (`ownValueBorrow`), confined as a borrowed copy's is (O38), and never returned. A return reaching it -
+the reference itself, or anything holding it - is `ERR_OWN_RETURNS_OWNER_BORROW`, naming the owned value result (`fn
+mk3() Outer`, where `return v` moves the owner). Its loans meet releases as the borrow it is, not as a copy: the owner
+releases nothing through its own name while a local holding one is used after (`r mut Outer& = v; v.o = x; r.o` is
+O39's error), but a release through the borrow itself, or any other reference, is the borrow's - what it reads it reads
+through the owner's slots, `null` or the new owner after a release, never freed memory - and an argument's loan is used
+by its call alone, once every argument is evaluated (`ownStash(s, take s.cur)` stays legal).
+
+**Two places the build departs from the decision, and why.** (1) *O26a still moves an owner value local*: the decision
+said it never should, but the move form it names as the fix needs it - `fn mk3() Outer { v := Outer(); v.name = "n" $k;
+return v }` builds `v.name`'s text into `v`'s storage, which is in the result scope only because O26a put it there; left
+in the block, that return is O26's error. What O26a's move made unsound is a reference reaching past the release, and
+the return rule refuses every one. The same rule covers `h := Hold(v); return h` without excluding `h` from O26a - which
+also keeps the error the one that names the fix, instead of O26's "returns a local's storage". (2) *Owners made from such
+a borrow*: an owner made from a reference to an owner value local's storage is held to O34's reach, as one holding any
+reference to a block's storage is, not refused outright as one made from a borrowed copy is (a copy of the owner's
+pointers would dangle once it releases; a reference reads through its slots). Refusing it would refuse the corpus's
+`OwnArrHolder(x, h)`, whose constructor moves `h.cur` out (`ctorHeld` cannot tell a moved owner from a kept argument). A
+value with a destructor stays refused - which is what "a destructor-bearing holder counts as a use at its block's end"
+asks for, in both declaration orders.
+
+**Found on the way**: the own walk asked `calleeMayKeepArg`/`calleeMayHoldArg` with `obligUnsettled` still set on every
+function that had been in a call cycle while bodies were checked, so such a callee "might keep" anything - `a.Clone()` on
+an owner value local was refused. The walk runs after every obligation is known (`ownObligationsKnown`). And a value
+derived from a call now carries only what the callee may keep in its result (`ownKeptOnly`): a holder or a confined
+value took every argument's loans before, so `c := a.Clone()` held a loan on `a`'s buffer (O39 on the next `a = ...`).
+
+### 16.3 F3: an owner held in a register past a guaranteed check, inside a test (O35, S18, P1d)
+
+`eat(Res(1), a[lo:hi])`, `eat3(Res(2), e as E.A)`, `eat(Res(3), Array<I64>(n))` inside `test` blocks: the slice, the
+`as` and the array length fail a guaranteed check, which outside a test aborts the process but inside one abandons the
+test (S18) - and the owner, held in no scope, was never released.
+
+**Decided** (the coordinator's call): `cgMayLeave` is a whitelist - an argument cannot leave only if it is built from
+literals, `null`, reads of locals, parameters, globals and fields (and an array's length), unchecked numeric operators
+and comparisons on primitives, and unchecked indexing; anything else holds the owner in its slot. **Measured** (callgrind,
+`-a x86-64-v3`, 1M turns of four calls each giving an owner made in place, two of them now held - a slice and an `as`
+argument): 1,441M instructions on e3ded09, 1,570M now, +9%: about 65 instructions per newly held call, 42 of them the
+registration on the loop body's scope (made once per opening of the scope, M1) and the rest the slot and its release at
+the close. Calls whose later arguments the whitelist admits pay nothing; the leftover release is skipped inline where
+the slot is empty (it was a call each time). Outside a test a guaranteed check ends the process, so there an
+expression is left only by `try`, a catch clause or a clause of a match value: holding for anything else buys
+correctness in tests alone, at these instructions in every build. Holding for the whitelist only in test builds would
+make it free again outside them - recorded, not done.
+
+### 16.4 Tests and the fuzzer
+
+`checks/cases`: `o38derivedvalue`, `o38derivedmethod`, `o38derivedfield` (F1), `o38ownerreturnref`,
+`o38ownerreturnhold`, `o38ownerrefstored` (the review's n1v), `o38ownerrefpush`, `o39ownerref` (F2) - every one
+compiles on e3ded09. `checks/fixtures/ownleave/ownabort.olang` (F3): five tests abandoned past an owner held for a call,
+a constructor's region and a moved owner, then one asserting every owner made was released - `-t` and the test binary
+under valgrind, both in the `ownleave` scenario (e3ded09: `assertion failed`). shared.olang unchanged, 733 tests; the
+review's F2 move form bakes and runs the same (`baked 10 run 10`, `-i` and `-s` agreeing).
+
+The scope fuzzer's own mode writes the shapes: `own5Op` (F1's three keeps through an `OW` field, F2's two returns as
+helpers of their scenario), and in programs with destructors test blocks with some of F3's five shapes, run by `-t -d -s`
+and checked by their last test - the harness's first test-mode check. On e3ded09, own seeds 7000-7099: 280
+scenarios run, 920 refused, **52 findings**, every one an own5 shape (F1 21, F2 14, F3 21 - by its tests; some programs
+hold two). Fixed, own seeds 7000-7299: 775 run, 2825 refused, **no findings**; mixed seeds 100-139 and the checks
+scenario's seeds: none.
+
+### 16.5 The next phase's first items
+
+- **A borrowed result of an own field through the receiver** - `fn (v Outer&) First() Inner&v { return v.o }`,
+  `View() Array<I64>&v { return v.buf }` - is O10's error today, with or without `mut`. `Vec<T>.View()` needs it.
+- **O17's precise reading for `Sort`** (section 14.1): a callee only permuting a split value's elements is refused.
+
+Both go with the `Vec<T>` phase, each with a soundness review.

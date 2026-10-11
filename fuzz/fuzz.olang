@@ -326,7 +326,14 @@ fn scopeSeed(seed I64, dir String&) {
         }
         bst := sh(dir, "timeout 120 ./build/p > i.txt 2> ierr.txt")
         bOut := read(dir, "i.txt")
-        if st == 0 and bst == 0 and sOut == bOut and sOut.Contains("\ndtors 0\n") { return }
+        if st == 0 and bst == 0 and sOut == bOut and sOut.Contains("\ndtors 0\n") {
+            #own5 F3: its test blocks, if it has any, abandon tests past owners held for a call - each must be released
+            if not read(dir, "p.olang").Contains("\ntest \"") { return }
+            sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -t -d -s p.olang > t.txt 2>&1")
+            if read(dir, "t.txt").Contains("ok - every held owner was released") { return }
+            scopeFinding(dir, seed, -1, "a test abandoned past an owner held for a call left it unreleased", read(dir, "t.txt"))
+            return
+        }
         if st == 0 and bst == 0 and sOut == bOut {
             scopeFinding(dir, seed, -1, "a destructor did not run (made and destructed differ)", sOut)
             return

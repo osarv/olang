@@ -323,6 +323,7 @@ struct type;
     X(ERR_SLICE_SPLIT_VALUE,            "O17a",  "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") \
     X(ERR_OWN_BORROW_KEPT_BY_CALL,      "O38",   "this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead") \
     X(ERR_OWN_BORROW_STORED,            "O38",   "this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead") \
+    X(ERR_OWN_RETURNS_OWNER_BORROW,     "O38, O26a", "this result reaches the owner value local '%S' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('%t'), where 'return %S' moves it") \
     X(ERR_OWN_BORROW_IN_OWNER,          "O38",   "this value borrows an own object, and an owner, or a value with a destructor, would hold it past its loans - make it from a Clone() instead") \
     X(ERR_OWN_ARRAY_LENT_STORES,        "O17, O33", "an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is - lend it what holds the array, or hand it the array as an owner ('b.names = f(take b.names)')") \
     X(ERR_BORROW_SPLIT_VALUE,           "O17a",  "this value's references live where its own storage does not, so it is not held by reference - use the value itself") \

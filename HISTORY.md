@@ -15306,3 +15306,45 @@ version used the fuzzer's holder, whose own arrays of `mut` references make a bo
 refuses to lend at all, so most shapes never reached the own walk; and N3's first version caught its checked operation
 with a clause, which F3 already held for. On 67cb5b1, own seeds 4200-4299 give 67 findings, every one holding an own4
 shape; fixed, own seeds 4000-4299 give none.
+
+### own5: derived fields, references to an owner value local, every way out of a test (§8.8 O38, O39, O35, O26a, O23a, S18, 2026-10-11)
+
+The third review of the own work (`/home/user/review/own5`, at e3ded09) found confinement holding almost everywhere and
+three defects, all present on 079921e too. The coordinator decided each; docs/own.md section 16 has the details.
+
+**F1 - a derived field kept.** O23a reads a field of a parameter at a scope variable of its own, standing for where the
+argument bound that field - so a callee keeping `w.f` records an obligation on that derived variable, and the questions
+"can this callee keep argument i" compared obligations with parameter i's own variable only. One predicate
+(`scopeIsParams`) now says whether a scope variable is a parameter's, its own or derived from it, and every such question
+asks it: the keep destinations, both keep predicates, the transient-parameter test and the O10c note. O17's region facts
+were checked and need nothing: they are keyed on regions, and a derived region is resolved by each caller exactly.
+
+**F2 - a reference past the release.** An owner value local's owners are released as its block ends; O26a may put its
+storage in the result scope; a reference to that storage returned, or held by a returned value, then outlived the
+release - a null trap at run time, while the evaluator, which gives a release no meaning, baked the value. The decision
+was to make such a reference a borrow of the owner, confined, and to stop O26a moving the owner. The first half was
+built as decided: the owner's own fields are read once as it is declared, and every operand borrowing its storage
+(E12c, a slice) carries a loan on those reads, confined like a borrowed copy's, with a new rule that a return reaching it
+is refused - naming the owned value result as the decision asked. The second half was not: the move form the error
+recommends (`fn mk3() Outer`) needs O26a whenever the owner holds text or anything else built into its own storage, and
+once nothing reaching the storage by reference can be returned, the move is harmless. Building the loans as decided
+also showed how they meet releases. As a copy's would, they refused `ownStash(s, take s.cur)` and every release through a
+`Hold` given the owner; but a reference reads through the owner's slots, so a release only changes what it sees, never
+frees what it reads. The loans therefore meet only releases made through the owner's own name, not releases through the
+borrow itself or through an argument evaluated beside it (Rust's two-phase borrows). That is what `r mut Outer& = v;
+v.o = x; r.o` - refused - and `r.o = x` through the borrow - allowed - show. And owners made from such a borrow are held
+to O34's reach rather than refused: the corpus's `OwnArrHolder(x, h)` moves an owner out of `h`, which `ctorHeld` cannot
+tell from keeping `h`. Two latent imprecisions surfaced: the own walk still saw `obligUnsettled` on functions once in a
+call cycle (it runs after every obligation is known), and a value made by a call took the loans of every argument, not
+only of those its callee may keep in its result - together they made `c := a.Clone()` hold `a`'s buffer.
+
+**F3 - the next entry of a list.** `cgMayLeave` listed what can leave an expression, and each review found the next
+entry; a guaranteed check (a slice's bounds, `as`, an array's length) aborts a program but abandons a test. It is a
+whitelist now: literals, `null`, reads, unchecked operators on numbers. The cost is real, not one store: about 65
+instructions per call that newly holds, most of it registering the hold on its scope once per opening - +9% on a loop
+of nothing but owner-passing calls with a slice or `as` after the owner. Outside tests only `try` and clauses leave an
+expression, so holding by the whitelist in test builds alone would cost production nothing; recorded.
+
+**Fuzzer.** `own5Op` writes F1's and F2's shapes, and programs with destructors carry test blocks with F3's, run by
+`-t -d -s` - the harness's first test-mode check. On e3ded09, own seeds 7000-7099 give 52 findings, every one an own5 shape;
+fixed, own seeds 7000-7299 give none.

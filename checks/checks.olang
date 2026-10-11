@@ -1532,6 +1532,9 @@ fn ownleave(r mut report&) ? Failed {
                           " && cmp -s s.txt ownleave.want")) == 0, "ownleave -s", dir)
     try r.expect(sh(dir, ("\"$OLANG\" -b -d ownleave.olang > out.txt 2>&1 && ./build/ownleave.debug > d.txt 2>&1"
                           " && cmp -s d.txt ownleave.want")) == 0, "ownleave -d", dir)
+    # own5 F3: owners held while a later argument fails a guaranteed check in a test are released by its unwinder
+    try r.expect(sh(dir, ("\"$OLANG\" -t ownabort.olang > a.txt 2>&1; grep -q '^made 4 dropped 4$' a.txt"
+                          " && grep -q '^1 passed, 5 failed$' a.txt")) == 0, "ownabort", dir)
     # own4 M1: a hold in a loop's condition and post clause, 4M turns in one open scope, in flat memory
     try r.expect(sh(dir, ("\"$OLANG\" -b ownloop.olang > out.txt 2>&1 && (ulimit -v 50000 && ./build/ownloop) > l.txt 2>&1"
                           " && grep -q '^4000000 4000000 made 8000001 dropped 8000001$' l.txt")) == 0, "ownloop", dir)
@@ -1539,4 +1542,8 @@ fn ownleave(r mut report&) ? Failed {
     try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownleave.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
                           " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownleave > v.txt 2> vg.txt"
                           " && cmp -s v.txt ownleave.want && test ! -s vg.txt")) == 0, "ownleave under valgrind", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -t -a x86-64-v3 ownabort.olang > out.txt 2>&1; valgrind -q --leak-check=full"
+                          " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownabort_test > va.txt 2> vga.txt;"
+                          " test $? -ne 9 && grep -q '^made 4 dropped 4$' va.txt && test ! -s vga.txt")) == 0,
+                 "ownabort under valgrind", dir)
 }

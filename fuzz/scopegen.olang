@@ -108,6 +108,25 @@ DtorPrelude := (
     "    y.res = ORes(v + 1)\n"
     "}\n"
     "fn otake2(o own mut ORes&, k I64) I64 { return o.v + k }\n"
+    "# own5 F3: test blocks giving an owner to a call whose later argument fails a guaranteed check - a slice's bounds, an\n"
+    "# 'as', an array's length - which abandons the test: its unwinder must release the owner (counted apart from main's)\n"
+    "HeldMade mut I64 = 0\n"
+    "HeldDropped mut I64 = 0\n"
+    "type OHeld struct(n I64) {\n"
+    "    n\n"
+    "    HeldMade = HeldMade + 1\n"
+    "} destruct {\n"
+    "    HeldDropped = HeldDropped + 1\n"
+    "}\n"
+    "type OHeldBox struct() {\n"
+    "    r own mut OHeld&\n"
+    "}\n"
+    "type OHeldE enum {\n"
+    "    A(k I64)\n"
+    "    B(k I64)\n"
+    "}\n"
+    "fn oheldEat(o own mut OHeld&, s Array<I64>&) I64 { return o.n + s.Len() }\n"
+    "fn oheldEat3(o own mut OHeld&, k I64) I64 { return o.n + k }\n"
     "# own4 N1: a resource whose destructor reads what it was given; N6: constructors failing after making own fields\n"
     "type OWatch struct() {\n"
     "    x OPlain& = null\n"
@@ -452,6 +471,16 @@ Prelude := (
     "    bx OHolder& = null\n"
     "}\n"
     "fn okeepFirst(dst mut OBig&, a own mut Array<OHolder&>&) { dst.bx = a[0] }\n"
+    "# own5 F1: a callee keeping an '&p' field of what it is given - the field read at a derived scope (O23a)\n"
+    "type OW struct(o OPlain&) {\n"
+    "    f OPlain&o = o\n"
+    "}\n"
+    "fn okeepW(l mut List<OPlain&>&, w OW) { l.Push(w.f) }\n"
+    "fn (w OW&) ointo(l mut List<OPlain&>&) { l.Push(w.f) }\n"
+    "type OBig2 struct() {\n"
+    "    x OPlain& = null\n"
+    "}\n"
+    "fn osetBig(g mut OBig2&, w OW&) { g.x = w.f }\n"
     "# a flag set atomically; owait waits for it 2 ms at most (-i runs a task only at its join, so there it never comes)\n"
     "type OFlag struct() {\n"
     "    v I64 = 0\n"
@@ -1005,7 +1034,7 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
     e := g.name("e")
     back := ($ind "if " $n ".Len() > 0 and " $n "[0] != null {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n
              " = Array<mut Node&>(1)\n" $ind "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
-    if g.chance(50) { return g.own4Op(h, ind, v) }
+    if g.chance(50) { return g.own4Op(h, ind, v) if g.chance(60) else g.own5Op(h, ind, v) }
     k := g.r(15 if g.dtors else 11)
     if k == 0 { return $ind "ofillAt(" $n ", " $v ")\n" $back }
     if k == 1 {
@@ -1153,6 +1182,38 @@ fn (g mut SG&) own4Op(h String&, ind String&, v I64) String& {
     }
     fl := "OFail" if g.chance(50) else "OFail2"    # N6
     return $loop $ind "    " $x " := try " $fl "(" $v " + i) catch { break }\n" $ind "}\n"
+}
+
+# the shapes the review of own4's fixes found (own5): a borrowed copy kept by a callee through an '&p' field of what it is
+# given - by value, as a receiver, into another argument's field (F1, refused: O38) - and an owner value local returned
+# by reference, or held by a returned value, whose owners its block's end releases (F2, refused: O38)
+fn (g mut SG&) own5Op(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    b := g.name("b")
+    r := g.name("r")
+    w := g.name("w")
+    pv := g.name("pv")
+    k := g.r(5)
+    made := ($ind $pv " := OPlain()\n" $ind $pv ".o = OInner(" $v ")\n" $ind $pv ".o.deep = OLeaf(" $v " + 1)\n" $ind $b " := "
+             $pv "\n")
+    rel := $ind $pv ".o = null\n" $ind "churn()\n"
+    if k <= 2 {
+        if k == 2 {
+            return ($ind "{\n" $made $ind $r " := OBig2()\n" $ind $w " := OW(" $b ")\n" $ind "osetBig(" $r ", " $w ")\n" $rel
+                    $ind $o " = ONode(opl(" $r ".x) % 997 + " $v ")\n" $ind "}\n")
+        }
+        keep := "okeepW(" $r ", " $w ")" if k == 0 else $w ".ointo(" $r ")"
+        return ($ind "{\n" $made $ind $r " := List<OPlain&>()\n" $ind $w " := OW(" $b ")\n" $ind $keep "\n" $rel $ind $o
+                " = ONode(opl(" $r "[0]) % 997 + " $v ")\n" $ind "}\n")
+    }
+    f := g.name("omkOwnerRef")
+    mk := ("    p := OPlain()\n    p.o = OInner(v)\n    p.o.deep = OLeaf(v + 1)\n")
+    if k == 3 {
+        g.addHelper("fn " $f "(v I64) mut OPlain& {\n" $mk "    return p\n}\n")
+        return $ind $r " := " $f "(" $v ")\n" $ind "churn()\n" $ind $o " = ONode(opl(" $r ") % 997 + " $v ")\n"
+    }
+    g.addHelper("fn " $f "(v I64) OHolder {\n" $mk "    q := OHolder(p)\n    return q\n}\n")
+    return $ind $r " := " $f "(" $v ")\n" $ind "churn()\n" $ind $o " = ONode(opl(" $r ".x) % 997 + " $v ")\n"
 }
 
 # a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a
@@ -1462,5 +1523,28 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     }
     if HasDtors(seed) { b.Push("    println(\"dtors \" $(Made - Dropped))\n") }
     b.Push("}\n")
+    if HasDtors(seed) and OwnOnly { b.Push(HeldTests(seed)) }
+    return b.ToString()
+}
+
+# own5 F3: the test blocks of a program with destructors in own mode (see the prelude's OHeld) - some of five shapes,
+# chosen by the seed, then one checking every owner they made was released. Run by "-t" only (fuzz.olang)
+fn HeldTests(seed U64) String& {
+    b := StringBuilder()
+    pick := seed / 4
+    shapes := String&[
+        "    a := I64[1, 2, 3]\n    lo := 1 + Run\n    x := oheldEat(OHeld(1), a[lo:1])\n    println($x)\n",
+        "    e := OHeldE.B(Run)\n    x := oheldEat3(OHeld(2), (e as OHeldE.A))\n    println($x)\n",
+        "    x := oheldEat(OHeld(3), Array<I64>(0 - Run))\n    println($x)\n",
+        "    h := OHeldBox()\n    a := I64[1, 2]\n    h.r = OHeld(a[1 + Run:1].Len())\n",
+        "    h := OHeldBox()\n    h.r = OHeld(4)\n    e := OHeldE.B(Run)\n    x := oheldEat3(take h.r, (e as OHeldE.A))\n    println($x)\n"]
+    for i in range shapes.Len() {
+        if ((pick >> U64(i)) & 1) == 0 and i != I64(pick % 5) { continue }
+        b.Push("test \"held " $i "\" {\n")
+        b.Push(shapes[i])
+        b.Push("}\n")
+    }
+    b.Push("test \"every held owner was released\" {\n    println(\"held made \" $HeldMade \" dropped \" $HeldDropped)\n"
+           "    assert HeldMade == HeldDropped\n}\n")
     return b.ToString()
 }

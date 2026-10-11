@@ -7787,6 +7787,7 @@ enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct typ
     if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
+    if (root && canonicalVar(root)->ownValue) op->ownValueBorrow = canonicalVar(root); //O38 (own5 F2): a borrow of the owner
     bool isGlobal = false;
     int storageDepth = 0;
     struct var* storage = lvalueStorageScope(op, &isGlobal, &storageDepth);
@@ -9714,8 +9715,10 @@ static void noteSliceBorrow(struct checkCtx* ctx, struct operand* sl) {
     while ((r->opType == OPERATION_MEMBER || r->opType == OPERATION_INDEX || r->opType == OPERATION_SLICE)
            && !r->type.structMAlloc && r->args.len && !r->isAtCall)
         r = *(struct operand**)ListGetIdx(&r->args, 0);
-    if (r->opType == OPERATION_READ_VAR && r->readVar && !r->type.structMAlloc && !canonicalVar(r->readVar)->owner)
+    if (r->opType == OPERATION_READ_VAR && r->readVar && !r->type.structMAlloc && !canonicalVar(r->readVar)->owner) {
         canonicalVar(r->readVar)->slotBorrowed = true;
+        if (canonicalVar(r->readVar)->ownValue) sl->ownValueBorrow = canonicalVar(r->readVar); //O38 (own5 F2)
+    }
 }
 
 bool callIsLanding(struct operand* op) {
@@ -9868,6 +9871,20 @@ static bool operandIsTemporary(struct checkCtx* ctx, struct operand* op) {
 }
 
 static bool scopeIsDerived(struct var* sv) { return sv && sv != SCOPE_AMBIGUOUS && canonicalVar(sv)->derivedFrom; }
+//O23a (own5 F1): whether scope variable x is parameter p's - its own scope variable sv, or a derived one standing for where
+//the argument for p bound a field's scope (a field of p, at any depth: a field of such a field reads at its container's
+//derived scope) - so an obligation on either says what a callee may keep of p's argument
+static bool scopeIsParams(struct var* x, struct var* p, struct var* sv) {
+    if (!x || x == SCOPE_AMBIGUOUS) return false;
+    x = canonicalVar(x);
+    if (sv && x == canonicalVar(sv)) return true;
+    for (int n = 0; x && x->derivedFrom && n < 64; n++) {
+        struct var* from = canonicalVar(x->derivedFrom);
+        if (p && from == canonicalVar(p)) return true;
+        x = from->derivedFrom ? from : NULL;
+    }
+    return false;
+}
 
 static struct scopeBinding* callBinding(struct operand* op, struct var* sv) {
     for (int i = 0; i < op->scopeBindings.len; i++) {
@@ -10914,6 +10931,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             if (borrowed) { //C2d: the callee is handed the very storage
                 struct var* root = lvalueRootVar(arg);
                 if (root && !root->owner) root->slotBorrowed = true;
+                if (root && canonicalVar(root)->ownValue) arg->ownValueBorrow = canonicalVar(root); //O38 (own5 F2)
             }
             //O25: the argument's EXACT scope - a field read through a container is the container's scope,
             //not the slot's bare tag - and two arguments naming one variable must agree exactly, depth
@@ -11582,9 +11600,10 @@ static bool paramTransient(struct var* func, int j) {
     struct var* sv = ((struct var*)ListGetIdx(&func->type.vars, j))->type.scopeParam;
     if (!sv) return false;
     sv = canonicalVar(sv);
+    struct var* pj = ListGetIdx(&func->type.vars, j);
     for (int i = 0; i < func->type.scopeObligations.len; i++) {
         struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
-        if (canonicalVar(o->longer) == sv || canonicalVar(o->shorter) == sv) return false;
+        if (scopeIsParams(o->longer, pj, sv) || scopeIsParams(o->shorter, pj, sv)) return false;
     }
     if (func->type.hasRetType && paramTypeNamesScope(*func->type.retType, sv)) return false;
     for (int k = 0; k < func->type.vars.len; k++) {
@@ -12307,7 +12326,8 @@ bool SemanticReliesNoBuild(struct var* func, struct var* v) {
 //O10c: the argument a call passes for its callee's scope variable sv, or NULL
 static struct operand* argForScope(struct var* func, struct list args, struct var* sv) {
     for (int j = 0; j < func->type.vars.len && j < args.len; j++) {
-        if (paramTypeNamesScope((*(struct var*)ListGetIdx(&func->type.vars, j)).type, sv))
+        struct var* pj = ListGetIdx(&func->type.vars, j);
+        if (paramTypeNamesScope(pj->type, sv) || scopeIsParams(sv, pj, NULL)) //(a derived scope is its parameter's, O23a)
             return *(struct operand**)ListGetIdx(&args, j);
     }
     return NULL;
@@ -19226,6 +19246,9 @@ static void syntaxTokensNoLambda(struct syntax* n, struct list* out) {
 //O26a: whether a call to m can make its result hold what its parameter idx refers to - its result borrowed from that
 //parameter, or an obligation of its body (O10b) holding the parameter's scope to outlive the result scope. A generic
 //callee, one whose body is not known, or a constructor whose instance holds the parameter (C2d) can
+//(O38: set while the own walk runs, once every body's obligations are known - a call cycle's included, which
+//obligUnsettled marks only while bodies are still being checked)
+static bool ownObligationsKnown;
 static bool calleeMayKeepArg(struct var* m, int idx) {
     if (!m || m->type.bType != BASETYPE_FUNC) return true;
     if (!m->type.hasRetType) return false;
@@ -19243,15 +19266,15 @@ static bool calleeMayKeepArg(struct var* m, int idx) {
     }
     struct var* sv = p->type.scopeParam ? canonicalVar(p->type.scopeParam) : NULL;
     if (!sv || m->type.resultViaTypeVar) return true;
-    if (rt.scopeParam && canonicalVar(rt.scopeParam) == sv) return true; //borrowed from it
+    if (rt.scopeParam && scopeIsParams(rt.scopeParam, p, sv)) return true; //borrowed from it
     ensureBodyChecked(m);
     //(a body not checked, or one in a call cycle whose late obligations are not added yet, may keep it)
-    if (m->bodyState != 2 || canonicalVar(m)->obligUnsettled) return true;
+    if (m->bodyState != 2 || (canonicalVar(m)->obligUnsettled && !ownObligationsKnown)) return true;
     struct var* rs = m->type.resultScope ? canonicalVar(m->type.resultScope) : NULL;
     if (!rs) return false; //borrowed from another parameter
     for (int i = 0; i < m->type.scopeObligations.len; i++) {
         struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, i);
-        if (canonicalVar(ob->longer) == sv && canonicalVar(ob->shorter) == rs) return true;
+        if (scopeIsParams(ob->longer, p, sv) && canonicalVar(ob->shorter) == rs) return true;
     }
     return false;
 }
@@ -19271,10 +19294,10 @@ static bool calleeMayHoldArg(struct var* m, int idx) {
     if (!sv) return p->type.structMAlloc || TypeHoldsReferences(p->type) || TypeIsGeneric(p->type)
                    || p->type.bType == BASETYPE_FUNC;
     ensureBodyChecked(m);
-    if (m->bodyState != 2 || m->bodyHadErrors || canonicalVar(m)->obligUnsettled) return true;
+    if (m->bodyState != 2 || m->bodyHadErrors || (canonicalVar(m)->obligUnsettled && !ownObligationsKnown)) return true;
     for (int i = 0; i < m->type.scopeObligations.len; i++) {
         struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, i);
-        if (canonicalVar(ob->longer) == sv || (ob->exact && canonicalVar(ob->shorter) == sv)) return true;
+        if (scopeIsParams(ob->longer, p, sv) || (ob->exact && scopeIsParams(ob->shorter, p, sv))) return true;
     }
     return false;
 }
@@ -19915,6 +19938,21 @@ static void ownValueDecl(struct checkCtx* ctx, struct var* v, struct operand* rh
         v->ownReach = cv->ownReach = rv;
         v->ownReachDepth = cv->ownReachDepth = rd;
         v->ownReachUnnamed = cv->ownReachUnnamed = ru;
+        //O38 (own5 F2): what a reference to its storage borrows - each object its own fields hold, read once here
+        struct type* vt = canonicalStructOf(v->type);
+        struct checkCtx* savedCtx = ownCtx;
+        ownCtx = ctx;
+        cv->ownValueReads = ListInit(sizeof(struct operand*));
+        for (int i = 0; vt && ctx->hasOwnScope && i < vt->vars.len; i++) {
+            struct var* f = ListGetIdx(&vt->vars, i);
+            if (!f->type.refOwn) continue;
+            struct operand* m = OperandMember(NULL, OperandReadVar(v, v->tok), f->name, v->tok);
+            if (m->type.unknown) continue;
+            ownBorrowRead(m);
+            ListAdd(&cv->ownValueReads, &m);
+        }
+        ownCtx = savedCtx;
+        v->ownValueReads = cv->ownValueReads;
         return;
     }
     int param;
@@ -26762,7 +26800,9 @@ struct ownEffects { struct list rels; struct list borrows; };
 //calling a function value
 //(copied: made by a borrowed copy (O32), whose own pointers are plain copies in storage of this function's - what only
 //this function's locals may hold, O38; a borrow of an owned object itself is kept in its region by §8, O33)
-struct ownLoan { struct var* R; struct token tok; bool task; bool anyType; struct token via; bool copied; };
+//(by: a loan a reference to an owner value local's storage made (own5 F2) - the borrowed operand; the call it is lent to
+//releases through it as its own, and so does a reference local holding it)
+struct ownLoan { struct var* R; struct token tok; bool task; bool anyType; struct token via; bool copied; struct operand* by; };
 //...held by a local (or, always, by a task until its join) for as long as the local is used
 struct ownHolder { struct var* v; struct list loans; int frame; bool always; };
 //a block being walked, the statement in it at idx being the one walked; owner: the statement the block belongs to
@@ -26912,6 +26952,7 @@ static void ownLoanPut(struct list* out, struct ownLoan l) {
         struct ownLoan* have = ListGetIdx(out, i);
         if (have->R != l.R) continue;
         if (l.copied) have->copied = true;
+        if (have->by != l.by) have->by = NULL; //(made two ways: no one place it is released through as its own)
         return;
     }
     ListAdd(out, &l);
@@ -26932,6 +26973,8 @@ static void ownLoansOfBlockDeep(struct list* block, struct list* out);
 //O38: what evaluating op borrows while it runs - every read of an own slot made into a borrow, and every local holding
 //some, except where the value is used at once for something holding no reference (transient: "s.cur.n", a comparison, a
 //rendering). place: op is where an assignment stores, used until the store whatever it reads
+//(own5: only what a value keeps - see ownLoansIn's arguments)
+static bool ownKeptOnly;
 static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
     if (!op) return;
     if (!transient) {
@@ -26944,6 +26987,17 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
                 l.copied = true;
                 ownLoanPut(out, l);
             }
+        }
+        //O38 (own5 F2): a reference to an owner value local's storage borrows everything it owns, confined as a copy's
+        for (int i = 0; op->ownValueBorrow && i < op->ownValueBorrow->ownValueReads.len; i++) {
+            struct operand* r = *(struct operand**)ListGetIdx(&op->ownValueBorrow->ownValueReads, i);
+            if (!r->ownRegion || !r->ownOrig) continue;
+            struct ownLoan l = (struct ownLoan){0};
+            l.R = r->ownRegion;
+            l.tok = op->tok;
+            l.copied = true;
+            l.by = op;
+            ownLoanPut(out, l);
         }
         if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
         else if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) {
@@ -26983,7 +27037,14 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
         transient = false;
         break;
     }
-    for (int i = 0; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, transient, false);
+    //(own5: what a value carries of a call's arguments is what the callee may keep in its result - a call that cannot
+    //hands back nothing of them, whatever it borrowed while it ran; the statement's own loans still take every argument)
+    struct var* keeper = ownKeptOnly && op->opType == OPERATION_FUNCCALL && !op->callee && op->readVar
+                         && roCalleeKnown(op->readVar) && !op->readVar->isLambda ? op->readVar : NULL;
+    for (int i = 0; i < op->args.len; i++) {
+        if (keeper && !calleeMayKeepArg(keeper, i)) continue;
+        ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, transient, false);
+    }
     for (int i = 0; i < op->chainOperands.len; i++)
         ownLoansIn(*(struct operand**)ListGetIdx(&op->chainOperands, i), out, true, false);
     ownLoansIn(op->callee, out, false, false);
@@ -27239,10 +27300,16 @@ static void ownConflict(struct list* types, struct operand* chainOf, int root, s
     if (!ow.check || !types->len) return;
     struct list chain = ListInit(sizeof(struct var*));
     if (chainOf) ownChain(chainOf, &chain);
+    //(own5 F2: a loan a reference to an owner value local's storage made is the owner's borrow, held by the locals given
+    //it to their last use: while it is, the owner releases nothing through its own name - what is released through the
+    //borrow itself, or through any other reference, is the borrow's, and what it reads it reads through the owner's
+    //slots, never freed memory. An argument's is used by its call alone, once every argument is evaluated: a release
+    //among them meets it not)
     struct list* opens[2] = { &ow.cur, &ow.encl };
     for (int o = 0; o < 2 && !ow.onlyTask; o++)
         for (int i = 0; i < opens[o]->len; i++) {
             struct ownLoan* l = ListGetIdx(opens[o], i);
+            if (l->by) continue;
             if (ownLoanHits(l, types, &chain, root, local, place)) { ownReport(l, tok, what, via, callee, move, NULL); return; }
         }
     for (int i = 0; i < ow.holders.len; i++) {
@@ -27250,6 +27317,7 @@ static void ownConflict(struct list* types, struct operand* chainOf, int root, s
         if (ow.onlyTask && !h->always) continue;
         for (int k = 0; k < h->loans.len; k++) {
             struct ownLoan* l = ListGetIdx(&h->loans, k);
+            if (l->by && !(root == OWN_ROOT_LOCAL && local && local == l->by->ownValueBorrow)) continue;
             ow.useTok = (struct token){0};
             if (ownLoanHits(l, types, &chain, root, local, place) && ownHolderLive(h)) {
                 struct token use = ow.useTok;
@@ -27598,10 +27666,11 @@ static bool ownKeepDests(struct var* m, int i, int nargs, bool* dest) {
     for (int k = 0; k < m->type.scopeObligations.len; k++) {
         struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, k);
         struct var* other;
-        if (ob->longer && canonicalVar(ob->longer) == sv) other = ob->shorter;
-        else if (ob->exact && ob->shorter && canonicalVar(ob->shorter) == sv) other = ob->longer;
+        //(an obligation on a derived scope of p - a field of its argument kept, O23a - is one on p, own5 F1)
+        if (ob->longer && scopeIsParams(ob->longer, p, sv)) other = ob->shorter;
+        else if (ob->exact && ob->shorter && scopeIsParams(ob->shorter, p, sv)) other = ob->longer;
         else continue;
-        if (ob->shorterViaParam && canonicalVar(ob->longer) == sv) { //O22: in what that parameter's argument was built with
+        if (ob->shorterViaParam && scopeIsParams(ob->longer, p, sv)) { //O22: in what that parameter's argument was built with
             int j = ownParamIndex(m, ob->shorterViaParam);
             if (j < 0 || j >= nargs) return false;
             dest[j] = true;
@@ -27609,10 +27678,11 @@ static bool ownKeepDests(struct var* m, int i, int nargs, bool* dest) {
         }
         if (!other) return false;
         other = canonicalVar(other);
-        if (other == rs || other == sv || other->isInstanceScope) continue; //(the result, a constructor's instance included)
+        if (other == rs || scopeIsParams(other, p, sv) || other->isInstanceScope) continue; //(the result, a constructor's instance included)
         bool named = false;
         for (int j = 0; j < m->type.vars.len && j < nargs; j++) {
-            if (j == i || !paramTypeNamesScope(((struct var*)ListGetIdx(&m->type.vars, j))->type, other)) continue;
+            struct var* pj = ListGetIdx(&m->type.vars, j);
+            if (j == i || !(paramTypeNamesScope(pj->type, other) || scopeIsParams(other, pj, NULL))) continue;
             dest[j] = true;
             named = true;
         }
@@ -27626,20 +27696,33 @@ static bool ownKeepDests(struct var* m, int i, int nargs, bool* dest) {
 static void ownCarried(struct operand* v, struct list* out) {
     if (!v || v->isNullLiteral) return;
     struct list all = ListInit(sizeof(struct ownLoan));
+    bool was = ownKeptOnly;
+    ownKeptOnly = true;
     ownLoansIn(v, &all, false, false);
+    ownKeptOnly = was;
     for (int i = 0; i < all.len; i++) {
         struct ownLoan* l = ListGetIdx(&all, i);
         if (l->copied) ownLoanPut(out, *l);
     }
 }
 
+//...whether a value of type t has a destructor, which reads what it holds as its scope closes (C9, O15)
+static bool ownTypeDestructs(struct type t) {
+    struct type* c = canonicalStructOf(t);
+    return c && c->destructFunc;
+}
 //...whether a value of type t is, or is made, an owner, or has a destructor - which releases, or reads, what it holds as
 //its scope closes, after the loans of a copy given it have ended (O35, O15)
 static bool ownTypeOutlivesLoans(struct type t) {
     if (t.refOwn) return true;
-    struct type* c = canonicalStructOf(t);
-    if (c && c->destructFunc) return true;
+    if (ownTypeDestructs(t)) return true;
     return !t.structMAlloc && TypeIsOwning(t);
+}
+//...whether every loan in loans was made by a reference to an owner value local's storage (own5 F2), none by a copy
+static bool ownLoansOnlyRef(struct list* loans) {
+    for (int i = 0; i < loans->len; i++)
+        if (!((struct ownLoan*)ListGetIdx(loans, i))->by) return false;
+    return true;
 }
 
 //(a call refused for what it was given is one error: a call it is given to, or a target given its result, adds none)
@@ -27669,8 +27752,12 @@ static void ownCallConfined(struct operand* call) {
         struct list loans = ListInit(sizeof(struct ownLoan));
         ownCarried(a, &loans);
         if (!loans.len) continue;
+        //(own5 F2: what a reference to an owner value local's storage makes reads through that local's slots - not a copy
+        //of its pointers, which its release would leave dangling - so an owner holding one is held to O34's reach, as one
+        //holding any reference to a block's storage is; only a destructor, which reads it as its scope closes, is refused)
+        bool onlyRef = ownLoansOnlyRef(&loans);
         if (i < m->type.vars.len && ((struct var*)ListGetIdx(&m->type.vars, i))->type.refOwn) {
-            ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
+            if (!onlyRef) ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
             continue;
         }
         if (!calleeMayHoldArg(m, i)) continue;
@@ -27679,7 +27766,8 @@ static void ownCallConfined(struct operand* call) {
         for (int j = 0; j < call->args.len && !elsewhere; j++) elsewhere = dest[j];
         free(dest);
         if (elsewhere) ownRefuse(call, a->tok, ERR_OWN_BORROW_KEPT_BY_CALL);
-        else if (m->type.hasRetType && ownTypeOutlivesLoans(*m->type.retType) && calleeMayKeepArg(m, i))
+        else if (m->type.hasRetType && (onlyRef ? ownTypeDestructs(*m->type.retType) : ownTypeOutlivesLoans(*m->type.retType))
+                 && calleeMayKeepArg(m, i))
             ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
     }
 }
@@ -27832,7 +27920,14 @@ static void ownStmtWalk(struct statement* s) {
     case STATEMENT_VAR_DECL:
         ownOpWalk(s->op);
         ownOpWalk(s->fillValue);
-        if (ow.check) ownHold(&s->var, &ow.cur, ow.frames.len - 1);
+        if (ow.check) { //(what the local is given keeps - own5: a call's result keeps of its arguments what its callee may)
+            struct list kept = ListInit(sizeof(struct ownLoan));
+            ownKeptOnly = true;
+            ownLoansIn(s->op, &kept, false, false);
+            ownLoansIn(s->fillValue, &kept, false, false);
+            ownKeptOnly = false;
+            ownHold(&s->var, &kept, ow.frames.len - 1);
+        }
         //D16e/P4a: the hidden local a task's lambda is held in - a call through it runs that lambda's body (ownCalleeBody)
         if (s->op && s->op->opType == OPERATION_READ_VAR && s->op->readVar && s->op->readVar->isLambda && s->var.name.len
                 && s->var.name.ptr[0] == '$') {
@@ -27857,7 +27952,13 @@ static void ownStmtWalk(struct statement* s) {
             ow.relAssign = NULL;
             ow.cur = all;
         }
-        if (ow.check && s->target) ownHoldMore(s->target, &ow.cur, s->op);
+        if (ow.check && s->target) {
+            struct list kept = ListInit(sizeof(struct ownLoan));
+            ownKeptOnly = true;
+            ownLoansIn(s->op, &kept, false, false);
+            ownKeptOnly = false;
+            ownHoldMore(s->target, &kept, s->op);
+        }
         break;
     case STATEMENT_IF: {
         ownOpWalk(s->op);
@@ -27988,6 +28089,24 @@ static void ownStmtWalk(struct statement* s) {
     case STATEMENT_ASSERT:
         ownOpWalk(s->op);
         ownOpWalk(s->assertMsg);
+        break;
+    case STATEMENT_RET:
+        ownOpWalk(s->op);
+        //O38 (own5 F2): what only this function's locals may hold is not handed back - a reference to an owner value
+        //local's storage, or a value holding one, would outlive the release of its owners at its block's end
+        if (ow.check && !ow.rewalking && s->op) {
+            struct list loans = ListInit(sizeof(struct ownLoan));
+            ownCarried(s->op, &loans);
+            struct var* owner = NULL;
+            for (int i = 0; i < loans.len && !owner; i++) {
+                struct ownLoan* l = ListGetIdx(&loans, i);
+                if (l->by && l->by->ownValueBorrow) owner = l->by->ownValueBorrow;
+            }
+            if (owner && !ownReportedAt(s->op->tok)) {
+                struct type vt = owner->type;
+                Err(s->op->tok, ERR_OWN_RETURNS_OWNER_BORROW, owner->name, &vt, owner->name);
+            } else if (loans.len && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
+        }
         break;
     default:
         ownOpWalk(s->op);
@@ -28301,7 +28420,11 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     settleFrameLambdas(); //D16c: before the may-build walk, which reads it
     checkStrRendered(); //E11c
     settleMayBuild(); //E11c
-    if (ErrMsgGetNErrors() == errsAtStart) settleOwnBorrows(); //O38-O41: on a program that checked cleanly
+    if (ErrMsgGetNErrors() == errsAtStart) { //O38-O41: on a program that checked cleanly
+        ownObligationsKnown = true;
+        settleOwnBorrows();
+        ownObligationsKnown = false;
+    }
 
     //K2: every immutable global whose initializer can be computed now is - its value becomes the global's
     //data, and nothing is left to run at startup. Only once the program has checked cleanly: evaluation
