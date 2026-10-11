@@ -1749,3 +1749,52 @@ result function - refused, O38), F3 (a spawn target given `View()` - refused, O3
 global's own object - refused, O1b - and a number read out of it - accepted).
 Own seeds 1-200: 280ef76 6 findings (all F1's wrapper shape; 597 scenarios run, 1803 refused), this tip none (590 run,
 1810 refused).
+
+## 23. Vec phase 1's fourth review, fixed (2026-10-11)
+
+The review of 1bcfb72 (`/home/user/review/vec4`) found two use-after-free classes - F1', a gap in section 22's fix, and R,
+older than the Vec work and on master - one disagreement between `-i` and the built program (X, older, on master), and
+one over-rejection new in section 22. Fixed as the coordinator decided.
+
+1. **One list of the code a statement or an operand holds** (F1'). The freshness proof (`ownFreshReturns`), its write
+   scan (`ownFreshStmtWrites`) and the deep loans of a comprehension's body (`ownLoansOfStmtDeep`) each kept a list of
+   the fields to walk, and each missed some: an `else if`'s condition, a case guard, an assert's message, a `for`'s post
+   clause, a spawn target's subexpressions. A `return pick(a, b)` in any of them proved a function fresh that hands its
+   argument back. Now `StmtEachChild`/`OpEachChild` (semantic.c, beside `SemanticMatchValues`) list every field that can
+   hold code, by role, with a comment naming each field of `struct statement` and `struct operand` and why the others
+   are not code; `CodeDeepBlock`/`CodeDeepStmt`/`CodeDeepOp` visit everything at any depth. The proof, the write scan,
+   the deep loans and the liveness scan (`ownStmtReads`/`ownOpReads`, whose list was complete but hand-kept) all read
+   it. `ownStmtWalk` keeps its per-statement cases, which walk in their own order and frames, and then walks every child
+   its case did not name (`ownStmtWalksRole`), so a field added later is walked at least plainly.
+   **Other walkers checked**: the may-build walk `mbStmt` was complete; `mbiStmt` (the walk asking whether a body builds
+   into one scope variable) never walked a spawn target's place - fixed directly, since its walk is role-dependent; C2d's
+   instance-holding analysis (`holdStmt`/`holdMentions`) missed assert messages, spawn targets, catch defaults and most of
+   a value's statements - it reads the list now (more joins, so more conservative); S8c's write scan (`stmtsWrite`)
+   missed assert messages, comparison chains and `take` - reads the list now. `htStmt` (O17b's handle walk) was complete;
+   `finalizeStmtLambdas` walks only top-level positions by design; codegen's and the evaluator's walkers were not
+   touched (codegen.c is another branch's).
+2. **A local built in an owned object's region holds a loan on it** (R). `x := c.text` holds a loan, but `d mut
+   String&x = ...` (O25a) and `d := mk&x(5)` (E25) are new storage in the same region, and held none: releasing `c.text`
+   and reading `d` read freed memory. A local whose scope is a region - its type's, or its value home's (`valueHome`,
+   `refsHome`) - now holds a loan on it, live to its last use and confined as a borrow is (`ownHomeLoan`; for-loop
+   variables too). The O20 note's path in the review (r1e: `last mut String&b`, `b := c.box`) ends at O39 now. Kept
+   usable, as decided: text made where an owned `List` lives, pushed and read before the List is replaced.
+3. **An assert's message may not leave** (X, S17). A `return`, an `error` statement, a `try` letting an error out and a
+   `break`/`continue` other than of a loop written in it are compile-time errors, as in deferred code (S19b); a spawn in
+   it needs a join in it. `-i` aborted where the built program returned; now neither can.
+4. **A global value copy keeps no loan** (over-rejection 1). `T String = Docs.title` was refused because the global
+   initializer's walk kept the slot read's loan whatever the declared type; like a local, a global whose type holds no
+   reference keeps none. A global reference or a value holding one is still O38's error.
+
+**Tests**: must-fail cases `vec50`-`vec57` (F1': an else-if catch, a match value's clause in an else-if, a case guard, a
+for post clause, a generic, a spawn target's index; O39; `vec54` an assert message, now S17), `vec58`-`vec63` (R: a typed
+local, a scope argument, in a method, an owned List's text, the O20 note's source and where it leads; O39 and O20),
+`vec65` (a write in an assert message's catch block; O39), `vec68`-`vec69` (a global reference or value holding one; O38),
+`s17msgreturn`/`s17msgerror`/`s17msgbreak` (S17). Run: `vec64globalvaluecopy`, `vec66elseiffresh` (an else-if returning
+new storage stays proven), `vec67regionkept`, `s17msgok`.
+
+**Fuzzer**: own mode's `vec4Op` writes F1' (a return of the argument, or a write of the local returned, in an else-if's
+condition, a case guard, a for post clause, a match value's clause or a spawn target's index - refused, O39 - beside new
+storage returned there - accepted), R (text built in a holder's own text's region through a typed local or a scope
+argument, read after the release - refused, O39 - or before it - accepted) and X (a return in an assert message -
+refused, S17).

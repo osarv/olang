@@ -5064,6 +5064,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   type it settled on (or it settled any) - `t := c.Text(); return t` beside `return String(c.data)` is O38's error. F3: a
   spawn target holds the task's call's own borrowed-own-result loan. F4 (older, on master): a borrow of a global's own
   object is not the program's scope (O1b), and a global's initializer is walked as a declaration (O38).
+  **Its fourth review (vec4), fixed (the coordinator's calls, docs/own.md section 23)**: F1' (a gap in F1's fix) - the
+  freshness proof, its write scan and the deep loans each kept a hand list of the fields to walk and missed an else-if's
+  condition, a case guard, an assert's message, a for post clause and a spawn target's index; **one list now**
+  (`StmtEachChild`/`OpEachChild`, every field that can hold code, by role) that they, the liveness scan, C2d's hold walk
+  and S8c's write scan read, and `ownStmtWalk` walks whatever its cases do not name (mbi's spawn-target gap fixed
+  directly). R (older, on master): a local whose scope is an owned object's region - written `d mut String&x` with `x :=
+  c.text`, or from a scope argument `mk&x(5)` - is new storage there and holds a loan on the region, as the borrow does.
+  X (older, on master): an assert's message may not leave (S17). A global value copy (`T String = Docs.title`) keeps no
+  loan, as in a local.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

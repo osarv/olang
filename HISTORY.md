@@ -15549,3 +15549,30 @@ was taken to live in the program's scope because a global does, so it could be s
 object's release. A borrow is in its object's region wherever the owner is, and a global's initializer is now checked as
 the declaration it is.
 
+
+### Vec phase 1's fourth review, fixed (§8.8 O33, O38, S17, 2026-10-11)
+
+The fourth review found that the third round's fix had the right design and an incomplete reach. Proving a function's
+result fresh means looking at every return it has, and the proof walked the body through a hand-written list of the
+fields of a statement - which missed an `else if`'s condition, a case guard, an assert's message and a `for`'s post
+clause. A `return pick(a, b)` inside a catch block in any of those, the natural "fall back to the caller's buffer" form,
+proved the function fresh while it handed its argument back, so the loan on a Vec's buffer was spared. The write scan
+had the same kind of hole for a spawn target's index. The fix the coordinator chose is the one that stops this from
+coming back: one list, in one place, of every field of a statement and an operand that can hold code, with a comment
+saying why each other field is not code, and every walker asking "what is anywhere in this body" reads it. Checking the
+other walkers against it found the same holes in two outside the own pass - C2d's analysis of what a constructor's
+instance may hold, and S8c's scan for writes to a local the evaluator treats as fixed - and one in the may-build walk
+(a spawn target's place); all three were fixed with it.
+
+The second class was older than the Vec work. A borrow of an owned object, `x := c.text`, holds a loan, but a local
+whose written scope names that borrow, `d mut String&x`, or a call given it as a scope argument, `mk&x(5)`, is new
+storage built in the same region and held nothing - and the O20 diagnostic itself suggested writing it ("build it where
+the container lives"). The coordinator decided on a loan rather than a refusal, so the suggestion stays usable: such a
+local holds a loan on the region, exactly as the borrow it names does, and releasing the object while it is still used
+is O39's error.
+
+The third was not about ownership: a `return` inside an assert's message (in a catch block there) made `-i`, which
+abandons the message, and the built program, which returned, disagree. A message gives text and is evaluated only when
+the assert fails, so it may not leave - the rule deferred code already has. Last, the third round's check of a global's
+initializer refused a plain value copy, `T String = Docs.title`, which holds nothing of the object; it now keeps a loan
+only where the global's type can hold a reference, as a local does.
