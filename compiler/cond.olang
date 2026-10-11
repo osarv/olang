@@ -55,6 +55,7 @@ type Consts struct() {
     builtin List<Bool>
     big List<Bool>
     known List<Bool>
+    raws List<String&>
     Texts List<String&>
 }
 
@@ -64,6 +65,7 @@ fn (c mut Consts&) add(name String&, v Value, builtin Bool, big Bool, known Bool
     c.builtin.Push(builtin)
     c.big.Push(big)
     c.known.Push(known)
+    c.raws.Push("")
 }
 
 fn (c mut Consts&) text(t String&) I64 {
@@ -152,6 +154,30 @@ fn (c mut Consts&) define(flag String&) ? DefineError {
     }
     v, big := try c.literal(value)
     c.add(name, v, false, big, true)
+    c.raws[c.raws.Len() - 1] = $value
+}
+
+# -D's value for name as written, for a message
+fn (c Consts&) Raw(name String&) String {
+    i := try c.find(name) catch { return "" }
+    return $c.raws[i]
+}
+
+# B10c: whether -D's value for name fits a default of type ty - Bool, I32, I64, U64, F64 or String - as its literal
+# written there would
+fn (c Consts&) Fits(name String&, ty String&) Bool {
+    i := try c.find(name) catch { return false }
+    v := c.values[i]
+    big := c.big[i]
+    return match ty {
+        case "Bool" => v.Kind == ValueKind.Bool
+        case "String" => v.Kind == ValueKind.Text
+        case "I32" => v.Kind == ValueKind.Int and not big and fits(v.I, 32, false)
+        case "I64" => v.Kind == ValueKind.Int and not big
+        case "U64" => v.Kind == ValueKind.Int and (big or v.I >= 0)
+        case "F64" => v.Kind == ValueKind.Float or (v.Kind == ValueKind.Int and not big)
+        case _ => false
+    }
 }
 
 fn isName(t String&) Bool {
@@ -225,7 +251,7 @@ type Global struct(Name String&, Sp source.Span, Mut Bool, Declared String&, Ini
 type Scope struct(Std Bool) {
     Std
     globals List<Global&>
-    locals List<source.NameId>
+    Locals List<source.NameId>    # a local condition's (S8b): every parameter and local named so far in its item
 }
 
 fn (s mut Scope&) Add(g Global&) {
@@ -341,7 +367,7 @@ fn (e mut Eval&) Local(c ast.Expr&) (Outcome, Bool) {
 }
 
 fn (e Eval&) isLocal(n source.NameId) Bool {
-    for l in e.scope.locals {
+    for l in e.scope.Locals {
         if l == n { return true }
     }
     return false

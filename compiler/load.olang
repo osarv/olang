@@ -66,7 +66,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     branchChain List<I64>
     branchIndex List<I64>
     globalsAt List<I64>                # the token index of every global's name outside every branch
-    scope mut cond.Scope& = null           # the globals a condition reads, parsed when one is first evaluated
+    Scope mut cond.Scope& = null           # the globals a condition reads, parsed when one is first evaluated
     cparser mut parse.Parser& = null
     cdiags mut diag.Diagnostics& = null
     publicDone Bool = false
@@ -391,10 +391,10 @@ fn (l mut Loader&) decide(mi I64, c I64) {
 # a top-level condition at token index i, evaluated by B9a: a mistake is reported and Failed
 fn (l mut Loader&) evalCond(mi I64, i I64) (cond.Outcome, Bool) {
     m := l.Mods[mi]
-    l.condParser(m)
+    l.CondParser(m)
     x := try m.cparser.ExprAt(i) catch { return cond.Outcome.Failed, false }   # the parser reports it
     if m.Toks.Toks[m.cparser.Pos()].Kind != token.Tok.LBrace { return cond.Outcome.Deferred, false }
-    e mut cond.Eval&m = cond.Eval(m.Src.Text, l.Names, m.scope, l.Consts)
+    e mut cond.Eval&m = cond.Eval(m.Src.Text, l.Names, m.Scope, l.Consts)
     outcome, value := e.Top(x)
     if outcome == cond.Outcome.Failed {
         at, msg := e.Error()
@@ -405,12 +405,12 @@ fn (l mut Loader&) evalCond(mi I64, i I64) (cond.Outcome, Bool) {
 
 # the parser conditions are read with, and the globals they may read: "Name [mut] [type] = init" and "Name := init" at
 # the top level, outside every branch - the first declaration of each name (B9a)
-fn (l mut Loader&) condParser(m mut Module&) {
+fn (l mut Loader&) CondParser(m mut Module&) {
     if m.cparser != null { return }
     m.cdiags = diag.Diagnostics(false)
     file := m.cdiags.AddFile(m.Path, m.Src.Text)
     m.cparser = parse.Parser(m.Src, m.Toks, l.Names, m.Oracle, m.cdiags, file)
-    m.scope = cond.Scope(m.Identity.StartsWith("std/"))
+    m.Scope = cond.Scope(m.Identity.StartsWith("std/"))
     toks := m.Toks.Toks
     for at in m.globalsAt {
         j := at + 1
@@ -444,7 +444,7 @@ fn (l mut Loader&) condParser(m mut Module&) {
         after := toks[m.cparser.Pos()].Kind
         whole := after == token.Tok.StmtEnd or after == token.Tok.Eof
         sp := source.Span(toks[at].Start, toks[at].End)
-        m.scope.Add(cond.Global($m.Src.Text[sp.Start:sp.End], sp, mutable, $declared, init, whole))
+        m.Scope.Add(cond.Global($m.Src.Text[sp.Start:sp.End], sp, mutable, $declared, init, whole))
     }
 }
 
@@ -727,13 +727,15 @@ fn (l mut Loader&) Chosen(mi I64, condStart I32) I64 {
     return Pending
 }
 
-# the top-level ifs B9a left to compile-time evaluation (B9c): each as its module and the offset of its first condition
-fn (l Loader&) PendingIfs() List<Pair<I64, I32>> {
+# the top-level ifs B9a left to compile-time evaluation (B9c) whose own branch is part of the module: each as its
+# module and the offset of its first condition
+fn (l mut Loader&) PendingIfs() List<Pair<I64, I32>> {
     out List<Pair<I64, I32>>
     for mi in range l.Mods.Len() {
         m := l.Mods[mi]
         for c in range m.chainAt.Len() {
-            if m.chainChosen[c] == Pending and m.chainParent[c] < 0 { out.Push(Pair(mi, m.chainAt[c])) }
+            l.decide(mi, c)
+            if m.chainChosen[c] == Pending and l.taken(mi, m.chainParent[c]) == 1 { out.Push(Pair(mi, m.chainAt[c])) }
         }
     }
     return out
