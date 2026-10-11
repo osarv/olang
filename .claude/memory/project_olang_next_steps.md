@@ -808,6 +808,10 @@ Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger
 Then the port (a redesign, see feedback_port_clean_design.md): C compiler frozen as stage 0, module by module, acceptance = the test suite plus per-stage diffs where cheap (was: identical normalized IR),
 then the stage-1 compiler rebuilding itself identically. 26.5k lines of C.
 
+**After the compiler (the user, 2026-10-11):** research on settling networks. Extract functional structures for tasks,
+MNIST first, NLP and robotics later; genetic algorithms are allowed. Done in oann, clean room
+(user_olang_direction.md).
+
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):
 - **FPGA support, for spiking neural networks** (the user, 2026-10-09: "I want FPGA support for spiking neural network
   implementations"; after self-hosting, as a second backend of the olang compiler). Route: high-level synthesis of a

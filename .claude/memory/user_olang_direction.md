@@ -27,3 +27,12 @@ domain to weigh when designing numeric types (bit widths, fixed point, saturatio
 the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
 in olang (the C version is only a rough reference); std/linalg's Tensor is the operand of every numeric/NN operation,
 and efficiency comes first: zero-allocation in-place forms, transposed matmul without copies, fused elementwise.
+
+**Settling networks research (the user, 2026-10-11):** "When you are done with the compiler I want you to start playing
+around with the settling networks to extract functional structures for various tasks. Be it MNIST initially, but NLP
+and robotics later on. You may use genetic algorithms if you want." This starts after the compiler work. My reading:
+the self-hosted compiler bootstrapped; asked to confirm. The goal is to find the circuit structures (regions,
+projections, connectivity motifs, memories) that solve a task, and to understand them. It is not only accuracy. MNIST
+comes first, then NLP, then robotics. Evolutionary search over circuit structures is allowed. The clean-room rule
+holds: work only from oann/docs/settling.md and the published papers.
+
