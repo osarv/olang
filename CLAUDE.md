@@ -5111,7 +5111,7 @@ and literals made only of such, never existing storage anywhere in it) - it is
   scope after its region was released built into freed memory); O33's order check walks `CodeDeepOp` (a match value's
   clauses, catch clauses and defaults) and runs for a spawned call. `h := mk&x(x)` (a function returning such an instance,
   a scope argument naming a live region) is judged where E25 put it, as `H&x(...)` was. Fuzzer: `vec5Op` (own) and
-  `ctorScopeOp` (scope mode).
+  `ctorScopeOp` (scope mode); own seeds 1-200: 4d9c1fc 10 findings, the fix none; scope seeds 1-100: 4d9c1fc 6, the fix none.
 - **C2d: building in a parameter's scope holds the parameter (2026-10-11, vec5 R2a).** A constructor field or local
   written in a parameter's scope (`y String&x = $n "..."`), given a value a scope argument built there (`y := mk&x(n)`),
   or holding one, is new storage where the argument lives, and its instance outlived the argument's block - a

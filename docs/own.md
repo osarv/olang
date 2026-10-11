@@ -1852,3 +1852,5 @@ scope read in the argument's block, and put in a live region by `mk&x(x)` and `H
 function returning the instance - refused, C2d - and its legal sides); own mode's `vec5Op` writes R2a over an own slot's
 borrow, R2b (a typed local and a scope argument after the release, the loop form) and O33 (a match value, a spawned call),
 each beside its legal side.
+Own seeds 1-200: 4d9c1fc 10 findings (3 R2a, 1 R2b, 6 O33; 600 scenarios run, 1800 refused), this tip none (590 run, 1810
+refused). Scope seeds 1-100: 4d9c1fc 6 findings (all R2a; 513 run, 687 refused), this tip none (506 run, 694 refused).
