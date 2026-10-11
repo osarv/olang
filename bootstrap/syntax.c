@@ -1419,6 +1419,11 @@ static bool condHasConstVar(SyntaxCtx sc, int start);
 struct condDecision { struct str file; int at; bool value; enum diag err; char* reason; enum condDecisionKind kind; };
 static struct condDecision* condDecisionFor(TokenCtx tc, int at);
 static struct token firstTokAnywhereSyntax(struct syntax* s);
+//compiler/DESIGN.md section 4: the structure oracle (bootstrap/oracle/astdump.c) compares the self-hosted parser, which
+//parses every branch of an if the build may decide (B9, S8b) and leaves the deciding to later passes - so the oracle
+//asks for the same here: every branch parsed and scanned, every local if an ordinary one, nothing decided or queued
+static bool allBranches;
+void SyntaxParseAllBranches(bool on) { allBranches = on; }
 static void condTablesInit(void);
 static struct list condPending;
 static void condPendingAdd(struct pendingCond p);
@@ -1498,6 +1503,7 @@ struct syntax* parseStmntIf(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_IF);
     if (kw.type == TOK_NONE) return NULL;
+    if (allBranches) return parseStmntIfRuntime(sc, cur, kw);
     int condStart = TokenGetCursor(sc->tc);
     bool value, deferrable;
     bool decided = evalLocalCond(sc, &value, &deferrable);
@@ -4458,7 +4464,8 @@ static void scanTopIf(TokenCtx tc, struct scanResult* r) {
     cond = scanCond(tc, &ok);
     while (true) {
         if (TokenFeed(tc).type != TOK_CURLY_O) return; //malformed - the parser reports it
-        if (!taken && ok && cond) { scanRegion(tc, r, true); taken = true; }
+        if (allBranches) scanRegion(tc, r, true);
+        else if (!taken && ok && cond) { scanRegion(tc, r, true); taken = true; }
         else skipBraceBody(tc);
         int before = TokenGetCursor(tc);
         if (TokenFeed(tc).type != TOK_ELSE) { TokenSetCursor(tc, before); return; }
@@ -4920,6 +4927,12 @@ static bool skipTopBranch(SyntaxCtx sc) {
 
 static bool parseTopIf(SyntaxCtx sc, struct list* out) {
     if (acceptTok(sc, TOK_IF).type == TOK_NONE) return false;
+    while (allBranches) {
+        if (!parseExpr(sc) || !parseTopBranch(sc, out)) return false;
+        int before = TokenGetCursor(sc->tc);
+        if (TokenFeed(sc->tc).type != TOK_ELSE) { TokenSetCursor(sc->tc, before); return true; }
+        if (acceptTok(sc, TOK_IF).type == TOK_NONE) return parseTopBranch(sc, out);
+    }
     bool taken = false;
     while (true) {
         int condStart = TokenGetCursor(sc->tc);

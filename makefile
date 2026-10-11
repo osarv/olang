@@ -45,6 +45,11 @@ build: build/out
 build/tokdump: bootstrap/oracle/tokdump.c build/obj/token.o build/obj/util.o build/obj/errmsg.o
 	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm
 
+# the structure oracle (compiler/DESIGN.md section 4): every declaration and statement the C parser finds, with its span,
+# which the self-hosted parser's must equal (compiler/tools/astdiff.sh)
+build/astdump: bootstrap/oracle/astdump.c build/obj/syntax.o build/obj/token.o build/obj/util.o build/obj/errmsg.o
+	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm
+
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
 	$(OLANG) -b compiler/tools/dump.olang
