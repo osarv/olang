@@ -808,6 +808,17 @@ because what it finds about structure feeds the refactor.
   Pacing: weekly 0.58 at 13:15 CEST, resetting Sat 06:00 CEST (~137 h). Keep on or under the line to 1.0 at the
   reset, about 0.3%/h. One running agent is about 1%/h, so pause between agents with a send_later whenever usage is
   above the line.
+- 13:40 CEST: own phase 2a MERGED and pushed (master = 3a4f5e8). Its last fix (c740281) only tightened: in-place
+  borrows of an owned object's parts take loans (F1), and a join's pieces are held. No sixth review.
+  Vec phase 1 started on wt-own (afe0b23):
+  - View() as a borrowed result of an own field (a relaxation);
+  - Sort's precise O17 reading (a relaxation);
+  - Vec<T> in the prelude as an owner value type, with every method List has, Clone as an owned result, and
+    `$`/`==`/Hash like an array.
+  A review follows before the merge. Vec phase 2 then lets owning value types compose: Vec as a struct field, a
+  global, a type argument (List<Vec<T>>, Vec<Vec<T>>), an own-array element. That is what makes Vec the default
+  everywhere. Then the port's scanner.
+  Pacing: weekly 0.58 at 13:31 CEST, on the line to the reset.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
