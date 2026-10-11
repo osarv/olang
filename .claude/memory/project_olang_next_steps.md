@@ -763,6 +763,8 @@ because what it finds about structure feeds the refactor.
   - F3 (leak, tests only): cgMayLeave misses guaranteed checks. Fix: make it a whitelist.
   NEXT PHASE's first items: a borrowed result of an own field (`View() Array<T>&v`, refused today with O10) and Sort's
   precise O17 reading. Both are needed for Vec, and both need a review.
+- 09:30 CEST: the user asked whether self-hosting has started (no) and said "Go at your pace": the order stays own,
+  then the Vec phase, then the scanner, one agent at a time.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
