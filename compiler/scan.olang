@@ -1,0 +1,720 @@
+# scan - a file's text to tokens (compiler/DESIGN.md 1.1, SPEC.md section 1).
+#
+# A hand-written scanner, as Go's and most compilers' are: it switches on a token's first character and takes the
+# longest token that starts there (maximal munch, L16); a word is read whole and then looked up as a keyword (L9). A
+# literal is checked as it is read - its digits, separators and escapes (L10-L15) - and its value is decoded later,
+# from its span. Statement ends are inserted as Go's lexer inserts semicolons: after a token that can end a
+# statement, where a line ends outside parentheses and square brackets (L18, L18a).
+#
+# What it returns is plain data: the tokens by value in one array, the matching '}' of every '{' (the brace table,
+# by braces alone as B9 needs), and the lexical errors found, each a kind and a span. Nothing in it refers back to the
+# scanner, so the scanner's own working storage is reclaimed when Scan returns.
+
+import "token"
+
+# a lexical error's kind; a diagnostic module renders it (Rule, Message)
+type LexError enum {
+    UnknownChar
+    NonAscii
+    NulByte
+    CarriageReturn
+    Semicolon
+    UnclosedComment
+    UnclosedString
+    StringNewline
+    UnclosedChar
+    CharNewline
+    EmptyChar
+    LongChar
+    BadEscape
+    HexNoDigits
+    BinNoDigits
+    HexDigit
+    BinDigit
+    DigitSeparator
+    PointNoDigit
+    TwoPoints
+}
+
+# a lexical error: its kind, the span it is about, and the byte it names where its message names one
+type Diag struct(Kind LexError, Start I32, End I32, Byte Char) {
+    Kind
+    Start
+    End
+    Byte
+}
+
+# the rule a lexical error breaks
+fn (d Diag) Rule() String& {
+    return match d.Kind {
+        case LexError.UnknownChar => "L16"
+        case LexError.NonAscii, LexError.NulByte => "L1"
+        case LexError.CarriageReturn => "L3"
+        case LexError.Semicolon => "L18"
+        case LexError.UnclosedComment => "L4a"
+        case LexError.UnclosedString, LexError.StringNewline => "L14"
+        case LexError.UnclosedChar, LexError.CharNewline, LexError.EmptyChar, LexError.LongChar => "L13"
+        case LexError.BadEscape => "L15"
+        case LexError.HexNoDigits, LexError.HexDigit => "L10a"
+        case LexError.BinNoDigits, LexError.BinDigit => "L10c"
+        case LexError.DigitSeparator => "L10b"
+        case LexError.PointNoDigit, LexError.TwoPoints => "L12"
+    }
+}
+
+# what a lexical error says
+fn (d Diag) Message() String {
+    b := d.Byte
+    return match d.Kind {
+        case LexError.UnknownChar => "unexpected character '" $b "'"
+        case LexError.NonAscii => "non-ASCII byte - olang source is ASCII"
+        case LexError.NulByte => "NUL byte in the source - is this a text file?"
+        case LexError.CarriageReturn => "carriage return - save the file with LF line endings"
+        case LexError.Semicolon => "olang has no ';' - a statement ends where its line does; put the next one on a line of its own"
+        case LexError.UnclosedComment => "unterminated block comment - '##' closes it"
+        case LexError.UnclosedString => "unterminated string literal"
+        case LexError.StringNewline => "string literal not closed on its line - write \\n for a newline"
+        case LexError.UnclosedChar => "unterminated character literal"
+        case LexError.CharNewline => "character literal not closed on its line"
+        case LexError.EmptyChar => "empty character literal"
+        case LexError.LongChar => "character literal holds more than one character - text is written in \"\""
+        case LexError.BadEscape => "unknown escape '\\" $b "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\""
+        case LexError.HexNoDigits => "'0x' needs hexadecimal digits"
+        case LexError.BinNoDigits => "'0b' needs binary digits"
+        case LexError.HexDigit => "'" $b "' is not a hexadecimal digit"
+        case LexError.BinDigit => "'" $b "' is not a binary digit"
+        case LexError.DigitSeparator => "'_' in a number must stand between two digits"
+        case LexError.PointNoDigit => "a decimal point needs a digit after it"
+        case LexError.TwoPoints => "a number has at most one decimal point"
+    }
+}
+
+# a scanned file: its tokens (the last is Eof), the brace table, and its lexical errors in the order found.
+# Opens holds the index of every '{' token, in order, and Closes the index of the '}' matching each, or -1
+type Tokens struct(Toks Array<token.Token>&, Opens Array<I32>&, Closes Array<I32>&, Diags Array<Diag>&) {
+    Toks
+    Opens
+    Closes
+    Diags
+}
+
+# the index of the '}' matching the '{' at token index open, or -1 when it has none (or open is no '{')
+fn (ts Tokens&) Match(open I32) I32 {
+    lo I64 = 0
+    hi I64 = ts.Opens.Len() - 1
+    for lo <= hi {
+        mid := (lo + hi) / 2
+        o := ts.Opens[mid]
+        if o == open { return ts.Closes[mid] }
+        if o < open { lo = mid + 1 } else { hi = mid - 1 }
+    }
+    return -1
+}
+
+# scans a file's text. A text longer than an I32 can index is the caller's to refuse (source.Read does)
+fn Scan(text String&) Tokens {
+    s := scanner(text)
+    s.run()
+    toks Array<token.Token>&return = s.toks.ToArray()
+    count I64 = 0
+    for tk in toks {
+        if tk.Kind == token.Tok.LBrace { count++ }
+    }
+    opens mut Array<I32>&return = Array<I32>(count)
+    closes mut Array<I32>&return = Array<I32>(count, -1)
+    matchBraces(toks, opens, closes)
+    diags Array<Diag>&return = s.diags.ToArray()
+    return Tokens(toks, opens, closes, diags)
+}
+
+# the scanner's working state; its lists are flattened into arrays when it is done
+type scanner struct(text String&) {
+    text
+    toks List<token.Token>
+    diags List<Diag>
+    brackets List<Char>              # L18a: the brackets open here, innermost last - '(' '[' '{'
+    curlies I64 = 0                  # how many of them are '{'
+    reportedCR Bool = false          # L3: a carriage return is reported once per file
+}
+
+fn (s mut scanner&) diag(k LexError, start I64, end I64, b Char = '\0') {
+    s.diags.Push(Diag(k, I32(start), I32(end), b))
+}
+
+fn (s mut scanner&) run() {
+    t := s.text
+    n := t.Len()
+    i I64 = 0
+    nl Bool = false                  # a line ended since the last token kept
+    last token.Tok = token.Tok.Eof               # the last token kept (a word after '.' as Iden, L9a)
+    lastEnd I64 = 0                  # where it ended - a statement end it is followed by stands there
+    for {
+        # whitespace and comments (L3, L4, L4a)
+        for i < n {
+            c := t[i]
+            if c == ' ' or c == '\t' {
+                i++
+            } else if c == '\n' {
+                nl = true
+                i++
+            } else if c == '#' {
+                if i + 1 < n and t[i + 1] == '#' {
+                    end, spans := blockComment(t, i + 2)
+                    if end < 0 {
+                        s.diag(LexError.UnclosedComment, i, i + 2)
+                        i = n
+                    } else {
+                        if spans { nl = true }
+                        i = end
+                    }
+                } else {
+                    i = lineEnd(t, i)
+                    if i == n { nl = true }
+                }
+            } else {
+                break
+            }
+        }
+        if i >= n { break }
+
+        start := i
+        c := t[i]
+        k token.Tok = token.Tok.Eof
+        end I64 = i + 1
+        if isLetter(c) or c == '_' {
+            end = wordEnd(t, i + 1)
+            k = token.Tok.Iden if last == token.Tok.Dot else token.Keyword(t, i, end - i)
+        } else if isDigit(c) {
+            k, end = s.number(i)
+        } else if c == '"' {
+            k = token.Tok.StrLit
+            end = s.str(i)
+        } else if c == '\'' {
+            k = token.Tok.CharLit
+            end = s.char(i)
+        } else {
+            k, end = operator(t, i)
+            if k == token.Tok.Eof {
+                # no token starts here (L1, L3, L16): reported and passed over, as though the bytes were not there -
+                # except a ';', which ends a statement where one could end (L18)
+                if c == ';' {
+                    s.diag(LexError.Semicolon, i, i + 1)
+                    i++
+                    if last.EndsStatement() and not s.inBrackets() {
+                        at := lastEnd if nl else start
+                        s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
+                        last = token.Tok.StmtEnd
+                    }
+                } else if c == '\r' {
+                    if not s.reportedCR { s.diag(LexError.CarriageReturn, i, i + 1) }
+                    s.reportedCR = true
+                    i++
+                } else {
+                    j := junkEnd(t, i + 1)
+                    kind := LexError.NulByte if c == '\0' else (LexError.NonAscii if c >= 128 else LexError.UnknownChar)
+                    s.diag(kind, i, j, c)
+                    i = j
+                }
+                continue
+            }
+        }
+
+        flags U8 = 0
+        if nl { flags = flags | token.LineBreak }
+        if start > lastEnd { flags = flags | token.Space }
+        lineStart := start == 0 or t[start - 1] == '\n'
+        if lineStart { flags = flags | token.LineStart }
+        if lineStart and start > 0 { s.closeBeforeDecl(k, end) }
+        # L18 - and no statement starts with catch, so a clause may begin a line (R9b)
+        if nl and last.EndsStatement() and not s.inBrackets() and k != token.Tok.Catch {
+            s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd)))
+        }
+        s.toks.Push(token.Token(k, flags, I32(start), I32(end)))
+        s.track(k)
+        last = k
+        lastEnd = end
+        nl = false
+        i = end
+    }
+    # the end of the file ends a statement as a line's end does
+    if last.EndsStatement() { s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd))) }
+    s.toks.Push(token.Token(token.Tok.Eof, token.LineBreak, I32(n), I32(n)))
+}
+
+# L18a: a line's end ends nothing while the innermost bracket open is a '(' or a '['
+fn (s scanner&) inBrackets() Bool {
+    n := s.brackets.Len()
+    if n == 0 { return false }
+    top := s.brackets[n - 1]
+    return top == '(' or top == '['
+}
+
+# keeps the bracket stack: a ')' or ']' closes its own kind only (a stray one is the parser's to report); a '}' closes
+# its block and with it any bracket left open inside it, so one missing ')' is one error
+fn (s mut scanner&) track(k token.Tok) {
+    match k {
+        case token.Tok.LParen { s.brackets.Push('(') }
+        case token.Tok.LBrack { s.brackets.Push('[') }
+        case token.Tok.LBrace {
+            s.brackets.Push('{')
+            s.curlies++
+        }
+        case token.Tok.RParen, token.Tok.RBrack {
+            n := s.brackets.Len()
+            want := '(' if k == token.Tok.RParen else '['
+            if n > 0 and s.brackets[n - 1] == want { s.brackets.Truncate(n - 1) }
+        }
+        case token.Tok.RBrace {
+            for s.brackets.Len() > 0 {
+                c := try s.brackets.Pop() catch { break }
+                if c == '{' {
+                    s.curlies--
+                    break
+                }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# L18a: a declaration beginning a line, with no block open, ends the brackets left open before it - "fn" counts when a
+# name follows it (a lambda or a method's receiver is "fn (")
+fn (s mut scanner&) closeBeforeDecl(k token.Tok, end I64) {
+    if s.brackets.Len() == 0 or s.curlies > 0 { return }
+    decl := k == token.Tok.Type or k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern
+    if k == token.Tok.Fn {
+        t := s.text
+        i I64 = end
+        for i < t.Len() and (t[i] == ' ' or t[i] == '\t') { i++ }
+        decl = i < t.Len() and (isLetter(t[i]) or t[i] == '_')
+    }
+    if decl { s.brackets.Clear() }
+}
+
+fn isLetter(c Char) Bool { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') }
+fn isDigit(c Char) Bool { return c >= '0' and c <= '9' }
+fn isWordChar(c Char) Bool { return isLetter(c) or isDigit(c) or c == '_' }
+fn isHexDigit(c Char) Bool { return isDigit(c) or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F') }
+
+# where the word whose second character is at i ends
+fn wordEnd(t String&, from I64) I64 {
+    i I64 = from
+    n := t.Len()
+    for i < n and isWordChar(t[i]) { i++ }
+    return i
+}
+
+# where the line holding i ends: its newline, or the end of the text
+fn lineEnd(t String&, from I64) I64 {
+    i I64 = from
+    n := t.Len()
+    for i < n and t[i] != '\n' { i++ }
+    return i
+}
+
+# the end of a block comment whose text starts at i - just past its closing "##" - and whether it spans a line's
+# end; -1 when it is never closed (L4a)
+fn blockComment(t String&, from I64) (I64, Bool) {
+    i I64 = from
+    n := t.Len()
+    spans Bool = false
+    for i + 1 < n {
+        c := t[i]
+        if c == '#' and t[i + 1] == '#' { return i + 2, spans }
+        if c == '\n' { spans = true }
+        i++
+    }
+    return -1, spans
+}
+
+# whether a token can start at t[i] - or whitespace, or a comment: what ends a run of bytes that begin none (L1)
+fn canStart(t String&, i I64) Bool {
+    c := t[i]
+    if isWordChar(c) or c == ' ' or c == '\t' or c == '\n' or c == '#' or c == '"' or c == '\'' { return true }
+    if c == '!' { return i + 1 < t.Len() and t[i + 1] == '=' }
+    k, _ := operator(t, i)
+    return k != token.Tok.Eof
+}
+
+# where a run of bytes that begin no token ends - before the next that can, or a carriage return (reported apart)
+fn junkEnd(t String&, from I64) I64 {
+    i I64 = from
+    n := t.Len()
+    for i < n and t[i] != '\r' and not canStart(t, i) { i++ }
+    return i
+}
+
+# the operator or punctuation at i, the longest that matches (L16), and where it ends; Eof when none starts there
+fn operator(t String&, i I64) (token.Tok, I64) {
+    n := t.Len()
+    c := t[i]
+    d := t[i + 1] if i + 1 < n else '\0'
+    match c {
+        case '+' {
+            if d == '+' { return token.Tok.Inc, i + 2 }
+            if d == '=' { return token.Tok.PlusEq, i + 2 }
+            return token.Tok.Plus, i + 1
+        }
+        case '-' {
+            if d == '-' { return token.Tok.Dec, i + 2 }
+            if d == '=' { return token.Tok.MinusEq, i + 2 }
+            return token.Tok.Minus, i + 1
+        }
+        case '*' {
+            if d == '=' { return token.Tok.StarEq, i + 2 }
+            return token.Tok.Star, i + 1
+        }
+        case '/' {
+            if d == '=' { return token.Tok.SlashEq, i + 2 }
+            return token.Tok.Slash, i + 1
+        }
+        case '%' {
+            if d == '=' { return token.Tok.PercentEq, i + 2 }
+            return token.Tok.Percent, i + 1
+        }
+        case '&' {
+            if d == '=' { return token.Tok.AmpEq, i + 2 }
+            return token.Tok.Amp, i + 1
+        }
+        case '|' {
+            if d == '=' { return token.Tok.PipeEq, i + 2 }
+            return token.Tok.Pipe, i + 1
+        }
+        case '^' {
+            if d == '=' { return token.Tok.CaretEq, i + 2 }
+            return token.Tok.Caret, i + 1
+        }
+        case ':' {
+            if d == '=' { return token.Tok.Define, i + 2 }
+            return token.Tok.Colon, i + 1
+        }
+        case '=' {
+            if d == '=' { return token.Tok.EqEq, i + 2 }
+            if d == '>' { return token.Tok.Arrow, i + 2 }
+            return token.Tok.Assign, i + 1
+        }
+        case '!' {
+            if d == '=' { return token.Tok.NotEq, i + 2 }
+            return token.Tok.Eof, i + 1
+        }
+        case '<' {
+            if d == '<' {
+                if i + 2 < n and t[i + 2] == '=' { return token.Tok.ShlEq, i + 3 }
+                return token.Tok.Shl, i + 2
+            }
+            if d == '=' { return token.Tok.Le, i + 2 }
+            return token.Tok.Lt, i + 1
+        }
+        case '>' {
+            if d == '>' {
+                if i + 2 < n and t[i + 2] == '=' { return token.Tok.ShrEq, i + 3 }
+                return token.Tok.Shr, i + 2
+            }
+            if d == '=' { return token.Tok.Ge, i + 2 }
+            return token.Tok.Gt, i + 1
+        }
+        case '@' { return token.Tok.At, i + 1 }
+        case ',' { return token.Tok.Comma, i + 1 }
+        case '.' { return token.Tok.Dot, i + 1 }
+        case '?' { return token.Tok.Question, i + 1 }
+        case '~' { return token.Tok.Tilde, i + 1 }
+        case '$' { return token.Tok.Dollar, i + 1 }
+        case '(' { return token.Tok.LParen, i + 1 }
+        case ')' { return token.Tok.RParen, i + 1 }
+        case '[' { return token.Tok.LBrack, i + 1 }
+        case ']' { return token.Tok.RBrack, i + 1 }
+        case '{' { return token.Tok.LBrace, i + 1 }
+        case '}' { return token.Tok.RBrace, i + 1 }
+        nomatch { return token.Tok.Eof, i + 1 }
+    }
+}
+
+# whether c is a digit of a radix: 10, 16 or 2
+fn digitOf(c Char, radix I64) Bool {
+    if radix == 16 { return isHexDigit(c) }
+    if radix == 2 { return c == '0' or c == '1' }
+    return isDigit(c)
+}
+
+# a run of digits of one radix from i, with '_' separators between them (L10b): where it ends and how many digits it
+# has. A '_' stands between two digits of the run - one before it and one after - or it is reported, once for a run
+# of them
+fn (s mut scanner&) digits(from I64, radix I64) (I64, I64) {
+    t := s.text
+    n := t.Len()
+    i I64 = from
+    count I64 = 0
+    prev Char = '\0'
+    for i < n {
+        c := t[i]
+        if digitOf(c, radix) {
+            count++
+        } else if c == '_' {
+            between := digitOf(prev, radix) and i + 1 < n and digitOf(t[i + 1], radix)
+            if not between and prev != '_' { s.diag(LexError.DigitSeparator, i, i + 1) }
+        } else {
+            break
+        }
+        prev = c
+        i++
+    }
+    return i, count
+}
+
+# whether an exponent's digits start at i: a run of digits and separators holding at least one digit (L12a)
+fn exponentDigits(t String&, from I64) Bool {
+    i I64 = from
+    n := t.Len()
+    for i < n and (isDigit(t[i]) or t[i] == '_') {
+        if isDigit(t[i]) { return true }
+        i++
+    }
+    return false
+}
+
+# whether a '.' at i begins a number's fraction: it does unless a letter or '_' follows it (L12: "7.Hash()")
+fn fractionAt(t String&, i I64) Bool {
+    if i >= t.Len() or t[i] != '.' { return false }
+    return not (i + 1 < t.Len() and (isLetter(t[i + 1]) or t[i + 1] == '_'))
+}
+
+# the number literal at i (L10-L12a): its kind and where it ends
+fn (s mut scanner&) number(i I64) (token.Tok, I64) {
+    t := s.text
+    n := t.Len()
+    if t[i] == '0' and i + 1 < n {
+        p := t[i + 1]
+        if p == 'x' or p == 'X' or p == 'b' or p == 'B' {
+            hex := p == 'x' or p == 'X'
+            end, count := s.digits(i + 2, 16 if hex else 2)
+            if count == 0 { s.diag(LexError.HexNoDigits if hex else LexError.BinNoDigits, i, end) }
+            # a digit or a letter right after the run is a mistake in the literal, not the start of a token (L10c)
+            if end < n and (isDigit(t[end]) or isLetter(t[end])) {
+                s.diag(LexError.HexDigit if hex else LexError.BinDigit, end, end + 1, t[end])
+            }
+            return token.Tok.IntLit, end
+        }
+    }
+    end, _ := s.digits(i, 10)
+    k token.Tok = token.Tok.IntLit
+    if fractionAt(t, end) {
+        fe, count := s.digits(end + 1, 10)
+        if count == 0 { s.diag(LexError.PointNoDigit, end, end + 1) }
+        end = fe
+        k = token.Tok.FloatLit
+        if fractionAt(t, end) { s.diag(LexError.TwoPoints, end, end + 1) }
+    }
+    # an exponent is one only when the whole of it is there: "1e" is a number and a name (L12a)
+    if end < n and (t[end] == 'e' or t[end] == 'E') {
+        j I64 = end + 1
+        if j < n and (t[j] == '+' or t[j] == '-') { j++ }
+        if exponentDigits(t, j) {
+            ee, _ := s.digits(j, 10)
+            return token.Tok.FloatLit, ee
+        }
+    }
+    return k, end
+}
+
+# whether e may follow a '\' in a literal quoted by q (L13-L15)
+fn escapeOk(e Char, q Char) Bool {
+    return e == 'n' or e == 't' or e == 'r' or e == '0' or e == '\\' or e == q
+}
+
+# the string literal at i (L14, L15): where it ends. A literal never crosses a line: one a line's end stops ends before
+# that newline
+fn (s mut scanner&) str(i I64) I64 {
+    t := s.text
+    n := t.Len()
+    j I64 = i + 1
+    for {
+        if j >= n {
+            s.diag(LexError.UnclosedString, i, n)
+            return n
+        }
+        c := t[j]
+        if c == '"' { return j + 1 }
+        if c == '\n' {
+            s.diag(LexError.StringNewline, i, j)
+            return j
+        }
+        if c == '\\' {
+            if j + 1 >= n {
+                s.diag(LexError.UnclosedString, i, n)
+                return n
+            }
+            e := t[j + 1]
+            if e == '\n' {
+                s.diag(LexError.StringNewline, i, j + 1)
+                return j + 1
+            }
+            if not escapeOk(e, '"') { s.diag(LexError.BadEscape, j, j + 2, e) }
+            j += 2
+        } else {
+            j++
+        }
+    }
+}
+
+# the character literal at i (L13, L15): where it ends, never past its line's end
+fn (s mut scanner&) char(i I64) I64 {
+    t := s.text
+    n := t.Len()
+    j I64 = i + 1
+    if j >= n {
+        s.diag(LexError.UnclosedChar, i, n)
+        return n
+    }
+    c := t[j]
+    if c == '\n' {
+        s.diag(LexError.CharNewline, i, j)
+        return j
+    }
+    if c == '\'' {
+        s.diag(LexError.EmptyChar, i, j + 1)
+        return j + 1
+    }
+    if c == '\\' {
+        if j + 1 >= n {
+            s.diag(LexError.UnclosedChar, i, n)
+            return n
+        }
+        e := t[j + 1]
+        if e == '\n' {
+            s.diag(LexError.CharNewline, i, j + 1)
+            return j + 1
+        }
+        if not escapeOk(e, '\'') { s.diag(LexError.BadEscape, j, j + 2, e) }
+        j += 2
+    } else {
+        j++
+    }
+    if j >= n {
+        s.diag(LexError.UnclosedChar, i, n)
+        return n
+    }
+    if t[j] == '\'' { return j + 1 }
+    if t[j] == '\n' {
+        s.diag(LexError.CharNewline, i, j)
+        return j
+    }
+    # more than one character: the literal runs to its closing quote, or to its line's end
+    k I64 = j
+    for k < n and t[k] != '\'' and t[k] != '\n' { k++ }
+    end := k + 1 if k < n and t[k] == '\'' else k
+    s.diag(LexError.LongChar, i, end)
+    return end
+}
+
+# fills the brace table: the index of every '{' token, in order, and of the '}' matching each - by braces alone (B9)
+fn matchBraces(toks Array<token.Token>&, opens mut Array<I32>&, closes mut Array<I32>&) {
+    open := List<I64>()              # positions in opens of the braces still open
+    k I64 = 0
+    for i, tk in toks {
+        if tk.Kind == token.Tok.LBrace {
+            opens[k] = I32(i)
+            open.Push(k)
+            k++
+        } else if tk.Kind == token.Tok.RBrace {
+            at := try open.Pop() catch { continue }
+            closes[at] = I32(i)
+        }
+    }
+}
+
+# the text a token covers, for tests
+fn spelled(text String&, ts Tokens&) String {
+    b := StringBuilder()
+    for tk in ts.Toks {
+        if tk.Kind == token.Tok.Eof { break }
+        if b.Len() > 0 { b.PushChar(' ') }
+        b.Push(";" if tk.Kind == token.Tok.StmtEnd else text[tk.Start:tk.End])
+    }
+    return b.ToString()
+}
+
+test "words, numbers and operators take the longest token that starts there" {
+    t := "x := a<<=b >>= c >= d >> e<f << g != h == i => j:k ... ++ -- += @ $s ~ ? 0x1F 0b101 1_000 2.5 1e3 1e 7.Hash()"
+    ts := Scan(t)
+    assert spelled(t, ts) == "x := a <<= b >>= c >= d >> e < f << g != h == i => j : k . . . ++ -- += @ $ s ~ ? 0x1F 0b101 1_000 2.5 1e3 1 e 7 . Hash ( ) ;"
+    assert ts.Diags.Len() == 0
+}
+
+test "keywords, literals, and a word after a dot is a name" {
+    t := "if s.if or true and null not x.null"
+    ts := Scan(t)
+    assert ts.Toks[0].Kind == token.Tok.If and ts.Toks[3].Kind == token.Tok.Iden and ts.Toks[4].Kind == token.Tok.Or
+    assert ts.Toks[5].Kind == token.Tok.BoolLit and ts.Toks[7].Kind == token.Tok.NullLit and ts.Toks[8].Kind == token.Tok.Not
+    assert ts.Toks[11].Kind == token.Tok.Iden
+}
+
+test "a line's end ends a statement after a token that can end one, outside brackets" {
+    t := "x := f(a,\n  b)\ny := 1 +\n  2\nreturn\nif c {\n  z++\n}\n"
+    assert spelled(t, Scan(t)) == "x := f ( a , b ) ; y := 1 + 2 ; return ; if c { z ++ ; }"
+    u := "a := [\n  1,\n  2,\n]\nb := try f()\ncatch { }\nfn g() { h(fn() {\n  q()\n}) }"
+    assert spelled(u, Scan(u)) == "a := [ 1 , 2 , ] ; b := try f ( ) catch { } fn g ( ) { h ( fn ( ) { q ( ) ; } ) }"
+}
+
+test "a declaration at a line's start ends the brackets left open before it" {
+    t := "x := f(a\nfn g() { y(\n}\ntype T struct() { }\n"
+    assert spelled(t, Scan(t)) == "x := f ( a ; fn g ( ) { y ( } type T struct ( ) { }"
+    u := "x := f(a\ntest \"t\" { }\n"
+    assert spelled(u, Scan(u)) == "x := f ( a ; test \"t\" { }"
+    v := "x := f(a\nfn (r R) m() { }\n"
+    assert spelled(v, Scan(v)) == "x := f ( a fn ( r R ) m ( ) { }"
+}
+
+test "comments end lines; a block comment only where it spans one" {
+    t := "a # note\nb ## inline ## c\nd ## two\nlines ## e"
+    assert spelled(t, Scan(t)) == "a ; b c ; d ; e ;"
+}
+
+test "flags say what stood before a token" {
+    ts := Scan("f&x(y)\n  g ##\n## h")
+    assert not ts.Toks[1].Has(token.Space) and not ts.Toks[2].Has(token.Space) and ts.Toks[0].Has(token.LineStart)
+    assert ts.Toks[7].Has(token.LineBreak) and ts.Toks[7].Has(token.Space) and not ts.Toks[7].Has(token.LineStart)
+    assert ts.Toks[9].Has(token.LineBreak) and not ts.Toks[9].Has(token.LineStart)
+}
+
+test "a semicolon is reported and ends a statement where one could end" {
+    t := "a := 1; b := 2\nf(x; y)"
+    ts := Scan(t)
+    assert spelled(t, ts) == "a := 1 ; b := 2 ; f ( x y ) ;"
+    assert ts.Diags.Len() == 2 and ts.Diags[0].Kind == LexError.Semicolon and ts.Diags[0].Rule() == "L18"
+    u := "a\n;\nb"
+    assert spelled(u, Scan(u)) == "a ; b ;"
+}
+
+test "bytes that begin no token are reported once a run and passed over" {
+    ts := Scan("a !! b\r\nc\r\nd")
+    assert spelled("a !! b\r\nc\r\nd", ts) == "a b ; c ; d ;"
+    assert ts.Diags.Len() == 2 and ts.Diags[0].Kind == LexError.UnknownChar and ts.Diags[0].End - ts.Diags[0].Start == 2
+    assert ts.Diags[1].Kind == LexError.CarriageReturn
+    u := "x\n!\ny"
+    assert spelled(u, Scan(u)) == "x ; y ;"
+}
+
+test "literals are checked as they are read" {
+    cases := String&["\"a\\qb\"", "\"abc", "\"ab\ncd", "'", "''", "'ab'", "'\\q'", "'a\n", "0x", "0b12", "1__0",
+                     "0x_FF", "1.)", "1.2.3", "1_", "## open"]
+    want := LexError[LexError.BadEscape, LexError.UnclosedString, LexError.StringNewline, LexError.UnclosedChar,
+                     LexError.EmptyChar, LexError.LongChar, LexError.BadEscape, LexError.CharNewline,
+                     LexError.HexNoDigits, LexError.BinDigit, LexError.DigitSeparator, LexError.DigitSeparator,
+                     LexError.PointNoDigit, LexError.TwoPoints, LexError.DigitSeparator, LexError.UnclosedComment]
+    for k, c in cases {
+        ts := Scan(c)
+        assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " $k ": " $c
+    }
+    assert Scan("1.5.Hash() 1e_x").Diags.Len() == 0
+}
+
+test "a literal never runs past its line" {
+    t := "x := \"abc\ny := 'q\nz := '\\\nw"
+    assert spelled(t, Scan(t)) == "x := \"abc ; y := 'q ; z := '\\ ; w ;"
+}
+
+test "the brace table matches braces alone" {
+    ts := Scan("{ ( { } [ } }")
+    assert ts.Match(0) == 5 and ts.Match(5) == -1 and ts.Match(2) == 3 and ts.Match(1) == -1
+    assert ts.Opens.Len() == 2
+}

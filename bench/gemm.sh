@@ -10,15 +10,17 @@
 #   BENCH_LOCK=FILE         take this flock while timing, as run.sh does
 set -euo pipefail
 cd "$(dirname "$0")"
-OLANG=../build/out
-[ -x $OLANG ] || make -C .. build/out >/dev/null
+# the compiler: $OLANG (relative to the repository root when it is relative), else build/out - as the makefile's
+OLANG=${OLANG:-build/out}
+case $OLANG in /*) ;; *) OLANG=$(cd .. && pwd)/$OLANG ;; esac
+[ -x "$OLANG" ] || make -C .. build/out >/dev/null
 mkdir -p build/la
 # each olang program in a directory of its own, built for this machine and again for baseline x86-64; the C side is
 # built for this machine too, with C's floating point kept as written (-ffp-contract=off), as olang's is (B12c)
 for p in gemm mlp; do
     mkdir -p build/la/$p
-    (cd build/la/$p && ../../../$OLANG -a x86-64 -b ../../../$p.olang >/dev/null && cp build/$p build/$p.base \
-        && ../../../$OLANG -b ../../../$p.olang >/dev/null)
+    (cd build/la/$p && $OLANG -a x86-64 -b ../../../$p.olang >/dev/null && cp build/$p build/$p.base \
+        && $OLANG -b ../../../$p.olang >/dev/null)
 done
 clang -O3 -flto -march=native -ffp-contract=off -o build/la/gemm_c c/gemm.c -lopenblas -lpthread
 clang -O3 -flto -march=native -ffp-contract=off -o build/la/mlp_c c/mlp.c -lopenblas -lpthread -lm

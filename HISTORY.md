@@ -15414,3 +15414,56 @@ one released before it is evaluated still compiles. The conditional message the 
 for owners made there. Everything here only adds loans; one shape accepted before is refused now, a part borrowed after a
 releasing call in the same statement, because a statement's loans are not ordered - recorded with the other
 over-rejections.
+
+### The port starts: M1, the scanner (L1, L9a, L12, L12a, L13, L14, L18, 2026-10-11)
+
+The self-hosted compiler's first milestone (compiler/DESIGN.md section 6): `compiler/source.olang`, `token.olang` and
+`scan.olang`, with `compiler/tools/dump.olang` printing a file's tokens. study2's rehearsal scanner was the starting
+point and was rewritten as the real module rather than copied: a `Token` is four fields by value in one array, keywords
+are found by a switch on the first letter and the length with no table built at run time, the scanner's own lists are
+flattened into arrays when it is done (its working storage is reclaimed when `Scan` returns - ten scans of a 4.6 MB
+file peak at 48 MB), and lexical errors are plain records M2's diagnostics will render. Everything the parser needs
+from the scanner, by the thirteen grammar points of section 2, is in the token: the kind, and three flags - a line break
+before it, anything before it (E25's adjacency), and whether it begins its line. The last was planned as "first on its
+line", which turned out to be the line-break flag again except at the file's first token, so it is column 1 instead -
+which is what the C tokenizer's rule for a declaration starting a line reads. A word after `.` is `Iden` whatever it
+spells: the C tokenizer kept the keyword's kind and only treated it as a name for statement ends (L9a), which every
+consumer would have had to repeat.
+
+**The token diff is the acceptance, and it is clean.** `bootstrap/oracle/tokdump.c` links the C tokenizer alone and
+prints its stream; `compiler/tools/tokdiff.sh` normalizes the one documented difference - the C statement end before a
+`catch` beginning a line, which its parser skips - and compares tokens, statement ends and every lexical error's rule
+and position. Over the repository's 1,232 `.olang` files, study2's data (`big.olang`, the deep nestings, its samples
+and reproducers) and fifteen files of lexical edge cases written for it (`compiler/testdata/lex`: bytes that begin no
+token, carriage returns, semicolons, literals stopped by a line's end or the file's, escapes, numbers, comments,
+brackets left open, member words) there is no difference. `make tokdiff` builds both tools and runs it, about 12 s, and
+`make verify` runs it last.
+
+**The edge cases found four bugs in the C tokenizer**, fixed in `bootstrap/token.c` (fixes are allowed there), each
+with a `checks/cases` program, and each a case where the C stream contradicted the spec:
+
+- A string or character literal stopped by a newline took the newline into the token - and so did a `\` before a
+  newline, which also reported `\` + newline as an unknown escape and then went on reading the literal on the next
+  line. With the newline inside a token, no statement ended there, so the next line was read as the broken line's
+  continuation: `a := "abc` then `b := 2` gave a second error, "expected end of line, found 'b'", and `'q` then a line
+  gave "holds more than one character" and a cascade. A literal never crosses its line now (SPEC L13 says so): one error,
+  and the next line parses (`l14newline`, `l13newline`).
+- Bytes that begin no token are dropped "as though they were not there" (L1), but a line's end before them emitted its
+  statement end at the bytes, and the next token, after another line's end, emitted a second - `x := 1`, a line holding
+  only `\x01`, then `y := x + 1` reported "expected '}', found end of line" beside the real error (`l1junkline`). A `;`
+  on a line of its own after a statement gave two ends the same way. The pending line end now waits for the next token,
+  and a `;` there ends nothing more.
+- `1.5.Hash()` reported "a number has at most one decimal point": the check for a second `.` did not ask, as the first
+  does, whether a name follows it (L12).
+- `1e_x` lexed as `1e` and `_x` with a separator error - the exponent's run was consumed before it was known to hold a
+  digit, and only the `e` and sign were put back (L12a: `1` and the name `e_x`). Whether an exponent is there is now
+  decided by looking ahead first (`l12twopoints`).
+
+**P0 alongside.** The compiler under test is a makefile variable, `OLANG ?= build/out`; `checks/checks.olang`, the fuzzer
+and the bench scripts read `OLANG` from the environment, a relative one against the repository root, and fall back to
+`build/out`, so default behaviour is unchanged and `make test OLANG=build/stage1` will work once there is a stage 1.
+`make test` now runs `compiler/*.olang`'s own tests (keywords, the line table, the scanner's cases).
+
+**Measured** (`dump speed`, the fastest of ten scans, load average 0.7): 93-102 MB/s on study2's 4.6 MB `big.olang`,
+763k tokens in 47-50 ms - the target was 50 MB/s idle; study2's rehearsal read 72-90 MB/s idle, the C tokenizer 9.5 MB/s
+under load.

@@ -133,9 +133,17 @@ fn fresh(tag String&) String& {
     return dir
 }
 
+# the compiler under test, as an absolute path: $OLANG - relative to the repository root when it is relative - else
+# build/out (compiler/DESIGN.md section 4; the makefile's OLANG)
+fn olang() String& {
+    o := try os.Env("OLANG") catch default "build/out"
+    if o.StartsWith("/") { return $o }
+    return $root() "/" $o
+}
+
 # runs cmd inside dir; the compiler is "$OLANG" there, and what it printed lands in dir/out.txt
 fn sh(dir String&, cmd String&) I32 {
-    return os.Run("cd " $os.Quote(dir) " && OLANG=" $os.Quote($root() "/build/out") " && " $cmd)
+    return os.Run("cd " $os.Quote(dir) " && OLANG=" $os.Quote(olang()) " && " $cmd)
 }
 
 fn outOf(dir String&) String& {
@@ -1403,10 +1411,10 @@ fn crashes(r mut report&) ? Failed {
                  "crash assert: status " $a.Status ", " $a.Stderr, dir)
     d := crashRun(dir, "./build/crash deep")
     try r.expect(d.Status == 0 and d.Stdout == "deep 1000000\n", "RunOnStack deep: status " $d.Status ", " $d.Stdout, dir)
-    olang := $root() "/build/out"
-    i := crashRun(dir, $os.Quote(olang) " -i crash.olang deep 20000")
+    compiler := olang()
+    i := crashRun(dir, $os.Quote(compiler) " -i crash.olang deep 20000")
     try r.expect(i.Status == 0 and i.Stdout == "deep 20000\n", "RunOnStack -i: " $i.Stdout $i.Stderr, dir)
-    f := crashRun(dir, $os.Quote(olang) " -i foreign.olang")
+    f := crashRun(dir, $os.Quote(compiler) " -i foreign.olang")
     try r.expect(f.Status == 139 and f.Stderr.StartsWith("foreign.olang crashed\nolang: internal compiler error")
                  and f.Stderr.Contains("while interpreting"), "OnCrash -i: status " $f.Status ", " $f.Stderr, dir)
     # T2b: a read through null traps where it is written, optimized (where the optimizer can see the null) and not;
@@ -1418,7 +1426,7 @@ fn crashes(r mut report&) ? Failed {
         try r.expect(n.Status == 139 and n.Stdout == "start\nafter a push: 4\n" and n.Stderr == "nullpeek crashed\n",
                      "nullpeek " $flags ": status " $n.Status ", " $n.Stdout $n.Stderr, dir)
     }
-    ni := crashRun(dir, $os.Quote(olang) " -i nullpeek.olang")
+    ni := crashRun(dir, $os.Quote(compiler) " -i nullpeek.olang")
     try r.expect(ni.Status == 1 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.Contains("reads through a null"),
                  "nullpeek -i: status " $ni.Status ", " $ni.Stderr, dir)
     # std/chan: a Send on a closed channel stops the program, naming it

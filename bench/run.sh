@@ -12,7 +12,9 @@
 #                    heavy jobs take, so nothing heavy runs beside the measurements
 set -euo pipefail
 cd "$(dirname "$0")"
-OLANG=../build/out
+# the compiler: $OLANG (relative to the repository root when it is relative), else build/out - as the makefile's
+OLANG=${OLANG:-build/out}
+case $OLANG in /*) ;; *) OLANG=$(cd .. && pwd)/$OLANG ;; esac
 # what olang compiles and links its own output with (main.c, addModeFlags): -O3 and whole-program LTO, for this
 # machine (B12: native by default) - and -ffp-contract=off keeps C's floating point exactly as written, as olang's is
 # (B12c): clang's default would fuse a*b+c into one FMA wherever the target has one, which changes results (and so the
@@ -62,7 +64,7 @@ done
 [ ${#selected[@]} -gt 0 ] || { echo "no benchmark matches $*" >&2; exit 2; }
 
 # ---- build ----
-[ -x $OLANG ] || make -C .. build/out >/dev/null
+[ -x "$OLANG" ] || make -C .. build/out >/dev/null
 mkdir -p build
 declare -A built
 for row in "${selected[@]}"; do

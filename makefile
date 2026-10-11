@@ -21,7 +21,12 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
 # in olang like the rest
 OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang)) $(wildcard geom/*.olang) $(wildcard std/*.olang) \
-	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) checks/checks.olang
+	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) checks/checks.olang
+# the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
+# OLANG=build/stage1". What it runs - checks/checks.olang, fuzz/, bench/ - reads it from the environment, as an absolute
+# path, and falls back to build/out when it is unset
+OLANG ?= build/out
+OLANG_ENV = OLANG=$(abspath $(OLANG))
 
 build/obj/%.o: bootstrap/%.c
 	mkdir -p build/obj
@@ -34,6 +39,19 @@ build/out: $(OBJ)
 	$(CC) $(CFLAGS) $^ -o build/out -lm -lffi -ldl -lpthread
 
 build: build/out
+
+# the token oracle (compiler/DESIGN.md section 4): the C tokenizer's stream, which the self-hosted scanner's must equal.
+# It links the tokenizer alone, so it stays buildable once bootstrap/ is frozen
+build/tokdump: bootstrap/oracle/tokdump.c build/obj/token.o build/obj/util.o build/obj/errmsg.o
+	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm
+
+# what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
+build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
+	$(OLANG) -b compiler/tools/dump.olang
+
+# M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
+tokdiff: build/tokdump build/compiler_tools_dump
+	compiler/tools/tokdiff.sh
 
 build/stage0.obj/%.o: bootstrap/%.c
 	mkdir -p build/stage0.obj
@@ -51,17 +69,17 @@ build/stage0: $(STAGE0_OBJ)
 bootstrap: build/stage0
 	@echo "bootstrap: stage 0 is build/stage0 - compiler/ holds no olang compiler yet, so there are no later stages"
 
-run: build/out
-	build/out -b runner.olang
+run: $(OLANG)
+	$(OLANG_ENV) $(OLANG) -b runner.olang
 
 # picks up every *.olang file automatically - a new test file needs no makefile edit to be included.
 # (usertest.olang is the one deliberate exception - a gitignored scratch file, never part of the suite.)
-test: build/out
-	build/out -t $(OLANG_TESTS)
+test: $(OLANG)
+	$(OLANG_ENV) $(OLANG) -t $(OLANG_TESTS)
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
-usertest: build/out
-	build/out -b usertest.olang
+usertest: $(OLANG)
+	$(OLANG) -b usertest.olang
 	./build/usertest
 
 # O2c: every alloca this compiler emits belongs in its function's entry block, or a declaration inside a
@@ -92,14 +110,15 @@ verify:
 	$(MAKE) run
 	./build/runner
 	$(MAKE) checkir
+	$(MAKE) tokdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
 # intentional data race - the "several tasks may be handed the same instance" test, which exists to show
 # that the language permits one since P3 was withdrawn - so a correct run of this target REPORTS exactly
 # one race, in shared.Tally.readOut, and exits nonzero for it. More than one means something regressed.
-race: build/out
-	-build/out -t -r $(filter-out checks/checks.olang, $(OLANG_TESTS))
+race: $(OLANG)
+	-$(OLANG) -t -r $(filter-out checks/checks.olang, $(OLANG_TESTS))
 	@echo "race: expect exactly one report, in shared.Tally.readOut (the intentional one)"
 
 # the differential fuzzer (fuzz/, K1): random programs whose every value is computed while compiling, built -O3, built
@@ -110,31 +129,31 @@ SEED ?= 1
 COUNT ?= 100
 JOBS ?= 2
 CASES ?= 30
-fuzz: build/out
-	nice -n 19 build/out -b -d fuzz/fuzz.olang
-	nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
+fuzz: $(OLANG)
+	nice -n 19 $(OLANG) -b -d fuzz/fuzz.olang
+	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
 
 # the suite under the scope sanitizer (B2f): every use of storage after its scope closed stops the program, or fails the
 # test it happens in. Not part of "verify" - shared.olang alone takes a minute and a half under it - and not a race-style
 # expected count either: a correct run passes every test, and a failure is a use after free the static check (section
 # 8) let through. checks.olang is left out: what it checks is the compiler, and it runs its own sanitized builds.
-scopesan: build/out
-	build/out -t -d -s $(filter-out checks/checks.olang, $(OLANG_TESTS))
+scopesan: $(OLANG)
+	$(OLANG) -t -d -s $(filter-out checks/checks.olang, $(OLANG_TESTS))
 
 # the scope fuzzer (fuzz/scopegen.olang, B2f): random programs storing, lending, copying and returning where scopes close,
 # built under the scope sanitizer and interpreted, the two outputs compared. "make scopefuzz SEED=1 COUNT=300 SCENARIOS=12";
 # a run's findings land in its own directory's scope/, a line each in scope/findings.txt (named when there are any).
 SCENARIOS ?= 12
-scopefuzz: build/out
-	nice -n 19 build/out -b -d fuzz/fuzz.olang
-	nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
+scopefuzz: $(OLANG)
+	nice -n 19 $(OLANG) -b -d fuzz/fuzz.olang
+	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
 
 all: clean build run
 
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
