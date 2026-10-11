@@ -28241,10 +28241,11 @@ static void ownHoldMore(struct operand* target, struct list* loans, struct opera
 }
 
 static void ownBlockWalkIn(int k) {
-    struct ownFrame* F = ListGetIdx(&ow.frames, k);
-    for (int i = 0; i < F->block->len; i++) {
+    //(the frame is read again each turn: a nested block's frame pushed by the walk may move the list)
+    struct list* block = ((struct ownFrame*)ListGetIdx(&ow.frames, k))->block;
+    for (int i = 0; i < block->len; i++) {
         ((struct ownFrame*)ListGetIdx(&ow.frames, k))->idx = i;
-        ownStmtWalk(ListGetIdx(F->block, i));
+        ownStmtWalk(ListGetIdx(block, i));
     }
 }
 

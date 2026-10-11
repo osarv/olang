@@ -1542,7 +1542,10 @@ owned result), ToArray (a copy), and Eq/Hash/Str as an array of the elements wit
 3. **One T25e error per instantiation**: `Vec<Tok>` with `Tok` a value holding references was reported at the type and
    again at every method used; the type's report marks the instantiation (`unmetTypeInsts`) so its methods are not
    checked again, with a note naming the fix: `Vec<Tok&>`.
-4. The corpus's own `Vec<T>` (shared.olang, G6's example) is `GrowBuf<T>` now, the fixtures' `Vec` structs `Vec2`, and
+4. **Found on the way, pre-existing**: the own walk kept a pointer to its block's frame across the walk of the block's
+   statements, which push frames of their own and may move the list - forty nested `try ... catch` blocks crashed the
+   compiler (the `nestparse` check) once the prelude's walk had grown the list; the frame's block is read once, before.
+5. The corpus's own `Vec<T>` (shared.olang, G6's example) is `GrowBuf<T>` now, the fixtures' `Vec` structs `Vec2`, and
    SPEC's examples `Buf<T>`: the prelude owns the name (M19d).
 
 **Tests**: `std/prelude/tests/vec.olang` (10 tests): every operation, an empty Vec's errors, 1,000 pushes read back

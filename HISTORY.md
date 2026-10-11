@@ -15450,5 +15450,9 @@ array does, and List indexes six times slower; Push costs about twice List's, th
 the owner local's storage is registered for release, and each new buffer zero-filled. The scope fuzzer's own mode writes
 the new shapes; on 3a4f5e8 they are refused and on this tip they run, with no findings on either.
 
+The full verify found one crash older than this work: the own walk held a pointer into its list of frames while walking
+a block whose nested blocks push frames, and forty nested `try ... catch` blocks moved the list under it once the
+prelude's walk (now with Vec's bodies) had grown it. The frame's block is read once, before the walk.
+
 What phase 2 must add for Vec to be the default everywhere is in docs/own.md 19.4: a Vec in a field, a global, a type
 argument, elements that are values holding references, a task pushing to one, a lambda capturing one, and Push's cost.
