@@ -738,6 +738,14 @@ because what it finds about structure feeds the refactor.
   New over-rejection: a callee that only permutes an own array (Reverse, Sort, swap) is refused by O17's syntactic
   reading. Vec<String&>.Sort will need the precise reading (docs/own.md 14.1); take it with Vec.
   A follow-up review runs (/home/user/wt/rvown4 @ 67cb5b1 -> /home/user/review/own4). Weekly 0.50 at 07:30 CEST.
+- 08:15 CEST: the follow-up review (/home/user/review/own4) found six more bugs, all already present on 079921e.
+  - Use-after-frees N1, N2, N4, N5 all come from F2 letting a call KEEP a loan-carrying value while chasing its holders.
+  - N3 is a gap in F3; N6 is a failing constructor's own fields leaking; M1 is F3's slot growing in a loop condition.
+  Decided: REVERSE F2's extension and go back to the user's strict start. A borrow or borrowed copy, or anything built
+  from one, is held only by locals of its function (liveness, or block end where the storage has another name).
+  Anything that would keep it elsewhere is refused, with "Clone() what must be kept". N3, N6 and M1 get direct fixes.
+  Sent to the own agent (afe0b23). Another review follows.
+  Lesson, again: extending loans to wherever a value is kept is whack-a-mole. Confinement is the design that holds.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
