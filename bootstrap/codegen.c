@@ -188,8 +188,6 @@ struct cgCtx {
     struct list unwindPool;
     char* ownUnwindNode;
     bool emitUnwind;
-    bool floatText; //E11a: a float is rendered - the object carries @__olang_fmt_float (emitFloatTextRuntime)
-    bool textBuilt; //E11c: a rendering is built in one pass - the object carries @__olang_sb_* (emitTextBuilderRuntime)
     bool rdBuild;   //E11c: the rendering helper being emitted builds into %rd.sb in one pass, not measure-then-write
     //every "alloca" goes here rather than where it is written, so all of them land in the function's
     //ENTRY block. An alloca inside a loop body allocates a fresh slot per iteration and the stack grows
@@ -5182,7 +5180,6 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
         enum floatKind fk = t.bType == BASETYPE_FLOAT32 ? FLOAT_KIND_F32 : t.bType == BASETYPE_F16 ? FLOAT_KIND_F16
                           : t.bType == BASETYPE_BF16 ? FLOAT_KIND_BF16 : FLOAT_KIND_F64;
         fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_float(ptr %s, i64 %s, double %s, i32 %d)\n", k, p, cap, wide, (int)fk);
-        ctx->floatText = true;
     } else {
         fprintf(ctx->fnOut, "  %s = call i64 @__olang_fmt_%s(ptr %s, i64 %s)\n", k, u64 ? "u64" : "i64", p, wide);
     }
@@ -5569,7 +5566,6 @@ static char* cgRenderBuildFn(struct cgCtx* ctx, struct type t) {
     free(key.p);
     char* sym = cgBufStr(&symB);
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
-    ctx->textBuilt = true;
 
     FILE* savedOut = ctx->fnOut;
     bool savedTerm = ctx->terminated;
@@ -5769,7 +5765,6 @@ static void cgTextOperands(struct cgCtx* ctx, struct type textT, struct list* pa
 //once per iteration - and a header for it in every frame cost a recursion through a Str a quarter of its depth
 static char* cgTextBuilt(struct cgCtx* ctx, struct operand* op, struct list* pieces) {
     char* scopeVal = cgWhereBuilt(ctx, op);
-    ctx->textBuilt = true;
     char* sb = cgNewTmp(ctx);
     char* room = cgNewTmp(ctx);
     fprintf(cgAllocaOut(ctx), "  %s = alloca { ptr, i64, i64, ptr, ptr }\n", sb);
@@ -7540,7 +7535,7 @@ void cgFail(struct cgCtx* ctx, struct statement* s) {
 }
 
 //"assert EXPR" - a statement now, not a call (see the report); the failure path is shared with the
-//see emitRuntimeDecls for its longjmp-in-test-mode-else-hard-abort behavior
+//see std/runtime/runtime.ll for its longjmp-in-test-mode-else-hard-abort behavior
 void cgAssert(struct cgCtx* ctx, struct statement* s) {
     if (s->op->ctProven) return; //S18c: already checked, and true, at compile time
     char* cv = cgValue(ctx, s->op);
@@ -8124,9 +8119,10 @@ bool CodegenProgramUsesDyncall(void) {
 //must not be declared a second time - LLVM rejects a duplicate "declare", and a "declare" beside a definition, even
 //when the signatures agree. So the runtime's own declaration stands for both. It can, because a call states its own
 //function type at the call site, and X3 marshals an array parameter to the same "ptr" the runtime uses; a prototype
-//that disagrees is an X1a error the program is already responsible for. The answer comes from the runtime's own
-//text, rendered once, rather than from a list kept beside it: a list missed "exit", "abort", "setjmp" and "longjmp",
-//so "extern fn exit(status I32)" failed to compile with an invalid redefinition reported against the IR.
+//that disagrees is an X1a error the program is already responsible for. The answer comes from the declarations every
+//module carries for the runtime, derived from its own text (std/runtime, runtime.c), rather than from a list kept beside
+//it: a list missed "exit", "abort", "setjmp" and "longjmp", so "extern fn exit(status I32)" failed to compile with an
+//invalid redefinition reported against the IR.
 static bool cgRuntimeDeclaresSym(struct str name, bool dyncall) {
     static char* texts[2];
     static size_t lens[2];
@@ -8134,8 +8130,7 @@ static bool cgRuntimeDeclaresSym(struct str name, bool dyncall) {
     if (!text) {
         FILE* f = open_memstream(&texts[dyncall], &lens[dyncall]);
         if (!f) ErrorBugFound();
-        emitRuntimeDecls(f, cgArch, cgScopeSan);
-        if (dyncall) emitDyncallRuntime(f, cgArch);
+        emitRuntimeDecls(f, cgArch, cgScopeSan, dyncall);
         fclose(f);
         text = texts[dyncall];
     }
@@ -8696,9 +8691,8 @@ void cgEmitModuleDecls(FILE* out, struct semaModule* emitMod) {
     emitTargetTriple(out);
     emitStructTypeDefs(out);
     fputs("\n", out);
-    emitRuntimeDecls(out, cgArch, cgScopeSan);
     bool dyncall = cgModuleDeclaresDyncall(emitMod);
-    if (dyncall) emitDyncallRuntime(out, cgArch);
+    emitRuntimeDecls(out, cgArch, cgScopeSan, dyncall);
     emitExternDecls(out, dyncall);
     emitTbaaTypeTree(out);
     emitGlobalDecls(out, emitMod);
@@ -8937,13 +8931,14 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
 //attributes - a flag given to the compile step would reach nothing. P7: LLVM's ThreadSanitizer pass instruments a
 //function only if it carries the "sanitize_thread" attribute - a C/C++ frontend adds it, and there is no frontend for a
 //.ll, so -fsanitize=thread alone silently instruments NOTHING. Rewriting the finished text is what avoids threading
-//both through all the "define" sites, several of which live inside multi-function runtime string literals; doing it
-//here also guarantees the runtime itself (the arena, the scope merge, the chunk pool, the join walk) is built for the
-//target and, under -r, instrumented - exactly the code a concurrency bug would hide in.
-//B3: a "linkonce_odr" global or constant - the runtime's, which every object carries - goes in a comdat of its own name,
-//as clang puts an inline variable: without one a link that is not LTO's (-d, -r) keeps every object's copy of its
-//storage, only the symbol being resolved to one, so the static TLS a thread needs grew with the number of modules
-//(0x4680 bytes for 16 objects against 0x448) and os.RunOnStack's small stacks no longer held it
+//both through all the "define" sites; the runtime's own IR goes through it too (CodegenRuntime), so the runtime (the
+//arena, the scope merge, the chunk pool, the join walk) is built for the target and, under -r, instrumented - exactly
+//the code a concurrency bug would hide in.
+//B3: a "linkonce_odr" global or constant goes in a comdat of its own name, as clang puts an inline variable: without
+//one a link that is not LTO's (-d, -r) keeps every object's copy of its storage, only the symbol being resolved to one.
+//The runtime's globals, which every object used to carry this way, are defined once now, in the runtime's object; the
+//static TLS a thread needs had grown with the number of modules (0x4680 bytes for 16 objects against 0x448) and
+//os.RunOnStack's small stacks no longer held it
 static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
     size_t i = 0;
     while (i < len) {
@@ -8988,6 +8983,24 @@ static void cgWriteWithAttributes(FILE* dst, char* buf, size_t len, bool race) {
     fprintf(dst, "attributes #1 = { null_pointer_is_valid %s }\n", cgTargetAttrs);
 }
 
+//B3, compiler/DESIGN.md section 1.10: the runtime's own IR, as its object is compiled from it - the target's triple, the
+//runtime's text filled in for this build (std/runtime: runtime.ll and, under -s, san.ll; or with dyncall the dynamic
+//call's part, dyncall.ll, after the declarations of the rest), and every function given the attributes each generated function carries, sanitize_thread
+//included under -r, so the runtime is built for the target and instrumented exactly as the program's own code is
+void CodegenRuntime(FILE* dst, bool dyncall, bool race) {
+    char* buf;
+    size_t len;
+    FILE* out = open_memstream(&buf, &len);
+    if (!out) ErrorBugFound();
+    emitTargetTriple(out);
+    //the dynamic call's part calls into the rest of the runtime, which it reaches as any module does
+    if (dyncall) emitRuntimeDecls(out, cgArch, cgScopeSan, false);
+    fputs(RuntimeText(cgArch, cgScopeSan, dyncall), out);
+    fclose(out);
+    cgWriteWithAttributes(dst, buf, len, race);
+    free(buf);
+}
+
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug) {
     SemanticMethodScope = mod; //M22: main, the harness and the globals initializer are this module's code
     char* modBuf;
@@ -9030,8 +9043,6 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
         cgEmitLambdasOf(&ctx, NULL, mod, true); //D16: those written in its tests
     }
     cgEmitFuncValues(&ctx);
-    if (ctx.floatText) emitFloatTextRuntime(out);
-    if (ctx.textBuilt) emitTextBuilderRuntime(out);
 
     fflush(fnOut);
     fwrite(fnBuf, 1, fnSize, out);
