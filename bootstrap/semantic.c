@@ -1560,6 +1560,118 @@ struct list SemanticMatchValues(struct operand* op) {
     return out;
 }
 
+//---- the code a statement or an operand holds ----
+//One list, field by field, of every sub-operand and sub-block a checked statement or operand holds, which every walker
+//asking "what is anywhere in this body" reads - so that a field added to either struct is added here once, and no walker
+//can miss it (vec4 F1': the freshness proof, the write scan and the deep loans each kept a list of their own, and each
+//missed some of an else-if's condition, a case guard, an assert's message, a for's post clause and a spawn target).
+//  struct statement: op, target, spawnTargets (each, NULL for "_"), fillValue, assertMsg, forInit, forPost (a
+//    statement), block, elseStmnt (a statement - an "else if"'s condition is its op), caseAlts (each test, each bind's
+//    from), caseGuard, matchHold, matchCases, nomatchBlock, nomatchValue, catchClauses (each block, dflt and taskCall).
+//    Not code: var (a declaration's declInit is its op), line/file, the flags, caseBindings (the vars binds fill),
+//    joinErrors.
+//  struct operand: args, chainOperands, callee, comprBody, catchClauses (each block, dflt and taskCall).
+//    Not code of its own: checkRoot, placeOf and landsWith (other operands of the same tree, reached through it),
+//    ownCopyReads and ownResultRegions (the checker's records, never evaluated), scopeBindings, a lambda's body (a
+//    function of its own, walked as one), pendingLambda (checked by the time a body is walked).
+//A walker gives callbacks for what it wants - NULL skips that kind - and may set stop to end the walk early
+enum codeRole {
+    ROLE_OP, ROLE_TARGET, ROLE_SPAWN_TARGET, ROLE_FILL, ROLE_ASSERT_MSG, ROLE_FOR_INIT, ROLE_FOR_POST, ROLE_BLOCK,
+    ROLE_ELSE, ROLE_CASE_TEST, ROLE_CASE_BIND, ROLE_CASE_GUARD, ROLE_MATCH_HOLD, ROLE_MATCH_CASES, ROLE_NOMATCH_BLOCK,
+    ROLE_NOMATCH_VALUE, ROLE_CATCH_BLOCK, ROLE_CATCH_DEFAULT, ROLE_TASK_CALL,
+    ROLE_ARG, ROLE_CHAIN, ROLE_CALLEE, ROLE_COMPR_BODY
+};
+struct codeVisit {
+    void (*op)(struct codeVisit* v, struct operand* op, enum codeRole role);
+    void (*stmt)(struct codeVisit* v, struct statement* s, enum codeRole role);
+    void (*block)(struct codeVisit* v, struct list* block, enum codeRole role);
+    void* ctx;
+    bool stop;
+};
+static void codeVisitOp(struct codeVisit* v, struct operand* op, enum codeRole r) {
+    if (op && v->op && !v->stop) v->op(v, op, r);
+}
+static void codeVisitStmt(struct codeVisit* v, struct statement* s, enum codeRole r) {
+    if (s && v->stmt && !v->stop) v->stmt(v, s, r);
+}
+static void codeVisitBlock(struct codeVisit* v, struct list* b, enum codeRole r) {
+    if (b->len && v->block && !v->stop) v->block(v, b, r);
+}
+static void codeVisitClauses(struct codeVisit* v, struct list* clauses) {
+    for (int i = 0; i < clauses->len && !v->stop; i++) {
+        struct catchClause* c = ListGetIdx(clauses, i);
+        codeVisitBlock(v, &c->block, ROLE_CATCH_BLOCK);
+        codeVisitOp(v, c->dflt, ROLE_CATCH_DEFAULT);
+        codeVisitOp(v, c->taskCall, ROLE_TASK_CALL);
+    }
+}
+static void StmtEachChild(struct statement* s, struct codeVisit* v) {
+    codeVisitOp(v, s->op, ROLE_OP);
+    codeVisitOp(v, s->target, ROLE_TARGET);
+    for (int i = 0; i < s->spawnTargets.len; i++) codeVisitOp(v, *(struct operand**)ListGetIdx(&s->spawnTargets, i), ROLE_SPAWN_TARGET);
+    codeVisitOp(v, s->fillValue, ROLE_FILL);
+    codeVisitOp(v, s->assertMsg, ROLE_ASSERT_MSG);
+    codeVisitOp(v, s->forInit, ROLE_FOR_INIT);
+    codeVisitStmt(v, s->forPost, ROLE_FOR_POST);
+    codeVisitBlock(v, &s->block, ROLE_BLOCK);
+    codeVisitStmt(v, s->elseStmnt, ROLE_ELSE);
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        codeVisitOp(v, a->test, ROLE_CASE_TEST);
+        for (int k = 0; k < a->binds.len; k++) codeVisitOp(v, ((struct caseBind*)ListGetIdx(&a->binds, k))->from, ROLE_CASE_BIND);
+    }
+    codeVisitOp(v, s->caseGuard, ROLE_CASE_GUARD);
+    codeVisitBlock(v, &s->matchHold, ROLE_MATCH_HOLD);
+    codeVisitBlock(v, &s->matchCases, ROLE_MATCH_CASES);
+    codeVisitBlock(v, &s->nomatchBlock, ROLE_NOMATCH_BLOCK);
+    codeVisitOp(v, s->nomatchValue, ROLE_NOMATCH_VALUE);
+    codeVisitClauses(v, &s->catchClauses);
+}
+static void OpEachChild(struct operand* op, struct codeVisit* v) {
+    for (int i = 0; i < op->args.len; i++) codeVisitOp(v, *(struct operand**)ListGetIdx(&op->args, i), ROLE_ARG);
+    for (int i = 0; i < op->chainOperands.len; i++) codeVisitOp(v, *(struct operand**)ListGetIdx(&op->chainOperands, i), ROLE_CHAIN);
+    codeVisitOp(v, op->callee, ROLE_CALLEE);
+    codeVisitBlock(v, &op->comprBody, ROLE_COMPR_BODY);
+    codeVisitClauses(v, &op->catchClauses);
+}
+
+//...and every statement and operand at any depth, each once, outer before inner: pre's callbacks see each (its block
+//callback is not used), and set stop to end the walk
+static void codeDeepOp(struct codeVisit* v, struct operand* op, enum codeRole r);
+static void codeDeepStmt(struct codeVisit* v, struct statement* s, enum codeRole r);
+static void codeDeepBlock(struct codeVisit* v, struct list* b, enum codeRole r) {
+    (void)r;
+    for (int i = 0; i < b->len && !v->stop; i++) codeDeepStmt(v, ListGetIdx(b, i), ROLE_BLOCK);
+}
+static void codeDeepOp(struct codeVisit* v, struct operand* op, enum codeRole r) {
+    struct codeVisit* pre = v->ctx;
+    if (pre->op) pre->op(pre, op, r);
+    if (pre->stop) { v->stop = true; return; }
+    OpEachChild(op, v);
+}
+static void codeDeepStmt(struct codeVisit* v, struct statement* s, enum codeRole r) {
+    struct codeVisit* pre = v->ctx;
+    if (pre->stmt) pre->stmt(pre, s, r);
+    if (pre->stop) { v->stop = true; return; }
+    StmtEachChild(s, v);
+}
+static bool CodeDeepBlock(struct list* block, struct codeVisit* pre) {
+    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
+    codeDeepBlock(&d, block, ROLE_BLOCK);
+    return !pre->stop;
+}
+static bool CodeDeepStmt(struct statement* s, struct codeVisit* pre) {
+    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
+    codeDeepStmt(&d, s, ROLE_BLOCK);
+    return !pre->stop;
+}
+static bool CodeDeepOp(struct operand* op, struct codeVisit* pre) {
+    if (!op) return true;
+    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
+    codeDeepOp(&d, op, ROLE_OP);
+    return !pre->stop;
+}
+
 bool OperandIsWrittenText(struct operand* op) {
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_MATCH) { //S12b: as a conditional's - written text when every value is
@@ -6560,6 +6672,7 @@ struct checkCtx {
                               //of storage within one, kept in what the value builds, takes its old value (copiesOld)
     struct list* joinErrs; //P4c: the error types the innermost join's tasks let through (struct type*), with joinHasSpawn
     bool* joinFallibleTarget; //P4d: set by a spawn with targets whose task can fail into that join
+    bool inAssertMsg; //S17: building an assert's message, evaluated only when the assert fails - it may not leave
     bool inTaskClause; //P4a: checking a clause of a spawned try - code of the task, which it may not leave
 };
 
@@ -12259,6 +12372,9 @@ static bool mbiStmt(struct statement* s) {
                 }
             }
         }
+        //(a target's place - an index, a field's base - is computed on the spawner's thread, as an assignment's is, vec4)
+        for (int i = 0; i < s->spawnTargets.len; i++)
+            if (mbiOperand(*(struct operand**)ListGetIdx(&s->spawnTargets, i), false)) return true;
         {
             bool savedSpawn = mbiInSpawn;
             mbiInSpawn = true;
@@ -15937,6 +16053,7 @@ void rejectDefaultArgs(struct list args) {
 void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
+    if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
     if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
     for (int i = 0; i < calleeType.errors.len; i++) {
@@ -21653,51 +21770,32 @@ static struct var* lvalueRoot(struct operand* op) {
     return op && op->opType == OPERATION_READ_VAR ? canonicalVar(op->readVar) : NULL;
 }
 
-static bool stmtsWrite(struct list* stmts, struct var* v);
 static struct statement* stmtsFindDecl(struct list* stmts, struct var* v);
 
-static bool opWrites(struct operand* op, struct var* v) {
-    if (!op) return false;
+//(whether code writes v anywhere in it - StmtEachChild's list, vec4)
+static void writesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct var* v = c->ctx;
+    if (s->sType == STATEMENT_ASSIGN && lvalueRoot(s->target) == v) c->stop = true;
+    for (int i = 0; i < s->spawnTargets.len; i++) {
+        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+        if (t && lvalueRoot(t) == v) c->stop = true;
+    }
+}
+static void writesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
     switch (op->opType) {
         case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC: case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD: case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
-            if (lvalueRoot(*(struct operand**)ListGetIdx(&op->args, 0)) == v) return true;
+        case OPERATION_TAKE:
+            if (op->args.len && lvalueRoot(*(struct operand**)ListGetIdx(&op->args, 0)) == c->ctx) c->stop = true;
             break;
         default: break;
     }
-    if (opWrites(op->callee, v)) return true; //E13b
-    if (stmtsWrite(&op->comprBody, v)) return true; //E27
-    for (int i = 0; i < op->args.len; i++) if (opWrites(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        if (stmtsWrite(&cc->block, v) || opWrites(cc->dflt, v)) return true;
-    }
-    return false;
 }
-
-static bool stmtWrites(struct statement* s, struct var* v) {
-    if (s->sType == STATEMENT_ASSIGN && lvalueRoot(s->target) == v) return true;
-    for (int i = 0; i < s->spawnTargets.len; i++) {
-        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
-        if (t && lvalueRoot(t) == v) return true;
-    }
-    if (opWrites(s->op, v) || opWrites(s->target, v) || opWrites(s->fillValue, v) || opWrites(s->forInit, v)) return true;
-    if (s->forPost && stmtWrites(s->forPost, v)) return true;
-    if (stmtsWrite(&s->block, v) || stmtsWrite(&s->nomatchBlock, v)) return true;
-    if (s->elseStmnt && stmtWrites(s->elseStmnt, v)) return true;
-    for (int i = 0; i < s->matchCases.len; i++) if (stmtWrites(ListGetIdx(&s->matchCases, i), v)) return true;
-    if (stmtsWrite(&s->matchHold, v) || opWrites(s->caseGuard, v) || opWrites(s->nomatchValue, v)) return true;
-    for (int i = 0; i < s->caseAlts.len; i++) if (opWrites(((struct caseAlt*)ListGetIdx(&s->caseAlts, i))->test, v)) return true;
-    for (int c = 0; c < s->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
-        if (stmtsWrite(&cc->block, v)) return true;
-    }
-    return false;
-}
-
 static bool stmtsWrite(struct list* stmts, struct var* v) {
-    for (int i = 0; i < stmts->len; i++) if (stmtWrites(ListGetIdx(stmts, i), v)) return true;
-    return false;
+    struct codeVisit c = { writesOp, writesStmt, NULL, v, false };
+    return !CodeDeepBlock(stmts, &c);
 }
 
 static struct statement* stmtFindDecl(struct statement* s, struct var* v) {
@@ -24023,6 +24121,10 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(firstTokOfType(s, TOK_RET), ERR_TASK_CLAUSE_RETURNS);
         return (struct statement){.sType = STATEMENT_RET};
     }
+    if (ctx->inAssertMsg) { //S17: a message gives text, evaluated only when the assert fails
+        Err(firstTokOfType(s, TOK_RET), ERR_ASSERT_MSG_RETURNS);
+        return (struct statement){.sType = STATEMENT_RET};
+    }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
     struct syntax* exprNode = exprNodes.len > 0 ? *(struct syntax**)ListGetIdx(&exprNodes, 0) : NULL;
     struct type* retExpect = exprNodes.len == 1 && ctx->func && ctx->func->type.hasRetType && !ctx->func->inferRet
@@ -24319,6 +24421,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return stmt; } //S19b
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return stmt; } //P4a
+    if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return stmt; } //S17
     if (!ctx->func) { Err(tok, ERR_ERROR_OUTSIDE_FUNCTION); return stmt; }
 
     //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
@@ -25680,7 +25783,9 @@ static bool blockLeavesValue(struct list* block) {
 //nesting an if/match/try inside the body changes nothing - ctx->inLoop is simply inherited by buildBlock.
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
-    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ctx->inTaskClause ? ERR_TASK_CLAUSE_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b, P4a
+    if (!ctx->inLoop)
+        Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ctx->inTaskClause ? ERR_TASK_CLAUSE_LOOP_JUMP
+                : ctx->inAssertMsg ? ERR_ASSERT_MSG_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b, P4a, S17
     if (kind == STATEMENT_BREAK && ctx->loopBreak) *ctx->loopBreak = true; //D10a
     return (struct statement){.sType = kind};
 }
@@ -25726,7 +25831,27 @@ struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     //S18a: "assert cond, message" - text (a literal, a join, "$x", a String), written as a String value
     struct operand* msg = NULL;
     if (exprs.len > 1) {
+        //S17: the message is evaluated only when the assert fails, and gives text - it may not leave: no return, no error
+        //statement, no error a try in it lets out, no break or continue but of a loop written in it, and a spawn in it
+        //needs a join written in it (so the evaluator and the program, which would leave from different places, agree)
+        bool savedMsg = ctx->inAssertMsg, savedLoop = ctx->inLoop;
+        bool* savedBreak = ctx->loopBreak;
+        bool* savedSpawn = ctx->joinHasSpawn;
+        struct list* savedErrs = ctx->joinErrs;
+        bool* savedFallible = ctx->joinFallibleTarget;
+        ctx->inAssertMsg = true;
+        ctx->joinFallibleTarget = NULL;
+        ctx->inLoop = false;
+        ctx->loopBreak = NULL;
+        ctx->joinHasSpawn = NULL;
+        ctx->joinErrs = NULL;
         msg = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprs, 1));
+        ctx->inAssertMsg = savedMsg;
+        ctx->inLoop = savedLoop;
+        ctx->loopBreak = savedBreak;
+        ctx->joinHasSpawn = savedSpawn;
+        ctx->joinErrs = savedErrs;
+        ctx->joinFallibleTarget = savedFallible;
         struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
         if (textT && OperandIsWrittenText(msg)) {
             struct type tv = *textT;
@@ -25836,6 +25961,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         if (StatementCatchCoversType(matches, *e)) continue;
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
         if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
+        if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
         if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
         bool found = false;
@@ -26215,47 +26341,24 @@ static void holdJoin(struct holdGroups* g, const char* a, const char* b) {
 static const char* holdKey(struct var* v) {
     return v && !v->owner && !v->isFuncDecl ? v->tok.str.ptr : NULL;
 }
-static void holdMentionsStmts(struct list* ss, struct list* out);
-//every local and parameter op's value may be derived from
-static void holdMentions(struct operand* op, struct list* out) {
-    if (!op) return;
+//every local and parameter op's value may be derived from - any it reads anywhere in it, StmtEachChild's list (vec4)
+static void holdMentions(struct operand* op, struct list* out);
+static void holdMentionsNode(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct list* out = c->ctx;
     if (op->opType == OPERATION_READ_VAR && op->readVar) {
         const char* k = holdKey(op->readVar);
         if (k) ListAdd(out, &k);
         for (int i = 0; op->readVar->isLambda && i < op->readVar->lambdaCaptures.len; i++) {
-            const char* c = holdKey(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer);
-            if (c) ListAdd(out, &c);
+            const char* cp = holdKey(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer);
+            if (cp) ListAdd(out, &cp);
         }
     }
-    holdMentions(op->callee, out);
     holdMentions(op->placeOf, out);
-    for (int i = 0; i < op->args.len; i++) holdMentions(*(struct operand**)ListGetIdx(&op->args, i), out);
-    for (int i = 0; i < op->chainOperands.len; i++) holdMentions(*(struct operand**)ListGetIdx(&op->chainOperands, i), out);
-    holdMentionsStmts(&op->comprBody, out);
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        holdMentions(cc->dflt, out);
-        holdMentionsStmts(&cc->block, out);
-    }
 }
-static void holdMentionsStmts(struct list* ss, struct list* out) {
-    for (int i = 0; i < ss->len; i++) {
-        struct statement* s = ListGetIdx(ss, i);
-        holdMentions(s->op, out);
-        holdMentions(s->nomatchValue, out);
-        holdMentionsStmts(&s->block, out);
-        holdMentionsStmts(&s->nomatchBlock, out);
-        for (int k = 0; k < s->matchCases.len; k++) {
-            struct statement* c = ListGetIdx(&s->matchCases, k);
-            holdMentions(c->op, out);
-            holdMentionsStmts(&c->block, out);
-        }
-        if (s->elseStmnt) {
-            struct list one = ListInit(sizeof(struct statement));
-            ListAdd(&one, s->elseStmnt);
-            holdMentionsStmts(&one, out);
-        }
-    }
+static void holdMentions(struct operand* op, struct list* out) {
+    struct codeVisit c = { holdMentionsNode, NULL, NULL, out, false };
+    CodeDeepOp(op, &c);
 }
 static bool holdCarries(struct type t) {
     return t.structMAlloc || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || TypeHoldsReferences(t);
@@ -26264,6 +26367,12 @@ static void holdJoinAll(struct holdGroups* g, const char* to, struct list* ks) {
     for (int i = 0; i < ks->len; i++) holdJoin(g, to, *(const char**)ListGetIdx(ks, i));
 }
 static void holdStmts(struct holdGroups* g, struct list* ss);
+static void holdOp(struct holdGroups* g, struct operand* op);
+static void holdStmt(struct holdGroups* g, struct statement* s);
+//(every child of a statement or an operand, StmtEachChild's list, vec4)
+static void holdChildOp(struct codeVisit* c, struct operand* op, enum codeRole r) { (void)r; holdOp(c->ctx, op); }
+static void holdChildStmt(struct codeVisit* c, struct statement* s, enum codeRole r) { (void)r; holdStmt(c->ctx, s); }
+static void holdChildBlock(struct codeVisit* c, struct list* b, enum codeRole r) { (void)r; holdStmts(c->ctx, b); }
 static void holdOp(struct holdGroups* g, struct operand* op) {
     if (!op) return;
     if (op->opType == OPERATION_FUNCCALL) { //a callee may keep one argument in another
@@ -26275,15 +26384,8 @@ static void holdOp(struct holdGroups* g, struct operand* op) {
         holdMentions(op->callee, &ks);
         for (int i = 1; i < ks.len; i++) holdJoin(g, *(const char**)ListGetIdx(&ks, 0), *(const char**)ListGetIdx(&ks, i));
     }
-    holdOp(g, op->callee);
-    for (int i = 0; i < op->args.len; i++) holdOp(g, *(struct operand**)ListGetIdx(&op->args, i));
-    for (int i = 0; i < op->chainOperands.len; i++) holdOp(g, *(struct operand**)ListGetIdx(&op->chainOperands, i));
-    holdStmts(g, &op->comprBody);
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        holdOp(g, cc->dflt);
-        holdStmts(g, &cc->block);
-    }
+    struct codeVisit c = { holdChildOp, holdChildStmt, holdChildBlock, g, false };
+    OpEachChild(op, &c);
 }
 static void holdStmt(struct holdGroups* g, struct statement* s) {
     struct list ks = ListInit(sizeof(const char*));
@@ -26301,15 +26403,8 @@ static void holdStmt(struct holdGroups* g, struct statement* s) {
             if (holdKey(tr)) holdJoinAll(g, holdKey(tr), &ks);
         }
     }
-    holdOp(g, s->op);
-    holdOp(g, s->target);
-    holdOp(g, s->fillValue);
-    holdOp(g, s->forInit);
-    holdOp(g, s->caseGuard);
-    holdOp(g, s->nomatchValue);
     for (int i = 0; i < s->caseAlts.len; i++) {
         struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        holdOp(g, a->test);
         for (int b = 0; b < a->binds.len; b++) {
             struct caseBind* cb = ListGetIdx(&a->binds, b);
             struct list bk = ListInit(sizeof(const char*));
@@ -26317,13 +26412,8 @@ static void holdStmt(struct holdGroups* g, struct statement* s) {
             if (cb->v && holdCarries(cb->v->type)) holdJoinAll(g, cb->v->tok.str.ptr, &bk);
         }
     }
-    if (s->forPost) holdStmt(g, s->forPost);
-    if (s->elseStmnt) holdStmt(g, s->elseStmnt);
-    holdStmts(g, &s->block);
-    holdStmts(g, &s->nomatchBlock);
-    holdStmts(g, &s->matchHold);
-    for (int i = 0; i < s->matchCases.len; i++) holdStmt(g, ListGetIdx(&s->matchCases, i));
-    for (int c = 0; c < s->catchClauses.len; c++) holdStmts(g, &((struct catchClause*)ListGetIdx(&s->catchClauses, c))->block);
+    struct codeVisit c = { holdChildOp, holdChildStmt, holdChildBlock, g, false };
+    StmtEachChild(s, &c);
 }
 static void holdStmts(struct holdGroups* g, struct list* ss) {
     for (int i = 0; i < ss->len; i++) holdStmt(g, ListGetIdx(ss, i));
@@ -27381,54 +27471,32 @@ static void ownFreshCollect(struct var* f, struct list* block) {
         ListAdd(&ownFreshFuncs, &c);
     }
 }
-//(a local v written again anywhere in a body - assigned, a spawn's target, taken - or declared more than once)
-static bool ownFreshOpWrites(struct operand* op, struct var* v, int* decls);
-static bool ownFreshBlockWrites(struct list* block, struct var* v, int* decls);
+//(a local v written again anywhere in a body - assigned, a spawn's target, taken - or declared more than once; every
+//statement and operand at any depth, StmtEachChild's list)
+struct ownFreshScan { struct var* v; int decls; struct var* f; };
 static bool ownFreshIsVar(struct operand* op, struct var* v) {
     return op && op->opType == OPERATION_READ_VAR && op->readVar && canonicalVar(op->readVar) == v;
 }
-static bool ownFreshStmtWrites(struct statement* s, struct var* v, int* decls) {
-    if (s->sType == STATEMENT_VAR_DECL && canonicalVar(&s->var) == v) (*decls)++;
-    if (s->sType == STATEMENT_ASSIGN && ownFreshIsVar(s->target, v)) return true;
+static void ownFreshWritesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct ownFreshScan* w = c->ctx;
+    if (s->sType == STATEMENT_VAR_DECL && canonicalVar(&s->var) == w->v) w->decls++;
+    if (s->sType == STATEMENT_ASSIGN && ownFreshIsVar(s->target, w->v)) c->stop = true;
     for (int i = 0; i < s->spawnTargets.len; i++)
-        if (ownFreshIsVar(*(struct operand**)ListGetIdx(&s->spawnTargets, i), v)) return true;
-    if (ownFreshOpWrites(s->op, v, decls) || ownFreshOpWrites(s->target, v, decls) || ownFreshOpWrites(s->fillValue, v, decls)
-            || ownFreshOpWrites(s->forInit, v, decls) || ownFreshOpWrites(s->caseGuard, v, decls)
-            || ownFreshOpWrites(s->nomatchValue, v, decls) || ownFreshOpWrites(s->assertMsg, v, decls))
-        return true;
-    for (int i = 0; i < s->caseAlts.len; i++) {
-        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        if (ownFreshOpWrites(a->test, v, decls)) return true;
-        for (int k = 0; k < a->binds.len; k++)
-            if (ownFreshOpWrites(((struct caseBind*)ListGetIdx(&a->binds, k))->from, v, decls)) return true;
-    }
-    for (int i = 0; i < s->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&s->catchClauses, i);
-        if (ownFreshBlockWrites(&c->block, v, decls) || ownFreshOpWrites(c->dflt, v, decls)) return true;
-    }
-    if (s->forPost && ownFreshStmtWrites(s->forPost, v, decls)) return true;
-    if (ownFreshBlockWrites(&s->block, v, decls) || ownFreshBlockWrites(&s->matchHold, v, decls)
-            || ownFreshBlockWrites(&s->matchCases, v, decls) || ownFreshBlockWrites(&s->nomatchBlock, v, decls))
-        return true;
-    return s->elseStmnt && ownFreshStmtWrites(s->elseStmnt, v, decls);
+        if (ownFreshIsVar(*(struct operand**)ListGetIdx(&s->spawnTargets, i), w->v)) c->stop = true;
+}
+static void ownFreshWritesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct ownFreshScan* w = c->ctx;
+    if (op->opType == OPERATION_TAKE && op->args.len && ownFreshIsVar(*(struct operand**)ListGetIdx(&op->args, 0), w->v))
+        c->stop = true;
 }
 static bool ownFreshBlockWrites(struct list* block, struct var* v, int* decls) {
-    for (int i = 0; i < block->len; i++) if (ownFreshStmtWrites(ListGetIdx(block, i), v, decls)) return true;
-    return false;
-}
-static bool ownFreshOpWrites(struct operand* op, struct var* v, int* decls) {
-    if (!op) return false;
-    if (op->opType == OPERATION_TAKE && op->args.len && ownFreshIsVar(*(struct operand**)ListGetIdx(&op->args, 0), v))
-        return true;
-    for (int i = 0; i < op->args.len; i++) if (ownFreshOpWrites(*(struct operand**)ListGetIdx(&op->args, i), v, decls)) return true;
-    for (int i = 0; i < op->chainOperands.len; i++)
-        if (ownFreshOpWrites(*(struct operand**)ListGetIdx(&op->chainOperands, i), v, decls)) return true;
-    if (ownFreshOpWrites(op->callee, v, decls)) return true;
-    for (int i = 0; i < op->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
-        if (ownFreshBlockWrites(&c->block, v, decls) || ownFreshOpWrites(c->dflt, v, decls)) return true;
-    }
-    return ownFreshBlockWrites(&op->comprBody, v, decls);
+    struct ownFreshScan w = { v, 0, NULL };
+    struct codeVisit c = { ownFreshWritesOp, ownFreshWritesStmt, NULL, &w, false };
+    bool wrote = !CodeDeepBlock(block, &c);
+    *decls += w.decls;
+    return wrote;
 }
 static bool ownFreshValue(struct var* f, struct operand* op, int depth) {
     if (!op || depth > 32 || op->type.unknown) return false;
@@ -27466,38 +27534,17 @@ static bool ownFreshValue(struct var* f, struct operand* op, int depth) {
         return false;
     }
 }
-static bool ownFreshReturns(struct var* f, struct list* block);
-static bool ownFreshStmtReturns(struct var* f, struct statement* s) {
-    if (s->sType == STATEMENT_RET && !ownFreshValue(f, s->op, 0)) return false;
-    for (int i = 0; i < s->catchClauses.len; i++)
-        if (!ownFreshReturns(f, &((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block)) return false;
-    if (!ownFreshReturns(f, &s->block) || !ownFreshReturns(f, &s->matchHold) || !ownFreshReturns(f, &s->matchCases)
-            || !ownFreshReturns(f, &s->nomatchBlock))
-        return false;
-    return !s->elseStmnt || ownFreshStmtReturns(f, s->elseStmnt);
-}
-//(every return of a block, at any depth - a return inside an operand's statements (a match's clauses, a catch block)
-//included: operands are searched for them too)
-static bool ownFreshOpReturns(struct var* f, struct operand* op) {
-    if (!op) return true;
-    for (int i = 0; i < op->args.len; i++) if (!ownFreshOpReturns(f, *(struct operand**)ListGetIdx(&op->args, i))) return false;
-    for (int i = 0; i < op->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
-        if (!ownFreshReturns(f, &c->block) || !ownFreshOpReturns(f, c->dflt)) return false;
-    }
-    if (!ownFreshOpReturns(f, op->callee)) return false;
-    return ownFreshReturns(f, &op->comprBody);
+//(every return of a block, at any depth - one inside an operand's statements (a match's clauses, a catch block) in any
+//position, StmtEachChild's list, included)
+static void ownFreshReturnsStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct ownFreshScan* w = c->ctx;
+    if (s->sType == STATEMENT_RET && !ownFreshValue(w->f, s->op, 0)) c->stop = true;
 }
 static bool ownFreshReturns(struct var* f, struct list* block) {
-    for (int i = 0; i < block->len; i++) {
-        struct statement* s = ListGetIdx(block, i);
-        if (!ownFreshStmtReturns(f, s)) return false;
-        if (!ownFreshOpReturns(f, s->op) || !ownFreshOpReturns(f, s->target) || !ownFreshOpReturns(f, s->fillValue)
-                || !ownFreshOpReturns(f, s->forInit) || !ownFreshOpReturns(f, s->nomatchValue))
-            return false;
-        if (s->forPost && !ownFreshStmtReturns(f, s->forPost)) return false;
-    }
-    return true;
+    struct ownFreshScan w = { NULL, 0, f };
+    struct codeVisit c = { NULL, ownFreshReturnsStmt, NULL, &w, false };
+    return CodeDeepBlock(block, &c);
 }
 static void ownResultFreshSettle(void) {
     ownFreshFuncs = ListInit(sizeof(struct var*));
@@ -27686,23 +27733,23 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
     if (op->comprBody.len) ownLoansOfBlockDeep(&op->comprBody, out);
 }
 
+//(what a statement and everything in it borrow, StmtEachChild's list - a place where it is one: an assignment's or a
+//spawn's target)
+static void ownLoansOfStmtDeep(struct statement* s, struct list* out);
+static void ownLoansDeepOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    ownLoansIn(op, c->ctx, false, r == ROLE_TARGET || r == ROLE_SPAWN_TARGET);
+}
+static void ownLoansDeepStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    ownLoansOfStmtDeep(s, c->ctx);
+}
+static void ownLoansDeepBlock(struct codeVisit* c, struct list* b, enum codeRole r) {
+    (void)r;
+    ownLoansOfBlockDeep(b, c->ctx);
+}
 static void ownLoansOfStmtDeep(struct statement* s, struct list* out) {
-    ownLoansIn(s->op, out, false, false);
-    ownLoansIn(s->target, out, false, true);
-    ownLoansIn(s->fillValue, out, false, false);
-    ownLoansIn(s->forInit, out, false, false);
-    ownLoansIn(s->caseGuard, out, false, false);
-    ownLoansIn(s->nomatchValue, out, false, false);
-    for (int i = 0; i < s->caseAlts.len; i++) {
-        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        ownLoansIn(a->test, out, false, false);
-        for (int k = 0; k < a->binds.len; k++) ownLoansIn(((struct caseBind*)ListGetIdx(&a->binds, k))->from, out, false, false);
-    }
-    ownLoansOfBlockDeep(&s->block, out);
-    ownLoansOfBlockDeep(&s->matchHold, out);
-    ownLoansOfBlockDeep(&s->matchCases, out);
-    ownLoansOfBlockDeep(&s->nomatchBlock, out);
-    if (s->elseStmnt) ownLoansOfStmtDeep(s->elseStmnt, out);
+    struct codeVisit c = { ownLoansDeepOp, ownLoansDeepStmt, ownLoansDeepBlock, out, false };
+    StmtEachChild(s, &c);
 }
 
 static void ownLoansOfBlockDeep(struct list* block, struct list* out) {
@@ -27748,58 +27795,27 @@ static void ownLoansOfStmt(struct statement* s, struct list* out) {
     }
 }
 
-static bool ownBlockReads(struct list* block, struct var* v);
-static bool ownStmtReads(struct statement* s, struct var* v);
-//whether op reads v - directly, or as a capture of a closure it makes
-static bool ownOpReads(struct operand* op, struct var* v) {
-    if (!op) return false;
+//whether code reads v - directly, or as a capture of a closure it makes; anywhere in it, StmtEachChild's list
+static void ownReadsOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct var* v = c->ctx;
     if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) { //(a call through it reads it)
         bool reads = canonicalVar(op->readVar) == v;
         for (int i = 0; !reads && i < op->readVar->lambdaCaptures.len; i++)
             if (canonicalVar(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer) == v) reads = true;
         if (reads) {
             ow.useTok = op->tok;
-            return true;
+            c->stop = true;
         }
     }
-    for (int i = 0; i < op->args.len; i++)
-        if (ownOpReads(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
-    for (int i = 0; i < op->chainOperands.len; i++)
-        if (ownOpReads(*(struct operand**)ListGetIdx(&op->chainOperands, i), v)) return true;
-    if (ownOpReads(op->callee, v)) return true;
-    for (int i = 0; i < op->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
-        if (ownOpReads(c->dflt, v) || ownBlockReads(&c->block, v)) return true;
-    }
-    return ownBlockReads(&op->comprBody, v);
 }
-
+static bool ownOpReads(struct operand* op, struct var* v) {
+    struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
+    return !CodeDeepOp(op, &c);
+}
 static bool ownStmtReads(struct statement* s, struct var* v) {
-    if (ownOpReads(s->op, v) || ownOpReads(s->target, v) || ownOpReads(s->fillValue, v) || ownOpReads(s->forInit, v)
-            || ownOpReads(s->assertMsg, v) || ownOpReads(s->caseGuard, v) || ownOpReads(s->nomatchValue, v))
-        return true;
-    if (s->forPost && ownStmtReads(s->forPost, v)) return true;
-    if (s->elseStmnt && ownStmtReads(s->elseStmnt, v)) return true;
-    for (int i = 0; i < s->caseAlts.len; i++) {
-        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        if (ownOpReads(a->test, v)) return true;
-        for (int k = 0; k < a->binds.len; k++)
-            if (ownOpReads(((struct caseBind*)ListGetIdx(&a->binds, k))->from, v)) return true;
-    }
-    for (int i = 0; i < s->spawnTargets.len; i++)
-        if (ownOpReads(*(struct operand**)ListGetIdx(&s->spawnTargets, i), v)) return true;
-    for (int i = 0; i < s->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&s->catchClauses, i);
-        if (ownOpReads(c->dflt, v) || ownBlockReads(&c->block, v)) return true;
-    }
-    return ownBlockReads(&s->block, v) || ownBlockReads(&s->matchHold, v) || ownBlockReads(&s->matchCases, v)
-           || ownBlockReads(&s->nomatchBlock, v);
-}
-
-static bool ownBlockReads(struct list* block, struct var* v) {
-    for (int i = 0; i < block->len; i++)
-        if (ownStmtReads(ListGetIdx(block, i), v)) return true;
-    return false;
+    struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
+    return !CodeDeepStmt(s, &c);
 }
 
 static bool ownLoopOwner(struct statement* s) {
@@ -28470,6 +28486,23 @@ static void ownFramePop(int k) {
     ow.frames.len = k;
 }
 
+//O33/O38 (vec4 R): a local whose written scope names an owned object's region - "d mut String&x" with "x := c.text", or a
+//":=" from a call given that scope, "d := mk&x(5)" - is new storage built in the region, which the region's release frees
+//as it frees what is read through the owner: it holds a loan on the region as the borrow it names does, live to its last
+//use and confined as a borrow is (the region outlives nothing, so §8.4 keeps it in locals, calls and the region)
+static struct var* ownRegionScope(struct var* sv) {
+    if (!sv || sv == SCOPE_AMBIGUOUS) return NULL;
+    sv = canonicalVar(sv);
+    return sv->isRegion ? sv : NULL;
+}
+static void ownHomeLoan(struct var* v, struct list* out, struct token tok) {
+    if (!v) return;
+    struct var* R = ownRegionScope(v->type.scopeParam);
+    if (!R && v->valueHomeSet) R = ownRegionScope(v->valueHome);
+    if (!R && v->refsHomeSet) R = ownRegionScope(v->refsHome);
+    if (R) ownLoanAdd(out, R, tok);
+}
+
 //O38: a local declared holding what it was given - a reference, a value holding one, or a closure - until its last use
 static void ownHold(struct var* v, struct list* loans, int frame) {
     if (!v || v->type.refOwn || !typeCarriesScopes(v->type)) return;
@@ -28544,6 +28577,44 @@ static void ownBlockWalk(struct list* block, struct statement* owner) {
     ownFramePop(k);
 }
 
+//(what of a statement its case in ownStmtWalk walks itself, in its own order and frames - the rest of StmtEachChild's list
+//is walked after it, so that code in a position no case names is never skipped, vec4 F1')
+static bool ownStmtWalksRole(enum statementType t, enum codeRole r) {
+    switch (t) {
+    case STATEMENT_VAR_DECL: return r == ROLE_OP || r == ROLE_FILL;
+    case STATEMENT_ASSIGN: return r == ROLE_TARGET || r == ROLE_OP;
+    case STATEMENT_IF: return r == ROLE_OP || r == ROLE_BLOCK || r == ROLE_ELSE;
+    case STATEMENT_FOR: return r == ROLE_FOR_INIT || r == ROLE_OP || r == ROLE_FOR_POST || r == ROLE_BLOCK;
+    case STATEMENT_DO: return r == ROLE_BLOCK || r == ROLE_OP;
+    case STATEMENT_MATCH:
+        return r == ROLE_OP || r == ROLE_MATCH_HOLD || r == ROLE_MATCH_CASES || r == ROLE_NOMATCH_BLOCK
+               || r == ROLE_NOMATCH_VALUE;
+    case STATEMENT_CASE:
+        return r == ROLE_CASE_TEST || r == ROLE_CASE_BIND || r == ROLE_CASE_GUARD || r == ROLE_BLOCK || r == ROLE_OP;
+    case STATEMENT_DEFER: return r == ROLE_BLOCK;
+    case STATEMENT_JOIN: return r == ROLE_BLOCK || r == ROLE_CATCH_BLOCK;
+    case STATEMENT_SPAWN: //(a task's clauses are its lambdas' bodies, walked by ownTaskLoans)
+        return r == ROLE_OP || r == ROLE_SPAWN_TARGET || r == ROLE_CATCH_BLOCK || r == ROLE_CATCH_DEFAULT || r == ROLE_TASK_CALL;
+    case STATEMENT_TRY_CATCH: return r == ROLE_OP || r == ROLE_CATCH_BLOCK || r == ROLE_CATCH_DEFAULT;
+    case STATEMENT_ASSERT: return r == ROLE_OP || r == ROLE_ASSERT_MSG;
+    default: return r == ROLE_OP;
+    }
+}
+static void ownRestOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    if (!ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) ownOpWalk(op);
+}
+static void ownRestStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    if (ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) return;
+    struct list one = ListInit(sizeof(struct statement));
+    ListAdd(&one, s);
+    int k = ownFramePush(&one, c->ctx);
+    ownStmtWalk(s);
+    ownFramePop(k);
+}
+static void ownRestBlock(struct codeVisit* c, struct list* b, enum codeRole r) {
+    if (!ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) ownBlockWalk(b, c->ctx);
+}
+
 static void ownStmtWalk(struct statement* s) {
     struct list cur = ow.cur;
     struct statement* stmt = ow.stmt;
@@ -28560,9 +28631,11 @@ static void ownStmtWalk(struct statement* s) {
             ownLoansIn(s->op, &kept, false, false);
             ownLoansIn(s->fillValue, &kept, false, false);
             ownKeptOnly = false;
+            ownHomeLoan(&s->var, &kept, s->var.tok); //(vec4 R: a local built in an owned object's region)
             //(vec3 F4: a global's initializer - every loan it keeps would outlive its release, which nothing here sees)
+            //(vec4: a value whose type holds no reference - "T String = Docs.title" - is a copy and keeps nothing, as in a local)
             if (s->var.isGlobalVar) {
-                if (kept.len && !ow.rewalking && s->op && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
+                if (kept.len && !s->var.type.refOwn && typeCarriesScopes(s->var.type) && !ow.rewalking && s->op && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
             } else ownHold(&s->var, &kept, ow.frames.len - 1);
         }
         //D16e/P4a: the hidden local a task's lambda is held in - a call through it runs that lambda's body (ownCalleeBody)
@@ -28613,7 +28686,10 @@ static void ownStmtWalk(struct statement* s) {
     case STATEMENT_FOR: {
         ownOpWalk(s->forInit);
         int k = ownFramePush(&s->block, s);
-        if (ow.check) ownHold(&s->var, &ow.cur, k);
+        if (ow.check) {
+            ownHomeLoan(&s->var, &ow.cur, s->var.tok); //(vec4 R)
+            ownHold(&s->var, &ow.cur, k);
+        }
         ownOpWalk(s->op);
         ow.cur.len = 0;
         if (s->forPost) ownStmtWalk(s->forPost);
@@ -28768,6 +28844,8 @@ static void ownStmtWalk(struct statement* s) {
         ownOpWalk(s->op);
         break;
     }
+    struct codeVisit rest = { ownRestOp, ownRestStmt, ownRestBlock, s, false };
+    StmtEachChild(s, &rest);
     ow.cur = cur;
     ow.stmt = stmt;
 }

@@ -1,0 +1,20 @@
+# check: run
+# S17: an assert's message may hold code that does not leave it - a catch block giving a default, a lambda returning from
+# itself, a loop broken inside it, unreachable
+error E {
+    BAD
+}
+fn h(k I64) I64 ? E {
+    if k > 0 { error E.BAD }
+    return k
+}
+fn g(k I64) I64 {
+    assert k > 0, $(try h(k) catch { k = k + 1 } default 1)
+    assert k > 0, $(fn(a I64) I64 { return a + 1 }(k))
+    assert k > 0, $(try h(k) catch { for j in range 2 { if j > 0 { break } } } default 1)
+    assert k > 0, $(try h(k) catch { unreachable })
+    return 3
+}
+fn main() ? {
+    assert g(1) == 3
+}

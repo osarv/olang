@@ -587,6 +587,9 @@ struct type;
     X(ERR_DEFAULT_NOT_COMPUTABLE,       "D8a",   "a default is computed while compiling, and this one cannot be: %s") \
     X(ERR_ASSERT_FALSE,                 "S18c",  "this assertion is false, evaluated while compiling") \
     X(ERR_ASSERT_FALSE_MESSAGE,         "S18c",  "this assertion is false, evaluated while compiling: %s") \
+    X(ERR_ASSERT_MSG_RETURNS,           "S17",   "an assert's message may not return - it is evaluated only when the assert fails, and gives text") \
+    X(ERR_ASSERT_MSG_ERROR,             "S17",   "an error may not leave an assert's message - catch it here") \
+    X(ERR_ASSERT_MSG_LOOP_JUMP,         "S17",   "%n may not leave an assert's message - it is evaluated only when the assert fails") \
     X(ERR_ASSERT_MESSAGE_NOT_TEXT,      "S18a",  "an assertion's message is text, found %t - write it as text: \"x is \" $x") \
     X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \

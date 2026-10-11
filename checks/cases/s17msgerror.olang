@@ -1,0 +1,15 @@
+# check: fail error[S17]: an error may not leave an assert's message - catch it here
+error E {
+    BAD
+}
+fn h(k I64) I64 ? E {
+    if k > 0 { error E.BAD }
+    return k
+}
+fn f(k I64) I64 ? E {
+    assert k > 100, $(try h(k))
+    return 3
+}
+fn main() ? E {
+    assert (try f(1)) == 3
+}

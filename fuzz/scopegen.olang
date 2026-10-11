@@ -1127,7 +1127,11 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
         if w < 4 { return g.own4Op(h, ind, v) }
         if w < 6 { return g.own5Op(h, ind, v) }
         if w < 9 { return g.own6Op(h, ind, v) }
-        if w >= 14 { return g.vec2Op(h, ind, v, g.r(4)) if g.chance(50) else g.vec3Op(h, ind, v, g.r(8)) }
+        if w >= 14 {
+            pv := g.r(3)
+            if pv == 0 { return g.vec2Op(h, ind, v, g.r(4)) }
+            return g.vec3Op(h, ind, v, g.r(8)) if pv == 1 else g.vec4Op(h, ind, v, g.r(11))
+        }
         return g.own7Op(h, ind, v) if w < 11 else g.vecOp(h, ind, v)
     }
     k := g.r(15 if g.dtors else 11)
@@ -1627,6 +1631,72 @@ fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
     # ...a number read out of it, kept (accepted)
     return ($ind "{\n" $ind $x " := " $gg ".title.Len() + I64(" $gg ".title[0])\n" $rename $ind $x " += " $gg ".title.Len()\n" $use
             $ind "}\n")
+}
+
+# vec4 (the fourth review of Vec phase 1): F1' - a return (or a write of the local returned) hidden in an else-if's
+# condition, a case guard, a for's post clause, a match value's block clause or a spawn target's index, which the
+# freshness proof must see (refused: O39), beside one returning new storage there (accepted); R - new storage built in an
+# owned object's region through a local typed with a borrow's scope, or a scope argument naming one, used after the
+# region's release (refused: O39) or before it (accepted); X - a return in an assert's message (refused: S17)
+fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    if k <= 6 {
+        vv := g.name("vv")
+        d := g.name("d")
+        pk := g.name("v4p")
+        fl := g.name("v4g")
+        w := g.name("v4w")
+        g.addHelper("fn " $pk "(c Bool, x <T>, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error }\n"
+                    "    return k\n}\n")
+        back := $pk "(true, a, b)"
+        body := ""
+        if k == 0 {
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if (try " $fl "(a.Len()) catch { return " $back
+                    " }) > 0 { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        } else if k == 1 {
+            body = ("    match a.Len() {\n        case 0 { return Array<I64>(1) }\n        case _ if (try " $fl "(a.Len()) catch { return "
+                    $back " }) > 0 { return Array<I64>(2) }\n        case _ { return Array<I64>(3) }\n    }\n")
+        } else if k == 2 {
+            body = "    for i := 0, i < 3, i = (try " $fl "(i) catch { return " $back " }) { }\n    return Array<I64>(3)\n"
+        } else if k == 3 {
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if match a.Len() { case 2 { return " $back
+                    " } case _ => true } { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        } else if k == 4 {
+            body = ("    out mut Array<I64>&return = Array<I64>(2)\n    res := Array<I64>(4)\n    join { spawn res[(try " $fl
+                    "(1) catch { out = " $back " } default 0)] = " $pk "(true, 3, 4) }\n    return out\n")
+        } else if k == 5 {
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if (try " $fl "(a.Len()) catch { out := " $back
+                    "\n        return out }) > 0 { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        } else {    # the legal side: new storage returned from the else-if's catch block (accepted)
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if (try " $fl "(a.Len()) catch { return Array<I64>(5, b.Len()) })"
+                    " > 0 { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        }
+        g.addHelper("fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {\n" $body "}\n")
+        return ($ind "{\n" $ind $vv " := Vec<I64>()\n" $ind $vv ".Push(" $v ")\n" $ind $vv ".Push(" $v " + 1)\n" $ind $d " := " $w
+                "(" $vv ".ViewMut(), Array<I64>(1))\n" $ind "for i in range 100 { " $vv ".Push(i) }\n" $ind "churn()\n" $ind $x
+                " := " $d "[0] + " $d ".Len()\n" $use $ind "}\n")
+    }
+    if k == 10 {    # X: a return in an assert's message (refused: S17)
+        fl := g.name("v4g")
+        w := g.name("v4x")
+        g.addHelper("fn " $fl "(k I64) I64 ? {\n    if k < 5 { error }\n    return k\n}\nfn " $w "(k I64) I64 {\n    assert k > 100, (try "
+                    $fl "(k) catch { return 7 }).Format()\n    return 3\n}\n")
+        return $ind $x " := " $w "(" $v ")\n" $use
+    }
+    t := g.name("t")
+    d := g.name("d")
+    mk := g.name("v4m")
+    g.addHelper("fn " $mk "(n I64) mut String& { return $n \"-new-text-in-the-region\" }\n")
+    made := $ind $d " mut String&" $t " = $" $v " \"-new-text-in-the-region\"\n"
+    if k == 8 { made = $ind $d " := " $mk "&" $t "(" $v ")\n" }
+    rel := $ind $h ".text = \"zz" $v "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n"
+    read := $ind $x " := " $d ".Len() + I64(" $d "[0])\n"
+    if k == 9 {    # R's legal side: used before the release (accepted)
+        return $ind "{\n" $ind $t " := " $h ".text\n" $made $read $rel $use $ind "}\n"
+    }
+    return $ind "{\n" $ind $t " := " $h ".text\n" $made $rel $read $use $ind "}\n"    # R: used after it (refused: O39)
 }
 
 # a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a

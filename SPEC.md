@@ -3553,7 +3553,11 @@ simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in
 constructor, or destructor body (§9), not
 only inside `test { }` blocks. The optional second `expr` is the assert's **message**: text - a literal, a join
 or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fails**, so its cost and its effects
-are paid only then: `assert n < cap, "n is " $n ", cap " $cap`.
+are paid only then: `assert n < cap, "n is " $n ", cap " $cap`. The message may not leave: it gives text, and is evaluated only
+where the assert fails. A `return` or an `error` statement in it, a `try` an error can leave it through (in a catch block
+in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
+deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `done`, `fail`, `abort` and `unreachable` end
+the test or the process and may appear.
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
@@ -5128,7 +5132,10 @@ borrow is a split value (O17a). *(Not yet implemented: an element that is a valu
 `Array<T, N>` by value - is a compile-time error (T25e).)*
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
-borrowed result that is the object (O37) - or through a reference this function read out of such a borrow. A borrow of
+borrowed result that is the object (O37) - or through a reference this function read out of such a borrow, or where a
+local's written scope names such a borrow (`d mut String&x` with `x := c.text`, O25a) or a scope argument does
+(`mk&x(n)`, E25). Such a local is new storage in the region, which the region's release frees: it holds a loan on the
+region as the borrow it names does (O38). A borrow of
 anything else lives where it is not known (O12). A region is known as the borrow naming it is read, so a value built
 for an argument in the region a later argument of the same call reads - `setN(Node(9), s.cur)`, `setN` storing its
 first parameter into its second's object - is a compile-time error naming the place: read it into a local first
@@ -5286,8 +5293,9 @@ owned result is an owner only in a move position (`x := f()`, an own slot, an ow
 `return` of an owned result) or standing as a statement (O35); anywhere else it is a compile-time error naming
 `x := f(...)`. A `catch default` giving a value of an owning type held by value is a compile-time error.)*
 
-**O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), and by each call giving a
-borrowed result (O37). A part of an owned object - an inline field or array, an own array's element - **borrowed where
+**O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), by each call giving a
+borrowed result (O37), and by each local whose scope is a region - written naming a borrow, or taken from a value a
+scope argument built there (O33). A part of an owned object - an inline field or array, an own array's element - **borrowed where
 it is** reads the slot as well, whatever the part's type holds: lent by reference (E12c - to a reference parameter, a
 receiver, a reference local or field, a task's argument), sliced or viewed (E16a, E32b), walked by `for` (S9), or
 rendered by a join (E11b) after a later operand that runs code - a join reads its pieces once every operand is evaluated.
@@ -5325,8 +5333,9 @@ neither to the argument's own storage, nor to an own array the argument's loans 
 holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
 from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Two references are none
 of those: the own top of a **built** result (`T&` or `T&return` written, not borrowed from a parameter nor a type
-variable's) proven **new storage** - every return of its function a constructor call, `Array<T>(n)`, a comprehension, a
-literal, text rendered or joined there, `null`, a local declared from one of those and never assigned again, a call to
+variable's) proven **new storage** - every return of its function - wherever it is written: in a block, an `else if`'s condition, a case guard, a `for`'s
+post clause, a catch block or a match value's clause - a constructor call, `Array<T>(n)`, a comprehension, a
+literal, text rendered or joined there, `null`, a local declared from one of those and never assigned again (nor taken, nor a spawn's target, anywhere), a call to
 a function so proven, or a conditional, match or catch default all of whose values are - which an owned object's region,
 outliving nothing (O33), never is (a built result is no proof alone: a call whose result lands in the result scope -
 `id(a)`, `l[0]`, `m.Get(k)` - can hand an argument back into it, O14b); and an own reference in a result, which refers
