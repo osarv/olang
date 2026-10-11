@@ -15516,3 +15516,80 @@ method 'Push'" - while the same module tested alone compiles: the method's body 
 constructor's body has inferred the field. diag first wrote its fields that way; they are typed now. The reproducer is
 two files, `a.olang` with `type S struct() { xs := List<I64>() }` and `fn (s mut S&) Add(x I64) { s.xs.Push(x) }`, and
 `b.olang` importing it and calling `a.S().Add(3)` in a test. Left for a semantic.c fix (QB: bootstrap/ takes fixes).
+
+### The runtime is `std/runtime/*.ll`, compiled once and linked once (B3, B2b, B2f, X7, 2026-10-11)
+
+The last P0 item of the port (compiler/DESIGN.md sections 1.10 and 6). The runtime - the allocator and chunk pool,
+the workers, unwinding, process entry, the os helpers, number formatting, the text builder - was ~3,300 lines of LLVM IR
+in string literals in `bootstrap/runtime.c` (moved there from codegen.c by the refactor), with the scope sanitizer's
+part and the dynamic call's (S3) beside it, and every module's object carried all of it as `linkonce_odr`, the linker
+keeping one copy.
+
+**The files.** `std/runtime/runtime.ll`, `san.ll` (B2f, a `-s` build only) and `dyncall.ll` (S3, a program declaring
+it only), beside the standard library, so stage 1 will read the very files stage 0 reads. The variation a build needs
+is written in the files in three ways, each header saying which:
+- `@@NAME@@` is one of the target's C-library facts - struct stat's size and offsets, struct dirent's `d_name`, a
+  `posix_spawn_file_actions_t`'s, a `pthread_attr_t`'s and a `jmp_buf`'s sizes, a `struct sigaction`'s size and its
+  `sa_flags`, libffi's default ABI number - from a table in runtime.c with a row per architecture (x86_64, aarch64).
+  Static asserts hold the row for the machine the compiler is built on to its own headers, and the kernel constants
+  the IR writes as numbers (errno values, signals, `S_IF*`, the handlers' and mmap's flags, sysconf's names) are
+  asserted the same way, each annotated in the IR where it is written.
+- `; @if COND` / `; @else` / `; @end` keep one of two runs of lines; COND is `san`, an architecture, or either negated
+  with `!`; no nesting (six blocks in runtime.ll, one in san.ll). A malformed directive or an unknown fact or condition
+  is an internal error naming the file and line.
+- Comment lines are copied as they are, with nothing substituted, so the files can talk about their placeholders.
+The target's attributes and `-r`'s `sanitize_thread` are not placeholders: the same rewrite that gives a module's IR
+its `#0` (cgWriteWithAttributes) gives the runtime its own. `@__olang_pow10m`, the float renderer's table, is checked
+against the evaluator's `FloatPow10` each time runtime.ll is read, so the two can never render a value differently.
+**Proof of the move**: the filled-in text, with comments and `linkonce_odr` normalized away, is identical to what the
+old emitters wrote, for x86_64 and aarch64, with and without `-s` and the dynamic call (all six).
+
+**Compiled once.** `build/olang_runtime.<hash>[.race][.debug][.san].o` - the hash of the filled-in IR and of the clang
+flags it is compiled with - is linked once into each program, `build/olang_dyncall.<hash>.o` beside it where needed. A
+name is current by construction: any change to the files, the target or the mode gives another, so a later build, a
+second program in the directory or the next `-t` child reuses it with no staleness to judge. It is compiled under a name
+of its own process's and renamed into place, so builds side by side never read half of one. checks.olang's cases copy
+it from the seed build along with the prelude's objects. `-c` builds it too (a library compiled with `-c` is linked
+with it later).
+
+**What a module carries instead.** Derived from the filled-in definitions, never written twice: the types; each global
+as `external` (its thread-local model kept, its initializer and `unnamed_addr` dropped); each function as a declaration,
+its parameter names dropped and its attributes kept; nothing the runtime keeps to itself (`internal`/`private`). X7's
+"does the runtime own this symbol" reads the same derived text. **And the bodies marked for inlining**: a definition
+carrying `alwaysinline` or `inlinehint` - LLVM's own words for it - is given to each module whole, as
+`available_externally`. That was not in the first version, and measuring showed why it has to be. With declarations
+only, the per-module optimization (`-O3 -flto -c` runs the pre-link pipeline, inliner included) saw calls where it used
+to see the allocator's fast path and a scope's close: callgrind, the bench programs built for x86-64-v3, against
+01b3827 - a `for x in List` walk +612% (it no longer vectorized), List push +40%, spectral-norm +25%, text +16%,
+k-nucleotide +16%, binary-trees +11%; and some went the other way (Array.Iter().Fold -54%, fannkuch -19%), so the
+optimizer was making different decisions throughout. Giving every non-`noinline` body was measured too, and is
+identical to giving only the six marked ones (`scope_alloc`, `scope_close`, `capture_scope`, `scope_escape`,
+`scope_mine`, `sb_room`, about 160 lines), so the rule is the attributes the runtime already wrote. A marked body may
+name nothing the runtime keeps to itself - checked as the file is read. **The result, same measurement**: every program
+equal to 01b3827 or better - binary-trees -23% (the per-call scope's header is now proven empty and deleted; it was
+zeroed and checked on every call), text -15%, List push -6%, the rest within 0.3% (k-nucleotide +0.25%) - and every
+output identical. Under `-d` and `-r` the marked bodies are inlined by the AlwaysInliner and the rest are calls.
+
+**Staleness.** A module's object holds the runtime's types, declarations and the bodies it inlines, so its name now
+carries a hash of the runtime's filled-in text too (B3): an edit to `std/runtime` rebuilds every object. The B7 rule
+(the compiler binary newer than an object) no longer covers the runtime, which is a file now; this does.
+
+**Measured** (the corpus `make run` build, `-b runner.olang`, 19 modules; interleaved, load average 3-7):
+- IR: every object's `.ll` is 65 KB smaller (120 KB where it renders a float, which carried the float renderer and its
+  table), 15.7 MB -> 14.3 MB in all, plus the runtime's 176 KB once; the bitcode objects 6.8 MB -> 2.4 MB, the
+  runtime's 111 KB once. The binary is 118.5 KB -> 132 KB, from different inlining in the program's own functions
+  (no runtime function is kept that was dropped before).
+- A clean `-b`: 46-55 s -> 35-44 s wall, 40.1-40.8 s -> 30.6-32.5 s user (-22%).
+- A clean `-t` of the corpus and std (37 files: checks/, compiler/ and shared.olang left out - shared.olang was
+  OOM-killed under both compilers beside other work): 431 s -> 381 s wall, 376 s -> 320 s user (-15%), 313 tests passing
+  under both.
+
+**Bugs found on the way, fixed.** A compiled runtime is one object every program links, so its errors surface early:
+the first build used a `define internal` worker loop in a declaration (invalid linkage) - internal definitions are
+now never a module's; and the dyncall part, compiled alone, named `@__olang_alloc_check` undeclared - it is compiled
+after the core's declarations. Comments that called the old emitters current (comptime.c's S3 note, util.c's
+pow10 table, codegen.c's X7 and attribute rewrite) were rewritten.
+
+**checks.** `scopesan` greps the sanitizer's calls in the runtime's `-s` IR and their absence in its plain IR; the P7
+crash-handler check reads the `-r` runtime's IR (the handler is the runtime's); the cases start from the seed's runtime
+object as from its prelude objects.

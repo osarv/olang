@@ -14,6 +14,7 @@
 #include "comptime.h"
 #include "util.h"
 #include "errmsg.h"
+#include "runtime.h"
 
 //P7: "-r" builds everything under ThreadSanitizer. It is a whole-build mode rather than a per-file
 //one: the runtime's object and every module's are built under it together, the runtime's own allocator and workers
@@ -151,6 +152,17 @@ static char* objectHash(struct semaModule* mod) {
     char* self = StrFmt("%.*s\1%.*s", mod->identity.len, mod->identity.ptr, mod->canonical.len, mod->canonical.ptr);
     for (char* c = gTarget.triple; c && *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
     for (char* c = gTarget.attrs; c && *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
+    //and the runtime it is compiled against: an object holds the runtime's types, declarations and the bodies it
+    //inlines (std/runtime/*.ll, filled in for this build), so an edit there gives every object a new name
+    static unsigned long long runtimeHash;
+    if (!runtimeHash) {
+        runtimeHash = 14695981039346656037ULL;
+        for (int part = 0; part < 2; part++) {
+            for (char* c = RuntimeText(gTarget.arch, gScopeSan, part == 1); *c; c++)
+                runtimeHash = (runtimeHash ^ (unsigned char)*c) * 1099511628211ULL;
+        }
+    }
+    h = (h ^ runtimeHash) * 1099511628211ULL;
     for (int i = -1; i < seen.len; i++) {
         char* k = i < 0 ? self : keys[i];
         for (char* c = k; *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;

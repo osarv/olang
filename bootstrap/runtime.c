@@ -1,15 +1,16 @@
 /* the runtime, as the compiler reads it (compiler/DESIGN.md section 1.10): the arena allocator and its chunk pool (O2,
  * O8b), the worker cache behind spawn and join (P1e), the checks' failure paths and the test unwinding (S18, P1d), text
  * rendering (E11a, E11c), what std reaches through "extern fn" (X6, S1, S2), the scope sanitizer (B2f) and the dynamic
- * call (S3) are LLVM IR written in std/runtime/ (*.ll), beside the standard library, not in this compiler. This file reads
- * those files, fills them in for a build - the target's C-library facts, a -s build's lines, as each file's header
- * says - and derives what a module's own IR declares in their place. main.c compiles the filled-in text once per build
- * configuration into an object of its own, linked once into each program (B3), where every object used to carry all of
- * it as linkonce_odr. */
+ * call (S3) are LLVM IR written in std/runtime/ (*.ll), beside the standard library, not in this compiler. This file
+ * reads those files, fills them in for a build - the target's C-library facts, a -s build's lines, as each file's
+ * header says - and derives what a module's own IR carries in their place: declarations, and the bodies marked for
+ * inlining. main.c compiles the filled-in text once per build configuration into an object of its own, linked once
+ * into each program (B3), where every object used to carry all of it as linkonce_odr. */
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
@@ -29,12 +30,13 @@
 #include "errmsg.h"
 #include "runtime.h"
 
-/* §11 X6, B12a: what the runtime's IR says about the C library's structures, on each architecture it builds for - Linux
- * with the GNU C library, 64-bit - as @@NAME@@ in std/runtime/ (*.ll): struct stat's size and where st_mode, st_size and
- * st_mtim's two parts are, where struct dirent's d_name is, the size of a posix_spawn_file_actions_t, a pthread_attr_t's
- * and a jmp_buf's sizes (S1), a struct sigaction's size and where its sa_flags are (S2), and libffi's default calling
- * convention, whose number is the architecture's (S3). The kernel's constants beside them - errno values, signal
- * numbers, the S_IF* kinds, the flags - are one set for every architecture here, written in the IR as numbers.
+/* §11 X6, B12a: what the runtime's IR says about the C library's structures, on each architecture it builds for -
+ * Linux with the GNU C library, 64-bit - as @@NAME@@ in std/runtime/ (*.ll): struct stat's size and where st_mode,
+ * st_size and st_mtim's two parts are, where struct dirent's d_name is, the size of a posix_spawn_file_actions_t, a
+ * pthread_attr_t's and a jmp_buf's sizes (S1), a struct sigaction's size and where its sa_flags are (S2), and libffi's
+ * default calling convention, whose number is the architecture's (S3). The kernel's constants beside them - errno
+ * values, signal numbers, the S_IF* kinds, the flags - are one set for every architecture here, written in the IR as
+ * numbers.
  * Written down rather than taken from this compiler's own headers, which describe only the machine it runs on - and
  * checked against them for that machine, below, so the row a build for this machine uses is the C library's own; and
  * the numbers the IR writes are checked the same way. */
@@ -65,29 +67,32 @@ _Static_assert(sizeof(((struct stat*)0)->st_mode) == 4, "st_mode's size"); //run
 _Static_assert(offsetof(struct stat, st_size) == 48 && sizeof(((struct stat*)0)->st_size) == 8, "st_size");
 _Static_assert(offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_sec) == 88, "st_mtim.tv_sec");
 _Static_assert(offsetof(struct stat, st_mtim) + offsetof(struct timespec, tv_nsec) == 96, "st_mtim.tv_nsec");
-_Static_assert(sizeof(((struct stat*)0)->st_mtim.tv_sec) == 8 && sizeof(((struct stat*)0)->st_mtim.tv_nsec) == 8, "st_mtim");
+_Static_assert(sizeof(((struct stat*)0)->st_mtim.tv_sec) == 8 && sizeof(((struct stat*)0)->st_mtim.tv_nsec) == 8,
+               "st_mtim");
 _Static_assert(offsetof(struct dirent, d_name) == 19, "d_name's offset");
 _Static_assert(sizeof(posix_spawn_file_actions_t) == 80, "posix_spawn_file_actions_t's size");
-_Static_assert(sizeof(pthread_attr_t) == (RT_HOST_LAYOUT ? 64 : 56) && sizeof(pthread_t) == 8, "pthread_attr_t, pthread_t");
+_Static_assert(sizeof(pthread_attr_t) == (RT_HOST_LAYOUT ? 64 : 56) && sizeof(pthread_t) == 8,
+               "pthread_attr_t, pthread_t");
 _Static_assert(sizeof(jmp_buf) == (RT_HOST_LAYOUT ? 312 : 200), "jmp_buf's size");
 _Static_assert(sizeof(struct sigaction) == 152 && offsetof(struct sigaction, sa_flags) == 136
                && sizeof(((struct sigaction*)0)->sa_flags) == 4, "struct sigaction");
-_Static_assert(sizeof(stack_t) == 24 && offsetof(stack_t, ss_flags) == 8 && offsetof(stack_t, ss_size) == 16, "stack_t");
+_Static_assert(sizeof(stack_t) == 24 && offsetof(stack_t, ss_flags) == 8 && offsetof(stack_t, ss_size) == 16,
+               "stack_t");
 _Static_assert(FFI_DEFAULT_ABI == (RT_HOST_LAYOUT ? 1 : 2) && sizeof(ffi_cif) <= 64 && FFI_OK == 0
                && sizeof(ffi_arg) == 8, "libffi's ABI number, an ffi_cif's size");
 _Static_assert(RTLD_NOW == 2 && RTLD_GLOBAL == 0x100, "dlopen's flags"); //RTLD_DEFAULT is a null handle on glibc
 #endif
-//the kernel's and the C library's constants, one set for every architecture here (asm-generic's), which the runtime's IR
-//writes as numbers: the file kinds and the errno values it tells apart, the fatal signals an OnCrash handler takes, the
-//handlers' flags, SS_DISABLE, mmap's and madvise's, and sysconf's names
+//the kernel's and the C library's constants, one set for every architecture here (asm-generic's), which the runtime's
+//IR writes as numbers: the file kinds and the errno values it tells apart, the fatal signals an OnCrash handler takes,
+//the handlers' flags, SS_DISABLE, mmap's and madvise's, and sysconf's names
 _Static_assert(S_IFMT == 0170000 && S_IFREG == 0100000 && S_IFDIR == 0040000 && EINVAL == 22, "the kernel's constants");
 _Static_assert(ENOENT == 2 && EEXIST == 17 && EACCES == 13 && EPERM == 1 && ENOTDIR == 20 && EISDIR == 21
                && ENOTEMPTY == 39, "the errno values __olang_err tells apart");
 _Static_assert(SIGILL == 4 && SIGABRT == 6 && SIGBUS == 7 && SIGFPE == 8 && SIGSEGV == 11, "the fatal signals");
 _Static_assert(SA_ONSTACK == 0x08000000 && (unsigned)SA_RESETHAND == 0x80000000u && SA_NODEFER == 0x40000000
                && SA_SIGINFO == 4 && SS_DISABLE == 2, "the handlers' flags");
-_Static_assert(PROT_NONE == 0 && (PROT_READ | PROT_WRITE) == 3 && (MAP_PRIVATE | MAP_ANONYMOUS) == 34 && MADV_DONTNEED == 4
-               && SI_KERNEL == 0x80, "mmap's, madvise's and a fault's constants");
+_Static_assert(PROT_NONE == 0 && (PROT_READ | PROT_WRITE) == 3 && (MAP_PRIVATE | MAP_ANONYMOUS) == 34
+               && MADV_DONTNEED == 4 && SI_KERNEL == 0x80, "mmap's, madvise's and a fault's constants");
 _Static_assert(_SC_PHYS_PAGES == 85 && _SC_PAGESIZE == 30 && _SC_THREAD_STACK_MIN == 75, "sysconf's names");
 #if defined(__x86_64__) && defined(__linux__)
 _Static_assert(offsetof(siginfo_t, si_code) == 8 && offsetof(ucontext_t, uc_mcontext.gregs) == 40
@@ -174,7 +179,8 @@ static char* rtFill(const char* file, const char* arch, bool san) {
             bool neg = *c == '!';
             if (neg) c++;
             size_t cl = strcspn(c, " \n");
-            if (!rtKnownCond(c, cl)) rtMalformed(file, lineNr, "a condition that is neither \"san\" nor an architecture");
+            if (!rtKnownCond(c, cl))
+                rtMalformed(file, lineNr, "a condition that is neither \"san\" nor an architecture");
             bool holds = cl == 3 && !strncmp(c, "san", 3) ? san : strlen(arch) == cl && !strncmp(arch, c, cl);
             keep = holds != neg;
             inIf = true;
@@ -239,6 +245,51 @@ static void rtCheckPow10(const char* text) {
     }
 }
 
+//B3: a body given to the modules (rtModulesInline) is compiled into each of them, so it may name nothing the runtime
+//keeps to itself - an internal or private function or global would be undefined there
+static bool rtModulesInline(const char* line, size_t len);
+static void rtCheckInlineBodies(const char* file, const char* text) {
+    struct list kept = ListInit(sizeof(char*));
+    for (const char* line = text; *line; ) {
+        size_t len = strcspn(line, "\n");
+        bool own = (len > 16 && !strncmp(line, "define internal ", 16))
+                || (len > 15 && !strncmp(line, "define private ", 15));
+        const char* at = own ? memchr(line, '@', len) : NULL;
+        if (!own && line[0] == '@') {
+            const char* eq = memmem(line, len, " = ", 3);
+            if (eq && (!strncmp(eq + 3, "internal ", 9) || !strncmp(eq + 3, "private ", 8))) at = line;
+        }
+        if (at) {
+            size_t n = strcspn(at + 1, "( =");
+            char* name = StrFmt("@%.*s", (int)n, at + 1);
+            ListAdd(&kept, &name);
+        }
+        line += len + (line[len] ? 1 : 0);
+    }
+    int lineNo = 1;
+    bool inBody = false;
+    for (const char* line = text; *line; lineNo++) {
+        size_t len = strcspn(line, "\n");
+        if (inBody) {
+            for (int k = 0; k < kept.len; k++) {
+                const char* name = *(char**)ListGetIdx(&kept, k);
+                size_t n = strlen(name);
+                for (const char* f = memmem(line, len, name, n); f;
+                        f = memmem(f + 1, len - (size_t)(f + 1 - line), name, n)) {
+                    char after = f + n < line + len ? f[n] : ' ';
+                    if (isalnum((unsigned char)after) || after == '_' || after == '.' || after == '$') continue;
+                    rtMalformed(file, lineNo, StrFmt("a body given to the modules names %s, which the runtime keeps to"
+                                                     " itself", name));
+                }
+            }
+            if (len == 1 && line[0] == '}') inBody = false;
+        } else if (rtModulesInline(line, len)) inBody = true;
+        line += len + (line[len] ? 1 : 0);
+    }
+    for (int k = 0; k < kept.len; k++) free(*(char**)ListGetIdx(&kept, k));
+    ListDestroy(kept);
+}
+
 char* RuntimeText(const char* arch, bool scopeSan, bool dyncall) {
     static char* texts[2];
     static const char* forArch;
@@ -251,10 +302,13 @@ char* RuntimeText(const char* arch, bool scopeSan, bool dyncall) {
     forArch = arch;
     forSan = scopeSan;
     if (!texts[dyncall]) {
-        if (dyncall) texts[1] = rtFill("dyncall.ll", arch, scopeSan);
-        else {
+        if (dyncall) {
+            texts[1] = rtFill("dyncall.ll", arch, scopeSan);
+            rtCheckInlineBodies("dyncall.ll", texts[1]);
+        } else {
             char* core = rtFill("runtime.ll", arch, scopeSan);
             rtCheckPow10(core);
+            rtCheckInlineBodies("runtime.ll", core);
             char* san = scopeSan ? rtFill("san.ll", arch, scopeSan) : NULL;
             texts[0] = san ? StrFmt("%s\n%s", core, san) : core;
             if (san) { free(core); free(san); }
@@ -284,8 +338,8 @@ static void rtDeclare(FILE* out, const char* line, size_t len) {
         return;
     }
     //what the runtime keeps to itself is no module's to reach
-    if (strstr(line, "define internal ") == line || strstr(line, "define private ") == line || strstr(line, " = internal ")
-            || strstr(line, " = private ")) return;
+    if (strstr(line, "define internal ") == line || strstr(line, "define private ") == line
+            || strstr(line, " = internal ") || strstr(line, " = private ")) return;
     if (len > 7 && !strncmp(line, "define ", 7)) {
         const char* open = strchr(line, '(');
         if (!open) return;
@@ -338,16 +392,36 @@ static void rtDeclare(FILE* out, const char* line, size_t len) {
     }
 }
 
+//B3: a definition the runtime marks for inlining - alwaysinline or inlinehint, LLVM's own words for it - is given to
+//every module whole, as available_externally: the module's own optimization inlines it where it is called (the
+//allocator's fast path, a scope's close), as it did when every module carried the runtime, and emits no copy of it;
+//anything not inlined calls the one definition, in the runtime's object. Every other definition is a declaration to a
+//module.
+static bool rtModulesInline(const char* line, size_t len) {
+    if (len < 7 || strncmp(line, "define ", 7) || !strncmp(line, "define internal ", 16)
+            || !strncmp(line, "define private ", 15)) return false;
+    return memmem(line, len, "alwaysinline", 12) || memmem(line, len, "inlinehint", 10);
+}
+
 void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan, bool dyncall) {
     for (int part = 0; part <= (dyncall ? 1 : 0); part++) {
         char* text = RuntimeText(arch, scopeSan, part == 1);
+        bool copying = false;
         for (char* line = text; *line; ) {
             char* nl = strchr(line, '\n');
             size_t len = nl ? (size_t)(nl - line) : strlen(line);
-            char* one = strndup(line, len); //rtDeclare reads one line, to its end
-            if (!one) ErrorBugFound();
-            rtDeclare(out, one, len);
-            free(one);
+            if (copying) {
+                fprintf(out, "%.*s\n", (int)len, line);
+                if (len == 1 && line[0] == '}') copying = false;
+            } else if (rtModulesInline(line, len)) {
+                fprintf(out, "define available_externally %.*s\n", (int)len - 7, line + 7);
+                copying = true;
+            } else {
+                char* one = strndup(line, len); //rtDeclare reads one line, to its end
+                if (!one) ErrorBugFound();
+                rtDeclare(out, one, len);
+                free(one);
+            }
             line += len + (nl ? 1 : 0);
         }
     }

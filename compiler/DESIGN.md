@@ -53,7 +53,7 @@ Measurements below were taken on 2026-10-09 on the shared 4-core machine while o
 | mid-level IR | `mir`, `lower` | 600 + 2,400 | codegen.c lowering half |
 | evaluation, `-i` | `eval` | 2,600 | comptime.c (2,987) |
 | LLVM emission | `emit`, `dwarf` | 2,800 + 400 | codegen.c emission half |
-| runtime | `std/runtime/runtime.ll` | ~2,000 IR lines | codegen.c's runtime strings |
+| runtime | `std/runtime/*.ll` | ~3,500 IR lines (built: section 1.10) | the same files |
 | driver | `olang` (root), `build`, `target` | 300 + 900 + 300 | main.c (789) |
 
 The total is about 30,000 lines of olang (the C compiler is 40,829). The estimate comes from study2: its scanner is
@@ -347,22 +347,39 @@ not a port, so the pass follows §8 rule by rule. The pass runs on every body th
 - **Parallel emission.** Emission reads only tables that no longer change, so modules can be emitted by parallel
   tasks once that is measured to pay. The first version is sequential.
 
-### 1.10 The runtime (`std/runtime/runtime.ll`)
+### 1.10 The runtime (`std/runtime/*.ll`) - built in C (P0)
 
-- **What moves.** About 2,050 lines of runtime IR are written inside codegen.c's string literals: the allocator and
-  chunk pool, workers, unwinding, process entry, the argv, env, stat and spawn helpers, and number formatting. They
-  become one `.ll` file. `@@NAME@@` placeholders take the target's C-library layout constants and the mode's
-  attributes, filled from a table in `target.olang`. A checks scenario compiles a C probe with clang to verify the
-  host's row.
-- **How it is built.** The runtime is compiled once per target and mode into the object cache and linked into every
-  program. Today it is emitted `linkonce_odr` into every object:
-  - in study2's build that is about 96 KB per object, 1.9 MB of 7.5 MB of IR;
-  - a 9-line prelude module's object is almost entirely runtime.
-- **Inlining.** Under LTO the allocator still inlines into user code. Under `-d` and `-r` it becomes a call, an
-  accepted cost.
+- **What it is.** The runtime is LLVM IR in three files beside the standard library: `runtime.ll` (about 3,300
+  lines: the allocator and chunk pool, workers, unwinding, process entry, the argv, env, stat and spawn helpers,
+  number formatting and the text builder), `san.ll` (the scope sanitizer, B2f, in a `-s` build only) and
+  `dyncall.ll` (S3's dynamic call over libffi, only in a program that declares it). The C compiler reads them
+  (`bootstrap/runtime.c`); stage 1 will read the same files.
+- **Filling in.** A file is written for every target and mode, and filled in for one build:
+  - `@@NAME@@` is one of the target's C-library facts (struct stat's size and offsets, a jmp_buf's size, libffi's
+    ABI number ...), from a per-architecture table. The table's row for the machine the compiler runs on is checked
+    against its own headers when it is compiled, and so are the kernel constants the IR writes as numbers.
+  - `; @if COND` / `; @else` / `; @end` keep one of two runs of lines. COND is `san`, an architecture, or either
+    negated with `!`; they do not nest.
+  - Comment lines are copied as written, so a file can explain its placeholders.
+  - The target's attributes and `-r`'s `sanitize_thread` are added by the same rewrite as a module's IR, so they are
+    not placeholders. `@__olang_pow10m` is held to the evaluator's own table each time the file is read.
+- **How it is built.** The filled-in IR is compiled once per build configuration into
+  `build/olang_runtime.<hash>[.race][.debug][.san].o`, named by a hash of the IR and its clang flags, and linked
+  once into each program (`olang_dyncall.<hash>.o` beside it where needed). An object with that name is current by
+  construction, so another program, a later build or the next `-t` child reuses it. It is written under a
+  temporary name and renamed into place.
+- **What a module carries instead.** Its types, its globals as `external` and its functions as declarations, derived
+  from the filled-in definitions; and every body marked `alwaysinline` or `inlinehint` (the allocator's fast path, a
+  scope's close, the closure and text-builder fast paths: six bodies, about 160 lines) as `available_externally`.
+  The module's own optimization inlines those where they are called, as it did when every module carried the whole
+  runtime, and emits no copy. A module's object hash includes the runtime's text, so an edit to `std/runtime`
+  rebuilds every object.
+- **Inlining.** Without the marked bodies, `-O3` code lost up to 7x (a List walk, which then never vectorized),
+  because the per-module optimization saw only calls. With them, every benchmark measures equal to the old build or
+  better (HISTORY.md, "The runtime is `std/runtime/*.ll`"). Under LTO the link inlines the rest where it pays. Under
+  `-d` and `-r` the marked bodies are still inlined (AlwaysInliner) and the rest are calls.
 - **It stays IR.** It needs pointers, threads and `setjmp`, none of which olang expresses. Number formatting could
   later become prelude olang; that is not part of the port.
-- **Done in C first** (P0, section 6), so stage 0 and stage 1 link the same file.
 
 ### 1.11 Driver (`olang`, `build`, `target`)
 
@@ -546,7 +563,9 @@ These are extrapolations from the measurements above, to be measured at M10.
 
 ### 3.4 What the driver should change
 
-1. **Link the runtime once** (section 1.10). Each object loses about 1,200 IR lines, 25% of study2's IR.
+1. **Link the runtime once** (section 1.10). Done in C: each object is 65 KB of IR smaller (120 KB where it renders
+   floats), the corpus's bitcode objects 6.8 MB -> 2.4 MB, a clean `-b` of the corpus 22% less CPU, a clean `-t` of
+   the corpus and std 15% less (HISTORY.md).
 2. **Objects are addressed by their content.** The front end checks the whole program on every build anyway, and
    emission is cheap next to clang. So every module's IR is emitted, and its object is named by a hash of that IR
    text, the clang flags and clang's version. An object is reused exactly when that file exists. This replaces B3's
@@ -637,7 +656,7 @@ for scanner and parser regressions until the grammar moves past what stage 0 par
 ```
 bootstrap/          the C compiler (frozen once the port works), its makefile, oracle/, CHAIN
 compiler/           the olang compiler, this file, tools/dump.olang
-std/                the standard library; std/runtime/runtime.ll
+std/                the standard library; std/runtime/*.ll
 build/stage0        the C compiler, built with gcc -O2 for bootstrapping (the C development build stays -g)
 build/olang         the compiler in use: stage 2 after `make bootstrap`
 ```
@@ -688,11 +707,11 @@ on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-ti
 
 **P0, before the port, in the C repository.** Part of this is already queued.
 
-- The C compiler moves to `bootstrap/` as part of the modest refactor. (Done: `make bootstrap` builds `build/stage0`;
-  the runtime's IR is `bootstrap/runtime.c` until it moves to `std/runtime/runtime.ll`.)
+- The C compiler moves to `bootstrap/` as part of the modest refactor. (Done: `make bootstrap` builds `build/stage0`.)
 - `OLANG` is parametrized in the makefile, checks, fuzz and bench. (Done with M1: a relative `OLANG` is read against the
   repository root.)
 - The runtime is extracted to `std/runtime/runtime.ll` and linked as one object by the C compiler (section 1.10).
+  (Done: `runtime.ll`, `san.ll` and `dyncall.ll`, compiled once per build configuration.)
 - The std and runtime gaps S1-S6 (section 7) are closed.
 - The in-flight branches are merged: the permissions batch and checker batch 3 (study2's r01-r15).
 - The oracle tools move to `bootstrap/oracle`. (`tokdump.c` done with M1; `astdump.c` comes with M3.)
@@ -753,11 +772,11 @@ Notes on the schedule:
 
 **Built 2026-10-09** (records: CLAUDE.md and HISTORY.md, "What the port needs from std and the runtime"): S1
 `os.RunOnStack`, S2 `os.OnCrash`, S3 `std/ffi` (`ffi.Call`, `ffi.Has`, `Pack`/`Unpack`) over `__olang_dyncall` - a
-separate runtime part, emitted only into a declaring module's object, `-lffi -ldl` linked only then - S4 `os.RemoveAll`,
-`os.MkTemp(dir = "", prefix = "")` and `os.Exec(args, input, capture = false)`, S5 (O8a: an aggregate takes its own
-alignment, an array its size class), and S6 `n.Format(base)`. The runtime's new pieces are in codegen.c's runtime IR
-(`emitStackRuntime`, `emitDyncallRuntime`) and move to `runtime.ll` with the rest (section 1.10); the dynamic call
-stays a part of its own there too.
+separate runtime part, emitted only into a declaring module's object, `-lffi -ldl` linked only then - S4
+`os.RemoveAll`, `os.MkTemp(dir = "", prefix = "")` and `os.Exec(args, input, capture = false)`, S5 (O8a: an aggregate
+takes its own alignment, an array its size class), and S6 `n.Format(base)`. The runtime's new pieces are in
+`std/runtime/runtime.ll` with the rest (section 1.10), and the dynamic call is a part of its own,
+`std/runtime/dyncall.ll`.
 
 Already in flight, and prerequisites:
 
