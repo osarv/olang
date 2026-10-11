@@ -57,6 +57,7 @@ type Table struct() {
     values Map<source.NameId, I64>
     types Map<source.NameId, I64>
     aliases Map<source.NameId, I64>
+    waiting Map<source.NameId, Bool>   # the names a pending branch declares (B9c): not unknown until it is decided
 }
 
 # a parameter, a local or a type variable in scope
@@ -203,7 +204,14 @@ fn (r mut Resolver&) aliasesOf(mi I64) {
 fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
     for d in decls {
         match d {
-            case ast.Decl.If(_, ti) { r.collectIf(mi, ti, r.L.Chosen(mi, ti.Cond.Span().Start), 0) }
+            case ast.Decl.If(_, ti) {
+                chosen := r.L.Chosen(mi, ti.Cond.Span().Start)
+                if chosen == load.Pending {
+                    r.waitAside(mi, ti)
+                } else {
+                    r.collectIf(mi, ti, chosen, 0)
+                }
+            }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) {
                 from := f.Recv.Sp.End if f.Recv != null else f.Sp.Start
                 r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv != null, null)
@@ -222,6 +230,38 @@ fn (r mut Resolver&) collectIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
     if chosen == index and ti.Then.Decls != null { r.collect(mi, ti.Then.Decls) }
     if ti.ElseIf != null { r.collectIf(mi, ti.ElseIf, chosen, index + 1) }
     if ti.Else != null and chosen == index + 1 and ti.Else.Decls != null { r.collect(mi, ti.Else.Decls) }
+}
+
+# the names a pending if's branches declare, which wait aside until it is decided
+fn (r mut Resolver&) waitAside(mi I64, ti ast.TopIf&) {
+    r.waitBranch(mi, ti.Then)
+    if ti.ElseIf != null { r.waitAside(mi, ti.ElseIf) }
+    if ti.Else != null { r.waitBranch(mi, ti.Else) }
+}
+
+fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
+    if b.Decls == null { return }
+    t := r.Tables[mi]
+    for d in b.Decls {
+        match d {
+            case ast.Decl.If(_, ti) { r.waitAside(mi, ti) }
+            case ast.Decl.Fn(f), ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
+            case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
+            case ast.Decl.Errors(_, name, _) { t.waiting.Put(name, true) }
+            case ast.Decl.Global(_, v) {
+                for n in v.Names { t.waiting.Put(n, true) }
+            }
+            case ast.Decl.Import(_, alias, path) {
+                name := alias
+                if name == source.NameId(0) {
+                    spec := r.L.Mods[mi].Src.Text[path.Start + 1:path.End - 1]
+                    name = r.L.Names.Intern(load.DeriveAlias(spec))
+                }
+                t.waiting.Put(name, true)
+            }
+            nomatch { }
+        }
+    }
 }
 
 # whether a declaration's written type makes it assignable: "mut" at its top (T2)
@@ -797,7 +837,8 @@ fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Boo
         } else {
             r.L.Diags.Drop(b.Group)
         }
-    } else if runtime {
+    } else if runtime and not r.L.Diags.Holds(b.Group) {
+        # a branch that did not parse may be one compile-time evaluation drops (S8c, B9c): the checker decides it
         r.L.Diags.Choose(b.Group)
     }
 }
@@ -962,6 +1003,7 @@ fn (r mut Resolver&) name(sp source.Span, n source.NameId) {
 # B10: a name nothing declares, in a condition, with nothing near it - most likely a build constant -D did not define.
 # Said once a name in an item
 fn (r mut Resolver&) unknownInCond(sp source.Span, n source.NameId) {
+    if n in r.Tables[r.mi].waiting { return }
     name := r.text(n)
     if r.suggests(name) or r.importedType(n) { return }
     for u in r.unknownSaid {
@@ -1070,6 +1112,7 @@ fn (r mut Resolver&) aliasHop(sp source.Span, inner ast.Expr&, n source.NameId) 
 
 # M10: the first name of a dotted path no declaration or import gives, which std has a module of
 fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
+    if n in r.Tables[r.mi].waiting { return }
     name := r.text(n)
     if not os.Exists($r.L.Std "/" $name ".olang") { return }
     for u in r.unknownSaid {

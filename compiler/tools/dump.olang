@@ -6,6 +6,8 @@
 #     dump ast FILE...
 #     dump parse FILE...
 #     dump roundtrip FILE...
+#     dump modules [-D NAME=VALUE]... [-t] FILE...
+#     dump names [-D NAME=VALUE]... [-t] FILE...
 #
 # For each file, "== FILE", then:
 #
@@ -22,6 +24,11 @@
 #   commas and comments aside, a token of "<", ">" and "=" read a character at a time ("List<List<I32>>= ...") - and
 #   read again must give the same text written: "ok", or where they first differ. A file with syntax errors outside a
 #   branch the build may decide is skipped; such a branch is written as its text.
+# - modules: the program the file is the root of, loaded (load): "module IDENTITY" for every module, then one
+#   "  ALIAS IDENTITY" per import it loaded, sorted. bootstrap/oracle/modgraph prints stage 0's the same way, and
+#   compiler/tools/modgraph.sh compares the two. -D defines build constants, -t makes TestBuild true.
+# - names: the program loaded and its names resolved (names): the diagnostics both said, rendered as the compiler
+#   renders them. compiler/tools/namesdiff.sh compares their load and names rules with stage 0's goldens.
 
 import "std/os"
 import "std/io"
@@ -33,14 +40,19 @@ import "../ast"
 import "../parse"
 import "../diag"
 import "../msgs"
+import "../cond"
+import "../fetch"
+import "../load"
+import resolver "../names"
 import "unparse"
 import "std/filepath"
 
 fn main() ? {
     args := os.Args()
     mode := args[1] if args.Len() >= 3 else ""
-    if mode != "tokens" and mode != "speed" and mode != "ast" and mode != "parse" and mode != "roundtrip" {
-        eprintln("usage: dump tokens|speed|ast|parse|roundtrip FILE...")
+    if mode != "tokens" and mode != "speed" and mode != "ast" and mode != "parse" and mode != "roundtrip" and
+       mode != "modules" and mode != "names" {
+        eprintln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names FILE...")
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(mode, args) })
@@ -49,6 +61,11 @@ fn main() ? {
 fn run(mode String&, args Array<String&>&) {
     out := io.Writer(1)
     std := try os.Env("OLANG_STD") catch default "std"
+    if mode == "modules" or mode == "names" {
+        program(out, mode, std, args)
+        try out.Flush() catch io.IoError { os.Exit(1) }
+        return
+    }
     prelude := preludeTypes(std)
     for k in range 2, args.Len() {
         path := args[k]
@@ -66,6 +83,40 @@ fn run(mode String&, args Array<String&>&) {
         }
     }
     try out.Flush() catch io.IoError { os.Exit(1) }
+}
+
+# each file the root of a program, loaded - and its names resolved - as "dump modules" and "dump names" print them
+fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) {
+    defines List<String&>
+    testBuild := false
+    k I64 = 2
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        }
+        k++
+    }
+    for i in range k, args.Len() {
+        path := args[i]
+        out.Write("== " $path "\n")
+        d := diag.Diagnostics(false)
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
+        for f in defines { try consts.Define(f, d) catch { } }
+        f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+        l := load.Loader(std, consts, f, source.Names(), d)
+        l.Load(path)
+        if mode == "modules" {
+            out.Write(l.Graph())
+            continue
+        }
+        r := resolver.Resolver(l)
+        r.Resolve()
+        out.Write(d.Render())
+    }
 }
 
 # a file's tokens and lexical errors, as "dump tokens" prints them
