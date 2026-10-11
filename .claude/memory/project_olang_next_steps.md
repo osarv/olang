@@ -855,6 +855,13 @@ because what it finds about structure feeds the refactor.
   proven-fresh fixed point, or revert (b). Then a 4th review. At the wt-own merge: re-run compiler/tools/genmsgs.py
   and make diaggold (errmsg.h changed). Queued for semantic.c after the merge: the `:=` constructor field losing its
   type across modules (M2 agent's find, HISTORY.md).
+- 21:00 CEST: master = f743da5 (pushed, verified): own/Vec phase 1 with five review rounds fixed (vec1-vec5:
+  /home/user/review/vec1..5; vec5's R2a was a §8 hole even without own), the runtime extracted to
+  std/runtime/runtime.ll (P0 done), M1+M2. Running: wt-portm3 (M3 parser), wt-vecp2 (Vec phase 2a: Vec in fields,
+  globals, reference-holding elements; docs/own.md 19.4 items 1,2,4,7 - REVIEW before merging), wt-smallfix2 (the `:=`
+  ctor field across modules; std/math "sign and size" under -r/-s). Next: Vec phase 2b (type args/move-aware
+  List/Map, tasks, lambdas, Push cost), M4 after M3. LESSON: never pkill by a "vlock make verify" pattern - it kills
+  other agents' runs and my own shell; kill by PID with the cwd checked.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
