@@ -765,6 +765,17 @@ because what it finds about structure feeds the refactor.
   precise O17 reading. Both are needed for Vec, and both need a review.
 - 09:30 CEST: the user asked whether self-hosting has started (no) and said "Go at your pace": the order stays own,
   then the Vec phase, then the scanner, one agent at a time.
+- 10:35 CEST: own5's three are fixed on wt-own (79bf11c, verified; fuzzer 52 -> 0).
+  - The agent departed from the brief in three relaxations, now under the fourth review (/home/user/wt/rvown6 ->
+    /home/user/review/own6):
+    - O26a still moves owner value locals;
+    - loans on an owner's storage meet only releases through the owner's own name;
+    - an owner made from such a borrow is held to O34's reach rather than refused.
+  - Two pre-existing false refusals of `c := a.Clone()` were fixed: a stale obligUnsettled, and a result taking every
+    argument's loans.
+  - F3's whitelist costs about 65 instructions per newly held call (+9% on an owner-passing loop). Decided for the next
+    round: apply it only in test builds. Outside tests, guaranteed checks abort the process, so only `try` and
+    catch/match clauses can leave; production pays only for those.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
