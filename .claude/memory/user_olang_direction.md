@@ -30,8 +30,8 @@ and efficiency comes first: zero-allocation in-place forms, transposed matmul wi
 
 **Settling networks research (the user, 2026-10-11):** "When you are done with the compiler I want you to start playing
 around with the settling networks to extract functional structures for various tasks. Be it MNIST initially, but NLP
-and robotics later on. You may use genetic algorithms if you want." This starts after the compiler work. My reading:
-the self-hosted compiler bootstrapped; asked to confirm. The goal is to find the circuit structures (regions,
+and robotics later on. You may use genetic algorithms if you want." This starts once the self-hosted compiler is
+done (confirmed by the user: "The self hosted one"). The goal is to find the circuit structures (regions,
 projections, connectivity motifs, memories) that solve a task, and to understand them. It is not only accuracy. MNIST
 comes first, then NLP, then robotics. Evolutionary search over circuit structures is allowed. The clean-room rule
 holds: work only from oann/docs/settling.md and the published papers.
