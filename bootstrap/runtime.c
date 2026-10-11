@@ -1932,6 +1932,23 @@ static void emitScopeRuntime(FILE* out, bool san) {
         "  call void @__olang_own_free(ptr %obj)\n"
         "  ret void\n"
         "}\n\n"
+        //F3/M1: a hidden owner slot { owner, registered }, released as its scope closes - what it holds then, the mark
+        //cleared so a hold evaluated again after the scope's next opening registers again
+        "define linkonce_odr void @__olang_own_drop_held(ptr %slot, ptr %scope) {\n"
+        "entry:\n"
+        "  %obj = load ptr, ptr %slot\n"
+        "  store { ptr, i64 } zeroinitializer, ptr %slot\n"
+        "  call void @__olang_own_free(ptr %obj)\n"
+        "  ret void\n"
+        "}\n\n"
+        "define linkonce_odr void @__olang_own_drop_aheld(ptr %slot, ptr %scope) {\n"
+        "entry:\n"
+        "  %a = load { i64, ptr }, ptr %slot\n"
+        "  store { { i64, ptr }, i64 } zeroinitializer, ptr %slot\n"
+        "  %obj = extractvalue { i64, ptr } %a, 1\n"
+        "  call void @__olang_own_free(ptr %obj)\n"
+        "  ret void\n"
+        "}\n\n"
         //O32: the region a borrow's referent is in, for building there - the word before the object; a null borrow's is
         //read from here instead (null: a build into it traps, as reading through the null itself does, T2b)
         "@__olang_own_nullhdr = linkonce_odr global ptr null\n"

@@ -1,6 +1,6 @@
 # check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
-# also: note: kept here, until the end of the block it is kept in
-# O38: ...stored into a local a reference was taken to before - read through that reference
+# O38: ...stored into a local a reference was taken to before - held to the end of its block, so a release before then
+# is refused (O39), the local's storage having another name
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n

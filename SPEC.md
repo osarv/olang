@@ -5095,7 +5095,8 @@ reference read out of the region through it, and every value holding one - in lo
 bind to the region, §8.6) and in the region itself: never in a field, an element or a global outside the region, never
 in a result but a borrowed one (O37), never in a closure that outlives the function. Distinct owned objects therefore
 never refer to one another except by owning: a borrow of one is stored neither into another nor into anything outside
-its own region.
+its own region. A borrowed copy (O32), whose own references are borrows, is confined to this function's
+locals (O38).
 
 Each read is a region of its own to the check, even when it reads an object read before. A borrow is held in a local
 declared with `:=`, which takes the read's region exactly (O25a); a local declared with a written type lives in its
@@ -5183,8 +5184,12 @@ then a release under that loan (O39). So owners form trees, and each object is r
   test is abandoned (P1d) as well. A destructor's own owner locals are its own, released as it returns: its top level
   is never the scope being closed for them (C9a);
 - it is an owner made, taken or given for an owning parameter (O36), or the region made for an object whose constructor
-  has not run yet, and an argument evaluated after it leaves the expression first - an error propagated, a clause's
-  `break`, `continue` or `return`: the call is never made, and it is released where the expression is left;
+  has not run yet, and an argument evaluated after it leaves the expression first - an error propagated, a checked
+  operation under `try` failing (R20), a clause's `break`, `continue` or `return`: the call is never made, and it is
+  released where the expression is left;
+- it is a constructor's own field (C2a) and the constructor fails before its instance is assembled - by its own
+  `error` (R3) or a `try` it does not catch: until then the constructor's frame holds it, as an owner local, and from
+  then on the instance does;
 - it is an owner no slot receives - a call's owned result left unused, a value made for a borrowing parameter (O36), a
   `take` standing as a statement (S3) - and is released at the end of its statement;
 - the scope holding its slot closes: an instance or an array holding owners releases them when its scope closes, in
@@ -5245,17 +5250,25 @@ something not derived from the loan. A number, a `Bool`, or any value holding no
 derived from it and carries nothing (O26a). A loan given as an argument lasts until its call returns, and one given to
 a task until its join (P2) - as does every loan a task's call may make (O41).
 
-What is derived from a loan may be **kept**: stored where another name can reach it. A value derived from it stored
-through a reference (`gr.x = b`), or into a local a reference has been taken to (E12c), and an argument derived from it
-that a call may keep in another argument - what the callee's body requires of their scopes says so (O10b: `l.Push(b)`,
-`m.Put(k, b)`, `put(g, b)`, a closure capturing `b` pushed into a `List`), a task's call too - keeps the loan until the
-end of the block the storage it is kept in lives in: the local's, a handle's (whose state lives where it was made), the
-body's where it is kept through a reference or in a parameter's referent. A call that may keep it where that cannot be
-followed - a callee whose body is not known, or a destination outside the body: a global, a lambda's capture - is a
-compile-time error. A borrow of an owned object kept anywhere is kept in its region (O33), and an owner moved into an
-own slot or an owning parameter holds no loan. What a call keeps in its result - a constructor's instance, a borrowed
-result - is held by the local given it, as any value derived from a loan is, and through a function value nothing is
-kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
+What is derived from a borrowed copy is **confined** to this function's locals: the `:=` locals holding the copy, or
+a borrow read out of it, and the value locals built directly from one of those here - a struct or an enum made holding
+it, a lambda capturing it, a copy of either - each holding the loan to its own last use. Where such a local's storage
+has another name - a reference was taken to it (E12c), or it is a handle's copy (O17b), whose state lives where it was
+made - the loan lasts to the end of its block. Anything that would keep a value derived from a borrowed copy anywhere
+else is a compile-time error saying to keep a `Clone()` of it instead:
+
+- an argument a call may keep beyond the call - in another argument, its receiver or a collection (`l.Push(b)`,
+  `m.Put(k, b)`, `put(g, b)`, `g.set(b)`), what the callee's body requires of their scopes saying so (O10b) - or one
+  given to a call whose body is not known (a generic one, an `extern`), a task's call that may keep it among them;
+- a store through a reference, into a handle, or into a global or a capture;
+- a spawn target given a call's result derived from it (P1g);
+- an owner made from it or holding it - an object built into an own slot, an owned result (O37), an owner given to an
+  owning parameter (O36) - or a value of a type with a destructor (C9), which would hold it past its loans;
+- a lambda capturing it, kept by any of the above.
+
+A borrow of an owned object is confined to its region already (O33). What a call keeps in its result - a constructor's
+instance, a borrowed result - is held by the local given it, as any value derived from a loan is, and through a function
+value nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
 conservatively: a local holding a loan uses it wherever it is read after in its block, anywhere in a loop enclosing
 both inside its scope, and in deferred code, whichever path is taken.)*
 

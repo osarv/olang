@@ -1,0 +1,26 @@
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
+# O38: ...or through a for-in element that is a handle (own4 N5)
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    ls := List<List<Outer&>>()
+    ls.Push(List<Outer&>())
+    for inner in ls {
+        inner.Push(b)
+    }
+    v.o = null
+    println($ls[0][0].o.k)
+}

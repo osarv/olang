@@ -1,5 +1,4 @@
-# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
-# also: note: kept here, until the end of the block it is kept in
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38: ...a method keeping its argument in its receiver
 type Leaf struct(n I64) {
     n

@@ -1,0 +1,33 @@
+# own4 M1: an owner held while a later argument that may leave runs (O36, F3), in a loop's condition and its post
+# clause - evaluated 4M times in one open scope. The hold registers once per opening of its scope, so memory stays flat
+# (run under ulimit -v), and every Leaf made is released
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Leaf struct(n I64) {
+    n
+    Made = Made + 1
+} destruct { Dropped = Dropped + 1 }
+fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
+fn ok(k I64) I64 ? {
+    if k > 5000000000 { error }
+    return 0
+}
+fn run(n I64) I64 ? {
+    i := 0
+    for take2(Leaf(i), try ok(i)) < n {
+        i++
+    }
+    return i
+}
+fn post(n I64) I64 ? {
+    t := 0
+    for i := 0, i < n, t = take2(Leaf(i), try ok(i)) {
+        i++
+    }
+    return t
+}
+fn main() ? {
+    a := try run(4000000)
+    b := try post(4000000)
+    println($a " " $b " made " $Made " dropped " $Dropped)
+}

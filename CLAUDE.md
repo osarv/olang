@@ -4968,6 +4968,20 @@ and literals made only of such, never existing storage anywhere in it) - it is
   region and an own array's buffer are held in a hidden owner slot while a later argument that can leave runs. **F4**: a
   frame's owners are registered on its own block's scope, a destructor's top-level ones on its private scope, closed as
   it returns. Scope fuzzer's own mode writes the shapes: 079921e 41 findings in 120 seeds, now none in 400.
+- **own4: borrows are confined - F2's extension reversed (§8.8 O33, O35, O36, O38, R20, C2a, 2026-10-11; the
+  coordinator's decisions, details mine, docs/own.md section 15).** The review of the phase-2a fixes found four more
+  use-after-frees from one cause: a value carrying a borrowed copy's loan was allowed to be **kept**, and the checker
+  chased its holders - and missed a destructor in the same block reading it (N1), a spawn target set from the task's
+  result (N2), owners given it (N4), and a handle's copy in an inner block (N5). **Reversed**: such a value is held only
+  by this function's locals - the `:=` locals holding the copy or a borrow out of it, and value locals built directly
+  from one - each to its last use (to its block's end where its storage has another name); a call that may keep it (its
+  body's obligations say so, or its body is not known), a store through a reference or into a handle, a global, a
+  capture, a spawn target, an owner or a destructor-bearing value made from it are compile-time errors saying to keep a
+  `Clone()`. `ownCallKeeps`/`ownDestFrame` and the `kept` loan are gone. **N3**: F3's hold keys on any operation that
+  can leave - a checked one under `try`, a catch clause - not on "runs code" (`cgMayLeave`). **N6**: a constructor's own
+  fields are registered on its frame until assembly takes them, so a failing constructor releases them. **M1**: a hold
+  in a loop condition registers once per opening of its scope (`{ owner, registered }` slot), flat over 4M turns.
+  Scope fuzzer's own mode writes all six shapes: 67cb5b1 67 findings in 100 own seeds, now none in 300.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

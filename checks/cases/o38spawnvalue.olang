@@ -1,0 +1,28 @@
+# check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
+# O38: ...or a value holding one (own4 N2)
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Hold struct(x Outer&) {
+    x
+}
+fn wrap(x Outer&) Hold { return Hold(x) }
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    h Hold = Hold(null)
+    join {
+        spawn h = wrap(b)
+    }
+    println($h.x.o.k)
+}

@@ -15254,3 +15254,55 @@ findings, each holding one of the shapes; fixed, own seeds 1-400 and mixed seeds
 own seeds 1-40 compiled alone under both compilers, every scenario newly refused holds a review shape or the existing
 `ogrowAt` lend, which was the same F1 hole one field further (a callee storing a node built in the buffer's region into an
 element's `next`).
+
+### own4: borrows are confined, F2's extension reversed (§8.8 O33, O35, O36, O38, R20, C2a, 2026-10-11)
+
+The review of phase 2a's fixes (`/home/user/review/own4`, at 67cb5b1) reproduced six bugs and a growth: N1, N2, N4 and N5
+use-after-frees, N3 and N6 leaks of regions and destructors, M1 memory growing in a loop condition. All six also
+reproduce on 079921e. The coordinator decided each; docs/own.md section 15 has the details.
+
+**The pattern, and why F2 is reversed.** F2 (own3) answered "a call keeps a borrowed copy" by holding the copy's loans to
+the end of the block the destination lives in, extending a chase that began with direct stores: every place a value
+carrying a loan could be kept had to be found and its holder kept alive as long. Four of the review's six were holders
+the chase did not see. N1 is a resource destructed after the owner value local beside it - destructors run in reverse
+order, so one made earlier in the block runs last, after the owners were released, and reads the copy. N2 is a spawn
+target, set on the task's thread from the call's result. N4 is an owner (an own local, an owning parameter) given an
+owned result holding the copy; owners never held loans. N5 is a handle's copy made in an inner block, sharing state
+that lives in an outer one. Each could have had its own patch, and each would have been the next review's finding
+again. The coordinator went back to the user's strict start for borrows: a value carrying a borrowed copy's loan is held
+only by locals of the function it is made in - the `:=` locals holding the copy or a borrow out of it, and value locals
+built directly from those - and everything that would keep it anywhere else is refused with a message to keep a
+`Clone()`. Confinement needs no holder search, because the only holders it admits are ones the checker already tracks.
+
+**How it was built.** A loan records whether a borrowed copy made it (`copied`); a borrow of an owned object itself is
+already kept in its region by §8 (O33) and needs nothing. `ownCallConfined` replaces `ownCallKeeps`: an argument
+carrying a copied loan is refused where the callee is handed it as an owner, where the callee's body may keep it beyond
+the call - its obligations relate the parameter to another argument's scope, or the body is not known - and where the
+result is an owner or has a destructor and may keep it. `ownHoldMore` refuses the same value stored through a reference,
+into a global or a capture, and keeps the "hold to the block's end" only for a local a reference was taken to, which is
+still a local of this function. A spawn target is refused when the task's call is given a copy and its result can hold a
+reference, a tuple's element included. Three things were found building it. A constructor keeping a copy in its plain
+instance must stay legal (it is a local given the result), and ownKeepDests had read a constructor's body through the
+wrong state: constructors have their own body state, so it now builds the body on demand. A destination that is the
+parameter itself (a self-obligation) is not a destination. And `TypeIsOwning` counts references, so an `Outer&` result
+looked like an owner until the check asked for a value of an owning type.
+
+**N3.** F3's hidden owner slot was made only where a later argument "runs code". That test (`cgRunsCode`) was written
+for E11a's joins, and it treats a checked index, slice, division, conversion or `as` as a plain operation, while under
+`try` each can leave the expression. `cgMayLeave` adds a tried operation, a checked one (`checkRoot`) and a catch clause,
+and the three F3 sites use it.
+
+**N6.** A constructor's own fields were registered for release nowhere, since the instance releases them once
+assembled; a body failing before assembly left them to nobody. They are registered on the frame as any owner local, and
+the constructor's return takes them - emptying their slots after the instance's value is computed and before the frame
+closes - so only a failing constructor's frame releases anything.
+
+**M1.** A hold evaluated in a loop's condition registered a release node on the enclosing scope every turn. The slot now
+carries a mark: registered once per opening of its scope, cleared by the release. An owner an earlier evaluation left in
+the slot is released before the slot is reused.
+
+**Fuzzer.** `own4Op` writes the six shapes in the scope fuzzer's own mode, over an owner value of a plain type: the first
+version used the fuzzer's holder, whose own arrays of `mut` references make a borrowed copy of it a split value O17
+refuses to lend at all, so most shapes never reached the own walk; and N3's first version caught its checked operation
+with a clause, which F3 already held for. On 67cb5b1, own seeds 4200-4299 give 67 findings, every one holding an own4
+shape; fixed, own seeds 4000-4299 give none.

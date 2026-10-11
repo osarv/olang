@@ -1,6 +1,5 @@
-# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
-# also: note: kept here, until the end of the block it is kept in
-# O38: ...stored through a reference to a local - kept where it leads, read through the local itself
+# check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
+# O38: ...stored through a reference to a local - refused, whatever the reference leads to
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n

@@ -1,7 +1,6 @@
-# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
-# also: note: kept here, until the end of the block it is kept in
-# O38: a borrowed copy kept by a call - List.Push - is borrowed until the end of the block the list lives in: what
-# the list holds is b's storage, whose pointers name v's owners (the review of own phase 2a, F2)
+# check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
+# O38: a borrowed copy is held only by this function's locals - a call that can keep it (List.Push) is refused, where
+# phase 2a's review (F2) held the loan until the list's block ended (reversed by own4: the holders could not all be found)
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n

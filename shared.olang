@@ -17333,26 +17333,23 @@ type OwnKeep struct() {
     s OwnServer& = null
 }
 fn ownKeep(k mut OwnKeep&, s OwnServer&) { k.s = s }
-test "O38: a borrowed copy kept by a call - in a List, a Map, a struct, a lambda - is read back after the arena churns" {
+test "O38: a borrowed copy is held by this function's locals - a copy of it, a struct local, a lambda local - read back after a churn" {
     OwnDropped = 0
     s := OwnServer()
     s.cur = OwnConn(4 * OwnRun)
     s.cur.sock = OwnSock(9)
     t := OwnServer()
     t.cur = OwnConn(5)
-    b := s                                      # a borrowed copy: its loans on s's objects last as long as what keeps it
-    l := List<OwnServer&>()
-    l.Push(b)
-    m := Map<I64, OwnServer&>()
-    m.Put(1, b)
+    b := s                                      # a borrowed copy: its loans on s's objects last while a local holds it
+    c := b                                      # a copy of it holds them too
     k := OwnKeep()
-    ownKeep(k, b)
-    fs := List<fn() I64>()
-    fs.Push(fn() I64 { return b.cur.fd })
-    t.cur = null                                # another owner's object: nothing kept borrows it
+    k.s = b                                     # into a local's own storage: k holds them
+    f := fn() I64 { return b.cur.fd }           # a closure held in a local, and called
+    t.cur = null                                # another owner's object: nothing here borrows it
     assert sbChurn() > 0
-    assert l[0].cur.name == "c4" and l[0].cur.sock.n == 9 and k.s.cur.fd == 4 and fs[0]() == 4 and OwnDropped == 1
-    for e in m { assert e.Value.cur.sock.n == 9 }
+    assert c.cur.name == "c4" and c.cur.sock.n == 9 and k.s.cur.fd == 4 and f() == 4 and OwnDropped == 1
+    s.cur = null                                # once nothing holding the copy is used again
+    assert OwnDropped == 3
 }
 type OwnKeepCtor struct(s OwnServer&) {
     s
@@ -17413,4 +17410,39 @@ test "O35: a destructor's own owner locals are released as it returns - every de
     }
     assert sbChurn() > 0
     assert OwnDtorLocals == 1000 and OwnDropped == 2000
+}
+fn ownViaIndex(a Array<I64>&, i I64) I64 ? { return ownTake2(OwnConn(30), try a[i]) }
+fn ownViaDiv(z I64) I64 ? { return ownTake2(OwnConn(31), try (10 / z)) }
+fn ownViaSlice(a Array<I64>&, n I64) I64 ? { return ownTake2(OwnConn(32), (try a[1:n]).Len()) }
+type OwnFailing struct(n I64) ? {
+    n
+    c own mut OwnConn& = OwnConn(n)
+    c.sock = OwnSock(n)
+    k := try ownFails(n)
+}
+type OwnFailingOwn struct(n I64) ? {
+    n
+    c own mut OwnConn& = OwnConn(n)
+    if n > 0 { error }
+}
+test "O35, O36: an owner left behind by a checked operation under try, and a failing constructor's own fields, are released" {
+    OwnDropped = 0
+    a := I64[1, 2, 3]
+    x := try ownViaIndex(a, 8 * OwnRun) catch default -1        # OUT_OF_BOUNDS leaves before the call takes the owner
+    y := try ownViaDiv(OwnRun - 1) catch default -1             # DIVIDE_BY_ZERO
+    z := try ownViaSlice(a, 9 * OwnRun) catch default -1        # a slice out of range
+    assert x == -1 and y == -1 and z == -1 and OwnDropped == 3
+    for i in range 1 {
+        f := try OwnFailing(5 * OwnRun) catch { break }        # fails after making its field and the field's socket
+    }
+    for i in range 1 {
+        g := try OwnFailingOwn(6 * OwnRun) catch { break }     # its own error, after making its field
+    }
+    assert sbChurn() > 0
+    assert OwnDropped == 6
+    {
+        h := try OwnFailing(0) catch { unreachable }            # built: its fields go with the instance
+        assert h.c.fd == 0 and h.c.sock.n == 0 and OwnDropped == 6
+    }
+    assert OwnDropped == 8
 }

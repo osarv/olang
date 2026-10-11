@@ -1516,11 +1516,12 @@ fn frameenv(r mut report&) ? Failed {
                  "no environment of a local that leaves the frame in it", dir)
 }
 
-# O36/O30, O35 (the review of own phase 2a, F3 and F4): an owner handed to a call, or a constructor's region, is released
-# when a later argument leaves first, and a destructor's own owner locals as it returns - built, built -s and built -d,
-# every object made released, and under valgrind where it is installed (built for x86-64-v3, which it decodes) nothing
-# lost and no slot read after its frame is gone
-test "owners a later argument leaves past, and a destructor's own, are released" { assert passed("ownleave") }
+# O36/O30, O35 (the reviews of own phase 2a, F3 and F4, and own4, N3, N6 and M1): an owner handed to a call, or a
+# constructor's region, is released when a later argument leaves first - by a call or by a checked operation under "try"
+# - a failing constructor's own fields as it fails, and a destructor's own owner locals as it returns - built, built -s
+# and built -d, every object made released, and under valgrind where it is installed (built for x86-64-v3, which it
+# decodes) nothing lost and no slot read after its frame is gone; a hold in a loop's condition stays in flat memory
+test "owners a later argument leaves past, a failing constructor's and a destructor's own, are released" { assert passed("ownleave") }
 
 fn ownleave(r mut report&) ? Failed {
     dir := fresh("ownleave")
@@ -1531,6 +1532,9 @@ fn ownleave(r mut report&) ? Failed {
                           " && cmp -s s.txt ownleave.want")) == 0, "ownleave -s", dir)
     try r.expect(sh(dir, ("\"$OLANG\" -b -d ownleave.olang > out.txt 2>&1 && ./build/ownleave.debug > d.txt 2>&1"
                           " && cmp -s d.txt ownleave.want")) == 0, "ownleave -d", dir)
+    # own4 M1: a hold in a loop's condition and post clause, 4M turns in one open scope, in flat memory
+    try r.expect(sh(dir, ("\"$OLANG\" -b ownloop.olang > out.txt 2>&1 && (ulimit -v 50000 && ./build/ownloop) > l.txt 2>&1"
+                          " && grep -q '^4000000 4000000 made 8000001 dropped 8000001$' l.txt")) == 0, "ownloop", dir)
     if sh(dir, "command -v valgrind > /dev/null 2>&1") != 0 { return }
     try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownleave.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
                           " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownleave > v.txt 2> vg.txt"

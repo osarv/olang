@@ -26760,8 +26760,9 @@ struct ownEffects { struct list rels; struct list borrows; };
 //O38: a region borrowed - one read of an own slot - and where it was read, for the message. task: borrowed by a task
 //until its join (O41) - read at tok, the spawn, or in what the task runs, at via; anyType: an object of any type, a task
 //calling a function value
-//(kept: held where a call kept what borrowed it, O38 - via is that call)
-struct ownLoan { struct var* R; struct token tok; bool task; bool anyType; struct token via; bool kept; };
+//(copied: made by a borrowed copy (O32), whose own pointers are plain copies in storage of this function's - what only
+//this function's locals may hold, O38; a borrow of an owned object itself is kept in its region by §8, O33)
+struct ownLoan { struct var* R; struct token tok; bool task; bool anyType; struct token via; bool copied; };
 //...held by a local (or, always, by a task until its join) for as long as the local is used
 struct ownHolder { struct var* v; struct list loans; int frame; bool always; };
 //a block being walked, the statement in it at idx being the one walked; owner: the statement the block belongs to
@@ -26907,8 +26908,12 @@ static struct ownHolder* ownHolderOf(struct var* v) {
 }
 
 static void ownLoanPut(struct list* out, struct ownLoan l) {
-    for (int i = 0; i < out->len; i++)
-        if (((struct ownLoan*)ListGetIdx(out, i))->R == l.R) return;
+    for (int i = 0; i < out->len; i++) {
+        struct ownLoan* have = ListGetIdx(out, i);
+        if (have->R != l.R) continue;
+        if (l.copied) have->copied = true;
+        return;
+    }
     ListAdd(out, &l);
 }
 
@@ -26932,7 +26937,13 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
     if (!transient) {
         for (int i = 0; i < op->ownCopyReads.len; i++) { //O32: a borrowed copy made - a borrow of each object it holds
             struct operand* r = *(struct operand**)ListGetIdx(&op->ownCopyReads, i);
-            if (r->ownRegion && r->ownOrig) ownLoanAdd(out, r->ownRegion, op->tok);
+            if (r->ownRegion && r->ownOrig) {
+                struct ownLoan l = (struct ownLoan){0};
+                l.R = r->ownRegion;
+                l.tok = op->tok;
+                l.copied = true;
+                ownLoanPut(out, l);
+            }
         }
         if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
         else if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) {
@@ -27212,7 +27223,6 @@ static void ownReport(struct ownLoan* l, struct token tok, const char* what, str
     else if (l->task) Err(tok, ERR_OWN_RELEASE_UNDER_TASK, what, l->R->regionType, l->tok.lineNr);
     else if (move) Err(tok, ERR_OWN_MOVE_UNDER_LOAN, what, l->R->regionType, l->tok.lineNr);
     else Err(tok, ERR_OWN_RELEASE_UNDER_LOAN, what, l->R->regionType, l->tok.lineNr);
-    if (l->kept && l->via.owner) Note(l->via, NOTE_OWN_KEPT_HERE);
     if (l->task && l->via.owner && l->anyType) Note(l->via, NOTE_OWN_TASK_CALLS_VALUE);
     else if (l->task && l->via.owner) Note(l->via, NOTE_OWN_TASK_BORROWS);
     else if (!l->anyType) Note(l->tok, NOTE_OWN_BORROWED_HERE);
@@ -27611,57 +27621,66 @@ static bool ownKeepDests(struct var* m, int i, int nargs, bool* dest) {
     return true;
 }
 
-//O38 (own3 F2): until the end of which frame what is kept in dest - an argument's storage, or what it leads to - stays
-//kept: the block its root local is declared in, where that local's own storage keeps it (a value local, a handle, whose
-//state lives where it was made); the body's, where it is kept through a reference or in a parameter's referent (what
-//this body made cannot outlive it there, O13). -1 where its storage is outside this body: a global, a lambda's capture
-static int ownDestFrame(struct operand* dest) {
-    struct operand* t = dest;
-    bool viaRef = false;
-    while (t && (t->opType == OPERATION_MEMBER || t->opType == OPERATION_INDEX || t->opType == OPERATION_SLICE) && t->args.len) {
-        struct operand* b = *(struct operand**)ListGetIdx(&t->args, 0);
-        if (b->type.structMAlloc) viaRef = true;
-        t = b;
+//O38 (confined, own4): what only this function's locals may hold that v carries - the loans of a borrowed copy, or of
+//anything made from one (a value holding a reference to it, a closure capturing it, a call's result given it)
+static void ownCarried(struct operand* v, struct list* out) {
+    if (!v || v->isNullLiteral) return;
+    struct list all = ListInit(sizeof(struct ownLoan));
+    ownLoansIn(v, &all, false, false);
+    for (int i = 0; i < all.len; i++) {
+        struct ownLoan* l = ListGetIdx(&all, i);
+        if (l->copied) ownLoanPut(out, *l);
     }
-    if (!t || t->opType != OPERATION_READ_VAR || !t->readVar) return 0;
-    if (t->readVar->owner && !t->readVar->isFuncDecl) return -1;
-    struct var* v = canonicalVar(t->readVar);
-    if (v->isCapture || t->readVar->isCapture) return -1;
-    if (viaRef || t->type.structMAlloc || ownParamIndex(ow.func, t->readVar) >= 0) return 0;
-    struct ownHolder* h = ownHolderOf(v);
-    return h ? h->frame : 0;
 }
 
-static void ownHoldUntil(int frame, struct list* loans, struct token at);
-//O38 (own3 F2): a call that may keep what an argument refers to - a borrowed copy's storage, a closure that captured one -
-//in another argument's storage stores it there, as an assignment would: what that argument borrows stays borrowed until
-//the end of the block that storage lives in (ownDestFrame). Where it is not known that the callee keeps it nowhere else -
-//its body, or a destination outside this body - the call is refused. Through a function value nothing is kept but in its
-//result (T22a), which a local given it holds
-static void ownCallKeeps(struct operand* call, struct token at) {
+//...whether a value of type t is, or is made, an owner, or has a destructor - which releases, or reads, what it holds as
+//its scope closes, after the loans of a copy given it have ended (O35, O15)
+static bool ownTypeOutlivesLoans(struct type t) {
+    if (t.refOwn) return true;
+    struct type* c = canonicalStructOf(t);
+    if (c && c->destructFunc) return true;
+    return !t.structMAlloc && TypeIsOwning(t);
+}
+
+//(a call refused for what it was given is one error: a call it is given to, or a target given its result, adds none)
+static struct list ownRefusedCalls;
+static bool ownCallRefused(struct operand* a) {
+    for (int i = 0; i < ownRefusedCalls.len; i++) if (*(struct operand**)ListGetIdx(&ownRefusedCalls, i) == a) return true;
+    return false;
+}
+static void ownRefuse(struct operand* call, struct token tok, enum diag d) {
+    if (!ownRefusedCalls.elemSize) ownRefusedCalls = ListInit(sizeof(struct operand*));
+    ListAdd(&ownRefusedCalls, &call);
+    if (!ownReportedAt(tok)) Err(tok, d);
+}
+
+//O38 (confined, own4): a call given what only this function's locals may hold (ownCarried) is refused where it may keep
+//it beyond the call: in another argument - its body's obligations relate their scopes (O10b), or it is not known - in
+//an owner it is handed (an owning parameter), or in its result where that is an owner or has a destructor. Kept in a
+//result that is neither, it is held by the local given the result, as any value derived from a loan is. Through a
+//function value nothing is kept but in its result (T22a)
+static void ownCallConfined(struct operand* call) {
     if (!ow.check || ow.rewalking || !call || call->opType != OPERATION_FUNCCALL || call->callee) return;
     struct var* m = call->readVar;
     if (!m || !roCalleeKnown(m) || m->isLambda) return;
     for (int i = 0; i < call->args.len; i++) {
         struct operand* a = *(struct operand**)ListGetIdx(&call->args, i);
-        //(a borrow of an owned object - a read of an own slot, a local holding one - refers into its region, which outlives
-        //nothing: wherever a callee keeps it is in that region too, and leaves with it, O33)
-        if (ownRegionOf(a)) continue;
+        if (ownCallRefused(a)) continue;
         struct list loans = ListInit(sizeof(struct ownLoan));
-        ownLoansIn(a, &loans, false, false);
-        //(an owner moved into an owning parameter holds no borrow, whatever the place it was taken from was read through)
-        bool ownParam = i < m->type.vars.len && ((struct var*)ListGetIdx(&m->type.vars, i))->type.refOwn;
-        if (!loans.len || ownParam || !calleeMayHoldArg(m, i)) continue;
-        bool* dest = calloc(call->args.len + 1, sizeof(bool));
-        bool known = ownKeepDests(m, i, call->args.len, dest);
-        for (int j = 0; known && j < call->args.len; j++) {
-            if (!dest[j]) continue;
-            int frame = ownDestFrame(*(struct operand**)ListGetIdx(&call->args, j));
-            if (frame < 0) { known = false; break; }
-            ownHoldUntil(frame, &loans, at);
+        ownCarried(a, &loans);
+        if (!loans.len) continue;
+        if (i < m->type.vars.len && ((struct var*)ListGetIdx(&m->type.vars, i))->type.refOwn) {
+            ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
+            continue;
         }
+        if (!calleeMayHoldArg(m, i)) continue;
+        bool* dest = calloc(call->args.len + 1, sizeof(bool));
+        bool elsewhere = !ownKeepDests(m, i, call->args.len, dest);
+        for (int j = 0; j < call->args.len && !elsewhere; j++) elsewhere = dest[j];
         free(dest);
-        if (!known && !ownReportedAt(a->tok)) Err(a->tok, ERR_OWN_KEPT_UNFOLLOWED);
+        if (elsewhere) ownRefuse(call, a->tok, ERR_OWN_BORROW_KEPT_BY_CALL);
+        else if (m->type.hasRetType && ownTypeOutlivesLoans(*m->type.retType) && calleeMayKeepArg(m, i))
+            ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
     }
 }
 
@@ -27700,7 +27719,7 @@ static void ownOpWalk(struct operand* op) {
     }
     if (op->opType == OPERATION_FUNCCALL) {
         ownCallRelease(op);
-        ownCallKeeps(op, op->tok);
+        ownCallConfined(op);
     } else if (op->opType == OPERATION_TAKE && op->args.len) {
         //O39: a move frees nothing, but the object leaves the tree a borrow of it, or of anything inside it, was read
         //through - and a release through its new owner meets no loan rooted at the old one. So it is refused while one is
@@ -27738,24 +27757,21 @@ static void ownHold(struct var* v, struct list* loans, int frame) {
     ListAdd(&ow.holders, &h);
 }
 
-//O38 (own3): what a value stored at `at` borrows, kept until the end of frame (ownDestFrame) - by every name the storage
-//has, not only the local it was stored through
+//O38 (own3): what a value stored into a local's storage borrows, held until the end of frame - the local's block - by
+//every name that storage has, not only the local it was stored through
 static void ownHoldUntil(int frame, struct list* loans, struct token at) {
+    (void)at;
     if (!loans->len) return;
     if (frame >= ow.frames.len) frame = ow.frames.len - 1;
     struct ownHolder h = { NULL, ListInit(sizeof(struct ownLoan)), frame < 0 ? 0 : frame, true };
-    for (int k = 0; k < loans->len; k++) {
-        struct ownLoan l = *(struct ownLoan*)ListGetIdx(loans, k);
-        l.kept = true;
-        l.via = at;
-        ownLoanPut(&h.loans, l);
-    }
+    for (int k = 0; k < loans->len; k++) ownLoanPut(&h.loans, *(struct ownLoan*)ListGetIdx(loans, k));
     ListAdd(&ow.holders, &h);
 }
 
-//...or later given more, by an assignment to it or into a value it holds. What the stored value borrows (val) is kept
-//where it is stored: through a reference - where that leads, which other names may reach - or into a local's storage a
-//reference was taken to, it is held until that storage's block ends (own3), not only while the local is used
+//...or later given more, by an assignment to it or into a value it holds. What only this function's locals may hold
+//(ownCarried) is stored only into a local's own storage: through a reference - where it leads, which other names may
+//reach, a handle's shared state included - or into a global or a lambda's capture it is refused (own4); into a local's
+//storage a reference was taken to, it is held until that local's block ends, not only while the local is used (own3)
 static void ownHoldMore(struct operand* target, struct list* loans, struct operand* val) {
     struct operand* t = target;
     bool viaRef = false;
@@ -27764,17 +27780,20 @@ static void ownHoldMore(struct operand* target, struct list* loans, struct opera
         if (b->type.structMAlloc) viaRef = true;
         t = b;
     }
-    //(an owner moved or made into an own slot holds no borrow - C2d - whatever the place it was taken from was read through)
+    //(an owner moved or made into an own slot holds no borrow - C2d - whatever the place it was taken from was read through;
+    //one made from a borrowed copy is refused where it is made, ownCallConfined)
     bool ownerInto = target->type.refOwn || (target->ownOrig && target->ownOrig->refOwn) || OwnValueLocalOf(target);
-    if (val && !ownerInto && !ow.rewalking && !val->isNullLiteral && !ownRegionOf(val) && typeCarriesScopes(val->type)) {
+    if (val && !ownerInto && !ow.rewalking) {
         struct list vl = ListInit(sizeof(struct ownLoan));
-        ownLoansIn(val, &vl, false, false);
-        bool aliased = !viaRef && t && t->opType == OPERATION_READ_VAR && t->readVar && canonicalVar(t->readVar)->slotBorrowed;
-        if (vl.len && (viaRef || aliased)) {
-            int frame = ownDestFrame(target);
-            if (frame < 0) {
-                if (!ownReportedAt(val->tok)) Err(val->tok, ERR_OWN_STORED_UNFOLLOWED);
-            } else ownHoldUntil(frame, &vl, target->tok);
+        ownCarried(val, &vl);
+        bool root = t && t->opType == OPERATION_READ_VAR && t->readVar;
+        bool outside = viaRef || t->type.structMAlloc || !root || (t->readVar->owner && !t->readVar->isFuncDecl)
+                       || canonicalVar(t->readVar)->isCapture || t->readVar->isCapture;
+        if (vl.len && outside) {
+            if (!ownCallRefused(val)) ownRefuse(val, val->tok, ERR_OWN_BORROW_STORED);
+        } else if (vl.len && canonicalVar(t->readVar)->slotBorrowed) {
+            struct ownHolder* h = ownHolderOf(t->readVar);
+            ownHoldUntil(h ? h->frame : 0, &vl, target->tok);
         }
     }
     if (viaRef) return; //(stored through a reference: not into a local's storage)
@@ -27927,7 +27946,18 @@ static void ownStmtWalk(struct statement* s) {
             ownOpWalk(call->callee);
         }
         for (int i = 0; i < s->spawnTargets.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->spawnTargets, i));
-        if (call) ownCallKeeps(call, call->tok); //O38: what the task's call keeps outlives its join
+        if (call) ownCallConfined(call); //O38: what the task's call keeps outlives its join
+        //...and a target given what only this function's locals may hold - the call's result made from a borrowed copy -
+        //is set on the task's thread, where no local of this function holds it (own4 N2)
+        if (ow.check && !ow.rewalking && call && call->opType == OPERATION_FUNCCALL && s->spawnTargets.len) {
+            //(any result that can hold a reference may hold what it was given - a tuple's element borrowed from it too)
+            struct list loans = ListInit(sizeof(struct ownLoan));
+            struct var* f = call->readVar;
+            bool holds = call->callee || !f || !f->type.hasRetType || typeCarriesScopes(*f->type.retType)
+                         || f->type.retType->bType == BASETYPE_FUNC;
+            for (int i = 0; holds && i < call->args.len; i++) ownCarried(*(struct operand**)ListGetIdx(&call->args, i), &loans);
+            if (loans.len && !ownCallRefused(call)) ownRefuse(call, call->tok, ERR_OWN_BORROW_STORED);
+        }
         struct var* g = call && !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
         if (g && g->ownEff && g->ownEff->rels.len) {
             if (!ow.check) ownCallRelease(call);
@@ -28101,6 +28131,7 @@ static void settleOwnBorrows(void) {
     ow.holders = ListInit(sizeof(struct ownHolder));
     ow.encl = ListInit(sizeof(struct ownLoan));
     ow.reported = ListInit(sizeof(struct token));
+    ownRefusedCalls = ListInit(sizeof(struct operand*));
     ow.reportedStmts = ListInit(sizeof(struct statement*));
     ow.lambdaLocals = ListInit(sizeof(struct var*));
     ow.rewalkLoops = ListInit(sizeof(struct statement*));

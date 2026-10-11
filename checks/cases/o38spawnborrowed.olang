@@ -1,0 +1,26 @@
+# check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
+# O38: ...nor by a spawn target given a borrowed result - its loans would end at the join (own4 N2)
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn id(x Outer&) Outer&x { return x }
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    r Outer& = null
+    join {
+        spawn r = id(b)
+    }
+    v.o = null
+    println($r.o.k)
+}

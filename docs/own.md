@@ -1006,6 +1006,9 @@ T22a) would lift it, and `Vec<String&>.Sort` will need it.
 
 ### 14.2 F2: a borrowed copy kept by a call (O38, O39)
 
+*(Reversed by own4, section 15.1: a borrowed copy is now confined to this function's locals, and a call that may keep
+it is refused rather than followed.)*
+
 A borrowed copy's loans lasted until its own last use, so a call keeping it - `l.Push(b)`, `m.Put(1, b)`, `put(g, b)`,
 `g.set(b)`, a lambda capturing `b` pushed into a `List` - let `v.o = null` release what the kept `b` still named.
 
@@ -1074,3 +1077,115 @@ one of these shapes (F1 in 28, F2 in 16, F3 in 14, F4 in 7). Fixed, own seeds 1-
 findings**; mixed seeds 100-179: 377 run, 583 refused, none. Compiling each scenario of own seeds 1-40 alone under both
 compilers, every scenario 079921e accepts and this refuses holds one of the shapes, or the old `ogrowAt` lend - a
 callee storing a node built in the buffer's region into an element's field, the F1 shape once removed.
+
+## 15. own4: borrows are confined, F2 reversed (2026-10-11)
+
+The review of phase 2a's fixes (`/home/user/review/own4`, at 67cb5b1) reproduced six bugs the compiler accepted: four
+use-after-frees (N1, N2, N4, N5) and two leaks of regions and destructors (N3, N6), plus a growth in a loop condition
+(M1). All six reproduce on 079921e too.
+
+### 15.1 The pattern, and the reversal of F2's extension (O33, O38)
+
+N1, N2, N4 and N5 have one cause: a value carrying a loan was allowed to be **kept** - stored where another name reaches
+it - and the checker then had to find every holder and keep the loan alive as long as each. F2 (section 14.2) extended
+that chase from stores to calls, holding the loans to the end of the destination's block. The holders it could not see:
+
+- **N1**: a destructor reads the kept copy - a resource made earlier in the same block (`w := Watch()`, destructed
+  last, O15) given the copy (`w.x = b`, `put(w, b)`) is destructed after the owner value local's owners are released at
+  that block's close, so its destructor reads freed objects;
+- **N2**: a spawn target is set on the task's thread from the call's result (`spawn r = id(b)`, a value holding `b`,
+  one of several targets, a closure capturing it) and held nothing after the join;
+- **N4**: an owner given the copy - an own local or an owning parameter receiving an owned result whose own array holds
+  `b` - holds no loan (owners never did);
+- **N5**: a handle's copy made in an inner block (`l2 := l`, a for-in element, a Map's copy) keeps `b` in state that
+  lives where the original was made, an outer block, while the hold ended with the inner one.
+
+**Decided** (the coordinator's call, reversing F2's extension): a value carrying a loan of a **borrowed copy** - the copy,
+a borrow read out of it, anything built from one - may be held only by locals of the function it is made in: the `:=`
+locals holding it and the value locals built directly from them (a struct or an enum made holding it, a lambda
+capturing it, a copy). Their loans last to each holder's last use; where a holder's storage has another name (a
+reference taken to it, E12c), to the end of its block. Anything that would keep it elsewhere is **refused**, not
+extended (`ERR_OWN_BORROW_KEPT_BY_CALL`, `ERR_OWN_BORROW_STORED`, `ERR_OWN_BORROW_IN_OWNER`, each saying to keep a
+`Clone()` instead):
+
+- a call whose checked body may keep it beyond the call - in another argument, its receiver or a collection
+  (`List.Push`, `Map.Put`, `put(g, b)`, `g.set(b)`), read off the callee's obligations (O10b, `ownKeepDests`) - or
+  whose body is not known (a generic, an `extern`); a task's call among them;
+- a store through a reference or into a handle (a handle's state is reached through its reference field), into a
+  global or a capture;
+- a spawn target given a call's result made from it, whenever that result can hold a reference;
+- an owner made from it or holding it - an owning parameter given one, a call's owned result or a result of a type with
+  a destructor (`ownTypeOutlivesLoans`) that may keep the argument;
+- a lambda capturing it, kept by any of these.
+
+A borrow of an owned object itself needs nothing new: §8 already keeps it in its region (O33). Loans now carry whether a
+borrowed copy made them (`ownLoan.copied`); only those are confined. What the review found was a holder the checker
+could not see; under confinement there is no holder outside the function's own locals to see, so each N shape is one
+error where the copy would leave. The F2 machinery that followed calls (`ownCallKeeps`, `ownDestFrame`, the `kept` loan
+and its note, `ERR_OWN_KEPT_UNFOLLOWED`, `ERR_OWN_STORED_UNFOLLOWED`) is removed; `ownHoldUntil` stays for the one
+place it still guards a direct local store - a value stored into a local a reference was taken to.
+
+Reading stays free: a borrowed copy may be passed to a call that keeps nothing (`count(b)`), captured by a lambda
+handed to a helper that runs it (`Any`, `Fold` - T22a), made into a struct local, rendered and compared.
+
+### 15.2 N3: an argument that leaves by a checked operation (O35, O36, R20)
+
+F3 held an owner (for an owning parameter, a constructor's region, an own array's buffer) only where a later argument
+"runs code" (`cgRunsCode`, written for E11a's joins), which takes a checked index, slice, division, conversion or `as`
+for a plain operation. Under `try` each can leave by propagating a `BuiltinError`. **Decided**: an argument can leave
+whenever it holds an operation that can fail or jump - a call, a checked operation under `try` (`checkRoot`), a tried
+operation, a catch clause - `cgMayLeave`, keyed on at the three F3 sites.
+
+### 15.3 N6: a constructor failing after making its own fields (O35, C2a)
+
+A constructor's own field was registered for release by nobody until the instance was assembled, so a body failing
+first - its own `error`, a `try` it does not catch - left the field's region and destructors to nobody. **Decided**: a
+constructor's own fields are registered on its frame (`cgOwnReleaseScope`, as any owner local) from when they are made;
+assembly takes them (`cgCtorTakeOwners` empties their slots after the instance's value is computed, before the frame
+closes), and a failing constructor's frame releases them on its way out, the test unwind included.
+
+### 15.4 M1: a hold in a loop's condition
+
+F3's hidden owner slot registered a release node on the enclosing block's scope every time it was evaluated, and a loop's
+condition or post clause is evaluated again and again in one open scope: 4M turns grew ~98MB. **Decided**: the slot is
+`{ owner, registered }`; a hold registers only while the mark is clear and sets it, and the release
+(`__olang_own_drop_held`, `_aheld`) clears it with the slot, so the scope's next opening registers again. What an earlier
+evaluation left behind - it left before the call took the owner - is released before the slot is reused. 4M turns run in
+flat memory (1.6MB peak).
+
+### 15.5 New over-rejections, recorded
+
+- `g(Names())` - a constructor call of an owning type passed to an owning parameter - is O34's error, while
+  `x own mut Names& = Names()` then `g(take x)` compiles.
+- Storing existing text into an own array's elements in a callee (`setAll(arr, s)`) is F1's refusal even where `s`
+  lives in the program scope.
+- An own struct result holding a parameter's reference (`return Box(x)` for an `own mut Box&` result) is C2d's error,
+  while the own-array form of the same compiles.
+- Confinement refuses keeping a borrowed copy even where nothing is released while it is kept (`l.Push(b)` with no
+  release before `l`'s last use, accepted by phase 2a) - keep a `Clone()`.
+- Borrowed copies cannot reach a generic's `<T>` (T25c) - known.
+
+### 15.6 Tests and the fuzzer
+
+`checks/cases`: the nine `o38kept*` cases of section 14.5 now fail with the confinement errors (`o38keptaliased`, a local
+a reference was taken to, still with O39 - its loans held to the block's end), and twelve more, every one accepted by
+67cb5b1: `o38dtorstore`, `o38dtorcall` (N1), `o38spawnborrowed`, `o38spawnvalue`, `o38spawntwo`, `o38spawnclosure`
+(N2), `o38ownlocal`, `o38ownassign`, `o38owningparam` (N4), `o38handlecopy`, `o38handleloop`, `o38handlemap` (N5). An
+own object built from a borrowed copy, a global and a capture given one are refused before O38 already (C2d, O1b), so
+they need no case. `checks/fixtures/ownleave` gained N3's shapes - an index, a division, a conversion, a slice and `as`
+failing under `try` after an owner was made, a constructor's region and an own array's buffer - and N6's (a
+constructor failing by `try` or `error` after making one field, or two and an own array), counted made and released,
+built plain, `-s`, `-d` and under valgrind; and `ownloop.olang` runs M1's condition and post clause 4M turns under
+`ulimit -v 50000`. shared.olang: the F2 test of a copy kept in a List, a Map, a struct and a lambda is now one of a copy
+held by locals (a copy of it, a struct local, a lambda local) read back after a churn; and owners left behind by a
+checked index, division and slice propagated out of a helper, and constructors failing after making their fields, all
+released (a built one with its instance).
+
+The scope fuzzer's own mode writes own4's shapes (`own4Op`, half of `ownReviewOp`'s statements, which became one own
+statement in four): a borrowed copy of an owner value of a plain type (`OPlain`, nothing storable through it, so O17
+lends it) kept by a spawn target four ways, an owned result or an owning parameter, a handle's copy in an inner block, a
+for-in element and a Map's copy; in programs with destructors, a resource given the copy beside the owner (N1), an owner
+left by a checked operation propagated out of a helper or caught by a clause (N3), and constructors failing after
+making their own fields (N6). On 67cb5b1, own seeds 4200-4299: 355 scenarios run, 845 refused, **67 findings**, every
+one holding an own4 shape (N1 2, N2 26, N3 3, N4 17, N5 28, N6 1; some hold two). Fixed, own seeds 4000-4299: 765 run,
+2835 refused, **no findings**; mixed seeds 100-139 and the checks scenario's seeds: none.
