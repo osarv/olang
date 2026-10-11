@@ -5104,6 +5104,21 @@ and literals made only of such, never existing storage anywhere in it) - it is
   c.text`, or from a scope argument `mk&x(5)` - is new storage there and holds a loan on the region, as the borrow does.
   X (older, on master): an assert's message may not leave (S17). A global value copy (`T String = Docs.title`) keeps no
   loan, as in a local. Scope fuzzer own seeds 1-200: 1bcfb72 6 findings, the fix none.
+  **Its fifth review (vec5), fixed (the coordinator's calls, docs/own.md section 24)**: R2a (older, a §8 hole on master,
+  below), R2b (own's first cut): building into an own region - a local declared there, a scope argument binding it, a
+  constructor landed there - is a **use** of every loan on it, so a release before it is O39's error (naming a borrow as a
+  scope after its region was released built into freed memory); O33's order check walks `CodeDeepOp` (a match value's
+  clauses, catch clauses and defaults) and runs for a spawned call. `h := mk&x(x)` (a function returning such an instance,
+  a scope argument naming a live region) is judged where E25 put it, as `H&x(...)` was. Fuzzer: `vec5Op` (own) and
+  `ctorScopeOp` (scope mode).
+- **C2d: building in a parameter's scope holds the parameter (2026-10-11, vec5 R2a).** A constructor field or local
+  written in a parameter's scope (`y String&x = $n "..."`), given a value a scope argument built there (`y := mk&x(n)`),
+  or holding one, is new storage where the argument lives, and its instance outlived the argument's block - a
+  use-after-free on master, own or not, because C2d's hold analysis joined only variables a value *mentions*. The groups
+  now hold scope variables too (a parameter joined with its own, a local with every one it is built in -
+  `LocalBuildScopes`, the predicate own's region loans read - a call with every one its bindings put something in).
+  Plain functions, O17's region facts and `calleeMayKeepArg` were checked for the same gap: obligations and O17 already
+  saw such builds.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

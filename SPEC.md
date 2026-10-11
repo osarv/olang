@@ -5136,11 +5136,12 @@ A temporary is built in an object's region (O6) only through a borrow of the obj
 borrowed result that is the object (O37) - or through a reference this function read out of such a borrow, or where a
 local's written scope names such a borrow (`d mut String&x` with `x := c.text`, O25a) or a scope argument does
 (`mk&x(n)`, E25). Such a local is new storage in the region, which the region's release frees: it holds a loan on the
-region as the borrow it names does (O38). A borrow of
+region as the borrow it names does (O38) - and building there **uses** every loan on the region, so a release before
+it is O39's error: naming a borrow as a scope after its region was released would build into freed storage. A borrow of
 anything else lives where it is not known (O12). A region is known as the borrow naming it is read, so a value built
 for an argument in the region a later argument of the same call reads - `setN(Node(9), s.cur)`, `setN` storing its
-first parameter into its second's object - is a compile-time error naming the place: read it into a local first
-(`o := s.cur`).
+first parameter into its second's object, the read anywhere in that argument (a match value's clause, a catch default)
+and the call spawned or not - is a compile-time error naming the place: read it into a local first (`o := s.cur`).
 
 **O34 (reach, and moving an owner).** Every slot and every owner has a **reach**: a scope that everything an owned
 object refers to outside its region is known to outlive. A slot's reach is the scope its storage lives in - a field's
@@ -5296,7 +5297,8 @@ owned result is an owner only in a move position (`x := f()`, an own slot, an ow
 
 **O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), by each call giving a
 borrowed result (O37), and by each local whose scope is a region - written naming a borrow, or taken from a value a
-scope argument built there (O33). A part of an owned object - an inline field or array, an own array's element - **borrowed where
+scope argument built there (O33). Building into a region - a local declared there, a call given a scope argument
+binding it, a constructor put there - uses each loan on it, as reading the borrow does. A part of an owned object - an inline field or array, an own array's element - **borrowed where
 it is** reads the slot as well, whatever the part's type holds: lent by reference (E12c - to a reference parameter, a
 receiver, a reference local or field, a task's argument), sliced or viewed (E16a, E32b), walked by `for` (S9), or
 rendered by a join (E11b) after a later operand that runs code - a join reads its pieces once every operand is evaluated.
@@ -5518,7 +5520,9 @@ A violation is a compile-time error at that point, reported at the argument.
 An argument binds the instance this way only when the instance **may hold** what it refers to, as read off the
 constructor's checked body: the parameter is stored in a field (a bare pun included), built into one, passed to a call
 together with a field (which could keep one in the other), or shares what it refers to - through a local, a slice, a
-borrowed result - with something that is. A value that cannot carry a reference (a count, a flag, a new array of
+borrowed result - with something that is. **Building in the parameter's scope** shares it too: a field or local written
+`y String&p = ...`, one given a value a scope argument built there (`y := mk&p(n)`, E25), or anything holding such a
+value - new storage where the argument lives, which the argument's scope must outlive as the argument itself. A value that cannot carry a reference (a count, a flag, a new array of
 numbers, T17c) carries nothing, so a constructor that only reads an argument binds nothing for it:
 `type Counts struct(text String&) { letters I64 = count(text) }` built from a local may be returned. A constructor
 whose body is being checked when its call is (a call inside its own body) binds every such argument.

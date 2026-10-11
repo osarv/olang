@@ -15677,3 +15677,28 @@ abandons the message, and the built program, which returned, disagree. A message
 the assert fails, so it may not leave - the rule deferred code already has. Last, the third round's check of a global's
 initializer refused a plain value copy, `T String = Docs.title`, which holds nothing of the object; it now keeps a loan
 only where the global's type can hold a reference, as a local does.
+
+
+### Vec phase 1's fifth review, fixed (§8 C2d, §8.8 O33, O38, O39, 2026-10-11)
+
+The fifth review found that the fourth round's fixes held, and three classes that were all older than it. The worst was
+not about ownership at all. C2d decides which of a constructor's parameters its instance may hold by grouping the
+variables that share what they refer to, and a variable joined a group only by being *mentioned* in a value. A field
+declared in a parameter's scope, `y String&x = $n "..."`, is new text built where the argument lives, and it mentions
+nothing: the instance was taken not to hold `x`, so it could be assigned to a variable outside the block the argument
+lived in, and the text was read after that block's arena was reused - silently, on master, with no `own` in sight. The
+same went for a field made by a call given a scope argument naming the parameter, a local typed in its scope, and with
+own, an instance holding a region that was then released. The fix makes building in a scope a mention of it: the
+groups hold scope variables beside names, each parameter is joined with its own, and a local with every scope it is
+built in - the same predicate own's region loans read, so the two can no longer disagree about where a local is built.
+The other analyses that ask "can this callee keep its argument" were probed with the same shapes; obligations and O17's
+region facts already saw such builds. One shape this made stricter was natural and safe - a function returning such an
+instance, called with a scope argument naming a live region - and it is judged where the scope argument put it, as a
+constructor given one already was.
+
+The second class was own's first cut. A local typed `d mut String&x` names the region of a borrow read earlier, but
+liveness counted only reads of `x`, so a release between the two was accepted and the build went into a region already
+freed - with the memory reused by the next owned object's region, silently. A build into a region is now a use of every
+loan on it. The third was two gaps in O33's argument-order check: it searched a later argument for the region's read by a
+hand-written walk that missed a match value's clauses, and a spawned call never reached the check. Both now go through the
+shared walk and the shared check.

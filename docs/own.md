@@ -1800,3 +1800,55 @@ argument, read after the release - refused, O39 - or before it - accepted) and X
 refused, S17).
 Own seeds 1-200: 1bcfb72 6 findings (5 of F1''s wrapper shapes, 1 of R's; 599 scenarios run, 1801 refused), this tip none
 (592 run, 1808 refused).
+
+## 24. Vec phase 1's fifth review, fixed (2026-10-11)
+
+The review of 7f1a37a (`/home/user/review/vec5`) found that the fourth round's changes held, and three classes older than
+it: R2a, a §8 hole on master that needs no own; R2b, from own's first cut; and two gaps in the O33 order check. Fixed as the
+coordinator decided, with nothing relaxed.
+
+1. **Building in a parameter's scope is holding the parameter** (R2a, C2d). C2d's hold analysis (`ctorComputeHeld`,
+   `holdStmt`/`holdMentions`) grouped variables by the values that *mention* them. A constructor field or local whose
+   written scope names a parameter (`y String&x = $n "..."`), one given a value built there by a scope argument
+   (`y := mk&x(n)`, E25), or a local typed `&x` then stored in a field is new storage where the argument lives, and it
+   mentions nothing. So `ctorHeld[x]` was false, and the instance could outlive the argument's block. With own, a call
+   kept no loan (`calleeMayKeepArg`). Now the groups also hold **scope variables**:
+   - each parameter is joined with its own scope variable;
+   - a local is joined with every scope variable it is built in (`LocalBuildScopes`: its written scope, its value home,
+     its references' home - the predicate own's region loans use too, `ownHomeLoan`);
+   - a call mentions every scope variable its bindings put something in.
+   The instance then holds the parameter, C2d holds it to the argument's scope, a function returning the instance gets
+   the obligation (O10b), and with own the argument's loans are kept. **Other analyses checked**: a plain function
+   building in its parameter's scope and returning or storing it is already an obligation (O14/O10c; probed through a
+   typed local, a scope argument, and a store into another parameter); O17's region facts already mark a typed local or a
+   scope argument as a build (probed: a `regrow` building its new array through `d mut Array<I64>&b` or `mkarr&b(v)` is
+   refused, O17); `calleeMayKeepArg` reads `ctorHeld` for a constructor and obligations otherwise, so it follows.
+   **Restored**: `h := mk&x(x)`, a function returning such an instance with a scope argument naming a live region, judged
+   where the scope argument put it (E25: the written binding of the callee's result scope - `scopeBinding.written`), as
+   `H&x(x, 6)` already was. Over-rejection kept, consistent with the rest of C2d: `h := H(c.text, 6)` with no scope
+   argument, the instance in the block and what it holds in a region that outlives nothing, as `W(c.text)` holding the
+   borrow directly always was.
+2. **Building in a region uses its loans** (R2b, O39). `d mut String&x` or `mk&x(5)` names the region of a read made
+   earlier; the liveness scan counted only reads of `x`, so `x`'s holder was dead at a release before it, and the build
+   went into the freed region. Now a statement building into a region - a local declared there (`LocalBuildScopes`), a
+   call given a scope argument binding it, a constructor landed there - is a **use** of every holder with a loan on it
+   (`ownStmtUses`/`ownOpUses`, used wherever liveness asks: later statements, deferred code, a loop around), and the
+   release before it is O39's error, its note at the build. In the releasing assignment itself, what its value builds in
+   the region it lets go of counts too. Naming a live region stays legal: a typed local or a scope argument read before
+   the release, and in a loop a borrow taken again each turn.
+3. **O33's order check looks everywhere** (O33). `ownOpContains` walked arguments, chain operands and the callee by
+   hand, missing a match value's clauses, a comprehension's body, catch clauses and their defaults; it walks
+   `CodeDeepOp` now (the plausible catch-default form with it). And the spawn case never ran `ownArgOrder` on the task's
+   call; it does.
+
+**Tests**: must-fail cases `vec70`-`vec76` (R2a: a block, a function, a scope argument, a typed local, an own slot's
+borrow directly and through a function - C2d - and a global, O38), `vec77`-`vec80` (R2b: the review's four, O39),
+`vec83`/`vec84` (R2b through a releasing call and in deferred code, O39), `vec81`/`vec82` (O33 through a match value and a
+spawned call). Run: `vec85ctorbuildsheld` (an instance whose field lives with it kept past the block; one in a parameter's
+scope read in the argument's block, and put in a live region by `mk&x(x)` and `H&x(x, 6)`), `vec86regionlive`,
+`vec87o33ordered`.
+
+**Fuzzer**: the scope mode's `ctorScopeOp` writes R2a over text from an inner block (a typed field, a scope argument, a
+function returning the instance - refused, C2d - and its legal sides); own mode's `vec5Op` writes R2a over an own slot's
+borrow, R2b (a typed local and a scope argument after the release, the loop form) and O33 (a match value, a spawned call),
+each beside its legal side.

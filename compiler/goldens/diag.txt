@@ -6443,6 +6443,120 @@ vec69globalwrapborrow.olang:16:10: error[O38]: this value borrows an own object,
    16 | W Wrap = Wrap(Docs.title)
       |          ^~~~
 compilation failed with 1 error
+=== vec70ctorfieldblock.olang
+vec70ctorfieldblock.olang:11:15: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
+   11 |         h = H(t, 5 + i)
+      |               ^
+compilation failed with 1 error
+=== vec71ctorfieldfunc.olang
+vec71ctorfieldfunc.olang:12:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   12 |         h = mk(t)
+      |           ^
+compilation failed with 1 error
+=== vec72ctorscopearg.olang
+vec72ctorscopearg.olang:12:15: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
+   12 |         h = H(t, 5 + i)
+      |               ^
+compilation failed with 1 error
+=== vec73ctorlocaltyped.olang
+vec73ctorlocaltyped.olang:12:15: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
+   12 |         h = H(s, 5 + i)
+      |               ^
+compilation failed with 1 error
+=== vec74ctorfieldown.olang
+vec74ctorfieldown.olang:12:14: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
+   12 |     h := H(c.text)
+      |              ^~~~
+compilation failed with 1 error
+=== vec75ctorfieldfuncown.olang
+vec75ctorfieldfuncown.olang:12:5: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   12 |     h := mk(c.text)
+      |     ^
+compilation failed with 1 error
+=== vec76ctorfieldglobal.olang
+vec76ctorfieldglobal.olang:23:7: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   23 | G H = H(Docs.title)
+      |       ^
+compilation failed with 1 error
+=== vec77namedafterrelease.olang
+vec77namedafterrelease.olang:10:7: error[O39]: assigning 'c.text' may release the String borrowed on line 9, which is used after it
+   10 |     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+vec77namedafterrelease.olang:9:12: note: borrowed here
+    9 |     x := c.text
+      |            ^~~~
+vec77namedafterrelease.olang:12:5: note: used here, after it
+   12 |     d mut String&x = $5 "-new-text-in-a-reused-region"
+      |     ^
+compilation failed with 1 error
+=== vec78scopeargafterrelease.olang
+vec78scopeargafterrelease.olang:10:7: error[O39]: assigning 'c.text' may release the String borrowed on line 9, which is used after it
+   10 |     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+vec78scopeargafterrelease.olang:9:12: note: borrowed here
+    9 |     x := c.text
+      |            ^~~~
+vec78scopeargafterrelease.olang:11:5: note: used here, after it
+   11 |     d := mk&x(5)
+      |     ^
+compilation failed with 1 error
+=== vec79typedafterrelease.olang
+vec79typedafterrelease.olang:9:7: error[O39]: assigning 'c.text' may release the String borrowed on line 8, which is used after it
+    9 |     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+vec79typedafterrelease.olang:8:12: note: borrowed here
+    8 |     x := c.text
+      |            ^~~~
+vec79typedafterrelease.olang:10:5: note: used here, after it
+   10 |     d mut String&x = $5 "-new-text-in-the-freed-region"
+      |     ^
+compilation failed with 1 error
+=== vec80typedloop.olang
+vec80typedloop.olang:13:11: error[O39]: assigning 'c.text' may release the String borrowed on line 9, which is used after it
+   13 |         c.text = $i "-replaced-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |           ^~~~
+vec80typedloop.olang:9:12: note: borrowed here
+    9 |     x := c.text
+      |            ^~~~
+vec80typedloop.olang:11:9: note: used here, after it
+   11 |         d mut String&x = $i "-new-text-in-x's-region"
+      |         ^
+compilation failed with 1 error
+=== vec81o33match.olang
+vec81o33match.olang:21:14: error[O33]: this value would be built where the object of 's.cur' lives, which a later argument reads - read it first, 'o := s.cur'
+   21 |         setN(Node(9 + i), match k { case 7 { unreachable } case _ => s.cur })
+      |              ^~~~
+compilation failed with 1 error
+=== vec82o33spawn.olang
+vec82o33spawn.olang:19:27: error[O33]: this value would be built where the object of 's.cur' lives, which a later argument reads - read it first, 'o := s.cur'
+   19 |         join { spawn setN(Node(9 + i), s.cur) }
+      |                           ^~~~
+compilation failed with 1 error
+=== vec83releasecallee.olang
+vec83releasecallee.olang:10:5: error[O39]: calling 'rel' may release the String borrowed on line 9, which is used after it
+   10 |     rel(c)
+      |     ^~~
+vec83releasecallee.olang:9:12: note: borrowed here
+    9 |     x := c.text
+      |            ^~~~
+vec83releasecallee.olang:11:5: note: used here, after it
+   11 |     d mut String&x = $5 "-new-text"
+      |     ^
+vec83releasecallee.olang:6:23: note: 'rel' releases here
+    6 | fn rel(c mut CB&) { c.text = $9 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" }
+      |                       ^~~~
+compilation failed with 1 error
+=== vec84releasedefer.olang
+vec84releasedefer.olang:13:7: error[O39]: assigning 'c.text' may release the String borrowed on line 8, which is used after it
+   13 |     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+vec84releasedefer.olang:8:12: note: borrowed here
+    8 |     x := c.text
+      |            ^~~~
+vec84releasedefer.olang:10:9: note: used here, after it
+   10 |         d mut String&x = $5 "-built-on-the-way-out"
+      |         ^
+compilation failed with 1 error
 === zeroeffect.olang
 zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
     9 |     c Counted
