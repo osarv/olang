@@ -2020,3 +2020,6 @@ and before its holder's release; an own array of values with an element copied o
 a slice of an element's inline array kept across it; `TakeAt`/`SwapTake`/`RemoveAt`/`SwapRemove` on a `Vec<String&>`.
 Each was generated alone and checked: the seven meant to be refused are (O39, C2d for the loop text), and the eight
 accepted print the same built `-b`, built `-b -d -s` and interpreted.
+Own seeds 1-300, the same generator under both compilers: f743da5 no findings (773 scenarios run, 2827 refused), this
+tip no findings (870 run, 2730 refused - the 97 more are the shapes f743da5 refuses: a Vec in a field or a global, value
+elements, deep results, `TakeAt`).

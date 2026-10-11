@@ -15828,3 +15828,8 @@ the struct, a take of the field while borrowed, a copy of the struct used after 
 lambda and a global keeping a borrow, a release through a method of the struct - and the element and deep shapes. The
 corpus tests in `shared.olang` and `std/prelude/tests/vec.olang` read every value back after an arena churn and compare
 globals baked while compiling with the same computation at run time; both files also pass under `-t -s`.
+The scope fuzzer's own mode writes fifteen vec2a shapes, each checked alone (the seven meant to be refused are, the
+eight accepted agree built, built `-d -s` and interpreted). Own seeds 1-300, one generator under both compilers: f743da5
+0 findings (773 scenarios run, 2827 refused), this tip 0 findings (870 run, 2730 refused). A first master run used a
+stale copy of the compiler from before the fifth review's fixes and reported three findings (seeds 53, 58, 71; the one
+examined was the fifth review's R2b shape) that f743da5 does not have; the comparison was rerun on a fresh build of it.
