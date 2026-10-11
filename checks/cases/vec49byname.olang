@@ -1,0 +1,39 @@
+# check: run
+# vec3 F2-F4: what stays legal - a borrow used before a release, a borrowed own result whose every return borrows an
+# object of one type (a local holding one included), and a global given a number read through a global's own object
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+fn (c CB&) Text() String&c { return c.text }
+fn (c CB&) Pick(trim Bool) String&c {
+    if trim { return c.Text() }
+    t := c.Text()
+    return t
+}
+G own mut CB& = CB()
+GLen := G.text.Len()
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := v.View()
+    s := d[0] + d[1]
+    v.Push(30)
+    churn()
+    assert s == 30 and v.Len() == 3
+    c := CB()
+    t := c.Pick(false)
+    n := t.Len()
+    c.text = "zzzz"
+    churn()
+    assert n == 2 and c.Pick(true) == "zzzz" and GLen == 2
+}

@@ -1,0 +1,13 @@
+# check: fail error[S17]: 'break' may not leave an assert's message
+error E {
+    BAD
+}
+fn h(k I64) I64 ? E {
+    if k > 0 { error E.BAD }
+    return k
+}
+fn main() ? {
+    for i in range 3 {
+        assert i > 100, $(try h(i) catch { break } default 0)
+    }
+}

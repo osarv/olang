@@ -1,0 +1,64 @@
+# check: fail error[O39]: calling 'Grow' may release the Array<I64> borrowed
+# O37/O38 (Vec phase 1): a borrowed own result - ...copied into another local
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+    data own mut Array<I64>&
+}
+type H struct() {
+    o own mut Inner&
+}
+type Keep struct() {
+    x Inner& = null
+}
+type Wrap struct(x Inner&) {
+    x
+}
+type Res struct(x Inner&) {
+    x
+    Made = Made + 1
+} destruct {
+    Dropped = Dropped + 1
+}
+fn (v Outer&) First() Inner&v { return v.o }
+fn (v Outer&) View() Array<I64>&v { return v.data }
+fn (v mut Outer&) Grow() {
+    v.data = Array<I64>(v.data.Len() * 2 + 1)
+}
+fn (v mut Outer&) Drop() { v.o = null }
+fn (h H&) HFirst() Inner&h { return h.o }
+fn (h mut H&) HDrop() { h.o = null }
+fn (v Outer&) Deep() Inner&v { return v.First() }
+fn mkO(k I64) Outer {
+    v := Outer()
+    v.o = Inner(k)
+    v.o.deep = Leaf(k)
+    v.data = Array<I64>(4, k)
+    return v
+}
+fn useI(x Inner&, out mut Array<I64>&) { out[0] = x.k }
+fn main() ? {
+    v := mkO(3)
+    d := v.View()
+    a := d
+    v.Grow()
+    churn()
+    println($a[0])
+}

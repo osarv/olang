@@ -203,6 +203,8 @@ struct type;
     X(ERR_OWN_RESULT_USE,               "O37",   "%S gives an owner, which only an own slot receives - 'x := %S(...)', an own field or global, an owning parameter, or a statement of its own") \
     X(ERR_OWN_RESULT_DEFAULT,           "O34",   "an owned result's 'catch default' is 'null' for now - or a clause that leaves") \
     X(ERR_OWN_MOVED_READ_AGAIN,         "O34",   "'return %s' moves '%s', which deferred code reads afterwards - write 'return take %s' to leave it null there") \
+    X(ERR_OWN_FUNC_VALUE_BORROW,        "O37",   "%S gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call %S by name") \
+    X(ERR_OWN_LAMBDA_BORROW_RESULT,     "O37",   "a lambda never gives a borrowed own result - a call through a function value holds no loan on the owned object it borrows; return a Clone(), or declare a function and call it by name") \
     X(ERR_OWN_FUNC_VALUE_SIG,           "O36",   "%S owns a parameter or gives an owned result, so it is called by name only - a function value never owns") \
     X(ERR_OWN_SPAWN_SIG,                "O41",   "a task's call may not own a parameter or give an owned result yet - spawn a function that borrows, and move the owner after the join") \
     X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
@@ -363,6 +365,7 @@ struct type;
     X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_OWN_ELEM_BY_REF,             "",      "its elements, %t, are values holding references - hold them by reference, '%t&'") \
     X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
     X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
     X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
@@ -584,6 +587,9 @@ struct type;
     X(ERR_DEFAULT_NOT_COMPUTABLE,       "D8a",   "a default is computed while compiling, and this one cannot be: %s") \
     X(ERR_ASSERT_FALSE,                 "S18c",  "this assertion is false, evaluated while compiling") \
     X(ERR_ASSERT_FALSE_MESSAGE,         "S18c",  "this assertion is false, evaluated while compiling: %s") \
+    X(ERR_ASSERT_MSG_RETURNS,           "S17",   "an assert's message may not return - it is evaluated only when the assert fails, and gives text") \
+    X(ERR_ASSERT_MSG_ERROR,             "S17",   "an error may not leave an assert's message - catch it here") \
+    X(ERR_ASSERT_MSG_LOOP_JUMP,         "S17",   "%n may not leave an assert's message - it is evaluated only when the assert fails") \
     X(ERR_ASSERT_MESSAGE_NOT_TEXT,      "S18a",  "an assertion's message is text, found %t - write it as text: \"x is \" $x") \
     X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \

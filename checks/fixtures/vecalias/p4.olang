@@ -1,0 +1,5 @@
+import "vlib"
+fn main() ? {
+    f := vlib.Eat
+    println("x")
+}

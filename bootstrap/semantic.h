@@ -359,6 +359,8 @@ struct var {
     bool roByArg;
     bool roToResult;
     struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
+    struct list regionWrites; //O17 (Vec phase 1): on a local, every value written into it or a part of it (struct operand*)
+    bool regionTainted;       //...and whether it was lent writably or a task's result stored into it - what O17 cannot read
     //O17: on a function, for each of its scope variables, what its body does with the region the variable names - stores
     //into a slot reached through it something not read out of that region (built, or handed in), itself or through a
     //callee (stored); or returns a reference or value carrying it through which a store is possible (handed out). Kept on
@@ -458,6 +460,18 @@ struct var {
     int regionRootParam;
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
     struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
+    bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
+    bool regionAnyType;         //...of objects of any own type (a borrowed own result whose object's type is not one known)
+    int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
+                                //parameters by own fields, as a result borrowed from them (T&p): the first one's index + 1,
+                                //else 0 - settled once every body is checked (ownBorrowResultsSettle, vec2 N1)
+    struct list ownBorrowParams; //...every parameter (int) it may be borrowed from (vec2: a set, not the last return's)
+    struct type* ownBorrowResultType; //...the type of the own object it borrows (OwnTypeKey of its slot - never the result's
+                                //own type, which a conversion may have renamed: "String(v.View())"), what its loan is on
+    bool ownBorrowResultAnyType; //...it may borrow objects of several types, or one not known: its loan meets any release
+    bool ownResultFresh; //O38 (vec3 F1): a built reference result proven new storage - every return a constructor call, an
+                         //allocation, a literal, text made here, a local declared from one and never repointed, or a call
+                         //to a function proven so (ownResultFreshSettle, a least fixed point once every body is checked)
     struct var* regionLife;     //...the scope the slot itself lives in - its container's, an owner local's block - which the
     int regionLifeDepth;        //   object is released by at the latest: what lasts until a join is judged by it (P2), where
     bool regionLifeUnnamed;     //   an owner local's reach (its initializer's) may be longer
@@ -774,6 +788,9 @@ struct operand {
     bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
     struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
                                 //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
+    struct list ownResultRegions; //O38 (Vec phase 1): the loans a call giving a borrowed own result makes (regionOfResult),
+                                  //one per parameter it may be borrowed from (struct var*)
+    bool ownResultRegionsMade;
     bool inPlaceBorrow; //O38 (own7 F1): this value lvalue is borrowed where it is (E12c) - by a reference parameter, a
                         //receiver, a reference local or field, a task's argument - not read as a copy: a part of an owned
                         //object borrowed so borrows the object, whatever the part's type holds

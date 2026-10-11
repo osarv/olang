@@ -1,0 +1,8 @@
+import "vlib"
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    f := (vlib.View2)
+    d := f(v)
+    println($d[0])
+}

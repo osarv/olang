@@ -1749,7 +1749,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   agree and the pointers do not (a null table has no entry to read, hence a helper with branches rather than
   inline code, as T17a's choice equality is). Identity for an array is **same storage, same length**, so
   `a[:2]` and `a[:3]` are different instances of one buffer. The trailing slot shifts no method's index.
-- **`Vec` is abandoned; the growable type is `List<T>`, chunked and append-only.** A contiguous growable
+- **`Vec` is abandoned; the growable type is `List<T>`, chunked and append-only.** (Reversed 2026-10-11: owned
+  references made moving a buffer safe, and `Vec<T>` is the default growable array - the user's QH answer; the "Vec
+  phase 1" entry near the end.) A contiguous growable
   array was the assumed goal for a long time. Working out what it would actually cost killed it, and the
   deciding question was what olang is *for*: an inference engine and big-data work allocate **once, at a
   size known at load time, and never resize** - weights, activation buffers, a KV cache preallocated to its
@@ -5050,6 +5052,58 @@ and literals made only of such, never existing storage anywhere in it) - it is
   also holds `-e` to stage 0 on every rule a message names; checks.olang holds msgs.olang to errmsg.h entry by entry.
   `make diagtest`, and part of `make test`. Found, not fixed (stage 0, semantic.c): a struct's `:=` field is `?` in its
   own module's methods when another module imports it first (HISTORY.md).
+- **Vec phase 1: `Vec<T>` in the prelude, a borrowed own result, Sort's O17 reading (O17, O31, O33, O37, O38, T25e,
+  M19d, 2026-10-11; the coordinator's three items, details mine, docs/own.md section 19).** **O37**: a reference result
+  borrowed from a parameter may return a borrow of an owned object below it, or a slice of one (`View() Array<T>&v`) -
+  each call's result a region of its own with a copied loan, confined and refused across a release (22 must-fail cases
+  first). **O17**: a local holding only reads of the lent region stored back is a permutation, and a call through a
+  function value stores only through a parameter admitting stores - so `Sort` on a buffer of text compiles (13 cases).
+  **`Vec<T>`** (`std/prelude/vec.olang`): an owning value over `data own mut Array<T>&` and a count - Push doubling from
+  8 through `vecGrown(take v.data, ...)`, Reserve, Cap, `v[i]`/SetAt, First/Last/Pop, Clear, Truncate, Insert, RemoveAt,
+  SwapRemove, Reverse, Sort, IndexOf, Remove, Has, Join, View/ViewMut, RunFrom (one run: `for x in v` is an array walk),
+  Iter, Clone (owned), ToArray, `==`/Hash/`$` as its elements (`Vec<I64>[1, 2]`). **Decided (mine)**: an own array's
+  elements refer outside its buffer, so a call's result that can refer neither to the argument's storage, nor to an own
+  array its loans are on, nor to such an array's elements held by value takes none of those loans (`s := v[0]` kept
+  across `Push`, O38); one T25e error per instantiation, with a note naming `Vec<Tok&>`; the corpus's `Vec` renamed
+  `GrowBuf`. Measured: walking, indexing and Sort as an array's; Push ~2x List's. Not yet (19.4): a Vec in a field,
+  global or type argument, elements that are values holding references, a task pushing to one, a lambda capturing one.
+  **Its soundness review (vec1), fixed (the coordinator's calls, docs/own.md section 20)**: a borrowed own result's loan is
+  on the type of the owned object it borrows, read off its slot (recorded per function, `ownBorrowResultType`) - it was
+  the result's own type, so `String(v.View())` or `Ix(v.View())` returned through a reference parameter or an own local
+  never met the buffer's release; a conversion to a type of one representation is the same borrow (T29a), also where it
+  is kept (`l.Push(String(v.View()))` was accepted, a use-after-free found beside the review's). A function giving a
+  borrowed own result is called by name only: made a value, or a type whose `Call` gives one adapted to a function type,
+  it is a compile-time error (O37) - only a call by name makes the loan. Nothing relaxed.
+  **Its second review (vec2), fixed (the coordinator's calls, docs/own.md section 21)**: N1, a use-after-free 2d1aabf made -
+  a caller copied its callee's object type while the callee's body was still being checked, so mutual recursion kept a
+  stale type: which functions give a borrowed own result, from which parameters (a set now, not the last return's) and of
+  which types is settled as a least fixed point over the returns once every body is checked, before any loan is made
+  (`ownBorrowResultsSettle`); N2 and three older ones (T22a, O40, a G12 crash) - a function made a value through an import
+  alias (`f := lib.View`) skipped every check a bare name gets: both go through one function now (`buildFuncValueRead`).
+  **Decided (mine)**: two over-rejections removed - a built result (`T&`) is new storage at its top and an own reference
+  refers only to what it owns, so neither keeps a loan on a buffer (`v.ToArray()`, `v.Clone()` of a `Vec<String&>`, O38),
+  and `Vec.Clone` copies element by element (lending the whole buffer to a helper conflated its elements' scope with the
+  region's, O10c); mutually recursive borrowed own results now compile (marked through each other). Found on the way:
+  O17's deferred split-lend errors lost their instantiation (B11 - reported at the program's use now); left recorded,
+  `Sort` of a `Vec<mut T&>` is still O17's over-rejection.
+  **Its third review (vec3), fixed (the coordinator's calls, docs/own.md section 22)**: four use-after-frees. F1 (from the
+  relaxation above): a *written* built result is no proof of new storage - a call landing in the result scope (`id(a)`,
+  `pick(c, a, b)`, `l[0]`, `m.Get(k)`) hands its argument back - so the top is spared only for a function proven fresh, a
+  least fixed point over every checked body's returns (a constructor call, an allocation, a literal, text, `null`, a local
+  declared once from one and never repointed, a call to a function so proven, a conditional/match/catch default of them);
+  ToArray is proven so and stays relaxed. F2: a marked borrowed-own-result function's return skipped at O38 must borrow the
+  type it settled on (or it settled any) - `t := c.Text(); return t` beside `return String(c.data)` is O38's error. F3: a
+  spawn target holds the task's call's own borrowed-own-result loan. F4 (older, on master): a borrow of a global's own
+  object is not the program's scope (O1b), and a global's initializer is walked as a declaration (O38).
+  **Its fourth review (vec4), fixed (the coordinator's calls, docs/own.md section 23)**: F1' (a gap in F1's fix) - the
+  freshness proof, its write scan and the deep loans each kept a hand list of the fields to walk and missed an else-if's
+  condition, a case guard, an assert's message, a for post clause and a spawn target's index; **one list now**
+  (`StmtEachChild`/`OpEachChild`, every field that can hold code, by role) that they, the liveness scan, C2d's hold walk
+  and S8c's write scan read, and `ownStmtWalk` walks whatever its cases do not name (mbi's spawn-target gap fixed
+  directly). R (older, on master): a local whose scope is an owned object's region - written `d mut String&x` with `x :=
+  c.text`, or from a scope argument `mk&x(5)` - is new storage there and holds a loan on the region, as the borrow does.
+  X (older, on master): an assert's message may not leave (S17). A global value copy (`T String = Docs.title`) keeps no
+  loan, as in a local. Scope fuzzer own seeds 1-200: 1bcfb72 6 findings, the fix none.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -1,0 +1,22 @@
+# check: fail error[O39]: assigning 'c.text' may release the String borrowed on line
+# vec4 (r1_local_typed_with_borrow_scope): the review's repro
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# new storage built into an own STRUCT's region (own object), through x T&y
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    d mut String&x = $5 "-new-text-in-the-region"
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}

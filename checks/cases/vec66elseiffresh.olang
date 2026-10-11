@@ -1,0 +1,26 @@
+# check: run
+# vec4 F1': an else-if condition's catch block returning new storage keeps the proof - the result is fresh, the loan on
+# the Vec's buffer is spared, and the buffer may change while the result is used
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn bufFor(spec String&, a mut Array<I64>&) mut Array<I64>& {
+    if spec == "new" { return Array<I64>(4) }
+    else if (try spec.ParseInt() catch { return Array<I64>(5, a.Len()) }) > 0 { return Array<I64>(2) }
+    return Array<I64>(1)
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := bufFor("?", v.ViewMut())
+    for i in range 1000 { v.Push(i) }
+    churn()
+    assert d.Len() == 5 and d[0] == 2
+    println($d[0])
+}

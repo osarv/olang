@@ -1,0 +1,19 @@
+# check: run
+# vec2 over-rejection 2: ToArray of a Vec<String&> is a built result - new storage in the result scope, which no owned
+# object's buffer can be - so it keeps no loan on the buffer, and the Vec may grow while the copy is used
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    a := v.ToArray()
+    for i in range 100 { v.Push("b") }
+    churn()
+    println($a[0] " " $a.Len() " " $v.Len())
+}

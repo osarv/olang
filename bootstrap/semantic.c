@@ -54,6 +54,7 @@ void FinalizeLambda(struct operand* op, struct type* expected);
 static void finalizeStmtLambdas(struct statement* st);
 void lambdaInferResult(struct var* f, struct list* vals, struct token tok);
 static void noteFuncValueUse(struct var* f, struct token tok);
+static struct operand* buildFuncValueRead(struct var* v, struct token tok);
 static void checkFuncValueUses(void);
 static void settleReadOnlyArgs(void);
 struct roFuncValue { struct var* f; struct token tok; };
@@ -1559,6 +1560,118 @@ struct list SemanticMatchValues(struct operand* op) {
     return out;
 }
 
+//---- the code a statement or an operand holds ----
+//One list, field by field, of every sub-operand and sub-block a checked statement or operand holds, which every walker
+//asking "what is anywhere in this body" reads - so that a field added to either struct is added here once, and no walker
+//can miss it (vec4 F1': the freshness proof, the write scan and the deep loans each kept a list of their own, and each
+//missed some of an else-if's condition, a case guard, an assert's message, a for's post clause and a spawn target).
+//  struct statement: op, target, spawnTargets (each, NULL for "_"), fillValue, assertMsg, forInit, forPost (a
+//    statement), block, elseStmnt (a statement - an "else if"'s condition is its op), caseAlts (each test, each bind's
+//    from), caseGuard, matchHold, matchCases, nomatchBlock, nomatchValue, catchClauses (each block, dflt and taskCall).
+//    Not code: var (a declaration's declInit is its op), line/file, the flags, caseBindings (the vars binds fill),
+//    joinErrors.
+//  struct operand: args, chainOperands, callee, comprBody, catchClauses (each block, dflt and taskCall).
+//    Not code of its own: checkRoot, placeOf and landsWith (other operands of the same tree, reached through it),
+//    ownCopyReads and ownResultRegions (the checker's records, never evaluated), scopeBindings, a lambda's body (a
+//    function of its own, walked as one), pendingLambda (checked by the time a body is walked).
+//A walker gives callbacks for what it wants - NULL skips that kind - and may set stop to end the walk early
+enum codeRole {
+    ROLE_OP, ROLE_TARGET, ROLE_SPAWN_TARGET, ROLE_FILL, ROLE_ASSERT_MSG, ROLE_FOR_INIT, ROLE_FOR_POST, ROLE_BLOCK,
+    ROLE_ELSE, ROLE_CASE_TEST, ROLE_CASE_BIND, ROLE_CASE_GUARD, ROLE_MATCH_HOLD, ROLE_MATCH_CASES, ROLE_NOMATCH_BLOCK,
+    ROLE_NOMATCH_VALUE, ROLE_CATCH_BLOCK, ROLE_CATCH_DEFAULT, ROLE_TASK_CALL,
+    ROLE_ARG, ROLE_CHAIN, ROLE_CALLEE, ROLE_COMPR_BODY
+};
+struct codeVisit {
+    void (*op)(struct codeVisit* v, struct operand* op, enum codeRole role);
+    void (*stmt)(struct codeVisit* v, struct statement* s, enum codeRole role);
+    void (*block)(struct codeVisit* v, struct list* block, enum codeRole role);
+    void* ctx;
+    bool stop;
+};
+static void codeVisitOp(struct codeVisit* v, struct operand* op, enum codeRole r) {
+    if (op && v->op && !v->stop) v->op(v, op, r);
+}
+static void codeVisitStmt(struct codeVisit* v, struct statement* s, enum codeRole r) {
+    if (s && v->stmt && !v->stop) v->stmt(v, s, r);
+}
+static void codeVisitBlock(struct codeVisit* v, struct list* b, enum codeRole r) {
+    if (b->len && v->block && !v->stop) v->block(v, b, r);
+}
+static void codeVisitClauses(struct codeVisit* v, struct list* clauses) {
+    for (int i = 0; i < clauses->len && !v->stop; i++) {
+        struct catchClause* c = ListGetIdx(clauses, i);
+        codeVisitBlock(v, &c->block, ROLE_CATCH_BLOCK);
+        codeVisitOp(v, c->dflt, ROLE_CATCH_DEFAULT);
+        codeVisitOp(v, c->taskCall, ROLE_TASK_CALL);
+    }
+}
+static void StmtEachChild(struct statement* s, struct codeVisit* v) {
+    codeVisitOp(v, s->op, ROLE_OP);
+    codeVisitOp(v, s->target, ROLE_TARGET);
+    for (int i = 0; i < s->spawnTargets.len; i++) codeVisitOp(v, *(struct operand**)ListGetIdx(&s->spawnTargets, i), ROLE_SPAWN_TARGET);
+    codeVisitOp(v, s->fillValue, ROLE_FILL);
+    codeVisitOp(v, s->assertMsg, ROLE_ASSERT_MSG);
+    codeVisitOp(v, s->forInit, ROLE_FOR_INIT);
+    codeVisitStmt(v, s->forPost, ROLE_FOR_POST);
+    codeVisitBlock(v, &s->block, ROLE_BLOCK);
+    codeVisitStmt(v, s->elseStmnt, ROLE_ELSE);
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        codeVisitOp(v, a->test, ROLE_CASE_TEST);
+        for (int k = 0; k < a->binds.len; k++) codeVisitOp(v, ((struct caseBind*)ListGetIdx(&a->binds, k))->from, ROLE_CASE_BIND);
+    }
+    codeVisitOp(v, s->caseGuard, ROLE_CASE_GUARD);
+    codeVisitBlock(v, &s->matchHold, ROLE_MATCH_HOLD);
+    codeVisitBlock(v, &s->matchCases, ROLE_MATCH_CASES);
+    codeVisitBlock(v, &s->nomatchBlock, ROLE_NOMATCH_BLOCK);
+    codeVisitOp(v, s->nomatchValue, ROLE_NOMATCH_VALUE);
+    codeVisitClauses(v, &s->catchClauses);
+}
+static void OpEachChild(struct operand* op, struct codeVisit* v) {
+    for (int i = 0; i < op->args.len; i++) codeVisitOp(v, *(struct operand**)ListGetIdx(&op->args, i), ROLE_ARG);
+    for (int i = 0; i < op->chainOperands.len; i++) codeVisitOp(v, *(struct operand**)ListGetIdx(&op->chainOperands, i), ROLE_CHAIN);
+    codeVisitOp(v, op->callee, ROLE_CALLEE);
+    codeVisitBlock(v, &op->comprBody, ROLE_COMPR_BODY);
+    codeVisitClauses(v, &op->catchClauses);
+}
+
+//...and every statement and operand at any depth, each once, outer before inner: pre's callbacks see each (its block
+//callback is not used), and set stop to end the walk
+static void codeDeepOp(struct codeVisit* v, struct operand* op, enum codeRole r);
+static void codeDeepStmt(struct codeVisit* v, struct statement* s, enum codeRole r);
+static void codeDeepBlock(struct codeVisit* v, struct list* b, enum codeRole r) {
+    (void)r;
+    for (int i = 0; i < b->len && !v->stop; i++) codeDeepStmt(v, ListGetIdx(b, i), ROLE_BLOCK);
+}
+static void codeDeepOp(struct codeVisit* v, struct operand* op, enum codeRole r) {
+    struct codeVisit* pre = v->ctx;
+    if (pre->op) pre->op(pre, op, r);
+    if (pre->stop) { v->stop = true; return; }
+    OpEachChild(op, v);
+}
+static void codeDeepStmt(struct codeVisit* v, struct statement* s, enum codeRole r) {
+    struct codeVisit* pre = v->ctx;
+    if (pre->stmt) pre->stmt(pre, s, r);
+    if (pre->stop) { v->stop = true; return; }
+    StmtEachChild(s, v);
+}
+static bool CodeDeepBlock(struct list* block, struct codeVisit* pre) {
+    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
+    codeDeepBlock(&d, block, ROLE_BLOCK);
+    return !pre->stop;
+}
+static bool CodeDeepStmt(struct statement* s, struct codeVisit* pre) {
+    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
+    codeDeepStmt(&d, s, ROLE_BLOCK);
+    return !pre->stop;
+}
+static bool CodeDeepOp(struct operand* op, struct codeVisit* pre) {
+    if (!op) return true;
+    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
+    codeDeepOp(&d, op, ROLE_OP);
+    return !pre->stop;
+}
+
 bool OperandIsWrittenText(struct operand* op) {
     if (op->opType == OPERATION_STR_OF || op->opType == OPERATION_CONCAT) return true;
     if (op->opType == OPERATION_MATCH) { //S12b: as a conditional's - written text when every value is
@@ -2792,7 +2905,7 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     for (int i = 0; i <= spec->type.vars.len; i++) {
         struct type* t = i < spec->type.vars.len ? &((struct var*)ListGetIdx(&spec->type.vars, i))->type
                          : spec->type.hasRetType ? spec->type.retType : NULL;
-        if (!t || !t->refOwn || t->bType != BASETYPE_ARRAY || ownArrayKindOk(*t)) continue;
+        if (unmet || !t || !t->refOwn || t->bType != BASETYPE_ARRAY || ownArrayKindOk(*t)) continue;
         struct type shown = *t;
         shown.refOwn = shown.refMut = shown.scopeWritten = false;
         shown.scopeParam = NULL;
@@ -3078,6 +3191,10 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
             shown.refOwn = shown.refMut = shown.scopeWritten = false;
             shown.scopeParam = NULL;
             Err(instSite.type != TOK_NONE ? instSite : generic->tok, ERR_OWN_KIND_NOT_YET, &shown);
+            if (shown.arrElem && !shown.arrElem->structMAlloc && TypeHoldsReferences(*shown.arrElem)) //(Vec<Tok>)
+                Note(instSite.type != TOK_NONE ? instSite : generic->tok, NOTE_OWN_ELEM_BY_REF, shown.arrElem, shown.arrElem);
+            ListAdd(&unmetTypeInsts, &spec); //(its methods' bodies are not checked, nor reported again: instantiateFunc)
+            break;
         }
     }
 
@@ -6555,6 +6672,7 @@ struct checkCtx {
                               //of storage within one, kept in what the value builds, takes its old value (copiesOld)
     struct list* joinErrs; //P4c: the error types the innermost join's tasks let through (struct type*), with joinHasSpawn
     bool* joinFallibleTarget; //P4d: set by a spawn with targets whose task can fail into that join
+    bool inAssertMsg; //S17: building an assert's message, evaluated only when the assert fails - it may not leave
     bool inTaskClause; //P4a: checking a clause of a spawned try - code of the task, which it may not leave
 };
 
@@ -7782,9 +7900,11 @@ bool valueRefsAdmitStores(struct type t);
 //O17a: set while a borrow is judged elsewhere - a call's argument, by the callee's body (O17); the reference a for-in
 //walks through, whose elements are given the value's references' scope (S9a)
 static bool splitBorrowJudgedElsewhere = false;
+static void regionLocalTaint(struct operand* op);
 enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct type target) {
     if (!target.structMAlloc || op->type.structMAlloc || !OperandIsLvalue(op)) return TYPE_FIT_OK;
     op->inPlaceBorrow = true; //O38 (own7 F1): borrowed where it is, not read as a copy
+    if (target.refMut) regionLocalTaint(op); //O17: a local lent writably holds what its borrower writes
     if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
@@ -10717,7 +10837,8 @@ static bool lendStores(struct var* func, struct var* sv, bool lambda) {
 struct regionEdge { struct var* rFunc; struct var* r; struct var* func; struct var* sv; struct token tok; bool builtOnly; };
 //(ownArr: an own array's borrow lent, O33 - said as that; a lambda's capture is judged by its body's own facts, as
 //calleeStoresRegion cannot: a lambda's body is known as it is made, its edges settled with every other)
-struct lendCheck { struct var* func; struct var* sv; struct token tok; bool atCopy; bool ownArr; bool lambda; };
+struct lendCheck { struct var* func; struct var* sv; struct token tok; bool atCopy; bool ownArr; bool lambda;
+                   struct errContextSaved* where; }; //(where: B11, an instantiation's, reported where the program asked for it)
 static struct list regionEdges;
 static struct list lendChecks;
 //O12: whether a callee may build into the region its scope variable sv names - store there, or build anything there at all
@@ -10761,7 +10882,9 @@ static void bindingEdges(void) {
     }
 }
 
+static void flushRegionLocalStores(struct var* func);
 static void settleRegions(void) {
+    flushRegionLocalStores(NULL); //O17: a lambda's, or any body's left
     bindingEdges();
     for (bool changed = true; changed; ) {
         changed = false;
@@ -10782,8 +10905,10 @@ static void settleRegions(void) {
     }
     for (int i = 0; i < lendChecks.len; i++) {
         struct lendCheck* c = ListGetIdx(&lendChecks, i);
-        if (lendStores(c->func, c->sv, c->lambda))
-            Err(c->tok, c->ownArr ? ERR_OWN_ARRAY_LENT_STORES : c->atCopy ? ERR_WRITE_THROUGH_AT_BUILDS : ERR_BORROW_SPLIT_SCOPES);
+        if (!lendStores(c->func, c->sv, c->lambda)) continue;
+        ErrMsgPushSaved(c->where); //B11 (vec2): in an instantiation, at the program's use of it
+        Err(c->tok, c->ownArr ? ERR_OWN_ARRAY_LENT_STORES : c->atCopy ? ERR_WRITE_THROUGH_AT_BUILDS : ERR_BORROW_SPLIT_SCOPES);
+        ErrMsgPopSaved(c->where);
     }
     for (int i = 0; i < unknownBuilds.len; i++) {
         struct unknownBuild* c = ListGetIdx(&unknownBuilds, i);
@@ -10978,7 +11103,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 struct var* L = synthLambda ? func->capturesOf : func;
                 if (synthLambda && !L) Err(arg->tok, ERR_OWN_ARRAY_LENT_STORES);
                 else {
-                    struct lendCheck lc = { L, sv, arg->tok, false, true, synthLambda };
+                    struct lendCheck lc = { L, sv, arg->tok, false, true, synthLambda, ErrMsgSaveContext() };
                     if (!ErrMsgMuted() && (synthLambda || func->owner || calleeBodyKnown(func))) ListAdd(&lendChecks, &lc);
                     else if (lendStores(L, sv, synthLambda)) Err(arg->tok, ERR_OWN_ARRAY_LENT_STORES);
                 }
@@ -11006,7 +11131,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                     bool atCopy = lr && canonicalVar(lr)->atElemCopy;
                     enum diag splitErr = atCopy ? ERR_WRITE_THROUGH_AT_BUILDS : ERR_BORROW_SPLIT_SCOPES;
                     if (func->owner || calleeBodyKnown(func)) {
-                        struct lendCheck lc = { func, sv, arg->tok, atCopy, false, false };
+                        struct lendCheck lc = { func, sv, arg->tok, atCopy, false, false, ErrMsgSaveContext() };
                         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
                         else if (calleeStoresRegion(func, sv)) Err(arg->tok, splitErr);
                     } else if (calleeStoresRegion(func, sv)) Err(arg->tok, splitErr);
@@ -11119,7 +11244,21 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 if (calleeBodyKnown(func) && !func->bodyHadErrors && regionStoredIn(func, sv)) markRegionStored(ctx->func, r, tok);
                 if (calleeBodyKnown(func) && !func->bodyHadErrors && regionBuiltIn(func, sv)) builtAt(ctx, r, tok);
             } else { //a function value: its body is not known here
-                markRegionStored(ctx->func, r, tok);
+                //(Vec phase 1: but it keeps nothing of its arguments beyond the call but in its result, T22a - so through a
+                //parameter whose type lets nothing be stored it stores nothing where its argument leads: "less(a[i], a[j])")
+                bool stores = false;
+                for (int j = 0; j < func->type.vars.len && !stores; j++) {
+                    struct type pt = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
+                    if (!pt.scopeParam || pt.scopeParam == SCOPE_AMBIGUOUS || canonicalVar(pt.scopeParam) != canonicalVar(sv))
+                        continue;
+                    stores = pt.structMAlloc ? RefNarrowingMatters(pt) : valueRefsAdmitStores(pt);
+                }
+                bool any = false; //(a variable no parameter names - the result's: what it hands back is judged where it lands)
+                for (int j = 0; j < func->type.vars.len && !any; j++) {
+                    struct type pt = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
+                    any = pt.scopeParam && pt.scopeParam != SCOPE_AMBIGUOUS && canonicalVar(pt.scopeParam) == canonicalVar(sv);
+                }
+                if (stores || !any) markRegionStored(ctx->func, r, tok);
                 builtAt(ctx, r, tok);
             }
         }
@@ -11916,6 +12055,18 @@ static bool mbiPlaced(struct operand* op, bool tgt) {
 static bool mbiPlaceIs(struct operand* p);
 static bool mbiBodyKnown(struct var* f);
 static bool mayBuildInto(struct var* func, struct var* v);
+//a declared function named as a value - by a bare name, or through an import alias chain ("lib.F"): every check a
+//function value gets is made here, on one path (vec2 N2: the alias path once skipped them all)
+static struct operand* buildFuncValueRead(struct var* v, struct token tok) {
+    //G12: a generic function names a family, not one function to point at
+    if (v->type.bType == BASETYPE_FUNC && v->type.typeParams.len) {
+        Err(tok, ERR_GENERIC_NOT_A_VALUE, tok);
+        return unknownPlaceholder(tok);
+    }
+    noteFuncValueUse(v, tok); //T22a, O36, O37, O40
+    if (ownSignature(v)) return unknownPlaceholder(tok); //O36, reported: one error, not a misfit too
+    return OperandReadVar(v, tok);
+}
 //E31: a value adapted to a function type through its Call - a call of Call with its receiver bound to where the instance
 //lives (cgCallAdapterValue: the instance's own scope, or the temporary's, placed with the adapter). So where the
 //instance may live in the variable asked about, Call's own body is asked about its receiver's variable
@@ -12221,6 +12372,9 @@ static bool mbiStmt(struct statement* s) {
                 }
             }
         }
+        //(a target's place - an index, a field's base - is computed on the spawner's thread, as an assignment's is, vec4)
+        for (int i = 0; i < s->spawnTargets.len; i++)
+            if (mbiOperand(*(struct operand**)ListGetIdx(&s->spawnTargets, i), false)) return true;
         {
             bool savedSpawn = mbiInSpawn;
             mbiInSpawn = true;
@@ -15249,6 +15403,7 @@ struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* 
     *outConsumed = i +1;
     if (!v) { Err(varTok, ERR_NOT_IN_MODULE, target->identity, varTok); return OperandIntLiteral(varTok); }
     if (!isPublic(name)) { Err(varTok, ERR_VAR_IS_PRIVATE, varTok); return OperandIntLiteral(varTok); }
+    if (v->isFuncDecl) return buildFuncValueRead(v, varTok); //(vec2 N2: as by a bare name - G12, T22a, O36, O37, O40)
     return OperandReadVar(v, varTok);
 }
 
@@ -15898,6 +16053,7 @@ void rejectDefaultArgs(struct list args) {
 void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type calleeType) {
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
+    if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
     if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
     for (int i = 0; i < calleeType.errors.len; i++) {
@@ -16771,15 +16927,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
                 }
                 struct var* v = lookupVar(ctx, tok);
                 if (!v) return unknownPlaceholder(tok); //keeps checking the rest of the file
-                //G12: a generic function names a family, not one function to point at
-                if (v->isFuncDecl && v->type.bType == BASETYPE_FUNC && v->type.typeParams.len) {
-                    Err(tok, ERR_GENERIC_NOT_A_VALUE, tok);
-                    return unknownPlaceholder(tok);
-                }
-                if (v->isFuncDecl) {
-                    noteFuncValueUse(v, tok); //T22a
-                    if (ownSignature(v)) return unknownPlaceholder(tok); //O36, reported: one error, not a misfit too
-                }
+                if (v->isFuncDecl) return buildFuncValueRead(v, tok);
                 return OperandReadVar(v, tok);
             }
             default: ErrorBugFound(); return NULL;
@@ -20738,6 +20886,57 @@ static void landAtTarget(struct checkCtx* ctx, struct operand* target, struct op
     }
 }
 
+//O17 (Vec phase 1): a local holding only what it read out of a region - its initializer and every value written into
+//it, or a part of it, a read of that region - brings nothing in from outside when it is stored back ("t := a[i]
+//a[i] = a[j]  a[j] = t"). Whether that holds is known once the body is (a write may follow the store), so such a store is
+//held (regionLocalStores) and judged as the body ends (flushRegionLocalStores): one that does not hold is a store into
+//the region as any other. A local lent writably, or given a task's result, is never one (regionTainted)
+struct regionLocalStore { struct var* func; struct var* v; struct var* r; struct token tok; };
+static struct list regionLocalStores;
+static struct var* regionLocalOf(struct operand* op) {
+    if (!op || op->opType != OPERATION_READ_VAR || !op->readVar) return NULL;
+    struct var* v = op->readVar;
+    if (v->owner || v->isFuncDecl || v->paramCopy || v->isCapture || canonicalVar(v)->isCapture || !v->declInit) return NULL;
+    return v;
+}
+static void regionLocalWrite(struct operand* target, struct operand* rhs) {
+    struct var* root = lvalueRootVar(target);
+    if (!root || root->owner || root->isFuncDecl) return;
+    if (!root->regionWrites.elemSize) root->regionWrites = ListInit(sizeof(struct operand*));
+    ListAdd(&root->regionWrites, &rhs);
+}
+static void regionLocalTaint(struct operand* op) {
+    struct var* root = op ? lvalueRootVar(op) : NULL;
+    if (root && !root->owner) root->regionTainted = true;
+}
+static bool regionLocalHolds(struct var* func, struct var* v, struct var* r) {
+    if (v->regionTainted || !v->declInit) return false;
+    struct checkCtx c = {0};
+    c.func = func;
+    c.hasOwnScope = true;
+    if (!readFromRegion(&c, v->declInit, r, v->type.structMAlloc)) return false;
+    for (int i = 0; i < v->regionWrites.len; i++) {
+        struct operand* w = *(struct operand**)ListGetIdx(&v->regionWrites, i);
+        if (!w->isNullLiteral && !readFromRegion(&c, w, r, w->type.structMAlloc)) return false;
+    }
+    return true;
+}
+static void flushRegionLocalStores(struct var* func) {
+    int keep = 0;
+    for (int i = 0; i < regionLocalStores.len; i++) {
+        struct regionLocalStore* p = ListGetIdx(&regionLocalStores, i);
+        if (func && canonicalVar(p->func) != canonicalVar(func)) {
+            *(struct regionLocalStore*)ListGetIdx(&regionLocalStores, keep++) = *p;
+            continue;
+        }
+        if (!regionLocalHolds(p->func, p->v, p->r)) {
+            markRegionStored(p->func, p->r, p->tok);
+            markRegionBuilt(p->func, p->r);
+        }
+    }
+    regionLocalStores.len = keep;
+}
+
 //O17: a store into a slot of the region one of this function's scope variables names - a slot holding references, or
 //one a value built for it lands in - of what that region does not already hold. Every store into a place counts: an
 //assignment's, and each target a task's results are stored into (P1g)
@@ -20749,7 +20948,12 @@ static void noteRegionStore(struct checkCtx* ctx, struct operand* target, struct
     int td;
     bool tu;
     struct var* r = targetRefsScope(ctx, target, &tv, &td, &tu) && !tu ? ownRegionVar(ctx, tv) : NULL;
-    if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) {
+    struct var* lv = r ? regionLocalOf(rhs) : NULL;
+    if (r && lv && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) { //(judged as the body ends, above)
+        if (!regionLocalStores.elemSize) regionLocalStores = ListInit(sizeof(struct regionLocalStore));
+        struct regionLocalStore p = { ctx->func, lv, r, target->tok };
+        ListAdd(&regionLocalStores, &p);
+    } else if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) {
         markRegionStored(ctx->func, r, target->tok);
         builtAt(ctx, r, target->tok); //something from elsewhere, kept where the region is
     }
@@ -20861,6 +21065,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         struct var* root = lvalueRootVar(target);
         if (root && !root->owner && !root->type.structMAlloc) root->lentForStores = true;
     }
+    regionLocalWrite(target, rhs);
     noteRegionStore(ctx, target, rhs);
     if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar && !ErrMsgMuted()) { //T25c, P2
         if (!target->readVar->roAssigns.elemSize) target->readVar->roAssigns = ListInit(sizeof(struct operand*));
@@ -21565,51 +21770,32 @@ static struct var* lvalueRoot(struct operand* op) {
     return op && op->opType == OPERATION_READ_VAR ? canonicalVar(op->readVar) : NULL;
 }
 
-static bool stmtsWrite(struct list* stmts, struct var* v);
 static struct statement* stmtsFindDecl(struct list* stmts, struct var* v);
 
-static bool opWrites(struct operand* op, struct var* v) {
-    if (!op) return false;
+//(whether code writes v anywhere in it - StmtEachChild's list, vec4)
+static void writesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct var* v = c->ctx;
+    if (s->sType == STATEMENT_ASSIGN && lvalueRoot(s->target) == v) c->stop = true;
+    for (int i = 0; i < s->spawnTargets.len; i++) {
+        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+        if (t && lvalueRoot(t) == v) c->stop = true;
+    }
+}
+static void writesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
     switch (op->opType) {
         case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC: case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD: case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
-            if (lvalueRoot(*(struct operand**)ListGetIdx(&op->args, 0)) == v) return true;
+        case OPERATION_TAKE:
+            if (op->args.len && lvalueRoot(*(struct operand**)ListGetIdx(&op->args, 0)) == c->ctx) c->stop = true;
             break;
         default: break;
     }
-    if (opWrites(op->callee, v)) return true; //E13b
-    if (stmtsWrite(&op->comprBody, v)) return true; //E27
-    for (int i = 0; i < op->args.len; i++) if (opWrites(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        if (stmtsWrite(&cc->block, v) || opWrites(cc->dflt, v)) return true;
-    }
-    return false;
 }
-
-static bool stmtWrites(struct statement* s, struct var* v) {
-    if (s->sType == STATEMENT_ASSIGN && lvalueRoot(s->target) == v) return true;
-    for (int i = 0; i < s->spawnTargets.len; i++) {
-        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
-        if (t && lvalueRoot(t) == v) return true;
-    }
-    if (opWrites(s->op, v) || opWrites(s->target, v) || opWrites(s->fillValue, v) || opWrites(s->forInit, v)) return true;
-    if (s->forPost && stmtWrites(s->forPost, v)) return true;
-    if (stmtsWrite(&s->block, v) || stmtsWrite(&s->nomatchBlock, v)) return true;
-    if (s->elseStmnt && stmtWrites(s->elseStmnt, v)) return true;
-    for (int i = 0; i < s->matchCases.len; i++) if (stmtWrites(ListGetIdx(&s->matchCases, i), v)) return true;
-    if (stmtsWrite(&s->matchHold, v) || opWrites(s->caseGuard, v) || opWrites(s->nomatchValue, v)) return true;
-    for (int i = 0; i < s->caseAlts.len; i++) if (opWrites(((struct caseAlt*)ListGetIdx(&s->caseAlts, i))->test, v)) return true;
-    for (int c = 0; c < s->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
-        if (stmtsWrite(&cc->block, v)) return true;
-    }
-    return false;
-}
-
 static bool stmtsWrite(struct list* stmts, struct var* v) {
-    for (int i = 0; i < stmts->len; i++) if (stmtWrites(ListGetIdx(stmts, i), v)) return true;
-    return false;
+    struct codeVisit c = { writesOp, writesStmt, NULL, v, false };
+    return !CodeDeepBlock(stmts, &c);
 }
 
 static struct statement* stmtFindDecl(struct statement* s, struct var* v) {
@@ -22304,7 +22490,7 @@ static void forInSplitCall(struct operand* call, struct operand* src, struct tok
         return;
     bool known = calleeBodyKnown(f);
     if (!known && f->owner) { //a body checked later (a cycle) - judged with every other once all are (settleRegions)
-        struct lendCheck lc = { f, sv, kw, false, false, false };
+        struct lendCheck lc = { f, sv, kw, false, false, false, ErrMsgSaveContext() };
         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
     } else if (!known || (!f->bodyHadErrors && regionStoredIn(f, sv))) {
         Err(kw, ERR_BORROW_SPLIT_SCOPES);
@@ -23935,6 +24121,10 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(firstTokOfType(s, TOK_RET), ERR_TASK_CLAUSE_RETURNS);
         return (struct statement){.sType = STATEMENT_RET};
     }
+    if (ctx->inAssertMsg) { //S17: a message gives text, evaluated only when the assert fails
+        Err(firstTokOfType(s, TOK_RET), ERR_ASSERT_MSG_RETURNS);
+        return (struct statement){.sType = STATEMENT_RET};
+    }
     struct list exprNodes = allPartsOfType(s, SNTX_EXPR);
     struct syntax* exprNode = exprNodes.len > 0 ? *(struct syntax**)ListGetIdx(&exprNodes, 0) : NULL;
     struct type* retExpect = exprNodes.len == 1 && ctx->func && ctx->func->type.hasRetType && !ctx->func->inferRet
@@ -23948,6 +24138,130 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
         ListAdd(&vals, &v);
     }
     return buildRetValues(ctx, tok, &vals);
+}
+
+//O37 (Vec phase 1): a borrow of an owned object reached from a reference parameter p by own fields only - "return v.o",
+//"return v.data", or a call's borrowed own result given p ("return v.First()") - returned as a result borrowed from p
+//(T&p). Its region outlives nothing (O33), so the result is not where p lives in time: each call holds a loan on what
+//it borrows below its argument, confined to the caller's locals (O38), and the function is marked so
+static int ownParamIndex(struct var* func, struct var* v);
+static int ownRootOf(struct var* func, struct operand* op, int* param, struct var** local);
+//(vec2 N1: what each return borrows is recorded, and the function marked only once every body is checked
+//(ownBorrowResultsSettle) - a caller checked while its callee's body still is would copy a state the callee's later
+//returns change)
+struct ownBorrowSrc {
+    struct var* func;   //the function returning it (canonical)
+    int param;          //a borrow of an own object below parameter param...
+    struct type* type;  //...of this type (NULL: not one known)...
+    bool anyType;
+    struct operand* call; //...or a call's borrowed own result, below whichever parameters its callee settles on
+    struct var* scope;  //the result's scope variable, which the parameter the borrow is below must name
+};
+static struct list ownBorrowSrcs;
+static bool ownBorrowSettled;
+static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, struct type rt) {
+    if (!ctx->func || !val || !rt.structMAlloc || rt.refOwn || !rt.scopeParam || rt.scopeParam == SCOPE_AMBIGUOUS) return;
+    struct operand* top = val;
+    struct var* R = ownRegionOf(val);
+    if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val); //(a slice of the buffer: the same borrow)
+    //(vec1 F1: what names the same storage - a conversion to a declared array type, "String(v.View())" (T29a), a slice, a
+    //view (E32b) - is the same borrow, of a call's borrowed own result too)
+    for (int guard = 0; !R && guard < 64 && val->args.len
+            && (val->opType == OPERATION_NOMINAL_CONVERT || val->opType == OPERATION_SLICE
+                || (val->opType == OPERATION_AS && val->type.bType == BASETYPE_ARRAY)); guard++) {
+        val = *(struct operand**)ListGetIdx(&val->args, 0);
+        R = ownRegionOf(val);
+        if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val);
+    }
+    struct ownBorrowSrc src = (struct ownBorrowSrc){0};
+    src.func = canonicalVar(ctx->func);
+    src.scope = canonicalVar(rt.scopeParam);
+    src.param = -1;
+    if (R && R->regionRoot == OWN_ROOT_PARAM) {
+        int p = R->regionRootParam;
+        if (p < 0 || p >= ctx->func->type.vars.len) return;
+        struct var* pv = ListGetIdx(&ctx->func->type.vars, p);
+        if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
+                || canonicalVar(pv->type.scopeParam) != src.scope) return;
+        src.param = p;
+        //(vec1 F1: the loan is on the own object's type, read off its slot - the result's type may be a declared array
+        //type the buffer was converted to, "String(v.View())", which a release of the buffer, keyed by the buffer's type,
+        //never meets)
+        src.type = R->regionType;
+        src.anyType = R->regionAnyType;
+        //(where the result is put is p's referent's scope - the loan says how long the borrow is good). A slice of the
+        //buffer is retagged down to the borrow it slices, since a slice's storage is its base's (E16a)
+        for (struct operand* o = top; o; ) {
+            o->type.scopeParam = rt.scopeParam;
+            o->type.scopeDepth = 0;
+            if (ownRegionOf(o) || !o->args.len
+                    || (o->opType != OPERATION_SLICE && o->opType != OPERATION_NOMINAL_CONVERT && o->opType != OPERATION_AS))
+                break;
+            o = *(struct operand**)ListGetIdx(&o->args, 0);
+        }
+    } else if (val->opType == OPERATION_FUNCCALL && !val->callee && val->readVar) {
+        src.call = val; //(whether its callee gives a borrowed own result is known once every body is)
+    } else return;
+    ListAdd(&ownBorrowSrcs, &src);
+}
+
+static bool ownIntIn(struct list* l, int x) {
+    for (int i = 0; i < l->len; i++)
+        if (*(int*)ListGetIdx(l, i) == x) return true;
+    return false;
+}
+
+//(...one source's answer added to its function's: a parameter, and the object's type - several, or one not known, any)
+static bool ownBorrowMark(struct var* f, int p, struct type* t, bool anyT) {
+    bool changed = false;
+    if (!f->ownBorrowParams.elemSize) f->ownBorrowParams = ListInit(sizeof(int));
+    if (!ownIntIn(&f->ownBorrowParams, p)) {
+        ListAdd(&f->ownBorrowParams, &p);
+        if (!f->ownBorrowResult) f->ownBorrowResult = p + 1;
+        changed = true;
+    }
+    if (!t) anyT = true;
+    if (f->ownBorrowResultType && t && f->ownBorrowResultType != t) anyT = true;
+    if (!f->ownBorrowResultType && t && !f->ownBorrowResultAnyType) f->ownBorrowResultType = t, changed = true;
+    if (anyT && !f->ownBorrowResultAnyType) f->ownBorrowResultAnyType = true, changed = true;
+    return changed;
+}
+
+//O37 (vec2 N1): which functions give a borrowed own result, from which parameters, of which objects' types - a least
+//fixed point over the returns recorded, propagated through calls until nothing changes, before any loan is made
+static void ownBorrowResultsSettle(void) {
+    for (int i = 0; i < ownBorrowSrcs.len; i++) {
+        struct var* f = ((struct ownBorrowSrc*)ListGetIdx(&ownBorrowSrcs, i))->func;
+        f->ownBorrowResult = 0;
+        f->ownBorrowResultType = NULL;
+        f->ownBorrowResultAnyType = false;
+        f->ownBorrowParams = ListInit(sizeof(int));
+    }
+    for (int round = 0; round < 100000; round++) {
+        bool changed = false;
+        for (int i = 0; i < ownBorrowSrcs.len; i++) {
+            struct ownBorrowSrc* s = ListGetIdx(&ownBorrowSrcs, i);
+            if (!s->call) {
+                if (ownBorrowMark(s->func, s->param, s->type, s->anyType)) changed = true;
+                continue;
+            }
+            struct var* g = canonicalVar(s->call->readVar);
+            for (int k = 0; g->ownBorrowResult && k < g->ownBorrowParams.len; k++) {
+                int q = *(int*)ListGetIdx(&g->ownBorrowParams, k);
+                if (q >= s->call->args.len) continue;
+                int pp;
+                struct var* loc;
+                if (ownRootOf(s->func, *(struct operand**)ListGetIdx(&s->call->args, q), &pp, &loc) != OWN_ROOT_PARAM) continue;
+                if (pp < 0 || pp >= s->func->type.vars.len) continue;
+                struct var* pv = ListGetIdx(&s->func->type.vars, pp);
+                if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
+                        || canonicalVar(pv->type.scopeParam) != s->scope) continue;
+                if (ownBorrowMark(s->func, pp, g->ownBorrowResultType, g->ownBorrowResultAnyType)) changed = true;
+            }
+        }
+        if (!changed) break;
+    }
+    ownBorrowSettled = true;
 }
 
 //the return of vals, already built - none for a bare "return", several for "return a, b" (D8c); also what a task's
@@ -24049,6 +24363,7 @@ static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, s
                                                                      : ctx->func->type.resultScope;
         if (resultHome) noteBuiltAt(ctx, resultHome, val); //O12/O17
         if (resultHome) landCall(val, resultHome, 0);
+        ownBorrowedOwnResult(ctx, val, *ctx->func->type.retType); //O37
         landReturnedLambda(ctx, val, resultHome, *ctx->func->type.retType); //D16d
         if (checkBuiltResult(ctx, val, *ctx->func->type.retType)) {
             struct statement stmt = (struct statement){0};
@@ -24106,6 +24421,7 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
 
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return stmt; } //S19b
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return stmt; } //P4a
+    if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return stmt; } //S17
     if (!ctx->func) { Err(tok, ERR_ERROR_OUTSIDE_FUNCTION); return stmt; }
 
     //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
@@ -24167,6 +24483,10 @@ struct var* lvalueRootVar(struct operand* op) {
 //a global, a slot reached from one with no scope of its own, a local that took such a thing, or a call's result that
 //was built or borrowed there. False where that is not known.
 bool storageInProgram(struct operand* op) {
+    //(vec3 F4: a borrow of an owned object - its slot read, a local holding the borrow, a slice of an own array, or
+    //anything reached through one - is in the object's region, which its owner may release at any time: never the
+    //program's, even where the owner is a global)
+    if (ownRegionOf(op) || ownArrayRegionOf(op)) return false;
     switch (op->opType) {
         case OPERATION_READ_VAR:
             //a named function's value - or a lambda's that captures nothing - is static, made once for the whole run (D16)
@@ -24785,6 +25105,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
                 fits = false;
             }
             if (!OperandIsMutableLvalue(t)) fits = false;
+            regionLocalTaint(t); //O17: a task's result is never a read of a region
             struct var* troot = lvalueRootVar(t);
             if (troot && !troot->owner && !t->type.scopeParam && t->type.scopeDepth > ctx->joinDepth) {
                 Err(t->tok, ERR_SPAWN_RESULT_TOO_SHORT);
@@ -25462,7 +25783,9 @@ static bool blockLeavesValue(struct list* block) {
 //nesting an if/match/try inside the body changes nothing - ctx->inLoop is simply inherited by buildBlock.
 struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     struct token kw = firstTokOfType(s, kind == STATEMENT_BREAK ? TOK_BREAK : TOK_CONTINUE);
-    if (!ctx->inLoop) Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ctx->inTaskClause ? ERR_TASK_CLAUSE_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b, P4a
+    if (!ctx->inLoop)
+        Err(kw, ctx->inDefer ? ERR_DEFER_LOOP_JUMP : ctx->inTaskClause ? ERR_TASK_CLAUSE_LOOP_JUMP
+                : ctx->inAssertMsg ? ERR_ASSERT_MSG_LOOP_JUMP : ERR_BREAK_OUTSIDE_LOOP, kw); //S19b, P4a, S17
     if (kind == STATEMENT_BREAK && ctx->loopBreak) *ctx->loopBreak = true; //D10a
     return (struct statement){.sType = kind};
 }
@@ -25508,7 +25831,27 @@ struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     //S18a: "assert cond, message" - text (a literal, a join, "$x", a String), written as a String value
     struct operand* msg = NULL;
     if (exprs.len > 1) {
+        //S17: the message is evaluated only when the assert fails, and gives text - it may not leave: no return, no error
+        //statement, no error a try in it lets out, no break or continue but of a loop written in it, and a spawn in it
+        //needs a join written in it (so the evaluator and the program, which would leave from different places, agree)
+        bool savedMsg = ctx->inAssertMsg, savedLoop = ctx->inLoop;
+        bool* savedBreak = ctx->loopBreak;
+        bool* savedSpawn = ctx->joinHasSpawn;
+        struct list* savedErrs = ctx->joinErrs;
+        bool* savedFallible = ctx->joinFallibleTarget;
+        ctx->inAssertMsg = true;
+        ctx->joinFallibleTarget = NULL;
+        ctx->inLoop = false;
+        ctx->loopBreak = NULL;
+        ctx->joinHasSpawn = NULL;
+        ctx->joinErrs = NULL;
         msg = buildExprFromSyntax(ctx, *(struct syntax**)ListGetIdx(&exprs, 1));
+        ctx->inAssertMsg = savedMsg;
+        ctx->inLoop = savedLoop;
+        ctx->loopBreak = savedBreak;
+        ctx->joinHasSpawn = savedSpawn;
+        ctx->joinErrs = savedErrs;
+        ctx->joinFallibleTarget = savedFallible;
         struct type* textT = SemanticBuiltinType(StrFromCStr("String"));
         if (textT && OperandIsWrittenText(msg)) {
             struct type tv = *textT;
@@ -25618,6 +25961,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         if (StatementCatchCoversType(matches, *e)) continue;
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
         if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
+        if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
         if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
         bool found = false;
@@ -25814,6 +26158,7 @@ void checkInstantiationBody(struct instantiation* inst) {
     instChain = prevChain;
     ErrMsgPopContext();
     SemanticMethodScope = savedScope;
+    flushRegionLocalStores(spec); //O17
     spec->bodyState = 2;
 }
 
@@ -25996,47 +26341,24 @@ static void holdJoin(struct holdGroups* g, const char* a, const char* b) {
 static const char* holdKey(struct var* v) {
     return v && !v->owner && !v->isFuncDecl ? v->tok.str.ptr : NULL;
 }
-static void holdMentionsStmts(struct list* ss, struct list* out);
-//every local and parameter op's value may be derived from
-static void holdMentions(struct operand* op, struct list* out) {
-    if (!op) return;
+//every local and parameter op's value may be derived from - any it reads anywhere in it, StmtEachChild's list (vec4)
+static void holdMentions(struct operand* op, struct list* out);
+static void holdMentionsNode(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct list* out = c->ctx;
     if (op->opType == OPERATION_READ_VAR && op->readVar) {
         const char* k = holdKey(op->readVar);
         if (k) ListAdd(out, &k);
         for (int i = 0; op->readVar->isLambda && i < op->readVar->lambdaCaptures.len; i++) {
-            const char* c = holdKey(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer);
-            if (c) ListAdd(out, &c);
+            const char* cp = holdKey(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer);
+            if (cp) ListAdd(out, &cp);
         }
     }
-    holdMentions(op->callee, out);
     holdMentions(op->placeOf, out);
-    for (int i = 0; i < op->args.len; i++) holdMentions(*(struct operand**)ListGetIdx(&op->args, i), out);
-    for (int i = 0; i < op->chainOperands.len; i++) holdMentions(*(struct operand**)ListGetIdx(&op->chainOperands, i), out);
-    holdMentionsStmts(&op->comprBody, out);
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        holdMentions(cc->dflt, out);
-        holdMentionsStmts(&cc->block, out);
-    }
 }
-static void holdMentionsStmts(struct list* ss, struct list* out) {
-    for (int i = 0; i < ss->len; i++) {
-        struct statement* s = ListGetIdx(ss, i);
-        holdMentions(s->op, out);
-        holdMentions(s->nomatchValue, out);
-        holdMentionsStmts(&s->block, out);
-        holdMentionsStmts(&s->nomatchBlock, out);
-        for (int k = 0; k < s->matchCases.len; k++) {
-            struct statement* c = ListGetIdx(&s->matchCases, k);
-            holdMentions(c->op, out);
-            holdMentionsStmts(&c->block, out);
-        }
-        if (s->elseStmnt) {
-            struct list one = ListInit(sizeof(struct statement));
-            ListAdd(&one, s->elseStmnt);
-            holdMentionsStmts(&one, out);
-        }
-    }
+static void holdMentions(struct operand* op, struct list* out) {
+    struct codeVisit c = { holdMentionsNode, NULL, NULL, out, false };
+    CodeDeepOp(op, &c);
 }
 static bool holdCarries(struct type t) {
     return t.structMAlloc || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || TypeHoldsReferences(t);
@@ -26045,6 +26367,12 @@ static void holdJoinAll(struct holdGroups* g, const char* to, struct list* ks) {
     for (int i = 0; i < ks->len; i++) holdJoin(g, to, *(const char**)ListGetIdx(ks, i));
 }
 static void holdStmts(struct holdGroups* g, struct list* ss);
+static void holdOp(struct holdGroups* g, struct operand* op);
+static void holdStmt(struct holdGroups* g, struct statement* s);
+//(every child of a statement or an operand, StmtEachChild's list, vec4)
+static void holdChildOp(struct codeVisit* c, struct operand* op, enum codeRole r) { (void)r; holdOp(c->ctx, op); }
+static void holdChildStmt(struct codeVisit* c, struct statement* s, enum codeRole r) { (void)r; holdStmt(c->ctx, s); }
+static void holdChildBlock(struct codeVisit* c, struct list* b, enum codeRole r) { (void)r; holdStmts(c->ctx, b); }
 static void holdOp(struct holdGroups* g, struct operand* op) {
     if (!op) return;
     if (op->opType == OPERATION_FUNCCALL) { //a callee may keep one argument in another
@@ -26056,15 +26384,8 @@ static void holdOp(struct holdGroups* g, struct operand* op) {
         holdMentions(op->callee, &ks);
         for (int i = 1; i < ks.len; i++) holdJoin(g, *(const char**)ListGetIdx(&ks, 0), *(const char**)ListGetIdx(&ks, i));
     }
-    holdOp(g, op->callee);
-    for (int i = 0; i < op->args.len; i++) holdOp(g, *(struct operand**)ListGetIdx(&op->args, i));
-    for (int i = 0; i < op->chainOperands.len; i++) holdOp(g, *(struct operand**)ListGetIdx(&op->chainOperands, i));
-    holdStmts(g, &op->comprBody);
-    for (int c = 0; c < op->catchClauses.len; c++) {
-        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
-        holdOp(g, cc->dflt);
-        holdStmts(g, &cc->block);
-    }
+    struct codeVisit c = { holdChildOp, holdChildStmt, holdChildBlock, g, false };
+    OpEachChild(op, &c);
 }
 static void holdStmt(struct holdGroups* g, struct statement* s) {
     struct list ks = ListInit(sizeof(const char*));
@@ -26082,15 +26403,8 @@ static void holdStmt(struct holdGroups* g, struct statement* s) {
             if (holdKey(tr)) holdJoinAll(g, holdKey(tr), &ks);
         }
     }
-    holdOp(g, s->op);
-    holdOp(g, s->target);
-    holdOp(g, s->fillValue);
-    holdOp(g, s->forInit);
-    holdOp(g, s->caseGuard);
-    holdOp(g, s->nomatchValue);
     for (int i = 0; i < s->caseAlts.len; i++) {
         struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        holdOp(g, a->test);
         for (int b = 0; b < a->binds.len; b++) {
             struct caseBind* cb = ListGetIdx(&a->binds, b);
             struct list bk = ListInit(sizeof(const char*));
@@ -26098,13 +26412,8 @@ static void holdStmt(struct holdGroups* g, struct statement* s) {
             if (cb->v && holdCarries(cb->v->type)) holdJoinAll(g, cb->v->tok.str.ptr, &bk);
         }
     }
-    if (s->forPost) holdStmt(g, s->forPost);
-    if (s->elseStmnt) holdStmt(g, s->elseStmnt);
-    holdStmts(g, &s->block);
-    holdStmts(g, &s->nomatchBlock);
-    holdStmts(g, &s->matchHold);
-    for (int i = 0; i < s->matchCases.len; i++) holdStmt(g, ListGetIdx(&s->matchCases, i));
-    for (int c = 0; c < s->catchClauses.len; c++) holdStmts(g, &((struct catchClause*)ListGetIdx(&s->catchClauses, c))->block);
+    struct codeVisit c = { holdChildOp, holdChildStmt, holdChildBlock, g, false };
+    StmtEachChild(s, &c);
 }
 static void holdStmts(struct holdGroups* g, struct list* ss) {
     for (int i = 0; i < ss->len; i++) holdStmt(g, ListGetIdx(ss, i));
@@ -26616,6 +26925,7 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
         }
     }
     roBodyFunc = savedRoBody;
+    flushRegionLocalStores(func); //O17
     func->bodyState = 2;
 }
 
@@ -27056,6 +27366,35 @@ static void ownLoansOfBlockDeep(struct list* block, struct list* out);
 //rendering). place: op is where an assignment stores, used until the store whatever it reads
 //(own5: only what a value keeps - see ownLoansIn's arguments)
 static bool ownKeptOnly;
+//O38 (Vec phase 1): the loan a call giving a borrowed own result (O37) makes - on the objects of the result's type below
+//the argument it is borrowed from, rooted where that argument is (made once a call)
+static int ownEvRoot(struct operand* op, int* param, struct var** local);
+static struct list* ownResultRegionsOf(struct operand* op) {
+    if (op->opType != OPERATION_FUNCCALL || op->callee || !op->readVar) return NULL;
+    struct var* f = canonicalVar(op->readVar);
+    if (!f->ownBorrowResult) return NULL;
+    if (op->ownResultRegionsMade) return &op->ownResultRegions;
+    op->ownResultRegionsMade = true;
+    op->ownResultRegions = ListInit(sizeof(struct var*));
+    for (int k = 0; k < f->ownBorrowParams.len; k++) { //(vec2: one below each parameter it may be borrowed from)
+        int q = *(int*)ListGetIdx(&f->ownBorrowParams, k);
+        if (q >= op->args.len) continue;
+        int param;
+        struct var* local;
+        int root = ownEvRoot(*(struct operand**)ListGetIdx(&op->args, q), &param, &local);
+        struct var* R = ownRegionNew(op->tok, NULL, 0, false, root, param);
+        R->regionRootLocal = local;
+        //(vec1 F1: on the type of the own object the callee borrows, never the result's own type, which may be a declared
+        //array type the buffer was converted to - a release of the buffer is keyed by the buffer's type. vec2 N1: as
+        //settled once every body is checked - before that, not known: any)
+        R->regionAnyType = !ownBorrowSettled || f->ownBorrowResultAnyType || !f->ownBorrowResultType;
+        R->regionType = f->ownBorrowResultType && !R->regionAnyType ? f->ownBorrowResultType : OwnTypeKey(op->type);
+        R->regionArray = R->regionType ? R->regionType->bType == BASETYPE_ARRAY : op->type.bType == BASETYPE_ARRAY;
+        R->regionOfResult = true;
+        ListAdd(&op->ownResultRegions, &R);
+    }
+    return &op->ownResultRegions;
+}
 //(a join's pieces, in order - its nested joins' flattened)
 static void ownJoinPieces(struct operand* op, struct list* out) {
     if (op->opType != OPERATION_CONCAT) {
@@ -27072,8 +27411,178 @@ static bool ownOpCalls(struct operand* op) {
     for (int i = 0; i < op->chainOperands.len; i++) if (ownOpCalls(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
     return op->comprBody.len > 0 || op->catchClauses.len > 0;
 }
+//Vec phase 1: whether two referents are one storage's - two arrays whose elements are both references or both values
+//(a slice, and T29a's conversions between arrays of one representation, name the same storage), or one struct or enum
+static bool ownSameReferent(struct type a, struct type b) {
+    if (a.bType == BASETYPE_ARRAY || b.bType == BASETYPE_ARRAY) {
+        if (a.bType != b.bType) return false;
+        if (!a.arrElem || !b.arrElem) return true;
+        return a.arrElem->structMAlloc == b.arrElem->structMAlloc;
+    }
+    if (a.bType != b.bType || (a.bType != BASETYPE_STRUCT && a.bType != BASETYPE_CHOICE)) return false;
+    return canonicalStructOf(a) == canonicalStructOf(b);
+}
+//...whether a value of type res can hold a reference to a value of type tgt - at any depth, through references too. A
+//function value, a type variable, anything not settled, or a walk too deep, may hold anything
+static bool ownMayReferTo(struct type res, struct type tgt, int depth) {
+    if (depth > 8 || res.unknown || res.bType == BASETYPE_FUNC || res.bType == BASETYPE_TYPEVAR
+            || res.bType == BASETYPE_INTERFACE)
+        return true;
+    //(vec2: an own reference refers only to the object it owns - never to one a loan is on, which is owned elsewhere: a
+    //moved one leaves its slot, "take" refused while a loan on it lives (O39); only what that object holds can)
+    if (res.structMAlloc && !res.refOwn && ownSameReferent(res, tgt)) return true;
+    res.structMAlloc = false;
+    struct list kids = TypeValueChildren(res);
+    bool hit = false;
+    for (int i = 0; i < kids.len && !hit; i++) hit = ownMayReferTo(*(struct type*)ListGetIdx(&kids, i), tgt, depth + 1);
+    ListDestroy(kids);
+    return hit;
+}
+//...whether f's result is written built (T& or T&return - in the result scope), not borrowed from a parameter (T&p)
+//nor owned (O37), nor a call's borrowed own result (O37, whose loan is its own)
+static bool ownResultWrittenBuilt(struct var* f) {
+    f = canonicalVar(f);
+    struct type* rt = f->type.hasRetType ? f->type.retType : NULL;
+    //(a type-variable result bound to a reference returns what the body gives it, its argument included, O14b - so it
+    //is not new storage, "id(v.View())")
+    if (!rt || !rt->structMAlloc || rt->refOwn || f->ownBorrowResult || f->type.resultViaTypeVar) return false;
+    return !rt->scopeParam || (f->type.resultScope && canonicalVar(rt->scopeParam) == canonicalVar(f->type.resultScope));
+}
+//...whether f's result is new storage at its top - written built AND proven fresh (vec3 F1: "built" says only which
+//scope the result is in; a call whose result lands there - "id(a)", "pick(c, a, b)", "l[0]", "m.Get(k)" - hands an
+//argument back into it, O14b, so a written built result is no proof)
+static bool ownResultBuilt(struct var* f) {
+    return ownResultWrittenBuilt(f) && canonicalVar(f)->ownResultFresh;
+}
+
+//O38 (vec3 F1): which built results are proven new storage - a least fixed point over the returns of every checked body,
+//conservative everywhere: a return is fresh only when it is a constructor call, "Array<T>(n)", a comprehension, a
+//literal, text rendered or joined here, null, a call to a function already proven fresh, a conditional or a match all of
+//whose values are, or a local declared from one and never repointed afterwards; any catch default must be fresh too.
+//Anything else - a parameter, a field, an element, a call through a type variable or a function value, a body unchecked
+//or with errors - is not, and the result keeps every loan its arguments carry
+static struct list ownFreshFuncs;
+static void ownForEachBody(void (*fn)(struct var*, struct list*));
+static void ownFreshCollect(struct var* f, struct list* block) {
+    (void)block;
+    if (f && !f->isLambda && ownResultWrittenBuilt(f)) {
+        struct var* c = canonicalVar(f);
+        for (int i = 0; i < ownFreshFuncs.len; i++) if (*(struct var**)ListGetIdx(&ownFreshFuncs, i) == c) return;
+        ListAdd(&ownFreshFuncs, &c);
+    }
+}
+//(a local v written again anywhere in a body - assigned, a spawn's target, taken - or declared more than once; every
+//statement and operand at any depth, StmtEachChild's list)
+struct ownFreshScan { struct var* v; int decls; struct var* f; };
+static bool ownFreshIsVar(struct operand* op, struct var* v) {
+    return op && op->opType == OPERATION_READ_VAR && op->readVar && canonicalVar(op->readVar) == v;
+}
+static void ownFreshWritesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct ownFreshScan* w = c->ctx;
+    if (s->sType == STATEMENT_VAR_DECL && canonicalVar(&s->var) == w->v) w->decls++;
+    if (s->sType == STATEMENT_ASSIGN && ownFreshIsVar(s->target, w->v)) c->stop = true;
+    for (int i = 0; i < s->spawnTargets.len; i++)
+        if (ownFreshIsVar(*(struct operand**)ListGetIdx(&s->spawnTargets, i), w->v)) c->stop = true;
+}
+static void ownFreshWritesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct ownFreshScan* w = c->ctx;
+    if (op->opType == OPERATION_TAKE && op->args.len && ownFreshIsVar(*(struct operand**)ListGetIdx(&op->args, 0), w->v))
+        c->stop = true;
+}
+static bool ownFreshBlockWrites(struct list* block, struct var* v, int* decls) {
+    struct ownFreshScan w = { v, 0, NULL };
+    struct codeVisit c = { ownFreshWritesOp, ownFreshWritesStmt, NULL, &w, false };
+    bool wrote = !CodeDeepBlock(block, &c);
+    *decls += w.decls;
+    return wrote;
+}
+static bool ownFreshValue(struct var* f, struct operand* op, int depth) {
+    if (!op || depth > 32 || op->type.unknown) return false;
+    for (int i = 0; i < op->catchClauses.len; i++) { //(a catch default is the value where the call fails)
+        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
+        if (c->dflt && !ownFreshValue(f, c->dflt, depth + 1)) return false;
+    }
+    if (op->isNullLiteral) return true;
+    if (op->isLiteral && op->opType == OPERATION_NONE) return true;
+    switch (op->opType) {
+    case OPERATION_STR_OF: case OPERATION_CONCAT: case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_COMPREHENSION:
+        return true;
+    case OPERATION_COND:
+        return op->args.len == 3 && ownFreshValue(f, *(struct operand**)ListGetIdx(&op->args, 1), depth + 1)
+               && ownFreshValue(f, *(struct operand**)ListGetIdx(&op->args, 2), depth + 1);
+    case OPERATION_MATCH: {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!ownFreshValue(f, *(struct operand**)ListGetIdx(&vs, i), depth + 1)) return false;
+        return vs.len > 0;
+    }
+    case OPERATION_FUNCCALL:
+        if (op->callee || !op->readVar || op->readVar->isLambda) return false;
+        if (opIsCtorCall(op)) return true;
+        return canonicalVar(op->readVar)->ownResultFresh;
+    case OPERATION_READ_VAR: {
+        struct var* v = op->readVar;
+        if (!v || v->isGlobalVar || v->isFuncDecl || v->isLambda || v->paramOf || v->paramCopy || v->isCapture
+                || canonicalVar(v)->isCapture || !v->declInit)
+            return false;
+        int decls = 0;
+        if (ownFreshBlockWrites(&f->codeBlock, canonicalVar(v), &decls) || decls != 1) return false;
+        return ownFreshValue(f, v->declInit, depth + 1);
+    }
+    default:
+        return false;
+    }
+}
+//(every return of a block, at any depth - one inside an operand's statements (a match's clauses, a catch block) in any
+//position, StmtEachChild's list, included)
+static void ownFreshReturnsStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct ownFreshScan* w = c->ctx;
+    if (s->sType == STATEMENT_RET && !ownFreshValue(w->f, s->op, 0)) c->stop = true;
+}
+static bool ownFreshReturns(struct var* f, struct list* block) {
+    struct ownFreshScan w = { NULL, 0, f };
+    struct codeVisit c = { NULL, ownFreshReturnsStmt, NULL, &w, false };
+    return CodeDeepBlock(block, &c);
+}
+static void ownResultFreshSettle(void) {
+    ownFreshFuncs = ListInit(sizeof(struct var*));
+    ownForEachBody(ownFreshCollect);
+    for (int i = 0; i < ownFreshFuncs.len; i++) (*(struct var**)ListGetIdx(&ownFreshFuncs, i))->ownResultFresh = false;
+    for (bool changed = true; changed; ) {
+        changed = false;
+        for (int i = 0; i < ownFreshFuncs.len; i++) {
+            struct var* f = *(struct var**)ListGetIdx(&ownFreshFuncs, i);
+            if (f->ownResultFresh || f->bodyHadErrors || !calleeBodyKnown(f) || !f->codeBlock.len) continue;
+            if (ownFreshReturns(f, &f->codeBlock)) f->ownResultFresh = true, changed = true;
+        }
+    }
+    ListDestroy(ownFreshFuncs);
+}
+//...whether it can refer to an argument of type arg's own storage - the value it is, or names, and its parts by value
+static bool ownMayReferToPart(struct type res, struct type arg, int depth) {
+    if (depth > 8) return true;
+    arg.structMAlloc = false;
+    if (ownMayReferTo(res, arg, 0)) return true;
+    struct list kids = TypeValueChildren(arg);
+    bool hit = false;
+    for (int i = 0; i < kids.len && !hit; i++) {
+        struct type k = *(struct type*)ListGetIdx(&kids, i);
+        if (!k.structMAlloc) hit = ownMayReferToPart(res, k, depth + 1);
+    }
+    ListDestroy(kids);
+    return hit;
+}
+
 static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
     if (!op) return;
+    //(vec1: a conversion names its argument's storage, T29a - "String(v.View())" keeps what the view keeps, though its
+    //own type, a declared array type by value, says it holds no reference)
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1 && !op->constVarValue) {
+        ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out, transient, place);
+        return;
+    }
     //(own6: a value whose type can hold no reference keeps nothing of what it was made from - a count, a flag, a number
     //read through a borrow, "return b.buf.Len()" - whatever it borrowed while it was computed)
     //(own7 F1: not a part borrowed where it is - E12c's reference to it, a slice or a view of it, leads into what it is a
@@ -27103,6 +27612,17 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
             l.tok = op->tok;
             l.copied = true;
             l.by = op;
+            ownLoanPut(out, l);
+        }
+        //O38 (Vec phase 1): a call giving a borrowed own result (O37) borrows what is below the argument it is borrowed from
+        struct list* RRs = ownResultRegionsOf(op);
+        for (int k = 0; RRs && k < RRs->len; k++) {
+            struct var* RR = *(struct var**)ListGetIdx(RRs, k);
+            struct ownLoan l = (struct ownLoan){0};
+            l.R = RR;
+            l.tok = op->tok;
+            l.copied = true;
+            l.anyType = RR->regionAnyType;
             ownLoanPut(out, l);
         }
         if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
@@ -27183,7 +27703,27 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
                          && roCalleeKnown(op->readVar) && !op->readVar->isLambda ? op->readVar : NULL;
     for (int i = 0; i < op->args.len; i++) {
         if (keeper && !calleeMayKeepArg(keeper, i)) continue;
-        ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, transient, false);
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        if (!keeper) {
+            ownLoansIn(a, out, transient, false);
+            continue;
+        }
+        //(Vec phase 1: an own array's elements refer outside its buffer (13.1) - a result that can refer neither to the
+        //buffer nor to the argument's own storage, "s := v[0]" of a Vec<String&>, keeps nothing the buffer's release frees)
+        struct list mine = ListInit(sizeof(struct ownLoan));
+        ownLoansIn(a, &mine, transient, false);
+        //(vec2: a built result is new storage at its top - an owned object's region outlives nothing, so no result scope
+        //holds a reference to it there (O33); only what the result holds can refer to it, "a := v.ToArray()")
+        struct type rt = op->type;
+        if (ownResultBuilt(keeper) && rt.structMAlloc) rt.structMAlloc = false;
+        bool spared = mine.len > 0 && !ownMayReferToPart(rt, a->type, 0);
+        for (int j = 0; spared && j < mine.len; j++) {
+            struct ownLoan* l = ListGetIdx(&mine, j);
+            spared = !l->anyType && l->R && l->R->regionArray && l->R->regionType
+                     && !ownMayReferToPart(rt, *l->R->regionType, 0); //(the buffer, its elements held by value)
+        }
+        for (int j = 0; !spared && j < mine.len; j++) ownLoanPut(out, *(struct ownLoan*)ListGetIdx(&mine, j));
+        ListDestroy(mine);
     }
     for (int i = 0; i < op->chainOperands.len; i++)
         ownLoansIn(*(struct operand**)ListGetIdx(&op->chainOperands, i), out, true, false);
@@ -27193,23 +27733,23 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
     if (op->comprBody.len) ownLoansOfBlockDeep(&op->comprBody, out);
 }
 
+//(what a statement and everything in it borrow, StmtEachChild's list - a place where it is one: an assignment's or a
+//spawn's target)
+static void ownLoansOfStmtDeep(struct statement* s, struct list* out);
+static void ownLoansDeepOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    ownLoansIn(op, c->ctx, false, r == ROLE_TARGET || r == ROLE_SPAWN_TARGET);
+}
+static void ownLoansDeepStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    ownLoansOfStmtDeep(s, c->ctx);
+}
+static void ownLoansDeepBlock(struct codeVisit* c, struct list* b, enum codeRole r) {
+    (void)r;
+    ownLoansOfBlockDeep(b, c->ctx);
+}
 static void ownLoansOfStmtDeep(struct statement* s, struct list* out) {
-    ownLoansIn(s->op, out, false, false);
-    ownLoansIn(s->target, out, false, true);
-    ownLoansIn(s->fillValue, out, false, false);
-    ownLoansIn(s->forInit, out, false, false);
-    ownLoansIn(s->caseGuard, out, false, false);
-    ownLoansIn(s->nomatchValue, out, false, false);
-    for (int i = 0; i < s->caseAlts.len; i++) {
-        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        ownLoansIn(a->test, out, false, false);
-        for (int k = 0; k < a->binds.len; k++) ownLoansIn(((struct caseBind*)ListGetIdx(&a->binds, k))->from, out, false, false);
-    }
-    ownLoansOfBlockDeep(&s->block, out);
-    ownLoansOfBlockDeep(&s->matchHold, out);
-    ownLoansOfBlockDeep(&s->matchCases, out);
-    ownLoansOfBlockDeep(&s->nomatchBlock, out);
-    if (s->elseStmnt) ownLoansOfStmtDeep(s->elseStmnt, out);
+    struct codeVisit c = { ownLoansDeepOp, ownLoansDeepStmt, ownLoansDeepBlock, out, false };
+    StmtEachChild(s, &c);
 }
 
 static void ownLoansOfBlockDeep(struct list* block, struct list* out) {
@@ -27255,58 +27795,27 @@ static void ownLoansOfStmt(struct statement* s, struct list* out) {
     }
 }
 
-static bool ownBlockReads(struct list* block, struct var* v);
-static bool ownStmtReads(struct statement* s, struct var* v);
-//whether op reads v - directly, or as a capture of a closure it makes
-static bool ownOpReads(struct operand* op, struct var* v) {
-    if (!op) return false;
+//whether code reads v - directly, or as a capture of a closure it makes; anywhere in it, StmtEachChild's list
+static void ownReadsOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct var* v = c->ctx;
     if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) { //(a call through it reads it)
         bool reads = canonicalVar(op->readVar) == v;
         for (int i = 0; !reads && i < op->readVar->lambdaCaptures.len; i++)
             if (canonicalVar(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer) == v) reads = true;
         if (reads) {
             ow.useTok = op->tok;
-            return true;
+            c->stop = true;
         }
     }
-    for (int i = 0; i < op->args.len; i++)
-        if (ownOpReads(*(struct operand**)ListGetIdx(&op->args, i), v)) return true;
-    for (int i = 0; i < op->chainOperands.len; i++)
-        if (ownOpReads(*(struct operand**)ListGetIdx(&op->chainOperands, i), v)) return true;
-    if (ownOpReads(op->callee, v)) return true;
-    for (int i = 0; i < op->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
-        if (ownOpReads(c->dflt, v) || ownBlockReads(&c->block, v)) return true;
-    }
-    return ownBlockReads(&op->comprBody, v);
 }
-
+static bool ownOpReads(struct operand* op, struct var* v) {
+    struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
+    return !CodeDeepOp(op, &c);
+}
 static bool ownStmtReads(struct statement* s, struct var* v) {
-    if (ownOpReads(s->op, v) || ownOpReads(s->target, v) || ownOpReads(s->fillValue, v) || ownOpReads(s->forInit, v)
-            || ownOpReads(s->assertMsg, v) || ownOpReads(s->caseGuard, v) || ownOpReads(s->nomatchValue, v))
-        return true;
-    if (s->forPost && ownStmtReads(s->forPost, v)) return true;
-    if (s->elseStmnt && ownStmtReads(s->elseStmnt, v)) return true;
-    for (int i = 0; i < s->caseAlts.len; i++) {
-        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-        if (ownOpReads(a->test, v)) return true;
-        for (int k = 0; k < a->binds.len; k++)
-            if (ownOpReads(((struct caseBind*)ListGetIdx(&a->binds, k))->from, v)) return true;
-    }
-    for (int i = 0; i < s->spawnTargets.len; i++)
-        if (ownOpReads(*(struct operand**)ListGetIdx(&s->spawnTargets, i), v)) return true;
-    for (int i = 0; i < s->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&s->catchClauses, i);
-        if (ownOpReads(c->dflt, v) || ownBlockReads(&c->block, v)) return true;
-    }
-    return ownBlockReads(&s->block, v) || ownBlockReads(&s->matchHold, v) || ownBlockReads(&s->matchCases, v)
-           || ownBlockReads(&s->nomatchBlock, v);
-}
-
-static bool ownBlockReads(struct list* block, struct var* v) {
-    for (int i = 0; i < block->len; i++)
-        if (ownStmtReads(ListGetIdx(block, i), v)) return true;
-    return false;
+    struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
+    return !CodeDeepStmt(s, &c);
 }
 
 static bool ownLoopOwner(struct statement* s) {
@@ -27977,6 +28486,23 @@ static void ownFramePop(int k) {
     ow.frames.len = k;
 }
 
+//O33/O38 (vec4 R): a local whose written scope names an owned object's region - "d mut String&x" with "x := c.text", or a
+//":=" from a call given that scope, "d := mk&x(5)" - is new storage built in the region, which the region's release frees
+//as it frees what is read through the owner: it holds a loan on the region as the borrow it names does, live to its last
+//use and confined as a borrow is (the region outlives nothing, so §8.4 keeps it in locals, calls and the region)
+static struct var* ownRegionScope(struct var* sv) {
+    if (!sv || sv == SCOPE_AMBIGUOUS) return NULL;
+    sv = canonicalVar(sv);
+    return sv->isRegion ? sv : NULL;
+}
+static void ownHomeLoan(struct var* v, struct list* out, struct token tok) {
+    if (!v) return;
+    struct var* R = ownRegionScope(v->type.scopeParam);
+    if (!R && v->valueHomeSet) R = ownRegionScope(v->valueHome);
+    if (!R && v->refsHomeSet) R = ownRegionScope(v->refsHome);
+    if (R) ownLoanAdd(out, R, tok);
+}
+
 //O38: a local declared holding what it was given - a reference, a value holding one, or a closure - until its last use
 static void ownHold(struct var* v, struct list* loans, int frame) {
     if (!v || v->type.refOwn || !typeCarriesScopes(v->type)) return;
@@ -28036,10 +28562,11 @@ static void ownHoldMore(struct operand* target, struct list* loans, struct opera
 }
 
 static void ownBlockWalkIn(int k) {
-    struct ownFrame* F = ListGetIdx(&ow.frames, k);
-    for (int i = 0; i < F->block->len; i++) {
+    //(the frame is read again each turn: a nested block's frame pushed by the walk may move the list)
+    struct list* block = ((struct ownFrame*)ListGetIdx(&ow.frames, k))->block;
+    for (int i = 0; i < block->len; i++) {
         ((struct ownFrame*)ListGetIdx(&ow.frames, k))->idx = i;
-        ownStmtWalk(ListGetIdx(F->block, i));
+        ownStmtWalk(ListGetIdx(block, i));
     }
 }
 
@@ -28048,6 +28575,44 @@ static void ownBlockWalk(struct list* block, struct statement* owner) {
     int k = ownFramePush(block, owner);
     ownBlockWalkIn(k);
     ownFramePop(k);
+}
+
+//(what of a statement its case in ownStmtWalk walks itself, in its own order and frames - the rest of StmtEachChild's list
+//is walked after it, so that code in a position no case names is never skipped, vec4 F1')
+static bool ownStmtWalksRole(enum statementType t, enum codeRole r) {
+    switch (t) {
+    case STATEMENT_VAR_DECL: return r == ROLE_OP || r == ROLE_FILL;
+    case STATEMENT_ASSIGN: return r == ROLE_TARGET || r == ROLE_OP;
+    case STATEMENT_IF: return r == ROLE_OP || r == ROLE_BLOCK || r == ROLE_ELSE;
+    case STATEMENT_FOR: return r == ROLE_FOR_INIT || r == ROLE_OP || r == ROLE_FOR_POST || r == ROLE_BLOCK;
+    case STATEMENT_DO: return r == ROLE_BLOCK || r == ROLE_OP;
+    case STATEMENT_MATCH:
+        return r == ROLE_OP || r == ROLE_MATCH_HOLD || r == ROLE_MATCH_CASES || r == ROLE_NOMATCH_BLOCK
+               || r == ROLE_NOMATCH_VALUE;
+    case STATEMENT_CASE:
+        return r == ROLE_CASE_TEST || r == ROLE_CASE_BIND || r == ROLE_CASE_GUARD || r == ROLE_BLOCK || r == ROLE_OP;
+    case STATEMENT_DEFER: return r == ROLE_BLOCK;
+    case STATEMENT_JOIN: return r == ROLE_BLOCK || r == ROLE_CATCH_BLOCK;
+    case STATEMENT_SPAWN: //(a task's clauses are its lambdas' bodies, walked by ownTaskLoans)
+        return r == ROLE_OP || r == ROLE_SPAWN_TARGET || r == ROLE_CATCH_BLOCK || r == ROLE_CATCH_DEFAULT || r == ROLE_TASK_CALL;
+    case STATEMENT_TRY_CATCH: return r == ROLE_OP || r == ROLE_CATCH_BLOCK || r == ROLE_CATCH_DEFAULT;
+    case STATEMENT_ASSERT: return r == ROLE_OP || r == ROLE_ASSERT_MSG;
+    default: return r == ROLE_OP;
+    }
+}
+static void ownRestOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    if (!ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) ownOpWalk(op);
+}
+static void ownRestStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    if (ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) return;
+    struct list one = ListInit(sizeof(struct statement));
+    ListAdd(&one, s);
+    int k = ownFramePush(&one, c->ctx);
+    ownStmtWalk(s);
+    ownFramePop(k);
+}
+static void ownRestBlock(struct codeVisit* c, struct list* b, enum codeRole r) {
+    if (!ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) ownBlockWalk(b, c->ctx);
 }
 
 static void ownStmtWalk(struct statement* s) {
@@ -28066,7 +28631,12 @@ static void ownStmtWalk(struct statement* s) {
             ownLoansIn(s->op, &kept, false, false);
             ownLoansIn(s->fillValue, &kept, false, false);
             ownKeptOnly = false;
-            ownHold(&s->var, &kept, ow.frames.len - 1);
+            ownHomeLoan(&s->var, &kept, s->var.tok); //(vec4 R: a local built in an owned object's region)
+            //(vec3 F4: a global's initializer - every loan it keeps would outlive its release, which nothing here sees)
+            //(vec4: a value whose type holds no reference - "T String = Docs.title" - is a copy and keeps nothing, as in a local)
+            if (s->var.isGlobalVar) {
+                if (kept.len && !s->var.type.refOwn && typeCarriesScopes(s->var.type) && !ow.rewalking && s->op && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
+            } else ownHold(&s->var, &kept, ow.frames.len - 1);
         }
         //D16e/P4a: the hidden local a task's lambda is held in - a call through it runs that lambda's body (ownCalleeBody)
         if (s->op && s->op->opType == OPERATION_READ_VAR && s->op->readVar && s->op->readVar->isLambda && s->var.name.len
@@ -28116,7 +28686,10 @@ static void ownStmtWalk(struct statement* s) {
     case STATEMENT_FOR: {
         ownOpWalk(s->forInit);
         int k = ownFramePush(&s->block, s);
-        if (ow.check) ownHold(&s->var, &ow.cur, k);
+        if (ow.check) {
+            ownHomeLoan(&s->var, &ow.cur, s->var.tok); //(vec4 R)
+            ownHold(&s->var, &ow.cur, k);
+        }
         ownOpWalk(s->op);
         ow.cur.len = 0;
         if (s->forPost) ownStmtWalk(s->forPost);
@@ -28197,6 +28770,9 @@ static void ownStmtWalk(struct statement* s) {
             bool holds = call->callee || !f || !f->type.hasRetType || typeCarriesScopes(*f->type.retType)
                          || f->type.retType->bType == BASETYPE_FUNC;
             for (int i = 0; holds && i < call->args.len; i++) ownCarried(*(struct operand**)ListGetIdx(&call->args, i), &loans);
+            //(...and the call's own: a borrowed own result's loan - "spawn d = w.View()" - is the call's, not an argument's,
+            //vec3 F3)
+            ownCarried(call, &loans);
             if (loans.len && !ownCallRefused(call)) ownRefuse(call, call->tok, ERR_OWN_BORROW_STORED);
         }
         struct var* g = call && !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
@@ -28237,6 +28813,22 @@ static void ownStmtWalk(struct statement* s) {
         if (ow.check && !ow.rewalking && s->op) {
             struct list loans = ListInit(sizeof(struct ownLoan));
             ownCarried(s->op, &loans);
+            //(a borrowed own result's loan rooted at the parameter this function's own borrowed own result is borrowed from
+            //is the caller's to hold - O37 - where the caller's loan meets its releases: on an object of the type this
+            //function settled on, or any (vec3 F2: a return no source was recorded for - "t := c.Text(); return t" beside
+            //"return String(c.data)" - borrows a String where the callers' loan is keyed by Array<Char>)
+            int keep = 0;
+            struct var* fc = ow.func ? canonicalVar(ow.func) : NULL;
+            for (int i = 0; i < loans.len; i++) {
+                struct ownLoan* l = ListGetIdx(&loans, i);
+                bool covered = fc && (fc->ownBorrowResultAnyType
+                                      || (!l->anyType && !l->R->regionAnyType && l->R->regionType
+                                          && l->R->regionType == fc->ownBorrowResultType));
+                if (l->R->regionOfResult && l->R->regionRoot == OWN_ROOT_PARAM && covered
+                        && ownIntIn(&fc->ownBorrowParams, l->R->regionRootParam)) continue;
+                *(struct ownLoan*)ListGetIdx(&loans, keep++) = *l;
+            }
+            loans.len = keep;
             struct var* owner = NULL;
             for (int i = 0; i < loans.len && !owner; i++) {
                 struct ownLoan* l = ListGetIdx(&loans, i);
@@ -28252,6 +28844,8 @@ static void ownStmtWalk(struct statement* s) {
         ownOpWalk(s->op);
         break;
     }
+    struct codeVisit rest = { ownRestOp, ownRestStmt, ownRestBlock, s, false };
+    StmtEachChild(s, &rest);
     ow.cur = cur;
     ow.stmt = stmt;
 }
@@ -28276,9 +28870,11 @@ static void ownForEachBody(void (*fn)(struct var*, struct list*)) {
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->isGlobalVar && v->initExpr) {
+                //(vec3 F4: walked as the declaration it is - a global holds nothing only locals may, O38)
                 struct list one = ListInit(sizeof(struct statement));
                 struct statement st = (struct statement){0};
-                st.sType = STATEMENT_EXPR;
+                st.sType = STATEMENT_VAR_DECL;
+                st.var = *v;
                 st.op = v->initExpr;
                 ListAdd(&one, &st);
                 fn(NULL, &one);
@@ -28386,6 +28982,8 @@ static bool ownReachesOwn(struct type t) {
 //refused (O40, O41), and each body against what its statements borrow (O38/O39)
 static void settleOwnBorrows(void) {
     if (!ownUsed) return;
+    ownBorrowResultsSettle(); //O37 (vec2 N1): before any loan is made
+    ownResultFreshSettle(); //O38 (vec3 F1): which built results are new storage, before any loan is made
     ow.frames = ListInit(sizeof(struct ownFrame));
     ow.holders = ListInit(sizeof(struct ownHolder));
     ow.encl = ListInit(sizeof(struct ownLoan));
@@ -28403,6 +29001,15 @@ static void settleOwnBorrows(void) {
         if (!ow.changed) break;
     }
     ownForEachBody(ownImplicitBody);
+    for (int i = 0; i < funcValueUses.len; i++) {
+        //O37 (vec1 F2): a borrowed own result's loan is made by a call by name (ownResultRegionsOf) - a call through a
+        //function value or a Call adapter makes none, so such a function is never a value (known once every body is)
+        struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
+        if (canonicalVar(u->f)->ownBorrowResult && !ownReportedAt(u->tok)) {
+            if (u->f->isLambda) Err(u->tok, ERR_OWN_LAMBDA_BORROW_RESULT);
+            else Err(u->tok, ERR_OWN_FUNC_VALUE_BORROW, ownQuoted(u->f), ownQuoted(u->f));
+        }
+    }
     for (int i = 0; i < funcValueUses.len; i++) {
         struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
         if (u->f->isLambda) continue; //(a lambda: above, at itself)
@@ -28454,6 +29061,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     instantiations = ListInit(sizeof(struct instantiation));
     allLambdas = ListInit(sizeof(struct var*)); //D16
     ownUsed = false; //O39
+    ownBorrowSrcs = ListInit(sizeof(struct ownBorrowSrc)); //O37
+    ownBorrowSettled = false;
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));

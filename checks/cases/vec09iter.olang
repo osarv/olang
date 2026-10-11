@@ -1,0 +1,9 @@
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 6
+# Vec phase 1: an iterator over a Vec holds the Vec, so a Push while it is used is refused (as Rust refuses it)
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    it := v.Iter()
+    v.Push(2)
+    println($(try it.Next() catch default 0))
+}

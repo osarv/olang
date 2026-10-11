@@ -1,0 +1,39 @@
+# check: run
+# vec3 F1: what stays legal - a built result proven new storage keeps no loan on the buffer: ToArray, a wrapper returning
+# ToArray's result directly or through a local, and Clone (an owned result), all kept across Pushes
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn flat(v Vec<String&>&) mut Array<String&>& { return v.ToArray() }
+fn flat2(v Vec<String&>&) mut Array<String&>& {
+    a := v.ToArray()
+    return a
+}
+fn fresh(n I64) mut Array<I64>& {
+    out mut Array<I64>& = Array<I64>(n)
+    for i in range n { out[i] = i * 10 }
+    return out
+}
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    v.Push($2 "b")
+    a := v.ToArray()
+    b := flat(v)
+    c := flat2(v)
+    d := v.Clone()
+    for i in range 100 { v.Push("y") }
+    churn()
+    assert a[1] == "2b" and b[0] == "a" and c[1] == "2b" and d.Len() == 2 and v.Len() == 102
+    w := Vec<I64>()
+    w.Push(1)
+    e := fresh(w.Len() + 2)
+    for i in range 100 { w.Push(i) }
+    churn()
+    assert e[2] == 20 and w.Len() == 101
+}

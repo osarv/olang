@@ -1,0 +1,17 @@
+# check: run
+# Vec phase 1: an element of a Vec of text or of nodes refers outside the buffer (an own array's elements live where the
+# Vec does), so it is kept across growth and across the Vec being given another buffer
+type N struct(v I64) { v }
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    s := v[0]
+    for i in range 100 { v.Push($i) }
+    v = Vec<String&>()
+    w := Vec<N&>()
+    w.Push(N(7))
+    n := w[0]
+    for i in range 100 { w.Push(N(i)) }
+    w = Vec<N&>()
+    println($s " " $n.v)
+}

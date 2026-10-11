@@ -681,7 +681,7 @@ helpers and methods writable once rather than once per instantiation.
 
 - In a struct type or a trait, the `type-params` list (G6) introduces every parameter, so the rest of the declaration -
   the list's own constraints (`type Map<K Hashable<K>, V>`), the constructor, the fields, the destructor, a trait's
-  method signatures - writes each bare: `type Vec<T> struct(cap I64) { items mut Array<T>& = Array<T>(cap) }`.
+  method signatures - writes each bare: `type Buf<T> struct(cap I64) { items mut Array<T>& = Array<T>(cap) }`.
 - In a function, a variable is introduced by its **first** `type-var` reading the signature left to right - the
   receiver, the parameters in order, the results - and is written bare everywhere after it, in the rest of the
   signature and in the body: `fn max(a <T>, b T) T`, and a method over a generic type introduces its variables in its
@@ -1851,22 +1851,29 @@ gives a borrow, `Values()` borrows and `Iter()` borrowed copies of its entries (
 may release a key or a value runs while one is used (O39). `Update` (whose function would be handed and give back an
 owner) and `Clone` are compile-time errors for such a map, reported where the program calls them (B11).
 
-The prelude declares `type Vec<T>`, the **growable array** *(§8.8, not yet implemented)*. Its elements lie next to each
-other in one buffer the `Vec` owns - an own array (§8.8) - so indexing it, walking it and `View()` cost what an array's
-do. `Vec<T>(cap = 0)` is empty, with room for `cap` elements before its buffer moves; `Push(x)` adds at the end, and
-when the buffer is full first moves every element into one twice as large, releasing the old buffer at once (O35);
+The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer the `Vec`
+owns - an own array (§8.8) - so indexing it, walking it and `View()` cost what an array's do. `Vec<T>(cap = 0)` is
+empty, with room for `cap` elements before its buffer moves; `Push(x)` adds at the end, and when the buffer is full
+first moves every element into one twice as large (8 at first), releasing the old buffer at once (O35);
 `Reserve(n)` makes room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the
-same names and on the same terms, its own element types included - `v[i]` and `v[i] = x` (E31, unchecked, `try`
-checking), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`,
-`Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join`, `ToArray`, `Iter`, `RunFrom` (one run, the rest of
-the buffer) and `Clone` - and `View()`, a borrow of its elements as one array (`Array<T>&v`). Whatever borrows the
-buffer - a view, `v[i]` of an own element, a walk - is a loan on it (O38), so while one is used nothing that may move
-or release the buffer (`Push`, `Reserve`, `Insert`, a release of the `Vec`) may run (O39): a view never reads a buffer
-that has been released. A `Vec` holds its buffer's owner by value, so it is an owning type (O31): a copy of one out of a
-place is a borrowed copy, through which nothing is pushed, `take v` moves it (leaving `v` empty), and `v.Clone()` copies
-its elements into a new one. `==` compares its elements (E10), it hashes as they do (E10b), and `$` renders it as an
-array with `Vec` named in front: `Vec<I64>[1, 2, 3]`. A `Vec` is the growable array; a `List` is for what its chunks
-give - a `Push` never moves what is stored, so appending never stops to copy, and a walk may push to it.
+same names and on the same terms - `v[i]` and `v[i] = x` (E31, unchecked, `try` checking), `First`, `Last`, `Pop`,
+`Insert`, `RemoveAt`, `SwapRemove`, `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`,
+`Join` (of a `Vec` of texts), `ToArray`, `Iter` (a `VecIter<T>`), `RunFrom` (one run, the rest of the elements, so
+`for x in v` walks a `Vec` as it walks an array, S9f) and `Clone` (an owned result, O37) - and `View()`, a borrow of its
+elements as one array (`Array<T>&v`; `ViewMut()` writably), a borrowed own result (O37). Whatever borrows the buffer - a
+view, a walk, a part of an element held by value - is a loan on it (O38), so while one is used nothing that may move or
+release the buffer (`Push`, `PushAll`, `Reserve`, `Insert`, a release or move of the `Vec`) may run (O39): a view never
+reads a buffer that has been released. What its elements refer to lives where the `Vec` does, not in the buffer (O33),
+so an element read out of it - a reference, or a value holding one - is no loan on the buffer and is kept across its
+release (`s := v[0]` then `v.Push(x)`, O38). A `Vec` holds its buffer's owner by value, so it is an owning type (O31): a
+copy of one out of a place is a borrowed copy, through which nothing is pushed, `take v` moves it (leaving `v` empty),
+`v.Clone()` copies its elements into a new one, and a `mut Vec<T>&` parameter takes it by reference. `==` compares its
+elements (E10), it hashes as they do (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2,
+3]`. A `Vec` is the growable array; a `List` is for what its chunks give - a `Push` never moves what is stored, so
+appending never stops to copy, and a walk may push to it. *(Not yet implemented: `TakeAt` and `SwapTake`, and
+`RemoveAt` and `SwapRemove` giving nothing, as for a `List`; a `Vec` whose elements are values holding references
+(T25e); a `Vec` held anywhere but by a local or as a result - a field, a global, a type argument (`List<Vec<T>>`,
+`Vec<Vec<T>>`), an own array's element (O31); a task that may push to one (O41).)*
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
@@ -2764,7 +2771,7 @@ one:
 
 ```
 makeVec&x()
-Vec<I32>&x(4)
+Buf<I32>&x(4)
 ```
 
 `IDEN` names a local or parameter of the **calling** function, and binds the callee's result scope (§8 O13,
@@ -3547,7 +3554,11 @@ simply parenthesizing `cond` as an ordinary sub-expression. `assert` is valid in
 constructor, or destructor body (§9), not
 only inside `test { }` blocks. The optional second `expr` is the assert's **message**: text - a literal, a join
 or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fails**, so its cost and its effects
-are paid only then: `assert n < cap, "n is " $n ", cap " $cap`.
+are paid only then: `assert n < cap, "n is " $n ", cap " $cap`. The message may not leave: it gives text, and is evaluated only
+where the assert fails. A `return` or an `error` statement in it, a `try` an error can leave it through (in a catch block
+in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
+deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `done`, `fail`, `abort` and `unreachable` end
+the test or the process and may appear.
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
@@ -4855,7 +4866,15 @@ answered from its own body, so `List<String&>.At` handing nothing out is not mad
 `List<List<String&>>.At` doing so, whatever order the program uses them in. Only what is read out of the region by following a reference from the parameter brings in
 nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the
 storage it is - its inline fields and elements, a view of them (`b`, `b.data`) - are the lent value, which may live
-elsewhere than its references, so storing one of them into the region is a store like any other. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
+elsewhere than its references, so storing one of them into the region is a store like any other. A **local holding only
+what it read out of the region** brings in nothing new either: one whose initializer and every value written into it, or
+into a part of it, anywhere in the body, is such a read - `t := a[i]  a[i] = a[j]  a[j] = t` - and which is never lent
+writably nor given a task's result. A call through a **function value** keeps nothing of its arguments beyond the call but
+in its result (T22a), so it stores nothing where an argument leads whose parameter's type lets nothing be stored through
+it (O25g) - `less(a[i], a[j])` with `less fn(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
+parameter through which something can be stored keeps counting as a store. So a callee that only permutes the elements
+- `Reverse`, `Sort`, a swap through a local - may be lent the value. A callee that only reads the value, or writes
+numbers into it, may be lent it: `toks := split(line);
 count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
@@ -4884,9 +4903,7 @@ callee's variable is bound to the region, so a callee that can store into what i
 function, a constructor, a lambda capturing a local holding the borrow, a task's call) would build what it stores in the
 buffer's region, released with the buffer while every read of the element says it lives on: lending it there is a
 compile-time error naming the fix - lend the callee what holds the array, or hand it the array as an owner (O36:
-`b.names = fill(take b.names)`). A callee that reads it, or writes numbers into it, may be lent it. *(Implemented as O17
-reads a body, so a callee that only permutes the elements - `Reverse`, `Sort`, a swap through a local - is refused as
-well.)*
+`b.names = fill(take b.names)`). A callee that reads it, writes numbers into it, or only permutes its elements (O17: `Reverse`, `Sort`), may be lent it.
 
 **O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
 exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
@@ -5094,7 +5111,9 @@ slot holding its object (O34) - a scope everything the object refers to outside 
 by every scope that outlives that reach; it outlives no scope but itself. So §8.4's check keeps a borrow - and every
 reference read out of the region through it, and every value holding one - in locals, in calls (whose scope variables
 bind to the region, §8.6) and in the region itself: never in a field, an element or a global outside the region, never
-in a result but a borrowed one (O37), never in a closure that outlives the function. Distinct owned objects therefore
+in a result but a borrowed one (O37), never in a closure that outlives the function. A global's owned object is no
+exception: its region is not the program's scope (O1b), which a borrow of it - read off the global's own slot, a slice
+of a global own array, a borrowed own result of it - may not be stored into, nor a global initialized with. Distinct owned objects therefore
 never refer to one another except by owning: a borrow of one is stored neither into another nor into anything outside
 its own region. A borrowed copy (O32), whose own references are borrows, is confined to this function's
 locals (O38).
@@ -5114,7 +5133,10 @@ borrow is a split value (O17a). *(Not yet implemented: an element that is a valu
 `Array<T, N>` by value - is a compile-time error (T25e).)*
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
-borrowed result that is the object (O37) - or through a reference this function read out of such a borrow. A borrow of
+borrowed result that is the object (O37) - or through a reference this function read out of such a borrow, or where a
+local's written scope names such a borrow (`d mut String&x` with `x := c.text`, O25a) or a scope argument does
+(`mk&x(n)`, E25). Such a local is new storage in the region, which the region's release frees: it holds a loan on the
+region as the borrow it names does (O38). A borrow of
 anything else lives where it is not known (O12). A region is known as the borrow naming it is read, so a value built
 for an argument in the region a later argument of the same call reads - `setN(Node(9), s.cur)`, `setN` storing its
 first parameter into its second's object - is a compile-time error naming the place: read it into a local first
@@ -5244,16 +5266,37 @@ compile-time error. A reference result borrowed from a parameter (`T&p`, O14) th
 reached from `p` is a borrowed result too. At a call, an owned result is an owner (O31) whose reach lands where it is
 put (O18a); a borrowed result is a borrow or a borrowed copy, with a loan (O38) on what the arguments it was read from
 reach, or on the globals, and is read-only exactly where a copy out of the same place would be (T25c) - through a
-generic's read-only reference parameter, as read-only as the argument. A borrowed result that is the owned object
-itself names its region (O33); one read out of an owned object - a field of it - lives where it is not known (O12).
+generic's read-only reference parameter, as read-only as the argument.
+
+A **borrowed own result** is a reference result borrowed from a reference parameter `p` (`T&p`) that returns a borrow of
+an owned object reached from `p` by own fields only, or a slice of one, or one converted to a type of the same representation (T29a,
+`String(v.View())`) - `fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }`, `fn (v Outer&) First() Inner&v {
+return v.o }`, or another function's borrowed own result given `p` or a borrow so reached.
+The result is where `p`'s referent lives, but it is good only while the object is not released: each call makes a loan
+(O38) on the objects below each argument given for a parameter it may be borrowed from (`p`, and any other parameter
+whose referent lives where `p`'s does) of the type of the owned object the result borrows - the buffer's `Array<Char>`
+for a result `String&v` converted from it; any type, where its returns borrow objects of several - rooted where that
+argument is (O39), and what it gives is confined to the caller's locals as a borrowed copy's is (O38). Which functions
+give a borrowed own result, from which parameters and of which objects' types, is decided once every body is checked,
+through the calls between them - so mutually recursive functions agree. It is decided by the returns that are such a
+borrow, or a call giving one; a return handing back a borrowed own result any other way - a local holding one, a
+conditional, a generic pass-through, a catch default - is accepted only where what it borrows is of the type so decided
+(or the function borrows objects of several types), and is O38's error otherwise, since the loans its callers make
+would never meet the release of what it borrows. Only a call by name makes that loan, so a
+function giving a borrowed own result is called by name only: made a value (D16, E31) - a named function, by its own
+name or through an import alias (`f := lib.View`), a lambda, a type whose `Call` gives one adapted to a function type -
+it is a compile-time error. So `d := v.View()` followed by
+`v.Push(x)` is a compile-time error while `d` is used after it. *(Not yet implemented: a borrow reached through
+another call's borrowed own result and then an own field - `return v.First().deep` - is not one, and is O10's error.)*
 *(Not yet implemented: only a result written `own`, or of an owning type held by value, is owned - one of several
 results never is (T25e), and a borrowed result of an owning type held by value is a compile-time error - and a call's
 owned result is an owner only in a move position (`x := f()`, an own slot, an owner value local, an owning parameter, a
 `return` of an owned result) or standing as a statement (O35); anywhere else it is a compile-time error naming
 `x := f(...)`. A `catch default` giving a value of an owning type held by value is a compile-time error.)*
 
-**O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), and by each call giving a
-borrowed result (O37). A part of an owned object - an inline field or array, an own array's element - **borrowed where
+**O38 (loans).** A **loan** is made by each read of a slot that does not move it (O32), by each call giving a
+borrowed result (O37), and by each local whose scope is a region - written naming a borrow, or taken from a value a
+scope argument built there (O33). A part of an owned object - an inline field or array, an own array's element - **borrowed where
 it is** reads the slot as well, whatever the part's type holds: lent by reference (E12c - to a reference parameter, a
 receiver, a reference local or field, a task's argument), sliced or viewed (E16a, E32b), walked by `for` (S9), or
 rendered by a join (E11b) after a later operand that runs code - a join reads its pieces once every operand is evaluated.
@@ -5277,7 +5320,7 @@ else is a compile-time error saying to keep a `Clone()` of it instead:
   the argument read at its derived scope (O23a) counting as the argument - or one given to a call whose body is not
   known (a generic one, an `extern`), a task's call that may keep it among them;
 - a store through a reference, into a handle, or into a global or a capture;
-- a spawn target given a call's result derived from it (P1g);
+- a spawn target given a call's result derived from it, or the task's call's own borrowed own result (P1g, O37);
 - an owner made from it or holding it - an object built into an own slot, an owned result (O37), an owner given to an
   owning parameter (O36) - or a value of a type with a destructor (C9), which would hold it past its loans;
 - a lambda capturing it, kept by any of the above.
@@ -5286,7 +5329,19 @@ A borrow of an owned object is confined to its region already (O33). What a call
 instance, a borrowed result - is held by the local given it, as any value derived from a loan is: a call's result
 derives from an argument only where the callee may keep that argument in its result (O26a) - in any part of it, one of
 several results (D8c), a type argument's, an array's elements, a function value's - and a result whose type holds no
-reference derives from nothing. Through a function value
+reference derives from nothing. An own array's elements refer outside its buffer (O33), so a result that can refer
+neither to the argument's own storage, nor to an own array the argument's loans are on, nor to an element such an array
+holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
+from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Two references are none
+of those: the own top of a **built** result (`T&` or `T&return` written, not borrowed from a parameter nor a type
+variable's) proven **new storage** - every return of its function - wherever it is written: in a block, an `else if`'s condition, a case guard, a `for`'s
+post clause, a catch block or a match value's clause - a constructor call, `Array<T>(n)`, a comprehension, a
+literal, text rendered or joined there, `null`, a local declared from one of those and never assigned again (nor taken, nor a spawn's target, anywhere), a call to
+a function so proven, or a conditional, match or catch default all of whose values are - which an owned object's region,
+outliving nothing (O33), never is (a built result is no proof alone: a call whose result lands in the result scope -
+`id(a)`, `l[0]`, `m.Get(k)` - can hand an argument back into it, O14b); and an own reference in a result, which refers
+only to the object it owns. So `a := v.ToArray()` and `c := v.Clone()` of a `Vec<String&>` keep their elements' text,
+and nothing of the buffer, across `v.Push(x)`. Through a function value
 nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
 
 A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference
@@ -5421,7 +5476,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 **C2c.** A constructor's scope variables (§8 O3) are implicit: one per reference parameter (O4b), and the
 **instance scope** — where the instance lands, which a constructor has as a function has its result scope
 (O13): bound to wherever the call's result is put (O18a), or supplied by a scope argument (E25) —
-`Vec<I32>&x(4)` builds the instance where `x` lives.
+`Buf<I32>&x(4)` builds the instance where `x` lives.
 
 **C2d.** In a constructor:
 
@@ -6203,7 +6258,7 @@ trait, declares a **type parameter** (the trait its constraint, G19); followed b
 **constant parameter** of that type (G20).
 
 ```
-type Vec<T> struct(cap I64) {
+type Buf<T> struct(cap I64) {
     items mut Array<T>& = Array<T>(cap)
     len I64 = 0
 }
@@ -6284,13 +6339,13 @@ Since `T` is then a reference, the generic's code is a reference's, as C11 makes
 `T`s is identity unless the type declares `Eq` (E10), and no `Hash` is supplied for it (E10b), so a `Hashable`
 constraint on `T` holds only where the type declares one (G19).
 
-**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<I32>`
-and `Vec<I64>` are different types (T27); two instantiations are the same type exactly when the
+**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Buf<I32>`
+and `Buf<I64>` are different types (T27); two instantiations are the same type exactly when the
 named type and every type argument are the same.
 
 **G10a.** A generic struct type that declares a constructor (§9.1) is constructed by writing its type
 arguments before the argument list, and a scope argument (E25) after them to build the instance where
-a variable lives: `Vec<I32>&x(4)`, or `Vec<I32>(4)` to build it where it lands (§8 O18a). The type
+a variable lives: `Buf<I32>&x(4)`, or `Buf<I32>(4)` to build it where it lands (§8 O18a). The type
 arguments select the instantiation exactly as G8
 does in a type reference, and the call then targets **that instantiation's own** constructor: the
 generic's own constructor is never a call target, its parameter types still being type variables.

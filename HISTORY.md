@@ -15516,3 +15516,164 @@ method 'Push'" - while the same module tested alone compiles: the method's body 
 constructor's body has inferred the field. diag first wrote its fields that way; they are typed now. The reproducer is
 two files, `a.olang` with `type S struct() { xs := List<I64>() }` and `fn (s mut S&) Add(x I64) { s.xs.Push(x) }`, and
 `b.olang` importing it and calling `a.S().Add(3)` in a test. Left for a semantic.c fix (QB: bootstrap/ takes fixes).
+### Vec phase 1: a borrowed own result, Sort's O17 reading, and `Vec<T>` in the prelude (§8.8 O17, O31, O33, O37, O38, T25e, M19d, 2026-10-11)
+
+With own phase 2a merged (3a4f5e8) the pieces a growable array needs existed except two, and both were refusals of
+correct programs. A method handing out its buffer as an array, `View() Array<T>&v`, was O10's error: the buffer lives in
+a region of its own, which no parameter names. And `Array.Sort` on a buffer of text was O17's error: Sort's swaps store a
+local into the lent region, and its comparison passes elements to a function value, both of which O17's reading took for
+a store from outside. The coordinator asked for both as relaxations with must-fail cases written first, then the type.
+
+The borrowed own result marks the function and gives each call's result a region of its own, rooted where the argument
+is and typed by the result, with the loan a borrowed copy has - so it is confined and refused across a release of the
+object, the existing machinery doing the work once the region exists. Twenty-two cases tried every way such a borrow
+could outlive its loan before the relaxation went in; they all refuse. The Sort reading tracks locals whose initializer
+and every write are reads out of the region itself - storing one back is a permutation - and reads a call through a
+function value as keeping its arguments only in its result, so it stores into the region only through a parameter that
+admits stores. Thirteen cases around it - a local given outside text before or after the store, through a field, a
+writable reference, a task, a second local, a storing helper, a storing function value - all refuse.
+
+Writing the type turned up a third refusal that would have made it worse than `List` for text: `s := v[0]` across a
+`Push`. The element is a call's result derived from the receiver, and the receiver's loans are on the buffer - but an own
+array's elements refer outside the buffer, so the loan is on the wrong thing. A call's result now takes none of an
+argument's loans on own arrays when its type can refer neither to the argument's storage, nor to such an array, nor to
+an element one holds by value. The first version checked only the buffer's type and let a `Pt&` into a `Vec<Pt>`'s
+element through; the case written against it caught that, and the check walks the buffer's parts held by value now.
+
+Growth had to be written the way 13.1 already recorded as the one that works - the old buffer handed to the copying
+call as an owner - since copying through a borrow puts the elements' referents in the result scope. The prelude owning
+the name `Vec` meant renaming the corpus's own `Vec<T>` (G6's example, `GrowBuf<T>` now), two fixtures' `Vec` structs and
+the spec's examples. `Vec<Tok>`, with `Tok` holding text, is still T25e's "not supported yet"; it was reported once at the
+type and again at every method used, and now once, with a note naming `Vec<Tok&>`.
+
+Measured with callgrind (on `-a x86-64-v3`, since valgrind cannot decode AVX-512): a Vec walks, indexes and sorts as an
+array does, and List indexes six times slower; Push costs about twice List's, the count going through memory because
+the owner local's storage is registered for release, and each new buffer zero-filled. The scope fuzzer's own mode writes
+the new shapes; on 3a4f5e8 they are refused and on this tip they run, with no findings on either.
+
+The full verify found one crash older than this work: the own walk held a pointer into its list of frames while walking
+a block whose nested blocks push frames, and forty nested `try ... catch` blocks moved the list under it once the
+prelude's walk (now with Vec's bodies) had grown it. The frame's block is read once, before the walk.
+
+What phase 2 must add for Vec to be the default everywhere is in docs/own.md 19.4: a Vec in a field, a global, a type
+argument, elements that are values holding references, a task pushing to one, a lambda capturing one, and Push's cost.
+
+### Vec phase 1's soundness review, fixed (§8.8 O37, O38, O39, T29a, 2026-10-11)
+
+The review of Vec phase 1 (`/home/user/review/vec1`) found two causes of use-after-free, both in the borrowed own result
+the phase added, with six programs the compiler accepted and the scope sanitizer stopped.
+
+The first was a type key. A call's borrowed own result makes a loan on the objects it borrows, and a release meets that
+loan only when the types agree. The loan was keyed by the result's own type, so a result declared `String&v` and made
+by `String(v.View())` carried a loan on `String` while growing the Vec released an `Array<Char>`. A local Vec escaped
+it only because a release through an owner local is also matched against the owner's own structure; through a
+reference parameter or an own-reference local nothing else stood in. Two things were wrong underneath, not one. When the
+conversion's argument is a call (`String(v.View())`) the function was never marked as giving a borrowed own result at
+all, because the check looked only at the returned operand itself; when it is a slot (`String(c.data)`, retyped in
+place) it was marked, with the wrong type. Now the returned value is looked through conversions, slices and views to
+the borrow underneath, and the function records the type of the owned object, read off the slot, which the loan at
+each call uses. A function whose returns borrow objects of two types, or one the check cannot name, makes a loan every
+release meets.
+
+Looking for other places the same renaming hid a borrow found one: a conversion's result is a value of a declared array
+type, and a value whose type holds no reference keeps no loan, so `l.Push(String(v.View()))` stored a view of the
+buffer in a List and the next Push left it dangling. A conversion names its argument's storage (T29a), so it now keeps
+what its argument keeps. A value local made from one is a copy, which was already right.
+
+The second was a function value. The loan is made where a call by name is checked, and a call through a function
+value or a `Call` adapter has no name to look up - so `f := view; d := f(w)` held no loan. The coordinator chose to
+refuse rather than reconstruct: as O36 already makes a function with an owning parameter or an owned result callable
+by name only, a function giving a borrowed own result is too, and so is a type whose `Call` gives one when it is adapted
+to a function type. It is decided once every body is checked, since only the body says whether a result is such a
+borrow. A lambda cannot write a borrowed result's marker today, so its branch of the error is defensive.
+
+The checks gained the six programs (vec13-vec18), the List case (vec19) and a run case of what stays legal (vec20). The
+scope fuzzer's own mode writes the shapes - a conversion of an own field's buffer used after its release, a Vec's view
+converted inside a function taking the Vec by reference and growing it, and a conversion called through a function
+value - and on own seeds 1-100 the reviewed compiler gives three findings where this one gives none.
+
+### Vec phase 1's second review, fixed (§8.8 O37, O38, G12, T22a, O36, O40, 2026-10-11)
+
+The second review of Vec phase 1 (`/home/user/review/vec2`) found two use-after-frees. One was made by the fix round it
+reviewed; the other went through a gap old enough to explain two earlier use-after-frees and a compiler crash.
+
+The first was a matter of when. The fix round had a function record the type of the owned object its borrowed result
+borrows, and a function returning another's borrowed result copy the callee's type and parameter at the return. But a
+callee is sometimes checked from inside its caller's body: `a`'s second return calls `b`, whose body is checked then
+and copies what `a` had recorded so far, and `a`'s last return borrows an object of a different type. `b` kept the
+stale type, so its callers held a loan on the wrong type and a release of the right one went through. Copying at check
+time was the mistake, not the type key. Each return now records only what it borrows - a parameter and a type, or a
+call whose callee will say - and once every body is checked the answers are settled together, a least fixed point over
+the calls between them, before the own walk makes any loan. The parameter a result is borrowed from became a set at the
+same time: it was whichever return was checked last, which the review could not turn into a hole but called fragile.
+Mutual recursion through borrowed own results, which the review listed as refused, now simply works, since each
+function is marked through the other.
+
+The second was a path. A function made a value by its bare name went through the checks a function value needs - a
+generic is not one (G12), a scope-relating function is not one (T22a), an owning or a borrowed-own-result or a
+releasing function is not one (O36, O37, O40) - but the same function made a value through an import alias went
+through none of them, and the alias path returned a plain read. So `f := lib.View` held no loan, `f := lib.Stash`
+skipped its scope obligation, `f := lib.Drop` released under a borrow, and `f := lib.Id` crashed the compiler. Both
+paths now call one function, so they cannot drift again.
+
+Two over-rejections the review listed went with it, each kept only after must-fail cases showed the hazard is still
+refused. Cloning a `Vec` of references failed because Clone lent the whole buffer to a helper whose one scope variable
+stood for both the buffer and its elements' referents; copying element by element, where an element's referent is
+where the Vec keeps it, makes the obligation Clone's own. And `v.ToArray()` kept a loan on the buffer because its result
+type could have named it - but a built result's own top is new storage, which a region outliving nothing cannot be, and
+an own reference refers only to what it owns; neither is now taken for the buffer, while what the result holds still is.
+
+The scope fuzzer's own mode now imports a small library module it writes beside each program, so it can make a function
+a value through an alias, and writes the recursion shape.
+
+### Vec phase 1's third review, fixed (§8.8 O1b, O33, O37, O38, P1g, 2026-10-11)
+
+The third review of the Vec branch found four ways to read freed memory, and the first was the second round's own
+relaxation. ToArray had been allowed to keep no loan on the buffer because its result is written `T&` - built in the
+result scope, where an owned object's region cannot be. But written-built says where the result is, not that it is new:
+a call whose result lands in the result scope can hand an argument straight back into it. A type-variable result does
+exactly that (`id`, `pick`, `List.At`, `Map.Get`), and the narrowing made the same evening caught only a keeper that was
+itself such a function, not a plain wrapper around one. The coordinator's answer was to keep the relaxation only where it
+can be proven: a function is fresh when every return is something the body made - a constructor call, an allocation, a
+literal, text, null, a local made from one and never assigned again, or a call to a function already proven fresh - a
+least fixed point once every body is checked. That is conservative by construction (recursion through itself never
+proves anything, a parameter or a field never counts), and ToArray, whose only return is a local made by `Array<T>(n)`
+and filled by element, passes it, so the relaxation the second round wanted survives in the form that is true.
+
+The second was an assumption in a skip. A function that gives a borrowed own result has the loans of such results it
+returns waved through at its own return - its callers hold them - and its callers key their loan by the type the
+function settled on. That type comes only from returns recognised as a borrow, so a return handing one back some other
+way (a local holding it, a conditional, a pass-through) was waved through under a type it did not have. The skip now asks
+for the type to match. The third was a spawn target set from the task's call: the check looked at what the call's
+arguments carried and not at the loan the call itself makes. The fourth was the oldest: a borrow of a global's own object
+was taken to live in the program's scope because a global does, so it could be stored in another global and outlive the
+object's release. A borrow is in its object's region wherever the owner is, and a global's initializer is now checked as
+the declaration it is.
+
+
+### Vec phase 1's fourth review, fixed (§8.8 O33, O38, S17, 2026-10-11)
+
+The fourth review found that the third round's fix had the right design and an incomplete reach. Proving a function's
+result fresh means looking at every return it has, and the proof walked the body through a hand-written list of the
+fields of a statement - which missed an `else if`'s condition, a case guard, an assert's message and a `for`'s post
+clause. A `return pick(a, b)` inside a catch block in any of those, the natural "fall back to the caller's buffer" form,
+proved the function fresh while it handed its argument back, so the loan on a Vec's buffer was spared. The write scan
+had the same kind of hole for a spawn target's index. The fix the coordinator chose is the one that stops this from
+coming back: one list, in one place, of every field of a statement and an operand that can hold code, with a comment
+saying why each other field is not code, and every walker asking "what is anywhere in this body" reads it. Checking the
+other walkers against it found the same holes in two outside the own pass - C2d's analysis of what a constructor's
+instance may hold, and S8c's scan for writes to a local the evaluator treats as fixed - and one in the may-build walk
+(a spawn target's place); all three were fixed with it.
+
+The second class was older than the Vec work. A borrow of an owned object, `x := c.text`, holds a loan, but a local
+whose written scope names that borrow, `d mut String&x`, or a call given it as a scope argument, `mk&x(5)`, is new
+storage built in the same region and held nothing - and the O20 diagnostic itself suggested writing it ("build it where
+the container lives"). The coordinator decided on a loan rather than a refusal, so the suggestion stays usable: such a
+local holds a loan on the region, exactly as the borrow it names does, and releasing the object while it is still used
+is O39's error.
+
+The third was not about ownership: a `return` inside an assert's message (in a catch block there) made `-i`, which
+abandons the message, and the built program, which returned, disagree. A message gives text and is evaluated only when
+the assert fails, so it may not leave - the rule deferred code already has. Last, the third round's check of a global's
+initializer refused a plain value copy, `T String = Docs.title`, which holds nothing of the object; it now keeps a loan
+only where the global's type can hold a reference, as a local does.

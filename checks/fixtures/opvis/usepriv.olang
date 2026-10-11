@@ -1,4 +1,4 @@
 import "vec"
 fn main() ? {
-    d := vec.Vec(5) - vec.Vec(2)
+    d := vec.Vec2(5) - vec.Vec2(2)
 }

@@ -1,0 +1,9 @@
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 6
+# Vec phase 1 (O39, S9f): a walk over a Vec pushing onto it - the run walked is a borrow of the buffer
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    for x in v {
+        v.Push(x)
+    }
+}

@@ -1,0 +1,36 @@
+# check: run
+# vec2 N1: mutually recursive borrowed own results are marked through each other (a least fixed point over calls), so a
+# use before the owner changes compiles, and a change after the last use too
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+fn a(c CB&, n I64) String&c {
+    if n == 0 { return String(c.data) }
+    if n == 1 { return b(c, n - 1) }
+    return c.text
+}
+fn b(c CB&, n I64) String&c { return a(c, n) }
+fn va(v Vec<I64>&, n I64) Array<I64>&v {
+    if n > 0 { return vb(v, n - 1) }
+    return v.View()
+}
+fn vb(v Vec<I64>&, n I64) Array<I64>&v { return va(v, n) }
+fn use(c mut CB&) {
+    t := b(c, 2)
+    u := b(c, 0)
+    println($t $u)
+    c.text = "zz"
+    println(b(c, 2))
+}
+fn main() ? {
+    c := CB()
+    use(c)
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := vb(v, 3)
+    println($d[0] " " $d[1])
+    v.Push(30)
+    assert va(v, 2)[2] == 30
+}

@@ -1180,20 +1180,21 @@ test "writing through a run-time-sized constructor field does not corrupt its le
 }
 
 # D14a and generics together: a generic struct type declaring a CONSTRUCTOR - which is what makes a real
-# "Vec<T>" expressible, and is exactly the example G6 states. Both halves of the type are generic and
+# growable array expressible, and is exactly the example G6 states (written "Vec<T>" there; the prelude's own Vec<T>
+# took the name since, so this one is GrowBuf<T>). Both halves of the type are generic and
 # both are monomorphized: the copy gets its own layout AND its own constructor, whose parameters and
 # field expressions are built against the substituted types (G16). Before this the whole combination was
 # unreachable: there was no "Vec<I32>(...)" call syntax at all, and since a type declaring a
 # constructor rejects the "Type{...}" literal (C8), a generic type with one could not be constructed by
 # any spelling - merely declaring one crashed the compiler, because the generic's own constructor was
 # emitted as if it were an ordinary function and its parameters still named type variables.
-type Vec<T> struct(cap I64) {
+type GrowBuf<T> struct(cap I64) {
     items mut Array<T>& = Array<T>(cap)
     len I64 = 0
 }
 
 fn vecRoundTrip() I32 {
-    v Vec<I32> = Vec<I32>(4)
+    v GrowBuf<I32> = GrowBuf<I32>(4)
     v.items[0] = 11
     v.items[3] = 22
     v.len = 2
@@ -1203,7 +1204,7 @@ fn vecRoundTrip() I32 {
 # two instantiations of one generic type are separate types with separate layouts and separate
 # constructors - the element sizes here differ, so a shared constructor would mis-size the buffer
 fn vecFloatRoundTrip() F64 {
-    v Vec<F64> = Vec<F64>(2)
+    v GrowBuf<F64> = GrowBuf<F64>(2)
     v.items[1] = 2.5
     return v.items[1] + F64(v.items.Len())
 }

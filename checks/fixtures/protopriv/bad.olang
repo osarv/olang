@@ -2,8 +2,8 @@ import "kk"
 fn main() ? {
     a := kk.Key(1) == kk.Key(11)
     s := $kk.Key(5)
-    v := kk.Vec(1) + kk.Vec(2)
-    l := kk.Vec(1) > kk.Vec(2)
+    v := kk.Vec2(1) + kk.Vec2(2)
+    l := kk.Vec2(1) > kk.Vec2(2)
     b := kk.Bag()
     x := b[0]
     for e in b { }
