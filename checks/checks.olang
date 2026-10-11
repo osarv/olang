@@ -1520,7 +1520,8 @@ fn frameenv(r mut report&) ? Failed {
 # constructor's region, is released when a later argument leaves first - by a call or by a checked operation under "try"
 # - a failing constructor's own fields as it fails, and a destructor's own owner locals as it returns - built, built -s
 # and built -d, every object made released, and under valgrind where it is installed (built for x86-64-v3, which it
-# decodes) nothing lost and no slot read after its frame is gone; a hold in a loop's condition stays in flat memory
+# decodes) nothing lost and no slot read after its frame is gone; a hold in a loop's condition stays in flat memory; an
+# owned result in flight is released by a join failing in its return's place, or by a test abandoned past it (own6 N3)
 test "owners a later argument leaves past, a failing constructor's and a destructor's own, are released" { assert passed("ownleave") }
 
 fn ownleave(r mut report&) ? Failed {
@@ -1538,7 +1539,26 @@ fn ownleave(r mut report&) ? Failed {
     # own4 M1: a hold in a loop's condition and post clause, 4M turns in one open scope, in flat memory
     try r.expect(sh(dir, ("\"$OLANG\" -b ownloop.olang > out.txt 2>&1 && (ulimit -v 50000 && ./build/ownloop) > l.txt 2>&1"
                           " && grep -q '^4000000 4000000 made 8000001 dropped 8000001$' l.txt")) == 0, "ownloop", dir)
+    # own6 N3/N3b: an owned result in flight is held while its return's exit code runs - a join failing in the return's
+    # place releases it, built, built -s and built -d; while a test runs, so does a failed check in deferred code or in a
+    # destructor the frame's own close runs
+    try r.expect(sh(dir, "\"$OLANG\" -b ownflight.olang > out.txt 2>&1 && ./build/ownflight > f.txt 2>&1 && cmp -s f.txt ownflight.want")
+                 == 0, "ownflight", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -s ownflight.olang > out.txt 2>&1 && ./build/ownflight.san > fs.txt 2>&1"
+                          " && cmp -s fs.txt ownflight.want")) == 0, "ownflight -s", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -d ownflight.olang > out.txt 2>&1 && ./build/ownflight.debug > fd.txt 2>&1"
+                          " && cmp -s fd.txt ownflight.want")) == 0, "ownflight -d", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -t ownflightabort.olang > fa.txt 2>&1; grep -q '^made 10 dropped 10$' fa.txt"
+                          " && grep -q '^3 passed, 5 failed$' fa.txt")) == 0, "ownflightabort", dir)
     if sh(dir, "command -v valgrind > /dev/null 2>&1") != 0 { return }
+    try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownflight.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
+                          " --show-leak-kinds=definite --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownflight"
+                          " > fv.txt 2> fvg.txt && cmp -s fv.txt ownflight.want && test ! -s fvg.txt")) == 0,
+                 "ownflight under valgrind", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -t -a x86-64-v3 ownflightabort.olang > out.txt 2>&1; valgrind -q --leak-check=full"
+                          " --show-leak-kinds=definite --errors-for-leak-kinds=definite --error-exitcode=9"
+                          " ./build/ownflightabort_test > fva.txt 2> fvga.txt; test $? -ne 9"
+                          " && grep -q '^made 10 dropped 10$' fva.txt && test ! -s fvga.txt")) == 0, "ownflightabort under valgrind", dir)
     try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownleave.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
                           " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownleave > v.txt 2> vg.txt"
                           " && cmp -s v.txt ownleave.want && test ! -s vg.txt")) == 0, "ownleave under valgrind", dir)

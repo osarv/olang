@@ -1,0 +1,17 @@
+# check: fail error[O39]: assigning 'h.cur' may release the Inner borrowed on line 14
+# O39 (own6 N1): a borrow handed back as one of several results (D8c) carries the loan it was made from - the slot it
+# came out of is not released while it is used
+type Inner struct(k I64) {
+    k
+}
+type Holder struct() {
+    cur own mut Inner&
+}
+fn two(x Inner&) (Inner&x, I64) { return x, x.k }
+fn main() ? {
+    h mut Holder& = Holder()
+    h.cur = Inner(1)
+    c, k := two(h.cur)
+    h.cur = null
+    println($c.k " " $k)
+}

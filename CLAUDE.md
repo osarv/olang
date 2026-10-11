@@ -4994,6 +4994,20 @@ and literals made only of such, never existing storage anywhere in it) - it is
   stale `obligUnsettled`, and a call's result took every argument's loans - `a.Clone()` was refused. **F3**: `cgMayLeave`
   is a whitelist (literals, reads, unchecked operators on numbers); measured +9% on a loop of owner-passing calls, ~65
   instructions per newly held call. Scope fuzzer: e3ded09 52 findings in 100 own seeds (all three shapes), now none in 300.
+- **own6: one of several results, conditionals of owners, a result in flight (§8.8 O34, O35, O38, O42, D8c, E28, P4b,
+  S18, 2026-10-11; the coordinator's decisions, details mine, docs/own.md section 17).** **N1** (new in own5): a borrow
+  handed back as one of several results carried no loan - `calleeMayKeepArg` read only a result's own scope, and a tuple
+  has none; it now walks every scope variable the result type names, at any depth, and answers "kept" for a kind it does
+  not know. The other one-result readers (O26a's home, O14/O14c, T22a, D8c's landing, B11's notes) are conservative or
+  diagnostic only. **A value whose type holds no reference carries no loan** (`return b.buf.Len()` through a borrow).
+  **N2**: a conditional or a match of owning values was checked as a borrow and built as a copy - it is O34's error
+  wherever it stands, naming `r mut T& = a` then `if not c { r = b }`. **N3/N3b**: an owned result in flight is held in
+  a hidden slot until its function returns - a join failing in the return's place releases it; in a test its slot is
+  registered in a scope whose unwind node sits just below the frame's (block nodes' links are fixed at frame entry), so a
+  failed check in deferred code or any close releases it. **F3's whitelist in test builds only**: outside them only
+  `try`, a catch clause or a clause's statements leave - the owner-passing loop 1,570M -> 1,223M instructions (e3ded09
+  1,441M). Scope fuzzer: 79bf11c 22 findings in 60 own seeds (all own6 shapes), now none. Left as they are, listed:
+  `x = v.Me()` into a local, C2d against O34's reach, O10c's note in `e3`.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

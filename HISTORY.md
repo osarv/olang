@@ -15348,3 +15348,43 @@ expression, so holding by the whitelist in test builds alone would cost producti
 **Fuzzer.** `own5Op` writes F1's and F2's shapes, and programs with destructors carry test blocks with F3's, run by
 `-t -d -s` - the harness's first test-mode check. On e3ded09, own seeds 7000-7099 give 52 findings, every one an own5 shape;
 fixed, own seeds 7000-7299 give none.
+
+### own6: one of several results, conditionals of owners, a result in flight (§8.8 O34, O35, O38, O42, D8c, E28, P4b, S18, 2026-10-11)
+
+The fourth review (`/home/user/review/own6`, at 79bf11c) found section 16's relaxations holding everywhere but one
+place, and four defects. The coordinator decided each; docs/own.md section 17 has the details.
+
+**N1 - the fix's own hole.** own5 made a call's result carry only what its callee may keep in its result, and asked
+that of the result's own scope and the result scope. A function returning several values (D8c) returns an anonymous
+tuple whose elements carry the scopes, so `fn two(x Inner&) (Inner&x, I64)` looked like it kept nothing, the loan was
+dropped, and every own check downstream passed - three use-after-frees and F2 again. The question now walks every scope
+the result type names, at any depth, and a kind it does not know means "kept". The coordinator also asked for every
+other place that reads one result scope to be checked; they were (section 17.1): each is conservative for a tuple or only
+words a note. Beside it, the decision's fifth item: a value whose type holds no reference carries no loan - what O38 had
+always said - which lifted own5's over-rejection of numbers returned through a borrow.
+
+**N2 - checked as one thing, built as another.** `r mut Outer& = v if c else w` was a borrow of `v` to the own walk and
+a copy of `v` to codegen (E28 builds a conditional's value where it lands), so a release through `r` freed what `v`
+still held. Pre-existing. Decided: a conditional or a match of owning values is O34's error anywhere, naming the
+reference repointed in a branch.
+
+**N3/N3b - between the return and the caller.** A `return` computes its owned result before the code the return runs
+first - deferred code, a join's wait, the scopes it closes - and a join failing there replaces the return (P4b), while in
+a test a failed check there abandons the test: either way the result went to nobody. Decided: it is held, as own5's F3
+holds an owner for a call. Outside a test only a join failing in the return's place can keep it, so only a return that
+crosses one holds it, and that join's failing branch releases it. In a test the slot needs a registration an unwind
+finds, and the obvious one - a node pushed on the chain at the return - does not work: a block's unwind node is linked
+to the block outside it once, when the frame starts, so a block opened after the return (the deferred code's own)
+leads past a node pushed above it. The hold node is linked just below the frame's own node instead, which every block
+reaches; the frame's normal end restores the chain from below it, unrun. A join failing in deferred code is not one the
+return leaves, and must not release the result - found by writing the case, and pinned.
+
+**F3's cost, and the reason for it.** own5 recorded that holding owners by the whitelist outside tests buys nothing:
+there a failed check ends the process. The decision made it so - the whitelist in test builds, `try`, catch clauses and
+clauses' statements elsewhere - and the loop own5 measured at +9% now runs 1,223M instructions against 79bf11c's 1,570M
+and e3ded09's 1,441M (whose rule held for a later argument that ran code, which cannot leave outside a test either).
+
+**Fuzzer.** `own6Op` writes N1's three shapes, N2's two, numbers kept across a release, and N3's failing joins; programs
+with destructors carry two N3b test blocks. On 79bf11c, own seeds 9000-9059 give 22 findings, every one an own6 shape;
+fixed, none. Left as they are, listed in section 17.7: `x = v.Me()` into an existing local, C2d against O34's reach, and
+the O10c note's wording in the review's `e3`.

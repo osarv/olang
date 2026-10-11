@@ -17447,6 +17447,32 @@ test "O38, O26a: an owner value local returned by value moves its owners, and a 
     assert x.cur.k == 3 and x.name == "n3"
     assert ownBorrowedRead(4 * OwnRun) == 56 and OwnDropped == 3
 }
+#(own6: a value whose type can hold no reference keeps nothing of what it was read through - a count read through a
+#borrowed copy, kept across a release of what the copy borrows, or returned through a borrow of an owner value local)
+fn ownNamedCount(k I64) I64 {
+    v := ownNamedOf(k)
+    b := v                                       # a borrowed copy (O32)
+    n := b.name.Len()                            # a count: it holds no loan
+    v.cur = OwnPart(k + 1)                       # released while n is still to be used
+    return n * 100 + v.cur.k
+}
+fn ownNamedThrough(k I64) I64 {
+    v := ownNamedOf(k)
+    r OwnNamed& = v
+    return r.name.Len() * 10 + r.cur.k           # numbers returned through a borrow of the owner value local
+}
+fn ownCopyLen(k I64) I64 {
+    v := ownNamedOf(k)
+    b := v
+    return b.name.Len()
+}
+OwnCountBaked I64 = ownNamedCount(7)             # K2: computed while compiling, as the run time computes it
+OwnThroughBaked I64 = ownNamedThrough(5) + ownCopyLen(123)
+test "O38: a number read through a borrow holds nothing of it - kept across a release, or returned through the borrow" {
+    assert ownNamedCount(7 * OwnRun) == OwnCountBaked and OwnCountBaked == 208
+    assert ownNamedThrough(5 * OwnRun) + ownCopyLen(123 * OwnRun) == OwnThroughBaked and OwnThroughBaked == 29
+    assert sbChurn() > 0
+}
 fn ownViaIndex(a Array<I64>&, i I64) I64 ? { return ownTake2(OwnConn(30), try a[i]) }
 fn ownViaDiv(z I64) I64 ? { return ownTake2(OwnConn(31), try (10 / z)) }
 fn ownViaSlice(a Array<I64>&, n I64) I64 ? { return ownTake2(OwnConn(32), (try a[1:n]).Len()) }

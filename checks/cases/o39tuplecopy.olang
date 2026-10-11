@@ -1,0 +1,20 @@
+# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line 16
+# O39 (own6 N1): one of several results of a method called on a borrowed copy (O32) borrows what the copy reads
+type Inner struct(k I64) {
+    k
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type View struct(x Outer&) {
+    x
+}
+fn (a Outer&) Two() (View&a, I64) { return View(a), 1 }
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    b := v
+    a, n := b.Two()
+    v.o = null
+    println($a.x.o.k " " $n)
+}

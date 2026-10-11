@@ -226,6 +226,10 @@ struct cgCtx {
     //constructor's top level builds into (its instance scope): where an owner held in this frame's own storage is
     //registered for release at the body's top level, so the release runs while the frame is still there (cgOwnReleaseScope)
     char* ownFrameScope;
+    //O35 (own6 N3/N3b): the owned result being returned, held in its slot while the return's exit code runs (cgRetHold)
+    char* retHeld;
+    char* retHeldNode; //...and, while a test runs, the unwind node it is registered in, below the frame's own
+    struct type retHeldT;
     //a function returning an aggregate returns it through one slot and one exit block, written by every return
     //site: so once the function is inlined, its result's fields reach the caller as separate values, which LLVM
     //can reason about - a merged aggregate value it cannot see into, and a loop testing a Bool from one (an
@@ -647,7 +651,10 @@ static void cgEmitDeferred(struct cgCtx* ctx, struct cgDefer d) {
     ctx->tdOp = NULL;
     bool leaving = ctx->leavingWithError; //P4b: a join inside the deferred code fails as anywhere else
     ctx->leavingWithError = false;
+    char* retHeld = ctx->retHeld; //(own6 N3: and replaces no return the deferred code runs for - its own clauses take it)
+    ctx->retHeld = NULL;
     cgBlock(ctx, &d.s->block);
+    ctx->retHeld = retHeld;
     ctx->leavingWithError = leaving;
     if (ctx->terminated) cgDeadLabel(ctx); //it ended the test or the process (S19c)
     ListDestroy(ctx->defers);
@@ -697,6 +704,85 @@ static struct cgJoinFail* cgJoinFailOf(struct cgCtx* ctx, char* jh) {
     return NULL;
 }
 
+//O35 (own6 N3/N3b): an owned result in flight - computed, its function not returned yet - is held in a hidden owner slot
+//while the code its return runs first (deferred code, joins, scope closes) runs. Outside a test only a join failing in
+//the return's place (P4b) can keep it from the caller, and releases it (cgLeaveJoin); while a test runs, a failed check
+//leaving the test can too (S18), so the slot is also registered in a scope of its own on the unwind chain, above every
+//block the return closes and the frame's own scope - an unwind releases it, the frame's normal end pops it unrun.
+//t is the result's type, v its value (or with addr its address); NULL where nothing can keep it from the caller
+static bool cgOwnIsArray(struct type t);
+static const char* cgOwnTy(struct type t);
+static char* cgOwnDropFn(struct cgCtx* ctx, struct type t);
+static FILE* cgAllocaOut(struct cgCtx* ctx);
+static char* cgRetHold(struct cgCtx* ctx, struct type t, char* v, bool addr) {
+    if (!t.refOwn && !TypeIsOwnValue(t)) return NULL;
+    bool crossesJoin = false;
+    for (int i = 0; i < ctx->blockJoins.len && !crossesJoin; i++) {
+        char* jh = *(char**)ListGetIdx(&ctx->blockJoins, i);
+        crossesJoin = jh && cgJoinFailOf(ctx, jh);
+    }
+    if (!crossesJoin && !ctx->emitUnwind) return NULL;
+    char* slot = cgNewTmp(ctx);
+    if (t.refOwn) { //(an owner's slot, as cgOwnHoldSlot's: { owner, mark }, which __olang_own_drop_held clears whole)
+        fprintf(cgAllocaOut(ctx), "  %s = alloca { %s, i64 }\n", slot, cgOwnTy(t));
+        fprintf(ctx->fnOut, "  store { %s, i64 } zeroinitializer, ptr %s\n", cgOwnTy(t), slot);
+        fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), v, slot);
+    } else {
+        char ty[256];
+        llvmType(t, ty, sizeof(ty));
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
+        if (addr) fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %s, ptr %s, i64 %lld, i1 false)\n", slot, v,
+                          TypeGetSize(t));
+        else fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, v, slot);
+    }
+    ctx->retHeldNode = NULL;
+    if (ctx->ownUnwindNode) {
+        //(linked just below the frame's own node, which every block's node leads down to: what an unwind walks after the
+        //frame's scope. The scope and its node are in this frame - the scope takes no chunk, and is left unrun as the
+        //frame ends normally, cgCloseOwnScope restoring the chain to what was below it)
+        char* scope = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.scope\n", scope);
+        fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", scope);
+        char* node = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.unwind\n", node);
+        char* fp = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", fp, ctx->ownUnwindNode);
+        char* below = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", below, fp);
+        fprintf(ctx->fnOut, "  store { ptr, ptr, ptr } { ptr null, ptr null, ptr null }, ptr %s\n", node);
+        char* np = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", np, node);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", below, np);
+        char* ns = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 1\n", ns, node);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", scope, ns);
+        fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", node, fp);
+        char* dn = cgNewTmp(ctx);
+        fprintf(cgAllocaOut(ctx), "  %s = alloca %%olang.dtornode\n", dn);
+        const char* fn = t.refOwn ? (cgOwnIsArray(t) ? "@__olang_own_drop_aheld" : "@__olang_own_drop_held")
+                                  : cgOwnDropFn(ctx, t);
+        fprintf(ctx->fnOut, "  call void @__olang_scope_push_dtor(ptr %s, ptr %s, ptr %s, ptr %s)\n", scope, dn, slot, fn);
+        ctx->retHeldNode = node;
+    }
+    return slot;
+}
+//...released where a join failing takes the return's place
+static void cgRetHeldRelease(struct cgCtx* ctx) {
+    if (!ctx->retHeld) return;
+    struct type t = ctx->retHeldT;
+    const char* fn = t.refOwn ? (cgOwnIsArray(t) ? "@__olang_own_drop_aheld" : "@__olang_own_drop_held") : cgOwnDropFn(ctx, t);
+    fprintf(ctx->fnOut, "  call void %s(ptr %s, ptr null)\n", fn, ctx->retHeld);
+    if (!ctx->retHeldNode) return;
+    //(and its node taken back out from below the frame's: the frame goes on, and may end by another way)
+    char* fp = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", fp, ctx->ownUnwindNode);
+    char* hp = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", hp, ctx->retHeldNode);
+    char* below = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", below, hp);
+    fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", below, fp);
+}
+
 //P4b: a join block left - its tasks waited for (the code returned: the earliest failure, 0 for none) and its scope
 //closed, slot i of blockSlots. When the join can fail, a failure goes to its handler (cgJoin) in place of the way out
 //being taken, which goes on only when every task succeeded; an error already leaving goes on regardless
@@ -713,6 +799,7 @@ static void cgLeaveJoin(struct cgCtx* ctx, char* jh, char* slot, int i) {
     int id = ctx->lblCtr++;
     fprintf(ctx->fnOut, "  br i1 %s, label %%joinleave.fail.%d, label %%joinleave.ok.%d\n", failed, id, id);
     fprintf(ctx->fnOut, "joinleave.fail.%d:\n", id);
+    cgRetHeldRelease(ctx); //(own6 N3: a return it replaces gives its result to nobody - released here)
     //back at the join's own level: everything inside it is closed, what is around it still open
     if (ctx->ownUnwindNode && slot) fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", cgUnwindBelow(ctx, i));
     fprintf(ctx->fnOut, "  br label %%%s\n", f->lbl);
@@ -758,8 +845,10 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
         fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownFrameScope);
     //and take this whole frame back off the unwind chain in one store - every node in it is gone now
     if (ctx->ownUnwindNode) {
+        //(an owned result held below it, cgRetHold, goes too - the caller's now)
         char* ps = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", ps, ctx->ownUnwindNode);
+        fprintf(ctx->fnOut, "  %s = getelementptr %%olang.unwind, ptr %s, i32 0, i32 0\n", ps,
+                ctx->retHeld && ctx->retHeldNode ? ctx->retHeldNode : ctx->ownUnwindNode);
         char* pv = cgNewTmp(ctx);
         fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", pv, ps);
         fprintf(ctx->fnOut, "  store ptr %s, ptr @__olang_unwind_top\n", pv);
@@ -3534,7 +3623,7 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
 //evaluated here, in the spawner, where they are built into the real scopes.
 struct cgRegionArg { int idx; struct var* region; bool task; bool result; };
 static bool cgRunsCode(struct operand* op);
-static bool cgMayLeave(struct operand* op);
+static bool cgMayLeave(struct cgCtx* ctx, struct operand* op);
 static const char* cgOwnNull(struct type t);
 //O36/O30 (F3): an owner made or moved here that code run before anything takes it could leave (a later argument's
 //"try", a constructor's own arguments, a fill): held in a hidden owner slot of this frame, registered for release
@@ -3682,7 +3771,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         if (paramT.refOwn) { //O36: an owning parameter's argument - the owner moved in, made, or a call's owned result
             bool laterRuns = false; //F3: held until the call takes it where a later argument could leave first
             for (int j = i + 1; j < op->args.len && !laterRuns; j++)
-                laterRuns = cgMayLeave(*(struct operand**)ListGetIdx(&op->args, j));
+                laterRuns = cgMayLeave(ctx, *(struct operand**)ListGetIdx(&op->args, j));
             if (!laterRuns) {
                 cgArgAdd(args, cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT));
                 continue;
@@ -4254,7 +4343,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         scopeVal = NULL;
         bytes = cgOwnArrayBuffer(ctx, op, byteSize);
         //F3: a fill evaluated after the buffer's region is made - one leaving releases the region
-        if (op->args.len > 1 && cgMayLeave(*(struct operand**)ListGetIdx(&op->args, 1))) heldBuf = cgOwnHoldSlot(ctx, false, bytes);
+        if (op->args.len > 1 && cgMayLeave(ctx, *(struct operand**)ListGetIdx(&op->args, 1))) heldBuf = cgOwnHoldSlot(ctx, false, bytes);
         if (zeroed) fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
     } else {
         scopeVal = cgWhereBuilt(ctx, op);
@@ -5594,7 +5683,20 @@ static bool cgCannotLeave(struct operand* op) {
             return false;
     }
 }
-static bool cgMayLeave(struct operand* op) { return !cgCannotLeave(op); }
+//...outside a test (own6): a failed check ends the process, which leaves no frame to release anything, and a call not
+//tried returns or ends it - so only what leaves to this program's own code can: a "try" (a check under one, a call's
+//error), a catch clause, a match's or a sequence's statements (a clause that returns, breaks or continues)
+static bool cgLeavesToProgram(struct operand* op) {
+    if (!op) return false;
+    if (op->isTried || op->checkRoot || op->catchClauses.len || op->comprBody.len) return true;
+    for (int i = 0; i < op->args.len; i++) if (cgLeavesToProgram(*(struct operand**)ListGetIdx(&op->args, i))) return true;
+    for (int i = 0; i < op->chainOperands.len; i++)
+        if (cgLeavesToProgram(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
+    return cgLeavesToProgram(op->callee);
+}
+static bool cgMayLeave(struct cgCtx* ctx, struct operand* op) {
+    return ctx->emitUnwind ? !cgCannotLeave(op) : cgLeavesToProgram(op);
+}
 
 //E11a/E11b: a join's operands, evaluated left to right - each to its value, as any expression's is - before any piece
 //is rendered. An array is held by reference (T7b) and a reference names an instance, so what those hold is read when
@@ -6683,7 +6785,7 @@ static char* cgOwnNew(struct cgCtx* ctx, struct operand* op) {
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
     //F3: its constructor's arguments are evaluated after the region is made - one leaving releases the region
     bool argsRun = false;
-    for (int i = 0; i < op->args.len && !argsRun; i++) argsRun = cgMayLeave(*(struct operand**)ListGetIdx(&op->args, i));
+    for (int i = 0; i < op->args.len && !argsRun; i++) argsRun = cgMayLeave(ctx, *(struct operand**)ListGetIdx(&op->args, i));
     char* held = argsRun ? cgOwnHoldSlot(ctx, false, obj) : NULL;
     cgPromoteAt(ctx, op, hdr, obj, true);
     if (held) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", held);
@@ -7330,10 +7432,16 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
         //value's own storage, or the reference it was read through
         char* src = cgValue(ctx, s->op);
         ctx->targetScopeOverride = prevTarget;
-        fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", src,
-                TypeGetSize(retT));
+        char* held = cgRetHold(ctx, retT, src, true); //(own6 N3: held here, given to the caller once nothing can keep it)
+        if (!held) fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", src,
+                           TypeGetSize(retT));
         cgCtorTakeOwners(ctx);
+        ctx->retHeld = held;
+        ctx->retHeldT = retT;
         cgCloseOwnScope(ctx);
+        ctx->retHeld = NULL;
+        if (held) fprintf(ctx->fnOut, "  call void @llvm.memcpy.p0.p0.i64(ptr %%out, ptr %s, i64 %lld, i1 false)\n", held,
+                          TypeGetSize(retT));
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
         return;
@@ -7348,8 +7456,16 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     if (retT.bType == BASETYPE_ARRAY && retT.arrMalloc && !retT.structMAlloc && !cgBuiltInResult(ctx, s->op, retT)) {
         val = cgCopyRuntimeLengthArray(ctx, retT, val, cgResolveScope(ctx, retT.scopeParam, retT.scopeDepth), NULL);
     }
+    char* held = cgRetHold(ctx, retT, val, false); //O35 (own6 N3/N3b): held while the return's exit code runs
     cgCtorTakeOwners(ctx);
+    ctx->retHeld = held;
+    ctx->retHeldT = retT;
     cgCloseOwnScope(ctx);
+    ctx->retHeld = NULL;
+    if (held) { //(the caller's now - the slot, and any unwind node it was registered in, are left as they are)
+        val = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", val, retT.refOwn ? cgOwnTy(retT) : ty, held);
+    }
     if (!fallible) {
         cgEmitRet(ctx, ty, val);
         ctx->terminated = true;

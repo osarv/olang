@@ -5146,6 +5146,11 @@ owner whose reach outlives the slot's or is it:
 `x := e` declares an owner local exactly when `e` is an owner - a value made there, an owned result, `take p`; from a
 slot it declares a borrow or a borrowed copy (O32).
 
+A conditional (E28) or a `match` (S12b) whose values are of an owning type held by value is a compile-time error
+wherever it stands: it gives the value it chooses as a copy (E28), a second owner of what that value owns - or, given
+to a reference, a copy built where the reference lands, while what it was chosen from still owns the same objects. A
+reference to one of them, repointed in a branch, says which: `r mut T& = a`, then `if not c { r = b }`.
+
 An own array slot's owner is a new array: `Array<T>(n)` - its elements zero values, or a fill that is `null`, zero bits,
 or, for elements referring nowhere (numbers, values holding no reference), any value - and, for elements referring
 nowhere, an array literal, written text, a join (E11b) or a comprehension (E27); or `take` from another own array slot,
@@ -5187,6 +5192,10 @@ then a release under that loan (O39). So owners form trees, and each object is r
   has not run yet, and an argument evaluated after it leaves the expression first - an error propagated, a checked
   operation under `try` failing (R20), a clause's `break`, `continue` or `return`, or, while a test runs, a failed check
   or assert abandoning the test (S18, P1d): the call is never made, and it is released where the expression is left;
+- it is an owned result being returned (O37) - held from where the `return` computes it until the function returns -
+  and a join failing in the return's place (P4b) gives it to nobody, or, while a test runs, a failed check or assert
+  in what the `return` runs first - deferred code, a join's wait, the destructors of the scopes it closes, its frame's
+  own included - abandons the test (S18, P1d): it is released there;
 - it is a constructor's own field (C2a) and the constructor fails before its instance is assembled - by its own
   `error` (R3) or a `try` it does not catch: until then the constructor's frame holds it, as an owner local, and from
   then on the instance does;
@@ -5269,7 +5278,9 @@ else is a compile-time error saying to keep a `Clone()` of it instead:
 
 A borrow of an owned object is confined to its region already (O33). What a call keeps in its result - a constructor's
 instance, a borrowed result - is held by the local given it, as any value derived from a loan is: a call's result
-derives from an argument only where the callee may keep that argument in its result (O26a). Through a function value
+derives from an argument only where the callee may keep that argument in its result (O26a) - in any part of it, one of
+several results (D8c), a type argument's, an array's elements, a function value's - and a result whose type holds no
+reference derives from nothing. Through a function value
 nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
 
 A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference
@@ -5348,7 +5359,10 @@ the object - for an object of 2KB or less, from the C allocator, its region's he
 the same allocation; for a larger one, from the scopes' storage (O8b) - and what the object builds into its region
 later takes the scopes' storage as any scope does; releasing it runs its region's destructors and returns that storage
 at once; an instance or an array holding owners costs a registration where it is built, as an instance with a destructor
-does (O16). The compile-time evaluator (K1) gives owned references the same meaning, and a global holding one is set
+does (O16). An owner held because something evaluated after it may leave (O35) - a later argument, a constructor's
+own, an owned result's `return` - costs a store into a hidden slot, and a registration where a test runs: outside a
+test only what leaves to the program's own code can - a `try`, a catch clause, a clause that leaves, a join failing in
+a return's place - since a failed check ends the process there. The compile-time evaluator (K1) gives owned references the same meaning, and a global holding one is set
 when the program starts (K2).
 
 ## 9. Constructors and Destructors

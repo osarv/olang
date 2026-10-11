@@ -206,6 +206,7 @@ struct type;
     X(ERR_OWN_FUNC_VALUE_SIG,           "O36",   "%S owns a parameter or gives an owned result, so it is called by name only - a function value never owns") \
     X(ERR_OWN_SPAWN_SIG,                "O41",   "a task's call may not own a parameter or give an owned result yet - spawn a function that borrows, and move the owner after the join") \
     X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
+    X(ERR_OWN_VALUE_IN_COND,            "O34",   "a conditional's or a match's values own objects (%t), and one is chosen by copying it - borrow one, 'r mut %t& = a', then repoint it in a branch, 'if not c { r = b }'") \
     X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
     X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
     X(ERR_TAKE_BORROWED_COPY,           "E34",   "'%S' is a borrowed copy and owns nothing - take from '%S', which owns what it holds, 'take %S'") \

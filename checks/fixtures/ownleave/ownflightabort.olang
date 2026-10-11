@@ -1,0 +1,107 @@
+# own6 N3b: an owned result in flight is held while the code its return runs first runs - deferred code, a join's wait,
+# the scopes closing, its own frame's included - so a failed check there, abandoning the test (S18, P1d), releases it,
+# as does a join failing in the return's place while a test runs - not one failing in deferred code, whose own clause
+# takes it. The last test sees every owner made released.
+Made mut I64 = 0
+Dropped mut I64 = 0
+Boom mut Bool = false
+type Res struct(n I64) {
+    n
+    Made = Made + 1
+} destruct {
+    Dropped = Dropped + 1
+}
+type Hold struct() {
+    r own mut Res&
+}
+type BigHold struct() {
+    r own mut Res&
+    pad Array<I64, 20>
+}
+type Bomb struct() {
+} destruct {
+    assert not Boom
+}
+fn failing() ? { error }
+fn mkOwned(a Array<I64>&, lo I64) own mut Res& {
+    defer { println($a[lo:1].Len()) }
+    return Res(1)
+}
+fn mkValue(a Array<I64>&, lo I64) Hold {
+    h := Hold()
+    h.r = Res(2)
+    defer { println($a[lo:1].Len()) }
+    return h
+}
+fn mkBig(a Array<I64>&, lo I64) BigHold {
+    h := BigHold()
+    h.r = Res(3)
+    defer { println($a[lo:1].Len()) }
+    return h
+}
+fn mkInner(a Array<I64>&, lo I64) own mut Res& {
+    if lo > 0 {
+        {
+            defer { println($a[lo:1].Len()) }
+            return Res(4)
+        }
+    }
+    return null
+}
+fn mkFrameDies() own mut Res& {
+    b := Bomb()
+    Boom = true
+    return Res(5)
+}
+fn mkCaught(n I64) own mut Res& {
+    for i in range n {
+        try join {
+            spawn try failing()
+            return Res(6 + i)
+        } catch { }
+    }
+    return Res(9)
+}
+test "deferred code fails after an owned result is made" {
+    a := I64[1, 2, 3]
+    x := mkOwned(a, 2)
+    println($x.n)
+}
+test "deferred code fails after an owner value local is returned" {
+    a := I64[1, 2, 3]
+    y := mkValue(a, 2)
+    println($y.r.n)
+}
+test "deferred code fails after an owner value is returned through memory" {
+    a := I64[1, 2, 3]
+    y := mkBig(a, 2)
+    println($y.r.n)
+}
+test "deferred code of an inner block fails after an owned result is made" {
+    a := I64[1, 2, 3]
+    x := mkInner(a, 2)
+    println($x.n)
+}
+test "a destructor fails as the returning frame's own scope closes" {
+    x := mkFrameDies()
+    println($x.n)
+}
+test "joins failing in the place of returns, caught, then a return that stands" {
+    Boom = false
+    x := mkCaught(3)
+    assert x.n == 9
+}
+fn mkDeferJoin() own mut Res& {
+    defer {
+        try join { spawn try failing() } catch { }
+    }
+    return Res(20)
+}
+test "a join failing in deferred code replaces no return" {
+    x := mkDeferJoin()
+    assert x.n == 20
+}
+test "every owner made was released" {
+    println("made " $Made " dropped " $Dropped)
+    assert Made == Dropped
+}

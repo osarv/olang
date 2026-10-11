@@ -14923,6 +14923,9 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
             Err(ifTok, ERR_COND_BRANCH_TYPES, &a->type, &b->type);
         }
     }
+    //O34 (own6 N2): values owning objects are chosen by copying one, which would be a second owner (or a borrow built as
+    //a copy) - a reference to one, repointed in a branch, says which
+    if (TypeIsOwnValue(t)) Err(ifTok, ERR_OWN_VALUE_IN_COND, &t, &t);
     struct operand* op = operandNew(ifTok, OPERATION_COND, t);
     ListAdd(&op->args, &c);
     ListAdd(&op->args, &a);
@@ -19243,12 +19246,48 @@ static void syntaxTokensNoLambda(struct syntax* n, struct list* out) {
         else syntaxTokensNoLambda(p->sntx, out);
     }
 }
-//O26a: whether a call to m can make its result hold what its parameter idx refers to - its result borrowed from that
-//parameter, or an obligation of its body (O10b) holding the parameter's scope to outlive the result scope. A generic
-//callee, one whose body is not known, or a constructor whose instance holds the parameter (C2d) can
+//own6 N1: every scope variable a result type names (into out, canonical), at any depth - its own, a tuple's elements', a
+//struct's or an enum's type arguments', an array's element's, a function type's parameters' and result's. False where it
+//meets a kind it does not know (a type variable, an interface, a scope): what such a result may hold is not known
+static bool resultScopeVarsOf(struct type t, struct list* out, int depth) {
+    if (depth > 32) return false;
+    if (t.scopeParam && t.scopeParam != SCOPE_AMBIGUOUS) {
+        struct var* v = canonicalVar(t.scopeParam);
+        ListAdd(out, &v);
+    }
+    switch (t.bType) {
+        case BASETYPE_VOID: case BASETYPE_NULL: case BASETYPE_BOOL: case BASETYPE_BYTE: case BASETYPE_INT32:
+        case BASETYPE_INT64: case BASETYPE_FLOAT32: case BASETYPE_FLOAT64: case BASETYPE_I8: case BASETYPE_I16:
+        case BASETYPE_U16: case BASETYPE_U32: case BASETYPE_U64: case BASETYPE_F16: case BASETYPE_BF16:
+        case BASETYPE_CONST: case BASETYPE_ERROR:
+            return true;
+        case BASETYPE_ARRAY:
+            return !t.arrElem || resultScopeVarsOf(*t.arrElem, out, depth + 1);
+        case BASETYPE_STRUCT: case BASETYPE_CHOICE:
+            //(a declared type's fields have scopes of the type's own, bound per instance - C2d, O13c - which the
+            //callee's obligations on its result scope answer for; a tuple's elements are the function's)
+            if (t.isTuple)
+                for (int i = 0; i < t.vars.len; i++)
+                    if (!resultScopeVarsOf(((struct var*)ListGetIdx(&t.vars, i))->type, out, depth + 1)) return false;
+            for (int i = 0; i < t.typeArgs.len; i++)
+                if (!resultScopeVarsOf(*(struct type*)ListGetIdx(&t.typeArgs, i), out, depth + 1)) return false;
+            return true;
+        case BASETYPE_FUNC:
+            for (int i = 0; i < t.vars.len; i++)
+                if (!resultScopeVarsOf(((struct var*)ListGetIdx(&t.vars, i))->type, out, depth + 1)) return false;
+            return !t.hasRetType || !t.retType || resultScopeVarsOf(*t.retType, out, depth + 1);
+        default:
+            return false;
+    }
+}
+
 //(O38: set while the own walk runs, once every body's obligations are known - a call cycle's included, which
 //obligUnsettled marks only while bodies are still being checked)
 static bool ownObligationsKnown;
+//O26a: whether a call to m can make its result hold what its parameter idx refers to - its result borrowed from that
+//parameter, or an obligation of its body (O10b) holding the parameter's scope to outlive a scope the result names, in
+//any part of it (own6: one of several results, a type argument, an array's elements, a function value's). A generic
+//callee, one whose body is not known, or a constructor whose instance holds the parameter (C2d) can
 static bool calleeMayKeepArg(struct var* m, int idx) {
     if (!m || m->type.bType != BASETYPE_FUNC) return true;
     if (!m->type.hasRetType) return false;
@@ -19266,17 +19305,34 @@ static bool calleeMayKeepArg(struct var* m, int idx) {
     }
     struct var* sv = p->type.scopeParam ? canonicalVar(p->type.scopeParam) : NULL;
     if (!sv || m->type.resultViaTypeVar) return true;
-    if (rt.scopeParam && scopeIsParams(rt.scopeParam, p, sv)) return true; //borrowed from it
-    ensureBodyChecked(m);
-    //(a body not checked, or one in a call cycle whose late obligations are not added yet, may keep it)
-    if (m->bodyState != 2 || (canonicalVar(m)->obligUnsettled && !ownObligationsKnown)) return true;
-    struct var* rs = m->type.resultScope ? canonicalVar(m->type.resultScope) : NULL;
-    if (!rs) return false; //borrowed from another parameter
-    for (int i = 0; i < m->type.scopeObligations.len; i++) {
-        struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, i);
-        if (scopeIsParams(ob->longer, p, sv) && canonicalVar(ob->shorter) == rs) return true;
+    //own6 N1: every scope the result type names, at any depth - one of several results borrowed from the parameter is
+    //as much its result as a single one ("fn two(x Inner&) (Inner&x, I64)") - and its result scope
+    struct list named = ListInit(sizeof(struct var*));
+    if (!resultScopeVarsOf(rt, &named, 0)) { //(a kind the walk does not know: it may hold anything)
+        ListDestroy(named);
+        return true;
     }
-    return false;
+    if (m->type.resultScope) {
+        struct var* rs = canonicalVar(m->type.resultScope);
+        ListAdd(&named, &rs);
+    }
+    bool kept = false;
+    for (int k = 0; k < named.len && !kept; k++) kept = scopeIsParams(*(struct var**)ListGetIdx(&named, k), p, sv); //borrowed from it
+    if (!kept) {
+        ensureBodyChecked(m);
+        //(a body not checked, or one in a call cycle whose late obligations are not added yet, may keep it)
+        kept = m->bodyState != 2 || (canonicalVar(m)->obligUnsettled && !ownObligationsKnown);
+    }
+    //...or stored where a scope the result names leads - its body requires the parameter's to outlive it, or to be it
+    for (int i = 0; !kept && i < m->type.scopeObligations.len; i++) {
+        struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, i);
+        bool fromP = scopeIsParams(ob->longer, p, sv), toP = ob->exact && scopeIsParams(ob->shorter, p, sv);
+        if (!fromP && !toP) continue;
+        struct var* other = fromP ? ob->shorter : ob->longer;
+        for (int k = 0; other && k < named.len && !kept; k++) kept = canonicalVar(other) == *(struct var**)ListGetIdx(&named, k);
+    }
+    ListDestroy(named);
+    return kept;
 }
 static struct token* tokAt(struct list* toks, int i) {
     return i >= 0 && i < toks->len ? ListGetIdx(toks, i) : NULL;
@@ -23409,6 +23465,7 @@ struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s) {
     ListAdd(&op->comprBody, &m);
     struct list vals = SemanticMatchValues(op);
     op->type = matchValueType(ctx, &vals);
+    if (TypeIsOwnValue(op->type)) Err(op->tok, ERR_OWN_VALUE_IN_COND, &op->type, &op->type); //O34 (own6 N2), as a conditional
     return op;
 }
 
@@ -26977,6 +27034,9 @@ static void ownLoansOfBlockDeep(struct list* block, struct list* out);
 static bool ownKeptOnly;
 static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
     if (!op) return;
+    //(own6: a value whose type can hold no reference keeps nothing of what it was made from - a count, a flag, a number
+    //read through a borrow, "return b.buf.Len()" - whatever it borrowed while it was computed)
+    if (ownKeptOnly && !op->type.unknown && !typeCarriesScopes(op->type) && !TypeIsGeneric(op->type)) return;
     if (!transient) {
         for (int i = 0; i < op->ownCopyReads.len; i++) { //O32: a borrowed copy made - a borrow of each object it holds
             struct operand* r = *(struct operand**)ListGetIdx(&op->ownCopyReads, i);

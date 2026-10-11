@@ -1287,3 +1287,113 @@ scenario's seeds: none.
 - **O17's precise reading for `Sort`** (section 14.1): a callee only permuting a split value's elements is refused.
 
 Both go with the `Vec<T>` phase, each with a soundness review.
+
+## 17. own6: one of several results, conditionals of owners, a result in flight (2026-10-11)
+
+The fourth review (`/home/user/review/own6`, at 79bf11c) found the three relaxations of section 16 holding everywhere but
+one place, and four defects: N1, new in 79bf11c, and N2, N3 and N3b, present on e3ded09 too. The coordinator decided each.
+
+### 17.1 N1: a borrow handed back as one of several results (O38, D8c)
+
+`ownKeptOnly` (16.2) makes a call's result carry only the arguments `calleeMayKeepArg` says the callee may keep in its
+result. That asked the result's own scope variable and the result scope - and a multi-result result (D8c) is an
+anonymous tuple with neither, its elements carrying the scope variables. So `fn two(x Inner&) (Inner&x, I64)` "kept
+nothing", every loan on its argument was dropped, and O39, O38 and 16.2's return rule all passed: `c, k := two(h.cur);
+h.cur = null` then `c` read freed memory; through a borrowed copy, into a `List`; and `a, b := v.Two(); return a` was
+16.2's F2 again.
+
+**Decided** (the coordinator's call): `calleeMayKeepArg` walks every scope variable the result type names, at every depth -
+a tuple's elements, a struct's or an enum's type arguments, an array's element, a function type's parameters and result
+(`resultScopeVarsOf`) - and the result scope; the argument is kept when any of them is the parameter's or derived from
+it (`scopeIsParams`), or an obligation of the body ties the parameter's scope to one of them. A kind the walk does not know
+(a type variable, an interface, a scope) answers "kept" - the default is conservative. The other places that read one
+result scope as if a result were one reference were checked:
+
+- `madeAsLocal` (B11's notes) reports a tuple element of a call as built - a less precise note, nothing more;
+- `resultHome` (O26a) gives a tuple result no home unless an element of it is built (the result scope): locals are then
+  not moved there, and returning one is O14's error - conservative;
+- `return a, b` judges each value against its own element's scope (O25d per result), `return f()` passing several
+  results on as the whole value's fit (`two(local)` passed on is refused); `storageInProgram` never puts a tuple
+  call's element in the program's scope - conservative;
+- `ownKeepDests` takes an obligation reaching another parameter's scope - one a tuple element names included - as kept
+  into that argument; through a function value (T22a) a callee keeps everything; D8c's destructuring is a hidden local of
+  the tuple type, which now holds the loans, and each element's member read carries them where it holds a reference.
+
+An own reference and an owning value type are refused as tuple elements (T25e, O31), so no owned result is one of several.
+
+### 17.2 Item 5 of the decision: a value holding no reference carries no loan (O38)
+
+What a value keeps of a call's arguments is read through its type too: a value whose type can hold no reference keeps
+nothing, whatever it was read through - `return b.buf.Len()` on a borrowed copy, `return r.o.deep.text.Len()` through a
+borrow of an owner value local, a count kept across a release. 16.2's by-loans had refused them (e3ded09 printed `4 4 5`;
+79bf11c refused), and a built-in method's call is judged by its result's type like any other. O38 already said "a number,
+a `Bool`, or any value holding no reference read out of it carries nothing" - the walk now does, in its kept-only mode.
+
+### 17.3 N2: a conditional of owner value locals given to a writable reference (O34, E28)
+
+`r mut Outer& = v if c else w`, then `r.o = null`: codegen gives the conditional's value as a copy built where `r` lands
+(E28), while the own walk read it as a borrow of `v` (a by-loan), under which a release through `r` is the borrow's own.
+So `r.o = null` freed the `Inner` `v.o` still pointed to. **Decided** (the coordinator's call): a conditional or a match
+whose values are of an owning type held by value is an O34 error wherever it stands (`ERR_OWN_VALUE_IN_COND`), naming the
+form that works - `r mut Outer& = a`, then `if not c { r = b }`. The read-only form was already O39's error; a reference
+repointed in a branch is a borrow of the very owner chosen.
+
+### 17.4 N3 and N3b: an owned result in flight (O35, O37, P4b, S18)
+
+`return Res(1)`, or `return h` with an owner value local moved into the result, inside a `try join` whose task fails:
+P4b replaces the return by the join's failure, and nothing released the result (destructors never ran). In a test,
+deferred code failing a guaranteed check after the result was computed abandoned the test with the same result held
+nowhere. **Decided** (the coordinator's call; the mechanism mine): from where the `return` computes it until the function
+returns, an owned result is held in a hidden owner slot (`cgRetHold`), so the code the return runs first - deferred code,
+a join's wait, the scopes it closes - runs with it held:
+
+- outside a test only a join failing in the return's place can keep it from the caller, so the slot is made only where
+  the return crosses such a join, and that join's failing branch releases it (`cgRetHeldRelease`, in `cgLeaveJoin`);
+  a join inside the deferred code is not one the return leaves and releases nothing (its own clauses take its failure);
+- while a test runs, the slot is registered in a scope of its own whose unwind node is linked just **below** the frame's
+  own node: every block's node leads down to the frame's with links fixed when the frame starts, so a node pushed on top
+  at the return would be skipped by a block opened afterwards - the deferred code's. An unwind walks it after the
+  frame's scope, so a failed check in deferred code, in a block's destructors or in the frame's own close releases the
+  result; the frame's normal end restores the chain from below the hold node, leaving it unrun (its node and scope are
+  in the frame and take no chunk); a join failing in the return's place releases it and unlinks the node;
+- a result returned through memory (over 128 bytes) is held in a slot of its own and copied to the caller's storage once
+  nothing can keep it.
+
+No cost outside a test unless the return crosses a join that can fail (one store and one load); in a test, a few stores
+and a registration per owned return.
+
+### 17.5 Item 4 of the decision: F3's whitelist only in test builds
+
+Outside a test a failed check ends the process, which leaves no frame to release anything, and a call not tried returns
+or ends it. So `cgMayLeave` applies section 16.3's whitelist in test builds only; elsewhere an owner is held for a call
+only where a later argument leaves to the program's own code - a `try`, a catch clause, a match's or a sequence's own
+statements (`cgLeavesToProgram`). **Measured** (callgrind, `-a x86-64-v3`, `bench`'s loop of four owner-passing calls
+per turn, 1M turns): 1,570M instructions on 79bf11c, **1,223M now** - below e3ded09's 1,441M, whose rule held where a
+later argument ran code (`first(a)`), which outside a test cannot leave either.
+
+### 17.6 Tests and the fuzzer
+
+`checks/cases`: `o39tupleborrow`, `o39tuplecopy`, `o38tuplekept`, `o38tuplereturn` (N1), `o34condvalue`, `o34matchvalue`
+(N2) - every one compiles on 79bf11c. `checks/fixtures/ownleave/ownflight.olang` (N3: an owned result, an owner value
+local, one through memory and an own array, each given to nobody by a failing join, and a join failing three times
+before a return stands - `made 9 dropped 9`, 79bf11c `made 9 dropped 4`) built, `-s`, `-d` and under valgrind;
+`ownflightabort.olang` (N3b: deferred code failing after each kind of result, in an inner block, a destructor failing in
+the returning frame's own close, joins failing in a test, one failing in deferred code - `made 10 dropped 10`) with `-t`
+and under valgrind. shared.olang's new test returns and keeps counts read through borrows, bakes them (K2) and compares
+them with the run time: 735 tests.
+
+The fuzzer's own mode writes the shapes (`own6Op`): N1's three through `otwo` (kept across a release, pushed to a
+`List`, returned from a helper's owner value local), N2's conditional and match, item 5's counts (accepted), and in
+programs with destructors N3's two failing-join helpers and two N3b test blocks. On 79bf11c, own seeds 9000-9059: 189
+scenarios run, 531 refused, **22 findings**, every one an own6 shape (8 use-after-frees the sanitizer caught, 3 crashes of
+the `-b` run, 1 destructor not run, 10 tests leaving owners unreleased). Fixed, own seeds 9000-9059: 177 run, 543 refused,
+**no findings**; seeds 9100-9339: 661 run, 2219 refused, **no findings** (one `-i` run failed as the compiler was
+rebuilt under it; that seed again: none).
+
+### 17.7 Over-rejections left as they are
+
+- `x := u.Me(); x = v.Me()` into an existing local: only `:=` holds a borrow (O33), and 16.2 made `v.Me()` one, so the
+  assignment is refused where e3ded09 printed `4 5`.
+- C2d refuses an own-reference owner made from a reference to an owner value local even where O34's reach would allow
+  it (the review's `c1`, `c2`, `c4`, `c6`).
+- The O10c note "the index is held here" points at the wrong cause in the review's `e3`.
