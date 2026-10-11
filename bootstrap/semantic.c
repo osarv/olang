@@ -27349,7 +27349,9 @@ static bool ownMayReferTo(struct type res, struct type tgt, int depth) {
 static bool ownResultBuilt(struct var* f) {
     f = canonicalVar(f);
     struct type* rt = f->type.hasRetType ? f->type.retType : NULL;
-    if (!rt || !rt->structMAlloc || rt->refOwn || f->ownBorrowResult) return false;
+    //(a type-variable result bound to a reference returns what the body gives it, its argument included, O14b - so it
+    //is not new storage, "id(v.View())")
+    if (!rt || !rt->structMAlloc || rt->refOwn || f->ownBorrowResult || f->type.resultViaTypeVar) return false;
     return !rt->scopeParam || (f->type.resultScope && canonicalVar(rt->scopeParam) == canonicalVar(f->type.resultScope));
 }
 //...whether it can refer to an argument of type arg's own storage - the value it is, or names, and its parts by value

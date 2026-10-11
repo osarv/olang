@@ -1663,7 +1663,9 @@ gap that also explained two older use-after-frees (P1, P2) and a compiler crash 
      name it. Two references are never the buffer: a **built** result's top (`T&`, `T&return`) is new storage in the
      result scope, which a region outliving nothing cannot be (O33; `ownResultBuilt`), and an **own** reference refers
      only to the object it owns (a moved one leaves its slot; `take` is refused under a loan) - so `ownMayReferTo` skips
-     both, and what the result holds is still looked at. The hazards still refused: a built result that is the buffer or
+     both, and what the result holds is still looked at. A written reference result only: one written as a type
+     variable bound to a reference returns what its body gives it, its argument included (O14b), so `id(v.View())`
+     keeps the loan (`vec31typevarresult` - the first version of this relaxation let it through, found by trying it). The hazards still refused: a built result that is the buffer or
      a slice of it is O10 at its return (`vec28builtleak`), and a built result holding a reference to it keeps the loan
      (`vec29builtholds`, O38 at the callee and O39 at the caller).
    The rest of the review's list stays as recorded there: an element read through a view keeps the loan (3), a

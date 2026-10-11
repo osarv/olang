@@ -5318,7 +5318,7 @@ reference derives from nothing. An own array's elements refer outside its buffer
 neither to the argument's own storage, nor to an own array the argument's loans are on, nor to an element such an array
 holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
 from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Two references are none
-of those: a **built** result's own top (`T&` or `T&return`, not borrowed from a parameter), which is new storage in the
+of those: a **built** result's own top (`T&` or `T&return` written, not borrowed from a parameter nor a type variable's), which is new storage in the
 result scope an owned object's region, outliving nothing (O33), never is; and an own reference in a result, which refers
 only to the object it owns. So `a := v.ToArray()` and `c := v.Clone()` of a `Vec<String&>` keep their elements' text,
 and nothing of the buffer, across `v.Push(x)`. Through a function value
