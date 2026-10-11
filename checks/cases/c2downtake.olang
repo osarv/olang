@@ -1,0 +1,21 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+# moving a parameter's owner into the instance, the instance kept past what that owner refers to: must fail
+type Node struct(t String&) { t }
+type H struct() {
+    kid own mut Node& = null
+}
+type W struct(h mut H&) {
+    inner own mut Node& = take h.kid
+}
+fn main() ? {
+    h0 := H()
+    w := W(h0)
+    {
+        h := H()
+        x := $5 "abc"
+        h.kid = Node(x)
+        w = W(h)
+    }
+    a := Array<I64>(64, 9)
+    println($w.inner.t " " $a[0])
+}

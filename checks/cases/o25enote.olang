@@ -1,10 +1,11 @@
-# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# check: fail error[O25e]: these arguments live in different scopes, and the signature requires one
 # also: note: 'text' is made here, in a block that closes first - make it where 'st' lives: 'mk&st(...)'
-# never: error[O25e]
+# never: error[O10d]
 # B11: arguments a signature requires in one scope, one made in a block that closes first - one error for the one
 # cause, with a note naming the declaration to change and what to write there. (Handed to a method called on "st",
 # "text" would flow into what the function returns and be made in the result scope, O26a; through a plain function
-# the flow is not read, and the text is made in the block.)
+# the flow is not read, and the text is made in the block. It was O10d once: a slice of "text" was taken for a call
+# still landing, and landed mk's result through the variable's read - a variable's read never lands, O18a.)
 type Store struct() {
     keys mut List<String&>& = List<String&>()
 }

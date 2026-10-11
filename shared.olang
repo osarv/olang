@@ -16964,3 +16964,126 @@ test "O39: moves and releases beside a borrow, a value using what its store rele
     assert OwnBesideBaked == ownBeside(3 * OwnRun) and OwnBesideBaked == 8
     assert ownBeside(4) == 10                   # S18c: decided while compiling
 }
+
+# ---- own arrays (§8.8, T25e, O33, O34): a buffer in a region of its own, replaced and released at will ----
+type OwnBuf struct(n I64) {
+    nums own mut Array<I64>& = Array<I64>(n)    # a constructor's own field: an owner local moved into the instance
+    names own mut Array<String&>& = Array<String&>(n)
+    text own mut String& = "start"
+}
+fn (b mut OwnBuf&) label(i I64) {
+    b.names[i] = $i "-" $b.nums[i]              # built where b lives - the elements' scope - not in the buffer's region
+}
+fn ownArrSum(a Array<I64>&) I64 {
+    t := 0
+    for x in a { t += x }
+    return t
+}
+OwnArrG own mut Array<I64>& = Array<I64>(3, 7)  # a global owner, assignable through its "mut" (T2)
+fn ownArrWork(k I64) I64 {
+    b := OwnBuf(4)
+    for i in range 4 { b.nums[i] = i * k }
+    for i in range 4 { b.label(i) }
+    kept := b.names[2]                          # an element: it lives where b does, not in the buffer
+    b.names = Array<String&>(2)                 # the old buffer released
+    b.names[0] = kept
+    b.text = $b.text "+" $kept.Len()
+    moved own mut Array<I64>& = I64[x * k for x in range 5]
+    other := take moved                         # moved: nothing released, moved left empty
+    t := ownArrSum(b.nums) + ownArrSum(b.nums[1:3]) + ownArrSum(other) + moved.Len() + b.text.Len()
+    b.nums = take other                         # the old buffer released, other left empty
+    return t + ownArrSum(b.nums) + other.Len() + (1 if b.names[0] == kept else 0)
+}
+OwnArrBaked I64 = ownArrWork(3)                 # K2: computed while compiling
+test "O33/O34: own arrays built, read through borrows, replaced, moved and released - while compiling and at run time" {
+    assert OwnArrBaked == ownArrWork(3 * OwnRun) and OwnArrBaked == 95
+    assert ownArrWork(2) == 66                  # S18c: decided while compiling
+}
+test "O33: an own array's elements live where its slot's would - read back after the buffer is replaced and the arena churns" {
+    b := OwnBuf(3)
+    for i in range 3 { b.nums[i] = 10 + i }
+    for i in range 3 { b.label(i) }
+    e := b.names[1]
+    b.names = Array<String&>(1)                 # releases the buffer, not what its elements referred to
+    assert sbChurn() > 0
+    assert e == "1-11" and b.names.Len() == 1 and b.names[0] == null
+    assert ownArrSum(b.nums) == 33 and b.text == "start"
+}
+test "O34: a global own array is replaced, and a slice of one read through a borrow" {
+    assert ownArrSum(OwnArrG) == 21
+    OwnArrG = Array<I64>(2, 5)
+    assert ownArrSum(OwnArrG) == 10 and ownArrSum(OwnArrG[1:]) == 5
+    OwnArrG = null
+    assert OwnArrG.Len() == 0
+    OwnArrG = Array<I64>(3, 7)
+}
+type OwnArrHolder struct(s String&, h mut OwnKidHolder&) {
+    inner own mut OwnList& = OwnList(s.Len())   # an own field given an owner made here
+    words own mut Array<String&>& = Array<String&>(2)
+    words[0] = s
+    moved own mut OwnKid& = take h.cur          # ...or moved out of a parameter's slot
+}
+test "O34: a constructor's own fields take an owner made there or moved in - read back after the arena churns" {
+    x := $5 "abc"
+    h := OwnKidHolder()
+    h.cur = OwnKid(7)
+    w := OwnArrHolder(x, h)
+    assert sbChurn() > 0
+    assert w.inner.v == 4 and w.words[0] == "5abc" and w.words[1] == null and w.moved.n == 7 and h.cur == null
+}
+fn ownMkNode(v I64) mut OwnNode& { return OwnNode(v) }
+test "O33: a call's built result stored into an owned object's field is built in its region - read back after the arena churns" {
+    s := OwnHolder()
+    s.cur = OwnHold(1 * OwnRun)
+    s.cur.n.next = ownMkNode(6)                 # built where s.cur's object lives
+    sbChurn()
+    assert s.cur.n.next.v == 6
+}
+OwnRelNext mut I64 = 0
+OwnRelBad mut I64 = 0
+type OwnDeep struct(v I64) {
+    v
+    next own mut OwnDeep&
+} destruct {
+    if v != OwnRelNext { OwnRelBad++ }
+    OwnRelNext--
+}
+OwnForkLog mut I64 = 0
+type OwnFork struct(v I64) {
+    v
+    a own mut OwnFork&
+    b own mut OwnFork&
+} destruct {
+    if v > 0 { OwnForkLog = OwnForkLog * 10 + v }
+}
+fn ownForkRelease(depth I64) I64 {
+    OwnForkLog = 0
+    {
+        root own mut OwnFork& = OwnFork(1)
+        root.a = OwnFork(2)
+        root.a.a = OwnFork(3)
+        root.b = OwnFork(4)
+        root.b.a = OwnFork(5)
+        for i in range depth {
+            n own mut OwnFork& = OwnFork(0)
+            n.a = take root
+            root = take n
+        }
+    }
+    return OwnForkLog
+}
+test "O30/O35: a chain of owners of any length is released, each destructor in turn, its regions one small allocation each" {
+    OwnRelBad = 0
+    {
+        head own mut OwnDeep& = null
+        for i in range 300000 {
+            n own mut OwnDeep& = OwnDeep(i)
+            n.next = take head
+            head = take n
+        }
+        OwnRelNext = 299999
+    }                                           # head released: a chain far deeper than a release may nest
+    assert OwnRelNext == -1 and OwnRelBad == 0
+    assert ownForkRelease(0) == 14523           # the object's destructor, then its fields' owners, last declared first
+    assert ownForkRelease(300) == 14523         # the same order where 256 releases are already under way
+}

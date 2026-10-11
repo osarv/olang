@@ -187,12 +187,14 @@ struct type;
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
     X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so it is held only by reference: write %t&") \
     X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
-    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - an own reference is to a struct, as 'own Conn&'") \
+    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')") \
     X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
     X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type - here it is not supported yet") \
     X(ERR_OWN_BUILT_BEFORE_BORROW,      "O33",   "this value would be built where the object of '%s' lives, which a later argument reads - read it first, 'o := %s'") \
     X(ERR_OWN_TAKE_NEEDED,              "O34",   "moving out of '%s' would leave it empty - write 'take %s'") \
     X(ERR_OWN_NOT_AN_OWNER,             "O34",   "an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this %s") \
+    X(ERR_OWN_NOT_AN_ARRAY_OWNER,       "O34",   "an own array slot takes an array made here - 'Array<T>(n)', or a literal, text or join of elements referring nowhere - 'take' from another own slot, or null") \
+    X(ERR_OWN_REACH_EXACT,              "O34",   "the array's elements can be stored through, so they must refer exactly where this slot's elements do - move it into a slot whose container lives where the source's does") \
     X(ERR_OWN_REACH,                    "O34",   "the owner refers to what lives shorter than the slot it is moved into - move it where that lives") \
     X(ERR_OWN_COMPOUND,                 "O34",   "an own slot is given an owner with '=', not '%s'") \
     X(ERR_OWN_OWNER_USE,                "O34",   "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field or an own global") \

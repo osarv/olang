@@ -1729,9 +1729,14 @@ void semaCollectNames(struct semaModule* mod) {
                 collectVar(mod, firstTokOfType(actual, TOK_IDEN), false, true,
                            firstPartOfType(actual, SNTX_RECEIVER) != NULL);
                 break;
-            case SNTX_VAR_DECL:
-                collectVar(mod, firstTokOfType(actual, TOK_IDEN), hasTokOfType(actual, TOK_MUT), false, false);
+            case SNTX_VAR_DECL: {
+                //T2: "mut" at the top of a global's type makes it assignable - after a leading "own" ("G own mut T&") the
+                //type expression holds it
+                struct syntax* te = firstPartOfType(actual, SNTX_TYPE_EXPR);
+                bool mut = hasTokOfType(actual, TOK_MUT) || (te && hasTokOfType(te, TOK_OWN) && hasTokOfType(te, TOK_MUT));
+                collectVar(mod, firstTokOfType(actual, TOK_IDEN), mut, false, false);
                 break;
+            }
             case SNTX_IMPORT:
             case SNTX_TEST_DECL:
                 break;
@@ -2798,6 +2803,31 @@ static struct type* canonicalStructOf(struct type t) {
     return NULL;
 }
 
+//O39: the identity an own reference's object has, for what a release frees and a loan is on: a struct's declaration, or
+//for an array one record per element type (an array type has no declaration to point at), whatever reference, permission
+//or scope a use writes on it
+static bool ownArrayKindOk(struct type t);
+static struct list ownArrayKeys; //struct type*
+static struct type* OwnTypeKey(struct type t) {
+    if (t.bType != BASETYPE_ARRAY) return canonicalStructOf(t);
+    t.structMAlloc = false;
+    t.refMut = false;
+    t.refOwn = false;
+    t.scopeParam = NULL;
+    t.scopeDepth = 0;
+    t.scopeWritten = false;
+    t.scopeUnknown = false;
+    if (!ownArrayKeys.elemSize) ownArrayKeys = ListInit(sizeof(struct type*));
+    for (int i = 0; i < ownArrayKeys.len; i++) {
+        struct type* k = *(struct type**)ListGetIdx(&ownArrayKeys, i);
+        if (TypeIsSame(*k, t)) return k;
+    }
+    struct type* k = MallocOrCrash(sizeof(struct type));
+    *k = t;
+    ListAdd(&ownArrayKeys, &k);
+    return k;
+}
+
 static void refreshTypeSnapshot(struct type* ft) {
     if (ft->bType == BASETYPE_ARRAY && ft->arrElem) {
         struct type* elem = MallocOrCrash(sizeof(struct type)); //never write through a shared element
@@ -3012,6 +3042,16 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //constructor being emitted with a field whose type is still a variable.
     spec->typeParams = argsStillGeneric ? generic->typeParams : ListInit(sizeof(struct str));
     refreshStructSnapshots(spec);
+    //T25e/G18: what an own array's elements may be, asked again once its type variables are bound
+    for (int i = 0; !argsStillGeneric && i < spec->vars.len; i++) {
+        struct var* f = ListGetIdx(&spec->vars, i);
+        if (f->type.refOwn && f->type.bType == BASETYPE_ARRAY && !ownArrayKindOk(f->type)) {
+            struct type shown = f->type;
+            shown.refOwn = shown.refMut = shown.scopeWritten = false;
+            shown.scopeParam = NULL;
+            Err(instSite.type != TOK_NONE ? instSite : generic->tok, ERR_OWN_KIND_NOT_YET, &shown);
+        }
+    }
 
     //D13/D14a re-checked against the SUBSTITUTED field types. The generic's own declaration cannot answer
     //this: a "<T>[n]&s" field's element type is a type variable, and a type variable contains no reference,
@@ -5443,6 +5483,19 @@ static struct token typeExprOwnTok(struct syntax* typeExprNode) {
     return (struct token){0};
 }
 
+//T25e: an own array - its buffer one owned object - is of a run-time length, and its elements own nothing and hold no
+//reference by value: numbers and plain values, or references, whose referents live where the slot's container keeps
+//them (O33). A type variable is asked again once it is bound (ownArrayElemsOk, per instantiation)
+static bool ownArrayElemsOk(struct type e) {
+    if (e.unknown) return true;
+    if (e.refOwn || TypeIsOwning(e)) return false;
+    if (e.structMAlloc || e.bType == BASETYPE_FUNC || e.bType == BASETYPE_TYPEVAR || TypeIsGeneric(e)) return true;
+    return !TypeHoldsReferences(e);
+}
+static bool ownArrayKindOk(struct type t) {
+    return t.bType == BASETYPE_ARRAY && t.arrMalloc && t.arrElem && ownArrayElemsOk(*t.arrElem);
+}
+
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
     bool ownHere = ownAllowed;
     ownAllowed = false;
@@ -5472,7 +5525,7 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
         if (!TypeIsPermRef(t) && t.bType != BASETYPE_TYPEVAR) {
             shown.structMAlloc = false;
             Err(ot, ERR_OWN_ON_VALUE, &shown, &shown);
-        } else if (t.bType != BASETYPE_STRUCT || t.isTuple) {
+        } else if ((t.bType != BASETYPE_STRUCT || t.isTuple) && !ownArrayKindOk(t)) {
             shown.scopeParam = NULL;
             shown.scopeWritten = false;
             Err(ot, ERR_OWN_KIND_NOT_YET, &shown);
@@ -6913,6 +6966,9 @@ bool scopeOutlives(struct var* func, struct var* longer, int longerDepth, struct
     //(O4a), and the callee's body is bracketed by the call, so every caller scope outlives it.
     if (longer == NULL && shorter == NULL) return shorterDepth == 0 || longerDepth <= shorterDepth;
     if (longer == shorter) return true;
+    //(a target "accepting any scope" - a bare field or element, whose container's scope is what the store is judged by
+    //(O20) - accepts a region too: "s.cur.n = mkNode(5)" builds the node where s.cur's object lives, its region)
+    if (shorter == NULL && shorterDepth == 0) return true;
     //O33: a region outlives no scope but itself, and is outlived by what outlives its reach - the scope its slot lives
     //in, which it is released by at the latest. A region's reach is never a region (ownBorrowRead)
     if (longer && longer->isRegion) return false;
@@ -8912,9 +8968,20 @@ static struct operand* ownBorrowRead(struct operand* op) {
     struct var* lv = NULL; //where the slot lives (regionLife)
     int ld = 0;
     bool lu = false;
+    bool isArr = op->type.bType == BASETYPE_ARRAY;
     if (op->opType == OPERATION_MEMBER) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
-        ownReachOfBase(ctx, base, &rv, &rd, &ru);
+        if (isArr) {
+            //O33: an own array's reach is where its elements' referents live - where the slot's container keeps them, as a
+            //plain array in the slot would have: the read's own scope, before it is made a borrow
+            struct var* ev;
+            int ed;
+            bool eu;
+            if (!RefExactScope(ctx, op, true, &ev, &ed, &eu)) { ev = SCOPE_AMBIGUOUS; ed = 0; eu = false; }
+            rv = ev && ev != SCOPE_AMBIGUOUS ? canonicalVar(ev) : ev;
+            rd = ed;
+            ru = eu;
+        } else ownReachOfBase(ctx, base, &rv, &rd, &ru);
         root = ownRootOf(ctx->func, base, &rootParam, &rootLocal);
         struct var* B = ownRegionOf(base);
         if (!B) { //(what lives in a region - a field of an owned object reached through a plain reference in it - lives there)
@@ -8946,7 +9013,8 @@ static struct operand* ownBorrowRead(struct operand* op) {
     R->regionLifeUnnamed = lu;
     R->regionRootLocal = rootLocal;
     R->regionSlot = op;
-    R->regionType = canonicalStructOf(op->type);
+    R->regionType = OwnTypeKey(op->type);
+    R->regionArray = isArr;
     bool writable = op->type.refMut && OperandIsMutableLvalue(op);
     op->ownOrig = MallocOrCrash(sizeof(struct type));
     *op->ownOrig = op->type;
@@ -9525,7 +9593,10 @@ bool callIsLanding(struct operand* op) {
         for (int i = 0; i < vs.len; i++) if (callIsLanding(*(struct operand**)ListGetIdx(&vs, i))) return true;
         return false;
     }
-    //an enum case built with a payload binds its scopes as a call does (T17c), and lands as one
+    //an enum case built with a payload binds its scopes as a call does (T17c), and lands as one - a variable's read never:
+    //it is existing storage, whatever bindings the call it was declared from carried ("w := mk()" left mk's result to
+    //land in w's block, and a later "w.inner.t" handed to a call re-landed mk's binding through the read's shared copy)
+    if (op->opType == OPERATION_READ_VAR) return false;
     if (op->opType != OPERATION_FUNCCALL && op->scopeBindings.len == 0) return false;
     if ((opIsCtorCall(op) || opIsEnumCtor(op)) && !op->ctorLanded) return true; //C2d: its instance follows it too
     for (int i = 0; i < op->scopeBindings.len; i++) {
@@ -9579,7 +9650,7 @@ static void landCallIn(struct operand* op, struct var* dst, int depth, bool prog
         for (int i = 0; i < vs.len; i++) landCallIn(*(struct operand**)ListGetIdx(&vs, i), dst, depth, program);
         return;
     }
-    if (!op || (op->opType != OPERATION_FUNCCALL && op->scopeBindings.len == 0)) return;
+    if (!op || op->opType == OPERATION_READ_VAR || (op->opType != OPERATION_FUNCCALL && op->scopeBindings.len == 0)) return;
     if ((opIsCtorCall(op) || opIsEnumCtor(op)) && !op->ctorLanded) {
         op->ctorLanded = true;
         op->landedTo = dst;
@@ -12801,6 +12872,15 @@ static struct operand* operandIndexAt(struct operand* base, struct operand* inde
     if (!TypeIsInt(index->type)) Err(index->tok, ERR_INDEX_NOT_INT, &index->type);
 
     struct type elemT = *base->type.arrElem;
+    //O33: an own array's buffer is a region of its own, but a reference element refers where the slot's container keeps
+    //it - the region's reach - so the index reads the borrow as the plain array the slot would hold without "own": every
+    //walk from the element to where it refers (O20) then finds that. A value element is left reading the buffer, whose
+    //storage it is (an own array holds none that refers anywhere, T25e)
+    struct var* R = ownRegionOf(base);
+    if (R && R->regionArray && (elemT.structMAlloc || elemT.bType == BASETYPE_FUNC)) {
+        base->type.scopeParam = R->regionReach;
+        base->type.scopeDepth = R->regionReach ? 0 : R->regionReachDepth;
+    }
     elemT.scopeDepth = base->type.scopeDepth; //O2a/O20: an element lives where its container does
     struct operand* op = operandNew(tok, OPERATION_INDEX, elemT);
     ListAdd(&op->args, &base);
@@ -17873,6 +17953,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
     }
     if (op->opType == OPERATION_READ_VAR && op->readVar) {
         struct var* v = canonicalVar(op->readVar);
+        if (asRef && op->ownOrig && op->ownRegion) { *outVar = op->ownRegion; return true; } //O32: a borrow, a global's too
         if (v->owner) { *unnamed = true; return true; } //a global
         bool isParam = ctx && ctx->func && varIsParamOf(v, ctx->func);
         //a value local's own storage is its block, wherever its references were built (valueHome) - which is what a
@@ -19292,6 +19373,31 @@ struct operand* buildTake(struct checkCtx* ctx, struct operand* place, struct to
     return op;
 }
 
+//O33: whether an own array's elements must refer exactly where its slot's elements do - references something can be
+//stored through (O25g), as a plain array's would
+static bool ownArrayElemsExact(struct type e) {
+    return e.structMAlloc ? RefNarrowingMatters(e) : TypeHoldsReferences(e);
+}
+static bool ownSameArray(struct type a, struct type b) {
+    if (a.bType != BASETYPE_ARRAY || b.bType != BASETYPE_ARRAY || !a.arrElem || !b.arrElem) return false;
+    if ((a.owner != NULL) != (b.owner != NULL) || (a.owner && (a.owner != b.owner || !StrCmp(a.name, b.name)))) return false;
+    return typeSameNested(*a.arrElem, *b.arrElem);
+}
+//O34: a new array made where an own array slot receives it - "Array<T>(n)" (zero values, or a fill referring nowhere), and
+//for elements that carry no scopes a literal, text, a join or a comprehension: it refers to nothing, so its buffer may be
+//a region of its own wherever the slot's elements live
+static bool ownFreshArray(struct operand* val, struct type slotT) {
+    if (!ownSameArray(val->type, slotT)) return false;
+    if (val->opType == OPERATION_SIZED_ARRAY_ALLOC) {
+        if (val->args.len < 2) return true;
+        struct operand* f = *(struct operand**)ListGetIdx(&val->args, 1);
+        return f->isNullLiteral || f->zeroBits || !typeCarriesScopes(*slotT.arrElem);
+    }
+    if (typeCarriesScopes(*slotT.arrElem)) return false;
+    return (val->isLiteral && val->opType == OPERATION_NONE) || OperandIsWrittenText(val) || val->opType == OPERATION_STR_OF
+           || val->opType == OPERATION_CONCAT || val->opType == OPERATION_COMPREHENSION;
+}
+
 //O34: what a move position receives, its slot's reach (rv, rd, ru) - an owner, or null. An owner is a constructor call
 //made here, built in a new region of its own whose reach is the slot's (so what it refers to outlives the slot, C2d), or
 //one taken from another own slot whose reach outlives this one's. A borrow owns nothing: it is taken from its slot
@@ -19304,6 +19410,37 @@ static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type s
         if (ru || rv == SCOPE_AMBIGUOUS || S->regionReach == SCOPE_AMBIGUOUS
                 || !scopeCanFlowInto(ctx->func, S->regionReach, S->regionReachDepth, rv, rd))
             Err(val->tok, ERR_OWN_REACH);
+        //...and an array whose elements can be stored through refers exactly where the slot's elements do (O25g): a store
+        //through one there builds where the slot's are, and hangs it off what lives where the moved one's were
+        else if (S->regionArray && slotT.arrElem && ownArrayElemsExact(*slotT.arrElem)
+                 && !sameExactScope(canonicalVar(S->regionReach), S->regionReach ? 0 : S->regionReachDepth,
+                                    rv ? canonicalVar(rv) : NULL, rv ? 0 : rd))
+            Err(val->tok, ERR_OWN_REACH_EXACT);
+        return;
+    }
+    if (slotT.bType == BASETYPE_ARRAY) { //O34: a new array made here - its buffer a region of its own
+        if (val->ownOrig) {
+            const char* t = ownPlaceText(val);
+            Err(val->tok, ERR_OWN_TAKE_NEEDED, t, t);
+            return;
+        }
+        //T29/T29c: written text or a literal adapts to a declared array type ("text own mut String& = "a"") as it would to
+        //the slot's reference without "own"
+        if (!val->type.owner && slotT.owner && (val->isLiteral || OperandIsWrittenText(val))) {
+            struct type plain = slotT;
+            plain.refOwn = false;
+            (void)OperandFitsType(ctx->func, val, plain);
+        }
+        if (!ownFreshArray(val, slotT)) {
+            if (val->opType == OPERATION_COND || val->opType == OPERATION_MATCH) Err(val->tok, ERR_OWN_IN_COND);
+            else Err(val->tok, ERR_OWN_NOT_AN_ARRAY_OWNER);
+            return;
+        }
+        struct var* R = ownRegionNew(val->tok, rv, rd, ru, OWN_ROOT_LOCAL, -1);
+        R->regionType = OwnTypeKey(slotT);
+        R->regionArray = true;
+        val->ownNewRegion = true;
+        val->ownRegion = R;
         return;
     }
     if (val->ownOrig) {
@@ -19313,7 +19450,7 @@ static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type s
     }
     if (opIsCtorCall(val) && ownSameStruct(val->type, slotT) && !val->isTried) {
         struct var* R = ownRegionNew(val->tok, rv, rd, ru, OWN_ROOT_LOCAL, -1);
-        R->regionType = canonicalStructOf(slotT);
+        R->regionType = OwnTypeKey(slotT);
         val->ownNewRegion = true;
         val->ownRegion = R;
         landCall(val, R, 0);
@@ -19358,10 +19495,27 @@ static bool ownCtorPlain(struct operand* call, int depth) {
     return true;
 }
 
-//O34: a local - a constructor's field among them - or a global declared own: an owner local, released at its block's end
-//unless moved on (codegen). Its reach (O33) is what its initializer needs: a constructor call referring to nothing outside
-//it, or null, needs nothing - the program's scope, so the owner may be moved anywhere; "take x" what x's needed; any other
-//constructor call its block (the instance's scope for a constructor's field, C2g)
+//O33: what an owner local's initializer needs (its reach): "take x" what x's needed; an own array where its elements'
+//referents live - nowhere for elements that carry no scopes, a global's the program's, else the block it is declared in,
+//what is stored in its elements kept there; a constructor call referring to nothing outside it, or null, nothing - the
+//program's scope, so the owner may be moved anywhere; any other constructor call its block (a constructor's field: the
+//instance's scope, C2g)
+static void ownDeclReach(struct checkCtx* ctx, struct type declType, struct operand* rhs, struct var** reach,
+                         int* reachDepth, bool* reachUnnamed) {
+    *reach = NULL;
+    *reachDepth = ctx->blockDepth;
+    *reachUnnamed = false;
+    if (rhs && rhs->opType == OPERATION_TAKE && rhs->ownRegion) {
+        *reach = rhs->ownRegion->regionReach;
+        *reachDepth = rhs->ownRegion->regionReachDepth;
+        *reachUnnamed = rhs->ownRegion->regionReachUnnamed;
+    } else if (declType.bType == BASETYPE_ARRAY)
+        *reachUnnamed = !ctx->func || !declType.arrElem || !typeCarriesScopes(*declType.arrElem);
+    else if (!rhs || rhs->isNullLiteral || (opIsCtorCall(rhs) && ownCtorPlain(rhs, 0))) *reachUnnamed = true;
+}
+
+//O34: a local or a global declared own: an owner local, released at its block's end unless moved on (codegen), its reach
+//(O33) what its initializer needs (ownDeclReach). A constructor's field is one too, declared by buildTypeBodiesCtor
 static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok, struct type declType, struct operand* rhs,
                                      struct syntax* exprNode) {
     declType.scopeParam = NULL;
@@ -19372,15 +19526,10 @@ static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok,
         want.refOwn = false;
         rhs = buildExpecting(ctx, exprNode, &want);
     }
-    struct var* reach = NULL;
-    int reachDepth = ctx->blockDepth;
-    bool reachUnnamed = false;
-    if (!rhs || rhs->isNullLiteral || (opIsCtorCall(rhs) && ownCtorPlain(rhs, 0))) reachUnnamed = true;
-    else if (rhs->opType == OPERATION_TAKE && rhs->ownRegion) {
-        reach = rhs->ownRegion->regionReach;
-        reachDepth = rhs->ownRegion->regionReachDepth;
-        reachUnnamed = rhs->ownRegion->regionReachUnnamed;
-    }
+    struct var* reach;
+    int reachDepth;
+    bool reachUnnamed;
+    ownDeclReach(ctx, declType, rhs, &reach, &reachDepth, &reachUnnamed);
     if (rhs) ownMoveInto(ctx, rhs, declType, reach, reachDepth, reachUnnamed);
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
     v->ownReachSet = true;
@@ -21827,13 +21976,16 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         refT.arrElem = src->type.arrElem;
         refT.arrMalloc = true;
         refT.structMAlloc = true;
+        //O33: a borrow of an own array is held where its region is - taken before the fit, which a region, outliving
+        //nothing, would not pass at the bare type
+        bool unnamed = false;
+        bool adopted = src->ownOrig && src->ownRegion && adoptInitializerScope(&wctx, &refT, src, &unnamed);
         bool judged = splitBorrowJudgedElsewhere;
         splitBorrowJudgedElsewhere = true;
         reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
         splitBorrowJudgedElsewhere = judged;
-        bool unnamed = false;
         landWalkedByObligations(&wctx, src); //O18c
-        if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
+        if (!adopted && !adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         struct token at = forInHiddenTok(kw, "Arr");
         arr = scopeDeclare(wctx.mod, wctx.scope, at.str, at, refT, true);
         arr->scopeUnnamed = unnamed;
@@ -25495,7 +25647,20 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
         //initializer's was, as an ordinary local's is its block: "q := p" is not the parameter's slot, depth 2)
         struct type fieldAsLocal = field->type;
         if (!fieldAsLocal.scopeParam && (!fieldAsLocal.structMAlloc || fieldAsLocal.scopeDepth == 0)) fieldAsLocal.scopeDepth = 1;
-        if (rhsNode) {
+        //O34: an own field is an owner local of the constructor, moved into the instance as it is assembled. Its reach
+        //(O33) is the instance's scope - the constructor's top level (C2g) - as a read of the field through the instance
+        //finds it (ownReachOfBase), so an object moved or built into it refers only to what outlives the instance (C2d);
+        //an own array whose elements carry no scopes needs nothing
+        bool ownField = typeExprNode && field->type.refOwn;
+        int ownReachDepth = 1;
+        bool ownReachUnnamed = field->type.bType == BASETYPE_ARRAY && field->type.arrElem
+                               && !typeCarriesScopes(*field->type.arrElem);
+        if (rhsNode && ownField) {
+            struct type want = field->type;
+            want.refOwn = false;
+            fieldOp = buildExpecting(&cctx, rhsNode, &want);
+            ownMoveInto(&cctx, fieldOp, field->type, NULL, ownReachDepth, ownReachUnnamed);
+        } else if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
             if (typeExprNode) {
                 int errsFieldFit = ErrMsgGetNErrors();
@@ -25578,6 +25743,12 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
             if (!fieldAsLocal.scopeParam && (!fieldAsLocal.structMAlloc || fieldAsLocal.scopeDepth == 0)) fieldAsLocal.scopeDepth = 1;
             struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, fieldAsLocal, true);
             local->scopeBindings = field->scopeBindings;
+            if (ownField) {
+                local->ownReachSet = true;
+                local->ownReach = NULL;
+                local->ownReachDepth = ownReachDepth;
+                local->ownReachUnnamed = ownReachUnnamed;
+            }
             struct statement decl = (struct statement){0};
             decl.sType = STATEMENT_VAR_DECL;
             decl.var = *local;
@@ -26163,9 +26334,10 @@ static bool ownTypeIn(struct list* l, struct type* t) {
 static void ownHeld(struct type* t, struct list* out) {
     if (!t || ownTypeIn(out, t)) return;
     ListAdd(out, &t);
+    if (t->bType != BASETYPE_STRUCT) return; //(an own array's elements own nothing, T25e)
     for (int i = 0; i < t->vars.len; i++) {
         struct var* f = ListGetIdx(&t->vars, i);
-        if (f->type.refOwn) ownHeld(canonicalStructOf(f->type), out);
+        if (f->type.refOwn) ownHeld(OwnTypeKey(f->type), out);
     }
 }
 
@@ -26302,9 +26474,14 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
                        !place && (transient || !typeCarriesScopes(op->type)), place);
         return;
     case OPERATION_INDEX:
-        if (op->args.len)
-            ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out,
-                       !place && (transient || !typeCarriesScopes(op->type)), place);
+        //(a reference element of an own array refers where the slot's container keeps it, not into the buffer: what is
+        //read out of one borrows nothing of the buffer, O33)
+        if (op->args.len) {
+            struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+            struct var* R = ownRegionOf(b);
+            bool outside = R && R->regionArray && (op->type.structMAlloc || op->type.bType == BASETYPE_FUNC);
+            ownLoansIn(b, out, !place && (transient || outside || !typeCarriesScopes(op->type)), place);
+        }
         for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
         return;
     case OPERATION_EQ:
@@ -26597,7 +26774,7 @@ static void ownConflict(struct list* types, struct operand* chainOf, int root, s
 //O35/O39: an own slot let go of - assigned, or taken out of (move): what it held may be freed, or leaves the tree it was
 //reached through
 static void ownSlotRelease(struct operand* place, struct token tok, const char* what, bool move) {
-    struct type* t = canonicalStructOf(place->type);
+    struct type* t = OwnTypeKey(place->type);
     if (!t) return;
     struct operand* base = place->opType == OPERATION_MEMBER && place->args.len ? *(struct operand**)ListGetIdx(&place->args, 0)
                                                                                : NULL;
@@ -26677,6 +26854,7 @@ static int ownRelRoot(struct ownRel* r, struct operand* call, int* param, struct
 //what they hold (ownHeld): what rendering or comparing it may read
 static void ownReachTypes(struct type t, struct list* out, struct list* seen, int depth) {
     if (depth > 64) return;
+    if (t.bType == BASETYPE_ARRAY && t.refOwn) ownHeld(OwnTypeKey(t), out);
     if (t.bType == BASETYPE_ARRAY) {
         if (t.arrElem) ownReachTypes(*t.arrElem, out, seen, depth + 1);
         return;

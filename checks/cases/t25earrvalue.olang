@@ -1,0 +1,8 @@
+# check: fail error[T25e]: 'own' on Array<P>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
+# a value element holding a reference: not yet (T25e)
+type P struct(s String&, n I64) { s
+ n }
+type B struct() {
+    data own mut Array<P>& = null
+}
+fn main() ? { b := B() }

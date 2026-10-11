@@ -1,0 +1,17 @@
+# check: fail error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+# an element text that dies before the container: must fail
+type B struct() {
+    data own mut Array<String&>& = null
+}
+fn fill(b mut B&) {
+    b.data = Array<String&>(2)
+    for i in range 2 {
+        t := $i
+        b.data[i] = t
+    }
+}
+fn main() ? {
+    b := B()
+    fill(b)
+    println(b.data[0])
+}

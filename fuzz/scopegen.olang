@@ -94,6 +94,8 @@ DtorPrelude := (
 # payload, and copies of an enum's payload passed on), so that a run finds what is not known yet; set by "fuzz scope ...
 # avoid". Built without it, a program is the whole of what the generator writes
 AvoidKnown mut Bool = false
+# every scenario an own one (§8.8), set by "fuzz scope ... own"
+OwnOnly mut Bool = false
 
 # the types and helpers every program has
 Prelude := (
@@ -263,15 +265,39 @@ Prelude := (
     "type OHold struct() {\n"
     "    cur own mut ONode&\n"
     "    other own mut ONode&\n"
+    "    buf own mut Array<I64>&                # own arrays: a buffer in a region of its own, its elements living where h does\n"
+    "    nodes own mut Array<mut Node&>&\n"
+    "    text own mut String& = \"t\"\n"
     "}\n"
     "fn onode(o ONode&) I64 {\n"
     "    if o == null { return 0 }\n"
     "    return o.v * 7 + chain(o.n)\n"
     "}\n"
+    "fn osum(a Array<I64>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for x in a { t = t * 31 + x }\n"
+    "    return t\n"
+    "}\n"
     "fn ohash(h OHold&) I64 {\n"
     "    t I64 = onode(h.cur) * 31 + onode(h.other)\n"
     "    if h.cur != null { t = t * 31 + onode(h.cur.sub) }\n"
-    "    return t\n"
+    "    t = t * 31 + osum(h.buf)\n"
+    "    for n in h.nodes { t = t * 31 + chain(n) }\n"
+    "    return t * 31 + h.text.Len() + I64(h.text[h.text.Len() - 1])\n"
+    "}\n"
+    "fn ofill(h mut OHold&, v I64) {\n"
+    "    h.nodes = Array<mut Node&>(3)\n"
+    "    for i in range 3 { h.nodes[i] = Node(v + i) }\n"
+    "}\n"
+    "fn ogrowAt(a mut Array<mut Node&>&, v I64) {\n"
+    "    if a.Len() > 0 and a[0] != null { a[0].next = Node(v) }\n"
+    "}\n"
+    "# a holder whose constructor gives its own fields owners made there\n"
+    "type OBuf struct(v I64) {\n"
+    "    buf own mut Array<I64>& = Array<I64>(3, v)\n"
+    "    nodes own mut Array<mut Node&>& = Array<mut Node&>(2)\n"
+    "    nodes[0] = Node(v)\n"
+    "    kid own mut ONode& = ONode(v)\n"
     "}\n"
     "fn ogrow(o mut ONode&, v I64) { o.n.next = Node(v) }\n"
     "fn (o mut ONode&) Grow(v I64) { o.n.next = mkChain(v) }\n"
@@ -733,9 +759,17 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
 fn (g mut SG&) ownOp(h String&, ind String&) String& {
     v := g.val()
-    k := g.r(26)
+    k := g.r(37)
     c := $h ".cur"
     o := $h ".other"
+    if k >= 27 { return g.ownArrOp(h, ind, k - 27, v) }
+    if k == 26 {    # a chain of owners deeper than a release nests (O35), built through owner locals and released later
+        x := g.name("x")
+        y := g.name("y")
+        return ($ind "{\n" $ind "    " $x " own mut ONode& = ONode(" $v ")\n" $ind "    for i in range 260 + " $v " % 9 {\n" $ind "        "
+                $y " own mut ONode& = ONode(" $v " + i)\n" $ind "        " $y ".n.next = Node(i)\n" $ind "        " $y ".sub = take " $x
+                "\n" $ind "        " $x " = take " $y "\n" $ind "    }\n" $ind "    churn()\n" $ind "    " $c " = take " $x "\n" $ind "}\n")
+    }
     if k == 0 { return $ind $c " = ONode(" $v ")\n" }
     if k == 1 { return $ind $o " = ONode(" $v ")\n" }
     if k == 2 { return $ind $c " = take " $o "\n" }
@@ -811,6 +845,40 @@ fn (g mut SG&) ownOp(h String&, ind String&) String& {
     }
     if g.chance(50) { return $ind "if " $c " != null and " $c ".sub != null { ogrow(" $c ".sub, " $v ") }\n" }
     return $ind "if " $c " != null { osetN(Node(" $v "), " $c ") }\n"    # built before its region is read (O33: refused)
+}
+
+# a statement on h's own arrays: new buffers, writes, a buffer moved through an owner local and back, elements kept
+# across a release of their buffer (they live where h does), a constructor's own fields, and a borrow of the buffer - a
+# slice - kept across its release, which the checker must refuse (O39)
+fn (g mut SG&) ownArrOp(h String&, ind String&, k I64, v I64) String& {
+    b := $h ".buf"
+    n := $h ".nodes"
+    if k == 0 { return $ind $b " = Array<I64>(" $(v % 5 + 1) ", " $v ")\n" }
+    if k == 1 { return $ind $b " = I64[x * " $v " for x in range " $(v % 4 + 1) "]\n" }
+    if k == 2 { return $ind "if " $b ".Len() > 0 { " $b "[0] = " $b "[0] + " $v " }\n" }
+    if k == 3 {    # moved out to an owner local, the arena churned, moved back
+        x := g.name("x")
+        return $ind "{\n" $ind "    " $x " := take " $b "\n" $ind "    churn()\n" $ind "    " $b " = take " $x "\n" $ind "}\n"
+    }
+    if k == 4 { return $ind "ofill(" $h ", " $v ")\n" }
+    if k == 5 {    # an element kept across a release of its buffer: it lives where h does
+        e := g.name("e")
+        return ($ind "if " $n ".Len() > 0 {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n " = Array<mut Node&>(1)\n" $ind
+                "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
+    }
+    if k == 6 { return $ind "ogrowAt(" $n ", " $v ")\n" }
+    if k == 7 { return $ind $h ".text = $" $h ".text \"" $(v % 10) "\"\n" }
+    if k == 8 {    # a constructor's own fields, read back after a churn
+        o := g.name("o")
+        return ($ind $o " := OBuf(" $v ")\n" $ind "churn()\n" $ind $b " = take " $o ".buf\n" $ind $h ".other = take " $o ".kid\n" $ind
+                "if " $n ".Len() > 0 { " $n "[0] = " $o ".nodes[0] }\n")
+    }
+    if g.chance(50) {    # a slice of the buffer kept across its release (O39: refused)
+        s := g.name("s")
+        return ($ind $s " := " $b "[0:]\n" $ind $b " = Array<I64>(2, " $v ")\n" $ind "churn()\n" $ind "if " $s ".Len() > 0 { " $b
+                "[0] = " $s "[0] }\n")
+    }
+    return $ind "if " $n ".Len() > 0 and " $n "[0] != null { " $n "[0].next = Node(" $v ") }\n"
 }
 
 # ---- Str scenarios ----
@@ -956,6 +1024,7 @@ fn Scenario(seed U64, k I64) String& {
     g.k = k
     g.dtors = HasDtors(seed)
     t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
+    if OwnOnly { t = 11 }
     g.global = t == 9
     decl String& = $Decls[t]
     check String& = $Checks[t]

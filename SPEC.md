@@ -977,8 +977,10 @@ reference's scope being its object's region (O33). A type holding an own referen
 of one, an `Array<own T&, N>` held by value, transitively - is an **owning type** (O31), copied only as §8.8 says.
 
 `own` may be written on a field's type, an element or type argument (`List<own Msg&>`, `Map<I64, own Conn&>`), a
-local, a parameter, a result and a global. *(§8.8, not yet implemented: only a reference to a struct type, as a field's,
-a local's or a global's type - anything else is a compile-time error saying it is not supported yet.)* It is a
+local, a parameter, a result and a global. *(§8.8, not yet implemented: only a reference to a struct type, or to an
+array of a run-time length whose elements are numbers, values holding no reference, references or function values
+(`own mut Array<I64>&`, `own Array<Node&>&`, `own mut String&`), as a field's, a local's or a global's type - anything
+else is a compile-time error saying it is not supported yet, re-checked for each instantiation (G18).)* It is a
 compile-time error before anything that is not a reference (`own
 I64`, `own Point`, a function type), on a receiver (a method is called on a borrow, O36), in a function type (O36), in
 an `extern` declaration (X2), and in an enum's payload - an enum value is copied freely and nothing can take a payload
@@ -5007,8 +5009,9 @@ the scope it was built in (where its constructor's instance landed, C2d) and des
 
 ### 8.8 Owned references
 
-> **Partly implemented.** The compiler accepts `own` on a reference to a struct type as the type of a field, a local
-> or a global, and `take` of such a slot: O30-O35 and O38-O42 hold for these. Not yet: `own` anywhere else (T25e: a
+> **Partly implemented.** The compiler accepts `own` on a reference to a struct type, or to an array of a run-time length
+> (T25e), as the type of a field, a local or a global, and `take` of such a slot: O30-O35 and O38-O42 hold for these.
+> Not yet: `own` anywhere else (T25e: a
 > compile-time error saying so) and with it owning parameters and owned results (O36, O37), M19d's own elements,
 > `TakeAt`, `SwapTake`, `Take` and `Vec`; an owning struct held by value, and so borrowed copies (O31, O32); an owner
 > local moved by its last use without `take`, and an owner given by a conditional, a match, an array literal, a
@@ -5055,6 +5058,10 @@ owner:
   it is read from it as from a slot, giving a borrow; none may be moved out of it (E34), assigned, or given where an
   owner goes (O34); nothing in it is released when it ends. Its other parts are its own, as any copy's are.
 
+An own array's object is its buffer, and its elements are not owned objects: an element read through a borrow of the
+array - indexed, walked by `for ... in` - is what a plain array in that slot would give, its references living where
+that array's elements' would (O33); a slice of the borrow is a borrow of the same object.
+
 An owned object is part of its owner, so **ownership is deep**: a borrow read from a slot reached read-only (T25c - an
 immutable global, through a read-only reference, a read-only or a borrowed copy, a capture) is read-only, whatever the
 own reference's own permission. Reading is how `$` (E11a), `==` (E10), `is` (E10c), `match` (S12), `for ... in` (S9a),
@@ -5077,6 +5084,12 @@ block (O25a), where no borrow does. A reference local given borrows of different
 them where it is **not known** (O12): it may be read, walked, compared and lent, but nothing is built into or stored
 through it. *(Not yet implemented: a `:=` local holds the borrow it was declared with and no other - given a borrow of
 another read, it is O10's error.)*
+
+An own array's region holds its buffer alone. What its elements refer to lives in the slot's reach (O34), exactly
+where a plain array in that slot keeps its elements' referents: a temporary stored in an element is built there, not
+in the region, an element read out of it lives there, and releasing the array releases its buffer and nothing its
+elements refer to. *(Not yet implemented: an element that is a value holding a reference - a struct, an enum or an
+`Array<T, N>` by value - is a compile-time error (T25e).)*
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
 borrowed result that is the object (O37) - or through a reference this function read out of such a borrow. A borrow of
@@ -5112,11 +5125,20 @@ owner whose reach outlives the slot's or is it:
 `x := e` declares an owner local exactly when `e` is an owner - a value made there, an owned result, `take p`; from a
 slot it declares a borrow or a borrowed copy (O32).
 
+An own array slot's owner is a new array: `Array<T>(n)` - its elements zero values, or a fill that is `null`, zero bits,
+or, for elements referring nowhere (numbers, values holding no reference), any value - and, for elements referring
+nowhere, an array literal, written text, a join (E11b) or a comprehension (E27); or `take` from another own array slot,
+whose reach must be the slot's exactly where something can be stored through its elements (O25g), as a plain array of
+them would require. Any other array given there - a slice, an existing array, a conversion - owns nothing, and is a
+compile-time error.
+
 *(Not yet implemented as written: an owner local's reach is its initializer's - the program's scope for `null`, no
 initializer, or a constructor call given nothing but numbers, literals, written text, `null` and such calls; its
-block's for another value made there; `p`'s for `take p` - and an owner given to it later must reach as far. An owner
-local is moved only by `take`, and a conditional, a match, an array literal, a `spawn`'s target or a `catch default`
-in a move position is a compile-time error.)*
+block's for another value made there; `p`'s for `take p` - and an owner given to it later must reach as far. An own
+array local's reach is the program's scope for elements referring nowhere, else its block. A constructor's own field
+reaches the instance's scope (C2g), whatever its initializer. An owner local is moved only by `take`, and a
+conditional, a match, an array literal, a `spawn`'s target or a `catch default` in a move position is a compile-time
+error.)*
 
 An object can never be moved into its own region: reaching a slot inside the object borrows it (O32), and the move is
 then a release under that loan (O39). So owners form trees, and each object is released exactly once.
@@ -5136,6 +5158,11 @@ then a release under that loan (O39). So owners form trees, and each object is r
   O15's order as a destructor would run - an instance's own destructor (C9) first, then its fields' owners in reverse
   declaration order; an array's elements last to first;
 - never, for a global's owners: the program's scope never closes (O1b).
+
+Releasing an object runs its region's destructors (O15), which release what it owns, each release finished before the
+next destructor runs - except where 256 releases are already under way on the thread: there a release is finished once
+the release it is made in has closed its region, those deferred finished in the order they were made, each with what it
+releases in turn. So a chain of owners of any length is released with the stack 256 nested releases take.
 
 Moving an owner (O34) releases nothing. A released owner's slot holds `null` or a new owner, never the old one.
 Releasing is observable only as storage reclaimed and destructors run. *(The prelude's collections hold no owners yet
@@ -5237,9 +5264,11 @@ data race (§6.8.1 P8b), undefined as every data race is. *(Not yet implemented 
 release anything is a compile-time error.)*
 
 **O42 (cost).** An own reference is one reference: reading, borrowing and moving it cost what reading and storing a
-reference cost, and nothing is checked at run time. Building an object into a new region costs an allocation from the
-scopes' storage (O8b) sized to the object; releasing it runs its region's destructors and returns that storage at
-once; an instance or an array holding owners costs a registration where it is built, as an instance with a destructor
+reference cost, and nothing is checked at run time. Building an object into a new region costs one allocation sized to
+the object - for an object of 2KB or less, from the C allocator, its region's header and destructor registrations in
+the same allocation; for a larger one, from the scopes' storage (O8b) - and what the object builds into its region
+later takes the scopes' storage as any scope does; releasing it runs its region's destructors and returns that storage
+at once; an instance or an array holding owners costs a registration where it is built, as an instance with a destructor
 does (O16). The compile-time evaluator (K1) gives owned references the same meaning, and a global holding one is set
 when the program starts (K2).
 

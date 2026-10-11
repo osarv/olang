@@ -713,3 +713,104 @@ All-own runs, seeds 1-60:
 
 On the old generator's own programs (seeds 1-40) the fixed compiler refuses exactly what 42efc87 refused, and finds
 nothing.
+
+
+## 13. Phase 2a: what `Vec<T>` needs (2026-10-10)
+
+The pieces a `Vec<T>` written in the prelude stands on: an own array for its buffer, owning parameters and owned
+results, owning value types with borrowed copies, and a small region for a small object. Each piece below says what
+was decided while building it; SPEC.md's notes say what is still not built.
+
+### 13.1 Own arrays
+
+`own mut Array<T>&` as a field's, a local's or a global's type: a buffer in a region of its own, released at will.
+`Array<T>(n)` makes one, `take` moves it, `null` or another buffer releases it. A `Vec` is a count beside one of these.
+
+**Decided**
+1. **The region holds the buffer alone; the elements' referents live in the slot's reach (option B).** An array in an
+   own slot keeps what its elements refer to exactly where a plain array in that slot would - the element scope `E`,
+   the read's own exact scope before it is made a borrow (`RefExactScope` on the plain read), recorded as the region's
+   reach. So a temporary stored into an element is built in `E`, an element read out of the borrow lives in `E`, and
+   releasing the buffer frees nothing the elements refer to. The alternative - elements in the region with the buffer -
+   would make every element a borrow of the region, so `e := b.names[2]; b.names = ...` (keeping one element while the
+   buffer is replaced, the commonest thing a growable array does) would be O39's error, and a `Vec`'s growth would have
+   to copy the elements' referents too.
+2. **One place makes the elements' scope `E`**: indexing a borrow of an own array whose elements are references or
+   function values retags the base to `E` (`operandIndexAt`), so the thirty-odd O20/container walks see a plain array
+   and need no case of their own. A slice of the borrow keeps the region: it is a borrow of the same buffer.
+3. **What an own array slot takes** (O34): `Array<T>(n)` - zero values, or a fill that is `null`, zero bits, or, for
+   elements carrying no scopes, any value; for elements carrying no scopes, also an array literal, written text, a join
+   and a comprehension (`ownFreshArray`); `take` from another own array slot; `null`. A temporary fill holding
+   references (`Array<String&>(4, $3)`) is refused - every element would share one temporary built in the call's block.
+4. **A move between own array slots** needs the source's reach to outlive the destination's (as for structs) and, where
+   something can be stored through the elements (O25g), to be it exactly (`ERR_OWN_REACH_EXACT`) - the same exactness
+   a plain array of them asks.
+5. **Elements that are values holding references** (a struct, an enum or `Array<T, N>` by value) are T25e's "not
+   supported yet", re-checked per instantiation (G18): their references would need the element scope at every depth of
+   a value read, which the one retag in decision 2 does not reach.
+6. **A constructor's own field** (`nums own mut Array<I64>& = Array<I64>(n)`, `a own mut Node& = Node(n)`) is an owner
+   local of the constructor, built expecting the type without `own` and moved in: its reach is the instance's scope,
+   the constructor's top level (C2g), as a read through the instance finds it - not its initializer's, which for `take
+   p.x` would have let the instance outlive what the moved object refers to. The first cut had no path for an own
+   field's initializer at all (E12 for anything but `null`).
+7. **A global own slot is assignable through its `mut`** (T2): `G own mut Array<I64>& = ...` puts the `mut` in the type
+   expression, after `own`, where `collectVar` never looked. Its initializer stores the owner it makes (`cgOwnValue`) -
+   it was copied into the program's scope, so the first `G = ...` freed arena storage.
+8. **Written text and literals adapt to a declared array type** in an own slot (`text own mut String& = "a"`), as they
+   would to the slot's reference without `own`; codegen copies a literal of its own length from its storage, not from a
+   `{len, ptr}` it does not have.
+
+**Found and fixed on the way (pre-existing)**
+- **A variable's read was taken for a landing call.** `w := mk()` leaves `mk`'s result to land in `w`'s block, and `w`'s
+  read shares the call's binding list. A later `w.inner.t` handed to a call (`println`) landed that shared binding in the
+  borrow's region, so `mk` was called with a null result scope - a segfault on the first cut too (`checks/cases` keeps
+  the shape). A variable's read is now never landing (`callIsLanding`, `landCallIn`).
+- **A global's borrow read as the program's scope** (`RefExactScope`), so `sum(G)` with `G` an own global was O10.
+- **A `for ... in` over an own array** fitted the borrow at the bare type before adopting its region - O10 on every loop
+  over one (found by the scope fuzzer's new shapes).
+- **A call's built result stored into an owned object's field** (`s.cur.n.next = mkNode(6)`) was O10's error: the
+  call landed in the object's region, and a region outlived even a bare field's "any scope" target. That target accepts
+  a region now; the store is judged by its container (O20), as for any scope.
+
+**Tests**: shared.olang's own-array section (read back after churns, a buffer replaced while its element is kept, a
+global replaced and sliced, a constructor's own fields; a computation through own arrays baked by K2 and an assert
+decided while compiling beside the run time); checks cases for a stored buffer borrow, a release under a whole-buffer
+borrow, a temporary fill, a value element (and one per instantiation), an element outliving its text, a move breaking
+exactness, a typed local kept past its owner, and three constructor shapes that would let the instance outlive what it
+holds. Scope fuzzer: the own shapes gained new buffers, element writes and stores, a buffer moved through an owner
+local and back, elements kept across a release, text joined into an own `String`, a constructor's own fields moved out,
+and a slice kept across a release (refused); own-only seeds 1-40 ran 252 scenarios (228 refused by the checker) and
+mixed seeds 100-139 ran 203 (277 refused), no findings.
+
+### 13.4 Small regions, and releases that do not nest without bound
+
+**Decided**
+1. **A region of one small object is one allocation.** An object of 2 KB or less gets a block from the C allocator
+   holding the region's 48-byte header, the destructor nodes it will register (24 bytes each: its owners' release,
+   its destructor), the word before the object and the object; `__olang_own_free`'s `free` of the header frees it
+   all. A larger object, and every region under `-s`, takes a chunk as before. The C allocator's own size classes
+   are the small classes the design (section 3, decision 15) asked for, so no second set of classes was written
+   beside O8b's. What the object builds later takes chunks as any scope does.
+2. **Registration takes no allocation.** An owning struct's object registers its owners' release, and a
+   destructor-bearing one its destructor, on its region - each a 24-byte node bump-allocated in the region, which was a
+   4 KB chunk per region however small the object. `__olang_own_new` now reserves the nodes before the word (in the
+   small block, or in the chunk's first allocation), and `__olang_scope_push_dtor` links a given node; registration
+   still happens after construction (O16), so the order is unchanged.
+3. **A release nests at most 256 deep.** A region's destructors release what the object owns, each in turn, so
+   releasing a chain of owners recursed as deep as the chain was long and overflowed the stack - a million owners
+   linked through own fields crashed at the end of `main` (300,000 on a 256 KB stack). Beyond 256 nested releases on
+   a thread a release is pushed on a per-thread stack, which the 256th release drains once its own region has closed;
+   each batch one release defers is reversed, so they are finished in the order made, depth first. The only order
+   that changes is between a deferred release and the rest of the region it was made in (its remaining destructors
+   now run first) - nothing an object refers to is in its owner's region (O33, O34), so that is memory-safe and
+   unobservable except as destructor order 256 releases down. A test abandoned inside a release resets the count
+   (`__olang_unwind_to`), leaving what it had deferred unreleased.
+
+**Measured**: a million owners linked through own fields - 4.2 GB peak and 3.45 s, then a crash, before; 111 MB and
+0.18 s, and a clean exit, after.
+
+**Tests**: shared.olang releases 300,000 owners with destructors checking their order, and a fork of owners 300 deep
+whose order matches the shallow case; `checks/cases/o35deepchain` releases 300,000 owners on a 256 KB stack (the old
+compiler crashes); the scope fuzzer builds chains of 260-268 owners through `sub` and releases them later (own-only
+seeds 1-40: 268 scenarios run, 212 refused; mixed seeds 100-139: 209 run, 271 refused; no findings - the old compiler
+cannot compile the own preamble, which holds own arrays).

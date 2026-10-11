@@ -452,6 +452,8 @@ struct var {
     struct var* regionReach;    //...its reach: a scope variable, or NULL for a block at regionReachDepth
     int regionReachDepth;
     bool regionReachUnnamed;    //...the program's scope (a global's slot)
+    bool regionArray;           //...of an own ARRAY's buffer, whose reach is where its elements' referents live - the
+                                //scope a plain array in that slot would have kept them in (O33), as an index reads it
     int regionRoot;
     int regionRootParam;
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)

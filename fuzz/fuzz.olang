@@ -62,6 +62,7 @@ fn main() ? {
         seed := try args[2].ParseInt() catch default 1
         if args.Len() > 3 { Scenarios = try args[3].ParseInt() catch default 12 }
         if args.Len() > 5 and args[5] == "avoid" { scopegen.AvoidKnown = true }
+        if args.Len() > 5 and args[5] == "own" { scopegen.OwnOnly = true }
         keep := Array<Bool>(0)
         if args.Len() > 4 {
             only := try args[4].ParseInt() catch default 0
@@ -260,6 +261,7 @@ fn scopeMain(args Array<String&>&) {
     if args.Len() > 4 { jobs = try args[4].ParseInt() catch default 2 }
     if args.Len() > 5 { Scenarios = try args[5].ParseInt() catch default 12 }
     if args.Len() > 6 and args[6] == "avoid" { scopegen.AvoidKnown = true }
+    if args.Len() > 6 and args[6] == "own" { scopegen.OwnOnly = true }
     newRun()
     os.Run("mkdir -p " $os.Quote($Run "/scope"))
     queue mut chan.Chan<I64>& = chan.Chan<I64>(count)
