@@ -28,9 +28,8 @@ code comes back from git (T30). GUI style (retained vs immediate mode) left to m
 design. Do what you want") - nothing to decide until a GUI is written.
 **Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
 
-**Asked 2026-10-11 13:20 CEST (the user asked "Can I add a new GitHub repo to this convo? Or create one"):**
-- QK. Which repository? To attach an existing one: owner/name. To create one under osarv: its name, and private
-  (recommended) or public. In effect: nothing; no repository is created or attached until they say which.
+**Answered 2026-10-11 13:25 CEST:** QK (a new GitHub repository): "No GitHub Repo, you can put the settling experiment
+stuff in a OANN subdirectory" - none is created or attached.
 
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
 **Answered 2026-10-10 08:15 CEST:**

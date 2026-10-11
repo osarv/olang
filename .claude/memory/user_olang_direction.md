@@ -35,4 +35,11 @@ done (confirmed by the user: "The self hosted one"). The goal is to find the cir
 projections, connectivity motifs, memories) that solve a task, and to understand them. It is not only accuracy. MNIST
 comes first, then NLP, then robotics. Evolutionary search over circuit structures is allowed. The clean-room rule
 holds: work only from oann/docs/settling.md and the published papers.
+Where it lives (the user, 2026-10-11): no new repository; the experiments go in a subdirectory of oann (`research/`).
+**The long-term plan (the user, 2026-10-11):** "a settling network with recursive self improvement for
+superintelligence". How I approach it, as told to the user: oversight is designed in from the start, not added later.
+- A self-improvement step is a proposal: evaluated in a sandbox against fixed benchmarks, kept only when it is better.
+- A capability jump needs the user's sign-off.
+- The system cannot change its own objective, its evaluation, or the oversight itself.
+- Everything is logged, so each change can be traced and undone.
 
