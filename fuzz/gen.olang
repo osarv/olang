@@ -1507,7 +1507,7 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     if p == 5 {
         at String& = $g.plainIdx() " % " $x ".Len()"
         v := g.pick(et, 6)
-        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.use(v) " = " $x ".RemoveAt(" $at ") }\n" }
+        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.use(v) " = " $x ".TakeAt(" $at ") }\n" }
         return $ind "if " $x ".Len() > 0 { " $x ".RemoveAt(" $at ") }\n"
     }
     if p == 6 {

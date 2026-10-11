@@ -21,7 +21,10 @@ fn vecWork(k I64) I64 {
     for i in range 100 { v.Push(i * k) }
     t := v.Len() + v[99]
     v.Insert(0, 7)
-    t += v.RemoveAt(50) + v.SwapRemove(1) + v[1]
+    t += v.TakeAt(50) + v.SwapTake(1) + v[1]
+    v.RemoveAt(2)                                       # gives nothing: Remove lets go, Take gives
+    v.SwapRemove(3)
+    t += v[2] + v[3] + v.Len()
     v.Reverse()
     v.Sort(fn(a I64, b I64) Bool { return a < b })
     t += v[0] + v[v.Len() - 1] + (try v.IndexOf(10 * k) catch default -1)
@@ -41,9 +44,9 @@ fn vecWork(k I64) I64 {
 }
 VecBaked I64 = vecWork(3)                               # K2: computed while compiling
 
-test "Vec: Push, indexing, Insert, RemoveAt, SwapRemove, Sort, Pop, Truncate, Clone - while compiling and at run time" {
+test "Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort, Pop, Truncate, Clone - while compiling and at run time" {
     assert VecBaked == vecWork(3 * Run) and VecBaked == vecWork(3)
-    assert vecWork(1) == 11835                          # S18c: decided while compiling
+    assert vecWork(1) == 12085                          # S18c: decided while compiling
 }
 
 fn vecText(k I64) I64 {
