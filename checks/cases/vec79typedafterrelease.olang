@@ -1,0 +1,21 @@
+# check: fail error[O39]: assigning 'c.text' may release the String borrowed on line
+# vec5 (r2b_typed_local_after_release): a local typed in a borrow's region declared after the release
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    d mut String&x = $5 "-new-text-in-the-freed-region"
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

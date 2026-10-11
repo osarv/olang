@@ -1,0 +1,44 @@
+# check: run
+# vec5 R2a: what stays legal - a constructor building in its own instance scope outlives the block it was given text in;
+# one building in a parameter's scope is used where the argument lives, or put there by a scope argument ('H&x(...)',
+# 'mk&x(...)'), its region live while it is read
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type H struct(x String&, n I64) {
+    y String&x = $n "-in-x"
+}
+type K struct(x String&, n I64) {
+    y String& = $n "-in-the-instance"
+}
+fn mk(p String&) H { return H(p, 5) }
+fn main() ? {
+    k := K("outer", 1)
+    for i in range 2 {
+        t := $i "-inner-block-text"
+        k = K(t, 5 + i)
+        h := H(t, 7 + i)
+        assert h.y == $(7 + i) "-in-x"
+    }
+    churn()
+    assert k.y == "6-in-the-instance"
+    c := CB()
+    x := c.text
+    h := mk&x(x)
+    h2 := H&x(x, 6)
+    churn()
+    assert h.y == "5-in-x"
+    assert h2.y == "6-in-x"
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    assert c.text == "2-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    println("ok")
+}

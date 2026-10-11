@@ -993,6 +993,7 @@ fn (g mut SG&) enumOp(e String&, ind String&, d I64) String& {
 
 # a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
 fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
+    if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(5)) }
     if t == 0 { return g.nodeOp(a, ind, d) }
     if t == 1 {
         if g.chance(60) { return g.boxOp(a, ind, d) }
@@ -1013,6 +1014,75 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
     if t == 6 { return g.enumOp(a, ind, d) }
     if t == 11 { return g.ownOp(a, ind) }
     return g.twoOp(a, ind, d)
+}
+
+# vec5 R2a (C2d): a constructor whose field is new text built in a parameter's scope ("y String&p = ..."), or made by a
+# call given a scope argument naming the parameter ("y := mk&p(n)"), or held through a function returning the instance -
+# the instance holds what the argument refers to, so one given an inner block's text and kept outside it must be refused
+# (C2d); one read inside that block, or one whose field lives with the instance, is accepted
+fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
+    v := g.val()
+    ty := g.name("cs")
+    mkt := g.name("cst")
+    mkh := g.name("csh")
+    hh := g.name("hh")
+    tt := g.name("tt")
+    field := "    y String&p = $n \"-new-text-in-p\"\n"
+    if k == 2 { field = "    y := " $mkt "&p(n)\n" }
+    if k == 4 { field = "    y String& = $n \"-new-text-in-the-instance\"\n" }
+    g.addHelper("fn " $mkt "(n I64) String& { return $n \"-made-in-p\" }\ntype " $ty " struct(p String&, n I64) {\n" $field
+                "}\nfn " $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n")
+    make := $ty "(" $tt ", " $v " + i)" if k != 1 else $mkh "(" $tt ", " $v " + i)"
+    use := $ind $a ".next = Node(" $hh ".y.Len() + I64(" $hh ".y[0]))\n"
+    if k == 3 {    # the legal side: read where the argument lives
+        return ($ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n" $ind "    " $hh " := " $make "\n" $ind
+                "    churn()\n" $ind "    " $a ".next = Node(" $hh ".y.Len() + I64(" $hh ".y[0]))\n" $ind "}\n")
+    }
+    return ($ind "{\n" $ind $hh " := " $ty "(\"outer\", " $v ")\n" $ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n"
+            $ind "    " $hh " = " $make "\n" $ind "}\n" $ind "churn()\n" $use $ind "}\n")
+}
+
+# vec5 (own mode): R2a over an own slot's borrow, R2b - a borrow named as a scope ("d mut String&t", "mk&t(v)") after the
+# release of its region, in a block and in a loop - and O33's order check through a match value and a spawned call. The
+# shapes are refused (C2d, O39, O33); their legal sides - built and read before the release, the region read first - run
+fn (g mut SG&) vec5Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    c := $h ".cur"
+    x := g.name("x")
+    t := g.name("t")
+    d := g.name("d")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    rel := $ind $h ".text = \"zz" $v "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n"
+    if k <= 2 {
+        ty := g.name("v5h")
+        mkh := g.name("v5m")
+        g.addHelper("type " $ty " struct(p String&, n I64) {\n    y String&p = $n \"-new-text-in-the-region\"\n}\nfn " $mkh "(p String&, n I64) "
+                    $ty " { return " $ty "(p, n) }\n")
+        read := $ind $x " := " $d ".y.Len() + I64(" $d ".y[0])\n"
+        if k == 0 { return $ind "{\n" $ind $d " := " $ty "(" $h ".text, " $v ")\n" $rel $read $use $ind "}\n" }      # refused
+        if k == 1 { return $ind "{\n" $ind $d " := " $mkh "(" $h ".text, " $v ")\n" $rel $read $use $ind "}\n" }     # refused
+        return ($ind "{\n" $ind $t " := " $h ".text\n" $ind $d " := " $ty "&" $t "(" $t ", " $v ")\n" $read $rel $use $ind
+                "}\n")    # the legal side: put in the live region, read before the release
+    }
+    if k <= 5 {
+        mk := g.name("v5t")
+        g.addHelper("fn " $mk "(n I64) mut String& { return $n \"-new-text-in-the-region\"\n}\n")
+        made := $ind $d " mut String&" $t " = $" $v " \"-new-text-in-the-region\"\n"
+        if k == 4 { made = $ind $d " := " $mk "&" $t "(" $v ")\n" }
+        read := $ind $x " := " $d ".Len() + I64(" $d "[0])\n"
+        if k == 5 {    # in a loop: the next turn builds in the region the previous turn released
+            return ($ind "{\n" $ind $t " := " $h ".text\n" $ind "for i in range 3 {\n" $ind "    " $d " mut String&" $t " = $i \"-new\"\n"
+                    $ind "    " $x " := " $d ".Len() + I64(" $d "[0])\n" $ind "    " $o " = ONode(" $x " % 997 + " $v ")\n" $ind "    "
+                    $h ".text = $i \"-replaced-zzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "    churn()\n" $ind "}\n" $ind "}\n")
+        }
+        return $ind "{\n" $ind $t " := " $h ".text\n" $rel $made $read $use $ind "}\n"    # built after the release (refused)
+    }
+    set := $ind $c " = ONode(" $v ")\n"
+    after := $ind "churn()\n" $ind $x " := onode(" $c ")\n" $use
+    if k == 6 { return $set $ind "osetN(Node(" $v "), match Run { case -1 { unreachable } case _ => " $c " })\n" $after }
+    if k == 7 { return $set $ind "join { spawn osetN(Node(" $v "), " $c ") }\n" $after }
+    oo := g.name("oo")    # the legal side: the region read into a local first
+    return $set $ind $oo " := " $c "\n" $ind "osetN(Node(" $v "), " $oo ")\n" $ind "join { spawn osetN(Node(" $v " + 1), " $oo ") }\n" $after
 }
 
 # a statement on the holder h of owned objects (§8.8): giving its slots new owners, moving owners between them and
@@ -1128,8 +1198,9 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
         if w < 6 { return g.own5Op(h, ind, v) }
         if w < 9 { return g.own6Op(h, ind, v) }
         if w >= 14 {
-            pv := g.r(3)
+            pv := g.r(4)
             if pv == 0 { return g.vec2Op(h, ind, v, g.r(4)) }
+            if pv == 3 { return g.vec5Op(h, ind, v, g.r(9)) }
             return g.vec3Op(h, ind, v, g.r(8)) if pv == 1 else g.vec4Op(h, ind, v, g.r(11))
         }
         return g.own7Op(h, ind, v) if w < 11 else g.vecOp(h, ind, v)

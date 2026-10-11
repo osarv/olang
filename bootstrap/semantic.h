@@ -299,6 +299,8 @@ struct scopeBinding {
     //O18a: no argument determined this variable and none was written, so it follows the call's result:
     //rebound to wherever the result lands (landCall), the caller's own block until then
     bool landing;
+    //E25: a written scope argument ("f&x(...)") made this binding - the call's result is built where it says (vec5 R2a)
+    bool written;
     struct list viaPath; //list of struct var* - see the comment above
 };
 

@@ -1,0 +1,13 @@
+# check: fail error[O39]: calling 'rel' may release the String borrowed on line
+# vec5 R2b: a release through a callee before a build in the borrow's region
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn rel(c mut CB&) { c.text = $9 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" }
+fn main() ? {
+    c := CB()
+    x := c.text
+    rel(c)
+    d mut String&x = $5 "-new-text"
+    println(d)
+}

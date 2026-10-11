@@ -11210,6 +11210,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         b.boundDepth = boundDepth;
         b.boundUnnamed = unnamed;
         b.landing = !determined && !written;
+        b.written = written;
         b.viaPath = ListInit(sizeof(struct var*));
         ListAdd(&op->scopeBindings, &b);
         //O17: a callee storing into the region it binds to one of this function's own scope variables stores into that
@@ -20373,6 +20374,16 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (!typeExprNode && !inResult && rv->ctorLanded && !rv->landedInProgram && (opIsCtorCall(rv) || opIsEnumCtor(rv))) {
             hereDst = rv->landedTo;
             hereDepth = rv->landedDepth;
+        } else if (!typeExprNode && !inResult && rv->opType == OPERATION_FUNCCALL) {
+            //...and so did a function given one ("mk&x(n)", vec5 R2a): its result - an instance included - is built in
+            //the result scope the argument bound
+            struct var* rs = rv->readVar && rv->readVar->type.resultScope ? canonicalVar(rv->readVar->type.resultScope) : NULL;
+            for (int i = 0; rs && i < rv->scopeBindings.len; i++) {
+                struct scopeBinding* b = ListGetIdx(&rv->scopeBindings, i);
+                if (!b->written || canonicalVar(b->typeParam) != rs || b->boundTo == SCOPE_AMBIGUOUS) continue;
+                hereDst = b->boundTo;
+                hereDepth = b->boundDepth;
+            }
         }
         checkCtorHereFits(ctx, rhs, hereDst, hereDepth, nameTok);
     }
@@ -26341,6 +26352,9 @@ static void holdJoin(struct holdGroups* g, const char* a, const char* b) {
 static const char* holdKey(struct var* v) {
     return v && !v->owner && !v->isFuncDecl ? v->tok.str.ptr : NULL;
 }
+//a scope variable's own key, apart from every name's (a variable's key is its token text pointer; this is the scope
+//variable's address)
+static const char* holdScopeKey(struct var* sv) { return sv ? (const char*)canonicalVar(sv) : NULL; }
 //every local and parameter op's value may be derived from - any it reads anywhere in it, StmtEachChild's list (vec4)
 static void holdMentions(struct operand* op, struct list* out);
 static void holdMentionsNode(struct codeVisit* c, struct operand* op, enum codeRole r) {
@@ -26354,6 +26368,14 @@ static void holdMentionsNode(struct codeVisit* c, struct operand* op, enum codeR
             if (cp) ListAdd(out, &cp);
         }
     }
+    //(vec5 R2a) a call building where a scope variable says - a scope argument, "mk&x(n)" - mentions that scope
+    for (int i = 0; op->opType == OPERATION_FUNCCALL && i < op->scopeBindings.len; i++) {
+        struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
+        if (b->boundTo && b->boundTo != SCOPE_AMBIGUOUS) {
+            const char* k = holdScopeKey(b->boundTo);
+            ListAdd(out, &k);
+        }
+    }
     holdMentions(op->placeOf, out);
 }
 static void holdMentions(struct operand* op, struct list* out) {
@@ -26365,6 +26387,28 @@ static bool holdCarries(struct type t) {
 }
 static void holdJoinAll(struct holdGroups* g, const char* to, struct list* ks) {
     for (int i = 0; i < ks->len; i++) holdJoin(g, to, *(const char**)ListGetIdx(ks, i));
+}
+//(vec5 R2a) the scope variables a local is built in - its written scope ("t String&x"), or the value home or references
+//home a ":=" or a scope argument gave it ("y := mk&x(n)"): new storage there lives where the variable's binding says,
+//which for a parameter's scope variable is where the argument for that parameter lives. Shared with own's region loans
+int LocalBuildScopes(struct var* v, struct var** out) {
+    int n = 0;
+    if (!v) return 0;
+    struct var* c[3] = { v->type.scopeParam, v->valueHomeSet ? v->valueHome : NULL, v->refsHomeSet ? v->refsHome : NULL };
+    for (int i = 0; i < 3; i++) {
+        if (!c[i] || c[i] == SCOPE_AMBIGUOUS) continue;
+        struct var* sv = canonicalVar(c[i]);
+        bool seen = false;
+        for (int k = 0; k < n; k++) seen |= out[k] == sv;
+        if (!seen) out[n++] = sv;
+    }
+    return n;
+}
+//building in a scope variable is a mention of every parameter whose scope it is (vec5 R2a): a local built there joins it
+static void holdBuiltIn(struct holdGroups* g, struct var* v) {
+    struct var* sv[3];
+    int n = LocalBuildScopes(v, sv);
+    for (int i = 0; i < n; i++) if (holdKey(v)) holdJoin(g, holdKey(v), holdScopeKey(sv[i]));
 }
 static void holdStmts(struct holdGroups* g, struct list* ss);
 static void holdOp(struct holdGroups* g, struct operand* op);
@@ -26389,6 +26433,7 @@ static void holdOp(struct holdGroups* g, struct operand* op) {
 }
 static void holdStmt(struct holdGroups* g, struct statement* s) {
     struct list ks = ListInit(sizeof(const char*));
+    if (s->sType == STATEMENT_VAR_DECL) holdBuiltIn(g, &s->var); //(vec5 R2a)
     if (s->sType == STATEMENT_VAR_DECL && s->op && holdCarries(s->op->type)) {
         holdMentions(s->op, &ks);
         holdMentions(s->fillValue, &ks);
@@ -26422,6 +26467,12 @@ static void holdStmts(struct holdGroups* g, struct list* ss) {
 static void ctorComputeHeld(struct type* t, struct list* fields) {
     struct var* f = t->ctorFunc;
     struct holdGroups g = { ListInit(sizeof(const char*)), ListInit(sizeof(int)) };
+    for (int j = 0; j < f->type.vars.len; j++) { //(vec5 R2a) a parameter is reached through its scope variable
+        struct var* p = ListGetIdx(&f->type.vars, j);
+        struct var* sv[3];
+        int n = LocalBuildScopes(p, sv);
+        for (int i = 0; i < n; i++) holdJoin(&g, p->tok.str.ptr, holdScopeKey(sv[i]));
+    }
     holdStmts(&g, &f->codeBlock);
     struct list roots = ListInit(sizeof(int));
     for (int i = 0; i < fields->len; i++) {
@@ -27809,12 +27860,58 @@ static void ownReadsOp(struct codeVisit* c, struct operand* op, enum codeRole r)
         }
     }
 }
-static bool ownOpReads(struct operand* op, struct var* v) {
-    struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
-    return !CodeDeepOp(op, &c);
-}
 static bool ownStmtReads(struct statement* s, struct var* v) {
     struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
+    return !CodeDeepStmt(s, &c);
+}
+
+//O39 (vec5 R2b): whether code builds into one of a holder's loaned regions - a local whose written scope or home is it
+//("d mut String&x", "d := mk&x(5)", LocalBuildScopes), a call given a scope argument binding it ("mk&x(5)"), a
+//constructor landed there ("H&x(5)"). Building there uses the region as reading its borrow does, so every holder with a
+//loan on it is live until then: a release before it would hand the build a freed region
+int LocalBuildScopes(struct var* v, struct var** out);
+static bool ownHolderHasRegion(struct ownHolder* h, struct var* sv) {
+    if (!sv || sv == SCOPE_AMBIGUOUS) return false;
+    sv = canonicalVar(sv);
+    if (!sv->isRegion) return false;
+    for (int i = 0; i < h->loans.len; i++)
+        if (canonicalVar(((struct ownLoan*)ListGetIdx(&h->loans, i))->R) == sv) return true;
+    return false;
+}
+static void ownUsesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    struct ownHolder* h = c->ctx;
+    struct codeVisit rc = { NULL, NULL, NULL, h->v, false };
+    ownReadsOp(&rc, op, r);
+    if (rc.stop) { c->stop = true; return; }
+    bool builds = op->ctorLanded && !op->landedInProgram && ownHolderHasRegion(h, op->landedTo);
+    for (int i = 0; !builds && op->opType == OPERATION_FUNCCALL && i < op->scopeBindings.len; i++) {
+        struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
+        builds = b->written && ownHolderHasRegion(h, b->boundTo);
+    }
+    if (builds) {
+        ow.useTok = op->tok;
+        c->stop = true;
+    }
+}
+static void ownUsesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)r;
+    struct ownHolder* h = c->ctx;
+    if (s->sType != STATEMENT_VAR_DECL) return;
+    struct var* sv[3];
+    int n = LocalBuildScopes(&s->var, sv);
+    for (int i = 0; i < n; i++) {
+        if (!ownHolderHasRegion(h, sv[i])) continue;
+        ow.useTok = s->var.tok;
+        c->stop = true;
+        return;
+    }
+}
+static bool ownOpUses(struct operand* op, struct ownHolder* h) {
+    struct codeVisit c = { ownUsesOp, ownUsesStmt, NULL, h, false };
+    return !CodeDeepOp(op, &c);
+}
+static bool ownStmtUses(struct statement* s, struct ownHolder* h) {
+    struct codeVisit c = { ownUsesOp, ownUsesStmt, NULL, h, false };
     return !CodeDeepStmt(s, &c);
 }
 
@@ -27831,19 +27928,23 @@ static bool ownHolderLive(struct ownHolder* h) {
         for (int i = F->idx < 0 ? 0 : F->idx; i < F->block->len; i++) {
             struct statement* st = ListGetIdx(F->block, i);
             //(an assignment's release follows its value, computed before the store (S4) - only its place is used then)
+            //...but what its value builds into a region the store lets go of is stored there, freed at once (vec5 R2b)
             if (st == ow.relAssign && k == ow.frames.len - 1) {
-                if (ownOpReads(st->target, h->v)) return true;
+                if (ownOpUses(st->target, h)) return true;
+                struct ownHolder nb = *h;
+                nb.v = NULL;
+                if (ownOpUses(st->op, &nb)) return true;
                 continue;
             }
-            if (ownStmtReads(st, h->v)) return true;
+            if (ownStmtUses(st, h)) return true;
         }
         for (int i = 0; i < F->idx && i < F->block->len; i++) {
             struct statement* d = ListGetIdx(F->block, i);
-            if (d->sType == STATEMENT_DEFER && ownStmtReads(d, h->v)) return true;
+            if (d->sType == STATEMENT_DEFER && ownStmtUses(d, h)) return true;
         }
         if (ownLoopOwner(F->owner)) {
-            if (k > h->frame && ownStmtReads(F->owner, h->v)) return true;
-            if (k == h->frame && (ownOpReads(F->owner->op, h->v) || (F->owner->forPost && ownStmtReads(F->owner->forPost, h->v))))
+            if (k > h->frame && ownStmtUses(F->owner, h)) return true;
+            if (k == h->frame && (ownOpUses(F->owner->op, h) || (F->owner->forPost && ownStmtUses(F->owner->forPost, h))))
                 return true;
         }
     }
@@ -28249,14 +28350,15 @@ static void ownExprBlockWalk(struct list* block) {
 
 //O33: a region is known from the borrow that names it as that borrow is read - an argument's value built into the
 //region an argument after it reads would be built before the region is known
+//(anywhere in root, at any depth - a match value's clauses, a comprehension's body, a catch clause and its default
+//included: StmtEachChild's list, vec5)
+static void ownContainsOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    if (op == c->ctx) c->stop = true;
+}
 static bool ownOpContains(struct operand* root, struct operand* x) {
-    if (!root) return false;
-    if (root == x) return true;
-    for (int i = 0; i < root->args.len; i++)
-        if (ownOpContains(*(struct operand**)ListGetIdx(&root->args, i), x)) return true;
-    for (int i = 0; i < root->chainOperands.len; i++)
-        if (ownOpContains(*(struct operand**)ListGetIdx(&root->chainOperands, i), x)) return true;
-    return ownOpContains(root->callee, x);
+    struct codeVisit c = { ownContainsOp, NULL, NULL, x, false };
+    return root && !CodeDeepOp(root, &c);
 }
 static void ownArgOrder(struct operand* op) {
     struct var* func = op->readVar;
@@ -28758,6 +28860,7 @@ static void ownStmtWalk(struct statement* s) {
         if (call) {
             for (int i = 0; i < call->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&call->args, i));
             ownOpWalk(call->callee);
+            if (ow.check && call->opType == OPERATION_FUNCCALL) ownArgOrder(call); //O33: as a call's (vec5)
         }
         for (int i = 0; i < s->spawnTargets.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->spawnTargets, i));
         if (call) ownCallConfined(call); //O38: what the task's call keeps outlives its join

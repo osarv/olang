@@ -1,0 +1,24 @@
+# check: fail error[C2d]: this instance would outlive what its '&p' field refers to
+# vec5 (r2a_ctor_field_in_param_scope_own): a constructor field built in a parameter's scope given an own slot's borrow
+# - the instance holds the region
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type H struct(x String&) {
+    y String&x = $5 "-new-text-in-the-region"
+}
+fn main() ? {
+    c := CB()
+    h := H(c.text)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(h.y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
