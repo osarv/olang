@@ -38,7 +38,8 @@ holds: work only from oann/docs/settling.md and the published papers.
 Where it lives (the user, 2026-10-11, superseding "a subdirectory of oann"): a new private repository, **osarv/oagent** -
 "where all implementations of the agent and its research go. This is where we will bootstrap superintelligence. The
 end stage is not being reliant on other companies at all." The GitHub integration cannot create repositories (403), so
-the user creates it on github.com; then I attach it with add_repo (push access) and clone it to /home/user/oagent.
+the user created it on github.com (2026-10-11), and it is attached and cloned at /home/user/oagent. Its first
+commit (2d216f2, main) has the README (goal, stages, oversight) and CLAUDE.md (working rules).
 **The goal (the user, 2026-10-11):** "growth, like for any dynamic system, growing more powerful through differentiation
 and pruning. The settling network should become a general high-quality agent that can take on any task using as little
 compute as possible. It may use settling stuff, it may implement backprop, genetic algorithms, as long as it grows

@@ -30,8 +30,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
 
 **Answered 2026-10-11 13:25 CEST:** QK (a new GitHub repository): "No GitHub Repo, you can put the settling experiment
 stuff in a OANN subdirectory" - then, superseding it: "create a new, private GitHub repo called oagent". Creating
-it through the integration failed (403: Resource not accessible by integration). The user is asked to create
-osarv/oagent (private, empty) on github.com; I attach it with add_repo afterwards. Nothing goes there before the
+it through the integration failed (403: Resource not accessible by integration). The user created
+osarv/oagent (private); it is attached and has its first commit. Nothing goes there before the
 self-hosted compiler is done.
 
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
