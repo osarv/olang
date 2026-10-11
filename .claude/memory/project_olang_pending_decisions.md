@@ -34,6 +34,16 @@ it through the integration failed (403: Resource not accessible by integration).
 osarv/oagent (private); it is attached and has its first commit. Nothing goes there before the
 self-hosted compiler is done.
 
+**Asked 2026-10-11 (contract work, [[project-outreach]]):**
+- QL1. The company's name. Recommended: Osarv (also offered: O Labs/Olab, Hotpath, Measured, Cycles, Kvick, Rask). In
+  effect: `[company]` in the letters. Also offered: checking the name (Bolagsverket, .se/.com domains, EUIPO).
+- QL2. The outreach doc's six "Before sending" decisions: the guarantee, prices, the AI-use line, the signature (company
+  name and background line), quoting olang/oann results, and invoicing. In effect: the defaults written into the
+  letters. Nothing is sent before the user OKs them.
+- QL3. Send order, asked as a comment in the doc: the strongest fits first, as listed (in effect), or the five Swedish
+  companies first, so a reply can become a meeting.
+- QL4. Offered, no answer yet: drafting a compute-credits application.
+
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
 **Answered 2026-10-10 08:15 CEST:**
 - QD (integer literal's own type I64): YES ("1) yes"). BUILT 43ce396 (T6a; oann migrates with tools/int_literal_i64.py).

@@ -23,3 +23,4 @@
 - [Revisit rigid decisions](feedback_revisit_decisions.md) — the user's own past calls may be changed when they prove really rigid in real code, by PRINCIPLES.md; record as a reversal and report it
 - [Times in CEST](user_timezone.md) — the user is in Gothenburg: report times as Swedish local time (CEST, CET after 2026-10-25)
 - [Agent effort per task](feedback_agent_effort.md) — set each subagent's effort to its task: xhigh for soundness reviews, low for searches
+- [Contract work and outreach](project_outreach.md) — fixed-price measured speedups; outreach doc, 14 targets, 8 letters; I send from the company Gmail once set up; QL pending

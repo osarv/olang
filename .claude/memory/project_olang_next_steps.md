@@ -819,6 +819,19 @@ because what it finds about structure feeds the refactor.
   global, a type argument (List<Vec<T>>, Vec<Vec<T>>), an own-array element. That is what makes Vec the default
   everywhere. Then the port's scanner.
   Pacing: weekly 0.58 at 13:31 CEST, on the line to the reset.
+- 15:20 CEST: Vec phase 1 is done and verified on wt-own (91ff37e, four commits on 3a4f5e8):
+  - View()/First() as borrowed own results (O37/O38), a relaxation;
+  - Sort's precise O17 reading (a callee that only permutes a lent split value), a relaxation;
+  - Vec<T> in the prelude: growth hands the old buffer over as an owner, and an element read out of the buffer is no
+    loan on it (O38), the third relaxation;
+  - a pre-existing frame bug: forty nested try blocks crashed the own walk.
+  The own agent ran out of context at the very end (prompt too long), so any fix round needs a fresh agent briefed
+  from docs/own.md sections 13-19. The soundness review runs (/home/user/wt/rvvec1 @ 91ff37e -> /home/user/review/vec1),
+  aimed at the three relaxations. Merge when it is clean or its findings are fixed.
+  Usage: weekly 0.60 at 15:09 CEST, which leaves about 0.3%/h to the Sat 06:00 CEST reset. So one agent at a time,
+  with gaps between.
+- 15:20 CEST: the outreach doc is filled: 14 targets and 8 letters ([[project-outreach]]). Its open questions are
+  ledger QL.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,

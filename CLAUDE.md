@@ -55,6 +55,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/project_olang_open_language_gaps.md
 @.claude/memory/project_olang_pending_decisions.md
 @.claude/memory/project_olang_vec_growth_question.md
+@.claude/memory/project_outreach.md
 
 ## Checklist for every language change
 
