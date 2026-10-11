@@ -6195,6 +6195,16 @@ vec125deepplain.olang:19:49: note: a read of an own slot is a borrow in a region
    19 | fn (x Outer&) Deep2() Leaf&x { return x.Plain().deep }
       |                                                 ^~~~
 compilation failed with 1 error
+=== vec126globalcopy.olang
+vec126globalcopy.olang:11:10: error[O32]: Vec<I64> owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it
+   11 |     x := G
+      |          ^
+compilation failed with 1 error
+=== vec127globalfieldcopy.olang
+vec127globalfieldcopy.olang:9:13: error[O32]: Vec<I64> owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it
+    9 |     c := GL.toks
+      |             ^~~~
+compilation failed with 1 error
 === vec13nominal.olang
 vec13nominal.olang:14:29: error[O39]: calling 'Push' may release the Array<Char> borrowed on line 13, which is used after it
    14 |     for i in range 1000 { w.Push('b') }   # grows/frees the buffer -- should be O39, is NOT refused

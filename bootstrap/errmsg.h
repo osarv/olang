@@ -214,7 +214,7 @@ struct type;
     X(ERR_TAKE_BORROWED_COPY,           "E34",   "'%S' is a borrowed copy and owns nothing - take from '%S', which owns what it holds, 'take %S'") \
     X(ERR_OWN_COPY_ASSIGNED,            "O32",   "'%S' is a borrowed copy of '%S' and owns nothing, so it is not assigned - declare another with ':='") \
     X(ERR_OWN_COPY_PART,                "O32",   "'%s' belongs to what '%S' was copied from - assign it there") \
-    X(ERR_OWN_VALUE_SOURCE,             "O32",   "%t owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local holding one ('b := a') - this is neither") \
+    X(ERR_OWN_VALUE_SOURCE,             "O32",   "%t owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it") \
     X(ERR_OWN_VALUE_NOT_AN_OWNER,       "O34",   "a local of %t, which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one") \
     X(ERR_OWN_VALUE_DEFAULT,            "O34",   "%t owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves") \
     X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
