@@ -1,0 +1,15 @@
+# check: fail error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is
+# O17/O33: ...a lambda capturing a local holding the borrow, which stores into an element - its capture's scope is the
+# buffer's region
+type B struct() {
+    names own mut Array<String&>& = Array<String&>(3)
+}
+fn main() ? {
+    b := B()
+    nm := b.names
+    f := fn() { nm[0] = $5 "via-lambda" }
+    f()
+    e := b.names[0]
+    b.names = Array<String&>(1)
+    println(e)
+}

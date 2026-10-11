@@ -15186,3 +15186,71 @@ compilers:
 
 Most of the extra refusals are the borrowed-copy shapes that must be refused. On b50019d the holder is a reference, so
 `b := h` is a second reference and nothing dangles.
+
+### Phase 2a's soundness review, fixed (§8.8 O17, O17a, O33, O35, O36, O38, C9a, 2026-10-11)
+
+The read-only review of phase 2a (`/home/user/review/own3`, at 079921e) reproduced four bugs, every one accepted by the
+compiler: F1 and F2 use-after-frees, F3 a leak of regions and destructors, F4 a use-after-return. The coordinator decided
+each fix; how they were built, and the three places the build departed from the decision, follow. The full write-up is
+docs/own.md section 14.
+
+**F1 - an own array lent to a callee that stores into it.** An index read through an own array's borrow is retagged to
+the slot's reach, where its elements' referents live; lent whole, though, the callee's variable was bound to the buffer's
+region, and what it stored into an element was built there and freed with the buffer. The decision: an own array's
+borrow is a split value, so O17/O17a refuse the lend where the callee can store into it - the same body-read
+(`calleeStoresRegion`, deferred through `lendChecks` to `settleRegions` for a body not settled yet), with a lambda judged
+by its own region facts for its capture's scope variable (`lendStores`), since `calleeStoresRegion` takes any lambda's
+body to be unknown. Detected at the call by the argument's exact scope being an array's region, so a local holding the
+borrow and a slice of it are caught too. Two departures. The suggested diagnostic, "build the new array in a local, then
+move it in", names a fix that does not compile - an own local lent is the same split value, and a plain array cannot be
+moved into an own slot (O34) - so the message names the two that do: lend the holder (`fill(b)`, which builds where `b`
+lives) or hand the array over as an owner (`b.names = f(take b.names)`, an owning parameter's elements built at its
+reach). And writing the slice case found a second hole: an element stored through a slice of the borrow
+(`b.names[0:2][0] = t`) was not retagged at all, since the retag looked only at a read of the slot or a local holding
+it - `ownArrayRegionOf` sees through slices now, for the retag, `RefExactScope` and the loan walk. The cost is an
+over-rejection: O17's reading treats a local copy of an element stored back, and any call through a function value with
+an element, as a store from outside, so `Reverse`, `Sort` and a swap through a callee are refused on an own array of
+references. It is O17's existing imprecision, shared by every split value; lifting it - a local holding only reads of
+the region, and T22a's guarantee that a function value keeps its arguments only in its result - is recorded for when
+`Vec<String&>` needs to sort.
+
+**F2 - a borrowed copy kept by a call.** Holders gained loans only by declaration and assignment, so a call keeping its
+argument (`l.Push(b)`, `put(g, b)`) let the copy's loans end at the call. The decision: a call that can keep an argument
+makes the destination's root a holder, like `ownHoldMore`, and a destination that cannot be followed refuses the call.
+Built: the destinations are read off the callee's checked obligations - those relating the kept parameter's scope to
+another argument's, and a derived obligation's parameter (O22) - which are all known when the walk runs, after
+`dischargeLateObligations`; a self-obligation, the result scope and a constructor's instance scope are not destinations
+(a local given the result holds it already) - a constructor's body is known once it is built, which a first version
+took for unknown, refusing `k := Keep(b)`. The departure: holding by the destination local's **last use** is unsound, and building it showed why -
+the storage can have names the holder does not see. A reference to the local taken before the store (`gr mut Big& = g;
+g.x = b; v.o = null; gr.x...`) and a handle copied before (`l2 := l` shares the list's state) both read the kept copy
+after the release; the first reproduced under `-s` through the existing direct-store path, a hole older than this phase.
+So the loans are held until the end of the block the destination lives in (an `always` holder at that frame,
+`ownHoldUntil`): every other name of that storage is gone by then (§8.4). The direct-store path got the same treatment
+where it was unsound - a store through a reference, which had no holder at all (`gr.x = b`, reproduced), and a store into
+a local a reference has been taken to - while a plain local keeps its last-use holder. Two exclusions keep the rule from
+reaching what cannot escape: a borrow of an owned object is kept only in its region (O33), so `osetN(Node(5), b)` with
+`b := h.cur` holds nothing; and an owner moved into an own slot or an owning parameter holds no loan (`s.cur.sock = take
+s.other.sock` broke two corpus tests before that exclusion). A call through a function value needs no rule: T22a already
+refuses making a value of a function that keeps an argument beyond its result. `ownFramePop` had popped holders only from
+the end of the list, stopping at the first one held for an outer frame; holders added for an outer block's end while an
+inner one is walked (and a task's) left inner holders alive, so it now removes every holder of the frames it pops.
+
+**F3 - an owner left behind by an argument that leaves.** `cgCallTargetAndArgs` held an owning argument in a register
+until the call, and `cgOwnNew` made a constructor's region before evaluating its arguments. As decided, each is held in a
+hidden owner slot registered for release before it is filled and emptied when the call (or the store) takes it - only
+where something evaluated after it runs code (`cgRunsCode`), so most calls are unchanged. Writing the test found the same
+gap for an own array's buffer made before its fill (`Array<I64>(8, try g())`), held the same way.
+
+**F4 - a destructor's owner locals.** Registered on `%dscope`, the scope being closed, with a slot in the destructor's
+frame. As decided, an owner held in a frame's storage is registered on its own block's scope, and at a body's top level
+on the frame's private scope (`cgOwnReleaseScope`, `ownFrameScope`), which a destructor now closes as it returns. The same
+helper registers owning parameters and owner value locals; a constructor's top-level owners would have hit the same
+dead-slot release through its instance scope, but a constructor's top-level locals are its fields, and an owning
+constructor parameter is not supported yet (T25e).
+
+**Fuzzer.** `ownReviewOp` writes the review's shapes in own mode. The same generator: 079921e, own seeds 1-120, 41
+findings, each holding one of the shapes; fixed, own seeds 1-400 and mixed seeds 100-179, none. Comparing each scenario of
+own seeds 1-40 compiled alone under both compilers, every scenario newly refused holds a review shape or the existing
+`ogrowAt` lend, which was the same F1 hole one field further (a callee storing a node built in the buffer's region into an
+element's `next`).

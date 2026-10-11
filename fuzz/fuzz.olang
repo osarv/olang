@@ -25,7 +25,7 @@
 #
 #     fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]]   seeds START.., SCENARIOS scenarios each (12); "avoid" leaves
 #                                                   out the shapes of use-after-frees known when it was written
-#     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY
+#     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY (-1: all)
 #
 # Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/out under the working directory.
 import "std/io"
@@ -64,8 +64,8 @@ fn main() ? {
         if args.Len() > 5 and args[5] == "avoid" { scopegen.AvoidKnown = true }
         if args.Len() > 5 and args[5] == "own" { scopegen.OwnOnly = true }
         keep := Array<Bool>(0)
-        if args.Len() > 4 {
-            only := try args[4].ParseInt() catch default 0
+        only := try args[4].ParseInt() catch default -1 if args.Len() > 4 else -1    # (-1: every scenario)
+        if only >= 0 and only < Scenarios {
             keep = Array<Bool>(Scenarios)
             keep[only] = true
         }

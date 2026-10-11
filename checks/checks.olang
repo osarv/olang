@@ -32,7 +32,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr",
-                     "frameenv"]
+                     "frameenv", "ownleave"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -255,6 +255,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "updir" { try updir(r) }
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
+        case "ownleave" { try ownleave(r) }
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
@@ -1513,4 +1514,25 @@ fn frameenv(r mut report&) ? Failed {
                  "frameonly's three environments in the frame", dir)
     try r.expect(sh(dir, "awk -f envcheck.awk build/frameescapes.main.ll > out.txt") == 0 and outOf(dir) == "0 8\n",
                  "no environment of a local that leaves the frame in it", dir)
+}
+
+# O36/O30, O35 (the review of own phase 2a, F3 and F4): an owner handed to a call, or a constructor's region, is released
+# when a later argument leaves first, and a destructor's own owner locals as it returns - built, built -s and built -d,
+# every object made released, and under valgrind where it is installed (built for x86-64-v3, which it decodes) nothing
+# lost and no slot read after its frame is gone
+test "owners a later argument leaves past, and a destructor's own, are released" { assert passed("ownleave") }
+
+fn ownleave(r mut report&) ? Failed {
+    dir := fresh("ownleave")
+    os.Run("cp checks/fixtures/ownleave/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -b ownleave.olang > out.txt 2>&1 && ./build/ownleave > b.txt 2>&1 && cmp -s b.txt ownleave.want")
+                 == 0, "ownleave", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -s ownleave.olang > out.txt 2>&1 && ./build/ownleave.san > s.txt 2>&1"
+                          " && cmp -s s.txt ownleave.want")) == 0, "ownleave -s", dir)
+    try r.expect(sh(dir, ("\"$OLANG\" -b -d ownleave.olang > out.txt 2>&1 && ./build/ownleave.debug > d.txt 2>&1"
+                          " && cmp -s d.txt ownleave.want")) == 0, "ownleave -d", dir)
+    if sh(dir, "command -v valgrind > /dev/null 2>&1") != 0 { return }
+    try r.expect(sh(dir, ("\"$OLANG\" -b -a x86-64-v3 ownleave.olang > out.txt 2>&1 && valgrind -q --leak-check=full"
+                          " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownleave > v.txt 2> vg.txt"
+                          " && cmp -s v.txt ownleave.want && test ! -s vg.txt")) == 0, "ownleave under valgrind", dir)
 }

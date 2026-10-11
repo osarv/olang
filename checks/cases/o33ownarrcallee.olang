@@ -1,0 +1,15 @@
+# check: fail error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is
+# O17/O33: an own array's borrow is a split value - its buffer in its region, its elements' referents where the slot's
+# container keeps them - so a callee that can store into it is not lent it: what it built would be released with the
+# buffer while every read of the element here says it lives on (the review of own phase 2a, F1)
+type B struct() {
+    names own mut Array<String&>& = Array<String&>(3)
+}
+fn fill(a mut Array<String&>&) { a[0] = $7 "built-by-callee" }
+fn main() ? {
+    b := B()
+    fill(b.names)
+    e := b.names[0]
+    b.names = Array<String&>(1)
+    println(e)
+}

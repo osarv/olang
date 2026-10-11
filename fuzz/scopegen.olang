@@ -87,6 +87,31 @@ DtorPrelude := (
     "    join { spawn fn() { h.next = Node(kk * 3) } }\n"
     "    r ResA& = ResA(Node(kk), kk + 1)\n"
     "}\n"
+    "# own3 F3/F4 (§8.8): an owned resource, a holder of one, and a chain whose destructor holds owner locals of its own\n"
+    "type ORes struct(v I64) {\n"
+    "    v\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "}\n"
+    "type ORHold struct() {\n"
+    "    res own mut ORes&\n"
+    "}\n"
+    "type ODeep struct(v I64) {\n"
+    "    v\n"
+    "    next own mut ODeep&\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    x own mut ORes& = ORes(v)\n"
+    "    y := ORHold()\n"
+    "    y.res = ORes(v + 1)\n"
+    "}\n"
+    "fn otake2(o own mut ORes&, k I64) I64 { return o.v + k }\n"
+    "fn ofail(k I64) I64 ? {\n"
+    "    if k > -1000000000 { error }\n"
+    "    return k\n"
+    "}\n"
 )
 
 # leaves out the shapes of the use-after-frees known and open when this was written (the 2026-10-09 review's 02, 02b,
@@ -341,6 +366,25 @@ Prelude := (
     "fn owrap(n Node&) own mut OWrap& {\n"
     "    o own mut OWrap& = OWrap(n)\n"
     "    return o\n"
+    "}\n"
+    "# own3's shapes (§8.8): a callee storing into an own array's element, read-only lends of one, and calls keeping a\n"
+    "# borrowed copy of the holder\n"
+    "fn ofillAt(a mut Array<mut Node&>&, v I64) {\n"
+    "    if a.Len() > 0 { a[0] = Node(v) }\n"
+    "}\n"
+    "fn onodes(a Array<mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for n in a { t = t * 31 + chain(n) }\n"
+    "    return t\n"
+    "}\n"
+    "type OBox struct() {\n"
+    "    h OHold& = null\n"
+    "}\n"
+    "fn oput(x mut OBox&, h OHold&) { x.h = h }\n"
+    "fn (x mut OBox&) set(h OHold&) { x.h = h }\n"
+    "fn oboxed(x OBox&) I64 {\n"
+    "    if x.h == null { return 0 }\n"
+    "    return ohash(x.h)\n"
     "}\n"
     "# a flag set atomically; owait waits for it 2 ms at most (-i runs a task only at its join, so there it never comes)\n"
     "type OFlag struct() {\n"
@@ -793,6 +837,7 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
 fn (g mut SG&) ownOp(h String&, ind String&) String& {
     v := g.val()
+    if g.chance(15) { return g.ownReviewOp(h, ind, v) }
     k := g.r(62)
     c := $h ".cur"
     o := $h ".other"
@@ -882,6 +927,78 @@ fn (g mut SG&) ownOp(h String&, ind String&) String& {
     }
     if g.chance(50) { return $ind "if " $c " != null and " $c ".sub != null { ogrow(" $c ".sub, " $v ") }\n" }
     return $ind "if " $c " != null { osetN(Node(" $v "), " $c ") }\n"    # built before its region is read (O33: refused)
+}
+
+# the shapes the review of own phase 2a found accepted wrongly (own3): a callee, a lambda or a task given a borrow of an own
+# array storing into its element (F1, refused: O17, O33), a call keeping a borrowed copy of h - a List, a Map, a function,
+# a method, a lambda pushed - or a store of one through a reference, across a release (F2, refused: O39), and in a program
+# with destructors an owner handed to a call or a constructor's region made before an argument that leaves (F3: released,
+# "dtors 0"), and a destructor with owner locals of its own (F4)
+fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
+    n := $h ".nodes"
+    e := g.name("e")
+    back := ($ind "if " $n ".Len() > 0 and " $n "[0] != null {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n
+             " = Array<mut Node&>(1)\n" $ind "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
+    k := g.r(15 if g.dtors else 11)
+    if k == 0 { return $ind "ofillAt(" $n ", " $v ")\n" $back }
+    if k == 1 {
+        nm := g.name("nm")
+        f := g.name("f")
+        return ($ind $nm " := " $n "\n" $ind $f " := fn(x I64) { if " $nm ".Len() > 0 { " $nm "[0] = Node(x) } }\n" $ind $f "("
+                $v ")\n" $back)
+    }
+    if k == 2 { return $ind "join { spawn ofillAt(" $n ", " $v ") }\n" $back }
+    if k == 3 { return $ind $h ".other = ONode(onodes(" $n ") % 997 + " $v ")\n" }    # a read-only lend
+    b := g.name("b")
+    l := g.name("l")
+    c := $h ".cur"
+    o := $h ".other"
+    if k == 4 {
+        return ($ind $b " := " $h "\n" $ind $l " := List<OHold&>()\n" $ind $l ".Push(" $b ")\n" $ind $c " = null\n" $ind
+                "churn()\n" $ind $o " = ONode(ohash(" $l "[0]) % 997)\n")
+    }
+    if k == 5 {
+        t := g.name("t")
+        return ($ind $b " := " $h "\n" $ind $l " := Map<I64, OHold&>()\n" $ind $l ".Put(1, " $b ")\n" $ind $c " = null\n" $ind
+                "churn()\n" $ind $t " I64 = 0\n" $ind "for kv in " $l " { " $t " = ohash(kv.Value) }\n" $ind $o " = ONode(" $t
+                " % 997)\n")
+    }
+    if k == 6 or k == 7 {
+        put := "oput(" $l ", " $b ")" if k == 6 else $l ".set(" $b ")"
+        return ($ind $b " := " $h "\n" $ind $l " := OBox()\n" $ind $put "\n" $ind $c " = null\n" $ind "churn()\n" $ind $o
+                " = ONode(oboxed(" $l ") % 997)\n")
+    }
+    if k == 8 {
+        return ($ind $b " := " $h "\n" $ind $l " := List<fn() I64>()\n" $ind $l ".Push(fn() I64 { return ohash(" $b ") })\n"
+                $ind $c " = null\n" $ind "churn()\n" $ind $o " = ONode(" $l "[0]() % 997)\n")
+    }
+    if k == 9 {    # stored through a reference to a local, read through the local
+        r := g.name("r")
+        return ($ind $b " := " $h "\n" $ind $l " := OBox()\n" $ind $r " mut OBox& = " $l "\n" $ind $r ".h = " $b "\n" $ind $c
+                " = null\n" $ind "churn()\n" $ind $o " = ONode(oboxed(" $l ") % 997)\n")
+    }
+    if k == 10 {    # kept, read, and built into through h's owners - nothing released while it is kept: accepted
+        return ($ind $b " := " $h "\n" $ind $l " := List<OHold&>()\n" $ind $l ".Push(" $b ")\n" $ind "churn()\n" $ind "if " $c
+                " != null { ogrow(" $c ", ohash(" $l "[0]) % 997 + " $v ") }\n")
+    }
+    rh := g.name("rh")
+    if k == 11 {    # an owner handed to a call, a later argument leaving first
+        return ($ind $rh " := ORHold()\n" $ind $rh ".res = ORes(" $v ")\n" $ind "for i in range 1 {\n" $ind "    " $g.name("x")
+                " := otake2(take " $rh ".res, try ofail(" $v ") catch { break })\n" $ind "}\n")
+    }
+    if k == 12 {    # ...one made for it
+        return ($ind "for i in range 1 {\n" $ind "    " $g.name("x") " := otake2(ORes(" $v "), try ofail(" $v ") catch { break })\n"
+                $ind "}\n")
+    }
+    if k == 13 {    # a constructor's region made before its argument leaves
+        return ($ind $rh " := ORHold()\n" $ind "for i in range 1 {\n" $ind "    " $rh ".res = ORes(try ofail(" $v
+                ") catch { break })\n" $ind "}\n")
+    }
+    hd := g.name("hd")    # a chain whose destructors hold owner locals, released at a block's end
+    x := g.name("x")
+    return ($ind "{\n" $ind "    " $hd " own mut ODeep& = null\n" $ind "    for i in range 20 + " $v " % 9 {\n" $ind "        " $x
+            " own mut ODeep& = ODeep(i)\n" $ind "        " $x ".next = take " $hd "\n" $ind "        " $hd " = take " $x "\n" $ind
+            "    }\n" $ind "}\n" $ind "churn()\n")
 }
 
 # a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a

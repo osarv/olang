@@ -1,0 +1,28 @@
+# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
+# also: note: kept here, until the end of the block it is kept in
+# O38: ...stored into a local a reference was taken to before - read through that reference
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Big struct() {
+    x Outer& = null
+}
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    g := Big()
+    gr mut Big& = g
+    g.x = b
+    v.o = null
+    println($gr.x.o.k)
+}

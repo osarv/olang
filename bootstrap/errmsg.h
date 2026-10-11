@@ -321,6 +321,9 @@ struct type;
     X(ERR_SCOPE_ARGS_DISAGREE,          "O25e",  "these arguments live in different scopes, and the signature requires one ('&p')") \
     X(ERR_BORROW_SPLIT_SCOPES,          "O17",   "this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')") \
     X(ERR_SLICE_SPLIT_VALUE,            "O17a",  "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") \
+    X(ERR_OWN_KEPT_UNFOLLOWED,          "O38",   "the callee may keep this argument, which borrows an own object, where the borrow cannot be followed - keep it in a local of this function instead") \
+    X(ERR_OWN_STORED_UNFOLLOWED,        "O38",   "this value borrows an own object, and is stored where the borrow cannot be followed - keep it in a local of this function instead") \
+    X(ERR_OWN_ARRAY_LENT_STORES,        "O17, O33", "an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is - lend it what holds the array, or hand it the array as an owner ('b.names = f(take b.names)')") \
     X(ERR_BORROW_SPLIT_VALUE,           "O17a",  "this value's references live where its own storage does not, so it is not held by reference - use the value itself") \
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
@@ -362,6 +365,7 @@ struct type;
     X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
     X(NOTE_OWN_MOVES_HERE,              "",      "%S moves it here") \
     X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
+    X(NOTE_OWN_KEPT_HERE,               "",      "kept here, until the end of the block it is kept in") \
     X(NOTE_OWN_TASK_BORROWS,            "",      "the task borrows it here") \
     X(NOTE_OWN_TASK_CALLS_VALUE,        "",      "it calls a function value here") \
     X(NOTE_OWN_BORROW_LOCAL,            "",      "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") \

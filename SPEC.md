@@ -4877,6 +4877,16 @@ reference of its own making, which it uses only to read the elements out and for
 judged as O17 judges a call lent the value): each element it hands the body - a reference, or a value holding them -
 lives where the value's references do.
 
+An **own array's borrow** (O33) - a read of the slot, a local holding one, a slice of either - is such a value too: its
+storage, the buffer, is its region, while its elements' referents live where the slot's container keeps them. Lent, the
+callee's variable is bound to the region, so a callee that can store into what it is lent (O17, read off its body: a
+function, a constructor, a lambda capturing a local holding the borrow, a task's call) would build what it stores in the
+buffer's region, released with the buffer while every read of the element says it lives on: lending it there is a
+compile-time error naming the fix - lend the callee what holds the array, or hand it the array as an owner (O36:
+`b.names = fill(take b.names)`). A callee that reads it, or writes numbers into it, may be lent it. *(Implemented as O17
+reads a body, so a callee that only permutes the elements - `Reverse`, `Sort`, a swap through a local - is refused as
+well.)*
+
 **O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
 exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
 by value - `List`, `Map` and `StringBuilder` are handles (T8), and so is any such struct a program declares. A copy of one
@@ -5096,8 +5106,9 @@ another read, it is O10's error.)*
 
 An own array's region holds its buffer alone. What its elements refer to lives in the slot's reach (O34), exactly
 where a plain array in that slot keeps its elements' referents: a temporary stored in an element is built there, not
-in the region, an element read out of it lives there, and releasing the array releases its buffer and nothing its
-elements refer to. *(Not yet implemented: an element that is a value holding a reference - a struct, an enum or an
+in the region, an element read out of it lives there - through a slice of the borrow too (`b.names[0:2][0] = t`) - and
+releasing the array releases its buffer and nothing its elements refer to. Lent to a call that can store into it, the
+borrow is a split value (O17a). *(Not yet implemented: an element that is a value holding a reference - a struct, an enum or an
 `Array<T, N>` by value - is a compile-time error (T25e).)*
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
@@ -5169,7 +5180,11 @@ then a release under that loan (O39). So owners form trees, and each object is r
   `Remove` and `Clear` (M19d), whose bodies assign or `take` the slot;
 - an owner local or an owning parameter still holds it when its block is left, by whichever way (S11a, P1b) - after
   the block's deferred code (S19) and its join, in O15's order with the destructors of the block's scope, and when a
-  test is abandoned (P1d) as well;
+  test is abandoned (P1d) as well. A destructor's own owner locals are its own, released as it returns: its top level
+  is never the scope being closed for them (C9a);
+- it is an owner made, taken or given for an owning parameter (O36), or the region made for an object whose constructor
+  has not run yet, and an argument evaluated after it leaves the expression first - an error propagated, a clause's
+  `break`, `continue` or `return`: the call is never made, and it is released where the expression is left;
 - it is an owner no slot receives - a call's owned result left unused, a value made for a borrowing parameter (O36), a
   `take` standing as a statement (S3) - and is released at the end of its statement;
 - the scope holding its slot closes: an instance or an array holding owners releases them when its scope closes, in
@@ -5228,7 +5243,19 @@ path from there, of anything **derived** from it: the borrow or the borrowed cop
 holding such a reference, a closure capturing one, and each local holding one of these, until that local is given
 something not derived from the loan. A number, a `Bool`, or any value holding no reference read out of it is not
 derived from it and carries nothing (O26a). A loan given as an argument lasts until its call returns, and one given to
-a task until its join (P2) - as does every loan a task's call may make (O41). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
+a task until its join (P2) - as does every loan a task's call may make (O41).
+
+What is derived from a loan may be **kept**: stored where another name can reach it. A value derived from it stored
+through a reference (`gr.x = b`), or into a local a reference has been taken to (E12c), and an argument derived from it
+that a call may keep in another argument - what the callee's body requires of their scopes says so (O10b: `l.Push(b)`,
+`m.Put(k, b)`, `put(g, b)`, a closure capturing `b` pushed into a `List`), a task's call too - keeps the loan until the
+end of the block the storage it is kept in lives in: the local's, a handle's (whose state lives where it was made), the
+body's where it is kept through a reference or in a parameter's referent. A call that may keep it where that cannot be
+followed - a callee whose body is not known, or a destination outside the body: a global, a lambda's capture - is a
+compile-time error. A borrow of an owned object kept anywhere is kept in its region (O33), and an owner moved into an
+own slot or an owning parameter holds no loan. What a call keeps in its result - a constructor's instance, a borrowed
+result - is held by the local given it, as any value derived from a loan is, and through a function value nothing is
+kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits. *(Implemented
 conservatively: a local holding a loan uses it wherever it is read after in its block, anywhere in a loop enclosing
 both inside its scope, and in deferred code, whichever path is taken.)*
 

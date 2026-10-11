@@ -220,6 +220,10 @@ struct cgCtx {
     struct list handed;
     bool hereBuilt;
     bool ownScopeBorrowed; //C9a: ownScopeSlot is a destructor's scope being closed - its caller's to close, not its own
+    //O35: the frame's own private scope, whatever ownScopeSlot became (a destructor's closing scope, C9a) and whatever a
+    //constructor's top level builds into (its instance scope): where an owner held in this frame's own storage is
+    //registered for release at the body's top level, so the release runs while the frame is still there (cgOwnReleaseScope)
+    char* ownFrameScope;
     //a function returning an aggregate returns it through one slot and one exit block, written by every return
     //site: so once the function is inlined, its result's fields reach the caller as separate values, which LLVM
     //can reason about - a merged aggregate value it cannot see into, and a loop testing a Bool from one (an
@@ -744,6 +748,9 @@ void cgCloseOwnScope(struct cgCtx* ctx) {
     cgLeaveBlocks(ctx, 0);
     if (ctx->ownScopeSlot && !ctx->ownScopeBorrowed)
         fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownScopeSlot);
+    //O35: a destructor's own owners - its top-level owner locals - released as it returns (its private scope)
+    else if (ctx->ownScopeBorrowed && ctx->ownFrameScope)
+        fprintf(ctx->fnOut, "  call void @__olang_scope_close(ptr %s)\n", ctx->ownFrameScope);
     //and take this whole frame back off the unwind chain in one store - every node in it is gone now
     if (ctx->ownUnwindNode) {
         char* ps = cgNewTmp(ctx);
@@ -1137,6 +1144,16 @@ static bool cgIsCtor(struct var* func);
 static char* cgOwnAllocSlot(struct cgCtx* ctx) {
     if (ctx->ctorHere && ctx->curFunc && cgIsCtor(ctx->curFunc)) return ctx->ctorHere;
     return ctx->ownScopeSlot;
+}
+
+//O35: where an owner held in this frame's own storage - an owner local, an owner value local, an owning parameter, a
+//hidden owner slot - is registered for release: its block's scope, or at the body's top level the frame's private
+//scope. Never a constructor's instance scope or a destructor's closing scope: both close after the frame is gone, and
+//the release would read the slot from a dead stack (F4)
+static char* cgOwnReleaseScope(struct cgCtx* ctx) {
+    int idx = ctx->blockDepth - 2;
+    if (idx >= 0 && idx < ctx->blockSlots.len) return *(char**)ListGetIdx(&ctx->blockSlots, idx);
+    return ctx->ownFrameScope ? ctx->ownFrameScope : cgOwnAllocSlot(ctx);
 }
 
 char* cgScopeSlotAt(struct cgCtx* ctx, int depth) {
@@ -3511,10 +3528,39 @@ static char* cgSpawnSubScope(struct cgCtx* ctx, struct list* merges, char* paren
 //`spawnMerges`, for a task, receives one sub-arena per scope the task allocates into (P2): the arguments are still
 //evaluated here, in the spawner, where they are built into the real scopes.
 struct cgRegionArg { int idx; struct var* region; bool task; bool result; };
+static bool cgRunsCode(struct operand* op);
+static const char* cgOwnNull(struct type t);
+//O36/O30 (F3): an owner made or moved here that code run before anything takes it could leave (a later argument's
+//"try", a constructor's own arguments, a fill): held in a hidden owner slot of this frame, registered for release
+//before it is filled, so a way out between releases it. Whatever takes it empties the slot first (cgOwnHoldTake)
+//(an own array's owner is its { len, ptr }; an object's, or a region a buffer starts, the pointer)
+static char* cgOwnHoldSlot(struct cgCtx* ctx, bool arr, char* v) {
+    const char* ty = arr ? "{ i64, ptr }" : "ptr";
+    char* slot = cgNewTmp(ctx);
+    fprintf(cgAllocaOut(ctx), "  %s = alloca %s\n", slot, ty);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, arr ? "zeroinitializer" : "null", slot);
+    char* scope = cgOwnReleaseScope(ctx);
+    cgNoteBuildInto(ctx, scope);
+    fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope, slot,
+            arr ? "aslot" : "slot");
+    if (v) fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", ty, v, slot);
+    return slot;
+}
+
+static char* cgOwnHoldTake(struct cgCtx* ctx, struct type t, char* slot) {
+    char* v = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = load %s, ptr %s\n", v, cgOwnTy(t), slot);
+    fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), cgOwnNull(t), slot);
+    return v;
+}
+
+struct cgHeldOwner { int idx; char* slot; struct type t; };
+
 static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct list* args, struct list* spawnMerges,
                                  char* outSlot) {
     struct var* func = op->readVar;
     struct list regionArgs = ListInit(sizeof(struct cgRegionArg));
+    struct list heldOwners = ListInit(sizeof(struct cgHeldOwner));
     char* closure = NULL;
     char* target;
     if (outSlot) cgArgAdd(args, "ptr", outSlot); //a result through memory (cgRetViaMemory) - its storage comes first
@@ -3601,7 +3647,18 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
             continue;
         }
         if (paramT.refOwn) { //O36: an owning parameter's argument - the owner moved in, made, or a call's owned result
-            cgArgAdd(args, cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT));
+            bool laterRuns = false; //F3: held until the call takes it where a later argument could leave first
+            for (int j = i + 1; j < op->args.len && !laterRuns; j++)
+                laterRuns = cgRunsCode(*(struct operand**)ListGetIdx(&op->args, j));
+            if (!laterRuns) {
+                cgArgAdd(args, cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT));
+                continue;
+            }
+            char* slot = cgOwnHoldSlot(ctx, cgOwnIsArray(paramT), NULL);
+            fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(paramT), cgOwnValue(ctx, argOp, paramT), slot);
+            struct cgHeldOwner h = { args->len, slot, paramT };
+            ListAdd(&heldOwners, &h);
+            cgArgAdd(args, cgOwnTy(paramT), "undef");
             continue;
         }
         bool argBuilds = cgArgMayBuild(argOp, paramT);
@@ -3632,6 +3689,11 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         llvmType(paramT, aty, sizeof(aty));
         cgArgAdd(args, aty, av);
     }
+    for (int i = 0; i < heldOwners.len; i++) { //F3: every argument evaluated - the call takes its held owners
+        struct cgHeldOwner* h = ListGetIdx(&heldOwners, i);
+        ((struct cgArg*)ListGetIdx(args, h->idx))->val = cgOwnHoldTake(ctx, h->t, h->slot);
+    }
+    ListDestroy(heldOwners);
     for (int i = 0; i < regionArgs.len; i++) { //O32: the regions the arguments' borrows have now recorded
         struct cgRegionArg* ra = ListGetIdx(&regionArgs, i);
         char* v = cgNewTmp(ctx);
@@ -4154,9 +4216,12 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
     bool zeroed = !(op->args.len > 1 && !(*(struct operand**)ListGetIdx(&op->args, 1))->zeroBits) && !op->noZeroFill;
     char* scopeVal;
     char* bytes;
+    char* heldBuf = NULL;
     if (op->ownNewRegion) { //O30: an own array's buffer, a region of its own - its fill refers nowhere (O34)
         scopeVal = NULL;
         bytes = cgOwnArrayBuffer(ctx, op, byteSize);
+        //F3: a fill evaluated after the buffer's region is made - one leaving releases the region
+        if (op->args.len > 1 && cgRunsCode(*(struct operand**)ListGetIdx(&op->args, 1))) heldBuf = cgOwnHoldSlot(ctx, false, bytes);
         if (zeroed) fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %s, i1 false)\n", bytes, byteSize);
     } else {
         scopeVal = cgWhereBuilt(ctx, op);
@@ -4179,6 +4244,7 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         char* fillVal = promote ? cgBoundaryValue(ctx, fillOp, elemT, scopeVal) : cgValueForTarget(ctx, fillOp, elemT, scopeVal);
         cgFillLoop(ctx, elemT, bytes, count, fillVal);
     }
+    if (heldBuf) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", heldBuf);
 
     //register every one of this array's N slots for destruction up front, at allocation time - not
     //deferred until (or gated on) individual elements actually being assigned later. Each destructor call
@@ -6543,7 +6609,12 @@ static char* cgOwnNew(struct cgCtx* ctx, struct operand* op) {
     char* hdr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr %s\n", hdr, word);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", hdr, cgRegionSlot(ctx, op->ownRegion));
+    //F3: its constructor's arguments are evaluated after the region is made - one leaving releases the region
+    bool argsRun = false;
+    for (int i = 0; i < op->args.len && !argsRun; i++) argsRun = cgRunsCode(*(struct operand**)ListGetIdx(&op->args, i));
+    char* held = argsRun ? cgOwnHoldSlot(ctx, false, obj) : NULL;
     cgPromoteAt(ctx, op, hdr, obj, true);
+    if (held) fprintf(ctx->fnOut, "  store ptr null, ptr %s\n", held);
     return obj;
 }
 
@@ -6651,7 +6722,7 @@ static void cgOwnDecl(struct cgCtx* ctx, struct statement* s, char* slot) {
     struct type t = s->var.type;
     fprintf(ctx->fnOut, "  store %s %s, ptr %s\n", cgOwnTy(t), cgOwnValue(ctx, s->op, t), slot);
     if (s->ctorField) return;
-    char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+    char* scope = cgOwnReleaseScope(ctx);
     cgNoteBuildInto(ctx, scope);
     fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope, slot,
             cgOwnIsArray(t) ? "aslot" : "slot");
@@ -6720,7 +6791,7 @@ void cgVarDecl(struct cgCtx* ctx, struct statement* s) {
     if (s->var.ownValue && !s->ctorField) {
         if (!cgViaMemory(s->var.type)) fprintf(ctx->fnOut, "  store %s zeroinitializer, ptr %s\n", ty, slot);
         else fprintf(ctx->fnOut, "  call void @llvm.memset.p0.i64(ptr %s, i8 0, i64 %lld, i1 false)\n", slot, TypeGetSize(s->var.type));
-        char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+        char* scope = cgOwnReleaseScope(ctx);
         cgNoteBuildInto(ctx, scope);
         fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr %s)\n", scope, slot,
                 cgOwnDropFn(ctx, s->var.type));
@@ -8258,6 +8329,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     fprintf(ctx->fnOut, "  store %%olang.scope zeroinitializer, ptr %s\n", ownScope);
     ctx->ownScopeSlot = ownScope;
     ctx->ownScopeBorrowed = false;
+    ctx->ownFrameScope = ownScope;
     for (int k = 0; k < ownCopies.len; k++) {
         struct var* p = ListGetIdx(&func->type.vars, *(int*)ListGetIdx(&ownCopies, k));
         struct cgLocal* l = cgFindLocal(ctx, p->name);
@@ -8282,7 +8354,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
         struct var* p = ListGetIdx(&func->type.vars, i);
         if (!p->type.refOwn || cgIsDtor(func)) continue;
         struct cgLocal* l = cgFindLocal(ctx, p->name);
-        char* scope = cgScopeSlotAt(ctx, ctx->blockDepth);
+        char* scope = cgOwnReleaseScope(ctx);
         cgNoteBuildInto(ctx, scope);
         fprintf(ctx->fnOut, "  call void @__olang_scope_register_dtor(ptr %s, ptr %s, ptr @__olang_own_drop_%s)\n", scope,
                 l->llvmVal, cgOwnIsArray(p->type) ? "aslot" : "slot");
@@ -8332,6 +8404,7 @@ static void cgFunctionIn(struct cgCtx* ctx, struct semaModule* mod, struct var* 
     ctx->curFunc = NULL;
     ctx->ownScopeSlot = NULL;
     ctx->ownScopeBorrowed = false;
+    ctx->ownFrameScope = NULL;
     cgPopScope(ctx);
 }
 

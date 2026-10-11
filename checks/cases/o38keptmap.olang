@@ -1,0 +1,24 @@
+# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
+# also: note: kept here, until the end of the block it is kept in
+# O38: ...a Map.Put
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    m := Map<I64, Outer&>()
+    m.Put(1, b)
+    v.o = null
+    for e in m { println($e.Value.o.k) }
+}

@@ -4954,6 +4954,20 @@ and literals made only of such, never existing storage anywhere in it) - it is
   call (a null result scope, a segfault), and fuzz runs now work in directories of their own (B2f). Scope fuzzer: own
   seeds 1-40, the same generator under both compilers, no findings (b50019d 206 run / 274 refused, now 181 / 299 - the
   difference the borrowed-copy shapes that must be refused).
+- **Phase 2a's soundness review, fixed (§8.8 O17, O17a, O33, O35, O36, O38, C9a, 2026-10-11; the coordinator's
+  decisions, details mine, docs/own.md section 14).** **F1**: an own array's borrow is a split value - its buffer in its
+  region, its elements' referents where the slot's container keeps them - so lending it to a callee that can store into
+  it (a function, a generic, a lambda capturing a local holding it, a task, a slice of it) is O17's error naming the fixes
+  that compile: lend what holds the array, or hand it over as an owner (`b.names = f(take b.names)`); an element store
+  through a slice of the borrow was not retagged (a use-after-free, fixed). Over-rejection recorded: a callee that only
+  permutes (`Reverse`, `Sort`) is refused too. **F2**: a call that may keep a loan-derived argument in another argument
+  (its obligations say so) holds the loans until the end of the block the destination lives in - **not** its last use,
+  as asked: a holder by last use is unsound where the storage has another name (a reference taken before, a handle's
+  copy), reproduced; a destination that cannot be followed is refused; a store through a reference, or into a local a
+  reference was taken to, likewise (both pre-existing holes). **F3**: an owner for an owning parameter, a constructor's
+  region and an own array's buffer are held in a hidden owner slot while a later argument that can leave runs. **F4**: a
+  frame's owners are registered on its own block's scope, a destructor's top-level ones on its private scope, closed as
+  it returns. Scope fuzzer's own mode writes the shapes: 079921e 41 findings in 120 seeds, now none in 400.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

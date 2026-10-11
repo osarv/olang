@@ -1,0 +1,28 @@
+# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
+# also: note: kept here, until the end of the block it is kept in
+# O38: ...a task's call keeping it, which outlives the task's join
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Big struct() {
+    x Outer& = null
+}
+fn work(g mut Big&, x Outer&) { g.x = x }
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    g := Big()
+    join { spawn work(g, b) }
+    v.o = null
+    println($g.x.o.k)
+}

@@ -17287,3 +17287,130 @@ test "O37: an owning value returned, and one moved out of an inner block - read 
     sbChurn()
     assert ownVecSum(a) == 15 and a.n == 5
 }
+# the review of own phase 2a (own3): an own array of references lent to a call that stores into it is refused (O17/O33,
+# checks/cases/o33ownarr*), a borrowed copy kept by a call is borrowed until the end of the block it is kept in (O38,
+# checks/cases/o38kept*), an owner a later argument leaves past is released (O36) and a destructor's own owner locals as it
+# returns (O35) - the forms that work, read back after the arena churns
+fn (b mut OwnBuf&) labelAll(k I64) {
+    for i in range b.names.Len() { b.names[i] = $k "-" $i }   # lent the holder: built where b lives, the elements' reach
+}
+fn ownFillOwned(a own mut Array<String&>&, k I64) own mut Array<String&>& {
+    for i in range a.Len() { a[i] = $k "/" $i } # an owning parameter's elements: built at its reach, the caller's
+    return a
+}
+fn ownNamesLen(a Array<String&>&) I64 {          # a read-only lend: nothing is stored into it
+    t := 0
+    for x in a { if x != null { t += x.Len() } }
+    return t
+}
+fn ownLendWork(k I64) I64 {
+    b := OwnBuf(3)
+    b.labelAll(k)
+    e := b.names[1]
+    b.names = ownFillOwned(take b.names, k + 1)
+    b.names[0:2][0] = $k "s"                    # through a slice of it: built where b lives too
+    g := b.names[0]
+    t := ownNamesLen(b.names) * 100 + e.Len() * 10 + g.Len()
+    b.names = Array<String&>(1)                 # the buffer released - not what its elements referred to
+    return t + e.Len() + g.Len()
+}
+OwnLendBaked I64 = ownLendWork(4)               # K2: computed while compiling
+test "O17/O33: an own array of references filled through its holder, as an owner and through a slice - while compiling and at run time" {
+    assert OwnLendBaked == ownLendWork(4 * OwnRun) and OwnLendBaked == 837
+    b := OwnBuf(3)
+    b.labelAll(7)
+    e := b.names[1]
+    b.names = ownFillOwned(take b.names, 8)
+    f := b.names[2]
+    b.names[0:2][0] = $9 "s"
+    g := b.names[0]
+    n := ownNamesLen(b.names)
+    b.names = Array<String&>(1)
+    assert sbChurn() > 0
+    assert e == "7-1" and f == "8/2" and g == "9s" and n == 8 and b.names[0] == null
+}
+type OwnKeep struct() {
+    s OwnServer& = null
+}
+fn ownKeep(k mut OwnKeep&, s OwnServer&) { k.s = s }
+test "O38: a borrowed copy kept by a call - in a List, a Map, a struct, a lambda - is read back after the arena churns" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(4 * OwnRun)
+    s.cur.sock = OwnSock(9)
+    t := OwnServer()
+    t.cur = OwnConn(5)
+    b := s                                      # a borrowed copy: its loans on s's objects last as long as what keeps it
+    l := List<OwnServer&>()
+    l.Push(b)
+    m := Map<I64, OwnServer&>()
+    m.Put(1, b)
+    k := OwnKeep()
+    ownKeep(k, b)
+    fs := List<fn() I64>()
+    fs.Push(fn() I64 { return b.cur.fd })
+    t.cur = null                                # another owner's object: nothing kept borrows it
+    assert sbChurn() > 0
+    assert l[0].cur.name == "c4" and l[0].cur.sock.n == 9 and k.s.cur.fd == 4 and fs[0]() == 4 and OwnDropped == 1
+    for e in m { assert e.Value.cur.sock.n == 9 }
+}
+type OwnKeepCtor struct(s OwnServer&) {
+    s
+}
+test "O38: a borrowed copy a constructor keeps in its instance is borrowed while the instance is used - released after it" {
+    OwnDropped = 0
+    s := OwnServer()
+    s.cur = OwnConn(6 * OwnRun)
+    b := s
+    k := OwnKeepCtor(b)                         # kept in the result: the local holding it holds the loans
+    sbChurn()
+    n := k.s.cur.fd + k.s.cur.name.Len()
+    s.cur = null                                # after k's last use: allowed
+    assert n == 8 and OwnDropped == 1
+}
+fn ownFails(k I64) I64 ? {
+    if k > 0 { error }
+    return k
+}
+fn ownTake2(c own mut OwnConn&, k I64) I64 { return c.fd + k }
+test "O36: an owner handed to a call, or a constructor's region, is released when a later argument leaves first" {
+    OwnDropped = 0
+    s := OwnServer()
+    for i in range 3 {
+        s.cur = OwnConn(i * OwnRun)
+        x := ownTake2(take s.cur, try ownFails(i) catch { continue })    # i > 0: the call never runs - released here
+        assert x == 0
+    }
+    for i in range 2 {
+        x := ownTake2(OwnConn(10 + i), try ownFails(i + 1) catch { break })
+    }
+    for i in range 2 {
+        s.other = OwnConn(try ownFails(i + 1) catch { break })          # its region made before its argument fails
+    }
+    assert sbChurn() > 0
+    assert OwnDropped == 4 and s.cur == null and s.other == null
+}
+OwnDtorLocals mut I64 = 0
+type OwnDtorChain struct(v I64) {
+    v
+    next own mut OwnDtorChain&
+} destruct {
+    x := OwnServer()                            # an owner value local of the destructor's own
+    x.cur = OwnConn(v)
+    y own mut OwnSock& = OwnSock(v)             # an own reference local
+    OwnDtorLocals++
+}
+test "O35: a destructor's own owner locals are released as it returns - every destructor of a chain of 1000" {
+    OwnDropped = 0
+    OwnDtorLocals = 0
+    {
+        hd own mut OwnDtorChain& = null
+        for i in range 1000 {
+            n own mut OwnDtorChain& = OwnDtorChain(i * OwnRun)
+            n.next = take hd
+            hd = take n
+        }
+    }
+    assert sbChurn() > 0
+    assert OwnDtorLocals == 1000 and OwnDropped == 2000
+}
