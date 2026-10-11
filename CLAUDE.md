@@ -5072,7 +5072,7 @@ and literals made only of such, never existing storage anywhere in it) - it is
   directly). R (older, on master): a local whose scope is an owned object's region - written `d mut String&x` with `x :=
   c.text`, or from a scope argument `mk&x(5)` - is new storage there and holds a loan on the region, as the borrow does.
   X (older, on master): an assert's message may not leave (S17). A global value copy (`T String = Docs.title`) keeps no
-  loan, as in a local.
+  loan, as in a local. Scope fuzzer own seeds 1-200: 1bcfb72 6 findings, the fix none.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

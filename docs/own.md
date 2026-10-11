@@ -1798,3 +1798,5 @@ condition, a case guard, a for post clause, a match value's clause or a spawn ta
 storage returned there - accepted), R (text built in a holder's own text's region through a typed local or a scope
 argument, read after the release - refused, O39 - or before it - accepted) and X (a return in an assert message -
 refused, S17).
+Own seeds 1-200: 1bcfb72 6 findings (5 of F1''s wrapper shapes, 1 of R's; 599 scenarios run, 1801 refused), this tip none
+(592 run, 1808 refused).
