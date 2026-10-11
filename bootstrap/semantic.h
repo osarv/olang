@@ -359,6 +359,8 @@ struct var {
     bool roByArg;
     bool roToResult;
     struct list roAssigns; //T25c: on a local, the values later assigned to it (struct operand*) - where a copy came from
+    struct list regionWrites; //O17 (Vec phase 1): on a local, every value written into it or a part of it (struct operand*)
+    bool regionTainted;       //...and whether it was lent writably or a task's result stored into it - what O17 cannot read
     //O17: on a function, for each of its scope variables, what its body does with the region the variable names - stores
     //into a slot reached through it something not read out of that region (built, or handed in), itself or through a
     //callee (stored); or returns a reference or value carrying it through which a store is possible (handed out). Kept on

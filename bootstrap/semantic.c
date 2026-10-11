@@ -7782,9 +7782,11 @@ bool valueRefsAdmitStores(struct type t);
 //O17a: set while a borrow is judged elsewhere - a call's argument, by the callee's body (O17); the reference a for-in
 //walks through, whose elements are given the value's references' scope (S9a)
 static bool splitBorrowJudgedElsewhere = false;
+static void regionLocalTaint(struct operand* op);
 enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct type target) {
     if (!target.structMAlloc || op->type.structMAlloc || !OperandIsLvalue(op)) return TYPE_FIT_OK;
     op->inPlaceBorrow = true; //O38 (own7 F1): borrowed where it is, not read as a copy
+    if (target.refMut) regionLocalTaint(op); //O17: a local lent writably holds what its borrower writes
     if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
@@ -10761,7 +10763,9 @@ static void bindingEdges(void) {
     }
 }
 
+static void flushRegionLocalStores(struct var* func);
 static void settleRegions(void) {
+    flushRegionLocalStores(NULL); //O17: a lambda's, or any body's left
     bindingEdges();
     for (bool changed = true; changed; ) {
         changed = false;
@@ -11119,7 +11123,21 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 if (calleeBodyKnown(func) && !func->bodyHadErrors && regionStoredIn(func, sv)) markRegionStored(ctx->func, r, tok);
                 if (calleeBodyKnown(func) && !func->bodyHadErrors && regionBuiltIn(func, sv)) builtAt(ctx, r, tok);
             } else { //a function value: its body is not known here
-                markRegionStored(ctx->func, r, tok);
+                //(Vec phase 1: but it keeps nothing of its arguments beyond the call but in its result, T22a - so through a
+                //parameter whose type lets nothing be stored it stores nothing where its argument leads: "less(a[i], a[j])")
+                bool stores = false;
+                for (int j = 0; j < func->type.vars.len && !stores; j++) {
+                    struct type pt = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
+                    if (!pt.scopeParam || pt.scopeParam == SCOPE_AMBIGUOUS || canonicalVar(pt.scopeParam) != canonicalVar(sv))
+                        continue;
+                    stores = pt.structMAlloc ? RefNarrowingMatters(pt) : valueRefsAdmitStores(pt);
+                }
+                bool any = false; //(a variable no parameter names - the result's: what it hands back is judged where it lands)
+                for (int j = 0; j < func->type.vars.len && !any; j++) {
+                    struct type pt = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
+                    any = pt.scopeParam && pt.scopeParam != SCOPE_AMBIGUOUS && canonicalVar(pt.scopeParam) == canonicalVar(sv);
+                }
+                if (stores || !any) markRegionStored(ctx->func, r, tok);
                 builtAt(ctx, r, tok);
             }
         }
@@ -20738,6 +20756,57 @@ static void landAtTarget(struct checkCtx* ctx, struct operand* target, struct op
     }
 }
 
+//O17 (Vec phase 1): a local holding only what it read out of a region - its initializer and every value written into
+//it, or a part of it, a read of that region - brings nothing in from outside when it is stored back ("t := a[i]
+//a[i] = a[j]  a[j] = t"). Whether that holds is known once the body is (a write may follow the store), so such a store is
+//held (regionLocalStores) and judged as the body ends (flushRegionLocalStores): one that does not hold is a store into
+//the region as any other. A local lent writably, or given a task's result, is never one (regionTainted)
+struct regionLocalStore { struct var* func; struct var* v; struct var* r; struct token tok; };
+static struct list regionLocalStores;
+static struct var* regionLocalOf(struct operand* op) {
+    if (!op || op->opType != OPERATION_READ_VAR || !op->readVar) return NULL;
+    struct var* v = op->readVar;
+    if (v->owner || v->isFuncDecl || v->paramCopy || v->isCapture || canonicalVar(v)->isCapture || !v->declInit) return NULL;
+    return v;
+}
+static void regionLocalWrite(struct operand* target, struct operand* rhs) {
+    struct var* root = lvalueRootVar(target);
+    if (!root || root->owner || root->isFuncDecl) return;
+    if (!root->regionWrites.elemSize) root->regionWrites = ListInit(sizeof(struct operand*));
+    ListAdd(&root->regionWrites, &rhs);
+}
+static void regionLocalTaint(struct operand* op) {
+    struct var* root = op ? lvalueRootVar(op) : NULL;
+    if (root && !root->owner) root->regionTainted = true;
+}
+static bool regionLocalHolds(struct var* func, struct var* v, struct var* r) {
+    if (v->regionTainted || !v->declInit) return false;
+    struct checkCtx c = {0};
+    c.func = func;
+    c.hasOwnScope = true;
+    if (!readFromRegion(&c, v->declInit, r, v->type.structMAlloc)) return false;
+    for (int i = 0; i < v->regionWrites.len; i++) {
+        struct operand* w = *(struct operand**)ListGetIdx(&v->regionWrites, i);
+        if (!w->isNullLiteral && !readFromRegion(&c, w, r, w->type.structMAlloc)) return false;
+    }
+    return true;
+}
+static void flushRegionLocalStores(struct var* func) {
+    int keep = 0;
+    for (int i = 0; i < regionLocalStores.len; i++) {
+        struct regionLocalStore* p = ListGetIdx(&regionLocalStores, i);
+        if (func && canonicalVar(p->func) != canonicalVar(func)) {
+            *(struct regionLocalStore*)ListGetIdx(&regionLocalStores, keep++) = *p;
+            continue;
+        }
+        if (!regionLocalHolds(p->func, p->v, p->r)) {
+            markRegionStored(p->func, p->r, p->tok);
+            markRegionBuilt(p->func, p->r);
+        }
+    }
+    regionLocalStores.len = keep;
+}
+
 //O17: a store into a slot of the region one of this function's scope variables names - a slot holding references, or
 //one a value built for it lands in - of what that region does not already hold. Every store into a place counts: an
 //assignment's, and each target a task's results are stored into (P1g)
@@ -20749,7 +20818,12 @@ static void noteRegionStore(struct checkCtx* ctx, struct operand* target, struct
     int td;
     bool tu;
     struct var* r = targetRefsScope(ctx, target, &tv, &td, &tu) && !tu ? ownRegionVar(ctx, tv) : NULL;
-    if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) {
+    struct var* lv = r ? regionLocalOf(rhs) : NULL;
+    if (r && lv && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) { //(judged as the body ends, above)
+        if (!regionLocalStores.elemSize) regionLocalStores = ListInit(sizeof(struct regionLocalStore));
+        struct regionLocalStore p = { ctx->func, lv, r, target->tok };
+        ListAdd(&regionLocalStores, &p);
+    } else if (r && !readFromRegion(ctx, rhs, r, target->type.structMAlloc)) {
         markRegionStored(ctx->func, r, target->tok);
         builtAt(ctx, r, target->tok); //something from elsewhere, kept where the region is
     }
@@ -20861,6 +20935,7 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
         struct var* root = lvalueRootVar(target);
         if (root && !root->owner && !root->type.structMAlloc) root->lentForStores = true;
     }
+    regionLocalWrite(target, rhs);
     noteRegionStore(ctx, target, rhs);
     if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar && !ErrMsgMuted()) { //T25c, P2
         if (!target->readVar->roAssigns.elemSize) target->readVar->roAssigns = ListInit(sizeof(struct operand*));
@@ -24819,6 +24894,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
                 fits = false;
             }
             if (!OperandIsMutableLvalue(t)) fits = false;
+            regionLocalTaint(t); //O17: a task's result is never a read of a region
             struct var* troot = lvalueRootVar(t);
             if (troot && !troot->owner && !t->type.scopeParam && t->type.scopeDepth > ctx->joinDepth) {
                 Err(t->tok, ERR_SPAWN_RESULT_TOO_SHORT);
@@ -25848,6 +25924,7 @@ void checkInstantiationBody(struct instantiation* inst) {
     instChain = prevChain;
     ErrMsgPopContext();
     SemanticMethodScope = savedScope;
+    flushRegionLocalStores(spec); //O17
     spec->bodyState = 2;
 }
 
@@ -26650,6 +26727,7 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
         }
     }
     roBodyFunc = savedRoBody;
+    flushRegionLocalStores(func); //O17
     func->bodyState = 2;
 }
 

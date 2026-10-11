@@ -1,0 +1,34 @@
+# check: fail error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee 
+# O17 (Vec phase 1): a callee lent a split value only permutes its elements - a second local copying the first, given a value from outside is a store from outside
+type N2 struct(v I64) {
+    v
+    next mut N2& = null
+}
+type Rec struct(name String&, n I64) {
+    name
+    n
+}
+type RecN struct(nd mut N2&) {
+    nd
+}
+type B struct() {
+    names own mut Array<String&>&
+}
+fn mkText(k I64) String& { return "t" $k }
+fn mkB() mut B& {
+    b mut B& = B()
+    b.names = Array<String&>(3)
+    for i in range 3 { b.names[i] = mkText(i) }
+    return b
+}
+fn setName(r mut Rec&, s String&) { r.name = s }
+fn f(a mut Array<String&>&, s String&) {
+    t := a[0]
+    t2 := t
+    t2 = s
+    a[1] = t2
+}
+fn main() ? {
+    b := mkB()
+    f(b.names, mkText(7))
+}

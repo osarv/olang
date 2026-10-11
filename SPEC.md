@@ -4854,7 +4854,15 @@ answered from its own body, so `List<String&>.At` handing nothing out is not mad
 `List<List<String&>>.At` doing so, whatever order the program uses them in. Only what is read out of the region by following a reference from the parameter brings in
 nothing new (`l.chunks[k]`, `b.head.next`, storage reached through one, `b.head.data`): the parameter itself and the
 storage it is - its inline fields and elements, a view of them (`b`, `b.data`) - are the lent value, which may live
-elsewhere than its references, so storing one of them into the region is a store like any other. A callee that only reads the value, or writes numbers into it, may be lent it: `toks := split(line);
+elsewhere than its references, so storing one of them into the region is a store like any other. A **local holding only
+what it read out of the region** brings in nothing new either: one whose initializer and every value written into it, or
+into a part of it, anywhere in the body, is such a read - `t := a[i]  a[i] = a[j]  a[j] = t` - and which is never lent
+writably nor given a task's result. A call through a **function value** keeps nothing of its arguments beyond the call but
+in its result (T22a), so it stores nothing where an argument leads whose parameter's type lets nothing be stored through
+it (O25g) - `less(a[i], a[j])` with `less fn(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
+parameter through which something can be stored keeps counting as a store. So a callee that only permutes the elements
+- `Reverse`, `Sort`, a swap through a local - may be lent the value. A callee that only reads the value, or writes
+numbers into it, may be lent it: `toks := split(line);
 count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
@@ -4883,9 +4891,7 @@ callee's variable is bound to the region, so a callee that can store into what i
 function, a constructor, a lambda capturing a local holding the borrow, a task's call) would build what it stores in the
 buffer's region, released with the buffer while every read of the element says it lives on: lending it there is a
 compile-time error naming the fix - lend the callee what holds the array, or hand it the array as an owner (O36:
-`b.names = fill(take b.names)`). A callee that reads it, or writes numbers into it, may be lent it. *(Implemented as O17
-reads a body, so a callee that only permutes the elements - `Reverse`, `Sort`, a swap through a local - is refused as
-well.)*
+`b.names = fill(take b.names)`). A callee that reads it, writes numbers into it, or only permutes its elements (O17: `Reverse`, `Sort`), may be lent it.
 
 **O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
 exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
