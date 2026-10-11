@@ -5129,6 +5129,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   lost up to 7x (a List walk stopped vectorizing); with them every benchmark is equal or better (binary-trees -23%,
   text -15%, push -6%). Every object's name hashes the runtime's text (an edit rebuilds them). Per object 65 KB less IR,
   bitcode 6.8 -> 2.4 MB for the corpus, a clean `-b` -22% CPU, a clean `-t` -15%.
+- **A `:=` field or global read before its turn; a BF16's sign bit (C2, D15, B5a, E33, 2026-10-11).** A `:=` field's
+  type comes from its constructor's body and a `:=` global's from its initializer, both built in declaration order, so a
+  body (or initializer) reading one earlier - a method above its type, an importing module's code, `A := B + 1` above
+  `B := 3` (legal by B5a) - saw `?`. Such a read now builds the constructor's body (a generic instantiation's too) or the
+  global's initializer first; `:=` globals reading each other are B5a's cycle error. `compiler/diag.olang`'s typed fields
+  went back to `:=`. std/math's SignBit failed under `-d`/`-r`: LLVM 18's x86 selection takes the sign bit of `bitcast
+  bfloat to i16` from a load/select/phi for a known zero (and crashed with the bfloat also stored); InstCombine rewrites
+  every other spelling into that bitcast, so `Bits()` of a BF16 goes through an empty asm always, and the BF16 widening
+  only in `-d`/`-r` builds (an asm stops vectorizing; `-O3`'s remaining shapes did not miscompile in any program tried).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

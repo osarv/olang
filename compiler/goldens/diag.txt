@@ -641,6 +641,16 @@ d13czeroref.olang:20:12: note: a reference has one, null - hold Ticket as 'Ticke
    20 |     b := a.Repeat(2)
       |            ^~~~~~
 compilation failed with 2 errors
+=== d15forwardcycle.olang
+d15forwardcycle.olang:3:1: error[B5a]: these globals' initializers read each other, so none can be set first: A -> B -> C -> A
+    3 | A := B + 1
+      | ^
+compilation failed with 1 error
+=== d15forwardself.olang
+d15forwardself.olang:3:1: error[B5a]: A's initializer reads A, which is not set until the initializer is done
+    3 | A := A + 1
+      | ^
+compilation failed with 1 error
 === d15null.olang
 d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'
     8 |     x := null

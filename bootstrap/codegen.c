@@ -125,6 +125,7 @@ struct cgCtx {
     //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
     //comes from dbgNext, which starts far above anything the TBAA metadata uses.
     bool debug;
+    bool bf16Opaque; //T4/E33: a -d or -r build, whose BF16 widening is kept opaque too (cgBF16Bits)
     FILE* dbgOut;
     char* dbgBuf;
     size_t dbgSize;
@@ -4082,9 +4083,25 @@ char* cgLen(struct cgCtx* ctx, struct operand* op) {
 //extended from bfloat to fit in any type of at least bfloat's precision, so "fptrunc (fdiv (fpext b), (fpext b)) to
 //half" became an F16 division of b narrowed to F16, where bfloat's range does not fit - 2^-126 / 2^-126 was 0 / 0, a
 //NaN (found by the fuzzer, fuzz/repro/bf16shrink.ll)
-static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide) {
+//a BF16's bits as an i16. LLVM 18's x86 selection takes the sign bit of "bitcast bfloat to i16" for a known zero
+//wherever the bfloat is not an argument in a register - a load, a value stored as well as read, a select or a phi - so
+//any test of that bit was folded to false ("x.Bits() >> 15 == 1", "& 0x8000", "F32(x).Bits() >> 31"), and with the
+//bfloat stored too, selection crashed (SimplifyDemandedBits); every other bit is computed correctly
+//(fuzz/repro/bf16signbit.ll). InstCombine rewrites every other spelling of those bits into that bitcast, so an empty asm
+//on the i16 - no instruction, but opaque to selection - is what keeps the bit; and since no loop vectorizes through
+//one, the widening every BF16 operation starts with is kept opaque only in a -d or -r build, where nothing vectorizes
+//and where the plain form went wrong on ordinary code (std/math's SignBit). Under -O3 InstCombine has made a load's
+//bits an i16 load before selection, which is what keeps the corpus right there
+static char* cgBF16Bits(struct cgCtx* ctx, char* val, bool opaque) {
     char* bits = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = bitcast bfloat %s to i16\n", bits, val);
+    if (!opaque) return bits;
+    char* hidden = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = call i16 asm \"\", \"=r,0\"(i16 %s)\n", hidden, bits);
+    return hidden;
+}
+static char* cgWidenBF16(struct cgCtx* ctx, char* val, const char* wide) {
+    char* bits = cgBF16Bits(ctx, val, ctx->bf16Opaque);
     char* z = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = zext i16 %s to i32\n", z, bits);
     char* sh = cgNewTmp(ctx);
@@ -6172,8 +6189,9 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             //the rest then read the bits as the other type (fuzz/repro/bf16bitcastfold.ll). That needs a half
             //on one side of the i16 and a bfloat on the other, and only an F16's bits put a half beside an i16
             //(a BF16's are also widened and narrowed through one, cgWidenBF16/cgNarrowBF16) - so an empty asm on
-            //the integer of every F16 bitcast, and of no other, keeps the two apart. It emits no instruction, but
-            //no loop vectorizes through it, which is why a BF16's bits are left plain
+            //the integer of every F16 bitcast keeps the two apart. It emits no instruction, but no loop vectorizes
+            //through it. A BF16's bits are behind one too, for a reason of their own (cgBF16Bits)
+            if (!strcmp(from, "bfloat")) return cgBF16Bits(ctx, v, true); //(always: one value, nothing to vectorize)
             bool toHalf = !strcmp(to, "half"), fromHalf = !strcmp(from, "half");
             if (toHalf) {
                 char* opaque = cgNewTmp(ctx);
@@ -9027,6 +9045,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
     ctx.ctorOwners = ListInit(sizeof(struct cgCtorOwner));
 
     ctx.debug = debug;
+    ctx.bf16Opaque = debug || race;
     ctx.fnValues = ListInit(sizeof(struct var*));
     ctx.capScopes = ListInit(sizeof(struct cgCapScope));
     ctx.handed = ListInit(sizeof(struct cgHanded));

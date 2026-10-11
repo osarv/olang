@@ -32,7 +32,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr",
-                     "frameenv", "ownleave", "vecalias"]
+                     "frameenv", "ownleave", "vecalias", "inferfield"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -268,6 +268,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "scopesan" { try scopesan(r) }
         case "ownleave" { try ownleave(r) }
         case "vecalias" { try vecalias(r) }
+        case "inferfield" { try inferfield(r) }
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
@@ -793,8 +794,9 @@ fn k2(r mut report&) ? Failed {
 }
 
 # E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
-# LLVM reads back exactly, the 16-bit ones in their own
-test "a NaN made from bits is written out with its bits" { assert passed("bits") }
+# LLVM reads back exactly, the 16-bit ones in their own; and a BF16's sign bit, read from memory, is its own under -d
+# as under -b (LLVM 18's selection took it for a known zero, so std/math's SignBit failed at -d and -r)
+test "a NaN made from bits is written out with its bits, and a BF16's sign bit read from memory" { assert passed("bits") }
 
 fn bits(r mut report&) ? Failed {
     dir := fresh("bits")
@@ -806,6 +808,8 @@ fn bits(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -q '@bits_GH = constant half 0xH7C01'" $ll) == 0, "bits_GH", dir)
     try r.expect(sh(dir, "grep -q '@bits_GB = constant bfloat 0xRFFC1'" $ll) == 0, "bits_GB", dir)
     try r.expect(sh(dir, "grep -q '@bits_Baked = constant i1 true'" $ll) == 0, "bits_Baked", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b bf16sign.olang > out.txt 2>&1 && ./build/bf16sign") == 0, "bf16sign", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -b -d bf16sign.olang > out.txt 2>&1 && ./build/bf16sign.debug") == 0, "bf16sign -d", dir)
 }
 
 # a function returning an aggregate returns it through one slot and one exit block, so that inlined, its result's
@@ -1275,6 +1279,18 @@ fn target(r mut report&) ? Failed {
 # types are resolved - resolves in a context of its own, so the signature's "<T>" is not the type's T. Which file's
 # storage lay above the other's decided whether it went wrong, so b.olang is padded until it is stored apart, above
 test "a generic type first reached from another module's signature" { assert passed("lazytype") }
+
+# C2: a ":=" field's type is settled as its constructor's body is built, which a body reading the field may need first -
+# a function or method declared above the type, a generic type's instantiation, or a module importing the type's, whose
+# bodies are checked first (the field read as "?", "? has no method 'Push'")
+test "a ':=' field read before its constructor's body is built" { assert passed("inferfield") }
+
+fn inferfield(r mut report&) ? Failed {
+    dir := fresh("inferfield")
+    os.Run("cp checks/fixtures/inferfield/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -t b.olang > out.txt 2>&1") == 0, "b.olang's tests", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -t a.olang > out.txt 2>&1") == 0, "a.olang's tests", dir)
+}
 
 fn lazytype(r mut report&) ? Failed {
     dir := fresh("lazytype")
