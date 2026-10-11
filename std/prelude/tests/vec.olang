@@ -1,0 +1,170 @@
+# Vec<T>, the growable array, tested - a module of its own, not part of the prelude, so these are compiled only when
+# they are run. Text and nodes kept in a Vec are read back after the arena churns; a computation through Vecs is baked
+# into a global (K2) and decided by an assert (S18c) beside the same computation at run time
+
+Run I64 = Count(1)                                      # a run-time 1: computations given it are not folded
+fn Count(k I64) I64 {
+    c := 0
+    for i in range k { c++ }
+    return c
+}
+# churn the arena: a block that allocates and closes, many times, so storage freed early would be reused
+fn churn() {
+    for i in range 200 {
+        s := $i " churn " $(i * 7)
+        assert s.Len() > 0
+    }
+}
+
+fn vecWork(k I64) I64 {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i * k) }
+    t := v.Len() + v[99]
+    v.Insert(0, 7)
+    t += v.RemoveAt(50) + v.SwapRemove(1) + v[1]
+    v.Reverse()
+    v.Sort(fn(a I64, b I64) Bool { return a < b })
+    t += v[0] + v[v.Len() - 1] + (try v.IndexOf(10 * k) catch default -1)
+    p := try v.Pop() catch default 0
+    t += p + (try v.First() catch default 0) + (try v.Last() catch default 0)
+    v.Truncate(10)
+    w := v.Clone()
+    w.Push(5)
+    t += w.Len() * 1000 + v.Len()
+    for x in v { t += x }
+    t += v.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x * 2 })
+    a := v.ToArray()
+    t += a.Len() + a[3]
+    v.Clear()
+    t += v.Len()
+    return t
+}
+VecBaked I64 = vecWork(3)                               # K2: computed while compiling
+
+test "Vec: Push, indexing, Insert, RemoveAt, SwapRemove, Sort, Pop, Truncate, Clone - while compiling and at run time" {
+    assert VecBaked == vecWork(3 * Run) and VecBaked == vecWork(3)
+    assert vecWork(1) == 11835                          # S18c: decided while compiling
+}
+
+fn vecText(k I64) I64 {
+    v := Vec<String&>()
+    for i in range 30 { v.Push($(i * k % 17)) }
+    s := v[3]                                           # kept across the growth below (13.1)
+    for i in range 30 { v.Push("x" $i) }
+    v.Sort(fn(a String&, b String&) Bool { return a < b })  # O17: Sort only permutes the buffer's elements
+    d := v.View()                                       # O37: a borrowed own result, used before the next Push
+    t := d.Len() * 100 + d[0].Len() + d[59].Len() + s.Len()
+    v.Push("z")
+    return t + v.Len() + (try v.IndexOf("x7") catch default -1)
+}
+VecTextBaked I64 = vecText(5)                           # K2
+
+test "Vec: text sorted, viewed and kept - while compiling and at run time" {
+    assert VecTextBaked == vecText(5 * Run) and vecText(1) == vecText(Run)
+}
+
+test "Vec: an empty one fails First, Last, Pop and IndexOf with the default error" {
+    v := Vec<I64>()
+    assert v.Len() == 0 and (try v.First() catch default -1) == -1 and (try v.Last() catch default -1) == -1
+    assert (try v.Pop() catch default -1) == -1 and (try v.IndexOf(3) catch default -1) == -1
+    assert (try v[0] catch default -1) == -1           # E31a: the derived checked form
+    v.Push(4)
+    assert (try v[1] catch default -1) == -1 and (try v[0] catch default -1) == 4
+}
+
+test "Vec: growth keeps every element, the buffer doubling from 8" {
+    v := Vec<I32>()
+    for i in range I32(1000) { v.Push(i) }
+    churn()
+    t := 0
+    for x in v { t += x }
+    assert v.Len() == 1000 and t == 499500 and v[999] == 999 and v[0] == 0
+    v.PushAll(I32[1, 2, 3])
+    assert v.Len() == 1003 and v[1002] == 3
+}
+
+test "Vec: text kept in one, an element kept while it grows, read back after a churn" {
+    v := Vec<String&>()
+    for i in range 40 { v.Push($i) }                    # each text built where v lives - its elements' reach
+    s := v[7]                                           # an element refers outside the buffer (13.1)
+    for i in range 200 { v.Push("x" $i) }               # so the buffer may be replaced under it
+    churn()
+    assert s == "7" and v.Len() == 240 and v[37] == "37" and v[239] == "x199"
+    v.Sort(fn(a String&, b String&) Bool { return a < b })
+    assert v[0] == "0" and v[1] == "1" and v[2] == "10"
+    assert "12" in v and not ("z" in v) and (try v.IndexOf("x0") catch default -1) == 40
+}
+
+test "Vec: View lends the elements as an array, RunFrom walks one run" {
+    v := Vec<F64>()
+    for i in range 10 { v.Push(F64(i) * 0.5) }
+    d := v.View()
+    s := 0.0
+    for x in d { s += x }
+    assert d.Len() == 10 and s == 22.5
+    m := v.ViewMut()
+    m[0] = 9.0
+    assert v[0] == 9.0
+    r := try v.RunFrom(4) catch default Array<F64>(0)
+    assert r.Len() == 6 and r[0] == 2.0
+    assert (try v.RunFrom(10) catch Exhausted default Array<F64>(1)).Len() == 1
+}
+
+test "Vec: equal Vecs compare and hash alike, and render as their elements" {
+    a := Vec<I64>()
+    b := Vec<I64>()
+    for i in range 5 { a.Push(i) }
+    for i in range 5 { b.Push(i) }
+    b.Push(9)
+    assert a != b
+    try b.Pop() catch { unreachable }
+    assert a == b and a.Hash() == b.Hash() and a.Hash() == I64[0, 1, 2, 3, 4].HashElements()
+    assert $a == "Vec<I64>[0, 1, 2, 3, 4]" and $Vec<String&>() == "Vec<String&>[]"
+}
+
+test "Vec: a borrowed copy reads, take moves, Clone copies" {
+    a := Vec<I64>()
+    for i in range 3 { a.Push(i + 1) }
+    b := a                                              # a borrowed copy: a loan on a's buffer to its last use
+    assert b.Len() == 3 and b[2] == 3
+    c := take a                                         # a left its zero value
+    assert a.Len() == 0 and c.Len() == 3
+    d := c.Clone()
+    d.Push(4)
+    assert c.Len() == 3 and d.Len() == 4
+}
+
+type vecNode struct(name String&, n I64) {
+    name
+    n
+}
+test "Vec: references kept in one, read back after a churn and after the Vec is replaced" {
+    v := Vec<vecNode&>()
+    for i in range 30 { v.Push(vecNode($i, i)) }
+    first := v[0]
+    v = Vec<vecNode&>()                                 # the old buffer released; the nodes live where v does
+    churn()
+    assert first.name == "0" and first.n == 0 and v.Len() == 0
+    for i in range 3 { v.Push(vecNode("n" $i, i * 10)) }
+    churn()
+    assert v[2].name == "n2" and v[2].n == 20
+}
+
+test "Vec: room made up front, Reserve, Cap, Remove and Join" {
+    v := Vec<I64>(100)
+    assert v.Len() == 0 and v.Cap() == 100
+    for i in range 100 { v.Push(i) }
+    assert v.Cap() == 100                               # no buffer replaced while there was room
+    v.Push(100)
+    assert v.Cap() == 200
+    v.Reserve(500)
+    assert v.Cap() == 601 and v.Len() == 101 and v[100] == 100
+    v.Reserve(10)
+    assert v.Cap() == 601                               # room enough: nothing replaced
+    assert v.Remove(50) and not v.Remove(50) and v.Len() == 100 and v[50] == 51
+    t := Vec<String&>()
+    t.Push("a")
+    t.Push("b")
+    t.Push("c")
+    assert t.Join(", ") == "a, b, c" and Vec<String&>().Join("-") == ""
+}

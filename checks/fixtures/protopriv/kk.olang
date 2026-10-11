@@ -6,11 +6,11 @@ fn (a Key) eq(b Key) Bool { return a.N % 10 == b.N % 10 }
 fn (a Key) hash() I64 { return I64(a.N % 10) }
 fn (k Key) str() String { return "K" $k.N }
 
-type Vec struct(x I32) {
+type Vec2 struct(x I32) {
     X I32 = x
 }
-fn (a Vec) plus(b Vec) Vec { return Vec(a.X + b.X) }
-fn (a Vec) less(b Vec) Bool { return a.X < b.X }
+fn (a Vec2) plus(b Vec2) Vec2 { return Vec2(a.X + b.X) }
+fn (a Vec2) less(b Vec2) Bool { return a.X < b.X }
 
 type Bag struct() {
     items mut List<I32>& = List<I32>()
@@ -53,7 +53,7 @@ fn Inside() Bool {
     for y in g { total += y }
     keys := Key[Key(1), Key(2)]
     add := Adder(2)
-    ok := Key(1) == Key(11) and $Key(5) == "K5" and (Vec(1) + Vec(2)).X == 3 and Vec(1) < Vec(2) and Vec(3) > Vec(2)
+    ok := Key(1) == Key(11) and $Key(5) == "K5" and (Vec2(1) + Vec2(2)).X == 3 and Vec2(1) < Vec2(2) and Vec2(3) > Vec2(2)
     ok = ok and b[1] == 5 and 4 in b and add(3) == 5 and apply(add, 4) == 6 and total == 15
     ok = ok and Wrap(Key(3)) == Wrap(Key(13)) and keys == Key[Key(11), Key(12)] and $Wrap(Key(2)) == "Wrap(K2)"
     return ok and Wrap(Key(4)).Hash() == Wrap(Key(14)).Hash() and keys.Hash() == Key[Key(21), Key(32)].Hash()

@@ -848,7 +848,7 @@ fn protopriv(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0, "protopriv", dir)
     try r.expect(sh(dir, "grep -q '@kk_Baked = .*i1 true' build/kk*.ll") == 0, "Inside() was not baked", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b bad.olang > out.txt 2>&1") != 0, "bad.olang compiled", dir)
-    for what in String&["'==' needs Key's eq", "'$' needs Key's str", "'+' needs Vec's plus", "'>' needs Vec's less",
+    for what in String&["'==' needs Key's eq", "'$' needs Key's str", "'+' needs Vec2's plus", "'>' needs Vec2's less",
                         "'[' needs Bag's at", "'for' needs Bag's at", "'in' needs Bag's has", "'for' needs Gen's next",
                         "needs Adder's call", "'Hash' needs Key's hash", "compilation failed with 14 errors"] {
         try r.expect(outOf(dir).Contains(what), "bad.olang: expected " $what, dir)

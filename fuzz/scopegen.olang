@@ -1107,10 +1107,11 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
     back := ($ind "if " $n ".Len() > 0 and " $n "[0] != null {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n
              " = Array<mut Node&>(1)\n" $ind "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
     if g.chance(60) {
-        w := g.r(12)
+        w := g.r(14)
         if w < 4 { return g.own4Op(h, ind, v) }
         if w < 6 { return g.own5Op(h, ind, v) }
-        return g.own6Op(h, ind, v) if w < 9 else g.own7Op(h, ind, v)
+        if w < 9 { return g.own6Op(h, ind, v) }
+        return g.own7Op(h, ind, v) if w < 11 else g.vecOp(h, ind, v)
     }
     k := g.r(15 if g.dtors else 11)
     if k == 0 { return $ind "ofillAt(" $n ", " $v ")\n" $back }
@@ -1390,6 +1391,80 @@ fn (g mut SG&) own7Op(h String&, ind String&, v I64) String& {
     }
     return ($ind "{\n" $mk $ind $x " := o7rd(" $hh ".buf[2])\n" $ind "for y in " $hh ".cur.data { " $x " += y }\n" $ind $hh
             ".buf = null\n" $rel $use $ind "}\n")
+}
+
+# Vec phase 1 (O37, O17, the prelude's Vec): a borrowed result of an own field or a slice of one, directly or passed
+# through, used before its object is released (accepted) or after (refused: O39); a callee permuting an own array of text
+# (accepted), or storing new text into it (refused: O17); a Vec of text or nodes grown with an element kept across the
+# growth, the Vec replaced, cloned or moved - and a view of it kept across a push (refused: O39)
+fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    s := g.name("s")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    k := g.r(12)
+    if k <= 3 {
+        vw := g.name("ovw")
+        sl := g.name("osl")
+        ps := g.name("ops")
+        g.addHelper("fn " $vw "(h OHold&) Array<I64>&h { return h.buf }\n" "fn " $sl "(h OHold&) Array<I64>&h { return h.buf[1:3] }\n"
+                    "fn " $ps "(h OHold&) Array<I64>&h { return " $vw "(h) }\n")
+        f := $vw if k == 0 else ($sl if k == 1 else $ps)
+        mk := $ind $h ".buf = Array<I64>(4, " $v ")\n" $ind $h ".buf[2] = " $v " + 5\n"
+        if k == 3 {    # used after the buffer is released (refused: O39)
+            return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $h ".buf = null\n" $ind "churn()\n" $ind $x " := " $s
+                    "[2]\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $s " := " $f "(" $h ")\n" $ind $x " := " $s "[1] + " $s ".Len()\n" $ind $h ".buf = null\n"
+                $ind "churn()\n" $use $ind "}\n")
+    }
+    if k == 4 or k == 5 {    # a borrowed own object: read before its release, or after it (refused: O39)
+        fs := g.name("ofs")
+        g.addHelper("fn " $fs "(h OHold&) ONode&h { return h.cur }\n")
+        mk := $ind $h ".cur = ONode(" $v ")\n"
+        if k == 5 {
+            return ($ind "{\n" $mk $ind $s " := " $fs "(" $h ")\n" $ind $h ".cur = null\n" $ind "churn()\n" $ind $x " := onode("
+                    $s ")\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $s " := " $fs "(" $h ")\n" $ind $x " := onode(" $s ")\n" $ind $h ".cur = null\n" $ind
+                "churn()\n" $use $ind "}\n")
+    }
+    if k == 6 or k == 7 {    # a callee permuting an own array of text, or storing new text into it (refused: O17)
+        ht := g.name("OHT")
+        pm := g.name("opm")
+        st := "    a[0] = $k\n" if k == 7 else ""
+        g.addHelper("type " $ht " struct() {\n    names own mut Array<String&>&\n}\n" "fn " $pm "(a mut Array<String&>&, k I64) {\n"
+                    "    t := a[0]\n    a[0] = a[a.Len() - 1]\n    a[a.Len() - 1] = t\n    a.Reverse()\n"
+                    "    a.Sort(fn(p String&, q String&) Bool { return p < q })\n"
+                    $st "}\n")
+        t := g.name("t")
+        y := g.name("y")
+        return ($ind "{\n" $ind $t " mut " $ht "& = " $ht "()\n" $ind $t ".names = Array<String&>(5)\n" $ind "for i in range 5 { " $t
+                ".names[i] = $(i * 3 + " $v ") }\n" $ind $pm "(" $t ".names, " $v ")\n" $ind "churn()\n" $ind $x " := 0\n" $ind
+                "for " $y " in " $t ".names { " $x " = " $x " * 31 + " $y ".Len() + I64(" $y "[0]) }\n" $use $ind "}\n")
+    }
+    if k == 8 {    # a Vec of text grown with an element kept across the growth, then replaced
+        e := g.name("e")
+        return ($ind "{\n" $ind $s " := Vec<String&>()\n" $ind "for i in range 3 { " $s ".Push($(i + " $v ")) }\n" $ind $e " := "
+                $s "[1]\n" $ind "for i in range 40 { " $s ".Push(\"v\" $i) }\n" $ind "churn()\n" $ind $x " := " $e ".Len() * 7 + "
+                $s "[40].Len()\n" $ind $s " = Vec<String&>()\n" $ind "churn()\n" $ind $x " += " $e ".Len() + " $s ".Len()\n" $use
+                $ind "}\n")
+    }
+    if k == 9 {    # a Vec of nodes: cloned, moved, sorted, its first node kept across a release of the buffers
+        e := g.name("e")
+        c := g.name("c")
+        return ($ind "{\n" $ind $s " := Vec<mut Node&>()\n" $ind "for i in range 20 { " $s ".Push(Node(" $v " + i % 7)) }\n" $ind
+                $e " := " $s "[3]\n" $ind $c " := " $s ".Clone()\n" $ind $c ".Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })\n"
+                $ind $s " = take " $c "\n" $ind "churn()\n" $ind $x " := chain(" $e ") + " $s "[0].v + " $s ".Len()\n" $use $ind "}\n")
+    }
+    if k == 10 {    # a view of a Vec kept across a push (refused: O39)
+        d := g.name("d")
+        return ($ind "{\n" $ind $s " := Vec<I64>()\n" $ind $s ".Push(" $v ")\n" $ind $d " := " $s ".View()\n" $ind "for i in range 40 { "
+                $s ".Push(i) }\n" $ind "churn()\n" $ind $x " := " $d "[0]\n" $use $ind "}\n")
+    }
+    # a view of a Vec used before a push, and the elements walked after (accepted)
+    return ($ind "{\n" $ind $s " := Vec<I64>()\n" $ind $s ".Push(" $v ")\n" $ind $x " := " $s ".View()[0]\n" $ind "for i in range 40 { "
+            $s ".Push(i) }\n" $ind "churn()\n" $ind "for " $x "y in " $s " { " $x " += " $x "y }\n" $use $ind "}\n")
 }
 
 # a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a

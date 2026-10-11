@@ -1,0 +1,12 @@
+# check: fail note: its elements, Tok, are values holding references - hold them by reference, 'Tok&'
+# Vec phase 1 (T25e): a Vec's elements may be numbers, plain values or references, not values holding references - one
+# error at the program's Vec<Tok>, with the fix, and none again for each method used
+type Tok struct(text String&, k I64) {
+    text
+    k
+}
+fn main() ? {
+    v := Vec<Tok>()
+    v.Push(Tok("a", 1))
+    println($v.Len())
+}

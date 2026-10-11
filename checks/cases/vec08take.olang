@@ -1,0 +1,10 @@
+# check: fail error[O39]: assigning 'w' may release the Array<I64> borrowed on line 7
+# Vec phase 1 (E34/O39): a Vec moved by take, then viewed, then given another buffer while the view is used
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(4)
+    w := take v
+    d := w.View()
+    w = Vec<I64>()
+    println($d)
+}

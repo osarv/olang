@@ -1747,7 +1747,9 @@ Go through this for every change to what olang means - a rule added, revised or 
   agree and the pointers do not (a null table has no entry to read, hence a helper with branches rather than
   inline code, as T17a's choice equality is). Identity for an array is **same storage, same length**, so
   `a[:2]` and `a[:3]` are different instances of one buffer. The trailing slot shifts no method's index.
-- **`Vec` is abandoned; the growable type is `List<T>`, chunked and append-only.** A contiguous growable
+- **`Vec` is abandoned; the growable type is `List<T>`, chunked and append-only.** (Reversed 2026-10-11: owned
+  references made moving a buffer safe, and `Vec<T>` is the default growable array - the user's QH answer; the "Vec
+  phase 1" entry near the end.) A contiguous growable
   array was the assumed goal for a long time. Working out what it would actually cost killed it, and the
   deciding question was what olang is *for*: an inference engine and big-data work allocate **once, at a
   size known at load time, and never resize** - weights, activation buffers, a KV cache preallocated to its
@@ -5019,6 +5021,21 @@ and literals made only of such, never existing storage anywhere in it) - it is
   the later operands that run code. Owners made in a conditional get O34's "gives an own slot nothing yet". Only
   tightens; one new over-rejection, a part borrowed after a releasing call in one statement. Fuzzer: d8c942b 13 findings
   in 60 own seeds (all own7 shapes), now none.
+- **Vec phase 1: `Vec<T>` in the prelude, a borrowed own result, Sort's O17 reading (O17, O31, O33, O37, O38, T25e,
+  M19d, 2026-10-11; the coordinator's three items, details mine, docs/own.md section 19).** **O37**: a reference result
+  borrowed from a parameter may return a borrow of an owned object below it, or a slice of one (`View() Array<T>&v`) -
+  each call's result a region of its own with a copied loan, confined and refused across a release (22 must-fail cases
+  first). **O17**: a local holding only reads of the lent region stored back is a permutation, and a call through a
+  function value stores only through a parameter admitting stores - so `Sort` on a buffer of text compiles (13 cases).
+  **`Vec<T>`** (`std/prelude/vec.olang`): an owning value over `data own mut Array<T>&` and a count - Push doubling from
+  8 through `vecGrown(take v.data, ...)`, Reserve, Cap, `v[i]`/SetAt, First/Last/Pop, Clear, Truncate, Insert, RemoveAt,
+  SwapRemove, Reverse, Sort, IndexOf, Remove, Has, Join, View/ViewMut, RunFrom (one run: `for x in v` is an array walk),
+  Iter, Clone (owned), ToArray, `==`/Hash/`$` as its elements (`Vec<I64>[1, 2]`). **Decided (mine)**: an own array's
+  elements refer outside its buffer, so a call's result that can refer neither to the argument's storage, nor to an own
+  array its loans are on, nor to such an array's elements held by value takes none of those loans (`s := v[0]` kept
+  across `Push`, O38); one T25e error per instantiation, with a note naming `Vec<Tok&>`; the corpus's `Vec` renamed
+  `GrowBuf`. Measured: walking, indexing and Sort as an array's; Push ~2x List's. Not yet (19.4): a Vec in a field,
+  global or type argument, elements that are values holding references, a task pushing to one, a lambda capturing one.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

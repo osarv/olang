@@ -15414,3 +15414,41 @@ one released before it is evaluated still compiles. The conditional message the 
 for owners made there. Everything here only adds loans; one shape accepted before is refused now, a part borrowed after a
 releasing call in the same statement, because a statement's loans are not ordered - recorded with the other
 over-rejections.
+
+### Vec phase 1: a borrowed own result, Sort's O17 reading, and `Vec<T>` in the prelude (§8.8 O17, O31, O33, O37, O38, T25e, M19d, 2026-10-11)
+
+With own phase 2a merged (3a4f5e8) the pieces a growable array needs existed except two, and both were refusals of
+correct programs. A method handing out its buffer as an array, `View() Array<T>&v`, was O10's error: the buffer lives in
+a region of its own, which no parameter names. And `Array.Sort` on a buffer of text was O17's error: Sort's swaps store a
+local into the lent region, and its comparison passes elements to a function value, both of which O17's reading took for
+a store from outside. The coordinator asked for both as relaxations with must-fail cases written first, then the type.
+
+The borrowed own result marks the function and gives each call's result a region of its own, rooted where the argument
+is and typed by the result, with the loan a borrowed copy has - so it is confined and refused across a release of the
+object, the existing machinery doing the work once the region exists. Twenty-two cases tried every way such a borrow
+could outlive its loan before the relaxation went in; they all refuse. The Sort reading tracks locals whose initializer
+and every write are reads out of the region itself - storing one back is a permutation - and reads a call through a
+function value as keeping its arguments only in its result, so it stores into the region only through a parameter that
+admits stores. Thirteen cases around it - a local given outside text before or after the store, through a field, a
+writable reference, a task, a second local, a storing helper, a storing function value - all refuse.
+
+Writing the type turned up a third refusal that would have made it worse than `List` for text: `s := v[0]` across a
+`Push`. The element is a call's result derived from the receiver, and the receiver's loans are on the buffer - but an own
+array's elements refer outside the buffer, so the loan is on the wrong thing. A call's result now takes none of an
+argument's loans on own arrays when its type can refer neither to the argument's storage, nor to such an array, nor to
+an element one holds by value. The first version checked only the buffer's type and let a `Pt&` into a `Vec<Pt>`'s
+element through; the case written against it caught that, and the check walks the buffer's parts held by value now.
+
+Growth had to be written the way 13.1 already recorded as the one that works - the old buffer handed to the copying
+call as an owner - since copying through a borrow puts the elements' referents in the result scope. The prelude owning
+the name `Vec` meant renaming the corpus's own `Vec<T>` (G6's example, `GrowBuf<T>` now), two fixtures' `Vec` structs and
+the spec's examples. `Vec<Tok>`, with `Tok` holding text, is still T25e's "not supported yet"; it was reported once at the
+type and again at every method used, and now once, with a note naming `Vec<Tok&>`.
+
+Measured with callgrind (on `-a x86-64-v3`, since valgrind cannot decode AVX-512): a Vec walks, indexes and sorts as an
+array does, and List indexes six times slower; Push costs about twice List's, the count going through memory because
+the owner local's storage is registered for release, and each new buffer zero-filled. The scope fuzzer's own mode writes
+the new shapes; on 3a4f5e8 they are refused and on this tip they run, with no findings on either.
+
+What phase 2 must add for Vec to be the default everywhere is in docs/own.md 19.4: a Vec in a field, a global, a type
+argument, elements that are values holding references, a task pushing to one, a lambda capturing one, and Push's cost.

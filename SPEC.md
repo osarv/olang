@@ -680,7 +680,7 @@ helpers and methods writable once rather than once per instantiation.
 
 - In a struct type or a trait, the `type-params` list (G6) introduces every parameter, so the rest of the declaration -
   the list's own constraints (`type Map<K Hashable<K>, V>`), the constructor, the fields, the destructor, a trait's
-  method signatures - writes each bare: `type Vec<T> struct(cap I64) { items mut Array<T>& = Array<T>(cap) }`.
+  method signatures - writes each bare: `type Buf<T> struct(cap I64) { items mut Array<T>& = Array<T>(cap) }`.
 - In a function, a variable is introduced by its **first** `type-var` reading the signature left to right - the
   receiver, the parameters in order, the results - and is written bare everywhere after it, in the rest of the
   signature and in the body: `fn max(a <T>, b T) T`, and a method over a generic type introduces its variables in its
@@ -1850,22 +1850,29 @@ gives a borrow, `Values()` borrows and `Iter()` borrowed copies of its entries (
 may release a key or a value runs while one is used (O39). `Update` (whose function would be handed and give back an
 owner) and `Clone` are compile-time errors for such a map, reported where the program calls them (B11).
 
-The prelude declares `type Vec<T>`, the **growable array** *(§8.8, not yet implemented)*. Its elements lie next to each
-other in one buffer the `Vec` owns - an own array (§8.8) - so indexing it, walking it and `View()` cost what an array's
-do. `Vec<T>(cap = 0)` is empty, with room for `cap` elements before its buffer moves; `Push(x)` adds at the end, and
-when the buffer is full first moves every element into one twice as large, releasing the old buffer at once (O35);
+The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer the `Vec`
+owns - an own array (§8.8) - so indexing it, walking it and `View()` cost what an array's do. `Vec<T>(cap = 0)` is
+empty, with room for `cap` elements before its buffer moves; `Push(x)` adds at the end, and when the buffer is full
+first moves every element into one twice as large (8 at first), releasing the old buffer at once (O35);
 `Reserve(n)` makes room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the
-same names and on the same terms, its own element types included - `v[i]` and `v[i] = x` (E31, unchecked, `try`
-checking), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`,
-`Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join`, `ToArray`, `Iter`, `RunFrom` (one run, the rest of
-the buffer) and `Clone` - and `View()`, a borrow of its elements as one array (`Array<T>&v`). Whatever borrows the
-buffer - a view, `v[i]` of an own element, a walk - is a loan on it (O38), so while one is used nothing that may move
-or release the buffer (`Push`, `Reserve`, `Insert`, a release of the `Vec`) may run (O39): a view never reads a buffer
-that has been released. A `Vec` holds its buffer's owner by value, so it is an owning type (O31): a copy of one out of a
-place is a borrowed copy, through which nothing is pushed, `take v` moves it (leaving `v` empty), and `v.Clone()` copies
-its elements into a new one. `==` compares its elements (E10), it hashes as they do (E10b), and `$` renders it as an
-array with `Vec` named in front: `Vec<I64>[1, 2, 3]`. A `Vec` is the growable array; a `List` is for what its chunks
-give - a `Push` never moves what is stored, so appending never stops to copy, and a walk may push to it.
+same names and on the same terms - `v[i]` and `v[i] = x` (E31, unchecked, `try` checking), `First`, `Last`, `Pop`,
+`Insert`, `RemoveAt`, `SwapRemove`, `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`,
+`Join` (of a `Vec` of texts), `ToArray`, `Iter` (a `VecIter<T>`), `RunFrom` (one run, the rest of the elements, so
+`for x in v` walks a `Vec` as it walks an array, S9f) and `Clone` (an owned result, O37) - and `View()`, a borrow of its
+elements as one array (`Array<T>&v`; `ViewMut()` writably), a borrowed own result (O37). Whatever borrows the buffer - a
+view, a walk, a part of an element held by value - is a loan on it (O38), so while one is used nothing that may move or
+release the buffer (`Push`, `PushAll`, `Reserve`, `Insert`, a release or move of the `Vec`) may run (O39): a view never
+reads a buffer that has been released. What its elements refer to lives where the `Vec` does, not in the buffer (O33),
+so an element read out of it - a reference, or a value holding one - is no loan on the buffer and is kept across its
+release (`s := v[0]` then `v.Push(x)`, O38). A `Vec` holds its buffer's owner by value, so it is an owning type (O31): a
+copy of one out of a place is a borrowed copy, through which nothing is pushed, `take v` moves it (leaving `v` empty),
+`v.Clone()` copies its elements into a new one, and a `mut Vec<T>&` parameter takes it by reference. `==` compares its
+elements (E10), it hashes as they do (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2,
+3]`. A `Vec` is the growable array; a `List` is for what its chunks give - a `Push` never moves what is stored, so
+appending never stops to copy, and a walk may push to it. *(Not yet implemented: `TakeAt` and `SwapTake`, and
+`RemoveAt` and `SwapRemove` giving nothing, as for a `List`; a `Vec` whose elements are values holding references
+(T25e); a `Vec` held anywhere but by a local or as a result - a field, a global, a type argument (`List<Vec<T>>`,
+`Vec<Vec<T>>`), an own array's element (O31); a task that may push to one (O41).)*
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
@@ -2763,7 +2770,7 @@ one:
 
 ```
 makeVec&x()
-Vec<I32>&x(4)
+Buf<I32>&x(4)
 ```
 
 `IDEN` names a local or parameter of the **calling** function, and binds the callee's result scope (§8 O13,
@@ -5252,8 +5259,9 @@ reach, or on the globals, and is read-only exactly where a copy out of the same 
 generic's read-only reference parameter, as read-only as the argument.
 
 A **borrowed own result** is a reference result borrowed from a reference parameter `p` (`T&p`) that returns a borrow of
-an owned object reached from `p` by own fields only - `fn (v Vec<T>&) View() Array<T>&v { return v.data }`, `fn (v
-Outer&) First() Inner&v { return v.o }`, or another function's borrowed own result given `p` or a borrow so reached.
+an owned object reached from `p` by own fields only, or a slice of one - `fn (v Vec<T>&) View() Array<T>&v { return
+v.data[:v.n] }`, `fn (v Outer&) First() Inner&v { return v.o }`, or another function's borrowed own result given `p` or a
+borrow so reached.
 The result is where `p`'s referent lives, but it is good only while the object is not released: each call makes a loan
 (O38) on the objects of the result's type below the argument given for `p`, rooted where that argument is (O39), and
 what it gives is confined to the caller's locals as a borrowed copy's is (O38). So `d := v.View()` followed by
@@ -5299,7 +5307,10 @@ A borrow of an owned object is confined to its region already (O33). What a call
 instance, a borrowed result - is held by the local given it, as any value derived from a loan is: a call's result
 derives from an argument only where the callee may keep that argument in its result (O26a) - in any part of it, one of
 several results (D8c), a type argument's, an array's elements, a function value's - and a result whose type holds no
-reference derives from nothing. Through a function value
+reference derives from nothing. An own array's elements refer outside its buffer (O33), so a result that can refer
+neither to the argument's own storage, nor to an own array the argument's loans are on, nor to an element such an array
+holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
+from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Through a function value
 nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
 
 A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference
@@ -5434,7 +5445,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 **C2c.** A constructor's scope variables (§8 O3) are implicit: one per reference parameter (O4b), and the
 **instance scope** — where the instance lands, which a constructor has as a function has its result scope
 (O13): bound to wherever the call's result is put (O18a), or supplied by a scope argument (E25) —
-`Vec<I32>&x(4)` builds the instance where `x` lives.
+`Buf<I32>&x(4)` builds the instance where `x` lives.
 
 **C2d.** In a constructor:
 
@@ -6216,7 +6227,7 @@ trait, declares a **type parameter** (the trait its constraint, G19); followed b
 **constant parameter** of that type (G20).
 
 ```
-type Vec<T> struct(cap I64) {
+type Buf<T> struct(cap I64) {
     items mut Array<T>& = Array<T>(cap)
     len I64 = 0
 }
@@ -6297,13 +6308,13 @@ Since `T` is then a reference, the generic's code is a reference's, as C11 makes
 `T`s is identity unless the type declares `Eq` (E10), and no `Hash` is supplied for it (E10b), so a `Hashable`
 constraint on `T` holds only where the type declares one (G19).
 
-**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Vec<I32>`
-and `Vec<I64>` are different types (T27); two instantiations are the same type exactly when the
+**G10.** A generic struct type is instantiated only by writing its type arguments (G8). `Buf<I32>`
+and `Buf<I64>` are different types (T27); two instantiations are the same type exactly when the
 named type and every type argument are the same.
 
 **G10a.** A generic struct type that declares a constructor (§9.1) is constructed by writing its type
 arguments before the argument list, and a scope argument (E25) after them to build the instance where
-a variable lives: `Vec<I32>&x(4)`, or `Vec<I32>(4)` to build it where it lands (§8 O18a). The type
+a variable lives: `Buf<I32>&x(4)`, or `Buf<I32>(4)` to build it where it lands (§8 O18a). The type
 arguments select the instantiation exactly as G8
 does in a type reference, and the call then targets **that instantiation's own** constructor: the
 generic's own constructor is never a call target, its parameter types still being type variables.

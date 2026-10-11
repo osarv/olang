@@ -1464,3 +1464,124 @@ shapes were added): 375 run, 585 refused, none.
 - From 17.7: `x = v.Me()` into an existing local, C2d against O34's reach, O10c's note in the review's `e3`.
 - New (18.1): a statement's loans are not ordered, so a part borrowed after a releasing call in the same statement is
   refused.
+
+## 19. Vec phase 1: `Vec<T>` in the prelude (2026-10-11)
+
+What phase 2a left for a growable array written in olang: returning a view of its buffer, sorting a buffer of text, and
+the type itself. Items 1 and 2 are **relaxations** - programs refused on 3a4f5e8 compile now - so each was preceded by
+must-fail cases for every way the relaxed borrow could outlive its loan.
+
+### 19.1 A borrowed own result (O37, O38)
+
+`fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }` and `fn (o Outer&) First() Inner&o { return o.in }` were
+O10's error: the result is in the object's region, which no parameter names.
+
+**Decided**: a reference result borrowed from a reference parameter `p` (`T&p`) may return a borrow of an owned object
+reached from `p` by own fields only, a slice of one (a slice of a borrow keeps its region, 13.1 decision 2), or another
+function's borrowed own result given `p` or such a borrow. The function is marked (`ownBorrowResult`, `p`'s index) and
+the returned operand retagged to `p`'s scope variable - down a slice to the borrow it slices, since a slice's storage is
+its base's (E16a). At each call the result is a new region `R'` (`ownResultRegionOf`), typed by the result's type,
+rooted where the argument for `p` is rooted, and carrying a **copied** loan: the result is confined to the caller's
+locals as a borrowed copy is (15), and every release of an object of that type below the argument's root while it is
+used is O39's error. Inside the borrowing function, a `return` does not count its own loan on that region.
+
+**Adversarial cases first** (`checks/cases/o37borrowres*`, 22, all refused): the view kept across a call that replaces
+the buffer, a release, a `take`, a field of a local; kept by a `List` or a `Map`; returned from the owner's own local,
+captured by a returned lambda, handed to a task, stored in a reference holder; through a borrowed copy, a re-export, a
+slice, a for-in, a plain function taking the owner; read through an own field; copied into another local; stored
+through a reference parameter; the owner reassigned; a pass-through function; a lambda's call; an argument of a
+releasing call. **Not built**: a borrow reached through another call's borrowed own result and then an own field
+(`return v.First().deep`) is not one, and stays O10's error.
+
+### 19.2 Sort's precise O17 reading (O17)
+
+`Vec<String&>.Sort` lends the buffer - a split value, its elements' referents outside it (14.1) - to `Array.Sort`, and
+O17's reading of the body refused it: Sort's swaps store a local into the lent region, and its comparison is a call
+through a function value given elements, which was taken to keep them.
+
+**Decided**: (1) a local whose initializer and every write are reads out of the lent region itself (`t := a[i]`, `t =
+a[j]`) holds nothing from outside it, so storing it back is a permutation, not a store; such a local lent writably to a
+callee, or a spawn's target, is tainted and counts as from outside (`regionLocalStore`, resolved per body and once more
+at `settleRegions`). (2) A call through a function value keeps its arguments only in its result (T22a), so it stores
+into the region only where a parameter bound to the region's scope variable admits stores - a reference parameter
+something can be stored through (O25g), or a value holding writable references - or where none names it. So `less(a[i],
+a[j])` stores nothing.
+
+**Adversarial cases first** (`checks/cases/o17permute*`, 13, all refused): a local holding an element then given a value
+from outside before it is stored back - directly, later in a loop around the store, after the store, through a field
+of it, through a field written in a loop, through a writable reference to it, by a task's result, through a second local
+copying it; the local lent writably to a callee that stores into it; a local reading another array's element; a
+function value whose parameter can be stored through, called on elements - given as a by-value parameter holding
+writable references, or handed in from outside. **Over-rejection**: a function value with a writable reference
+parameter is taken to store whether or not it does.
+
+### 19.3 `Vec<T>` (prelude, `std/prelude/vec.olang`)
+
+`type Vec<T> struct(cap I64 = 0) { data own mut Array<T>& ... n I64 }`: Push (doubling from 8), PushAll, Reserve, Len,
+Cap, `v[i]`/SetAt and the derived TryAt, First/Last/Pop failing with the default error, Clear/Truncate keeping the
+buffer, Insert/RemoveAt/SwapRemove (both giving the element, as List's do today), Reverse, Sort, IndexOf, Remove, Has,
+Join (of texts), View/ViewMut (19.1), RunFrom (one run, so `for x in v` is an array walk), Iter (`VecIter<T>`), Clone (an
+owned result), ToArray (a copy), and Eq/Hash/Str as an array of the elements with `Vec` named in front.
+
+**Decided**:
+1. **Growth hands the old buffer over as an owner** (`vecGrown(old own mut Array<T>&, n, room)`, called `v.data =
+   vecGrown(take v.data, ...)`): the old buffer is released as the callee returns and the elements' referents stay where
+   the Vec keeps them (13.1's form; a copy read through a borrow puts them in the result scope, O10c for `String&`).
+2. **An element read out of the buffer is no loan on it** (O38, the third relaxation). `s := v[0]` of a `Vec<String&>`
+   was refused across a later Push: `At`'s result is derived from the receiver (the callee may keep it, O26a), and the
+   receiver's loans are on the buffer. An own array's elements refer outside its buffer (13.1), so a call's result that
+   can refer neither to the argument's own storage, nor to an own array its loans are on, nor to an element such an
+   array holds by value - checked on types at any depth (`ownMayReferTo`, `ownMayReferToPart`): arrays met as one
+   storage whenever their elements are both references or both values (slices, and T29a's conversions between arrays
+   of one representation), any function value, type variable or unknown taken to reach anything - takes none of those
+   loans. Every loan in the argument must be on an own array for this; a struct's region still lends everything (its
+   parts live in it). Adversarial: `vec07text` (a `String&` naming a `Vec<Char>`'s buffer by conversion), `vec11inplace`
+   (a `Pt&` into a `Vec<Pt>`'s element held by value), `vec09iter` (an iterator holding the Vec), all refused; found
+   while writing them: the first version checked the buffer's type alone, so the in-place element was let through - the
+   walk covers the buffer's parts held by value now.
+3. **One T25e error per instantiation**: `Vec<Tok>` with `Tok` a value holding references was reported at the type and
+   again at every method used; the type's report marks the instantiation (`unmetTypeInsts`) so its methods are not
+   checked again, with a note naming the fix: `Vec<Tok&>`.
+4. The corpus's own `Vec<T>` (shared.olang, G6's example) is `GrowBuf<T>` now, the fixtures' `Vec` structs `Vec2`, and
+   SPEC's examples `Buf<T>`: the prelude owns the name (M19d).
+
+**Tests**: `std/prelude/tests/vec.olang` (10 tests): every operation, an empty Vec's errors, 1,000 pushes read back
+after a churn, text and node elements kept across growth and replacement read back after a churn, two computations
+baked by K2 (`VecBaked`, `VecTextBaked` - through View and Sort of text) and decided by S18c beside the run time, `-i`
+agreeing; under `-d -s` too. `checks/cases/vec01`-`vec12`: a view or a walk kept across a Push, a borrowed copy, the f1d
+shape (a view, and a view's element, lent to a callee that grows the same Vec), a view through a program's function,
+`take` then reassignment, the three of decision 2, `Vec<Tok>`, and one run case keeping elements across growth.
+
+**Fuzzer** (`vecOp` in the own mode): a borrowed own result of a buffer, a slice of one or one passed through, used
+before its release (accepted) or after (refused); a borrowed own object; a callee permuting an own array of text
+(accepted) or storing into it (refused); a Vec of text grown with an element kept, then replaced; a Vec of nodes cloned,
+sorted, moved; a view kept across a push (refused); a view used before pushes. Own seeds 1-40: 3a4f5e8 runs 106
+scenarios and refuses 374, finding nothing - the new shapes were refused there, never holes; this tip runs 112 and
+refuses 368, finding nothing.
+
+**Measured** (callgrind, `-a x86-64-v3` since valgrind cannot run AVX-512; 1M I64 values from a multiply-modulo, which
+costs ~12M of each count): Push 1M - Vec 75.0M (16.8M of it memset, counted per byte as `rep stosb`), List 38.7M,
+filling an Array 12.3M. Walking 10 x 1M - Vec, List and Array 117.5M each beyond the fill (vectorized alike). Random
+indexing 10M - Vec 110M, Array 105M, List 600M. Sort 1M with a lambda - Vec 731M, List 769M, Array 708M. So a Vec walks,
+indexes and sorts as an array does; its Push costs about 26 instructions to List's 14 beyond the value: the count is
+loaded and stored through memory each time (the owner value local's storage is registered for its release, so its
+address escapes) and each new buffer is zero-filled (D13c) though the copy overwrites its first half.
+
+### 19.4 What Vec phase 2 must add for `Vec` to be the default growable array everywhere
+
+1. **A Vec held by value in a field** (O31): a struct holding one (`toks Vec<Tok>`) becomes an owning type itself -
+   borrowed copies of it, `take` of the field, its owners released with its own slot or its container's scope, a
+   constructor field of Vec type.
+2. **A Vec global** (O31; K2 never bakes an owner).
+3. **A Vec as a type argument** - `List<Vec<T>>`, `Map<K, Vec<V>>`, `Vec<Vec<T>>`: phase 2b's move-aware collections
+   (`Push` taking an owner, `At`/`Get` giving borrows, `TakeAt`, `SwapTake`, `Map.Take`, releases on
+   `Remove`/`Clear`/`Truncate`) and generics instantiated with owning types (G9d, G18).
+4. **Elements that are values holding references** (T25e, 13.1 decision 5): `Vec<Tok>` with `Tok` holding a `String&` -
+   the commonest real element (tokens, records). It needs the element scope `E` at every depth of a value read, not the
+   one retag at indexing. Until then the error says `Vec<Tok&>`.
+5. **A task that pushes to a Vec** (O41): a task's releases, ordered by its join as its loans are.
+6. **A lambda capturing a Vec** (O31): the capture as a borrowed copy or a reference.
+7. **`return v.First().deep`** (19.1's not-built case), and `TakeAt`/`SwapTake` with `RemoveAt`/`SwapRemove` giving
+   nothing (as List's).
+8. **Push's cost**: keep the count in a register across a push loop (release registration without escaping the owner's
+   storage), and leave the copied-into half of a grown buffer unfilled - then measure against List again.

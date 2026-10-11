@@ -363,6 +363,7 @@ struct type;
     X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_OWN_ELEM_BY_REF,             "",      "its elements, %t, are values holding references - hold them by reference, '%t&'") \
     X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
     X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
     X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \

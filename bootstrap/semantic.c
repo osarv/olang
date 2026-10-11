@@ -2792,7 +2792,7 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     for (int i = 0; i <= spec->type.vars.len; i++) {
         struct type* t = i < spec->type.vars.len ? &((struct var*)ListGetIdx(&spec->type.vars, i))->type
                          : spec->type.hasRetType ? spec->type.retType : NULL;
-        if (!t || !t->refOwn || t->bType != BASETYPE_ARRAY || ownArrayKindOk(*t)) continue;
+        if (unmet || !t || !t->refOwn || t->bType != BASETYPE_ARRAY || ownArrayKindOk(*t)) continue;
         struct type shown = *t;
         shown.refOwn = shown.refMut = shown.scopeWritten = false;
         shown.scopeParam = NULL;
@@ -3078,6 +3078,10 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
             shown.refOwn = shown.refMut = shown.scopeWritten = false;
             shown.scopeParam = NULL;
             Err(instSite.type != TOK_NONE ? instSite : generic->tok, ERR_OWN_KIND_NOT_YET, &shown);
+            if (shown.arrElem && !shown.arrElem->structMAlloc && TypeHoldsReferences(*shown.arrElem)) //(Vec<Tok>)
+                Note(instSite.type != TOK_NONE ? instSite : generic->tok, NOTE_OWN_ELEM_BY_REF, shown.arrElem, shown.arrElem);
+            ListAdd(&unmetTypeInsts, &spec); //(its methods' bodies are not checked, nor reported again: instantiateFunc)
+            break;
         }
     }
 
@@ -24036,6 +24040,7 @@ static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, stru
     int p = -1;
     bool region = false;
     struct var* R = ownRegionOf(val);
+    if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val); //(a slice of the buffer: the same borrow)
     if (R && R->regionRoot == OWN_ROOT_PARAM) {
         p = R->regionRootParam;
         region = true;
@@ -24052,9 +24057,13 @@ static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, stru
     if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
             || canonicalVar(pv->type.scopeParam) != canonicalVar(rt.scopeParam)) return;
     canonicalVar(ctx->func)->ownBorrowResult = p + 1;
-    if (region) { //(where the result is put is p's referent's scope - the loan says how long the borrow is good)
-        val->type.scopeParam = rt.scopeParam;
-        val->type.scopeDepth = 0;
+    //(where the result is put is p's referent's scope - the loan says how long the borrow is good). A slice of the
+    //buffer is retagged down to the borrow it slices, since a slice's storage is its base's (E16a)
+    for (struct operand* o = region ? val : NULL; o; ) {
+        o->type.scopeParam = rt.scopeParam;
+        o->type.scopeDepth = 0;
+        if (ownRegionOf(o) || o->opType != OPERATION_SLICE || !o->args.len) break;
+        o = *(struct operand**)ListGetIdx(&o->args, 0);
     }
 }
 
@@ -27203,6 +27212,46 @@ static bool ownOpCalls(struct operand* op) {
     for (int i = 0; i < op->chainOperands.len; i++) if (ownOpCalls(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
     return op->comprBody.len > 0 || op->catchClauses.len > 0;
 }
+//Vec phase 1: whether two referents are one storage's - two arrays whose elements are both references or both values
+//(a slice, and T29a's conversions between arrays of one representation, name the same storage), or one struct or enum
+static bool ownSameReferent(struct type a, struct type b) {
+    if (a.bType == BASETYPE_ARRAY || b.bType == BASETYPE_ARRAY) {
+        if (a.bType != b.bType) return false;
+        if (!a.arrElem || !b.arrElem) return true;
+        return a.arrElem->structMAlloc == b.arrElem->structMAlloc;
+    }
+    if (a.bType != b.bType || (a.bType != BASETYPE_STRUCT && a.bType != BASETYPE_CHOICE)) return false;
+    return canonicalStructOf(a) == canonicalStructOf(b);
+}
+//...whether a value of type res can hold a reference to a value of type tgt - at any depth, through references too. A
+//function value, a type variable, anything not settled, or a walk too deep, may hold anything
+static bool ownMayReferTo(struct type res, struct type tgt, int depth) {
+    if (depth > 8 || res.unknown || res.bType == BASETYPE_FUNC || res.bType == BASETYPE_TYPEVAR
+            || res.bType == BASETYPE_INTERFACE)
+        return true;
+    if (res.structMAlloc && ownSameReferent(res, tgt)) return true;
+    res.structMAlloc = false;
+    struct list kids = TypeValueChildren(res);
+    bool hit = false;
+    for (int i = 0; i < kids.len && !hit; i++) hit = ownMayReferTo(*(struct type*)ListGetIdx(&kids, i), tgt, depth + 1);
+    ListDestroy(kids);
+    return hit;
+}
+//...whether it can refer to an argument of type arg's own storage - the value it is, or names, and its parts by value
+static bool ownMayReferToPart(struct type res, struct type arg, int depth) {
+    if (depth > 8) return true;
+    arg.structMAlloc = false;
+    if (ownMayReferTo(res, arg, 0)) return true;
+    struct list kids = TypeValueChildren(arg);
+    bool hit = false;
+    for (int i = 0; i < kids.len && !hit; i++) {
+        struct type k = *(struct type*)ListGetIdx(&kids, i);
+        if (!k.structMAlloc) hit = ownMayReferToPart(res, k, depth + 1);
+    }
+    ListDestroy(kids);
+    return hit;
+}
+
 static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
     if (!op) return;
     //(own6: a value whose type can hold no reference keeps nothing of what it was made from - a count, a flag, a number
@@ -27323,7 +27372,23 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
                          && roCalleeKnown(op->readVar) && !op->readVar->isLambda ? op->readVar : NULL;
     for (int i = 0; i < op->args.len; i++) {
         if (keeper && !calleeMayKeepArg(keeper, i)) continue;
-        ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, transient, false);
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        if (!keeper) {
+            ownLoansIn(a, out, transient, false);
+            continue;
+        }
+        //(Vec phase 1: an own array's elements refer outside its buffer (13.1) - a result that can refer neither to the
+        //buffer nor to the argument's own storage, "s := v[0]" of a Vec<String&>, keeps nothing the buffer's release frees)
+        struct list mine = ListInit(sizeof(struct ownLoan));
+        ownLoansIn(a, &mine, transient, false);
+        bool spared = mine.len > 0 && !ownMayReferToPart(op->type, a->type, 0);
+        for (int j = 0; spared && j < mine.len; j++) {
+            struct ownLoan* l = ListGetIdx(&mine, j);
+            spared = !l->anyType && l->R && l->R->regionArray && l->R->regionType
+                     && !ownMayReferToPart(op->type, *l->R->regionType, 0); //(the buffer, its elements held by value)
+        }
+        for (int j = 0; !spared && j < mine.len; j++) ownLoanPut(out, *(struct ownLoan*)ListGetIdx(&mine, j));
+        ListDestroy(mine);
     }
     for (int i = 0; i < op->chainOperands.len; i++)
         ownLoansIn(*(struct operand**)ListGetIdx(&op->chainOperands, i), out, true, false);
