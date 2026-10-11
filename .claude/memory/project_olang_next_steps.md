@@ -848,6 +848,13 @@ because what it finds about structure feeds the refactor.
   fixes (L13 etc.). Vec review 2 (/home/user/review/vec2): N1 (stale loan type through mutual recursion) and N2 (a
   function value through an import alias skips every value check, also P1-P3) - fix agent on wt-own. Two verifies
   side by side were OOM-killed again: /home/user/vlock is ONE slot now. M3 parser started on wt-portm3.
+- 18:30 CEST: M2 merged and pushed (28d1267, 01b3827 fixed a std/chan P4 timing flake). Started wt-rtll (P0: runtime to
+  std/runtime/runtime.ll, linked once). Vec review 3 (/home/user/review/vec3): F1 new (relaxation (b), a built result
+  can hand back its argument through id/pick/At/Get), F2 (O38 skip ignores the type), F3 (spawn target from a borrowed
+  own result), F4 (a global keeping a borrow of a global's own object - also on master). Fix agent on wt-own: F1 by a
+  proven-fresh fixed point, or revert (b). Then a 4th review. At the wt-own merge: re-run compiler/tools/genmsgs.py
+  and make diaggold (errmsg.h changed). Queued for semantic.c after the merge: the `:=` constructor field losing its
+  type across modules (M2 agent's find, HISTORY.md).
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
