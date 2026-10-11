@@ -1402,7 +1402,37 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
     x := g.name("x")
     s := g.name("s")
     use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
-    k := g.r(12)
+    k := g.r(16)
+    if k >= 12 {    # vec1: a borrowed own result converted to a declared array type, of an own field or of a Vec's view -
+                    # used before the release (accepted), after it (refused: O39), or through a function value (refused: O37)
+        ix := g.name("OIx")
+        vw := g.name("oix")
+        vv := g.name("oivw")
+        g.addHelper("type " $ix " Array<I64>\n" "fn " $vw "(h OHold&) " $ix "&h { return " $ix "(h.buf) }\n"
+                    "fn " $vv "(v Vec<I64>&) " $ix "&v { return " $ix "(v.View()) }\n")
+        mk := $ind $h ".buf = Array<I64>(4, " $v ")\n" $ind $h ".buf[2] = " $v " + 5\n"
+        if k == 12 {
+            return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $h ".buf = null\n" $ind "churn()\n" $ind $x " := " $s
+                    "[2]\n" $use $ind "}\n")
+        }
+        d := g.name("d")
+        w := g.name("w")
+        if k == 13 {    # (through a Vec parameter: the review's f1b, where the owner's own structure does not catch it)
+            gr := g.name("oigr")
+            g.addHelper("fn " $gr "(w mut Vec<I64>&) I64 {\n    d := " $vv "(w)\n    for i in range 40 { w.Push(i) }\n"
+                        "    churn()\n    return d[0]\n}\n")
+            return ($ind "{\n" $ind $w " := Vec<I64>()\n" $ind $w ".Push(" $v ")\n" $ind $x " := " $gr "(" $w ")\n" $use $ind
+                    "}\n")
+        }
+        if k == 14 {
+            f := g.name("f")
+            return ($ind "{\n" $mk $ind $f " := " $vw "\n" $ind $s " := " $f "(" $h ")\n" $ind $h ".buf = null\n" $ind
+                    "churn()\n" $ind $x " := " $s "[2]\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $x " := " $s "[2] + " $s ".Len()\n" $ind $h ".buf = null\n"
+                $ind $w " := Vec<I64>()\n" $ind $w ".Push(" $v ")\n" $ind $x " += " $vv "(" $w ")[0]\n" $ind
+                "for i in range 40 { " $w ".Push(i) }\n" $ind "churn()\n" $use $ind "}\n")
+    }
     if k <= 3 {
         vw := g.name("ovw")
         sl := g.name("osl")

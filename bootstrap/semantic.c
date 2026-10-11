@@ -24039,8 +24039,18 @@ static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, stru
     if (!ctx->func || !val || !rt.structMAlloc || rt.refOwn || !rt.scopeParam || rt.scopeParam == SCOPE_AMBIGUOUS) return;
     int p = -1;
     bool region = false;
+    struct operand* top = val;
     struct var* R = ownRegionOf(val);
     if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val); //(a slice of the buffer: the same borrow)
+    //(vec1 F1: what names the same storage - a conversion to a declared array type, "String(v.View())" (T29a), a slice, a
+    //view (E32b) - is the same borrow, of a call's borrowed own result too)
+    for (int guard = 0; !R && guard < 64 && val->args.len
+            && (val->opType == OPERATION_NOMINAL_CONVERT || val->opType == OPERATION_SLICE
+                || (val->opType == OPERATION_AS && val->type.bType == BASETYPE_ARRAY)); guard++) {
+        val = *(struct operand**)ListGetIdx(&val->args, 0);
+        R = ownRegionOf(val);
+        if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val);
+    }
     if (R && R->regionRoot == OWN_ROOT_PARAM) {
         p = R->regionRootParam;
         region = true;
@@ -24056,13 +24066,31 @@ static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, stru
     struct var* pv = ListGetIdx(&ctx->func->type.vars, p);
     if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
             || canonicalVar(pv->type.scopeParam) != canonicalVar(rt.scopeParam)) return;
-    canonicalVar(ctx->func)->ownBorrowResult = p + 1;
+    struct var* fc = canonicalVar(ctx->func);
+    fc->ownBorrowResult = p + 1;
+    //(vec1 F1: the loan is on the own object's type, read off its slot - the result's type may be a declared array type
+    //the buffer was converted to, "String(v.View())", which a release of the buffer, keyed by the buffer's type, never
+    //meets. Through a call, the callee's; not known, or two returns borrowing objects of two types: any release)
+    struct type* ot = NULL;
+    bool anyT = false;
+    if (region) ot = R->regionType, anyT = R->regionAnyType;
+    else if (val->opType == OPERATION_FUNCCALL && val->readVar) {
+        struct var* g = canonicalVar(val->readVar);
+        ot = g->ownBorrowResultType;
+        anyT = g->ownBorrowResultAnyType;
+    }
+    if (!ot) anyT = true;
+    if (fc->ownBorrowResultType && ot && fc->ownBorrowResultType != ot) anyT = true;
+    if (!fc->ownBorrowResultType) fc->ownBorrowResultType = ot;
+    if (anyT) fc->ownBorrowResultAnyType = true;
     //(where the result is put is p's referent's scope - the loan says how long the borrow is good). A slice of the
     //buffer is retagged down to the borrow it slices, since a slice's storage is its base's (E16a)
-    for (struct operand* o = region ? val : NULL; o; ) {
+    for (struct operand* o = region ? top : NULL; o; ) {
         o->type.scopeParam = rt.scopeParam;
         o->type.scopeDepth = 0;
-        if (ownRegionOf(o) || o->opType != OPERATION_SLICE || !o->args.len) break;
+        if (ownRegionOf(o) || !o->args.len
+                || (o->opType != OPERATION_SLICE && o->opType != OPERATION_NOMINAL_CONVERT && o->opType != OPERATION_AS))
+            break;
         o = *(struct operand**)ListGetIdx(&o->args, 0);
     }
 }
@@ -27190,8 +27218,11 @@ static struct var* ownResultRegionOf(struct operand* op) {
     int root = ownEvRoot(*(struct operand**)ListGetIdx(&op->args, f->ownBorrowResult - 1), &param, &local);
     struct var* R = ownRegionNew(op->tok, NULL, 0, false, root, param);
     R->regionRootLocal = local;
-    R->regionType = OwnTypeKey(op->type);
-    R->regionArray = op->type.bType == BASETYPE_ARRAY;
+    //(vec1 F1: on the type of the own object the callee borrows, never the result's own type, which may be a declared
+    //array type the buffer was converted to - a release of the buffer is keyed by the buffer's type)
+    R->regionType = f->ownBorrowResultType ? f->ownBorrowResultType : OwnTypeKey(op->type);
+    R->regionAnyType = f->ownBorrowResultAnyType || !f->ownBorrowResultType;
+    R->regionArray = R->regionType ? R->regionType->bType == BASETYPE_ARRAY : op->type.bType == BASETYPE_ARRAY;
     R->regionOfResult = true;
     op->ownResultRegion = R;
     return R;
@@ -27254,6 +27285,12 @@ static bool ownMayReferToPart(struct type res, struct type arg, int depth) {
 
 static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
     if (!op) return;
+    //(vec1: a conversion names its argument's storage, T29a - "String(v.View())" keeps what the view keeps, though its
+    //own type, a declared array type by value, says it holds no reference)
+    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1 && !op->constVarValue) {
+        ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out, transient, place);
+        return;
+    }
     //(own6: a value whose type can hold no reference keeps nothing of what it was made from - a count, a flag, a number
     //read through a borrow, "return b.buf.Len()" - whatever it borrowed while it was computed)
     //(own7 F1: not a part borrowed where it is - E12c's reference to it, a slice or a view of it, leads into what it is a
@@ -27292,6 +27329,7 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
             l.R = RR;
             l.tok = op->tok;
             l.copied = true;
+            l.anyType = RR->regionAnyType;
             ownLoanPut(out, l);
         }
         if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
@@ -28619,6 +28657,15 @@ static void settleOwnBorrows(void) {
         if (!ow.changed) break;
     }
     ownForEachBody(ownImplicitBody);
+    for (int i = 0; i < funcValueUses.len; i++) {
+        //O37 (vec1 F2): a borrowed own result's loan is made by a call by name (ownResultRegionOf) - a call through a
+        //function value or a Call adapter makes none, so such a function is never a value (known once every body is)
+        struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
+        if (canonicalVar(u->f)->ownBorrowResult && !ownReportedAt(u->tok)) {
+            if (u->f->isLambda) Err(u->tok, ERR_OWN_LAMBDA_BORROW_RESULT);
+            else Err(u->tok, ERR_OWN_FUNC_VALUE_BORROW, ownQuoted(u->f), ownQuoted(u->f));
+        }
+    }
     for (int i = 0; i < funcValueUses.len; i++) {
         struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
         if (u->f->isLambda) continue; //(a lambda: above, at itself)

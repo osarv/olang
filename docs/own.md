@@ -1588,3 +1588,39 @@ address escapes) and each new buffer is zero-filled (D13c) though the copy overw
    nothing (as List's).
 8. **Push's cost**: keep the count in a register across a push loop (release registration without escaping the owner's
    storage), and leave the copied-into half of a grown buffer unfilled - then measure against List again.
+
+## 20. Vec phase 1's soundness review, fixed (2026-10-11)
+
+The review (`/home/user/review/vec1`) found two causes, six programs the compiler accepted and the scope sanitizer
+stopped. Both are fixed by the coordinator's decisions; nothing is relaxed.
+
+1. **The loan is on the owned object's type, not the result's** (f1, f1b, f3, f3b). A borrowed own result's loan was
+   keyed `OwnTypeKey(result type)`, so `fn asText(v Vec<Char>&) String&v { return String(v.View()) }` made a loan on
+   `String` that a release of the buffer, keyed `Array<Char>`, never met - through a reference parameter or an
+   own-reference local, where nothing but the key matches a release. Underneath, a conversion of a call
+   (`String(v.View())`) was not even recognised as a borrowed own result; one of a slot (`String(c.data)`, retyped in
+   place) was, with the wrong key. `ownBorrowedOwnResult` now looks through conversions, slices and views to the borrow,
+   and records on the function the owned object's type, read off its slot (`ownBorrowResultType`), or through a call
+   the callee's; `ownResultRegionOf` keys each call's loan by it. Two returns borrowing objects of two types, or one not
+   named, give a loan every release meets (`ownBorrowResultAnyType`, `regionAnyType`).
+   **Found beside it**: a conversion's value is of a declared array type held by value, which holds no reference, so
+   `ownLoansIn` kept nothing of it - `l.Push(String(v.View()))` stored a view of the buffer in a List. A conversion names
+   its argument's storage (T29a), so it keeps what its argument keeps (vec19). `t := String(v.View())` is a copy, and
+   stays legal.
+2. **A borrowed own result is called by name only** (f2, f2b). The loan is made where a call by name is checked
+   (`readVar->ownBorrowResult`); a call through a function value or a `Call` adapter made none. As O36 does for owning
+   parameters and owned results, such a function made a value - a named function, or a type whose `Call` gives one
+   adapted to a function type - is a compile-time error (O37, `ERR_OWN_FUNC_VALUE_BORROW`), decided in the own pass once
+   every body is checked. A lambda cannot write a borrowed result's marker today; its error is there for when it can.
+
+Over-rejections left as the review recorded them: lending an own-array field directly to a callee storing an outside
+value into it, and `ViewMut()` results returned where a raw slice could be.
+
+**Tests**: `checks/cases/vec13`-`vec18` (the review's six), `vec19listconv`, and `vec20byname`, a run case: a borrowed
+own result by name and converted, used before a push; a conversion copied into a value kept across one; a plain borrowed
+result's function still a value.
+
+**Fuzzer** (`vecOp`, four new shapes): an own field's buffer converted and used after its release (refused, O39); a
+Vec's view converted inside a function taking the Vec by reference and growing it (refused, O39 - the shape a local
+Vec's owner structure would have caught); a conversion called through a function value (refused, O37); both used before
+their release (accepted). Own seeds 1-100: 91ff37e finds three (seeds 39, 65, 94), this tip none.

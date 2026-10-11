@@ -5036,6 +5036,13 @@ and literals made only of such, never existing storage anywhere in it) - it is
   across `Push`, O38); one T25e error per instantiation, with a note naming `Vec<Tok&>`; the corpus's `Vec` renamed
   `GrowBuf`. Measured: walking, indexing and Sort as an array's; Push ~2x List's. Not yet (19.4): a Vec in a field,
   global or type argument, elements that are values holding references, a task pushing to one, a lambda capturing one.
+  **Its soundness review (vec1), fixed (the coordinator's calls, docs/own.md section 20)**: a borrowed own result's loan is
+  on the type of the owned object it borrows, read off its slot (recorded per function, `ownBorrowResultType`) - it was
+  the result's own type, so `String(v.View())` or `Ix(v.View())` returned through a reference parameter or an own local
+  never met the buffer's release; a conversion to a type of one representation is the same borrow (T29a), also where it
+  is kept (`l.Push(String(v.View()))` was accepted, a use-after-free found beside the review's). A function giving a
+  borrowed own result is called by name only: made a value, or a type whose `Call` gives one adapted to a function type,
+  it is a compile-time error (O37) - only a call by name makes the loan. Nothing relaxed.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

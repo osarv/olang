@@ -15456,3 +15456,37 @@ prelude's walk (now with Vec's bodies) had grown it. The frame's block is read o
 
 What phase 2 must add for Vec to be the default everywhere is in docs/own.md 19.4: a Vec in a field, a global, a type
 argument, elements that are values holding references, a task pushing to one, a lambda capturing one, and Push's cost.
+
+### Vec phase 1's soundness review, fixed (§8.8 O37, O38, O39, T29a, 2026-10-11)
+
+The review of Vec phase 1 (`/home/user/review/vec1`) found two causes of use-after-free, both in the borrowed own result
+the phase added, with six programs the compiler accepted and the scope sanitizer stopped.
+
+The first was a type key. A call's borrowed own result makes a loan on the objects it borrows, and a release meets that
+loan only when the types agree. The loan was keyed by the result's own type, so a result declared `String&v` and made
+by `String(v.View())` carried a loan on `String` while growing the Vec released an `Array<Char>`. A local Vec escaped
+it only because a release through an owner local is also matched against the owner's own structure; through a
+reference parameter or an own-reference local nothing else stood in. Two things were wrong underneath, not one. When the
+conversion's argument is a call (`String(v.View())`) the function was never marked as giving a borrowed own result at
+all, because the check looked only at the returned operand itself; when it is a slot (`String(c.data)`, retyped in
+place) it was marked, with the wrong type. Now the returned value is looked through conversions, slices and views to
+the borrow underneath, and the function records the type of the owned object, read off the slot, which the loan at
+each call uses. A function whose returns borrow objects of two types, or one the check cannot name, makes a loan every
+release meets.
+
+Looking for other places the same renaming hid a borrow found one: a conversion's result is a value of a declared array
+type, and a value whose type holds no reference keeps no loan, so `l.Push(String(v.View()))` stored a view of the
+buffer in a List and the next Push left it dangling. A conversion names its argument's storage (T29a), so it now keeps
+what its argument keeps. A value local made from one is a copy, which was already right.
+
+The second was a function value. The loan is made where a call by name is checked, and a call through a function
+value or a `Call` adapter has no name to look up - so `f := view; d := f(w)` held no loan. The coordinator chose to
+refuse rather than reconstruct: as O36 already makes a function with an owning parameter or an owned result callable
+by name only, a function giving a borrowed own result is too, and so is a type whose `Call` gives one when it is adapted
+to a function type. It is decided once every body is checked, since only the body says whether a result is such a
+borrow. A lambda cannot write a borrowed result's marker today, so its branch of the error is defensive.
+
+The checks gained the six programs (vec13-vec18), the List case (vec19) and a run case of what stays legal (vec20). The
+scope fuzzer's own mode writes the shapes - a conversion of an own field's buffer used after its release, a Vec's view
+converted inside a function taking the Vec by reference and growing it, and a conversion called through a function
+value - and on own seeds 1-100 the reviewed compiler gives three findings where this one gives none.

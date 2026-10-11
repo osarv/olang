@@ -5259,12 +5259,15 @@ reach, or on the globals, and is read-only exactly where a copy out of the same 
 generic's read-only reference parameter, as read-only as the argument.
 
 A **borrowed own result** is a reference result borrowed from a reference parameter `p` (`T&p`) that returns a borrow of
-an owned object reached from `p` by own fields only, or a slice of one - `fn (v Vec<T>&) View() Array<T>&v { return
-v.data[:v.n] }`, `fn (v Outer&) First() Inner&v { return v.o }`, or another function's borrowed own result given `p` or a
-borrow so reached.
+an owned object reached from `p` by own fields only, or a slice of one, or one converted to a type of the same representation (T29a,
+`String(v.View())`) - `fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }`, `fn (v Outer&) First() Inner&v {
+return v.o }`, or another function's borrowed own result given `p` or a borrow so reached.
 The result is where `p`'s referent lives, but it is good only while the object is not released: each call makes a loan
-(O38) on the objects of the result's type below the argument given for `p`, rooted where that argument is (O39), and
-what it gives is confined to the caller's locals as a borrowed copy's is (O38). So `d := v.View()` followed by
+(O38) on the objects below the argument given for `p` of the type of the owned object the result borrows - the buffer's
+`Array<Char>` for a result `String&v` converted from it - rooted where that argument is (O39), and what it gives is
+confined to the caller's locals as a borrowed copy's is (O38). Only a call by name makes that loan, so a function giving a
+borrowed own result is called by name only: made a value (D16, E31) - a named function, a lambda, a type whose `Call`
+gives one adapted to a function type - it is a compile-time error. So `d := v.View()` followed by
 `v.Push(x)` is a compile-time error while `d` is used after it. *(Not yet implemented: a borrow reached through
 another call's borrowed own result and then an own field - `return v.First().deep` - is not one, and is O10's error.)*
 *(Not yet implemented: only a result written `own`, or of an owning type held by value, is owned - one of several

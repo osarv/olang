@@ -203,6 +203,8 @@ struct type;
     X(ERR_OWN_RESULT_USE,               "O37",   "%S gives an owner, which only an own slot receives - 'x := %S(...)', an own field or global, an owning parameter, or a statement of its own") \
     X(ERR_OWN_RESULT_DEFAULT,           "O34",   "an owned result's 'catch default' is 'null' for now - or a clause that leaves") \
     X(ERR_OWN_MOVED_READ_AGAIN,         "O34",   "'return %s' moves '%s', which deferred code reads afterwards - write 'return take %s' to leave it null there") \
+    X(ERR_OWN_FUNC_VALUE_BORROW,        "O37",   "%S gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call %S by name") \
+    X(ERR_OWN_LAMBDA_BORROW_RESULT,     "O37",   "a lambda never gives a borrowed own result - a call through a function value holds no loan on the owned object it borrows; return a Clone(), or declare a function and call it by name") \
     X(ERR_OWN_FUNC_VALUE_SIG,           "O36",   "%S owns a parameter or gives an owned result, so it is called by name only - a function value never owns") \
     X(ERR_OWN_SPAWN_SIG,                "O41",   "a task's call may not own a parameter or give an owned result yet - spawn a function that borrows, and move the owner after the join") \
     X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \

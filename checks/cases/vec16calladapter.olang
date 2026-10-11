@@ -1,0 +1,23 @@
+# check: fail error[O37]: 'Call' gives a borrowed own result, so it is called by name only
+# vec1 F2: nor adapted through its Call into a function value
+fn churn() I64 {
+    t := 0
+    for i in range 2000 { s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len() }
+    return t
+}
+type G struct() { }
+fn (g G&) Call(v Vec<I64>&) Array<I64>&v { return v.View() }
+fn apply(f fn(x Vec<I64>&) Array<I64>&x, v Vec<I64>&) Array<I64>&v { return f(v) }
+fn grow(w mut Vec<I64>&) {
+    d := apply(G(), w)
+    for i in range 1000 { w.Push(i + 100) }
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    grow(v)
+}
