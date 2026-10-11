@@ -15872,3 +15872,67 @@ test`. Measured on `big.olang` (4.6 MB, the machine loaded): scanning 97-103 MB/
   so the last field's span was wrong. Moving the constructor call into a method of its own (`lastField`) gives the right
   result. A small program of the same shape did not reproduce it, under `-s` either; semantic.c being other work's,
   it is left for a fix there with this description.
+
+### Port M4: loading, fetching and names (M1-M23c, B9a, B10, B10c, D2, D3, D3a, D8c, M19f, G22, 2026-10-11)
+
+The fourth milestone of the self-hosted compiler (compiler/DESIGN.md sections 1.4, 1.5 and 4): `compiler/load.olang`
+(the import closure), `compiler/fetch.olang` (remote repositories and the lock file), `compiler/cond.olang` (build
+constants and the conditions B9a decides, over the AST) and `compiler/names.olang` (declaration tables and name
+resolution), with `dump.olang modules` and `dump.olang names`.
+
+**Loading.** A module is one file known by its identity - its import path for std and a remote repository, its path
+from the working directory for local code (M22a) - registered before its imports load, so a cycle closes; two
+spellings of one file are one module by its real path. std is `<compiler>/../std` or `OLANG_STD`; the prelude is every
+file of `std/prelude`. Each module is read, scanned and pre-scanned (its type and error names in every branch, for the
+parser's oracle; its imports and the top-level ifs around each; the globals a condition may read), then parsed.
+M16 (one file reached two ways) and M17 (a re-export back to the importer) are walks over the finished graph.
+
+**B9a in the loader, decided over the AST.** Stage 0 decides B9a on tokens before anything is parsed, and B9c by
+checking the whole program again. The port parses every branch (DESIGN.md point 12) and decides a chain of top-level
+ifs with `cond.Eval` once the globals its conditions read are parsed; only the chosen branch's imports are loaded.
+**Decided (mine)**: a condition B9a cannot decide leaves its chain *pending* - its imports are not loaded and its
+branches' diagnostics stay held - and the loader never guesses. `PendingIfs()` lists such chains and
+`Decide(module, condition, branch)` takes the checker's decision (M5/M8 evaluate it); `names.DecideTop` enters and
+resolves the branch's declarations. Stage 0's first attempt checks every such chain's else; the port loads only what
+is decided, so the two differ only on a program whose graph depends on B9c - none in the repository.
+
+**Fetching.** Every remote part is validated (M23a: `NamePart`, `IsCommit`), git runs through `os.Exec`, a fetch goes
+into a temporary directory renamed into `cache/host/owner/repo/<commit>` once it holds the right commit, and the lock
+file and `-u` behave as stage 0's - the same lines, the same reports. Tested over local git repositories, in
+`fetch.olang` (locking, an offline locked build, a refetch by hash, `-u`, a deleted line, bad names) and `load.olang`
+(a remote import whose relative imports stay inside the repository).
+
+**Names.** A `Table` per module and one `Resolver` recording what every name written is (`Use`, `Member` for
+`alias.Name`). Parameters and locals are one map with an undo log - D3 and D3a forbid shadowing, so leaving a block
+only takes back what it declared. **Decided (mine)**: names reports only the rules about declarations and imports - D2,
+D3, D3a (and E29 for a for-in name), D8c's `_`, M10 (naming the std module where an unknown alias would be one), M14,
+M19f, M20, B10, B10c and G22's constant names - and records an unknown name as `None` for the checker, which knows a
+type's members and gives one error per name with its suggestion: two passes reporting it would say it twice, and only
+the checker can tell `x.f` on a value from `alias.f`. A name a pending top-level branch declares waits
+(`Table.waiting`): no clash and no unknown name until the branch is decided. A local if (S8b) whose condition `cond`
+decides has its chosen branch's diagnostics reported and the others dropped; one it cannot decide reports its branches'
+diagnostics only where they hold no syntax error, since the checker's evaluation (S8c, B9c) may still drop that
+branch, as stage 0 drops `shared.olang`'s `if arch > 0 and ccOnRealOs()` else branch.
+
+**Not parallel yet.** DESIGN.md allowed a parse per task; every parser interns into one `source.Names`, mutable shared
+state, so a parallel parse needs an interner per task merged after, or a locked one. Left for M10's measurements: the
+checker, not the parse, will be where the time goes.
+
+**Acceptance.**
+- `bootstrap/oracle/modgraph.c` links stage 0 without its driver, analyzes a root as `olang -c` does and prints the
+  module graph as `Loader.Graph()` does; `compiler/tools/modgraph.sh` (`make modgraph`) compares the two on every root
+  of the repository, as an ordinary build and as a test build, and on a remote program made in a scratch directory
+  (identities, edges, the lock file's lines): all 104 graphs are the same. Not in `make verify`: stage 0 checks each root
+  whole, about four and a half minutes in all. `bench/fused.olang` is refused by stage 0 today (E31b at its `S[g, h]`
+  arguments to `ws.Gemm`) and skipped.
+- `compiler/tools/namesdiff.sh` (`make namesdiff`, in `make verify`, about 25 s) runs `dump.olang names` on all 1,132
+  `checks/cases` programs with their `-D` and `-t` flags: the errors of load's and names' rules are exactly stage 0's
+  in `compiler/goldens/diag.txt` (40), by rule and position, and there are none where it gave none. Every other file
+  of the repository loads and resolves with no error, plainly and as a test build.
+
+**Found on the way.**
+- **Stage 0 ran out of memory** compiling an early draft of `load.olang` that had an E11b join error inside a
+  conditional inside a `$Normalize(...)` call; it should have reported the error. A small program of that shape
+  reports it correctly, so it was not minimized; semantic.c is other work's.
+- `bench/fused.olang` does not check under the current stage 0 (E31b at six `ws.Gemm(S[g, h], ...)` calls through a
+  `Batch`'s `At`), so `make bench` would not build it; left to the linalg/benchmark work.

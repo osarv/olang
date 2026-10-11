@@ -50,6 +50,11 @@ build/tokdump: bootstrap/oracle/tokdump.c build/obj/token.o build/obj/util.o bui
 build/astdump: bootstrap/oracle/astdump.c build/obj/syntax.o build/obj/token.o build/obj/util.o build/obj/errmsg.o
 	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm -lpthread
 
+# the module-graph oracle (compiler/DESIGN.md section 4): the modules and import edges the C compiler's loader reaches
+# from a root, with its build-decided branches decided, which the self-hosted loader's must equal (compiler/tools/modgraph.sh)
+build/modgraph: bootstrap/oracle/modgraph.c $(filter-out build/obj/main.o,$(OBJ))
+	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
+
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
 	$(OLANG) -b compiler/tools/dump.olang
@@ -62,6 +67,16 @@ tokdiff: build/tokdump build/compiler_tools_dump
 # and each tree written back as source and read again is the same tree (compiler/tools/astdiff.sh)
 astdiff: build/astdump build/compiler_tools_dump
 	compiler/tools/astdiff.sh
+
+# M4's acceptance: on every checks case the self-hosted loader and name resolver report the errors of their rules that
+# stage 0 reported, at the same position (compiler/tools/namesdiff.sh, against compiler/goldens/diag.txt)
+namesdiff: build/compiler_tools_dump
+	compiler/tools/namesdiff.sh
+
+# M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's
+# (compiler/tools/modgraph.sh)
+modgraph: build/modgraph build/compiler_tools_dump
+	compiler/tools/modgraph.sh
 
 build/stage0.obj/%.o: bootstrap/%.c
 	mkdir -p build/stage0.obj
@@ -122,6 +137,7 @@ verify:
 	$(MAKE) checkir
 	$(MAKE) tokdiff
 	$(MAKE) astdiff
+	$(MAKE) namesdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
@@ -175,7 +191,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.

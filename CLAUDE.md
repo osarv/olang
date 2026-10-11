@@ -5150,6 +5150,20 @@ and literals made only of such, never existing storage anywhere in it) - it is
   on a 1 GB thread now); a stage 0 constructor temporary built inside an `if` and returned through a borrowed result
   came back as garbage in the parser - worked around (a helper method), not minimized (HISTORY.md); stage 0's parse
   memo reused a parse the limit had cut short at a shallower depth, misreading statements near the limit (L21, fixed).
+- **Port M4: loading, fetching, names (M1-M23c, B9a, B10, B10c, D2, D3a, M19f, 2026-10-11; compiler/DESIGN.md
+  sections 1.4, 1.5 and 4, details mine).** `compiler/load.olang` (the import closure, M16/M17 over the graph),
+  `compiler/fetch.olang` (remote repositories through `os.Exec`, the lock file, `-u`), `compiler/cond.olang` (build
+  constants; B9a decided over the AST) and `compiler/names.olang` (a table per module, every name written resolved,
+  locals in one map with an undo log). **Decided (mine)**: a top-level condition B9a cannot decide leaves its chain
+  pending - imports unloaded, diagnostics held - until the checker calls `Decide`/`DecideTop`, never a guess (stage 0
+  checks a first attempt with the else); names reports only declaration and import rules and leaves an unknown name to
+  the checker (one error per name, with its suggestion); a name a pending branch declares waits; a local if `cond`
+  cannot decide reports a branch's diagnostics only where it holds no syntax error; parsing stays sequential (one
+  shared interner). **Acceptance**: `bootstrap/oracle/modgraph.c` + `compiler/tools/modgraph.sh` (`make modgraph`,
+  not in verify - stage 0 checks each root whole, ~4.5 min): every root's module graph, ordinary and `-t`, and a
+  remote program's, equal stage 0's; `compiler/tools/namesdiff.sh` (`make namesdiff`, in verify, ~25 s): all 1,132
+  checks cases give stage 0's load and name errors by rule and position. Found: `bench/fused.olang` does not check
+  under stage 0 (E31b), skipped.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

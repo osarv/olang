@@ -870,3 +870,34 @@ test "M16 and M17: one file reached twice, and a re-export back to its importer"
     l2.Load($dir "/x.olang")
     assert rules(l2).Contains("M17"), rules(l2)
 }
+
+fn git(dir String&, args Array<String&>&) Bool {
+    out := try os.Exec(args, "", true, dir) catch os.OsError { return false }
+    return out.Status == 0
+}
+
+test "a remote import is fetched, locked, and its relative imports stay inside it" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    repo := $dir "/remote/example.com/me/tools"
+    write(repo, "lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
+    write(repo, "part/inner.olang", "import \"../lib\"\n")
+    ok := git(repo, String&["git", "init", "-q"]) and
+          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
+          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit",
+                            "-q", "-m", "x"])
+    if not ok { done }   # no git here: nothing to fetch with
+    write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    f := fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file://" $dir "/remote/", false, true)
+    l := Loader("std", consts, f, source.Names(), diag.Diagnostics(false))
+    l.Load($dir "/main.olang")
+    assert l.Diags.Errors() == 0, rules(l)
+    g := l.Graph()
+    assert g.Contains("module main\n  T example.com/me/tools/lib\n"), g
+    assert g.Contains("module example.com/me/tools/lib\n  inner example.com/me/tools/part/inner\n"), g
+    assert g.Contains("module example.com/me/tools/part/inner\n  lib example.com/me/tools/lib\n"), g
+    lock := try os.ReadFile($dir "/olang.lock") catch default ""
+    assert lock.Contains("example.com/me/tools "), lock
+}
