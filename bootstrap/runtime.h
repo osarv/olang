@@ -4,14 +4,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-//the runtime's IR (runtime.c) for a build for architecture arch (TargetArch, B12a): everything every object carries -
-//with the scope sanitizer's quarantine in place of the chunk pool's immediate reuse under -s (B2f)
-void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan);
-//S3: the dynamic call over dlsym and libffi - only into the object of a module declaring it
-void emitDyncallRuntime(FILE* out, const char* arch);
-//E11a: a float's text and the powers of ten it needs - only into an object that renders a float
-void emitFloatTextRuntime(FILE* out);
-//E11c: the growing text a rendering built in one pass writes to - only into an object that builds one
-void emitTextBuilderRuntime(FILE* out);
+//the runtime's IR as read from std/runtime and filled in for a build for architecture arch (TargetArch, B12a), with the
+//scope sanitizer or not (B2f): runtime.ll (and san.ll under -s), or with dyncall the dynamic call's part, dyncall.ll (S3)
+//- what main.c compiles into the runtime's objects
+char* RuntimeText(const char* arch, bool scopeSan, bool dyncall);
+//the declarations a module's IR carries for everything the runtime defines or declares - its own part, and the dynamic
+//call's too for a module declaring it - in place of the runtime itself
+void emitRuntimeDecls(FILE* out, const char* arch, bool scopeSan, bool dyncall);
 
 #endif //RUNTIME_H

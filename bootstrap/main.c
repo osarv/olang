@@ -16,8 +16,8 @@
 #include "errmsg.h"
 
 //P7: "-r" builds everything under ThreadSanitizer. It is a whole-build mode rather than a per-file
-//one: the runtime is emitted linkonce_odr into every object, so mixing an instrumented object with an
-//uninstrumented one would let the linker keep either copy.
+//one: the runtime's object and every module's are built under it together, the runtime's own allocator and workers
+//instrumented as the program is, and a module's object for -r is a different artifact from its plain one.
 static bool gRace = false;
 //S18b/P1d: only a test binary can longjmp, so only a test build carries the open-scope chain. That makes
 //a module's test-build object a different artifact from its plain one, exactly as -r does.
@@ -28,7 +28,7 @@ static bool gTestBuild = false;
 static bool gDebug = false;
 //B2f: "-s" builds with the scope sanitizer - storage a closed scope gave back is poisoned, protected and quarantined, so
 //a use after its scope closed is reported where it happens. A whole-build mode for the reason -r is one: it changes the
-//runtime every object carries
+//runtime every program links (std/runtime/san.ll)
 static bool gScopeSan = false;
 
 //B12: the machine a build is for - what "-a" names, resolved once, before anything is analyzed. Every generated function
@@ -245,6 +245,59 @@ static void collectBuildRefs(struct semaModule* mod, struct list* seen, struct l
     for (int i = 0; i < mod->imports.len; i++) collectBuildRefs(((struct semaImport*)ListGetIdx(&mod->imports, i))->mod, seen, out);
 }
 
+//the flags an object is compiled with, beyond the mode's: B2c - LLVM 18's -O0 instruction selector (FastISel) keeps a
+//"bfloat" live across a branch wrongly - a BF16 value computed before a conditional or a match and used after it read
+//back as another number under -d (found by the differential fuzzer, fuzz/repro/bf16fastisel.ll) - so -d selects
+//instructions as the optimizing path does
+static void addCompileFlags(struct list* args) {
+    addModeFlags(args);
+    if (gDebug) { argAdd(args, "-mllvm"); argAdd(args, "-fast-isel=false"); }
+}
+
+//B3, compiler/DESIGN.md section 1.10: the runtime's object for this build - its own part, or with dyncall the dynamic
+//call's (S3) - compiled from std/runtime and linked once into each program, where every module's object used to carry
+//all of it. It is named by what it is made from: a hash of its filled-in IR (the files, the target's facts and
+//attributes, -s and -r all show there) and of the flags it is compiled with (-d's among them). So a change to any of
+//those gives another object, and the same configuration finds the one it made before - in a later build, another
+//program, the next -t child - with no staleness to judge, B3's or B7's. The mode is in the name too, for a reader. It is
+//compiled under a name of its own process's and renamed into place, so builds side by side never read half of one.
+static char* runtimeObject(char* clang, bool dyncall) {
+    char* ir;
+    size_t irLen;
+    FILE* f = open_memstream(&ir, &irLen);
+    if (!f) ErrorBugFound();
+    CodegenRuntime(f, dyncall, gRace);
+    fclose(f);
+    struct list args = ListInit(sizeof(char*));
+    argAdd(&args, clang);
+    addCompileFlags(&args);
+    unsigned long long h = 14695981039346656037ULL;
+    for (size_t i = 0; i < irLen; i++) h = (h ^ (unsigned char)ir[i]) * 1099511628211ULL;
+    for (int i = 1; i < args.len; i++) {
+        for (char* c = *(char**)ListGetIdx(&args, i); *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ULL;
+        h = (h ^ 0xFFu) * 1099511628211ULL;
+    }
+    char* base = StrFmt("build/olang_%s.%016llx%s%s%s", dyncall ? "dyncall" : "runtime", h, gRace ? ".race" : "",
+                        gDebug ? ".debug" : "", gScopeSan ? ".san" : "");
+    char* objPath = StrFmt("%s.o", base);
+    struct stat st;
+    if (stat(objPath, &st) == 0) { free(ir); ListDestroy(args); return objPath; }
+    char* irPath = StrFmt("%s.ll", base);
+    FILE* out = fopen(irPath, "w");
+    if (!out || fwrite(ir, 1, irLen, out) != irLen || fclose(out) != 0) ErrFatal(StrFromCStr(irPath), ERR_CANNOT_OPEN);
+    free(ir);
+    requireClangOrExplain(clang, irPath);
+    char* tmpPath = StrFmt("%s.%ld.tmp", objPath, (long)getpid());
+    argAdd(&args, "-c");
+    argAdd(&args, "-o");
+    argAdd(&args, tmpPath);
+    argAdd(&args, irPath);
+    if (RunProgram(argEnd(&args), false) != 0) ErrFatal((struct str){0}, ERR_CLANG_FAILED, irPath);
+    if (rename(tmpPath, objPath) != 0) ErrFatal(StrFromCStr(objPath), ERR_CANNOT_OPEN);
+    ListDestroy(args);
+    return objPath;
+}
+
 //compiles one module to build/<base>.o, skipping the work when the object is already up to date.
 //Returns the object path.
 char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) {
@@ -298,11 +351,7 @@ char* emitModuleObject(struct semaModule* mod, char* clang, enum cgEntry entry) 
     requireClangOrExplain(clang, irPath);
     struct list args = ListInit(sizeof(char*));
     argAdd(&args, clang);
-    addModeFlags(&args);
-    //B2c: LLVM 18's -O0 instruction selector (FastISel) keeps a "bfloat" live across a branch wrongly - a BF16 value
-    //computed before a conditional or a match and used after it read back as another number under -d (found by the
-    //differential fuzzer, fuzz/repro/bf16fastisel.ll) - so -d selects instructions as the optimizing path does
-    if (gDebug) { argAdd(&args, "-mllvm"); argAdd(&args, "-fast-isel=false"); }
+    addCompileFlags(&args);
     argAdd(&args, "-c");
     argAdd(&args, "-o");
     argAdd(&args, objPath);
@@ -321,11 +370,14 @@ static int linkProgram(char* clang, struct list* objs, char* binPath) {
     argAdd(&args, "-o");
     argAdd(&args, binPath);
     for (int i = 0; i < objs->len; i++) argAdd(&args, *(char**)ListGetIdx(objs, i));
+    //B3: the runtime, once (runtimeObject); and S3's dynamic call, over libffi, only into a program declaring it
+    bool dyncall = CodegenProgramUsesDyncall();
+    argAdd(&args, runtimeObject(clang, false));
+    if (dyncall) argAdd(&args, runtimeObject(clang, true));
     argAdd(&args, "-lm");
     argAdd(&args, "-lpthread");
     argAdd(&args, "-ldl"); //os.RunOnStack asks glibc's dlsym for the least stack a thread may have
-    //S3: the runtime's dynamic call is over libffi too, linked only into a program that declares it
-    if (CodegenProgramUsesDyncall()) argAdd(&args, "-lffi");
+    if (dyncall) argAdd(&args, "-lffi");
     int rc = RunProgram(argEnd(&args), false);
     ListDestroy(args);
     return rc;
@@ -340,6 +392,9 @@ void compileModule(char* file) {
     ensureBuildDir();
     char* clang = findClang();
     char* objPath = emitModuleObject(root, clang, CG_ENTRY_NONE);
+    //what the object links against beside the other modules' objects: the runtime's own (B3), made ready here too
+    runtimeObject(clang, false);
+    if (CodegenProgramUsesDyncall()) runtimeObject(clang, true);
     printf("%sbuilt %s%s\n", ErrMsgColor(COLOR_FG_GREEN), objPath, ErrMsgColor(COLOR_RESET));
 }
 

@@ -37,9 +37,10 @@ Scenarios := String&["cgreview", "agree", "fuzz", "objnames", "remote", "interp"
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
 
-# where the prelude's objects are built once, for every case to start from - as the cases did when they all shared one
-# directory. Each has a directory of its own now, since each build also writes an olang_build module beside them, and
-# building the prelude again costs every case that gets as far as code about 1.6s, two thirds of the cases' time again.
+# where the prelude's objects, and the runtime's (B3), are built once, for every case to start from - as the cases did
+# when they all shared one directory. Each has a directory of its own now, since each build also writes an olang_build
+# module beside them, and building the prelude again costs every case that gets as far as code about 1.6s, two thirds
+# of the cases' time again.
 Seed String& = "prelude"
 
 # what every check found - the scenarios', then the cases', in the order of Scenarios and Cases: "" for a check that
@@ -163,7 +164,9 @@ fn runCase(name String&) String& {
     flags := lineAfter(src, "# flags: ")
     base := name[:name.Len() - 6]
     dir := fresh("cases/" $base)
-    prelude String& = "cp build/checks/" $Seed "/build/std_prelude_*.o " $os.Quote($dir "/build") " 2> /dev/null"
+    seeded String& = "build/checks/" $Seed "/build/"
+    prelude String& = ("cp " $seeded "std_prelude_*.o " $seeded "olang_runtime.*.o " $os.Quote($dir "/build")
+                       " 2> /dev/null")
     os.Run("cp checks/cases/" $name " " $os.Quote(dir) " && mkdir " $os.Quote($dir "/build") " && " $prelude)
     status := sh(dir, "\"$OLANG\" -b " $flags " " $name " > out.txt 2>&1")
     if check.StartsWith("fail ") {
@@ -1425,8 +1428,9 @@ fn scopesan(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -c ' 0 failed' out.txt | grep -qx 2") == 0, "the tests under -d -s did not all pass", dir)
     # zero cost outside -s: nothing of it in a plain build's IR, all of it in a -s build's
     try r.expect(sh(dir, "\"$OLANG\" -b -d stub.olang > out.txt 2>&1") == 0, "stub.olang did not build plainly", dir)
-    try r.expect(sh(dir, "grep -q '__olang_san' build/stub.main.debug.ll") != 0, "a plain build carries the sanitizer", dir)
-    try r.expect(sh(dir, "grep -q 'call void @__olang_san_quarantine_list' build/stub.main.debug.san.ll") == 0,
+    try r.expect(sh(dir, "grep -q '__olang_san' build/stub.main.debug.ll build/olang_runtime.*[0-9a-f].debug.ll") != 0,
+                 "a plain build carries the sanitizer", dir)
+    try r.expect(sh(dir, "grep -q 'call void @__olang_san_quarantine_list' build/olang_runtime.*.debug.san.ll") == 0,
                  "a -s build does not quarantine what a scope closes", dir)
 }
 
@@ -1490,7 +1494,9 @@ fn crashes(r mut report&) ? Failed {
     # P7: under -r the crash handler is not instrumented (it can run while ThreadSanitizer holds its own locks); -c,
     # so no sanitizer runtime is needed to check it
     try r.expect(sh(dir, "\"$OLANG\" -c -r nullpeek.olang > out.txt 2>&1") == 0, "nullpeek -c -r did not build", dir)
-    ll := try os.ReadFile($dir "/build/nullpeek.race.ll") catch default ""
+    # the crash handler is the runtime's, compiled once for the build (B3)
+    try r.expect(sh(dir, "cat build/olang_runtime.*.race.ll > runtime.race.ll 2> out.txt") == 0, "no -r runtime IR", dir)
+    ll := try os.ReadFile($dir "/runtime.race.ll") catch default ""
     try r.expect(ll.Contains("@__olang_crash_handler(i32 %sig) #1 {") and ll.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread")
                  and ll.Contains("attributes #1 = { null_pointer_is_valid \"target-cpu\""), "crash handler instrumented under -r", dir)
 }

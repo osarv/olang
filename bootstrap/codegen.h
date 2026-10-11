@@ -22,10 +22,13 @@ void CodegenCheckModuleNames(void);
 void CodegenSetRoot(struct semaModule* root);
 //B12: the target - its LLVM triple, its architecture (TargetArch), and the attributes every generated function carries
 void CodegenSetTarget(const char* triple, const char* arch, const char* attrs);
-//B2f: whether every object of the build carries the scope sanitizer (-s)
+//B2f: whether the build carries the scope sanitizer (-s): the runtime's object holds it (std/runtime/san.ll)
 void CodegenSetScopeSan(bool on);
 void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bool race, bool unwind, bool debug);
-//S3: whether a module of the program declares the runtime's dynamic call, so the link takes libffi and libdl
+//S3: whether a module of the program declares the runtime's dynamic call, so the link takes its part and libffi
 bool CodegenProgramUsesDyncall(void);
+//B3: the runtime's IR - its own part, or with dyncall the dynamic call's - filled in for the build, written to dst for
+//main.c to compile into the runtime's object, which is linked once into each program (compiler/DESIGN.md section 1.10)
+void CodegenRuntime(FILE* dst, bool dyncall, bool race);
 
 #endif //CODEGEN_H
