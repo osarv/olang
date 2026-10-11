@@ -1324,6 +1324,59 @@ test "every diagnostic's call fits its message, and every rule it names is in th
     assert bad == 0
 }
 
+# The self-hosted compiler's messages (compiler/msgs.olang, compiler/DESIGN.md section 1.3) are held to the same: every
+# rule one names is one the specification states, and each is the twin of an errmsg.h entry - the id it is written under,
+# with the same rules - so no diagnostic is on one side only. Its arguments need no counting: they are typed parameters
+test "every message of compiler/msgs.olang names rules the specification states, as its errmsg.h twin does" {
+    table := try os.ReadFile("bootstrap/errmsg.h") catch default ""
+    msgs := try os.ReadFile("compiler/msgs.olang") catch default ""
+    spec := try os.ReadFile("SPEC.md") catch default ""
+    assert table.Len() > 0 and msgs.Len() > 0 and spec.Len() > 0
+    bad := 0
+    twins := 0
+    rest String& = msgs
+    for {
+        at := try rest.Find("\n# ERR_") catch default -1
+        note := try rest.Find("\n# NOTE_") catch default -1
+        if at < 0 or (note >= 0 and note < at) { at = note }
+        if at < 0 { break }
+        rest = rest[at + 3:]
+        eol := try rest.FindByte('\n') catch default 0
+        id := rest[:eol]
+        call := try rest.Find("Msg(Diag.") catch default 0
+        rs, re := literalAfter(rest, call)
+        rules := rest[rs:re]
+        for r in rules.Split(", ") {
+            if r.Len() > 0 and not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
+                try io.PrintErr("check FAIL: msgs.olang's " $id " names rule " $r ", which SPEC.md does not state\n") catch { }
+                bad++
+            }
+        }
+        entry := try table.Find("    X(" $id ",") catch default -1
+        if entry < 0 {
+            try io.PrintErr("check FAIL: msgs.olang has " $id ", which errmsg.h does not declare\n") catch { }
+            bad++
+        } else {
+            ts, te := literalAfter(table, entry)
+            if table[ts:te] != rules {
+                try io.PrintErr("check FAIL: " $id " applies " $rules " in msgs.olang, " $(table[ts:te]) " in errmsg.h\n") catch { }
+                bad++
+            }
+        }
+        twins++
+    }
+    entries := 0
+    for line in table.Split("\n") {
+        if line.StartsWith("    X(") { entries++ }
+    }
+    if twins != entries {
+        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.py\n") catch { }
+        bad++
+    }
+    assert twins > 0
+    assert bad == 0
+}
+
 # K1: the differential fuzzer (fuzz/), on a few fixed seeds - each program built at -O3, built at -O0 and interpreted,
 # every value computed while compiling the same as the run time's, and every output the same; "make fuzz" runs it longer
 test "the differential fuzzer finds nothing on its fixed seeds" { assert passed("fuzz") }
