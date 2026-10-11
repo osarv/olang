@@ -24380,6 +24380,10 @@ struct var* lvalueRootVar(struct operand* op) {
 //a global, a slot reached from one with no scope of its own, a local that took such a thing, or a call's result that
 //was built or borrowed there. False where that is not known.
 bool storageInProgram(struct operand* op) {
+    //(vec3 F4: a borrow of an owned object - its slot read, a local holding the borrow, a slice of an own array, or
+    //anything reached through one - is in the object's region, which its owner may release at any time: never the
+    //program's, even where the owner is a global)
+    if (ownRegionOf(op) || ownArrayRegionOf(op)) return false;
     switch (op->opType) {
         case OPERATION_READ_VAR:
             //a named function's value - or a lambda's that captures nothing - is static, made once for the whole run (D16)
@@ -27344,15 +27348,170 @@ static bool ownMayReferTo(struct type res, struct type tgt, int depth) {
     ListDestroy(kids);
     return hit;
 }
-//...whether f's result is built (T& or T&return - new storage in the result scope), not borrowed from a parameter (T&p)
+//...whether f's result is written built (T& or T&return - in the result scope), not borrowed from a parameter (T&p)
 //nor owned (O37), nor a call's borrowed own result (O37, whose loan is its own)
-static bool ownResultBuilt(struct var* f) {
+static bool ownResultWrittenBuilt(struct var* f) {
     f = canonicalVar(f);
     struct type* rt = f->type.hasRetType ? f->type.retType : NULL;
     //(a type-variable result bound to a reference returns what the body gives it, its argument included, O14b - so it
     //is not new storage, "id(v.View())")
     if (!rt || !rt->structMAlloc || rt->refOwn || f->ownBorrowResult || f->type.resultViaTypeVar) return false;
     return !rt->scopeParam || (f->type.resultScope && canonicalVar(rt->scopeParam) == canonicalVar(f->type.resultScope));
+}
+//...whether f's result is new storage at its top - written built AND proven fresh (vec3 F1: "built" says only which
+//scope the result is in; a call whose result lands there - "id(a)", "pick(c, a, b)", "l[0]", "m.Get(k)" - hands an
+//argument back into it, O14b, so a written built result is no proof)
+static bool ownResultBuilt(struct var* f) {
+    return ownResultWrittenBuilt(f) && canonicalVar(f)->ownResultFresh;
+}
+
+//O38 (vec3 F1): which built results are proven new storage - a least fixed point over the returns of every checked body,
+//conservative everywhere: a return is fresh only when it is a constructor call, "Array<T>(n)", a comprehension, a
+//literal, text rendered or joined here, null, a call to a function already proven fresh, a conditional or a match all of
+//whose values are, or a local declared from one and never repointed afterwards; any catch default must be fresh too.
+//Anything else - a parameter, a field, an element, a call through a type variable or a function value, a body unchecked
+//or with errors - is not, and the result keeps every loan its arguments carry
+static struct list ownFreshFuncs;
+static void ownForEachBody(void (*fn)(struct var*, struct list*));
+static void ownFreshCollect(struct var* f, struct list* block) {
+    (void)block;
+    if (f && !f->isLambda && ownResultWrittenBuilt(f)) {
+        struct var* c = canonicalVar(f);
+        for (int i = 0; i < ownFreshFuncs.len; i++) if (*(struct var**)ListGetIdx(&ownFreshFuncs, i) == c) return;
+        ListAdd(&ownFreshFuncs, &c);
+    }
+}
+//(a local v written again anywhere in a body - assigned, a spawn's target, taken - or declared more than once)
+static bool ownFreshOpWrites(struct operand* op, struct var* v, int* decls);
+static bool ownFreshBlockWrites(struct list* block, struct var* v, int* decls);
+static bool ownFreshIsVar(struct operand* op, struct var* v) {
+    return op && op->opType == OPERATION_READ_VAR && op->readVar && canonicalVar(op->readVar) == v;
+}
+static bool ownFreshStmtWrites(struct statement* s, struct var* v, int* decls) {
+    if (s->sType == STATEMENT_VAR_DECL && canonicalVar(&s->var) == v) (*decls)++;
+    if (s->sType == STATEMENT_ASSIGN && ownFreshIsVar(s->target, v)) return true;
+    for (int i = 0; i < s->spawnTargets.len; i++)
+        if (ownFreshIsVar(*(struct operand**)ListGetIdx(&s->spawnTargets, i), v)) return true;
+    if (ownFreshOpWrites(s->op, v, decls) || ownFreshOpWrites(s->target, v, decls) || ownFreshOpWrites(s->fillValue, v, decls)
+            || ownFreshOpWrites(s->forInit, v, decls) || ownFreshOpWrites(s->caseGuard, v, decls)
+            || ownFreshOpWrites(s->nomatchValue, v, decls) || ownFreshOpWrites(s->assertMsg, v, decls))
+        return true;
+    for (int i = 0; i < s->caseAlts.len; i++) {
+        struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+        if (ownFreshOpWrites(a->test, v, decls)) return true;
+        for (int k = 0; k < a->binds.len; k++)
+            if (ownFreshOpWrites(((struct caseBind*)ListGetIdx(&a->binds, k))->from, v, decls)) return true;
+    }
+    for (int i = 0; i < s->catchClauses.len; i++) {
+        struct catchClause* c = ListGetIdx(&s->catchClauses, i);
+        if (ownFreshBlockWrites(&c->block, v, decls) || ownFreshOpWrites(c->dflt, v, decls)) return true;
+    }
+    if (s->forPost && ownFreshStmtWrites(s->forPost, v, decls)) return true;
+    if (ownFreshBlockWrites(&s->block, v, decls) || ownFreshBlockWrites(&s->matchHold, v, decls)
+            || ownFreshBlockWrites(&s->matchCases, v, decls) || ownFreshBlockWrites(&s->nomatchBlock, v, decls))
+        return true;
+    return s->elseStmnt && ownFreshStmtWrites(s->elseStmnt, v, decls);
+}
+static bool ownFreshBlockWrites(struct list* block, struct var* v, int* decls) {
+    for (int i = 0; i < block->len; i++) if (ownFreshStmtWrites(ListGetIdx(block, i), v, decls)) return true;
+    return false;
+}
+static bool ownFreshOpWrites(struct operand* op, struct var* v, int* decls) {
+    if (!op) return false;
+    if (op->opType == OPERATION_TAKE && op->args.len && ownFreshIsVar(*(struct operand**)ListGetIdx(&op->args, 0), v))
+        return true;
+    for (int i = 0; i < op->args.len; i++) if (ownFreshOpWrites(*(struct operand**)ListGetIdx(&op->args, i), v, decls)) return true;
+    for (int i = 0; i < op->chainOperands.len; i++)
+        if (ownFreshOpWrites(*(struct operand**)ListGetIdx(&op->chainOperands, i), v, decls)) return true;
+    if (ownFreshOpWrites(op->callee, v, decls)) return true;
+    for (int i = 0; i < op->catchClauses.len; i++) {
+        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
+        if (ownFreshBlockWrites(&c->block, v, decls) || ownFreshOpWrites(c->dflt, v, decls)) return true;
+    }
+    return ownFreshBlockWrites(&op->comprBody, v, decls);
+}
+static bool ownFreshValue(struct var* f, struct operand* op, int depth) {
+    if (!op || depth > 32 || op->type.unknown) return false;
+    for (int i = 0; i < op->catchClauses.len; i++) { //(a catch default is the value where the call fails)
+        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
+        if (c->dflt && !ownFreshValue(f, c->dflt, depth + 1)) return false;
+    }
+    if (op->isNullLiteral) return true;
+    if (op->isLiteral && op->opType == OPERATION_NONE) return true;
+    switch (op->opType) {
+    case OPERATION_STR_OF: case OPERATION_CONCAT: case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_COMPREHENSION:
+        return true;
+    case OPERATION_COND:
+        return op->args.len == 3 && ownFreshValue(f, *(struct operand**)ListGetIdx(&op->args, 1), depth + 1)
+               && ownFreshValue(f, *(struct operand**)ListGetIdx(&op->args, 2), depth + 1);
+    case OPERATION_MATCH: {
+        struct list vs = SemanticMatchValues(op);
+        for (int i = 0; i < vs.len; i++) if (!ownFreshValue(f, *(struct operand**)ListGetIdx(&vs, i), depth + 1)) return false;
+        return vs.len > 0;
+    }
+    case OPERATION_FUNCCALL:
+        if (op->callee || !op->readVar || op->readVar->isLambda) return false;
+        if (opIsCtorCall(op)) return true;
+        return canonicalVar(op->readVar)->ownResultFresh;
+    case OPERATION_READ_VAR: {
+        struct var* v = op->readVar;
+        if (!v || v->isGlobalVar || v->isFuncDecl || v->isLambda || v->paramOf || v->paramCopy || v->isCapture
+                || canonicalVar(v)->isCapture || !v->declInit)
+            return false;
+        int decls = 0;
+        if (ownFreshBlockWrites(&f->codeBlock, canonicalVar(v), &decls) || decls != 1) return false;
+        return ownFreshValue(f, v->declInit, depth + 1);
+    }
+    default:
+        return false;
+    }
+}
+static bool ownFreshReturns(struct var* f, struct list* block);
+static bool ownFreshStmtReturns(struct var* f, struct statement* s) {
+    if (s->sType == STATEMENT_RET && !ownFreshValue(f, s->op, 0)) return false;
+    for (int i = 0; i < s->catchClauses.len; i++)
+        if (!ownFreshReturns(f, &((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block)) return false;
+    if (!ownFreshReturns(f, &s->block) || !ownFreshReturns(f, &s->matchHold) || !ownFreshReturns(f, &s->matchCases)
+            || !ownFreshReturns(f, &s->nomatchBlock))
+        return false;
+    return !s->elseStmnt || ownFreshStmtReturns(f, s->elseStmnt);
+}
+//(every return of a block, at any depth - a return inside an operand's statements (a match's clauses, a catch block)
+//included: operands are searched for them too)
+static bool ownFreshOpReturns(struct var* f, struct operand* op) {
+    if (!op) return true;
+    for (int i = 0; i < op->args.len; i++) if (!ownFreshOpReturns(f, *(struct operand**)ListGetIdx(&op->args, i))) return false;
+    for (int i = 0; i < op->catchClauses.len; i++) {
+        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
+        if (!ownFreshReturns(f, &c->block) || !ownFreshOpReturns(f, c->dflt)) return false;
+    }
+    if (!ownFreshOpReturns(f, op->callee)) return false;
+    return ownFreshReturns(f, &op->comprBody);
+}
+static bool ownFreshReturns(struct var* f, struct list* block) {
+    for (int i = 0; i < block->len; i++) {
+        struct statement* s = ListGetIdx(block, i);
+        if (!ownFreshStmtReturns(f, s)) return false;
+        if (!ownFreshOpReturns(f, s->op) || !ownFreshOpReturns(f, s->target) || !ownFreshOpReturns(f, s->fillValue)
+                || !ownFreshOpReturns(f, s->forInit) || !ownFreshOpReturns(f, s->nomatchValue))
+            return false;
+        if (s->forPost && !ownFreshStmtReturns(f, s->forPost)) return false;
+    }
+    return true;
+}
+static void ownResultFreshSettle(void) {
+    ownFreshFuncs = ListInit(sizeof(struct var*));
+    ownForEachBody(ownFreshCollect);
+    for (int i = 0; i < ownFreshFuncs.len; i++) (*(struct var**)ListGetIdx(&ownFreshFuncs, i))->ownResultFresh = false;
+    for (bool changed = true; changed; ) {
+        changed = false;
+        for (int i = 0; i < ownFreshFuncs.len; i++) {
+            struct var* f = *(struct var**)ListGetIdx(&ownFreshFuncs, i);
+            if (f->ownResultFresh || f->bodyHadErrors || !calleeBodyKnown(f) || !f->codeBlock.len) continue;
+            if (ownFreshReturns(f, &f->codeBlock)) f->ownResultFresh = true, changed = true;
+        }
+    }
+    ListDestroy(ownFreshFuncs);
 }
 //...whether it can refer to an argument of type arg's own storage - the value it is, or names, and its parts by value
 static bool ownMayReferToPart(struct type res, struct type arg, int depth) {
@@ -28401,7 +28560,10 @@ static void ownStmtWalk(struct statement* s) {
             ownLoansIn(s->op, &kept, false, false);
             ownLoansIn(s->fillValue, &kept, false, false);
             ownKeptOnly = false;
-            ownHold(&s->var, &kept, ow.frames.len - 1);
+            //(vec3 F4: a global's initializer - every loan it keeps would outlive its release, which nothing here sees)
+            if (s->var.isGlobalVar) {
+                if (kept.len && !ow.rewalking && s->op && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
+            } else ownHold(&s->var, &kept, ow.frames.len - 1);
         }
         //D16e/P4a: the hidden local a task's lambda is held in - a call through it runs that lambda's body (ownCalleeBody)
         if (s->op && s->op->opType == OPERATION_READ_VAR && s->op->readVar && s->op->readVar->isLambda && s->var.name.len
@@ -28532,6 +28694,9 @@ static void ownStmtWalk(struct statement* s) {
             bool holds = call->callee || !f || !f->type.hasRetType || typeCarriesScopes(*f->type.retType)
                          || f->type.retType->bType == BASETYPE_FUNC;
             for (int i = 0; holds && i < call->args.len; i++) ownCarried(*(struct operand**)ListGetIdx(&call->args, i), &loans);
+            //(...and the call's own: a borrowed own result's loan - "spawn d = w.View()" - is the call's, not an argument's,
+            //vec3 F3)
+            ownCarried(call, &loans);
             if (loans.len && !ownCallRefused(call)) ownRefuse(call, call->tok, ERR_OWN_BORROW_STORED);
         }
         struct var* g = call && !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
@@ -28573,12 +28738,18 @@ static void ownStmtWalk(struct statement* s) {
             struct list loans = ListInit(sizeof(struct ownLoan));
             ownCarried(s->op, &loans);
             //(a borrowed own result's loan rooted at the parameter this function's own borrowed own result is borrowed from
-            //is the caller's to hold - O37)
+            //is the caller's to hold - O37 - where the caller's loan meets its releases: on an object of the type this
+            //function settled on, or any (vec3 F2: a return no source was recorded for - "t := c.Text(); return t" beside
+            //"return String(c.data)" - borrows a String where the callers' loan is keyed by Array<Char>)
             int keep = 0;
+            struct var* fc = ow.func ? canonicalVar(ow.func) : NULL;
             for (int i = 0; i < loans.len; i++) {
                 struct ownLoan* l = ListGetIdx(&loans, i);
-                if (l->R->regionOfResult && l->R->regionRoot == OWN_ROOT_PARAM && ow.func
-                        && ownIntIn(&canonicalVar(ow.func)->ownBorrowParams, l->R->regionRootParam)) continue;
+                bool covered = fc && (fc->ownBorrowResultAnyType
+                                      || (!l->anyType && !l->R->regionAnyType && l->R->regionType
+                                          && l->R->regionType == fc->ownBorrowResultType));
+                if (l->R->regionOfResult && l->R->regionRoot == OWN_ROOT_PARAM && covered
+                        && ownIntIn(&fc->ownBorrowParams, l->R->regionRootParam)) continue;
                 *(struct ownLoan*)ListGetIdx(&loans, keep++) = *l;
             }
             loans.len = keep;
@@ -28621,9 +28792,11 @@ static void ownForEachBody(void (*fn)(struct var*, struct list*)) {
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->isGlobalVar && v->initExpr) {
+                //(vec3 F4: walked as the declaration it is - a global holds nothing only locals may, O38)
                 struct list one = ListInit(sizeof(struct statement));
                 struct statement st = (struct statement){0};
-                st.sType = STATEMENT_EXPR;
+                st.sType = STATEMENT_VAR_DECL;
+                st.var = *v;
                 st.op = v->initExpr;
                 ListAdd(&one, &st);
                 fn(NULL, &one);
@@ -28732,6 +28905,7 @@ static bool ownReachesOwn(struct type t) {
 static void settleOwnBorrows(void) {
     if (!ownUsed) return;
     ownBorrowResultsSettle(); //O37 (vec2 N1): before any loan is made
+    ownResultFreshSettle(); //O38 (vec3 F1): which built results are new storage, before any loan is made
     ow.frames = ListInit(sizeof(struct ownFrame));
     ow.holders = ListInit(sizeof(struct ownHolder));
     ow.encl = ListInit(sizeof(struct ownLoan));

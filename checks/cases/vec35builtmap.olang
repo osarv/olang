@@ -1,0 +1,22 @@
+# check: fail error[O39]: calling 'Push' may release the Array<Char> borrowed on line
+# vec3 F1: the same through a Map - Put, then Get
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn k(a mut Array<Char>&) mut Array<Char>& { m := Map<I64, mut Array<Char>&>()
+    m.Put(1, a)
+    return try m.Get(1) catch default null }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('b')
+    d := k(v.ViewMut())
+    for i in range 1000 { v.Push('z') }
+    churn()
+    println($d[0] $d[1])
+}

@@ -1037,6 +1037,7 @@ fn vecalias(r mut report&) ? Failed {
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
     try oneError(r, dir, "p4", "error[O36]: 'Eat' owns a parameter")
     try oneError(r, dir, "p5", "error[O37]: 'View2' gives a borrowed own result")
+    try oneError(r, dir, "f3", "error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it")
 }
 
 # P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land

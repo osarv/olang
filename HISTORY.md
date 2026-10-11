@@ -15524,3 +15524,28 @@ an own reference refers only to what it owns; neither is now taken for the buffe
 
 The scope fuzzer's own mode now imports a small library module it writes beside each program, so it can make a function
 a value through an alias, and writes the recursion shape.
+
+### Vec phase 1's third review, fixed (§8.8 O1b, O33, O37, O38, P1g, 2026-10-11)
+
+The third review of the Vec branch found four ways to read freed memory, and the first was the second round's own
+relaxation. ToArray had been allowed to keep no loan on the buffer because its result is written `T&` - built in the
+result scope, where an owned object's region cannot be. But written-built says where the result is, not that it is new:
+a call whose result lands in the result scope can hand an argument straight back into it. A type-variable result does
+exactly that (`id`, `pick`, `List.At`, `Map.Get`), and the narrowing made the same evening caught only a keeper that was
+itself such a function, not a plain wrapper around one. The coordinator's answer was to keep the relaxation only where it
+can be proven: a function is fresh when every return is something the body made - a constructor call, an allocation, a
+literal, text, null, a local made from one and never assigned again, or a call to a function already proven fresh - a
+least fixed point once every body is checked. That is conservative by construction (recursion through itself never
+proves anything, a parameter or a field never counts), and ToArray, whose only return is a local made by `Array<T>(n)`
+and filled by element, passes it, so the relaxation the second round wanted survives in the form that is true.
+
+The second was an assumption in a skip. A function that gives a borrowed own result has the loans of such results it
+returns waved through at its own return - its callers hold them - and its callers key their loan by the type the
+function settled on. That type comes only from returns recognised as a borrow, so a return handing one back some other
+way (a local holding it, a conditional, a pass-through) was waved through under a type it did not have. The skip now asks
+for the type to match. The third was a spawn target set from the task's call: the check looked at what the call's
+arguments carried and not at the loan the call itself makes. The fourth was the oldest: a borrow of a global's own object
+was taken to live in the program's scope because a global does, so it could be stored in another global and outlive the
+object's release. A borrow is in its object's region wherever the owner is, and a global's initializer is now checked as
+the declaration it is.
+

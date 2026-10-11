@@ -1,0 +1,27 @@
+# check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
+# vec3 F3: the same with a struct's borrowed own result
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    text own mut String& = "bb"
+}
+fn (c CB&) Text() String&c { return c.text }
+fn use(c mut CB&) {
+    d String&c = null
+    join {
+        spawn d = c.Text()            # a borrowed own result (O37) given by a task into d
+    }
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"   # releases it
+    churn()
+    println(d)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

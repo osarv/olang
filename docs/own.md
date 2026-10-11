@@ -1690,3 +1690,60 @@ refused, O39 - or before it) and N2's (a borrowed own result function or a relea
 - refused, O37 and O40 - and the same called by name, used before the release).
 Own seeds 1-200: 2d1aabf 28 findings (7 N1, 11 a borrowed own result made a value through the alias, 10 a releasing one),
 this tip none (593 scenarios run, 1807 refused).
+
+## 22. Vec phase 1's third review, fixed (2026-10-11)
+
+The review of 280ef76 (`/home/user/review/vec3`) found four use-after-frees: F1 new in the second fix round's relaxation,
+F2 and F3 older on this branch, F4 older than the Vec work and on master. Fixed as the coordinator decided; nothing new is
+relaxed.
+
+1. **A built result is new storage only where it is proven so** (F1). Relaxation (b) of section 21 took the top of any
+   result *written* `T&` or `T&return` for new storage, but "built" says only which scope the result is in: a call whose
+   result lands in the result scope - a type-variable result (O14b) such as `id(a)`, `pick(c, a, b)`, `l[0]`, `m.Get(k)`
+   - hands an argument back into it, and a non-generic wrapper (`fn longer(a, b) mut Array<I64>& { return pick(...) }`)
+   hid it from 8e3ddc1's narrowing, which looked at the keeper only. So `d := longer(v.ViewMut(), other)` kept no loan on
+   the Vec's buffer. The top is now spared only for a function proven fresh: `ownResultFreshSettle`, run in
+   `settleOwnBorrows` beside `ownBorrowResultsSettle`, is a least fixed point over the returns of every checked body. A
+   return is fresh when it is a constructor call, `Array<T>(n)`, a comprehension, a literal, text rendered or joined,
+   `null`, a call by name to a function already proven fresh, a conditional or a match all of whose values are, or a local
+   declared once from one of those and never assigned, made a spawn target or taken anywhere in the body; a catch default
+   on any of them must be fresh too. Anything else - a parameter, a field, an element, a call through a type variable, a
+   function value or a lambda, a body unchecked (`calleeBodyKnown`) or with errors - is not, and the result keeps every
+   loan its arguments carry as before section 21. Least is conservative: a function recursing through itself is never
+   proven. **ToArray stays relaxed**: its one return is `out`, declared from `Array<T>(v.n)` and only written into by
+   element, so it is proven fresh, and a wrapper returning `v.ToArray()` directly or through a local is too. Clone was
+   never relaxed this way: its result is a `Vec<T>` held by value, an owned result (relaxation (a), own references).
+2. **A marked function's other returns must borrow the type it settled on** (F2). The O38 return check skips a loan made
+   by a borrowed own result call rooted at a parameter in the function's `ownBorrowParams` - the caller's to hold. But
+   the function's settled type comes only from its recorded sources (an own slot's region, a call by name, a conversion,
+   slice or view of either), so a return of a borrowed own result any other way - a local holding one (`t := c.Text();
+   return t`), a pass-through (`h(c).Trim()`), a conditional, `id(h(c))`, a match, a catch default beside a recorded `try`
+   - borrowed a `String` while every caller keyed its loan by the recorded `Array<Char>`. The skip now requires the
+   loan's object type to be covered: the function settled any type, or the loan is not any-type and its region's type is
+   the settled one. Otherwise the loan is kept and the return is O38's error.
+3. **A spawn target holds the call's own loan** (F3). The check for a target given what only locals may hold collected
+   `ownCarried` of the call's arguments only, so the loan a borrowed own result call makes itself (`ownResultRegionsOf`)
+   was never looked at: `spawn d = w.View()`, `spawn d = c.Text()`, `spawn d = mid.Vl.View2(w)`. It now collects
+   `ownCarried` of the call as well.
+4. **A borrow of a global's own object is not in the program's scope** (F4). `storageInProgram` answered true for a
+   member, index or slice of anything rooted at a global, an own slot read included, so O1b let `Current = Docs.title`,
+   `Index.alias = Docs.title` and `Head = Buf[0:2]` into a global - whose region a later `Docs.title = ...` or `Buf = ...`
+   releases. It answers false for an operand with an own region (`ownRegionOf`, `ownArrayRegionOf`): the slot's read, a
+   local holding the borrow, a slice of an own array, anything reached through one. A global's initializer, walked as an
+   expression statement and never confined, is now walked as the declaration it is, and any loan it keeps - a direct slot
+   borrow (`T := G.text`) or a borrowed own result (`T := G.Text()`, which O1b cannot see while bodies are checked, its
+   callee not settled yet) - is O38's error. A borrowed own result stored into a global from a function was already O38's
+   (a copied loan through `ownHoldMore`).
+
+**Tests**: must-fail cases `vec32`-`vec35` (F1: through `pick`, `id`, a `List`, a `Map`; O39), `vec36`-`vec40` (F2: a pass-
+through, a conditional, a local, `id`, a catch default; O38), `vec41`-`vec42` (F3; O38), `vec43`-`vec47` (F4: a global
+assignment, an initializer from a slot and from a borrowed own result, a slice, a field of another global; O1b, O38), and
+`f3` in the `vecalias` scenario (F3 through an import alias chain). What stays legal runs: `vec48freshkept` (ToArray, a
+wrapper returning it directly and through a local, a function returning a new array it filled, Clone - all kept across
+pushes) and `vec49byname` (a view used before a push, a borrowed own result function whose returns all borrow a `String`
+- one through a local - a global given a number read through another global's own object).
+
+**Fuzzer**: own mode's `vec3Op` writes F1 (a built-result wrapper through `id`, a `List`, a conditional generic - refused,
+O39 - and one returning `v.ToArray()` through a local, kept across a growth - accepted), F2 (a mixed-type borrowed own
+result function - refused, O38), F3 (a spawn target given `View()` - refused, O38) and F4 (a global given a borrow of a
+global's own object - refused, O1b - and a number read out of it - accepted).

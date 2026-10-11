@@ -5055,6 +5055,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   region's, O10c); mutually recursive borrowed own results now compile (marked through each other). Found on the way:
   O17's deferred split-lend errors lost their instantiation (B11 - reported at the program's use now); left recorded,
   `Sort` of a `Vec<mut T&>` is still O17's over-rejection.
+  **Its third review (vec3), fixed (the coordinator's calls, docs/own.md section 22)**: four use-after-frees. F1 (from the
+  relaxation above): a *written* built result is no proof of new storage - a call landing in the result scope (`id(a)`,
+  `pick(c, a, b)`, `l[0]`, `m.Get(k)`) hands its argument back - so the top is spared only for a function proven fresh, a
+  least fixed point over every checked body's returns (a constructor call, an allocation, a literal, text, `null`, a local
+  declared once from one and never repointed, a call to a function so proven, a conditional/match/catch default of them);
+  ToArray is proven so and stays relaxed. F2: a marked borrowed-own-result function's return skipped at O38 must borrow the
+  type it settled on (or it settled any) - `t := c.Text(); return t` beside `return String(c.data)` is O38's error. F3: a
+  spawn target holds the task's call's own borrowed-own-result loan. F4 (older, on master): a borrow of a global's own
+  object is not the program's scope (O1b), and a global's initializer is walked as a declaration (O38).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -1127,7 +1127,7 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
         if w < 4 { return g.own4Op(h, ind, v) }
         if w < 6 { return g.own5Op(h, ind, v) }
         if w < 9 { return g.own6Op(h, ind, v) }
-        if w >= 14 { return g.vec2Op(h, ind, v, g.r(4)) }
+        if w >= 14 { return g.vec2Op(h, ind, v, g.r(4)) if g.chance(50) else g.vec3Op(h, ind, v, g.r(8)) }
         return g.own7Op(h, ind, v) if w < 11 else g.vecOp(h, ind, v)
     }
     k := g.r(15 if g.dtors else 11)
@@ -1562,6 +1562,70 @@ fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
     # by name, used before the release; a plain function through the value (accepted)
     return ($ind "{\n" $mk $ind $f " := oalib.Sum\n" $ind $s " := oalib.View(" $b ")\n" $ind $x " := " $s "[2] + " $f "(" $s
             ")\n" $ind $b ".Buf = Array<I64>(4, 1)\n" $ind "oalib.Drop()\n" $ind "churn()\n" $ind $x " += oalib.G.Buf[1]\n" $use
+            $ind "}\n")
+}
+
+# vec3 (the third review of Vec phase 1): a written built result handing back its argument through a generic, a List or
+# a conditional (refused: O39) beside one proven new storage (accepted); a borrowed own result function whose other return
+# borrows an object of another type (refused: O38); a spawn target given a borrowed own result (refused: O38); a borrow of
+# a global's own object kept in a global (refused: O1b, O38) beside a number read out of it (accepted)
+fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    vv := g.name("vv")
+    d := g.name("d")
+    mkv := $ind $vv " := Vec<I64>()\n" $ind $vv ".Push(" $v ")\n" $ind $vv ".Push(" $v " + 1)\n"
+    grow := $ind "for i in range 100 { " $vv ".Push(i) }\n" $ind "churn()\n"
+    if k <= 2 {    # F1: the wrapper hands its argument back - through id, a List, a conditional of generics (refused: O39)
+        id := g.name("oid")
+        w := g.name("obw")
+        if k == 0 {
+            g.addHelper("fn " $id "(a <T>) T { return a }\nfn " $w "(a mut Array<I64>&) mut Array<I64>& { return " $id "(a) }\n")
+        } else if k == 1 {
+            g.addHelper("fn " $w "(a mut Array<I64>&) mut Array<I64>& {\n    l := List<mut Array<I64>&>()\n    l.Push(a)\n"
+                        "    return l[0]\n}\n")
+        } else {
+            g.addHelper("fn " $id "(c Bool, a <T>, b T) T { return a if c else b }\n"
+                        "fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return " $id "(a.Len() >= b.Len(), a, b) }\n")
+        }
+        call := $w "(" $vv ".ViewMut())" if k < 2 else $w "(" $vv ".ViewMut(), Array<I64>(1))"
+        return $ind "{\n" $mkv $ind $d " := " $call "\n" $grow $ind $x " := " $d "[0] + " $d "[1]\n" $use $ind "}\n"
+    }
+    if k == 3 {    # F1's legal side: new storage made in the callee, kept across the growth (accepted)
+        w := g.name("obf")
+        g.addHelper("fn " $w "(v Vec<I64>&) mut Array<I64>& {\n    a := v.ToArray()\n    return a\n}\n")
+        return $ind "{\n" $mkv $ind $d " := " $w "(" $vv ")\n" $grow $ind $x " := " $d "[0] + " $d "[1] + " $vv ".Len()\n" $use $ind "}\n"
+    }
+    if k == 4 {    # F2: a borrowed own result whose other return is a String, recorded as an Array<Char> (refused: O38)
+        rc := g.name("ORM")
+        tx := g.name("ormt")
+        pk := g.name("ormp")
+        c := g.name("c")
+        t := g.name("t")
+        g.addHelper("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
+                    "fn " $tx "(c " $rc "&) String&c { return c.text }\n"
+                    "fn " $pk "(c " $rc "&, n I64) String&c {\n    if n == 0 { return String(c.data) }\n    t := " $tx "(c)\n"
+                    "    return t\n}\n")
+        return ($ind "{\n" $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n" $ind $t " := " $pk "(" $c ", 1)\n" $ind
+                $c ".text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n" $ind $x " := " $t ".Len() + I64(" $t "[0])\n"
+                $use $ind "}\n")
+    }
+    if k == 5 {    # F3: a spawn target given a task's borrowed own result, kept past the join (refused: O38)
+        return ($ind "{\n" $mkv $ind $d " Array<I64>&" $vv " = null\n" $ind "join { spawn " $d " = " $vv ".View() }\n" $grow
+                $ind $x " := " $d "[0] + " $d "[1]\n" $use $ind "}\n")
+    }
+    gd := g.name("OGD")
+    gg := g.name("OGd")
+    gc := g.name("OGc")
+    g.addHelper("type " $gd " struct() { title own mut String& = \"bb\" }\n" $gg " own mut " $gd "& = " $gd "()\n" $gc
+                " mut String& = \"none\"\n")
+    rename := $ind $gg ".title = \"zz" $v "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n"
+    if k == 6 {    # F4: a borrow of a global's own object kept in a global (refused: O1b)
+        return ($ind "{\n" $ind $gc " = " $gg ".title\n" $rename $ind $x " := " $gc ".Len() + I64(" $gc "[0])\n" $use $ind "}\n")
+    }
+    # ...a number read out of it, kept (accepted)
+    return ($ind "{\n" $ind $x " := " $gg ".title.Len() + I64(" $gg ".title[0])\n" $rename $ind $x " += " $gg ".title.Len()\n" $use
             $ind "}\n")
 }
 

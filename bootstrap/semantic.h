@@ -469,6 +469,9 @@ struct var {
     struct type* ownBorrowResultType; //...the type of the own object it borrows (OwnTypeKey of its slot - never the result's
                                 //own type, which a conversion may have renamed: "String(v.View())"), what its loan is on
     bool ownBorrowResultAnyType; //...it may borrow objects of several types, or one not known: its loan meets any release
+    bool ownResultFresh; //O38 (vec3 F1): a built reference result proven new storage - every return a constructor call, an
+                         //allocation, a literal, text made here, a local declared from one and never repointed, or a call
+                         //to a function proven so (ownResultFreshSettle, a least fixed point once every body is checked)
     struct var* regionLife;     //...the scope the slot itself lives in - its container's, an owner local's block - which the
     int regionLifeDepth;        //   object is released by at the latest: what lasts until a join is judged by it (P2), where
     bool regionLifeUnnamed;     //   an owner local's reach (its initializer's) may be longer

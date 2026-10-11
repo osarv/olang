@@ -5106,7 +5106,9 @@ slot holding its object (O34) - a scope everything the object refers to outside 
 by every scope that outlives that reach; it outlives no scope but itself. So §8.4's check keeps a borrow - and every
 reference read out of the region through it, and every value holding one - in locals, in calls (whose scope variables
 bind to the region, §8.6) and in the region itself: never in a field, an element or a global outside the region, never
-in a result but a borrowed one (O37), never in a closure that outlives the function. Distinct owned objects therefore
+in a result but a borrowed one (O37), never in a closure that outlives the function. A global's owned object is no
+exception: its region is not the program's scope (O1b), which a borrow of it - read off the global's own slot, a slice
+of a global own array, a borrowed own result of it - may not be stored into, nor a global initialized with. Distinct owned objects therefore
 never refer to one another except by owning: a borrow of one is stored neither into another nor into anything outside
 its own region. A borrowed copy (O32), whose own references are borrows, is confined to this function's
 locals (O38).
@@ -5268,7 +5270,11 @@ whose referent lives where `p`'s does) of the type of the owned object the resul
 for a result `String&v` converted from it; any type, where its returns borrow objects of several - rooted where that
 argument is (O39), and what it gives is confined to the caller's locals as a borrowed copy's is (O38). Which functions
 give a borrowed own result, from which parameters and of which objects' types, is decided once every body is checked,
-through the calls between them - so mutually recursive functions agree. Only a call by name makes that loan, so a
+through the calls between them - so mutually recursive functions agree. It is decided by the returns that are such a
+borrow, or a call giving one; a return handing back a borrowed own result any other way - a local holding one, a
+conditional, a generic pass-through, a catch default - is accepted only where what it borrows is of the type so decided
+(or the function borrows objects of several types), and is O38's error otherwise, since the loans its callers make
+would never meet the release of what it borrows. Only a call by name makes that loan, so a
 function giving a borrowed own result is called by name only: made a value (D16, E31) - a named function, by its own
 name or through an import alias (`f := lib.View`), a lambda, a type whose `Call` gives one adapted to a function type -
 it is a compile-time error. So `d := v.View()` followed by
@@ -5305,7 +5311,7 @@ else is a compile-time error saying to keep a `Clone()` of it instead:
   the argument read at its derived scope (O23a) counting as the argument - or one given to a call whose body is not
   known (a generic one, an `extern`), a task's call that may keep it among them;
 - a store through a reference, into a handle, or into a global or a capture;
-- a spawn target given a call's result derived from it (P1g);
+- a spawn target given a call's result derived from it, or the task's call's own borrowed own result (P1g, O37);
 - an owner made from it or holding it - an object built into an own slot, an owned result (O37), an owner given to an
   owning parameter (O36) - or a value of a type with a destructor (C9), which would hold it past its loans;
 - a lambda capturing it, kept by any of the above.
@@ -5318,8 +5324,12 @@ reference derives from nothing. An own array's elements refer outside its buffer
 neither to the argument's own storage, nor to an own array the argument's loans are on, nor to an element such an array
 holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
 from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Two references are none
-of those: a **built** result's own top (`T&` or `T&return` written, not borrowed from a parameter nor a type variable's), which is new storage in the
-result scope an owned object's region, outliving nothing (O33), never is; and an own reference in a result, which refers
+of those: the own top of a **built** result (`T&` or `T&return` written, not borrowed from a parameter nor a type
+variable's) proven **new storage** - every return of its function a constructor call, `Array<T>(n)`, a comprehension, a
+literal, text rendered or joined there, `null`, a local declared from one of those and never assigned again, a call to
+a function so proven, or a conditional, match or catch default all of whose values are - which an owned object's region,
+outliving nothing (O33), never is (a built result is no proof alone: a call whose result lands in the result scope -
+`id(a)`, `l[0]`, `m.Get(k)` - can hand an argument back into it, O14b); and an own reference in a result, which refers
 only to the object it owns. So `a := v.ToArray()` and `c := v.Clone()` of a `Vec<String&>` keep their elements' text,
 and nothing of the buffer, across `v.Push(x)`. Through a function value
 nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
