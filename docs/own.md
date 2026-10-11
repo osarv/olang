@@ -1685,5 +1685,8 @@ library module (one error each) and a program of what stays legal through an ali
 
 **Fuzzer**: own mode imports a library module the fuzzer writes beside each program (`OwnLib`, `oalib.olang`), and
 `vec2Op` writes N1's shape (two borrowed own result functions of different objects' types recursing through each other,
-used after a release - refused, O39 - or before it) and N2's (a borrowed own result function or a releasing one made a
-value through the alias - refused, O37 and O40 - and the same called by name, used before the release).
+used after a release in a function given the owner by reference, where nothing but the loan's type meets the release -
+refused, O39 - or before it) and N2's (a borrowed own result function or a releasing one made a value through the alias
+- refused, O37 and O40 - and the same called by name, used before the release).
+Own seeds 1-200: 2d1aabf 28 findings (7 N1, 11 a borrowed own result made a value through the alias, 10 a releasing one),
+this tip none (593 scenarios run, 1807 refused).

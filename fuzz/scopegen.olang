@@ -1534,9 +1534,12 @@ fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
         c := g.name("c")
         t := g.name("t")
         mk := $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n"
-        if k == 0 {    # used after the String it borrows is released (refused: O39)
-            return ($ind "{\n" $mk $ind $t " := " $rb "(" $c ", 2)\n" $ind $c ".text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind
-                    "churn()\n" $ind $x " := " $t ".Len() + I64(" $t "[0])\n" $use $ind "}\n")
+        if k == 0 {    # used after the String it borrows is released, through a reference parameter - where nothing but the
+                       # loan's type meets the release (refused: O39)
+            us := g.name("ous")
+            g.addHelper("fn " $us "(c mut " $rc "&) I64 {\n    t := " $rb "(c, 2)\n    c.text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n"
+                        "    churn()\n    return t.Len() + I64(t[0])\n}\n")
+            return $ind "{\n" $mk $ind $x " := " $us "(" $c ")\n" $use $ind "}\n"
         }
         return ($ind "{\n" $mk $ind $t " := " $rb "(" $c ", 2)\n" $ind $x " := " $t ".Len() + I64(" $t "[0]) + " $rb "(" $c
                 ", 0).Len()\n" $ind $c ".text = \"zz\"\n" $ind $c ".data = Array<Char>(3, 'q')\n" $ind "churn()\n" $ind $x " += " $ra "("
@@ -1546,9 +1549,11 @@ fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
     s := g.name("s")
     f := g.name("f")
     mk := $ind $b " := oalib.LBox()\n" $ind $b ".Buf[2] = " $v "\n"
-    if k == 2 {    # through the value, the box's buffer released after (refused: O37)
-        return ($ind "{\n" $mk $ind $f " := oalib.View\n" $ind $s " := " $f "(" $b ")\n" $ind $b ".Buf = Array<I64>(4, 1)\n"
-                $ind "churn()\n" $ind $x " := " $s "[2]\n" $use $ind "}\n")
+    if k == 2 {    # through the value, in a function given the box by reference, its buffer released after (refused: O37)
+        vw := g.name("oavw")
+        g.addHelper("fn " $vw "(b mut oalib.LBox&) I64 {\n    f := oalib.View\n    s := f(b)\n    b.Buf = Array<I64>(4, 1)\n"
+                    "    churn()\n    return s[2]\n}\n")
+        return $ind "{\n" $mk $ind $x " := " $vw "(" $b ")\n" $use $ind "}\n"
     }
     if g.chance(50) {    # a releasing function through the value, the global's buffer borrowed (refused: O40)
         return ($ind "{\n" $ind $f " := oalib.Drop\n" $ind $s " := oalib.G.Buf\n" $ind $f "()\n" $ind "churn()\n" $ind $x " := "
