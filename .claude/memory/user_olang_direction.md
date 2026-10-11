@@ -35,7 +35,14 @@ done (confirmed by the user: "The self hosted one"). The goal is to find the cir
 projections, connectivity motifs, memories) that solve a task, and to understand them. It is not only accuracy. MNIST
 comes first, then NLP, then robotics. Evolutionary search over circuit structures is allowed. The clean-room rule
 holds: work only from oann/docs/settling.md and the published papers.
-Where it lives (the user, 2026-10-11): no new repository; the experiments go in a subdirectory of oann (`research/`).
+Where it lives (the user, 2026-10-11, superseding "a subdirectory of oann"): a new private repository, **osarv/oagent** -
+"where all implementations of the agent and its research go. This is where we will bootstrap superintelligence. The
+end stage is not being reliant on other companies at all." The GitHub integration cannot create repositories (403), so
+the user creates it on github.com; then I attach it with add_repo (push access) and clone it to /home/user/oagent.
+**The goal (the user, 2026-10-11):** "growth, like for any dynamic system, growing more powerful through differentiation
+and pruning. The settling network should become a general high-quality agent that can take on any task using as little
+compute as possible. It may use settling stuff, it may implement backprop, genetic algorithms, as long as it grows
+stronger and more efficient." Any method is fair. The measure is capability per unit of compute, rising over time.
 **The long-term plan (the user, 2026-10-11):** "a settling network with recursive self improvement for
 superintelligence". How I approach it, as told to the user: oversight is designed in from the start, not added later.
 - A self-improvement step is a proposal: evaluated in a sandbox against fixed benchmarks, kept only when it is better.
