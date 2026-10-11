@@ -458,6 +458,9 @@ struct var {
     int regionRootParam;
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
     struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
+    bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
+    int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
+                                //parameter i by own fields, as a result borrowed from it (T&p): i + 1, else 0
     struct var* regionLife;     //...the scope the slot itself lives in - its container's, an owner local's block - which the
     int regionLifeDepth;        //   object is released by at the latest: what lasts until a join is judged by it (P2), where
     bool regionLifeUnnamed;     //   an owner local's reach (its initializer's) may be longer
@@ -774,6 +777,7 @@ struct operand {
     bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
     struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
                                 //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
+    struct var* ownResultRegion; //O38 (Vec phase 1): the loan a call giving a borrowed own result makes (regionOfResult)
     bool inPlaceBorrow; //O38 (own7 F1): this value lvalue is borrowed where it is (E12c) - by a reference parameter, a
                         //receiver, a reference local or field, a task's argument - not read as a copy: a part of an owned
                         //object borrowed so borrows the object, whatever the part's type holds

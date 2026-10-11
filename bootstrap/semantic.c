@@ -23950,6 +23950,39 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     return buildRetValues(ctx, tok, &vals);
 }
 
+//O37 (Vec phase 1): a borrow of an owned object reached from a reference parameter p by own fields only - "return v.o",
+//"return v.data", or a call's borrowed own result given p ("return v.First()") - returned as a result borrowed from p
+//(T&p). Its region outlives nothing (O33), so the result is not where p lives in time: each call holds a loan on what
+//it borrows below its argument, confined to the caller's locals (O38), and the function is marked so
+static int ownParamIndex(struct var* func, struct var* v);
+static int ownRootOf(struct var* func, struct operand* op, int* param, struct var** local);
+static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, struct type rt) {
+    if (!ctx->func || !val || !rt.structMAlloc || rt.refOwn || !rt.scopeParam || rt.scopeParam == SCOPE_AMBIGUOUS) return;
+    int p = -1;
+    bool region = false;
+    struct var* R = ownRegionOf(val);
+    if (R && R->regionRoot == OWN_ROOT_PARAM) {
+        p = R->regionRootParam;
+        region = true;
+    } else if (val->opType == OPERATION_FUNCCALL && !val->callee && val->readVar
+               && canonicalVar(val->readVar)->ownBorrowResult) {
+        int q = canonicalVar(val->readVar)->ownBorrowResult - 1;
+        int pp;
+        struct var* loc;
+        if (q < val->args.len && ownRootOf(ctx->func, *(struct operand**)ListGetIdx(&val->args, q), &pp, &loc) == OWN_ROOT_PARAM)
+            p = pp;
+    }
+    if (p < 0 || p >= ctx->func->type.vars.len) return;
+    struct var* pv = ListGetIdx(&ctx->func->type.vars, p);
+    if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
+            || canonicalVar(pv->type.scopeParam) != canonicalVar(rt.scopeParam)) return;
+    canonicalVar(ctx->func)->ownBorrowResult = p + 1;
+    if (region) { //(where the result is put is p's referent's scope - the loan says how long the borrow is good)
+        val->type.scopeParam = rt.scopeParam;
+        val->type.scopeDepth = 0;
+    }
+}
+
 //the return of vals, already built - none for a bare "return", several for "return a, b" (D8c); also what a task's
 //clause gives its targets (P4a), as its lambda's return
 static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, struct list* valsIn) {
@@ -24049,6 +24082,7 @@ static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, s
                                                                      : ctx->func->type.resultScope;
         if (resultHome) noteBuiltAt(ctx, resultHome, val); //O12/O17
         if (resultHome) landCall(val, resultHome, 0);
+        ownBorrowedOwnResult(ctx, val, *ctx->func->type.retType); //O37
         landReturnedLambda(ctx, val, resultHome, *ctx->func->type.retType); //D16d
         if (checkBuiltResult(ctx, val, *ctx->func->type.retType)) {
             struct statement stmt = (struct statement){0};
@@ -27056,6 +27090,25 @@ static void ownLoansOfBlockDeep(struct list* block, struct list* out);
 //rendering). place: op is where an assignment stores, used until the store whatever it reads
 //(own5: only what a value keeps - see ownLoansIn's arguments)
 static bool ownKeptOnly;
+//O38 (Vec phase 1): the loan a call giving a borrowed own result (O37) makes - on the objects of the result's type below
+//the argument it is borrowed from, rooted where that argument is (made once a call)
+static int ownEvRoot(struct operand* op, int* param, struct var** local);
+static struct var* ownResultRegionOf(struct operand* op) {
+    if (op->opType != OPERATION_FUNCCALL || op->callee || !op->readVar) return NULL;
+    struct var* f = canonicalVar(op->readVar);
+    if (!f->ownBorrowResult || f->ownBorrowResult - 1 >= op->args.len) return NULL;
+    if (op->ownResultRegion) return op->ownResultRegion;
+    int param;
+    struct var* local;
+    int root = ownEvRoot(*(struct operand**)ListGetIdx(&op->args, f->ownBorrowResult - 1), &param, &local);
+    struct var* R = ownRegionNew(op->tok, NULL, 0, false, root, param);
+    R->regionRootLocal = local;
+    R->regionType = OwnTypeKey(op->type);
+    R->regionArray = op->type.bType == BASETYPE_ARRAY;
+    R->regionOfResult = true;
+    op->ownResultRegion = R;
+    return R;
+}
 //(a join's pieces, in order - its nested joins' flattened)
 static void ownJoinPieces(struct operand* op, struct list* out) {
     if (op->opType != OPERATION_CONCAT) {
@@ -27103,6 +27156,15 @@ static void ownLoansIn(struct operand* op, struct list* out, bool transient, boo
             l.tok = op->tok;
             l.copied = true;
             l.by = op;
+            ownLoanPut(out, l);
+        }
+        //O38 (Vec phase 1): a call giving a borrowed own result (O37) borrows what is below the argument it is borrowed from
+        struct var* RR = ownResultRegionOf(op);
+        if (RR) {
+            struct ownLoan l = (struct ownLoan){0};
+            l.R = RR;
+            l.tok = op->tok;
+            l.copied = true;
             ownLoanPut(out, l);
         }
         if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
@@ -28237,6 +28299,16 @@ static void ownStmtWalk(struct statement* s) {
         if (ow.check && !ow.rewalking && s->op) {
             struct list loans = ListInit(sizeof(struct ownLoan));
             ownCarried(s->op, &loans);
+            //(a borrowed own result's loan rooted at the parameter this function's own borrowed own result is borrowed from
+            //is the caller's to hold - O37)
+            int keep = 0;
+            for (int i = 0; i < loans.len; i++) {
+                struct ownLoan* l = ListGetIdx(&loans, i);
+                if (l->R->regionOfResult && l->R->regionRoot == OWN_ROOT_PARAM && ow.func
+                        && canonicalVar(ow.func)->ownBorrowResult == l->R->regionRootParam + 1) continue;
+                *(struct ownLoan*)ListGetIdx(&loans, keep++) = *l;
+            }
+            loans.len = keep;
             struct var* owner = NULL;
             for (int i = 0; i < loans.len && !owner; i++) {
                 struct ownLoan* l = ListGetIdx(&loans, i);

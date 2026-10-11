@@ -5243,8 +5243,16 @@ compile-time error. A reference result borrowed from a parameter (`T&p`, O14) th
 reached from `p` is a borrowed result too. At a call, an owned result is an owner (O31) whose reach lands where it is
 put (O18a); a borrowed result is a borrow or a borrowed copy, with a loan (O38) on what the arguments it was read from
 reach, or on the globals, and is read-only exactly where a copy out of the same place would be (T25c) - through a
-generic's read-only reference parameter, as read-only as the argument. A borrowed result that is the owned object
-itself names its region (O33); one read out of an owned object - a field of it - lives where it is not known (O12).
+generic's read-only reference parameter, as read-only as the argument.
+
+A **borrowed own result** is a reference result borrowed from a reference parameter `p` (`T&p`) that returns a borrow of
+an owned object reached from `p` by own fields only - `fn (v Vec<T>&) View() Array<T>&v { return v.data }`, `fn (v
+Outer&) First() Inner&v { return v.o }`, or another function's borrowed own result given `p` or a borrow so reached.
+The result is where `p`'s referent lives, but it is good only while the object is not released: each call makes a loan
+(O38) on the objects of the result's type below the argument given for `p`, rooted where that argument is (O39), and
+what it gives is confined to the caller's locals as a borrowed copy's is (O38). So `d := v.View()` followed by
+`v.Push(x)` is a compile-time error while `d` is used after it. *(Not yet implemented: a borrow reached through
+another call's borrowed own result and then an own field - `return v.First().deep` - is not one, and is O10's error.)*
 *(Not yet implemented: only a result written `own`, or of an owning type held by value, is owned - one of several
 results never is (T25e), and a borrowed result of an owning type held by value is a compile-time error - and a call's
 owned result is an owner only in a move position (`x := f()`, an own slot, an owner value local, an owning parameter, a
