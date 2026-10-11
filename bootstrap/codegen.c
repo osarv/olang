@@ -4382,8 +4382,12 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
 //where the value as a whole is being built into, else where the checker landed v. Never the result type's own tag - a
 //reference taken from a call's result is tagged with the CALLEE's scope variable, which no frame here holds (resolving
 //it crashed the compiler: "return wrap(e) if e != null else Expr.Num(1.0)")
+//A run-time-length array VALUE is copied into storage of its own, which is built there too: the result type's tag may
+//be a callee's ("lc(1) if k > 2 else lc(2)" with lc returning a String crashed the compiler resolving it)
 static char* cgArmScope(struct cgCtx* ctx, struct operand* v, struct type resultT) {
-    if (ctx->targetScopeOverride || !typeNeedsMallocPromotion(resultT, v->type)) return ctx->targetScopeOverride;
+    if (ctx->targetScopeOverride) return ctx->targetScopeOverride;
+    bool arrayValue = resultT.bType == BASETYPE_ARRAY && resultT.arrMalloc && !resultT.structMAlloc;
+    if (!typeNeedsMallocPromotion(resultT, v->type) && !arrayValue) return NULL;
     return cgWhereBuilt(ctx, v);
 }
 

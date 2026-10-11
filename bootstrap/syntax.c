@@ -25,7 +25,9 @@ typedef struct syntaxContext* SyntaxCtx;
 //expression - and every block and lambda inside it - again, which nests: an expression statement holding a lambda
 //holding one ... was parsed 3^depth times. Positions are only meaningful for one shape of the token list, so an entry
 //records the list's version (+1, so a zeroed slot is empty) and is ignored once the parser has split a token since.
-struct memoSlot { int version; int end; struct syntax* result; };
+//depth and limited: where the parse was read, and whether the nesting limit refused a level in it - such a result is
+//not the answer at a shallower depth, where the same text may nest within the limit (L21)
+struct memoSlot { int version; int end; int depth; bool limited; struct syntax* result; };
 struct parseMemo { struct memoSlot* slots; int cap; };
 
 struct syntaxContext {
@@ -49,6 +51,7 @@ struct syntaxContext {
     struct parseMemo postfixMemo; //parseExprPostfix's results, by position
     struct parseMemo blockMemo;   //parseBlock's
     int depth;                    //nesting of expressions and blocks being parsed - see nestEnter
+    int limitRefusals;            //how many levels nestEnter has refused - a memoized parse one cut short is kept apart
     bool tooDeep;                 //the current top-level item went past MAX_NESTING, and that was reported
     bool noAngleOps;              //G21: a constant argument is being read inside a type-argument list, where a bare
                                   //comparison or shift would be read across the list's own ">" - they end it there
@@ -85,6 +88,7 @@ static struct syntax* attempt(SyntaxCtx sc, struct syntax* (*parse)(SyntaxCtx)) 
 struct token peekTok(SyntaxCtx sc);
 static bool nestEnter(SyntaxCtx sc, int levels) {
     if (sc->depth + levels <= MAX_NESTING) { sc->depth += levels; return true; }
+    sc->limitRefusals++;
     if (!sc->tooDeep) ErrSyntax(peekTok(sc), ERR_NESTING, MAX_NESTING);
     sc->tooDeep = true;
     return false;
@@ -106,14 +110,21 @@ static struct memoSlot* memoSlotAt(struct parseMemo* m, int pos) {
 static struct syntax* memoized(SyntaxCtx sc, struct parseMemo* m, struct syntax* (*parse)(SyntaxCtx)) {
     int pos = TokenGetCursor(sc->tc);
     struct memoSlot* slot = memoSlotAt(m, pos);
-    if (slot->version == TokenListVersion(sc->tc) + 1) {
+    //a statement is read in several forms, some a level deeper than others (an expression's "try" or "match"): a
+    //parse the limit cut short there - failed, or ended early - is read again here, where the text may nest within it
+    if (slot->version == TokenListVersion(sc->tc) + 1 && !(slot->limited && sc->depth < slot->depth)) {
+        if (slot->limited) sc->limitRefusals++; //the parse that reads this answer was limited too
         TokenSetCursor(sc->tc, slot->end);
         return slot->result;
     }
+    int refusals = sc->limitRefusals;
+    int depth = sc->depth;
     struct syntax* s = attempt(sc, parse);
     slot = memoSlotAt(m, pos); //the parse may have grown the table
     slot->version = TokenListVersion(sc->tc) + 1;
     slot->end = TokenGetCursor(sc->tc);
+    slot->depth = depth;
+    slot->limited = sc->limitRefusals != refusals;
     slot->result = s;
     return s;
 }
@@ -1419,6 +1430,11 @@ static bool condHasConstVar(SyntaxCtx sc, int start);
 struct condDecision { struct str file; int at; bool value; enum diag err; char* reason; enum condDecisionKind kind; };
 static struct condDecision* condDecisionFor(TokenCtx tc, int at);
 static struct token firstTokAnywhereSyntax(struct syntax* s);
+//compiler/DESIGN.md section 4: the structure oracle (bootstrap/oracle/astdump.c) compares the self-hosted parser, which
+//parses every branch of an if the build may decide (B9, S8b) and leaves the deciding to later passes - so the oracle
+//asks for the same here: every branch parsed and scanned, every local if an ordinary one, nothing decided or queued
+static bool allBranches;
+void SyntaxParseAllBranches(bool on) { allBranches = on; }
 static void condTablesInit(void);
 static struct list condPending;
 static void condPendingAdd(struct pendingCond p);
@@ -1498,6 +1514,7 @@ struct syntax* parseStmntIf(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_IF);
     if (kw.type == TOK_NONE) return NULL;
+    if (allBranches) return parseStmntIfRuntime(sc, cur, kw);
     int condStart = TokenGetCursor(sc->tc);
     bool value, deferrable;
     bool decided = evalLocalCond(sc, &value, &deferrable);
@@ -4458,7 +4475,8 @@ static void scanTopIf(TokenCtx tc, struct scanResult* r) {
     cond = scanCond(tc, &ok);
     while (true) {
         if (TokenFeed(tc).type != TOK_CURLY_O) return; //malformed - the parser reports it
-        if (!taken && ok && cond) { scanRegion(tc, r, true); taken = true; }
+        if (allBranches) scanRegion(tc, r, true);
+        else if (!taken && ok && cond) { scanRegion(tc, r, true); taken = true; }
         else skipBraceBody(tc);
         int before = TokenGetCursor(tc);
         if (TokenFeed(tc).type != TOK_ELSE) { TokenSetCursor(tc, before); return; }
@@ -4920,6 +4938,12 @@ static bool skipTopBranch(SyntaxCtx sc) {
 
 static bool parseTopIf(SyntaxCtx sc, struct list* out) {
     if (acceptTok(sc, TOK_IF).type == TOK_NONE) return false;
+    while (allBranches) {
+        if (!parseExpr(sc) || !parseTopBranch(sc, out)) return false;
+        int before = TokenGetCursor(sc->tc);
+        if (TokenFeed(sc->tc).type != TOK_ELSE) { TokenSetCursor(sc->tc, before); return true; }
+        if (acceptTok(sc, TOK_IF).type == TOK_NONE) return parseTopBranch(sc, out);
+    }
     bool taken = false;
     while (true) {
         int condStart = TokenGetCursor(sc->tc);

@@ -5129,6 +5129,27 @@ and literals made only of such, never existing storage anywhere in it) - it is
   lost up to 7x (a List walk stopped vectorizing); with them every benchmark is equal or better (binary-trees -23%,
   text -15%, push -6%). Every object's name hashes the runtime's text (an edit rebuilds them). Per object 65 KB less IR,
   bitcode 6.8 -> 2.4 MB for the corpus, a clean `-b` -22% CPU, a clean `-t` -15%.
+- **Port M3: the AST and the parser (L21, E28, 2026-10-11; compiler/DESIGN.md sections 1.2 and 4, details mine).**
+  `compiler/ast.olang` (recursive enums held by reference, a span on every node, names interned) and
+  `compiler/parse.olang` (recursive descent with Pratt precedence for expressions, one token of lookahead plus section
+  2's bounded peeks, no backtracking or memoizing; type-argument mode splits `<<`/`>>`). **Decided (mine)**: recovery
+  continues inside an item, statement by statement, where stage 0 stops at an item's first error; a function whose body
+  fails keeps its signature and a type its name and parameters; every branch of a build-decided `if` is parsed with its
+  diagnostics held in a diag group for the checker to choose (no token evaluator in the parser), a plain `else` being an
+  `If` with no condition so it has a group too; an error that ends the item (L21, an unclosed block) is reported outside
+  the held groups; L21 counted as stage 0 counts it; the parser runs inside `os.RunOnStack` with 1 GB. **Acceptance**:
+  `bootstrap/oracle/astdump.c` and `compiler/tools/dump.olang ast|roundtrip` (`compiler/tools/unparse.olang` writes a
+  tree back as source), compared by `compiler/tools/astdiff.sh` (`make astdiff`, in `make verify`): every declaration
+  and statement by kind and span, each item's first syntax error by rule and position, and each tree written back
+  reading as itself - clean on all 1,262 files and study2's data; nesting checked against stage 0 at a limit of 40 for
+  96 statement and expression forms and at 1,000 and 4,000 levels, and the new parser alone at 20,000 (stage 0 is
+  superlinear in depth); an L21 that ends an item is compared without its position (stage 0's comes from forms it tried
+  and dropped); a missing tool or a short output fails. 41-44 MB/s scan and parse
+  on study2's `big.olang`. **Found on the way**: stage 0's code generator crashed on a conditional whose values are
+  calls giving a `String` value (E28, fixed, `checks/cases/condcallvalue`); the oracle segfaulted on deep files (it runs
+  on a 1 GB thread now); a stage 0 constructor temporary built inside an `if` and returned through a borrowed result
+  came back as garbage in the parser - worked around (a helper method), not minimized (HISTORY.md); stage 0's parse
+  memo reused a parse the limit had cut short at a shallower depth, misreading statements near the limit (L21, fixed).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

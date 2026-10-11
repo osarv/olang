@@ -12,11 +12,38 @@ type Span struct(Start I32, End I32) {
     End
 }
 
+# an identifier, interned: two names are one id exactly when they are spelled alike. Id 0 is the empty name, which
+# stands for "no name" wherever a name is optional
+type NameId extends I32
+
+# the names of one compilation, each spelled once. Every identifier the parser reads is interned here, so the AST
+# holds ids, never text, and outlives the tokens it was read from
+type Names struct() {
+    texts List<String&>
+    ids Map<String&, NameId>
+}
+
+# the id of a spelling, given one the first time it is seen
+fn (n mut Names&) Intern(t String&) NameId {
+    if n.texts.Len() == 0 { n.add("") }
+    return try n.ids.Get(t) catch default n.add(t)
+}
+
+fn (n mut Names&) add(t String&) NameId {
+    id := NameId(I32(n.texts.Len()))
+    n.texts.Push($t)
+    n.ids.Put(n.texts[n.texts.Len() - 1], id)
+    return id
+}
+
+# how a name is spelled
+fn (n Names&) Text(id NameId) String&n { return n.texts[I64(id)] }
+
 # a source file: its path as written, its text, and where each line starts (line n starts at lines[n - 1])
 type Source struct(Path String&, Text String&) {
     Path
     Text
-    lines Array<I32>& = lineStarts(Text)
+    lines Array<I32>& = LineStarts(Text)
 }
 
 # reads the file at path whole. A file is at most 2 GB less one byte, so an offset fits an I32
@@ -26,8 +53,8 @@ fn Read(path String&) Source ? os.OsError {
     return Source(path, text)
 }
 
-# where each line of t starts: 0, and just past every newline
-fn lineStarts(t String&) Array<I32>& {
+# where each line of t starts: 0, and just past every newline - the one line table, diag's too
+fn LineStarts(t String&) Array<I32>& {
     n I64 = 1
     for c in t {
         if c == '\n' { n++ }
@@ -91,4 +118,13 @@ test "an empty source has one line" {
     assert s.Lines() == 1 and s.Line(0) == 1
     t := Source("n.olang", "\n")
     assert t.Lines() == 2 and t.Line(1) == 2
+}
+
+test "names are interned once, the empty name first" {
+    n := Names()
+    a := n.Intern("alpha")
+    b := n.Intern("beta")
+    assert a != b and n.Intern("alpha") == a
+    assert n.Text(b) == "beta" and n.Text(NameId(0)) == ""
+    assert n.Intern("") == NameId(0)
 }

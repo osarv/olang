@@ -1,0 +1,2782 @@
+# parse - tokens to a syntax tree (compiler/DESIGN.md 1.2 and section 2).
+#
+# Recursive descent for declarations and statements, precedence climbing (Pratt) over E5's table for expressions. The
+# parser looks one token ahead, plus the bounded peeks section 2 lists, and never backtracks: where a form cannot be
+# told from the next token, a cover grammar reads the common prefix once and the token after it decides (a statement's
+# "a, b", a type argument that turns out to be an expression, a case's patterns).
+#
+# Errors go to the compilation's diagnostics (diag). An error in a statement skips to that statement's end, or to its
+# block's "}"; one in a declaration skips the declaration. What an if's branch meets is held in a group of its own
+# (DESIGN.md point 12): which branch is compiled may depend on the build, and an untaken one says nothing.
+import "source"
+import "token"
+import "scan"
+import "ast"
+import "diag"
+import "msgs"
+import "std/os"
+
+error Fail { SYNTAX }
+
+# L21: how deep blocks, operands and operator chains may nest
+MaxNesting I64 = 20000
+
+# the names that are types where "Name<" stands in an expression (DESIGN.md point 1): the module's own type and error
+# names in every branch, the prelude's, and its imports' through their aliases
+type Oracle struct() {
+    bare Map<source.NameId, Bool>
+    qualified Map<String&, Bool>      # "alias.Name", "a.b.Name"
+}
+
+fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
+    if alias == "" {
+        o.bare.Put(names.Intern(name), true)
+    } else {
+        o.qualified.Put($alias "." $name, true)
+    }
+}
+
+type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&, oracle Oracle&, diags mut diag.Diagnostics&,
+                   file I64) {
+    src
+    ts
+    names
+    oracle
+    diags
+    file
+    pos I64 = 0
+    half token.Tok = token.Tok.Eof     # the rest of a split "<<", ">>", ">=" or ">>=", read next (point 10)
+    halfStart I32 = 0
+    prevKind token.Tok = token.Tok.Eof # the last token read, and where it ended
+    prevEnd I32 = 0
+    noGt Bool = false                  # in a type-argument list: ">" closes it, and a comparison or shift is no operator
+    inCtor Bool = false                # at a constructor body's top level: a bare name is a field (C2)
+    ctorBody Bool = false              # the next block is a constructor's body
+    brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
+    depth I64 = 0                      # L21
+    tooDeep Bool = false
+    limitAt I64 = -1                   # in a try statement, the token where a level first took the last one (L21)
+    unclosed Bool = false              # an unclosed block ended at a declaration: the item ends where it stands
+    listTry I32 = -1                   # where a try stands that is a whole destructuring's, return's or spawn's value: its
+                                       # clause may give one default a result (R9a)
+    ItemStarts List<I32>               # where each top-level item begins, in order - nested ones in an if's branches too
+    ItemKept List<Bool>                # beside ItemStarts: whether the item parsed whole (an L21 may be said in one that did)
+    vars List<source.NameId>           # the current item's introduced type variables (G8b), which "match T" takes
+    exprs List<ast.Expr&>              # nodes being gathered into lists, nested lists on top
+    stmts List<ast.Stmt&>
+    tys List<ast.TypeRef&>
+    prms List<ast.Param&>
+    pats List<ast.Pattern&>
+    ids List<source.NameId>
+    sps List<source.Span>
+    decls List<ast.Decl&>
+    salvage List<ast.Decl&>            # a function or type whose body did not parse, as the declaration it still is
+    typeParamsRead Array<ast.TypeParam&>& = null   # the type parameters of the type declaration being read
+}
+
+# ---- reading tokens ----
+
+fn (p Parser&) tk() token.Token { return p.ts.Toks[p.pos] }
+
+fn (p Parser&) peek() token.Tok {
+    if p.half != token.Tok.Eof { return p.half }
+    return p.ts.Toks[p.pos].Kind
+}
+
+# the kind n tokens after the next one
+fn (p Parser&) look(n I64) token.Tok {
+    i := p.pos + n - (1 if p.half != token.Tok.Eof else 0)
+    if i >= p.ts.Toks.Len() { return token.Tok.Eof }
+    return p.ts.Toks[i].Kind
+}
+
+fn (p Parser&) lookTok(n I64) token.Token {
+    i := p.pos + n
+    if i >= p.ts.Toks.Len() { return p.ts.Toks[p.ts.Toks.Len() - 1] }
+    return p.ts.Toks[i]
+}
+
+fn (p Parser&) here() I32 {
+    if p.half != token.Tok.Eof { return p.halfStart }
+    return p.ts.Toks[p.pos].Start
+}
+
+# whether a line ended before the next token
+fn (p Parser&) breakBefore() Bool {
+    if p.half != token.Tok.Eof { return false }
+    return p.tk().Has(token.LineBreak)
+}
+
+fn (p mut Parser&) advance() I32 {
+    if p.half != token.Tok.Eof {
+        p.prevKind = p.half
+        p.half = token.Tok.Eof
+        p.prevEnd = p.ts.Toks[p.pos - 1].End
+        return p.halfStart
+    }
+    t := p.ts.Toks[p.pos]
+    if t.Kind != token.Tok.Eof { p.pos++ }
+    if t.Kind != token.Tok.StmtEnd {
+        p.prevKind = t.Kind
+        p.prevEnd = t.End
+    }
+    return t.Start
+}
+
+fn (p Parser&) sees(k token.Tok) Bool { return p.peek() == k }
+
+fn (p mut Parser&) accept(k token.Tok) Bool {
+    if p.peek() != k { return false }
+    p.advance()
+    return true
+}
+
+# the span from start to the end of the last token read
+fn (p Parser&) from(start I32) source.Span { return source.Span(start, p.prevEnd) }
+
+fn (p Parser&) text(t token.Token) String&p { return p.src.Text[t.Start:t.End] }
+
+# the next token as a diagnostic names it
+fn (p Parser&) found() String {
+    if p.half != token.Tok.Eof { return msgs.Tok(p.half.Text()) }
+    t := p.tk()
+    if t.Kind == token.Tok.StmtEnd { return msgs.EndOfLine }
+    if t.Kind == token.Tok.Eof { return msgs.EndOfFile }
+    return msgs.Tok(p.text(t))
+}
+
+# ---- diagnostics ----
+
+fn (p mut Parser&) report(start I32, end I32, m msgs.Msg) {
+    p.diags.Error(diag.Where.Span(p.file, I64(start), I64(end)), m)
+}
+
+# what was wanted is not here: said at the next token, in the words of a hint where one fits
+fn (p mut Parser&) fail(want String&) ? Fail {
+    if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+    if not p.hint(want) {
+        t := p.tk()
+        p.report(p.here(), t.End, msgs.Expected(want, p.found()))
+    }
+    error Fail.SYNTAX
+}
+
+fn (p mut Parser&) want(k token.Tok) I32 ? Fail {
+    if p.peek() != k { try p.fail(k.Describe()) }
+    return p.advance()
+}
+
+# a name, interned
+fn (p mut Parser&) name() source.NameId ? Fail {
+    if p.peek() != token.Tok.Iden { try p.fail("a name") }
+    t := p.tk()
+    p.advance()
+    return p.names.Intern(p.text(t))
+}
+
+# L9a: a method's name may be any keyword (but true, false and null)
+fn (p mut Parser&) methodName() source.NameId ? Fail {
+    k := p.peek()
+    if k != token.Tok.Iden and not isWordKeyword(k) { try p.fail("a name") }
+    t := p.tk()
+    p.advance()
+    return p.names.Intern(p.text(t))
+}
+
+# whether the word after the next "." may be a member's name (L9a): a name, or a keyword where "(" follows it or that may
+# name a field - never true, false or null. The scanner makes every word after "." a name; its spelling decides here
+fn (p Parser&) memberNext() Bool {
+    t := p.lookTok(1)
+    if t.Kind != token.Tok.Iden { return false }
+    kw := token.Keyword(p.src.Text, I64(t.Start), I64(t.End - t.Start))
+    if kw == token.Tok.Iden { return true }
+    if kw == token.Tok.BoolLit or kw == token.Tok.NullLit { return false }
+    return keywordNamesField(kw) or p.look(2) == token.Tok.LParen
+}
+
+fn isWordKeyword(k token.Tok) Bool {
+    t := k.Text()
+    return t.Len() > 0 and t[0].IsLetter() and k != token.Tok.BoolLit and k != token.Tok.NullLit
+}
+
+# L21: one more level of nesting, or the one diagnostic that says there are too many
+fn (p mut Parser&) enter() ? Fail {
+    if p.depth >= MaxNesting {
+        if not p.tooDeep {
+            p.tooDeep = true
+            t := p.tk()
+            p.diags.ErrorUnheld(diag.Where.Span(p.file, I64(p.here()), I64(t.End)), msgs.Nesting(MaxNesting))
+        }
+        error Fail.SYNTAX
+    }
+    if p.depth + 1 == MaxNesting and p.limitAt < 0 { p.limitAt = p.pos }
+    p.depth++
+}
+
+fn (p mut Parser&) leave() { p.depth-- }
+
+# L21 where a statement starts: every statement is first tried as one that reads an operand there, so a statement met
+# at the limit is said to be too deep at its first token. It is still read: what in it nests (an operand, a block) is
+# refused by enter(), and one that nests nothing (break, error E.A, a bare return) is kept, its item with it
+fn (p mut Parser&) stmtRoom() {
+    if p.depth >= MaxNesting { p.tooDeepAt(p.pos) }
+}
+
+# the one L21 diagnostic, said at the token with that index
+fn (p mut Parser&) tooDeepAt(i I64) {
+    if p.tooDeep { return }
+    p.tooDeep = true
+    t := p.ts.Toks[i]
+    p.diags.ErrorUnheld(diag.Where.Span(p.file, I64(t.Start), I64(t.End)), msgs.Nesting(MaxNesting))
+}
+
+# ---- lists, gathered on the parser's stacks ----
+
+fn gather(stack mut List<<T>>&, from I64) Array<T>&stack {
+    a mut Array<T>&stack = Array<T>(stack.Len() - from)
+    for i in range a.Len() { a[i] = stack[from + i] }
+    stack.Truncate(from)
+    return a
+}
+
+# ---- statement ends and recovery ----
+
+# where the stacks stand, so that a statement that failed can leave nothing on them
+type stackMarks struct(exprs I64, stmts I64, tys I64, prms I64, pats I64, ids I64, sps I64) {
+    exprs
+    stmts
+    tys
+    prms
+    pats
+    ids
+    sps
+}
+
+fn (p Parser&) marks() stackMarks {
+    return stackMarks(p.exprs.Len(), p.stmts.Len(), p.tys.Len(), p.prms.Len(), p.pats.Len(), p.ids.Len(), p.sps.Len())
+}
+
+fn (p mut Parser&) release(m stackMarks) {
+    p.exprs.Truncate(m.exprs)
+    p.stmts.Truncate(m.stmts)
+    p.tys.Truncate(m.tys)
+    p.prms.Truncate(m.prms)
+    p.pats.Truncate(m.pats)
+    p.ids.Truncate(m.ids)
+    p.sps.Truncate(m.sps)
+}
+
+# a statement's end (L18, L20, L20a)
+fn (p mut Parser&) endStmt() ? Fail {
+    k := p.peek()
+    if k == token.Tok.StmtEnd {
+        p.advance()
+        return
+    }
+    if k == token.Tok.RBrace or k == token.Tok.Eof { return }
+    pk := p.prevKind
+    if (pk == token.Tok.Amp or pk == token.Tok.Gt or pk == token.Tok.RBrace) and p.breakBefore() { return }
+    try p.fail(token.Tok.StmtEnd.Describe())
+}
+
+fn (p mut Parser&) skipEnds() {
+    for p.sees(token.Tok.StmtEnd) { p.advance() }
+}
+
+# after an error in a statement: past its end at this depth, or to the "}" closing its block
+fn (p mut Parser&) syncStmt(start I64) {
+    # from the statement's start, so that the blocks it opened are passed whole - unless the parse got further
+    failed := p.pos
+    p.pos = start
+    p.syncFrom()
+    if p.pos < failed {
+        p.pos = failed
+        p.syncFrom()
+    }
+}
+
+# to the end of the statement at the cursor: its next line end outside brackets, or its block's "}" - inside a bracket
+# left open too
+fn (p mut Parser&) syncFrom() {
+    p.half = token.Tok.Eof
+    p.noGt = false
+    depth I64 = 0
+    for {
+        k := p.peek()
+        if k == token.Tok.Eof { return }
+        if k == token.Tok.LBrace {
+            close := p.ts.Match(I32(p.pos))
+            if close < 0 { return }
+            p.pos = I64(close)
+            p.advance()
+            continue
+        }
+        if k == token.Tok.RBrace {
+            return      # the blocks the statement opened were passed whole: this one closes the enclosing block
+        } else if k == token.Tok.LParen or k == token.Tok.LBrack {
+            depth++
+        } else if k == token.Tok.RParen or k == token.Tok.RBrack {
+            if depth > 0 { depth-- }
+        } else if k == token.Tok.StmtEnd and depth == 0 {
+            p.advance()
+            return
+        }
+        p.advance()
+    }
+}
+
+# after an error in a top-level item: from its start, past its end - a statement end outside its braces, or the "}"
+# that closes them at a line's end - or to the "}" of the branch it is in
+fn (p mut Parser&) syncItem(start I64) {
+    p.pos = start
+    p.half = token.Tok.Eof
+    p.noGt = false
+    depth I64 = 0
+    for {
+        t := p.tk()
+        if t.Kind == token.Tok.Eof { return }
+        if t.Kind == token.Tok.RBrace and depth == 0 { return }
+        p.advance()
+        if t.Kind == token.Tok.LBrace {
+            depth++
+        } else if t.Kind == token.Tok.RBrace {
+            depth--
+            if depth == 0 {
+                n := p.tk()
+                if n.Kind == token.Tok.Eof or n.Kind == token.Tok.StmtEnd or n.Has(token.LineBreak) { return }
+            }
+        } else if depth == 0 and t.Kind == token.Tok.StmtEnd {
+            return
+        }
+    }
+}
+
+# whether the next token starts a declaration where a statement was wanted - an unclosed block's end
+# O3: "fn f&s(" or "type T&s struct" - a scope named after a declaration's name, touching it; there is no such thing,
+# so it is reported and read past
+fn (p mut Parser&) scopeDecl() {
+    if p.half != token.Tok.Eof or not p.sees(token.Tok.Amp) or p.tk().Has(token.Space) { return }
+    n := p.lookTok(1)
+    if (n.Kind != token.Tok.Iden and n.Kind != token.Tok.Return) or n.Has(token.Space) { return }
+    t := p.tk()
+    p.report(t.Start, t.End, msgs.ScopeDecl())
+    p.advance()
+    p.advance()
+}
+
+fn (p Parser&) declHere() Bool {
+    k := p.peek()
+    if p.inCtor and p.keywordFieldHere() { return false }
+    if k == token.Tok.Fn or k == token.Tok.Type { return p.look(1) == token.Tok.Iden }
+    return k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern
+}
+
+# ---- declarations ----
+
+# a whole file
+fn (p mut Parser&) File() Array<ast.Decl&>&p {
+    from := p.decls.Len()
+    for {
+        p.skipEnds()
+        if p.sees(token.Tok.Eof) { break }
+        if p.sees(token.Tok.RBrace) {
+            try p.fail("a declaration") catch { }
+            p.advance()
+            continue
+        }
+        p.item()
+    }
+    return gather(p.decls, from)
+}
+
+# one top-level item, onto the decls stack, or its diagnostic
+fn (p mut Parser&) item() {
+    start := p.pos
+    k := p.ItemKept.Len()
+    p.ItemStarts.Push(p.here())
+    p.ItemKept.Push(true)
+    p.vars.Truncate(0)
+    p.inCtor = false
+    p.brackets = 0
+    p.depth = 0
+    p.tooDeep = false
+    p.unclosed = false
+    p.salvage.Truncate(0)
+    d := try p.decl() catch {
+        p.ItemKept[k] = false
+        # a function or type whose body did not parse stays declared by its signature or its name, its body never
+        # checked - so a use of it is not reported again (SNTX_BODY_UNPARSED)
+        for x in p.salvage { p.decls.Push(x) }
+        p.salvage.Truncate(0)
+        if p.unclosed {
+            p.unclosed = false
+            return
+        }
+        if start == p.pos {
+            p.advance()           # nothing of it read: an item's first token that begins none
+        }
+        p.syncItem(start)
+        if p.pos == start { p.advance() }
+        return
+    }
+    p.decls.Push(d)
+}
+
+fn (p mut Parser&) decl() ast.Decl&p ? Fail {
+    at := p.here()
+    match p.peek() {
+        case token.Tok.Import {
+            p.advance()
+            alias source.NameId = source.NameId(0)
+            if p.sees(token.Tok.Iden) { alias = try p.name() }
+            if not p.sees(token.Tok.StrLit) { try p.fail(token.Tok.StrLit.Describe()) }
+            path := p.tk()
+            p.advance()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Decl.Import(sp, alias, source.Span(path.Start, path.End))
+        }
+        case token.Tok.Type { return try p.typeDecl() }
+        case token.Tok.Fn {
+            f := try p.function()
+            return ast.Decl.Fn(f)
+        }
+        case token.Tok.Extern {
+            p.advance()
+            try p.want(token.Tok.Fn)
+            name := try p.name()
+            s := try p.sig(false)
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Decl.Extern(ast.Func(sp, null, name, s, null))
+        }
+        case token.Tok.Error {
+            p.advance()
+            name := try p.name()
+            try p.want(token.Tok.LBrace)
+            from := p.ids.Len()
+            p.skipEnds()
+            for not p.sees(token.Tok.RBrace) {
+                w := try p.name()
+                p.ids.Push(w)
+                try p.entryEnd()
+            }
+            p.advance()
+            return ast.Decl.Errors(p.from(at), name, gather(p.ids, from))
+        }
+        case token.Tok.Test {
+            p.advance()
+            if not p.sees(token.Tok.StrLit) { try p.fail(token.Tok.StrLit.Describe()) }
+            nt := p.tk()
+            p.advance()
+            body := try p.block()
+            return ast.Decl.Test(p.from(at), source.Span(nt.Start, nt.End), body)
+        }
+        case token.Tok.If { return try p.topIf() }
+        case token.Tok.Iden {
+            v := try p.declNames(false)
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Decl.Global(sp, v)
+        }
+        nomatch { try p.fail("a declaration") }
+    }
+    unreachable
+}
+
+# an entry of an enum, an error type or a trait ends its line; a comma there is reported and read past (T17, T19)
+fn (p mut Parser&) entryEnd() ? Fail {
+    if p.sees(token.Tok.Comma) {
+        t := p.tk()
+        p.report(t.Start, t.End, msgs.SeparatorComma())
+        p.advance()
+        p.skipEnds()
+        return
+    }
+    try p.endStmt()
+    p.skipEnds()
+}
+
+# a top-level if (B9): every branch parsed, each item of it an item of its own
+fn (p mut Parser&) topIf() ast.Decl&p ? Fail {
+    at := p.here()
+    t := try p.topIfRest()
+    return ast.Decl.If(p.from(at), t)
+}
+
+fn (p mut Parser&) topIfRest() ast.TopIf&p ? Fail {
+    try p.want(token.Tok.If)
+    cond := try p.expr()
+    then := try p.topBranch()
+    if not p.accept(token.Tok.Else) { return ast.TopIf(cond, then, null, null) }
+    if p.sees(token.Tok.If) {
+        inner := try p.topIfRest()
+        return ast.TopIf(cond, then, inner, null)
+    }
+    els := try p.topBranch()
+    return ast.TopIf(cond, then, null, els)
+}
+
+fn (p mut Parser&) topBranch() ast.TopBranch&p ? Fail {
+    at := try p.want(token.Tok.LBrace)
+    g := p.diags.Hold()
+    from := p.decls.Len()
+    for {
+        p.skipEnds()
+        if p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof) { break }
+        p.item()
+    }
+    p.diags.EndHold()
+    try p.want(token.Tok.RBrace)
+    sp := p.from(at)
+    decls := gather(p.decls, from)
+    return ast.TopBranch(sp, decls, g)
+}
+
+fn (p mut Parser&) typeDecl() ast.Decl&p ? Fail {
+    at := try p.want(token.Tok.Type)
+    name := try p.name()
+    return try p.typeDeclRest(at, name) catch {
+        p.salvage.Push(ast.Decl.Type(p.from(at), ast.TypeDecl(name, p.typeParamsRead, false, null)))
+        error Fail.SYNTAX
+    }
+}
+
+fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl&p ? Fail {
+    p.typeParamsRead = Array<ast.TypeParam&>(0)
+    params Array<ast.TypeParam&>&p = Array<ast.TypeParam&>(0)
+    if p.sees(token.Tok.Lt) or p.sees(token.Tok.Shl) {
+        try p.openAngle()
+        l mut List<ast.TypeParam&>&p = List<ast.TypeParam&>()
+        for {
+            pat := p.here()
+            pn := try p.name()
+            p.vars.Push(pn)
+            ty ast.TypeRef&p = null
+            if not p.sees(token.Tok.Comma) and not p.closesAngle() { ty = try p.typeExpr() }
+            l.Push(ast.TypeParam(p.from(pat), pn, ty))
+            if not p.accept(token.Tok.Comma) { break }
+        }
+        try p.closeAngle()
+        params = l.ToArray()
+        p.typeParamsRead = params
+    }
+    extending := p.accept(token.Tok.Extends)
+    p.scopeDecl()
+    body := try p.typeBody()
+    sp := p.from(at)
+    if p.sees(token.Tok.StmtEnd) { p.advance() }
+    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body))
+}
+
+fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
+    match p.peek() {
+        case token.Tok.Struct {
+            p.advance()
+            try p.want(token.Tok.LParen)
+            params := try p.params(false)
+            errs := try p.errorSet()
+            p.ctorBody = true
+            body := try p.block()
+            dsp := source.Span(0, 0)
+            dtor Array<ast.Stmt&>&p = null
+            if p.sees(token.Tok.Destruct) {
+                dat := p.advance()
+                dtor = try p.block()
+                dsp = p.from(dat)
+            }
+            return ast.TypeBody.Struct(ast.StructBody(params, errs, body, dsp, dtor))
+        }
+        case token.Tok.Enum {
+            p.advance()
+            try p.want(token.Tok.LBrace)
+            cases mut List<ast.CaseDecl&>&p = List<ast.CaseDecl&>()
+            p.skipEnds()
+            for not p.sees(token.Tok.RBrace) {
+                cat := p.here()
+                cn := try p.name()
+                payload Array<ast.Param&>&p = Array<ast.Param&>(0)
+                if p.accept(token.Tok.LParen) { payload = try p.params(false) }
+                cases.Push(ast.CaseDecl(p.from(cat), cn, payload))
+                try p.entryEnd()
+            }
+            p.advance()
+            return ast.TypeBody.Enum(cases.ToArray())
+        }
+        case token.Tok.Trait {
+            p.advance()
+            try p.want(token.Tok.LBrace)
+            methods mut List<ast.Func&>&p = List<ast.Func&>()
+            p.skipEnds()
+            for not p.sees(token.Tok.RBrace) {
+                mat := p.here()
+                # "mut" before the name: the receiver may be written through - a receiver of no name, typed "mut"
+                recv ast.Param&p = null
+                if p.sees(token.Tok.Mut) {
+                    mt := p.tk()
+                    p.advance()
+                    msp := source.Span(mt.Start, mt.End)
+                    recv = ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true, false), null)
+                }
+                mn := try p.methodName()
+                s := try p.sig(false)
+                methods.Push(ast.Func(p.from(mat), recv, mn, s, null))
+                try p.entryEnd()
+            }
+            p.advance()
+            return ast.TypeBody.Trait(methods.ToArray())
+        }
+        nomatch {
+            base := try p.typeExpr()
+            if p.sees(token.Tok.LParen) {      # a constructor over a primitive (T29d)
+                cat := p.advance()
+                cp := try p.params(false)
+                ce := try p.errorSet()
+                cb := try p.block()
+                s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors)
+                return ast.TypeBody.Over(base, ast.Func(p.from(cat), null, source.NameId(0), s, cb))
+            }
+            return ast.TypeBody.Over(base, null)
+        }
+    }
+    unreachable
+}
+
+# "fn [(receiver)] Name sig block"
+fn (p mut Parser&) function() ast.Func&p ? Fail {
+    at := try p.want(token.Tok.Fn)
+    recv ast.Param&p = null
+    name source.NameId = source.NameId(0)
+    if p.accept(token.Tok.LParen) {
+        recv = try p.param(false)
+        try p.want(token.Tok.RParen)
+        name = try p.methodName()
+    } else {
+        name = try p.name()
+    }
+    p.scopeDecl()
+    s := try p.sig(false)
+    braced := p.sees(token.Tok.LBrace)
+    body := try p.block() catch {
+        if braced { p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, null))) }
+        error Fail.SYNTAX
+    }
+    return ast.Func(p.from(at), recv, name, s, body)
+}
+
+# "(params) [results] [? errors]" - the "(" not yet read. A lambda's parameters may leave their types out
+fn (p mut Parser&) sig(lambda Bool) ast.Sig&p ? Fail {
+    try p.want(token.Tok.LParen)
+    params := try p.params(lambda)
+    results Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
+    k := p.peek()
+    if k == token.Tok.LParen {
+        p.advance()
+        from := p.tys.Len()
+        for {
+            p.tys.Push(try p.typeExpr())
+            if not p.accept(token.Tok.Comma) { break }
+        }
+        try p.want(token.Tok.RParen)
+        results = gather(p.tys, from)
+    } else if p.startsResult() {
+        t := try p.typeExpr()
+        results = ast.TypeRef&[t]
+    }
+    errs := try p.errorSet()
+    return ast.Sig(params, results, errs.HasErrors, errs.Errors)
+}
+
+# whether a signature's result type follows its parameters
+fn (p Parser&) startsResult() Bool {
+    k := p.peek()
+    return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or
+           k == token.Tok.Lt or k == token.Tok.Shl or k == token.Tok.Enum or k == token.Tok.Struct or
+           k == token.Tok.Trait
+}
+
+# "[? [A + B.c]]"
+fn (p mut Parser&) errorSet() ast.Sig&p ? Fail {
+    if not p.accept(token.Tok.Question) {
+        return ast.Sig(Array<ast.Param&>(0), Array<ast.TypeRef&>(0), false, Array<ast.Path&>(0))
+    }
+    l mut List<ast.Path&>&p = List<ast.Path&>()
+    if p.sees(token.Tok.Iden) {
+        for {
+            l.Push(try p.path())
+            if not p.accept(token.Tok.Plus) { break }
+        }
+    }
+    return ast.Sig(Array<ast.Param&>(0), Array<ast.TypeRef&>(0), true, l.ToArray())
+}
+
+fn (p mut Parser&) path() ast.Path&p ? Fail {
+    at := p.here()
+    from := p.ids.Len()
+    p.ids.Push(try p.name())
+    for p.sees(token.Tok.Dot) {
+        p.advance()
+        p.ids.Push(try p.methodName())
+    }
+    parts := gather(p.ids, from)
+    return ast.Path(p.from(at), parts)
+}
+
+# a parameter list after its "(", through the ")"
+fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
+    from := p.prms.Len()
+    p.brackets++
+    for not p.sees(token.Tok.RParen) {
+        p.prms.Push(try p.param(lambda))
+        if not p.accept(token.Tok.Comma) { break }
+        try p.trailing(token.Tok.RParen)
+    }
+    p.brackets--
+    try p.want(token.Tok.RParen)
+    return gather(p.prms, from)
+}
+
+fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
+    at := p.here()
+    name := try p.name()
+    ty ast.TypeRef&p = null
+    if not (lambda and (p.sees(token.Tok.Comma) or p.sees(token.Tok.RParen))) { ty = try p.typeExpr() }
+    dflt ast.Expr&p = null
+    if p.accept(token.Tok.Assign) { dflt = try p.expr() }
+    return ast.Param(p.from(at), name, ty, dflt)
+}
+
+# after a list's ",": its closing bracket may follow only from a line of its own (L18a)
+fn (p mut Parser&) trailing(close token.Tok) ? Fail {
+    if p.sees(close) and not p.breakBefore() {
+        tc := msgs.Tok(close.Text())
+        p.report(p.prevEnd - 1, p.prevEnd, msgs.TrailingComma(tc, tc))
+        error Fail.SYNTAX
+    }
+}
+
+# ---- types ----
+
+fn (p mut Parser&) typeExpr() ast.TypeRef&p ? Fail {
+    at := p.here()
+    owned := p.accept(token.Tok.Own)
+    writable := p.accept(token.Tok.Mut)
+    t := try p.typeBase()
+    t = p.markers(at, t)
+    if owned or writable { return ast.TypeRef.Perm(p.from(at), t, writable, owned) }
+    return t
+}
+
+fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
+    at := p.here()
+    match p.peek() {
+        case token.Tok.Fn {
+            p.advance()
+            s := try p.sig(false)
+            return ast.TypeRef.Func(p.from(at), s)
+        }
+        case token.Tok.Lt, token.Tok.Shl {
+            try p.openAngle()
+            name := try p.name()
+            p.vars.Push(name)
+            constraint ast.TypeRef&p = null
+            if not p.closesAngle() {
+                wasNoGt := p.noGt
+                p.noGt = true
+                constraint = try p.typeExpr()
+                p.noGt = wasNoGt
+            }
+            try p.closeAngle()
+            return ast.TypeRef.Var(p.from(at), name, constraint)
+        }
+        case token.Tok.Enum, token.Tok.Struct, token.Tok.Trait {
+            body := try p.typeBody()
+            return ast.TypeRef.Shape(p.from(at), body)
+        }
+        case token.Tok.Iden {
+            from := p.ids.Len()
+            p.ids.Push(try p.name())
+            for p.sees(token.Tok.Dot) {
+                p.advance()
+                p.ids.Push(try p.name())
+            }
+            path := gather(p.ids, from)
+            args Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
+            if p.sees(token.Tok.Lt) or p.sees(token.Tok.Shl) { args = try p.typeArgs() }
+            return ast.TypeRef.Named(p.from(at), path, args)
+        }
+        nomatch { try p.fail("a type") }
+    }
+    unreachable
+}
+
+# reference markers after a type - "&", "&x" (x on the "&"'s own line), "&return"; a second one is the checker's to
+# report (T24)
+fn (p mut Parser&) markers(at I32, t ast.TypeRef&p) ast.TypeRef&p {
+    r ast.TypeRef&p = t
+    for p.sees(token.Tok.Amp) and p.half == token.Tok.Eof {
+        p.advance()
+        scope source.NameId = source.NameId(0)
+        k := p.peek()
+        if (k == token.Tok.Iden or k == token.Tok.Return) and not p.breakBefore() {
+            nt := p.tk()
+            p.advance()
+            scope = p.names.Intern(p.text(nt))
+        }
+        r = ast.TypeRef.Ref(p.from(at), r, scope)
+    }
+    return r
+}
+
+fn (p Parser&) closesAngle() Bool {
+    k := p.peek()
+    return k == token.Tok.Gt or k == token.Tok.Shr or k == token.Tok.Ge or k == token.Tok.ShrEq
+}
+
+# "<" where one opens a type-argument list: a "<<" is split, its second half read next (G8b: List<<T>>)
+fn (p mut Parser&) openAngle() ? Fail {
+    if p.accept(token.Tok.Lt) { return }
+    if p.peek() == token.Tok.Shl and p.half == token.Tok.Eof {
+        at := p.advance()
+        p.prevKind = token.Tok.Lt
+        p.prevEnd = at + 1
+        p.half = token.Tok.Lt
+        p.halfStart = at + 1
+        p.pos--
+        p.pos++
+        return
+    }
+    try p.fail(token.Tok.Lt.Describe())
+}
+
+# ">" closing a type-argument list: ">>", ">=" and ">>=" are split, the rest read next - a half may split again
+fn (p mut Parser&) closeAngle() ? Fail {
+    k := p.peek()
+    if not p.closesAngle() { try p.fail(token.Tok.Gt.Describe()) }
+    at := p.advance()
+    if k == token.Tok.Gt { return }
+    p.half = token.Tok.Gt if k == token.Tok.Shr else (token.Tok.Assign if k == token.Tok.Ge else token.Tok.Ge)
+    p.halfStart = at + 1
+    p.prevKind = token.Tok.Gt
+    p.prevEnd = at + 1
+}
+
+# "<" type-or-constant {"," ...} ">"
+fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
+    try p.openAngle()
+    wasNoGt := p.noGt
+    p.noGt = true
+    from := p.tys.Len()
+    for {
+        p.tys.Push(try p.typeArg())
+        if not p.accept(token.Tok.Comma) { break }
+    }
+    p.noGt = wasNoGt
+    try p.closeAngle()
+    return gather(p.tys, from)
+}
+
+# a type argument: a type, or a constant (G21) - a name starting one is read as a type, and continued as an expression
+# where an operator follows it (DESIGN.md point 9)
+fn (p mut Parser&) typeArg() ast.TypeRef&p ? Fail {
+    at := p.here()
+    k := p.peek()
+    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or k == token.Tok.Lt or
+       k == token.Tok.Shl or k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait {
+        t := try p.typeExpr()
+        if p.sees(token.Tok.Comma) or p.closesAngle() { return t }
+        x := try p.typeAsExpr(t)
+        e := try p.postfixFrom(x)
+        e = try p.binaryFrom(e, 1)
+        return ast.TypeRef.Const(p.from(at), e)
+    }
+    e := try p.binary(1)
+    return ast.TypeRef.Const(p.from(at), e)
+}
+
+# a type read where an expression stood: a plain path, Name or alias.Name
+fn (p mut Parser&) typeAsExpr(t ast.TypeRef&p) ast.Expr&p ? Fail {
+    match t {
+        case ast.TypeRef.Var(sp, n, c) {
+            if c == null { return ast.Expr.TypeVar(sp, n) }
+        }
+        case ast.TypeRef.Named(sp, path, args) {
+            if args.Len() == 0 {
+                e ast.Expr&p = ast.Expr.Name(sp, path[0])
+                for i in range 1, path.Len() { e = ast.Expr.Member(sp, e, path[i]) }
+                return e
+            }
+        }
+        nomatch { }
+    }
+    try p.fail(token.Tok.Gt.Describe())
+    unreachable
+}
+
+# the type an expression path names, where only a type can stand (a comprehension's element type)
+fn (p mut Parser&) exprAsType(x ast.Expr&p) ast.TypeRef&p ? Fail {
+    from := p.ids.Len()
+    e ast.Expr&p = x
+    for {
+        match e {
+            case ast.Expr.Name(_, n) {
+                p.ids.Push(n)
+                break
+            }
+            case ast.Expr.Member(_, b, n) {
+                p.ids.Push(n)
+                e = b
+            }
+            nomatch {
+                p.ids.Truncate(from)
+                try p.fail("an element type before the [, as in I32[...]")
+            }
+        }
+    }
+    parts := gather(p.ids, from)
+    rev mut Array<source.NameId>&p = Array<source.NameId>(parts.Len())
+    for i in range parts.Len() { rev[i] = parts[parts.Len() - 1 - i] }
+    return ast.TypeRef.Named(x.Span(), rev, Array<ast.TypeRef&>(0))
+}
+
+# ---- statements ----
+
+fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
+    if not p.sees(token.Tok.LBrace) { try p.fail(token.Tok.LBrace.Describe()) }
+    try p.enter()
+    defer p.leave()
+    open := p.tk()
+    p.advance()
+    wasCtor := p.inCtor
+    p.inCtor = p.ctorBody
+    p.ctorBody = false
+    defer { p.inCtor = wasCtor }
+    wasBrackets := p.brackets
+    p.brackets = 0
+    defer { p.brackets = wasBrackets }
+    from := p.stmts.Len()
+    for {
+        p.skipEnds()
+        if p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof) { break }
+        if p.declHere() {
+            # a declaration where a statement stands: the block was never closed
+            if not p.tooDeep and not p.unclosed {
+                line := p.src.Line(open.Start)
+                t := p.tk()
+                where := diag.Where.Span(p.file, I64(t.Start), I64(t.End))
+                p.diags.ErrorUnheld(where, msgs.BlockNotClosed(I64(line), p.found()))
+            }
+            p.stmts.Truncate(from)
+            p.unclosed = true
+            error Fail.SYNTAX
+        }
+        marks := p.marks()
+        start := p.pos
+        s := try p.stmt() catch {
+            if p.tooDeep or p.unclosed {
+                p.stmts.Truncate(from)
+                error Fail.SYNTAX
+            }
+            p.release(marks)
+            p.syncStmt(start)
+            continue
+        }
+        p.stmts.Push(s)
+    }
+    if not p.sees(token.Tok.RBrace) {
+        p.stmts.Truncate(from)
+        try p.fail(token.Tok.RBrace.Describe())
+    }
+    p.advance()
+    return gather(p.stmts, from)
+}
+
+fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
+    at := p.here()
+    if p.inCtor and p.keywordFieldHere() { return try p.fieldDecl() }
+    p.stmtRoom()
+    match p.peek() {
+        case token.Tok.If {
+            s := try p.ifStmt()
+            return s
+        }
+        case token.Tok.For { return try p.forStmt() }
+        case token.Tok.Do {
+            p.advance()
+            body := try p.block()
+            try p.want(token.Tok.For)
+            cond := try p.expr()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.DoFor(sp, body, cond)
+        }
+        case token.Tok.Match {
+            m := try p.matchBody()
+            sp := p.from(at)
+            if p.sees(token.Tok.StmtEnd) { p.advance() }
+            return ast.Stmt.MatchS(sp, m)
+        }
+        case token.Tok.Return {
+            p.advance()
+            values Array<ast.Expr&>&p = Array<ast.Expr&>(0)
+            if not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and not p.sees(token.Tok.Eof) {
+                p.listTry = p.here()
+                values = try p.exprList()
+            }
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Return(sp, values)
+        }
+        case token.Tok.Break, token.Tok.Continue, token.Tok.Done, token.Tok.Fail, token.Tok.Abort,
+             token.Tok.Unreachable {
+            k := p.peek()
+            p.advance()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Jump(sp, k)
+        }
+        case token.Tok.Assert {
+            p.advance()
+            cond := try p.expr()
+            msg ast.Expr&p = null
+            if p.accept(token.Tok.Comma) { msg = try p.expr() }
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Assert(sp, cond, msg)
+        }
+        case token.Tok.Error {
+            p.advance()
+            word ast.Path&p = null
+            if p.sees(token.Tok.Iden) { word = try p.path() }
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Raise(sp, word)
+        }
+        case token.Tok.Spawn {
+            p.advance()
+            from := p.exprs.Len()
+            for {
+                p.exprs.Push(try p.expr())
+                if not p.accept(token.Tok.Comma) { break }
+            }
+            if p.accept(token.Tok.Assign) {
+                targets := gather(p.exprs, from)
+                if targets.Len() > 1 { p.listTry = p.here() }
+                call := try p.expr()
+                sp := p.from(at)
+                try p.endStmt()
+                return ast.Stmt.Spawn(sp, targets, call)
+            }
+            if p.exprs.Len() - from != 1 {
+                p.exprs.Truncate(from)
+                try p.fail(token.Tok.Assign.Describe())
+            }
+            call := p.exprs[from]
+            p.exprs.Truncate(from)
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Spawn(sp, Array<ast.Expr&>(0), call)
+        }
+        case token.Tok.Join {
+            j := try p.joinRest(false)
+            return ast.Stmt.Join(p.from(at), j)
+        }
+        case token.Tok.Defer {
+            p.advance()
+            if p.sees(token.Tok.LBrace) {
+                body := try p.block()
+                sp := p.from(at)
+                if p.sees(token.Tok.StmtEnd) { p.advance() }
+                return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body))
+            }
+            s := try p.stmt()
+            return ast.Stmt.Defer(p.from(at), s)
+        }
+        case token.Tok.LBrace {
+            body := try p.block()
+            sp := p.from(at)
+            if p.sees(token.Tok.StmtEnd) { p.advance() }
+            return ast.Stmt.Block(sp, body)
+        }
+        case token.Tok.Try { return try p.tryStmt() }
+        case token.Tok.Iden { return try p.idenStmt() }
+        nomatch { return try p.exprStmt() }
+    }
+    unreachable
+}
+
+# L9a: the keywords a field may be named by
+fn keywordNamesField(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Done, token.Tok.Fail, token.Tok.Break, token.Tok.Continue, token.Tok.Abort => true
+        case token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or => true
+        case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Nomatch, token.Tok.Type, token.Tok.Struct => true
+        case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test => true
+        case token.Tok.Extern, token.Tok.Default => true
+        nomatch => false
+    }
+}
+
+# whether a keyword at a constructor's statement start declares a field named by it: a type follows on its line
+fn (p Parser&) keywordField() Bool {
+    n := p.lookTok(1)
+    if n.Has(token.LineBreak) { return false }
+    k := n.Kind
+    return k != token.Tok.StmtEnd and k != token.Tok.Assign and k != token.Tok.Dot and k != token.Tok.LParen and
+           k != token.Tok.Comma and k != token.Tok.Eof and k != token.Tok.RBrace
+}
+
+# whether a keyword at a constructor's statement start declares a field and no declaration: "test := 1" is a field and
+# "test "t" {" a test, "type String& = s" a field and "type T struct(...) {" a type - a type's line holds a shape's
+# keyword or a "{", a field's none
+fn (p Parser&) keywordFieldHere() Bool {
+    k := p.peek()
+    if not keywordNamesField(k) or not p.keywordField() { return false }
+    n := p.look(1)
+    if n == token.Tok.StrLit or n == token.Tok.Fn { return false }
+    if k != token.Tok.Type { return true }
+    line := p.lineAt(p.pos)
+    i := p.pos + 1
+    for i < p.ts.Toks.Len() and p.lineAt(i) == line {
+        ki := p.kindAt(i)
+        if ki == token.Tok.Struct or ki == token.Tok.Enum or ki == token.Tok.Trait or ki == token.Tok.Extends or
+           ki == token.Tok.LBrace {
+            return false
+        }
+        i++
+    }
+    return true
+}
+
+# a constructor field named by a keyword: "done I64 = 0", "in := x"
+fn (p mut Parser&) fieldDecl() ast.Stmt&p ? Fail {
+    at := p.here()
+    nt := p.tk()
+    p.advance()
+    name := p.names.Intern(p.text(nt))
+    return try p.varDecl(at, p.one(name, source.Span(nt.Start, nt.End)))
+}
+
+# a statement starting with a name: a declaration, a field (in a constructor), or an expression or an assignment
+fn (p mut Parser&) idenStmt() ast.Stmt&p ? Fail {
+    at := p.here()
+    k2 := p.look(1)
+    if p.inCtor and (k2 == token.Tok.StmtEnd or k2 == token.Tok.RBrace or k2 == token.Tok.Eof) {
+        nt := p.tk()
+        name := try p.name()
+        sp := p.from(at)
+        try p.endStmt()
+        v := ast.VarDecl(Array<source.NameId>(1, name), Array<source.Span>(1, source.Span(nt.Start, nt.End)),
+                         null, Array<ast.Expr&>(0), false, true)
+        return ast.Stmt.Var(sp, v)
+    }
+    if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Own or
+       k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct or k2 == token.Tok.Lt or
+       k2 == token.Tok.Shl {
+        # "x <T> = v" declares; "x < y" as a statement would discard a value (S3), so it is taken as a declaration
+        nt := p.tk()
+        name := try p.name()
+        return try p.varDecl(at, p.one(name, source.Span(nt.Start, nt.End)))
+    }
+    return try p.exprStmt()
+}
+
+# the names of a declaration list, held while its type and values are read
+fn (p mut Parser&) varDecl(at I32, names NameList&) ast.Stmt&p ? Fail {
+    v := try p.declRest(names, p.inCtor)
+    sp := p.from(at)
+    if p.inCtor and p.sees(token.Tok.Comma) {
+        # a comma after a field, where a line end belongs (T17, T19, C2)
+        n := names.Names.Len()
+        if n > 1 and v.Values.Len() == 0 {
+            # "a, b T," is no list of fields: each name before the last is a field of its own (a pun), the comma
+            # after it a separator, and the last takes the type
+            for i in range n - 1 {
+                ns := names.Sps[i]
+                pun := ast.VarDecl(Array<source.NameId>(1, names.Names[i]), Array<source.Span>(1, ns), null,
+                                   Array<ast.Expr&>(0), false, true)
+                p.stmts.Push(ast.Stmt.Var(ns, pun))
+                c := ns.End
+                for p.src.Text[c] == ' ' or p.src.Text[c] == '\t' { c++ }
+                p.report(c, c + 1, msgs.SeparatorComma())
+            }
+            last := names.Sps[n - 1]
+            t := p.tk()
+            p.report(t.Start, t.End, msgs.SeparatorComma())
+            p.advance()
+            return ast.Stmt.Var(source.Span(last.Start, sp.End), p.lastField(v, names.Names[n - 1], last))
+        }
+        t := p.tk()
+        p.report(t.Start, t.End, msgs.SeparatorComma())
+        p.advance()
+        return ast.Stmt.Var(sp, v)
+    }
+    try p.endStmt()
+    return ast.Stmt.Var(sp, v)
+}
+
+# the last name of "a, b T," with the declaration's type: a field of its own
+fn (p Parser&) lastField(v ast.VarDecl&p, name source.NameId, sp source.Span) ast.VarDecl&p {
+    return ast.VarDecl(Array<source.NameId>(1, name), Array<source.Span>(1, sp), v.Ty, Array<ast.Expr&>(0), v.Infer, true)
+}
+
+# "[mut] T [= v, ...]" or ":= v, ..." after the names of a declaration
+fn (p mut Parser&) declRest(names NameList&, field Bool) ast.VarDecl&p ? Fail {
+    if p.sees(token.Tok.Mut) and p.look(1) == token.Tok.Define {
+        # "x mut := v": ":=" already gives the permission, which the checker says (D11a, C3)
+        mat := p.advance()
+        perm := ast.TypeRef.Perm(source.Span(mat, p.prevEnd), null, true, false)
+        p.advance()
+        values := try p.values(names, field)
+        return ast.VarDecl(names.Names, names.Sps, perm, values, true, field)
+    }
+    if p.accept(token.Tok.Define) {
+        values := try p.values(names, field)
+        if names.Names.Len() > 1 and values.Len() != names.Names.Len() { p.countDiag(names, values.Len()) }
+        return ast.VarDecl(names.Names, names.Sps, null, values, true, field)
+    }
+    ty := try p.typeExpr()
+    values Array<ast.Expr&>&p = Array<ast.Expr&>(0)
+    if p.accept(token.Tok.Assign) {
+        values = try p.values(names, field)
+        if values.Len() != names.Names.Len() and names.Names.Len() > 1 { p.countDiag(names, values.Len()) }
+    }
+    return ast.VarDecl(names.Names, names.Sps, ty, values, false, field)
+}
+
+# a declaration's values; a constructor field's no more than it has names, a comma after them separating the next
+# field (T17, T19, C2)
+fn (p mut Parser&) values(names NameList&, field Bool) Array<ast.Expr&>&p ? Fail {
+    if not field { return try p.exprList() }
+    from := p.exprs.Len()
+    for {
+        p.exprs.Push(try p.expr())
+        if p.exprs.Len() - from >= names.Names.Len() or not p.accept(token.Tok.Comma) { break }
+    }
+    return gather(p.exprs, from)
+}
+
+fn (p mut Parser&) countDiag(names NameList&, values I64) {
+    sp := names.Sps[0]
+    p.report(sp.Start, sp.End, msgs.VarListCount(names.Names.Len(), values))
+}
+
+# a top-level declaration of names: "X I32 = 1", "X, Y mut I32 = 0, 0", "X := 3"
+fn (p mut Parser&) declNames(field Bool) ast.VarDecl&p ? Fail {
+    from := p.ids.Len()
+    sfrom := p.sps.Len()
+    for {
+        nt := p.tk()
+        p.ids.Push(try p.name())
+        p.sps.Push(source.Span(nt.Start, nt.End))
+        if not p.accept(token.Tok.Comma) { break }
+    }
+    names := NameList(gather(p.ids, from), gather(p.sps, sfrom))
+    return try p.declRest(names, field)
+}
+
+# the names of a declaration list and the span of each
+type NameList struct(Names Array<source.NameId>&, Sps Array<source.Span>&) {
+    Names
+    Sps
+}
+
+# one name and its span, as a declaration list
+fn (p Parser&) one(n source.NameId, sp source.Span) NameList&p {
+    return NameList(Array<source.NameId>(1, n), Array<source.Span>(1, sp))
+}
+
+fn isAssignOp(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Assign, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq, token.Tok.SlashEq => true
+        case token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq, token.Tok.AmpEq, token.Tok.PipeEq => true
+        case token.Tok.CaretEq => true
+        nomatch => false
+    }
+}
+
+# an expression standing as a statement, an assignment, or - after a list - a declaration or a destructuring (the
+# cover grammar of DESIGN.md point 3)
+fn (p mut Parser&) exprStmt() ast.Stmt&p ? Fail {
+    at := p.here()
+    first := try p.expr()
+    if p.sees(token.Tok.Comma) {
+        from := p.exprs.Len()
+        p.exprs.Push(first)
+        for p.accept(token.Tok.Comma) { p.exprs.Push(try p.expr()) }
+        targets := gather(p.exprs, from)
+        if p.sees(token.Tok.Define) and p.inCtor {
+            names := try p.namesOf(targets)
+            return try p.varDecl(at, names)
+        }
+        if p.accept(token.Tok.Define) or p.accept(token.Tok.Assign) {
+            define := p.prevKind == token.Tok.Define
+            p.listTry = p.here()
+            values := try p.exprList()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Multi(sp, ast.Multi(targets, define, values))
+        }
+        names := try p.namesOf(targets)
+        if p.inCtor and (p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof)) {
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Var(sp, ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>(0), false, true))
+        }
+        return try p.varDecl(at, names)
+    }
+    k := p.peek()
+    if isAssignOp(k) {
+        p.advance()
+        value := try p.expr()
+        sp := p.from(at)
+        try p.endStmt()
+        return ast.Stmt.Assign(sp, k, first, value)
+    }
+    sp := p.from(at)
+    try p.endStmt()
+    return ast.Stmt.ExprS(sp, first)
+}
+
+# the names a list of targets is, where names are wanted; anything else is not where it can stand
+fn (p mut Parser&) namesOf(targets Array<ast.Expr&>&) NameList&p ? Fail {
+    names mut Array<source.NameId>&p = Array<source.NameId>(targets.Len())
+    sps mut Array<source.Span>&p = Array<source.Span>(targets.Len())
+    for i, t in targets {
+        match t {
+            case ast.Expr.Name(sp, n) {
+                names[i] = n
+                sps[i] = sp
+            }
+            nomatch { try p.fail(token.Tok.Assign.Describe()) }
+        }
+    }
+    return NameList(names, sps)
+}
+
+# "try" leading a statement: a guarded call, a checked store (R21), or a join that can fail (P4c)
+# L21 in a try statement, as stage 0 counts it: read as an expression, "try X" is the try's level and X's, so with fewer
+# than two levels left the limit is said at X first; a store's target and a call with clauses are read at one level, a
+# try with no clause (an expression) at two
+fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
+    at := try p.want(token.Tok.Try)
+    if p.depth + 2 > MaxNesting { p.tooDeepAt(p.pos) }
+    was := p.limitAt
+    defer { p.limitAt = was }
+    p.limitAt = -1
+    if p.sees(token.Tok.Join) {
+        j := try p.joinRest(true)
+        return ast.Stmt.Join(p.from(at), j)
+    }
+    if p.sees(token.Tok.Inc) or p.sees(token.Tok.Dec) {
+        x := try p.unary()
+        inner := ast.Stmt.ExprS(x.Span(), x)
+        cl := try p.clauses(false)
+        sp := p.from(at)
+        try p.endStmt()
+        return ast.Stmt.TryStore(sp, inner, cl)
+    }
+    x := try p.postfix()
+    k := p.peek()
+    if isAssignOp(k) {
+        p.advance()
+        value := try p.expr()
+        inner := ast.Stmt.Assign(source.Span(x.Span().Start, p.prevEnd), k, x, value)
+        cl := try p.clauses(false)
+        sp := p.from(at)
+        try p.endStmt()
+        return ast.Stmt.TryStore(sp, inner, cl)
+    }
+    match x {
+        case ast.Expr.Postfix(_, op, _) {
+            if op == token.Tok.Inc or op == token.Tok.Dec {
+                inner := ast.Stmt.ExprS(x.Span(), x)
+                cl := try p.clauses(false)
+                sp := p.from(at)
+                try p.endStmt()
+                return ast.Stmt.TryStore(sp, inner, cl)
+            }
+        }
+        nomatch { }
+    }
+    reached := p.limitAt
+    cl := try p.clauses(false)
+    if cl.Len() == 0 and reached >= 0 {
+        p.tooDeepAt(reached)
+        error Fail.SYNTAX
+    }
+    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
+    if cl.Len() == 0 {
+        e = try p.postfixFrom(e)
+        e = try p.binaryFrom(e, 1)
+        e = try p.condFrom(e)
+    }
+    sp := p.from(at)
+    try p.endStmt()
+    return ast.Stmt.ExprS(sp, e)
+}
+
+# "join { body } [catch ...]" - "try" already read when tried
+fn (p mut Parser&) joinRest(tried Bool) ast.JoinS&p ? Fail {
+    try p.want(token.Tok.Join)
+    body := try p.block()
+    cl := try p.clauses(false)
+    if p.sees(token.Tok.StmtEnd) { p.advance() }
+    return ast.JoinS(tried, body, cl)
+}
+
+fn (p mut Parser&) ifStmt() ast.Stmt&p ? Fail {
+    at := try p.want(token.Tok.If)
+    cond := try p.expr()
+    then := try p.branch()
+    els ast.Stmt&p = null
+    if p.accept(token.Tok.Else) {
+        if p.sees(token.Tok.If) {
+            els = try p.ifStmt()
+        } else {
+            b := try p.branch()
+            els = ast.Stmt.If(b.Sp, ast.If(null, b, null))
+        }
+    }
+    sp := p.from(at)
+    if p.sees(token.Tok.StmtEnd) { p.advance() }
+    return ast.Stmt.If(sp, ast.If(cond, then, els))
+}
+
+# an if's block, holding the diagnostics its parse met (DESIGN.md point 12): one that does not parse is kept as its
+# span, bounded by its matching "}" from the brace table
+fn (p mut Parser&) branch() ast.Branch&p ? Fail {
+    at := p.here()
+    if not p.sees(token.Tok.LBrace) { try p.fail(token.Tok.LBrace.Describe()) }
+    g := p.diags.Hold()
+    open := p.pos
+    body := try p.block() catch {
+        p.diags.EndHold()
+        if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+        close := p.ts.Match(I32(open))
+        if close < 0 { error Fail.SYNTAX }
+        p.pos = I64(close)
+        p.half = token.Tok.Eof
+        p.advance()
+        return ast.Branch(p.from(at), null, g)
+    }
+    p.diags.EndHold()
+    return ast.Branch(p.from(at), body, g)
+}
+
+fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
+    at := try p.want(token.Tok.For)
+    if p.sees(token.Tok.LBrace) {
+        body := try p.block()
+        sp := p.from(at)
+        if p.sees(token.Tok.StmtEnd) { p.advance() }
+        return ast.Stmt.Forever(sp, body)
+    }
+    if p.sees(token.Tok.Iden) {
+        k2 := p.look(1)
+        # for x in / for k, v in (DESIGN.md point 4)
+        if k2 == token.Tok.In or k2 == token.Tok.Comma {
+            key source.NameId = source.NameId(0)
+            name := try p.name()
+            if p.accept(token.Tok.Comma) {
+                key = name
+                name = try p.name()
+            }
+            try p.want(token.Tok.In)
+            tried := p.accept(token.Tok.Try)
+            src := try p.forSource()
+            body := try p.block()
+            cl Array<ast.Catch&>&p = Array<ast.Catch&>(0)
+            if tried { cl = try p.clauses(false) }
+            sp := p.from(at)
+            if p.sees(token.Tok.StmtEnd) { p.advance() }
+            return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl))
+        }
+        # three clauses: an initializer like a declaration, then "," cond "," post
+        if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Own {
+            iat := p.here()
+            nt := p.tk()
+            name := try p.name()
+            names := p.one(name, source.Span(nt.Start, nt.End))
+            v ast.VarDecl&p = null
+            if p.accept(token.Tok.Define) {
+                x := try p.expr()
+                v = ast.VarDecl(names.Names, names.Sps, null, ast.Expr&[x], true, false)
+            } else {
+                ty := try p.typeExpr()
+                try p.want(token.Tok.Assign)
+                x := try p.expr()
+                v = ast.VarDecl(names.Names, names.Sps, ty, ast.Expr&[x], false, false)
+            }
+            init := ast.Stmt.Var(p.from(iat), v)
+            try p.want(token.Tok.Comma)
+            cond := try p.expr()
+            try p.want(token.Tok.Comma)
+            post := try p.simpleStmt()
+            body := try p.block()
+            sp := p.from(at)
+            if p.sees(token.Tok.StmtEnd) { p.advance() }
+            return ast.Stmt.For3(sp, ast.For3(init, cond, post, body))
+        }
+    }
+    cond := try p.expr()
+    body := try p.block()
+    sp := p.from(at)
+    if p.sees(token.Tok.StmtEnd) { p.advance() }
+    return ast.Stmt.While(sp, cond, body)
+}
+
+# what a for-in walks: an expression, or "range a[, b[, c]]"
+fn (p mut Parser&) forSource() ast.Expr&p ? Fail {
+    if p.sees(token.Tok.Range) {
+        at := p.advance()
+        args := try p.exprList()
+        return ast.Expr.Range(p.from(at), args)
+    }
+    return try p.expr()
+}
+
+# a for's post clause: an assignment or an expression, with no statement end
+fn (p mut Parser&) simpleStmt() ast.Stmt&p ? Fail {
+    at := p.here()
+    e := try p.expr()
+    k := p.peek()
+    if isAssignOp(k) {
+        p.advance()
+        v := try p.expr()
+        return ast.Stmt.Assign(p.from(at), k, e, v)
+    }
+    return ast.Stmt.ExprS(p.from(at), e)
+}
+
+# "match" subject "{" cases "}" - a statement, or a value (S12b); "match T" on an introduced type variable takes types
+fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
+    at := try p.want(token.Tok.Match)
+    onType := false
+    if p.sees(token.Tok.Iden) and p.look(1) == token.Tok.LBrace {
+        n := p.names.Intern(p.text(p.tk()))
+        for v in p.vars {
+            if v == n { onType = true }
+        }
+    }
+    subject := try p.expr()
+    try p.want(token.Tok.LBrace)
+    wasBrackets := p.brackets
+    p.brackets = 0
+    cases mut List<ast.Case&>&p = List<ast.Case&>()
+    noMatch ast.Case&p = null
+    for {
+        p.skipEnds()
+        if p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof) { break }
+        cat := p.here()
+        if p.accept(token.Tok.Nomatch) {
+            body, value := try p.caseBody()
+            noMatch = ast.Case(p.from(cat), Array<ast.Pattern&>(0), Array<ast.TypeRef&>(0), null, body, value)
+            if p.sees(token.Tok.StmtEnd) { p.advance() }
+            continue
+        }
+        try p.want(token.Tok.Case)
+        pfrom := p.pats.Len()
+        tfrom := p.tys.Len()
+        for {
+            if onType {
+                p.tys.Push(try p.caseType())
+            } else {
+                x := try p.binary(1)
+                p.pats.Push(p.pattern(x, true))
+            }
+            if not p.accept(token.Tok.Comma) { break }
+        }
+        alts := gather(p.pats, pfrom)
+        types := gather(p.tys, tfrom)
+        guard ast.Expr&p = null
+        if p.accept(token.Tok.If) { guard = try p.expr() }
+        body, value := try p.caseBody()
+        cases.Push(ast.Case(p.from(cat), alts, types, guard, body, value))
+        if p.sees(token.Tok.StmtEnd) { p.advance() }
+    }
+    try p.want(token.Tok.RBrace)
+    p.brackets = wasBrackets
+    return ast.Match(p.from(at), subject, onType, cases.ToArray(), noMatch)
+}
+
+# a case of "match T" on an introduced variable: a type, or a constant where the variable is one (G26) - a name is read
+# as a type and continued as an expression where an operator follows it, as a type argument is (point 9)
+fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
+    at := p.here()
+    k := p.peek()
+    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or k == token.Tok.Lt or
+       k == token.Tok.Shl or k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait {
+        t := try p.typeExpr()
+        n := p.peek()
+        if n == token.Tok.Comma or n == token.Tok.LBrace or n == token.Tok.Arrow or n == token.Tok.If { return t }
+        x := try p.typeAsExpr(t)
+        e := try p.postfixFrom(x)
+        e = try p.binaryFrom(e, 1)
+        return ast.TypeRef.Const(p.from(at), e)
+    }
+    e := try p.binary(1)
+    return ast.TypeRef.Const(p.from(at), e)
+}
+
+# a case's block, or "=> value"
+fn (p mut Parser&) caseBody() (Array<ast.Stmt&>&p, ast.Expr&p) ? Fail {
+    if p.accept(token.Tok.Arrow) {
+        v := try p.expr()
+        return null, v
+    }
+    body := try p.block()
+    return body, null
+}
+
+# an alternative, read as an expression, as the pattern it is (DESIGN.md point 13): at the top a path, a case with its
+# payload, "_", or a value; in a payload position a name binds, "_" binds nothing, a call shape nests, a literal is a
+# value. A case whose payload holds anything else is a value compared by "==", as the expression it is
+fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
+    match x {
+        case ast.Expr.Name(sp, n) {
+            if p.names.Text(n) == "_" { return ast.Pattern.Wild(sp) }
+            if top { return ast.Pattern.Path(sp, x) }
+            return ast.Pattern.Bind(sp, n)
+        }
+        case ast.Expr.Member(sp, _, _) { return ast.Pattern.Path(sp, x) if top else ast.Pattern.Value(sp, x) }
+        case ast.Expr.Call(sp, f, args) {
+            if isPath(f) {
+                from := p.pats.Len()
+                for a in args {
+                    sub := p.pattern(a, false)
+                    match sub {
+                        case ast.Pattern.Value(_, v) {
+                            if not isLiteral(v) {
+                                p.pats.Truncate(from)
+                                return ast.Pattern.Value(sp, x)
+                            }
+                        }
+                        case ast.Pattern.Path(_, _) {
+                            p.pats.Truncate(from)
+                            return ast.Pattern.Value(sp, x)
+                        }
+                        nomatch { }
+                    }
+                    p.pats.Push(sub)
+                }
+                return ast.Pattern.Case(sp, f, gather(p.pats, from))
+            }
+            return ast.Pattern.Value(sp, x)
+        }
+        nomatch { return ast.Pattern.Value(x.Span(), x) }
+    }
+}
+
+fn isPath(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Name(_, _) => true
+        case ast.Expr.Member(_, b, _) => isPath(b)
+        nomatch => false
+    }
+}
+
+fn isLiteral(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(_, _) => true
+        case ast.Expr.Unary(_, op, v) => op == token.Tok.Minus and isLiteral(v)
+        nomatch => false
+    }
+}
+
+# catch clauses: "catch [A + B.w] [{ ... }] [default v, ...]" - several defaults only where listOk (R9a)
+fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
+    l mut List<ast.Catch&>&p = List<ast.Catch&>()
+    for p.sees(token.Tok.Catch) {
+        at := p.advance()
+        from := p.exprs.Len()
+        items mut List<ast.Path&>&p = List<ast.Path&>()
+        if p.sees(token.Tok.Iden) {
+            for {
+                items.Push(try p.path())
+                if not p.accept(token.Tok.Plus) { break }
+            }
+        }
+        body Array<ast.Stmt&>&p = null
+        if p.sees(token.Tok.LBrace) { body = try p.block() }
+        if p.accept(token.Tok.Default) {
+            for {
+                p.exprs.Push(try p.unary())
+                if not listOk or not p.accept(token.Tok.Comma) { break }
+            }
+        } else if body == null {
+            try p.fail(token.Tok.LBrace.Describe())
+        }
+        defaults := gather(p.exprs, from)
+        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults))
+    }
+    return l.ToArray()
+}
+
+# ---- expressions ----
+
+fn (p mut Parser&) exprList() Array<ast.Expr&>&p ? Fail {
+    from := p.exprs.Len()
+    for {
+        x := try p.expr() catch {
+            p.exprs.Truncate(from)
+            error Fail.SYNTAX
+        }
+        p.exprs.Push(x)
+        if not p.accept(token.Tok.Comma) { break }
+    }
+    return gather(p.exprs, from)
+}
+
+# expr: binary [ "if" binary "else" expr ] (E28). Outside brackets an "if" first on its line never continues a
+# conditional: it begins the next statement (L18b, DESIGN.md point 7)
+fn (p mut Parser&) expr() ast.Expr&p ? Fail {
+    a := try p.binary(1)
+    return try p.condFrom(a)
+}
+
+fn (p mut Parser&) condFrom(a ast.Expr&p) ast.Expr&p ? Fail {
+    if not p.sees(token.Tok.If) or (p.brackets == 0 and p.breakBefore()) { return a }
+    p.advance()
+    c := try p.binary(1)
+    try p.want(token.Tok.Else)
+    b := try p.expr()
+    return ast.Expr.Cond(source.Span(a.Span().Start, p.prevEnd), a, c, b)
+}
+
+# the binding power of an operator in infix position (E5), 0 for none. In a type-argument list a comparison or a
+# shift is none: it would reach across the list's own ">" (G21)
+fn (p Parser&) prec(k token.Tok) I64 {
+    return match k {
+        case token.Tok.Or => 1
+        case token.Tok.Xor => 2
+        case token.Tok.And => 3
+        case token.Tok.Pipe => 4
+        case token.Tok.Caret => 5
+        case token.Tok.Amp => 6
+        case token.Tok.EqEq, token.Tok.NotEq => 7
+        case token.Tok.In, token.Tok.Is, token.Tok.Not => 8
+        case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge => 0 if p.noGt else 8
+        case token.Tok.Shl, token.Tok.Shr => 0 if p.noGt else 9
+        case token.Tok.Plus, token.Tok.Minus => 10
+        case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => 11
+        nomatch => 0
+    }
+}
+
+fn isOrdering(k token.Tok) Bool { return k == token.Tok.Lt or k == token.Tok.Le or k == token.Tok.Gt or k == token.Tok.Ge }
+
+# precedence climbing: operators binding at least as tightly as min
+fn (p mut Parser&) binary(min I64) ast.Expr&p ? Fail {
+    left := try p.unary()
+    return try p.binaryFrom(left, min)
+}
+
+fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
+    left ast.Expr&p = first
+    start := first.Span().Start
+    links I64 = 0
+    defer { p.depth -= links }
+    for {
+        k := p.peek()
+        pr := p.prec(k)
+        if pr == 0 or pr < min { return left }
+        # "not" in infix position can only be "not in"
+        if k == token.Tok.Not and p.look(1) != token.Tok.In { return left }
+        # E25: f&x(...) is a call, read by postfix; an "&" there is no operator
+        if p.half != token.Tok.Eof and k == token.Tok.Amp { return left }
+        p.advance()
+        if k == token.Tok.Not {
+            p.advance()
+            right := try p.binary(pr + 1)
+            left = ast.Expr.NotIn(source.Span(start, p.prevEnd), left, right)
+            try p.enter()
+            links++
+            continue
+        }
+        if k == token.Tok.Is {
+            negated := p.accept(token.Tok.Not)
+            if p.startsType() {
+                t := try p.typeExpr()
+                left = ast.Expr.IsType(source.Span(start, p.prevEnd), left, t, negated)
+            } else {
+                y := try p.binary(pr + 1)
+                left = ast.Expr.Is(source.Span(start, p.prevEnd), left, y, negated)
+            }
+            try p.enter()
+            links++
+            continue
+        }
+        right := try p.binary(pr + 1)
+        if isOrdering(k) and isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
+            # a chain: a < b <= c (E30)
+            ops mut List<token.Tok>&p = List<token.Tok>()
+            ops.Push(k)
+            from := p.exprs.Len()
+            p.exprs.Push(left)
+            p.exprs.Push(right)
+            # each comparison of the chain is a level, as each operator of a + b + c is (L21)
+            try p.enter()
+            links++
+            for isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
+                ops.Push(p.peek())
+                p.advance()
+                p.exprs.Push(try p.binary(pr + 1))
+                try p.enter()
+                links++
+            }
+            left = ast.Expr.Chain(source.Span(start, p.prevEnd), ast.Chain(ops.ToArray(), gather(p.exprs, from)))
+            continue
+        }
+        left = ast.Expr.Binary(source.Span(start, p.prevEnd), k, left, right)
+        # each operator applied makes the tree on its left one level deeper, counted once it is built (L21)
+        try p.enter()
+        links++
+    }
+}
+
+# whether what follows "is" is a type by its form: "mut", "own", "fn", "<", type arguments or a marker. A bare path is
+# left to the resolver (DESIGN.md point 1)
+fn (p mut Parser&) startsType() Bool {
+    k := p.peek()
+    if k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or k == token.Tok.Lt or k == token.Tok.Shl {
+        return true
+    }
+    if k != token.Tok.Iden { return false }
+    i I64 = 1
+    for p.look(i) == token.Tok.Dot and p.look(i + 1) == token.Tok.Iden { i += 2 }
+    n := p.look(i)
+    if n == token.Tok.Amp { return not p.lookTok(i).Has(token.Space) }
+    if n == token.Tok.Lt or n == token.Tok.Shl { return p.isTypePath(i) }
+    return false
+}
+
+# whether the path at the next i tokens names a type, by the oracle
+fn (p mut Parser&) isTypePath(n I64) Bool {
+    if n == 1 { return p.oracle.bare.Has(p.names.Intern(p.text(p.tk()))) }
+    t StringBuilder = StringBuilder()
+    for i in range n { t.Push(p.text(p.lookTok(i))) }
+    return p.oracle.qualified.Has(t.ToString())
+}
+
+# unary: "not" binary | text | prefix-op unary | postfix
+# a prefix operator adds no level of its own, as text pieces do not: what nests is the operand postfix reads, and "not"
+# (L21, as stage 0 counts)
+fn (p mut Parser&) unary() ast.Expr&p ? Fail {
+    at := p.here()
+    match p.peek() {
+        case token.Tok.Not {
+            p.advance()
+            try p.enter()
+            defer p.leave()
+            x := try p.binary(4)
+            return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
+        }
+        case token.Tok.Minus, token.Tok.Tilde, token.Tok.Inc, token.Tok.Dec, token.Tok.Take {
+            k := p.peek()
+            p.advance()
+            x := try p.unary()
+            return ast.Expr.Unary(p.from(at), k, x)
+        }
+        case token.Tok.StrLit, token.Tok.Dollar {
+            # a literal with something else after it is a postfix primary ("a b".Split(" ")), else a piece of text
+            if p.sees(token.Tok.StrLit) {
+                k2 := p.look(1)
+                if k2 != token.Tok.StrLit and k2 != token.Tok.Dollar { return try p.postfix() }
+            }
+            first := try p.piece()
+            if not p.sees(token.Tok.StrLit) and not p.sees(token.Tok.Dollar) { return first }
+            from := p.exprs.Len()
+            p.exprs.Push(first)
+            for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) { p.exprs.Push(try p.piece()) }
+            return ast.Expr.Join(p.from(at), gather(p.exprs, from))
+        }
+        nomatch { return try p.postfix() }
+    }
+    unreachable
+}
+
+# a piece of text: a literal, or "$" rendering what follows
+fn (p mut Parser&) piece() ast.Expr&p ? Fail {
+    at := p.here()
+    if p.sees(token.Tok.StrLit) {
+        # a literal piece is an operand, a level as any is
+        try p.enter()
+        p.leave()
+        p.advance()
+        return ast.Expr.Lit(p.from(at), token.Tok.StrLit)
+    }
+    try p.want(token.Tok.Dollar)
+    k := p.peek()
+    if k == token.Tok.Minus or k == token.Tok.Tilde or k == token.Tok.Dollar {
+        p.advance()
+        inner := p.here()
+        x := try p.postfix()
+        return ast.Expr.Unary(p.from(at), token.Tok.Dollar, ast.Expr.Unary(p.from(inner), k, x))
+    }
+    x := try p.postfix()
+    return ast.Expr.Unary(p.from(at), token.Tok.Dollar, x)
+}
+
+# an operand and what follows it: one level (L21)
+fn (p mut Parser&) postfix() ast.Expr&p ? Fail {
+    try p.enter()
+    defer p.leave()
+    x := try p.primary()
+    return try p.postfixFrom(x)
+}
+
+fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
+    x ast.Expr&p = first
+    start := first.Span().Start
+    for {
+        match p.peek() {
+            case token.Tok.LBrack {
+                x = try p.index(x)
+            }
+            case token.Tok.Dot {
+                if not p.memberNext() { return x }
+                p.advance()
+                n := try p.methodName()
+                x = ast.Expr.Member(p.from(start), x, n)
+                # alias.Type<args>(...): a generic type through an import, known to the oracle
+                if (p.sees(token.Tok.Lt) or p.sees(token.Tok.Shl)) and p.isQualifiedType(x) {
+                    targs := try p.typeArgs()
+                    x = ast.Expr.Generic(p.from(start), x, targs)
+                    x = try p.literalAfterType(start, x)
+                }
+            }
+            case token.Tok.LParen {
+                args := try p.args()
+                x = ast.Expr.Call(p.from(start), x, args)
+            }
+            case token.Tok.Inc, token.Tok.Dec {
+                k := p.peek()
+                p.advance()
+                x = ast.Expr.Postfix(p.from(start), k, x)
+            }
+            case token.Tok.As {
+                p.advance()
+                t := try p.typeExpr()
+                x = ast.Expr.As(p.from(start), x, t)
+            }
+            case token.Tok.Amp {
+                if p.half != token.Tok.Eof { return x }
+                # alias.Name&[...]: a marked element type through an import, always a literal (point 1)
+                k2 := p.look(1)
+                if isPath(x) and (k2 == token.Tok.LBrack or (k2 == token.Tok.Iden and p.look(2) == token.Tok.LBrack and
+                                                             p.isQualifiedType(x))) {
+                    nt := try p.exprAsType(x)
+                    x = try p.arrayLit(start, p.markers(start, nt))
+                    continue
+                }
+                # E25: f&x(...) - the "&", the name and the "(" each touching the one before (DESIGN.md point 6)
+                a := p.tk()
+                n := p.lookTok(1)
+                o := p.lookTok(2)
+                if a.Has(token.Space) or (n.Kind != token.Tok.Iden and n.Kind != token.Tok.Return) or n.Has(token.Space) or
+                   o.Kind != token.Tok.LParen or o.Has(token.Space) {
+                    return x
+                }
+                p.advance()
+                p.advance()
+                scope := p.names.Intern(p.text(n))
+                args := try p.args()
+                x = ast.Expr.ScopeCall(p.from(start), x, scope, args)
+            }
+            nomatch { return x }
+        }
+    }
+}
+
+# whether x is a path whose text the oracle knows as a qualified type: alias.Name
+fn (p Parser&) isQualifiedType(x ast.Expr&) Bool {
+    if not isPath(x) { return false }
+    return p.oracle.qualified.Has(p.src.TextOf(x.Span()))
+}
+
+# "[" ... "]" after an operand: a slice, or an index - or an array literal, where the operand names a type
+fn (p mut Parser&) index(x ast.Expr&p) ast.Expr&p ? Fail {
+    start := x.Span().Start
+    p.advance()
+    wasNoGt := p.noGt
+    p.noGt = false
+    p.brackets++
+    defer {
+        p.brackets--
+        p.noGt = wasNoGt
+    }
+    if p.sees(token.Tok.Colon) or not p.sees(token.Tok.RBrack) {
+        lo ast.Expr&p = null
+        if not p.sees(token.Tok.Colon) {
+            lo = try p.elem()
+            if p.accept(token.Tok.For) {
+                elem := try p.exprAsType(x)
+                return try p.comprehension(start, elem, lo)
+            }
+        }
+        if p.accept(token.Tok.Colon) {
+            hi ast.Expr&p = null
+            if not p.sees(token.Tok.RBrack) { hi = try p.expr() }
+            try p.want(token.Tok.RBrack)
+            return ast.Expr.Slice(p.from(start), x, lo, hi)
+        }
+        from := p.exprs.Len()
+        p.exprs.Push(lo)
+        for p.accept(token.Tok.Comma) {
+            if p.sees(token.Tok.RBrack) {
+                if not p.breakBefore() { try p.trailing(token.Tok.RBrack) }
+                break
+            }
+            p.exprs.Push(try p.elem())
+        }
+        if not p.sees(token.Tok.RBrack) {
+            p.exprs.Truncate(from)
+            try p.fail(token.Tok.RBrack.Describe())
+        }
+        p.advance()
+        return ast.Expr.Index(p.from(start), x, gather(p.exprs, from))
+    }
+    p.advance()
+    return ast.Expr.Index(p.from(start), x, Array<ast.Expr&>(0))
+}
+
+# an element of a bracket list: an expression, or a nested "[...]" row (E21, reported by the checker)
+fn (p mut Parser&) elem() ast.Expr&p ? Fail {
+    if not p.sees(token.Tok.LBrack) { return try p.expr() }
+    at := p.advance()
+    from := p.exprs.Len()
+    for not p.sees(token.Tok.RBrack) {
+        p.exprs.Push(try p.elem())
+        if not p.accept(token.Tok.Comma) { break }
+        try p.trailing(token.Tok.RBrack)
+    }
+    if not p.sees(token.Tok.RBrack) {
+        p.exprs.Truncate(from)
+        try p.fail(token.Tok.RBrack.Describe())
+    }
+    p.advance()
+    return ast.Expr.Row(p.from(at), gather(p.exprs, from))
+}
+
+# "(" [arg {"," arg} [","]] ")" - an arg may be "default" (E14a)
+fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
+    try p.want(token.Tok.LParen)
+    wasNoGt := p.noGt
+    p.noGt = false
+    p.brackets++
+    from := p.exprs.Len()
+    for not p.sees(token.Tok.RParen) {
+        if p.sees(token.Tok.Default) {
+            at := p.advance()
+            p.exprs.Push(ast.Expr.Default(p.from(at)))
+        } else {
+            x := try p.expr() catch {
+                p.exprs.Truncate(from)
+                p.brackets--
+                error Fail.SYNTAX
+            }
+            p.exprs.Push(x)
+        }
+        if not p.accept(token.Tok.Comma) { break }
+        try p.trailing(token.Tok.RParen) catch {
+            p.exprs.Truncate(from)
+            p.brackets--
+            error Fail.SYNTAX
+        }
+    }
+    p.brackets--
+    p.noGt = wasNoGt
+    if not p.sees(token.Tok.RParen) {
+        p.exprs.Truncate(from)
+        try p.fail(token.Tok.RParen.Describe())
+    }
+    p.advance()
+    return gather(p.exprs, from)
+}
+
+fn (p mut Parser&) primary() ast.Expr&p ? Fail {
+    at := p.here()
+    k := p.peek()
+    match k {
+        case token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit,
+             token.Tok.StrLit {
+            p.advance()
+            return ast.Expr.Lit(p.from(at), k)
+        }
+        case token.Tok.LParen {
+            p.advance()
+            wasNoGt := p.noGt
+            p.noGt = false
+            p.brackets++
+            x := try p.expr() catch {
+                p.brackets--
+                error Fail.SYNTAX
+            }
+            p.brackets--
+            p.noGt = wasNoGt
+            try p.want(token.Tok.RParen)
+            return ast.Expr.Paren(p.from(at), x)
+        }
+        case token.Tok.Try {
+            listOk := at == p.listTry
+            p.advance()
+            x := try p.postfix()
+            cl := try p.clauses(listOk)
+            return ast.Expr.Try(p.from(at), x, cl)
+        }
+        case token.Tok.Fn {
+            p.advance()
+            s := try p.sig(true)
+            body := try p.block()
+            return ast.Expr.Lambda(p.from(at), ast.Func(p.from(at), null, source.NameId(0), s, body))
+        }
+        case token.Tok.Match {
+            m := try p.matchBody()
+            return ast.Expr.MatchE(p.from(at), m)
+        }
+        case token.Tok.Lt {
+            # "<N>": an introduction written again in an expression, for the checker to report (G8b)
+            p.advance()
+            n := try p.name()
+            try p.want(token.Tok.Gt)
+            return ast.Expr.TypeVar(p.from(at), n)
+        }
+        case token.Tok.Iden {
+            t := p.tk()
+            k2 := p.look(1)
+            name := p.names.Intern(p.text(t))
+            if (k2 == token.Tok.Lt or k2 == token.Tok.Shl) and p.oracle.bare.Has(name) {
+                # a generic type applied: Array<I32>(n), Pair<I32, I64>(1, 2), List<String&>[...]
+                p.advance()
+                targs := try p.typeArgs()
+                x := ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
+                return try p.literalAfterType(at, x)
+            }
+            if k2 == token.Tok.Amp {
+                # Name&[...]: a marked element type, always a literal; Name&x[...] is one where Name is a type
+                k3 := p.look(2)
+                if k3 == token.Tok.LBrack or (k3 == token.Tok.Iden and p.look(3) == token.Tok.LBrack and
+                                               p.oracle.bare.Has(name)) {
+                    p.advance()
+                    nt := ast.TypeRef.Named(p.from(at), Array<source.NameId>(1, name), Array<ast.TypeRef&>(0))
+                    elem := p.markers(at, nt)
+                    return try p.arrayLit(at, elem)
+                }
+            }
+            p.advance()
+            return ast.Expr.Name(p.from(at), name)
+        }
+        nomatch { try p.fail("an expression") }
+    }
+    unreachable
+}
+
+# after a generic type in an expression: "[...]" makes a literal of that element type (a marker may stand between)
+fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&p) ast.Expr&p ? Fail {
+    if not p.sees(token.Tok.Amp) and not p.sees(token.Tok.LBrack) { return x }
+    if p.sees(token.Tok.Amp) {
+        k2 := p.look(1)
+        if k2 != token.Tok.LBrack and not (k2 == token.Tok.Iden and p.look(2) == token.Tok.LBrack) { return x }
+    }
+    match x {
+        case ast.Expr.Generic(sp, base, targs) {
+            from := p.ids.Len()
+            e ast.Expr&p = base
+            for {
+                match e {
+                    case ast.Expr.Name(_, n) {
+                        p.ids.Push(n)
+                        break
+                    }
+                    case ast.Expr.Member(_, b, n) {
+                        p.ids.Push(n)
+                        e = b
+                    }
+                    nomatch { break }
+                }
+            }
+            parts := gather(p.ids, from)
+            rev mut Array<source.NameId>&p = Array<source.NameId>(parts.Len())
+            for i in range parts.Len() { rev[i] = parts[parts.Len() - 1 - i] }
+            nt := ast.TypeRef.Named(sp, rev, targs)
+            elem := p.markers(at, nt)
+            return try p.arrayLit(at, elem)
+        }
+        nomatch { return x }
+    }
+}
+
+# "[" items "]" or a comprehension "[" value "for" ... "]" (E19, E27), the element type read
+fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&p) ast.Expr&p ? Fail {
+    try p.want(token.Tok.LBrack)
+    wasNoGt := p.noGt
+    p.noGt = false
+    p.brackets++
+    defer {
+        p.brackets--
+        p.noGt = wasNoGt
+    }
+    from := p.exprs.Len()
+    if not p.sees(token.Tok.RBrack) {
+        first := try p.elem()
+        if p.accept(token.Tok.For) { return try p.comprehension(at, elem, first) }
+        p.exprs.Push(first)
+        for p.accept(token.Tok.Comma) {
+            if p.sees(token.Tok.RBrack) {
+                if not p.breakBefore() { try p.trailing(token.Tok.RBrack) }
+                break
+            }
+            p.exprs.Push(try p.elem())
+        }
+    }
+    if not p.sees(token.Tok.RBrack) {
+        p.exprs.Truncate(from)
+        try p.fail(token.Tok.RBrack.Describe())
+    }
+    p.advance()
+    return ast.Expr.ArrayLit(p.from(at), elem, gather(p.exprs, from))
+}
+
+# a comprehension after its value and "for": "[key,] name in source [if filter] ]"
+fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef&p, value ast.Expr&p) ast.Expr&p ? Fail {
+    key source.NameId = source.NameId(0)
+    name := try p.name()
+    if p.accept(token.Tok.Comma) {
+        key = name
+        name = try p.name()
+    }
+    try p.want(token.Tok.In)
+    src ast.Expr&p = null
+    if p.sees(token.Tok.Range) {
+        rat := p.advance()
+        from := p.exprs.Len()
+        for {
+            p.exprs.Push(try p.binary(1))
+            if not p.accept(token.Tok.Comma) { break }
+        }
+        src = ast.Expr.Range(p.from(rat), gather(p.exprs, from))
+    } else {
+        src = try p.binary(1)
+    }
+    filter ast.Expr&p = null
+    if p.accept(token.Tok.If) { filter = try p.binary(1) }
+    try p.want(token.Tok.RBrack)
+    return ast.Expr.Compr(p.from(at), ast.Compr(elem, value, key, name, src, filter))
+}
+
+# ---- hints: a syntax error said in terms of what was probably meant (B11) ----
+#
+# Each looks at the tokens around the one the parse stopped at, as a reader would, and says what was meant where the
+# tokens make it plain: the same patterns, in the same order, as stage 0's.
+
+# the kind and line of the token at i: Eof and -1 outside the file
+fn (p Parser&) kindAt(i I64) token.Tok {
+    if i < 0 or i >= p.ts.Toks.Len() { return token.Tok.Eof }
+    return p.ts.Toks[i].Kind
+}
+
+fn (p Parser&) lineAt(i I64) I64 {
+    if i < 0 or i >= p.ts.Toks.Len() { return -1 }
+    return I64(p.src.Line(p.ts.Toks[i].Start))
+}
+
+# a keyword spelled with letters - true, false and null among them
+fn (p Parser&) isKw(i I64) Bool {
+    k := p.kindAt(i)
+    if k == token.Tok.Iden or k == token.Tok.Eof or k == token.Tok.StmtEnd { return false }
+    t := p.ts.Toks[i]
+    return t.End > t.Start and p.src.Text[t.Start].IsLetter()
+}
+
+# the token at i as a diagnostic names it
+fn (p Parser&) named(i I64) String {
+    k := p.kindAt(i)
+    if k == token.Tok.StmtEnd { return msgs.EndOfLine }
+    if k == token.Tok.Eof { return msgs.EndOfFile }
+    return msgs.Tok(p.text(p.ts.Toks[i]))
+}
+
+fn (p mut Parser&) reportAt(i I64, m msgs.Msg) {
+    t := p.ts.Toks[i]
+    p.report(t.Start, t.End, m)
+}
+
+fn isJoiningOp(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => true
+        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le => true
+        case token.Tok.Gt, token.Tok.Ge, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr => true
+        nomatch => false
+    }
+}
+
+fn (p mut Parser&) hint(want String&) Bool {
+    if p.half != token.Tok.Eof { return false }
+    f := p.pos
+    fk := p.kindAt(f)
+    fl := p.lineAt(f)
+    pr := f - 1
+    pk := p.kindAt(pr)
+    pl := p.lineAt(pr)
+    # L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
+    if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Arrow {
+        p.reportAt(f, msgs.KeywordFieldRead(p.named(f)))
+        return true
+    }
+    if p.caseValueComma(f) {
+        p.reportAt(f, msgs.MatchValueOne())
+        return true
+    }
+    # "done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
+    if p.isKw(pr) and pl == fl and p.lineAt(pr - 1) < pl and
+       (fk == token.Tok.Mut or fk == token.Tok.Define or fk == token.Tok.Assign or fk == token.Tok.Comma or
+        (fk == token.Tok.Iden and (pk == token.Tok.Done or pk == token.Tok.Fail or pk == token.Tok.Break or
+                                   pk == token.Tok.Continue or pk == token.Tok.Abort or pk == token.Tok.Unreachable or
+                                   pk == token.Tok.Join))) {
+        p.reportAt(pr, msgs.KeywordAsName(p.named(pr)))
+        return true
+    }
+    # S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
+    if pk == token.Tok.Arrow and (fk == token.Tok.Unreachable or fk == token.Tok.Abort or fk == token.Tok.Return or
+                                  fk == token.Tok.Fail or fk == token.Tok.Done or fk == token.Tok.Break or
+                                  fk == token.Tok.Continue or fk == token.Tok.Error) {
+        from := I64(p.ts.Toks[f].Start)
+        end := from
+        for end < p.src.Text.Len() and p.src.Text[end] != '\n' { end++ }
+        for end > from and (p.src.Text[end - 1] == ' ' or p.src.Text[end - 1] == '\t') { end-- }
+        p.reportAt(f, msgs.ArrowLeaves(p.named(f), p.src.Text[from:end]))
+        return true
+    }
+    # "fn join(", "x I32, done I32" - a keyword where a name was wanted
+    if p.isKw(f) and fk != token.Tok.Mut and
+       (want == "a name" or (p.lineAt(f + 1) == fl and (p.kindAt(f + 1) == token.Tok.Iden or
+                                                         p.kindAt(f + 1) == token.Tok.Mut or
+                                                         p.kindAt(f + 1) == token.Tok.Define))) {
+        p.reportAt(f, msgs.KeywordAsName(p.named(f)))
+        return true
+    }
+    # L18: "s := a + b" then "    + c" - the end of the line before ended the statement
+    if (pk == token.Tok.StmtEnd or pl < fl) and fl > 0 and isJoiningOp(fk) {
+        p.reportAt(f, msgs.LineStartsWithOperator(p.named(f), p.named(f)))
+        return true
+    }
+    # C7: a destructor follows the constructor's body
+    if fk == token.Tok.Destruct {
+        p.reportAt(f, msgs.DestructInBody())
+        return true
+    }
+    # E11b: a value joined to text has to be rendered - "pretty(t) "\n"" or ""n=" n"
+    if (fk == token.Tok.StrLit or fk == token.Tok.Dollar) and pl == fl and p.isOperandEnd(pr) and
+       p.joinPieceHint(p.operandStartBefore(pr), pr) {
+        return true
+    }
+    if (pk == token.Tok.StrLit or p.endsRendering(pr)) and pl == fl and (isOperandEndTok(fk) or fk == token.Tok.LParen) and
+       fk != token.Tok.RParen and fk != token.Tok.RBrack and p.joinPieceHint(f, p.operandEndAfter(f)) {
+        return true
+    }
+    if p.textPieceCalled(f) { return true }
+    # L18a: "f(a, b,)" - a trailing comma ends a list only where its closing bracket begins a line
+    if (fk == token.Tok.RParen or fk == token.Tok.RBrack) and pk == token.Tok.Comma and pl == fl {
+        p.reportAt(pr, msgs.TrailingComma(p.named(f), p.named(f)))
+        return true
+    }
+    # G21: "Array<U8, 1 << 12>" - a comparison or shift in a constant argument reads across the list's own '>'
+    if (fk == token.Tok.Shl or fk == token.Tok.Lt or fk == token.Tok.Le or fk == token.Tok.Ge or fk == token.Tok.Shr or
+        fk == token.Tok.Gt) and want == token.Tok.Gt.Describe() {
+        p.reportAt(f, msgs.ConstArgParen(p.named(f)))
+        return true
+    }
+    # R15: "fn f() ?error {" - '?' is the whole of the default error
+    if fk == token.Tok.Error and pk == token.Tok.Question {
+        p.reportAt(f, msgs.ErrorAfterQuestion())
+        return true
+    }
+    # D12: "state Array<F32>(n)" - a declaration's value comes after '='
+    if fk == token.Tok.LParen and want == token.Tok.StmtEnd.Describe() and
+       (pk == token.Tok.Gt or pk == token.Tok.Shr or pk == token.Tok.Iden) and pl == fl {
+        return p.valueAfterEq(f)
+    }
+    return false
+}
+
+# S12b/D8c: "case P => a, b" - a comma after a case's value on its line, outside every bracket
+fn (p Parser&) caseValueComma(f I64) Bool {
+    if p.kindAt(f) != token.Tok.Comma { return false }
+    line := p.lineAt(f)
+    depth I64 = 0
+    t := f - 1
+    for t >= 0 and p.lineAt(t) == line {
+        k := p.kindAt(t)
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace {
+            depth++
+        } else if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            if depth == 0 { return false }
+            depth--
+        } else if k == token.Tok.Arrow and depth == 0 {
+            return true
+        }
+        t--
+    }
+    return false
+}
+
+fn isOperandEndTok(k token.Tok) Bool {
+    return k == token.Tok.Iden or k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.IntLit or
+           k == token.Tok.FloatLit or k == token.Tok.CharLit or k == token.Tok.BoolLit or k == token.Tok.NullLit
+}
+
+# ...or a member named by a keyword, "s.done" (L9a)
+fn (p Parser&) isOperandEnd(i I64) Bool {
+    return isOperandEndTok(p.kindAt(i)) or (p.isKw(i) and p.kindAt(i - 1) == token.Tok.Dot)
+}
+
+fn isOperandTail(k token.Tok) Bool { return k == token.Tok.Iden or k == token.Tok.RParen or k == token.Tok.RBrack }
+
+# the bracket matching the closing one at i, searching back: -1 for none
+fn (p Parser&) openerOf(i I64) I64 {
+    closer := p.kindAt(i)
+    opener := token.Tok.LParen if closer == token.Tok.RParen else token.Tok.LBrack
+    depth I64 = 0
+    t := i
+    for t >= 0 {
+        k := p.kindAt(t)
+        if k == closer {
+            depth++
+        } else if k == opener {
+            depth--
+            if depth == 0 { return t }
+        }
+        t--
+    }
+    return -1
+}
+
+# the first token of the postfix operand ending at last - "a.b(c)[d]" from its "]" - or -1 where it is not one (a
+# rendering's "$" before it makes it a join piece already)
+fn (p Parser&) operandStartBefore(last I64) I64 {
+    t := last
+    for guard in range 256 {
+        k := p.kindAt(t)
+        if k == token.Tok.RParen or k == token.Tok.RBrack {
+            t = p.openerOf(t)
+            if t < 0 { return -1 }
+            b := t - 1
+            if p.lineAt(b) == p.lineAt(t) and isOperandTail(p.kindAt(b)) {
+                t = b
+                continue
+            }
+        } else if p.isOperandEnd(t) {
+            if p.kindAt(t - 1) == token.Tok.Dot and isOperandTail(p.kindAt(t - 2)) {
+                t = t - 2
+                continue
+            }
+        } else {
+            return -1
+        }
+        return -1 if p.kindAt(t - 1) == token.Tok.Dollar else t
+    }
+    return -1
+}
+
+# the last token of the postfix operand starting at first - "a.b(c)[d]" from its "a"
+fn (p Parser&) operandEndAfter(first I64) I64 {
+    t := first
+    n := p.ts.Toks.Len()
+    for guard in range 256 {
+        k := p.kindAt(t)
+        if k == token.Tok.LParen or k == token.Tok.LBrack {
+            opener := k
+            closer := token.Tok.RParen if k == token.Tok.LParen else token.Tok.RBrack
+            depth I64 = 0
+            for t < n {
+                kt := p.kindAt(t)
+                if kt == opener {
+                    depth++
+                } else if kt == closer {
+                    depth--
+                    if depth == 0 { break }
+                }
+                t++
+            }
+            if t >= n { return first }
+        }
+        nx := t + 1
+        if p.lineAt(nx) != p.lineAt(t) { return t }
+        if p.kindAt(nx) == token.Tok.Dot and (p.kindAt(nx + 1) == token.Tok.Iden or p.isKw(nx + 1)) {
+            t = nx + 1
+            continue
+        }
+        if p.kindAt(nx) == token.Tok.LParen or p.kindAt(nx) == token.Tok.LBrack {
+            t = nx
+            continue
+        }
+        return t
+    }
+    return t
+}
+
+# E11b: "f(x "a")", "f("a" x)" - a value beside text with no "$": the hint shows the rendering to write
+fn (p mut Parser&) joinPieceHint(from I64, to I64) Bool {
+    if from < 0 or to < 0 or p.lineAt(from) != p.lineAt(to) { return false }
+    a := p.ts.Toks[from]
+    b := p.ts.Toks[to]
+    # a long operand - a chain holding a lambda, say - is rendered whole by parenthesizing it
+    if b.End > a.Start and b.End - a.Start <= 60 {
+        p.reportAt(from, msgs.JoinPiece(p.src.Text[a.Start:b.End]))
+    } else if from == to {
+        p.reportAt(from, msgs.JoinPiece(p.text(a)))
+    } else {
+        p.reportAt(from, msgs.JoinPiece("(...)"))
+    }
+    return true
+}
+
+# E11b: whether i ends a "$" rendering - "$n", "$a.b(c)" - a join piece another piece may follow
+fn (p Parser&) endsRendering(i I64) Bool {
+    if not p.isOperandEnd(i) { return false }
+    s := i
+    for guard in range 256 {
+        k := p.kindAt(s)
+        if k == token.Tok.RParen or k == token.Tok.RBrack {
+            s = p.openerOf(s)
+            if s < 0 { return false }
+            b := s - 1
+            if p.kindAt(b) == token.Tok.Dollar { return true }
+            if p.lineAt(b) == p.lineAt(s) and isOperandTail(p.kindAt(b)) {
+                s = b
+                continue
+            }
+            return false
+        }
+        b := s - 1
+        if p.kindAt(b) == token.Tok.Dollar { return true }
+        if p.kindAt(b) == token.Tok.Dot and isOperandTail(p.kindAt(s - 2)) {
+            s = s - 2
+            continue
+        }
+        return false
+    }
+    return false
+}
+
+# E11b: a text literal called - "$n "," (...)" - is a piece of text with "(" after it, which can only be a value to join
+fn (p mut Parser&) textPieceCalled(f I64) Bool {
+    fl := p.lineAt(f)
+    from := f
+    t := f
+    for t >= 0 and p.lineAt(t) >= fl - 1 {
+        from = t
+        t--
+    }
+    t = from
+    for t < p.ts.Toks.Len() and p.lineAt(t) <= fl {
+        nx := t + 1
+        if p.kindAt(t) == token.Tok.StrLit and p.kindAt(nx) == token.Tok.LParen and p.lineAt(nx) == p.lineAt(t) {
+            p.reportAt(nx, msgs.JoinPieceCalled())
+            return true
+        }
+        if nx == f { break }
+        t++
+    }
+    return false
+}
+
+# D12: "state Array<F32>(n)" - a declaration's value follows '=': the hint writes both spellings out of the line
+fn (p mut Parser&) valueAfterEq(f I64) Bool {
+    paren := I64(p.ts.Toks[f].Start)
+    ls := I64(p.src.LineStart(I32(p.lineAt(f))))
+    le := paren
+    for le < p.src.Text.Len() and p.src.Text[le] != '\n' { le++ }
+    line := p.src.Text[ls:le]
+    n := line.Len()
+    at := paren - ls
+    if at <= 0 or at >= n { return false }
+    i I64 = 0
+    for i < at and (line[i] == ' ' or line[i] == '\t') { i++ }
+    nameStart := i
+    for i < at and line[i] != ' ' and line[i] != '\t' { i++ }
+    nameEnd := i
+    for i < at and (line[i] == ' ' or line[i] == '\t') { i++ }
+    if line[i:].StartsWith("mut ") {
+        i += 4
+        for i < at and line[i] == ' ' { i++ }
+    }
+    typeStart := i
+    typeEnd := at
+    for typeEnd > typeStart and line[typeEnd - 1] == ' ' { typeEnd-- }
+    if nameEnd == nameStart or typeEnd == typeStart { return false }
+    for k in range nameStart, at {
+        if line[k] == '=' or line[k] == ':' or line[k] == '(' { return false }
+    }
+    depth I64 = 0
+    close := at
+    for close < n {
+        if line[close] == '(' {
+            depth++
+        } else if line[close] == ')' {
+            depth--
+            if depth == 0 { break }
+        }
+        close++
+    }
+    if close >= n { return false }
+    value := $line[typeStart:typeEnd] $line[at:close + 1]
+    p.reportAt(f, msgs.ValueAfterEq(line[nameStart:typeEnd], value, line[nameStart:nameEnd], value))
+    return true
+}
+
+# ---- tests ----
+
+# for the tests: a text parsed - every branch's diagnostics chosen when all is set - as its declarations' shapes, then
+# "!RULE" for each diagnostic said. types names the types the oracle knows (" List Map ")
+fn shapeOf(text String&, types String& = "", all Bool = false) String {
+    src := source.Source("t.olang", text)
+    names := source.Names()
+    o := Oracle()
+    for t in types.Split(" ") {
+        if t.Len() > 0 { o.Add(names, "", t) }
+    }
+    diags := diag.Diagnostics(false)
+    file := diags.AddFile(src.Path, src.Text)
+    ts := scan.Scan(src.Text)
+    p := Parser(src, ts, names, o, diags, file)
+    decls := p.File()
+    if all { diags.ChooseAll() }
+    b := StringBuilder()
+    for d in decls {
+        if b.Len() > 0 { b.Push("; ") }
+        match d {
+            case ast.Decl.Fn(f) {
+                b.Push("fn " $names.Text(f.Name) ":")
+                if f.Body == null {
+                    b.Push(" -")
+                } else {
+                    for s in f.Body { b.Push(" " $shapeStmt(s, names, src.Text)) }
+                }
+            }
+            case ast.Decl.Type(_, t) {
+                b.Push("type " $names.Text(t.Name))
+                match t.Body {
+                    case ast.TypeBody.Trait(ms) {
+                        for m in ms { b.Push(" " $("mut " if m.Recv != null else "") $names.Text(m.Name)) }
+                    }
+                    nomatch { }
+                }
+            }
+            nomatch { b.Push("decl") }
+        }
+    }
+    for s in diags.AllSaid() { b.Push(" !" $s.Rule) }
+    return b.ToString()
+}
+
+fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
+    return match s {
+        case ast.Stmt.ExprS(_, x) => shapeExpr(x, names, text)
+        case ast.Stmt.Return(_, vs) => "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
+        case ast.Stmt.Var(_, v) => "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty != null else "")
+        case ast.Stmt.Multi(_, m) => "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
+        case ast.Stmt.If(_, i) => "if" $(" else" if i.Else != null else "")
+        nomatch => "stmt"
+    }
+}
+
+fn shapeExpr(x ast.Expr&, names source.Names&, text String&) String {
+    return match x {
+        case ast.Expr.Name(_, n) => $names.Text(n)
+        case ast.Expr.Lit(sp, _) => $text[sp.Start:sp.End]
+        case ast.Expr.Paren(_, y) => shapeExpr(y, names, text)
+        case ast.Expr.Unary(_, op, y) => "(" $op.Text() " " $shapeExpr(y, names, text) ")"
+        case ast.Expr.Binary(_, op, a, b) => "(" $op.Text() " " $shapeExpr(a, names, text) " " $shapeExpr(b, names, text) ")"
+        case ast.Expr.Chain(_, c) => "(chain " $c.Ops.Len() ")"
+        case ast.Expr.Cond(_, a, c, b) => ("(if " $shapeExpr(c, names, text) " " $shapeExpr(a, names, text) " "
+                                           $shapeExpr(b, names, text) ")")
+        case ast.Expr.Call(_, f, args) => "(call " $shapeExpr(f, names, text) " " $args.Len() ")"
+        case ast.Expr.Generic(_, y, args) => "(generic " $shapeExpr(y, names, text) " " $args.Len() ")"
+        nomatch => "expr"
+    }
+}
+
+test "operators bind by E5's table: tighter first, left to right, not looser than a comparison" {
+    assert shapeOf("fn f() I64 {\n    return a + b * c - d\n}\n") == "fn f: return (- (+ a (* b c)) d)"
+    assert shapeOf("fn f() Bool {\n    return not a == b and c or d\n}\n") == "fn f: return (or (and (not (== a b)) c) d)"
+    assert shapeOf("fn f() Bool {\n    return a < b <= c\n}\n") == "fn f: return (chain 2)"
+    assert shapeOf("fn f() I64 {\n    return -a * b if c else d\n}\n") == "fn f: return (if c (* (- a) b) d)"
+}
+
+test "a list at a statement's start is read once and the token after it decides" {
+    assert shapeOf("fn f() {\n    a, b := 1, 2\n    a, b = b, a\n    g(a)\n}\n") == "fn f: multi2:=2 multi2=2 (call g 1)"
+    assert shapeOf("type P struct(x I32, y I32) {\n    x, y\n    p, q I32 = 1, 2\n}\n") == "type P"
+}
+
+test "a type-argument list splits the angles it closes, and Name< is a type only where the oracle says so" {
+    s := shapeOf("fn f() {\n    x List<List<I32>>= List<List<I32>>()\n}\n", " List ")
+    assert s == "fn f: var1 typed", s
+    assert shapeOf("fn f() Bool {\n    return a < b and c > d\n}\n") == "fn f: return (and (< a b) (> c d))"
+    assert shapeOf("fn f() {\n    g(List<I32>(3))\n}\n", " List ") == "fn f: (call g 1)"
+}
+
+test "an error skips its statement, and the items after it are read" {
+    s := shapeOf("fn f() {\n    x := (1 +\n    y := 2\n}\nfn g() I64 {\n    return 1\n}\n")
+    assert s.StartsWith("fn f:") and s.Contains("fn g: return 1") and s.CountOf("!") == 1, s
+}
+
+test "a function whose body does not parse is declared by its signature" {
+    # an error inside a statement leaves the body read; a body never closed leaves the function its signature
+    assert shapeOf("fn f() {\n    x := )\n}\nfn g() {\n}\n") == "fn f:; fn g: !"
+    s := shapeOf("fn f() {\n    x := )\n")
+    assert s.StartsWith("fn f: -"), s
+}
+
+test "nesting past the limit is one diagnostic (L21), never a crash" {
+    deep := StringBuilder()
+    deep.Push("fn f() I64 {\n    return ")
+    for i in range 20001 { deep.PushChar('(') }
+    deep.PushChar('1')
+    for i in range 20001 { deep.PushChar(')') }
+    deep.Push("\n}\nfn g() {\n}\n")
+    # the parser recurses as deep as the program nests: it runs on a stack sized for that, as the compiler does
+    os.RunOnStack(1 << 30, fn() {
+        s := shapeOf(deep.ToString())
+        # f stays declared by its signature (its body is the item the limit ended)
+        assert s == "fn f: -; fn g: !L21", s
+    })
+}
+
+test "a statement met at the limit is too deep at its first token, and one that nests nothing keeps its item (L21)" {
+    atLimit := fn(stmt String&) String {
+        b := StringBuilder()
+        b.Push("fn f() {\n    x := 1\n")
+        for i in range 19999 { b.Push("    if x > 0 {") }
+        b.Push("\n")
+        b.Push(stmt)
+        b.Push("\n")
+        for i in range 19999 { b.PushChar('}') }
+        b.Push("\n}\nfn g() {\n}\n")
+        return shapeOf(b.ToString())
+    }
+    os.RunOnStack(1 << 30, fn() {
+        # every statement is first read as one starting with an operand, so the limit is said at its first token;
+        # break, error E.A and return nest nothing and are read whole; the others nest an operand or a block and end
+        # the item
+        for stmt in String&["break", "error E.A", "return"] {
+            s := atLimit(stmt)
+            assert s == "fn f: var1 := if; fn g: !L21", s
+        }
+        for stmt in String&["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
+            s := atLimit(stmt)
+            assert s == "fn f: -; fn g: !L21", $stmt ": " $s
+        }
+    })
+}
+
+test "what a branch meets is held until the branch is chosen; a plain else keeps its branch" {
+    text := "fn f() {\n    if c {\n        g()\n    } else {\n        x := )\n    }\n}\n"
+    assert shapeOf(text) == "fn f: if else"
+    assert shapeOf(text, "", true).Contains(" !"), shapeOf(text, "", true)
+}
+
+test "a trait method's mut is kept, as its receiver" {
+    assert shapeOf("type T trait {\n    mut Next() I64\n    Len() I64\n}\n") == "type T mut Next Len"
+}

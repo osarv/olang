@@ -245,6 +245,8 @@ struct scanResult {
 struct scanResult ScanTopLevelDecls(TokenCtx tc);
 
 struct syntaxModule ParseSyntax(TokenCtx tc, void* typeCtx, TypeNameLookup isKnownType);
+//the structure oracle's mode (bootstrap/oracle/astdump.c): every branch of a build-decided if parsed, none decided
+void SyntaxParseAllBranches(bool on);
 struct syntax* newNode(enum syntaxType type);
 void addSntx(struct syntax* s, struct syntax* child);
 
