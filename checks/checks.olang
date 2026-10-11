@@ -1428,8 +1428,10 @@ fn scopesan(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -c ' 0 failed' out.txt | grep -qx 2") == 0, "the tests under -d -s did not all pass", dir)
     # zero cost outside -s: nothing of it in a plain build's IR, all of it in a -s build's
     try r.expect(sh(dir, "\"$OLANG\" -b -d stub.olang > out.txt 2>&1") == 0, "stub.olang did not build plainly", dir)
-    try r.expect(sh(dir, "grep -q '__olang_san' build/stub.main.debug.ll build/olang_runtime.*[0-9a-f].debug.ll") != 0,
-                 "a plain build carries the sanitizer", dir)
+    # (the runtime's comments name its parts; the code is every line that is not one)
+    plain String& = "build/stub.main.debug.ll build/olang_runtime.*[0-9a-f].debug.ll"
+    try r.expect(sh(dir, "grep -hv '^ *;' " $plain " | grep -q '__olang_san'") != 0, "a plain build carries the sanitizer",
+                 dir)
     try r.expect(sh(dir, "grep -q 'call void @__olang_san_quarantine_list' build/olang_runtime.*.debug.san.ll") == 0,
                  "a -s build does not quarantine what a scope closes", dir)
 }
