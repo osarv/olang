@@ -5129,6 +5129,20 @@ and literals made only of such, never existing storage anywhere in it) - it is
   lost up to 7x (a List walk stopped vectorizing); with them every benchmark is equal or better (binary-trees -23%,
   text -15%, push -6%). Every object's name hashes the runtime's text (an edit rebuilds them). Per object 65 KB less IR,
   bitcode 6.8 -> 2.4 MB for the corpus, a clean `-b` -22% CPU, a clean `-t` -15%.
+- **Vec phase 2a: a Vec in a field and a global, elements holding references, deep borrowed own results (O31, O32,
+  O33, O34, O37, O38, O39, T25e, M19d, K2, 2026-10-11; 19.4 items 1, 2, 4 and 7, details mine, docs/own.md section 25).**
+  An **owner value place** - a place holding an owning type by value whose owners its container owns - is now a body's
+  local, a field (to any depth of value fields) of one, of a borrowed copy's source or of an instance reached through a
+  reference, or a global (`OwnValuePlace`); `take`, assignment's release, borrowed copies and loans' roots all ask that.
+  So a struct holding `toks Vec<Tok>` is an owning type (its copies borrowed copies, `take l.toks`, its buffers released
+  with the instance), a typed global may hold a Vec (never released, never baked), and `c := l.toks` is a borrowed copy;
+  one is not declared from a global (`vec126`). An own array's (a Vec's) elements may be values holding references:
+  stored in the buffer, what they hold in the slot's reach, so an element copied out takes no loan on the buffer and a
+  loop turn's text pushed in is C2d's error. `return x.First().deep` is a borrowed own result whose loan any release of
+  a holder meets. `TakeAt`/`SwapTake` give the element; `RemoveAt`/`SwapRemove` give nothing. Twelve relaxations listed
+  for review in 25.7; enum payloads, type arguments, elements, by-value parameters and lambda captures of an owning value
+  stay O31/O32 (phase 2b, whose design consequences are 25.6). Cases `vec88`-`vec127`, corpus tests in shared.olang and
+  std/prelude/tests/vec.olang (baked beside the run time, also under `-s`), and fifteen shapes in the scope fuzzer.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

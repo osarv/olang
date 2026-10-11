@@ -15779,3 +15779,52 @@ pow10 table, codegen.c's X7 and attribute rewrite) were rewritten.
 **checks.** `scopesan` greps the sanitizer's calls in the runtime's `-s` IR and their absence in its plain IR; the P7
 crash-handler check reads the `-r` runtime's IR (the handler is the runtime's); the cases start from the seed's runtime
 object as from its prelude objects.
+
+### Vec phase 2a: a Vec in a field and a global, elements holding references, deep borrowed own results (§8.8 O31, O32, O33, O34, O37, O38, O39, T25e, M19d, K2, 2026-10-11)
+
+Phase 1 left `Vec` usable only as a local or a result. The coordinator asked for four of docs/own.md 19.4's items - a Vec
+held by value in a field ("the most important"), a Vec global, elements that are values holding references, and `return
+v.First().deep` with `TakeAt`/`SwapTake` - with the rest left to phase 2b, and asked for every hard shape to be refused
+rather than proved, with the refusal recorded.
+
+**One generalization did most of it.** An owner value local was the only place an owning type could be held by value,
+and every rule that mattered - `take`, an assignment releasing what it overwrites, a borrowed copy's source, the root a
+loan is keyed by - asked "is this an owner value local". A field holding a Vec, of such a local or of an instance reached
+through a reference, and a global holding one, are the same thing one level out: a place whose container owns its
+owners. So those rules now ask `OwnValuePlace`, and the reach (O34) of such a place is where its instance keeps its
+references - a global's the program's scope. Owning types compose (`TypeIsOwning` recurses through value fields), a
+constructor field of a Vec type is an owner value local of the constructor moved into the instance as it is assembled,
+and codegen's drop function releases value fields' owners after the own fields'. A global must be written with its type:
+making `G := Vec<I64>()` a value global was tried and reverted, since it changed what programs already declaring such a
+global with `:=` meant (`o41global`).
+
+**Elements that are values holding references** follow 13.1's decision 5 rather than a new design: an element is stored
+in the buffer, its own storage the region, while everything it holds lives where a reference element's referent would -
+the slot's reach - at every depth of a read through it (`ownElemRegion` on the index operand, read by
+`lvalueStorageScope`, `splitValueHome`, `valueRefsHome` and `RefExactScope`). Three consequences had to be made right
+for `Vec<Tok>` to be usable rather than merely accepted: a value element copied out must take no loan on the buffer for
+what it holds (`ownLoansIn`'s index case), or `d := v[1]` could never be kept across a push; two value types must meet
+only where one could be the other's storage (`ownSameReferent`), or the `String&` in a `Tok` named the `Array<Tok>`
+buffer and every release of it; and `v.Push(Tok(...))` must keep nothing of the borrow of `v` (`ownCallConfined` now asks
+whether the parameter's type can refer to the loaned objects or the argument's storage at all - the first version asked
+something weaker and refused `Push` of any element holding a writable reference). `Vec<Link>.At` then failed T25c:
+a borrow of an own slot reached through an instantiation's read-only parameter has to be read-only as the argument is
+(`roRefOf`). And `v.Push(v.Len())` failed O39 - two borrows of one owner value local's storage in one expression made two
+loans with no single place to release them through - so a merged loan keeps only the owner a borrow is of.
+
+**The deep borrowed own result** (19.1's case left over) is a source kind beside the parameter: a borrow reached by own
+fields from another call's borrowed own result, its loan on the deeper type, which a release of any holder meets because
+`ownHeld` walks own fields; the callee's parameter set is settled with the rest, and a return whose call settles on
+nothing is O10's error then.
+
+**Found on the way.** A type holding itself through a reference (`next mut Node&`) was walked by `ownMayReferToIn` until
+its depth limit and then taken to refer to anything, which made every list of such nodes look like it could hold the
+loaned buffer - it is walked once now. O32's message for a `:=` from something that is neither an owner nor a borrowed
+copy's source still described the local-only rule; it names fields now, and what to do for a global (`vec126`).
+
+**The relaxations**, twelve, are listed in docs/own.md 25.7 for review, each beside the must-fail cases on its hazard.
+`vec88`-`vec127` (40 cases) cover the hazards the coordinator named - a borrow of a field's Vec kept across a push through
+the struct, a take of the field while borrowed, a copy of the struct used after the original's Vec grows, a task, a
+lambda and a global keeping a borrow, a release through a method of the struct - and the element and deep shapes. The
+corpus tests in `shared.olang` and `std/prelude/tests/vec.olang` read every value back after an arena churn and compare
+globals baked while compiling with the same computation at run time; both files also pass under `-t -s`.

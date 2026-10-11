@@ -5096,7 +5096,8 @@ owner:
   copy's are. *(Not yet implemented: a borrowed copy is declared only by `x := y` from a local `y` holding a value of
   an owning type - an owner value local, or a borrowed copy, whose source the new one borrows from too - or from a
   field holding one, of such a local or of an instance reached through a reference (`c := l.toks`), and is not
-  assigned another value. One is not declared from a global or a field of one: `x := G` is O34's error naming `take G`.)*
+  assigned another value. One is not declared from a global or a field of one - any call may release what a global owns - and `x := G` is a
+  compile-time error saying to `take` it or read through it (`G.View()`, `G[i]`).)*
 
 An own array's object is its buffer, and its elements are not owned objects: an element read through a borrow of the
 array - indexed, walked by `for ... in` - is what a plain array in that slot would give, its references living where
