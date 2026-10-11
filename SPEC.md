@@ -190,7 +190,8 @@ zero or a subnormal, and is valid.
 - an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\'`.
 
 A `CHAR_LIT` is of type `Char` (T29h). An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
-a compile-time error.
+a compile-time error. A character or string literal never extends past its line: a newline - after a `\` too - stops
+it there, unterminated, and that line's end then ends the statement as any other does (L18).
 
 **L14.** `STR_LIT ::= '"' { str-content } '"'`, where each `str-content` element is:
 - any single byte other than `"`, `\`, or newline (including `'`, which needs no escaping here), or

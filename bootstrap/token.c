@@ -301,6 +301,7 @@ bool findNextTokStart(TokenCtx tc) {
 void tokenizeEscapeChar(TokenCtx tc, bool inString) {
     char c = feedChar(tc);
     if (fedEnd(tc, c)) return; //the literal is unterminated, which its own loop reports
+    if (c == '\n') { unfeedChar(tc); return; } //a literal never crosses a line: its own loop reports the line's end
     if (c == 'n');
     else if (c == 't');
     else if (c == 'r');
@@ -319,6 +320,7 @@ bool tokenizeCharInStringLiteral(TokenCtx tc) {
     }
     if (c == '\\') tokenizeEscapeChar(tc, true);
     else if (c == '\n') {
+        unfeedChar(tc); //the newline is no part of the literal: it ends the line, and so the statement (L18)
         ErrSyntax(tokSoFar(tc), ERR_STRING_NEWLINE);
         return true;
     }
@@ -329,8 +331,9 @@ bool tokenizeCharInStringLiteral(TokenCtx tc) {
 void tokenizeCharLiteral(TokenCtx tc) {
     char c = feedChar(tc);
     if (fedEnd(tc, c)) { ErrSyntax(tokSoFar(tc), ERR_UNCLOSED_CHAR); return; } //L13
+    //a literal never crosses a line: a newline is no part of it, and ends the line - and so the statement (L18)
     switch (c) {
-        case '\n': ErrSyntax(tokSoFar(tc), ERR_CHAR_NEWLINE); return;
+        case '\n': unfeedChar(tc); ErrSyntax(tokSoFar(tc), ERR_CHAR_NEWLINE); return;
         case '\'': ErrSyntax(tokSoFar(tc), ERR_EMPTY_CHAR); return;
         case '\\': tokenizeEscapeChar(tc, false); break;
         default: break;
@@ -338,8 +341,9 @@ void tokenizeCharLiteral(TokenCtx tc) {
     char close = feedChar(tc);
     if (close == '\'') return;
     if (fedEnd(tc, close)) { ErrSyntax(tokSoFar(tc), ERR_UNCLOSED_CHAR); return; }
-    char* str = "'\n";
-    feedUntilIncludingOneOfCharsOrEOF(tc, str);
+    if (close == '\n') { unfeedChar(tc); ErrSyntax(tokSoFar(tc), ERR_CHAR_NEWLINE); return; }
+    //more than one character: the literal runs to its closing quote, or to its line's end
+    while (!atEnd(tc) && peekChar(tc, 0) != '\n') if (feedChar(tc) == '\'') break;
     ErrSyntax(tokSoFar(tc), ERR_LONG_CHAR);
 }
 
@@ -477,21 +481,31 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
         feedChar(tc);
         if (consumeDigitRun(tc, isDigit) == 0) ErrSyntax(charSpan(tc, tc->charIdx - 1, 1), ERR_POINT_NO_DIGIT);
         isFloat = true;
-        if (peekChar(tc, 0) == '.') ErrSyntax(charSpan(tc, tc->charIdx, 1), ERR_TWO_POINTS);
+        //a second '.' is one too many - unless a name follows it, a member access on the float ("1.5.Hash()")
+        char after = peekChar(tc, 1);
+        if (peekChar(tc, 0) == '.' && !isLetter(after) && after != '_') ErrSyntax(charSpan(tc, tc->charIdx, 1), ERR_TWO_POINTS);
     }
 
     //L12a: an exponent - "e"/"E", an optional sign, then at least one digit. Committed to only if the
     //whole of it is there, so "1e" is still an int literal followed by an identifier and nothing that
     //parsed before this existed changed meaning. An exponent makes the literal a float with or without a
     //".", so "1e3" is one.
-    int fed = 0;
-    char e = feedChar(tc); fed++;
+    //Whether the whole of it is there is decided before anything is consumed: the run after the sign must hold a digit
+    //("1e_5" is an exponent with a misplaced separator, reported; "1e_x" is the number 1 and the name e_x)
+    char e = peekChar(tc, 0);
     if (e == 'e' || e == 'E') {
-        char sign = feedChar(tc); fed++;
-        if (sign != '+' && sign != '-') { unfeedChar(tc); fed--; }
-        if (consumeDigitRun(tc, isDigit) > 0) return TOK_FLOAT_LIT;
+        int at = 1;
+        if (peekChar(tc, at) == '+' || peekChar(tc, at) == '-') at++;
+        while (peekChar(tc, at) == '_') at++;
+        if (isDigit(peekChar(tc, at))) {
+            for (int i = 0; i < at; i++) {
+                char c = feedChar(tc);
+                if (c == '_') { unfeedChar(tc); break; } //the run itself takes - and reports - its separators
+            }
+            consumeDigitRun(tc, isDigit);
+            return TOK_FLOAT_LIT;
+        }
     }
-    while (fed-- > 0) unfeedChar(tc);
     return isFloat ? TOK_FLOAT_LIT : TOK_INT_LIT;
 }
 
@@ -650,16 +664,26 @@ static void closeBracketsBeforeDecl(TokenCtx tc, struct token tok) {
 }
 
 void tokenizeTokensFromChars(TokenCtx tc) {
+    tc->sawNewline = false;
     while (!atEnd(tc)) {
-        tc->sawNewline = false;
         if (!findNextTokStart(tc)) break;
         bool endHere = tc->sawNewline && stmntEndTriggerType(tc->lastTokType);
         struct token stmntEnd = endHere ? synthesizeStmntEnd(tc) : (struct token){0};
 
         struct token tok = tokenizeToken(tc);
-        if (tok.type != TOK_NONE) closeBracketsBeforeDecl(tc, tok);
-        if (endHere && !insideBrackets(tc)) ListAdd(&tc->tokens, &stmntEnd);
-        if (tok.type == TOK_NONE) continue; //reported and dropped - see tokenizeOperator
+        //L1: bytes that begin no token are reported and dropped (tokenizeOperator) as though they were not there, so a
+        //line's end before them still waits for the next token - one statement end, not one per run of such bytes
+        if (tok.type == TOK_NONE) continue;
+        closeBracketsBeforeDecl(tc, tok);
+        if (endHere && !insideBrackets(tc)) {
+            ListAdd(&tc->tokens, &stmntEnd);
+            //L18: a ';' after a line's end that ended the statement already ends nothing more
+            if (tok.type == TOK_STMNT_END) {
+                tc->lastTokType = TOK_STMNT_END;
+                tc->sawNewline = false;
+                continue;
+            }
+        }
         //L18b: such an "if" begins a statement - it never continues a conditional on the line before
         if (tok.type == TOK_IF && tc->sawNewline && !insideBrackets(tc)) ListAdd(&tc->lineIfs, &tok.str.ptr);
         trackBracket(tc, tok.type);
@@ -669,6 +693,7 @@ void tokenizeTokensFromChars(TokenCtx tc) {
         tc->lastTokEnd = tok.str.ptr + tok.str.len;
         tc->lastTokLine = tok.lineNr;
         ListAdd(&tc->tokens, &tok);
+        tc->sawNewline = false;
     }
     //the end of the file ends a statement exactly as a newline does. Without this a file whose last line is
     //a statement - a global declaration, say - with no newline-and-more-code after it failed to parse, since

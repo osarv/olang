@@ -1,0 +1,9 @@
+# check: run
+# L12/L12a: a second "." before a name is a member access on the float ("2.5.Fixed(1)"), where it was reported as a
+# second decimal point; and an exponent is one only when a digit follows its "e" and sign ("1e_x" is the number 1 and
+# the name e_x - it was "1e" and "_x", with a separator reported)
+fn main() ? {
+    assert 2.5.Fixed(1) == "2.5"
+    e_x := 3
+    assert 1e2 + 1E-1 == 100.1 and e_x == 3
+}
