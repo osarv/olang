@@ -932,3 +932,8 @@ is the one type walker still kept in step with the others by hand.
 
 **How to apply:** the user sets the order; don't start an item from the future-work list unasked. Fix bugs and debts
 on sight per [[feedback-surface-and-fix-bugs]].
+- 04:10 CEST (2026-10-12): typed contract revision merged and pushed (1c792a7: function types carry their scopes,
+  S4d decided by types in SPEC, DESIGN section 7 lists S4d and T22a as C disagreements). Started wt-check (M5b/M5c,
+  compiler/check.olang, phased with a PROGRESS.md handoff in the worktree) and wt-mir (M7's MIR contract + verifier,
+  DESIGN 1.8.1). Running: vecp2 (vec6 fixes), e31view (review fixes), check, mir. QUEUED stage-0 fixes after vecp2 and
+  e31view merge: T22a sharing (typed/repro/sharedscope*), S4d by types in C, E31b's M1.
