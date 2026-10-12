@@ -45,13 +45,25 @@ type fnRow struct(Mi I64, F ast.Func&, Extern Bool) {
     Extern
 }
 
-# a function's instance: the function, its arguments, its signature and its name (G16a)
-type instance struct(Fn I64, Args types.ListId, Sig types.TypeId, Name String&) {
+# a function's instance: the function, its arguments, its signature, its name (G16a) and where it was first asked for
+type instance struct(Fn I64, Args types.ListId, Sig types.TypeId, Name String&, From Origin) {
     Fn
     Args
     Sig
     Name
+    From
 }
+
+# where an instance - of a function or of a type - was first asked for (G16b): the span in a file, and the function
+# instance whose body was being checked there (-1 for a body no instance's); File -1 for none recorded. A diagnostic
+# met in an instance's body follows these back to the program's own use
+type Origin struct(File I64, Sp source.Span, Within I64) {
+    File
+    Sp
+    Within
+}
+
+NoOrigin Origin = Origin(-1, source.Span(0, 0), -1)
 
 # a type's variables bound so far while inferring (G9): by index, Unknown while unbound; whether only literals bound it
 # (G9a), and whether a receiver did (G9b: it does not widen)
@@ -89,6 +101,9 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
     folding Map<I64, Bool>             # the globals being folded (a cycle folds to nothing)
     chain I64 = 0                      # how many instances' layouts are being made, each asked for by the one before
+    Asking Origin = NoOrigin           # where the checker is asking from: recorded by the instances it makes (G16b)
+    typeFrom Map<types.TypeId, Origin> # a type instance: where it was first asked for
+    walkedBodies Map<types.TypeId, Bool> # the types bodiesOf has walked
 }
 
 # the owners of variables: a type declaration's, a function's
@@ -272,7 +287,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef&) types.TypeId {
     return match t {
         case ast.TypeRef.Named(sp, path, args) => p.named(c, sp, path, args)
         case ast.TypeRef.Var(_, n, _) => try c.Vars.Get(n) catch default types.UnknownT
-        case ast.TypeRef.Func(_, s) => p.sigType(c, s, types.UnknownT)
+        case ast.TypeRef.Func(_, s) => p.sigType(c, s, types.UnknownT, source.NameId(0))
         case ast.TypeRef.Const(_, _) => types.UnknownT
         case ast.TypeRef.Shape(_, body) => p.shape(c, body)
         case ast.TypeRef.Ref(_, of, _) => p.T.Ref(p.Resolve(c, of), types.ReadOnly)
@@ -335,8 +350,12 @@ fn (p mut Program&) Instance(d types.DeclId, args types.ListId) types.TypeId {
         p.unbounded(d)
         return types.UnknownT
     }
+    if args != types.ListId(0) and p.Asking.File >= 0 and not p.typeFrom.Has(t) { p.typeFrom.Put(t, p.Asking) }
     return t
 }
+
+# where a type instance was first asked for (G16b), NoOrigin for one the checker never asked for
+fn (p Program&) TypeOrigin(t types.TypeId) Origin { return try p.typeFrom.Get(t) catch default NoOrigin }
 
 # G17, said once for a declaration
 fn (p mut Program&) unbounded(d types.DeclId) {
@@ -352,18 +371,37 @@ fn (p mut Program&) unbounded(d types.DeclId) {
 MaxDepth I64 = 48
 MaxChain I64 = 1000
 
-# a function type written: its parameters, its result (a tuple for several, D8c) and its errors (R15: "?" alone is the
-# default error); recv, where it is no stand-in, is the parameter before the others (a method's receiver, M19)
-fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId) types.TypeId {
+# a function type written: its parameters, its result (a tuple for several, D8c), its errors (R15: "?" alone is the
+# default error) and its scopes - what its markers say (O4a): a parameter "&x" shares the scope variable of the earlier
+# parameter x (the receiver included), a result "&x" is borrowed from parameter x, a result written as a bare type
+# variable may hand back an argument where it becomes a reference (O14b); a marker naming nothing it may is the
+# checker's to report, and says nothing here. recv, where it is no stand-in, is the parameter before the others (a
+# method's receiver, M19), named recvName
+fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
     ps List<types.TypeId>
-    if recv != types.UnknownT { ps.Push(recv) }
-    for prm in s.Params { ps.Push(p.Resolve(c, prm.Ty)) }
+    named List<source.NameId>
+    shares List<I64>
+    if recv != types.UnknownT {
+        ps.Push(recv)
+        named.Push(recvName)
+        shares.Push(types.OwnScope)
+    }
+    for prm in s.Params {
+        ps.Push(p.Resolve(c, prm.Ty))
+        shares.Push(p.markedParam(prm.Ty, named, shares))
+        named.Push(prm.Name)
+    }
     result := types.VoidT
+    from := Array<I64>(s.Results.Len())
+    rs := Array<types.TypeId>(s.Results.Len())
+    for i in range s.Results.Len() {
+        rs[i] = p.Resolve(c, s.Results[i])
+        from[i] = p.markedParam(s.Results[i], named, shares)
+        if from[i] == types.OwnScope and p.T.KindOf(rs[i]) == types.Kind.Var { from[i] = types.FromTypeVar }
+    }
     if s.Results.Len() == 1 {
-        result = p.Resolve(c, s.Results[0])
+        result = rs[0]
     } else if s.Results.Len() > 1 {
-        rs := Array<types.TypeId>(s.Results.Len())
-        for i in range s.Results.Len() { rs[i] = p.Resolve(c, s.Results[i]) }
         result = p.T.Tuple(p.T.List(rs))
     }
     es List<types.TypeId>
@@ -371,7 +409,29 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId) types.Typ
         if s.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
         for e in s.Errors { es.Push(p.errorType(c, e)) }
     }
-    return p.T.Func(p.T.List(ps.ToArray()), result, p.T.List(es.ToArray()))
+    scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.T.List(es.ToArray()), scopes)
+}
+
+# the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
+# OwnScope for a bare marker, "&return", none, or a name that is no earlier parameter
+fn (p mut Program&) markedParam(t ast.TypeRef&, named List<source.NameId>&, shares List<I64>&) I64 {
+    scope := p.markOf(t)
+    if scope == source.NameId(0) { return types.OwnScope }
+    for j in range named.Len() {
+        if named[j] == scope { return shares[j] if shares[j] >= 0 else j }
+    }
+    return types.OwnScope
+}
+
+# the name a written type's outermost marker names, 0 for none ("mut", "own" stand before it)
+fn (p mut Program&) markOf(t ast.TypeRef&) source.NameId {
+    if t == null { return source.NameId(0) }
+    return match t {
+        case ast.TypeRef.Ref(_, _, sc) => sc
+        case ast.TypeRef.Perm(_, of, _, _) => p.markOf(of)
+        case _ => source.NameId(0)
+    }
 }
 
 # an error set's item: an error type, its own module's or one an alias chain reaches (names records the head)
@@ -788,7 +848,7 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
             return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args),
-                            p.substList(p.T.Errors(t), owner, args))
+                            p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t))
         }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
@@ -1258,8 +1318,12 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     for prm in row.F.S.Params { p.constraints(c, prm.Ty) }
     for r in row.F.S.Results { p.constraints(c, r) }
     recv := types.UnknownT
-    if row.F.Recv != null { recv = p.Resolve(c, row.F.Recv.Ty) }
-    sig := p.sigType(c, row.F.S, recv)
+    recvName := source.NameId(0)
+    if row.F.Recv != null {
+        recv = p.Resolve(c, row.F.Recv.Ty)
+        recvName = row.F.Recv.Name
+    }
+    sig := p.sigType(c, row.F.S, recv, recvName)
     p.fnSig.Put(f, sig)
     return sig
 }
@@ -1334,7 +1398,8 @@ fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
 # a function's instance (G16): its signature with its variables bound, and its name - its module, its receiver's type
 # for a method (M21), its name and its arguments' canonical texts, made a symbol (G16a: injective, since every
 # canonical text is)
-fn (p mut Program&) FnInstance(f I64, args types.ListId) I64 {
+fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
+    args := p.T.PlainList(written)   # held plain: T22's identity (G16a)
     key := Pair(f, args)
     i := try p.instanceOf.Get(key) catch default -1
     if i >= 0 { return i }
@@ -1360,13 +1425,49 @@ fn (p mut Program&) FnInstance(f I64, args types.ListId) I64 {
         b.PushChar('>')
     }
     i = p.instances.Len()
-    p.instances.Push(instance(f, args, sig, types.Symbol(b.ToString())))
+    p.instances.Push(instance(f, args, sig, types.Symbol(b.ToString()), p.Asking))
     p.instanceOf.Put(key, i)
     return i
 }
 
 fn (p Program&) InstanceSig(i I64) types.TypeId { return p.instances[i].Sig }
 fn (p Program&) InstanceName(i I64) String&p { return p.instances[i].Name }
+fn (p Program&) InstanceOrigin(i I64) Origin { return p.instances[i].From }
+
+# the scope variables a call of a function of this type passes (types.ScopeVarsOf), the bodies of the declared types
+# its parameters and results hold resolved first, since whether a value holds a reference is read off its fields (O4b)
+fn (p mut Program&) ScopeVarsOf(f types.TypeId) Array<I64> {
+    for x in p.T.Items(p.T.Params(f)) { p.bodiesOf(x) }
+    for x in p.T.Results(f) { p.bodiesOf(x) }
+    return p.T.ScopeVarsOf(f)
+}
+
+# resolves the bodies of the declared types a value of t holds in place, as far as a reference (which holds one
+# whatever it names)
+fn (p mut Program&) bodiesOf(t types.TypeId) {
+    if p.walkedBodies.Has(t) { return }
+    p.walkedBodies.Put(t, true)
+    match p.T.KindOf(t) {
+        case types.Kind.Named {
+            if not p.Body(t) { return }
+            for x in p.T.Items(p.T.Fields(t)) { p.bodiesOf(x) }
+            for x in p.T.Items(p.T.Cases(t)) {
+                if x != types.TypeId(0) { p.bodiesOf(x) }
+            }
+            if p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Over { p.bodiesOf(p.T.Base(t)) }
+        }
+        case types.Kind.Array { p.bodiesOf(p.T.Elem(t)) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for x in p.T.Items(p.T.Parts(t)) { p.bodiesOf(x) }
+        }
+        case types.Kind.AnonEnum {
+            for x in p.T.Items(p.T.ShapeCases(t)) {
+                if x != types.TypeId(0) { p.bodiesOf(x) }
+            }
+        }
+        nomatch { }
+    }
+}
 
 # ---- inference ----
 
@@ -1428,7 +1529,7 @@ fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&) B
 # number widens to a wider one of its family unless a receiver bound it (G9b), two references differing only in
 # permission meet at read-only (G9d)
 fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Bool, receiver Bool) Bool {
-    v := actual
+    v := p.T.Plain(actual)   # a type argument is held plain (G16a): T22's identity, scopes left out
     if p.T.KindOf(v) == types.Kind.Named and p.Body(v) and p.T.DeclKindOf(p.T.DeclOf(v)) == types.DeclKind.Struct and
        p.T.Destructs(v) {
         v = p.T.Ref(v, types.Writable)
@@ -1486,7 +1587,7 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
     f := p.MethodOf(t, m.Name)
     if f < 0 { return false }
     c := p.declContext(d)
-    want := p.Subst(p.sigType(c, m.S, types.UnknownT), DeclOwner(d), args)
+    want := p.Subst(p.sigType(c, m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), args)
     have := p.MethodSig(f, t)
     if have == types.UnknownT { return false }
     hs := p.T.Items(p.T.Params(have))
@@ -1496,7 +1597,7 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
     for i in range ws.Len() {
         if not p.sameUpToShape(hs[i + 1], ws[i]) { return false }
     }
-    return p.T.Result(have) == p.T.Result(want) and p.T.Errors(have) == p.T.Errors(want)
+    return p.T.Same(p.T.Result(have), p.T.Result(want)) and p.T.Errors(have) == p.T.Errors(want)
 }
 
 fn (p mut Program&) writableRecv(r types.TypeId) Bool {
@@ -1504,13 +1605,13 @@ fn (p mut Program&) writableRecv(r types.TypeId) Bool {
 }
 
 fn (p mut Program&) sameUpToShape(a types.TypeId, c types.TypeId) Bool {
-    if a == c { return true }
+    if p.T.Same(a, c) { return true }
     ar := p.T.KindOf(a) == types.Kind.Ref
     cr := p.T.KindOf(c) == types.Kind.Ref
     if ar and cr { return false }
     x := p.T.Referent(a) if ar else a
     y := p.T.Referent(c) if cr else c
-    return x == y
+    return p.T.Same(x, y)
 }
 
 # a variable's binding checked against its constraint, where it is bound (G19): whether it is met
@@ -1643,7 +1744,7 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
         l := try p.canonList(c, ")")
         xs := p.T.Items(l)
         result = xs[0] if xs.Len() == 1 else p.T.Tuple(l)
-    } else if c.At < c.Text.Len() and c.peek() == ' ' and not (c.At + 1 < c.Text.Len() and c.Text[c.At + 1] == '?') {
+    } else if c.At + 1 < c.Text.Len() and c.peek() == ' ' and c.Text[c.At + 1] != '?' and c.Text[c.At + 1] != '~' {
         c.At++
         result = try p.canonType(c)
     }
@@ -1662,7 +1763,20 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
             es.Push(types.DefaultErrT)
         }
     }
-    return p.T.Func(params, result, p.T.List(es.ToArray()))
+    scopes := types.ScopesId(0)
+    if c.eat(" ~[") {
+        xs List<I64>
+        for {
+            xs.Push(try canonNumber(c))
+            if c.eat("]") { break }
+            if not c.eat(",") { error }
+        }
+        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error }
+        n := xs[1]
+        all := xs.ToArray()
+        scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
+    }
+    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes)
 }
 
 fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
@@ -1826,7 +1940,7 @@ test "inference (G9): literals adapt, numbers widen unless a receiver bound them
     two := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i32)))
     assert one != two and one == p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i64)))
     assert p.InstanceName(one) == types.Symbol($m ".pick<I64>"), p.InstanceName(one)
-    assert p.T.Canon(p.InstanceSig(two)) == "fn(I32, I32) I32", p.T.Canon(p.InstanceSig(two))
+    assert p.T.Canon(p.InstanceSig(two)) == "fn(I32, I32) I32 ~[0,2,-1,-1,-2]", p.T.Canon(p.InstanceSig(two))
 }
 
 test "constraints (G19): a type satisfies a trait by its methods, checked where a variable is bound" {
@@ -1851,5 +1965,51 @@ test "constraints (G19): a type satisfies a trait by its methods, checked where 
     # a method over a generic type, its receiver's variable bound by the receiver (G9b)
     bx := try p.ParseCanon($m ":Box<I16>") catch { unreachable }
     g := p.MethodOf(bx, l.Names.Intern("Get"))
-    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16", p.T.Canon(p.MethodSig(g, bx))
+    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]",
+           p.T.Canon(p.MethodSig(g, bx))
+}
+
+test "function types carry what their markers say; a call's scope variables come from the type; instances remember where" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
+                       "fn link(a mut N&, b N&a) { }\nfn first(l N&) N&l { return l }\nfn make() N& { return N(1) }\n"
+                       "fn (l mut N&) Put(x N&l) { }\nfn apply(f fn(a mut N&, b N&a), x mut N&, y N&) { }\n"
+                       "fn id(x <T>) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    link := p.Sig(p.FnNamed(l.Root, l.Names.Intern("link")))
+    assert p.T.ShareOf(link, 1) == 0 and p.ScopeVarsOf(link) == I64[0]
+    text := "fn(mut " $m ":N&, " $m ":N&) ~[0,2,-1,0]"
+    assert p.T.Canon(link) == text, p.T.Canon(link)
+    assert p.roundTrip(text) and p.T.Same(link, p.T.Plain(link)) and link != p.T.Plain(link)
+    first := p.Sig(p.FnNamed(l.Root, l.Names.Intern("first")))
+    assert p.T.ResultFrom(first, 0) == 0 and p.ScopeVarsOf(first) == I64[0]
+    make := p.Sig(p.FnNamed(l.Root, l.Names.Intern("make")))
+    assert p.ScopeVarsOf(make) == I64[types.ResultVar]
+    nt := try p.ParseCanon($m ":N") catch { unreachable }
+    put := p.MethodSig(p.MethodOf(nt, l.Names.Intern("Put")), p.T.Ref(nt, types.Writable))
+    assert p.T.ShareOf(put, 1) == 0 and p.ScopeVarsOf(put) == I64[0]
+    apply := p.Sig(p.FnNamed(l.Root, l.Names.Intern("apply")))
+    cb := p.T.Items(p.T.Params(apply))[0]
+    assert p.T.ShareOf(cb, 1) == 0 and p.ScopeVarsOf(apply) == I64[0, 1, 2]
+    count := p.Sig(p.FnNamed(l.Root, l.Names.Intern("count")))
+    assert p.ScopeVarsOf(count) == I64[1]   # a number holds no reference, so passes no scope
+    # a result written as a type variable: a result scope where it becomes a reference (O14b), none for a number
+    f := p.FnNamed(l.Root, l.Names.Intern("id"))
+    assert p.T.ResultFrom(p.Sig(f), 0) == types.FromTypeVar
+    atI64 := p.FnInstance(f, p.T.List1(p.T.Prim("I64")))
+    atRef := p.FnInstance(f, p.T.List1(p.T.Ref(nt, types.ReadOnly)))
+    assert p.ScopeVarsOf(p.InstanceSig(atI64)) == I64[] and p.ScopeVarsOf(p.InstanceSig(atRef)) == I64[0, types.ResultVar]
+    # a type argument is held plain: one instance whatever scopes it was written with
+    assert p.FnInstance(f, p.T.List1(link)) == p.FnInstance(f, p.T.List1(p.T.Plain(link)))
+    # an instance remembers where it was first asked for (G16b)
+    p.Asking = Origin(7, source.Span(3, 9), atI64)
+    bx := try p.ParseCanon($m ":Box<I32>") catch { unreachable }
+    i := p.FnInstance(f, p.T.List1(p.T.Prim("U8")))
+    assert p.TypeOrigin(bx).File == 7 and p.TypeOrigin(bx).Within == atI64 and p.InstanceOrigin(i).Sp.Start == 3
+    assert p.InstanceOrigin(atI64).File == -1
+    assert l.Diags.Errors() == 0, saidRules(l)
 }
