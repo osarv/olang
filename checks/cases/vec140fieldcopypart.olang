@@ -1,0 +1,17 @@
+# check: fail error[O32]: 'e.toks' belongs to what 't' was copied from - assign it there
+# L1: a field's borrowed copy's part
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn main() ? {
+    t := Two()
+    for i in range 3 { t.a.toks.Push(i + 1) }
+    e := t.a
+    e.toks = Vec<I64>()
+    e.n = 5
+    println($t.a.toks[0] " " $e.n)
+}

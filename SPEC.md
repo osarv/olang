@@ -1070,7 +1070,8 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
   merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
-  variable, a field, an element or a slice, `Name(v)` is that storage read as `Name` - it may be written exactly
+  variable, a field, an element, a slice or a reference (a call's result included, `String(v.View())`), `Name(v)` is
+  that storage read as `Name` - it may be written exactly
   where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
   lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
   assignment may name. An `Array<T, N>` (T7c) is lent as a slice of it. A conversion to a declared type over an
@@ -4744,7 +4745,8 @@ result) keeps that storage's scope (O25a).
 For either kind, a local is returned also when, in the rest of its block, a value mentioning it **flows** into what is
 returned: it is assigned to a local (or a field or an element of one) that is returned or already in the result scope,
 or is a local declared from it that is, or is handed to a method called on such a local (`l.Push(x)` with `l`
-returned). A plain copy of a value local into a value (`f := e`, `b = a`) is no flow of it: the copy keeps its
+returned). `take` of it, or of a field of it, gives it whole, so a local taken from flows where the taker goes
+(`w := take l.toks; return w`, `l.toks = take v; return l`). A plain copy of a value local into a value (`f := e`, `b = a`) is no flow of it: the copy keeps its
 references where its source's are (O25h), and the source stays where it is; a reference declared from it borrows it,
 which is. The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that
 such a local lives in the caller's scope rather than in its block; a value passed to a plain function together with a
@@ -5091,7 +5093,8 @@ owner:
   read is a `mut Conn&` - living in the object's region (O33);
 - a value of another owning type so read is a **borrowed copy**: the same type, owning nothing. Each own reference in
   it is read from it as from a slot, giving a borrow; none may be moved out of it (E34), assigned, or given where an
-  owner goes (O34); nothing in it is released when it ends. It is read-only as a read-only copy is (T25c): it is not
+  owner goes (O34); nothing in it is released when it ends. A part of it holding an owning type by value (`c.a`, `c.toks`)
+  is not assigned either: it owns nothing, so nothing would release what it was given. It is read-only as a read-only copy is (T25c): it is not
   lent where it may be written, and nothing is written through its references. Its other parts are its own, as any
   copy's are. *(Not yet implemented: a borrowed copy is declared only by `x := y` from a local `y` holding a value of
   an owning type - an owner value local, or a borrowed copy, whose source the new one borrows from too - or from a
@@ -5155,7 +5158,10 @@ object refers to outside its region is known to outlive. A slot's reach is the s
 or an element's its container's, a global's the program's (O1b), an owner local's the shortest reach among the owners
 given to it, an owning parameter's its scope variable (O4b), bound at each call to its argument's reach - and, where
 that scope is a region, that region's reach: so the objects an owned object owns reach as far as it does, and may be
-moved out of it. An owner's reach is, for a value made where it is used, the shortest scope among those the references
+moved out of it. A field holding an owning type by value (a `Vec`) inside an object in a region is the exception: what
+its own objects refer to is built in that region (O33), so its reach is the region itself, which outlives nothing - it
+is moved only into another such field of the same object, read by the same path (`p.lx.more = take p.lx.toks`), unless
+nothing it holds can refer outside what it owns; the object moved whole (`take p.lx`) carries the region with it. An owner's reach is, for a value made where it is used, the shortest scope among those the references
 it holds outside its region live in - what C2d, E12c and T17c bind for any instance, the program's scope when it holds
 none; for a call's owned result, the call's result scope, which lands where the result is put (O18a); for `take p`,
 the reach of `p`; for an owner local or an owning parameter read for the last time, its slot's.

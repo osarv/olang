@@ -272,3 +272,30 @@ test "Vec: elements that are values holding references, kept across growth and r
     m[0].text = "last"                          # a field of an element written through a view, its text a literal
     assert v[0].text == "last" and v[109].text == "e0"
 }
+
+# T29a (vec6 x1): a conversion of the view a call gives names the Vec's buffer, while compiling and at run time alike
+fn vecViewNamed(n I64) I64 {
+    v := Vec<Char>()
+    for i in range n { v.Push('a') }
+    w String&v = String(v.View())
+    v[0] = 'z'
+    return 1 if w[0] == 'z' and w.Len() == n else 0
+}
+VecViewBaked I64 = vecViewNamed(2)              # K2: computed while compiling
+test "Vec: a conversion of a view names the buffer, not a copy of it" {
+    assert VecViewBaked == 1 and vecViewNamed(2 * Run) == 1
+}
+
+# O26a (vec6): a Vec taken out of a local into one returned keeps what it refers to where the result goes
+fn vecTakenOut(n I64) Vec<vecTok> {
+    t := "kept-" $n
+    l := Vec<vecTok>()
+    l.Push(vecTok(t, n))
+    w := take l
+    return w
+}
+test "Vec: a Vec taken into a local that is returned, its text read back after the arena churns" {
+    w := vecTakenOut(3)
+    churn()
+    assert w[0].text == "kept-3" and w[0].line == 3
+}

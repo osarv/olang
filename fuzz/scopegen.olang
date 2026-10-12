@@ -1095,7 +1095,10 @@ fn (g mut SG&) vec5Op(h String&, ind String&, v I64, k I64) String& {
 # through each level; a global Vec viewed across a call pushing to it (refused) or pushed, taken and given back; a borrow
 # two own fields deep used after its holder's release (refused) or before; an own array of values holding text, an
 # element copied out and kept across the buffer's replacement, or a slice of an element's inline array kept across it
-# (refused); TakeAt and SwapTake on a Vec of text
+# (refused); TakeAt and SwapTake on a Vec of text; and the vec6 review's shapes - a Vec field of an owned object moved
+# out of its region (refused), the whole object moved or the field moved within it (accepted), a borrowed copy of a Vec
+# 8 to 12 owning value levels down used after a push (refused) or before it, and a borrowed copy's owning field given an
+# owner (refused)
 fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
     o := $h ".other"
     x := g.name("x")
@@ -1195,6 +1198,62 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
         return ($ind "{\n" $mk $ind $d " := " $l ".data[0].arr[0:2]\n" $ind $l ".data = Array<" $q ">(1)\n" $ind "churn()\n" $ind $x " := "
                 $d "[1]\n" $use $ind "}\n")
     }
+    if k >= 15 and k <= 18 {
+        # vec6 R1: a Vec field of an OWNED object keeps its words in that object's region
+        lx := g.name("V6L")
+        hp := g.name("V6P")
+        g.addHelper("type " $lx " struct() {\n    toks Vec<String&> = Vec<String&>()\n    more Vec<String&> = Vec<String&>()\n}\n" "type "
+                    $hp " struct() {\n    lx own mut " $lx "& = null\n}\n")
+        p := g.name("p")
+        q := g.name("q")
+        mk := ($ind $p " := " $hp "()\n" $ind $p ".lx = " $lx "()\n" $ind "for i in range 3 { " $p ".lx.toks.Push($(i + " $v
+               ") \"-in-the-region\") }\n" $ind $q " := " $hp "()\n" $ind $q ".lx = " $lx "()\n")
+        sum := ($ind $x " := 0\n" $ind "for " $e " in " $q ".lx.toks { " $x " = " $x " * 31 + " $e ".Len() + I64(" $e "[0]) }\n")
+        if k == 15 {    # moved into another owned object's field, then the source's object released (refused: O34)
+            return ($ind "{\n" $mk $ind $q ".lx.toks = take " $p ".lx.toks\n" $ind $p ".lx = null\n" $ind "churn()\n" $sum $use $ind "}\n")
+        }
+        if k == 16 {    # taken out into a local, moved on into another owned object (refused: O34)
+            return ($ind "{\n" $mk $ind $d " := take " $p ".lx.toks\n" $ind $q ".lx.toks = take " $d "\n" $ind $p ".lx = null\n" $ind
+                    "churn()\n" $sum $use $ind "}\n")
+        }
+        if k == 17 {    # the whole object moved, its region with it, the source released (accepted)
+            return ($ind "{\n" $mk $ind $q ".lx = take " $p ".lx\n" $ind $p ".lx = " $lx "()\n" $ind "churn()\n" $sum $use $ind "}\n")
+        }
+        # moved into another field of the same object, read by the same path (accepted)
+        return ($ind "{\n" $mk $ind $p ".lx.more = take " $p ".lx.toks\n" $ind $q ".lx = take " $p ".lx\n" $ind "churn()\n" $ind $x
+                " := 0\n" $ind "for " $e " in " $q ".lx.more { " $x " = " $x " * 31 + " $e ".Len() + I64(" $e "[0]) }\n" $use $ind "}\n")
+    }
+    if k == 19 or k == 20 {
+        # vec6 D: a borrowed copy of a struct holding a Vec several owning value levels down (8 to 12)
+        depth := 8 + g.r(5)
+        base := g.name("V6D")
+        decl := "type " $base "0 struct() {\n    toks Vec<I64> = Vec<I64>()\n}\n"
+        for i in range 1, depth + 1 {
+            decl = $decl "type " $base $i " struct() {\n    x " $base $(i - 1) " = " $base $(i - 1) "()\n}\n"
+        }
+        g.addHelper(decl)
+        path := $l
+        for i in range depth { path = $path ".x" }
+        cpath := $d
+        for i in range depth { cpath = $cpath ".x" }
+        mk := $ind $l " := " $base $depth "()\n" $ind "for i in range 3 { " $path ".toks.Push(i + " $v ") }\n" $ind $d " := " $l "\n"
+        if k == 19 {    # the copy used after a push frees the buffer it reads (refused: O39)
+            return ($ind "{\n" $mk $ind "for i in range 40 { " $path ".toks.Push(i) }\n" $ind "churn()\n" $ind $x " := " $cpath
+                    ".toks[0]\n" $use $ind "}\n")
+        }
+        # used before the push (accepted)
+        return ($ind "{\n" $mk $ind $x " := " $cpath ".toks[0] + " $cpath ".toks.Len()\n" $ind "for i in range 40 { " $path
+                ".toks.Push(i) }\n" $ind "churn()\n" $ind $x " += " $path ".toks[42]\n" $use $ind "}\n")
+    }
+    if k == 21 {
+        # vec6 L1: a borrowed copy's owning field given an owner (refused: O32)
+        ty := g.name("V6C")
+        two := g.name("V6T")
+        g.addHelper("type " $ty " struct(n I64) {\n    n\n    toks Vec<I64> = Vec<I64>()\n}\n" "type " $two " struct() {\n    a " $ty
+                    " = " $ty "(1)\n}\n")
+        return ($ind "{\n" $ind $l " := " $two "()\n" $ind "for i in range 3 {\n" $ind "    " $d " := " $l "\n" $ind "    " $d ".a = " $ty
+                "(" $v " + i)\n" $ind "}\n" $ind "churn()\n" $ind $x " := " $l ".a.n\n" $use $ind "}\n")
+    }
     # TakeAt and SwapTake on a Vec of text (accepted)
     return ($ind "{\n" $ind $l " := Vec<String&>()\n" $ind "for i in range 12 { " $l ".Push($(i * 3 + " $v ")) }\n" $ind $e " := " $l
             ".TakeAt(2)\n" $ind $d " := " $l ".SwapTake(0)\n" $ind $l ".RemoveAt(1)\n" $ind $l ".SwapRemove(0)\n" $ind "churn()\n" $ind $x
@@ -1207,7 +1266,7 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
 fn (g mut SG&) ownOp(h String&, ind String&) String& {
     v := g.val()
     if g.chance(25) { return g.ownReviewOp(h, ind, v) }
-    if g.chance(8) { return g.vec2aOp(h, ind, v, g.r(15)) }
+    if g.chance(8) { return g.vec2aOp(h, ind, v, g.r(22)) }
     k := g.r(62)
     c := $h ".cur"
     o := $h ".other"
@@ -1316,7 +1375,7 @@ fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
         if w < 9 { return g.own6Op(h, ind, v) }
         if w >= 14 {
             pv := g.r(5)
-            if pv == 4 { return g.vec2aOp(h, ind, v, g.r(15)) }
+            if pv == 4 { return g.vec2aOp(h, ind, v, g.r(22)) }
             if pv == 0 { return g.vec2Op(h, ind, v, g.r(4)) }
             if pv == 3 { return g.vec5Op(h, ind, v, g.r(9)) }
             return g.vec3Op(h, ind, v, g.r(8)) if pv == 1 else g.vec4Op(h, ind, v, g.r(11))
