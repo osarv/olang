@@ -2,8 +2,9 @@
 # scope pass (scope, M6), lowering (lower, M7) and the evaluator (eval, M8) read of the program's code.
 #
 # The contract, in short:
-# - A body is one function instance, constructor, destructor, lambda, test or module initializer, with every type
-#   concrete (an instance's own, G16): no type variable and no constant pattern is left in it.
+# - A body is one function instance, constructor (a twin's own, G10d), destructor, lambda, test or global's
+#   initializer, with every type concrete (an instance's own, G16): no type variable and no constant pattern is left in
+#   it. An enum case's payload is a body too, with parameters and no code: where its marks live (T17c).
 # - The surface grammar is gone. Operators on declared types are calls (E31), "==" on aggregates a helper (E10),
 #   for-in and comprehensions loops (S9a-S9f, E27), matches decision tests over a value held once (S12, S13),
 #   chains and joins explicit temporaries (E30, E11b), "and"/"or" conditionals (E7). What is left is 18 kinds of
@@ -11,11 +12,20 @@
 # - Places are told from values. A place names storage (a local, a global, a field, an element, a payload, what a
 #   reference names); a value is computed. Read copies a place's value, Borrow makes a reference to the place itself
 #   (E12c), Take moves an owner out of it (E34). Every other value is a temporary: new storage when it needs any.
-# - Nothing is decided about scopes here. Each expression that may allocate, and each call, has a site; each local a
-#   storage; and the scope pass fills a Plan saying where each is built and what each call passes for its callee's
-#   scope variables. Nodes are never written after check makes them (O25g), so any part may be shared.
+# - Nothing is decided about scopes here. Each expression that may allocate, each call, each read of an own slot and
+#   each temporary place has a site; each local a storage; and the scope pass fills a Plan saying where each is built
+#   and what each call passes for its callee's scope variables. The plan holds placement only: nothing in it changes a
+#   value, so a body evaluated with no plan (while checking) and with one (after) gives the same values.
+# - Nodes are never written after check makes them. A decision made later about a node - an assert decided while
+#   compiling (S18c), a global baked (K2), a literal's constructor run (T29d), a type's zero value (D13c) - is kept
+#   beside the tree, under a key (DESIGN.md 1.8). A subtree holding a SiteId or a LocalId indexes one body's tables
+#   and is never shared; any other subtree may be.
+# - What a declaration says about where it lives is in its Mark, and a function's in its type: which parameters share
+#   a scope variable, which results are built, borrowed or written as a type variable (types.ScopesOf). The scope
+#   variables a call passes are types.ScopeVarsOf of the callee's type, in that order, for every pass alike.
 # - Every node has the span of what it was made from, in its body's file; a subtree from another file (a default
-#   argument written in a library, D8a) is wrapped in Away. Every expression and place has its type.
+#   argument written in a library, D8a, built again for each call with fresh ids) is wrapped in Away. Every expression
+#   and place has its type.
 
 import "source"
 import "types"
@@ -24,37 +34,49 @@ import "types"
 
 # a body, by its index in the program's table of bodies (check's)
 type BodyId extends I32
-# a body's local - a parameter, a variable, a hidden temporary, a binding, a capture, a field - by its index in Locals
+# a body's local - a parameter, a variable, a held value, a hidden one, a binding, a capture, a field - by its index in
+# Locals
 type LocalId extends I32
 # a body's block, by its index in Blocks: 0 is the body's outermost
 type BlockId extends I32
-# a body's site - an expression that may allocate, or a call - by its index in Sites
+# a body's site - an expression that may allocate, a call, a read of an own slot, a temporary place - by its index in
+# Sites; -1 for none
 type SiteId extends I32
 
 # ---- declarations' scopes ----
 
-# where a declaration says its reference lives (O3, O25a): written on a local's type, a field's (C2d) or a result's (O14)
+# where a declaration says its reference lives (O3, O4, O25a): a parameter's, a local's, a field's (C2d) or a payload
+# parameter's (T17c), as written; a result's, as its function type says (ResultMark)
 type Mark enum {
-    None              # not a reference and holding none; a parameter (it has a scope variable of its own, O4b)
-    Bare              # "&": a local's block (O25a), a field's instance (C2d), a result built in the result scope (O14)
-    Of(local LocalId) # "&x": where x lives - a local or a parameter of this body
-    Return            # "&return": the result scope
-    Infer             # ":=": where its initializer lives (O25a, O25h)
+    None              # no marker written: a value. A parameter so marked holding references has a scope variable of
+                      # its own for them (O4b), a local's references are its block's (O18a)
+    Bare              # "&": a parameter's own scope variable (O4b), a local's block (O25a), a field's instance (C2d), a
+                      # result built in the result scope (O13)
+    Of(local LocalId) # "&x": where x lives (O4a) - a parameter written before (one so marked shares x's scope variable
+                      # and has none of its own), a local or parameter for a local or a result
+    Global(module I64, name source.NameId)  # "&G": where a global lives, the program's scope (O1b) - a local's only
+    Return            # "&return": the result scope (O26)
+    Infer             # ":=", or a local written as a bare type variable: where its initializer lives (O25a, O25h)
+    TypeVar           # a result written as a bare type variable: a result scope where it became a reference (O14b, T22a)
 }
 
 # what a body is
 type BodyOf enum {
-    Fn(instance I64)        # a function or method instance (generic.Program.FnInstance)
-    Ctor(t types.TypeId)    # the constructor of a declared type or instance (C2, G10b, T29d)
-    Dtor(t types.TypeId)    # its destructor (C9)
-    Lambda(parent BodyId)   # a lambda, checked where it is written (D16)
-    Test(index I64)         # a test block of the root module
-    Init(module I64)        # a module's global initializers, in B5a's order
+    Fn(instance I64)                        # a function or method instance (generic.Program.FnInstance)
+    # the constructor of a declared type or instance (C2, G10b, T29d); twin binds the constructor's own type variables
+    # (G10d), a twin of t with a constructor of its own - ListId(0) for a type with none
+    Ctor(t types.TypeId, twin types.ListId)
+    Case(t types.TypeId, tag I64)           # an enum case's payload: its parameters and their marks, no code (T17c)
+    Dtor(t types.TypeId)                    # a destructor (C9): Params[0] the instance, "mut T&", in the closing scope
+    Lambda(parent BodyId)                   # a lambda, checked where it is written (D16)
+    Test(index I64)                         # a test block of the root module
+    Global(module I64, name source.NameId)  # one global's initializer (K2): its order among its module's is B5a's,
+                                            # computed once bodies are checked (DESIGN.md 1.6)
 }
 
-# one of a body's scope variables: what its hidden scope arguments, and its environment's scopes, stand for. A call
-# passes one scope for each of its callee's variables that is not a Capture, in order; a Capture is carried in the
-# lambda's environment instead (D16c)
+# one of a body's scope variables: what its hidden scope arguments, and its environment's scopes, stand for. The ones
+# a call passes are types.ScopeVarsOf of the body's type, in that order (SetVars); a Capture, after them, is carried in
+# the lambda's environment instead (D16c)
 type ScopeVar enum {
     Param(local LocalId)    # where a reference parameter's referent lives, or a by-value one's references (O4b)
     Result                  # the result scope: where a built result is made (O14, O18a)
@@ -66,7 +88,13 @@ type ScopeVar enum {
 type LocalKind enum {
     Param      # a parameter, the receiver first (M19)
     Var        # declared in the program's text
-    Hidden     # made by check: a value held once, a loop's counter, a destructured result, a compound place
+    # made by check, transparent: a value held for its one use, built where that use puts it (O18a) - D8d's call parts,
+    # E29's operand, E30's chain values, S4c's values (each lands at its target before it is held), E31b's place and
+    # indices, a match's subject, a destructured result (D8c)
+    Held
+    # made by check, storage of its own: a loop's counter, a for-in's iterator or borrowed collection (S9a), E31b's
+    # handle copy (lent as its reference, O17b)
+    Hidden
     Binding    # a match arm's (S13b)
     Capture    # a lambda's copy of what it captured (D16c)
     Field      # a constructor's field (C2a)
@@ -78,11 +106,12 @@ type Local struct(Name source.NameId, Sp source.Span, Ty types.TypeId, In BlockI
     Ty
     In         # the block it is declared in; a parameter's is 0
     Kind
-    Marked     # where its declared type says it lives
+    Marked     # where its declared type says it lives; a parameter's agrees with the body's type (ParamMark)
 }
 
 type BlockKind enum {
-    Body       # a body's outermost: a function's frame; a constructor's top level, built in its instance (C2g)
+    Body       # a body's outermost: its frame scope - in a constructor (C2g) and a destructor (C9a) too, whose instance
+               # and closing scope are scope variables (Var), not this block
     Plain      # a "{ }" (S1a), a branch, an arm, a clause of a try statement
     Loop       # a loop's body: a scope each turn (O2)
     Post       # a loop's post clause
@@ -101,11 +130,16 @@ type BlockInfo struct(Parent BlockId, Kind BlockKind, Sp source.Span) {
 type SiteKind enum {
     Call       # a call: the scopes it passes for its callee's variables - a built result's (Result) among them
     Make       # an array's storage: a literal, Array<T>(n) (D14), a tuple or case put in new storage
-    Promote    # a temporary given storage for a reference to it (E12c, T17d); a new own object's region (O30)
+    # a temporary given storage for a reference to it (E12c, T17d); a new own object's region (O30); an owner or a
+    # destructor-bearing value no slot receives, registered where it is built (O16, O30); an S4d copy of a place's old
+    # value
+    Promote
     Collect    # a comprehension's array (E27)
     Text       # a rendering or a join (E11a, E11b)
     Closure    # a lambda's environment (D16c, D16d), a Call adapter's (E31)
     Task       # a spawn's task environment, made in its join block (P1)
+    Region     # a read of an own slot borrowing what it owns: the region it reads, which calls pass on (O32, O33)
+    Temp       # a temporary place's storage: its block, or an arena over 64KB (E16a, T7c)
 }
 
 type SiteInfo struct(Kind SiteKind, Sp source.Span) {
@@ -123,8 +157,12 @@ type Place enum {
     Field(sp source.Span, ty types.TypeId, base Place&, index I64) # a struct's, tuple's or payload's field, by position
     Elem(sp source.Span, ty types.TypeId, e Elem&)                 # an array's element
     Payload(sp source.Span, ty types.TypeId, p Payload&)           # an enum case's payload record (E32)
-    Temp(sp source.Span, ty types.TypeId, value Expr&)             # a value with no storage, put in a temporary (E16a)
-    Target(sp source.Span, ty types.TypeId)                        # in an Assign's value: the place it stores to (S4)
+    Temp(sp source.Span, ty types.TypeId, value Expr&, site SiteId) # a value with no storage, given one (E16a, T7c)
+    # in an Assign's value: the place of the nearest enclosing Assign, read where it is evaluated - a compound
+    # assignment's old value (S4). A borrow of it is S4d's case as a borrow of the place written out is: check makes it
+    # Promote(Read(Target)) where the value's type can hold it. Never in E31b's or R21's elaboration, which hold their
+    # places in Held locals
+    Target(sp source.Span, ty types.TypeId)
 }
 
 type Elem struct(Base Place&, Index Expr&, Checked Check) {
@@ -149,14 +187,17 @@ type Check enum {
 # ---- expressions ----
 
 type Expr enum {
-    # a number, Bool, Char or null of type ty, as its bits: a float's IEEE pattern (E33), null and every zero value
-    # all-zero bits (T2a, D13c)
+    # a number, Bool, Char or null of type ty, as its bits: a float's IEEE pattern (E33), null all-zero bits (T2a). A
+    # Lit of an aggregate is all-zero bits and nothing else: a zero value no constructor makes (D13c)
     Lit(sp source.Span, ty types.TypeId, bits I64)
-    # read-only constant storage (T25d): a text literal, an array of constants; ty a read-only array reference
-    Data(sp source.Span, ty types.TypeId, bytes Array<U8>&)
+    # read-only constant storage (T25d): a text literal, an array of constants - its elements constants too, text
+    # among them; ty a read-only array reference. One instance per written position (file and span): two evaluations
+    # of one literal, in any instance or call, are the same storage (E10c, K2b)
+    Data(sp source.Span, ty types.TypeId, file I64, c Const&)
     # the value a place holds, copied - at the place's type, or one of its representation: a nominal conversion of a
-    # place names its storage (T29a). A Read of an own slot at its type without "own" is a borrow of it (O32)
-    Read(sp source.Span, ty types.TypeId, p Place&)
+    # place names its storage (T29a). A Read of an own slot at its type without "own" is a borrow of it (O32), its
+    # site a Region one - the region read there, which a call passes on (O33); site -1 for any other Read
+    Read(sp source.Span, ty types.TypeId, p Place&, site SiteId)
     Borrow(sp source.Span, ty types.TypeId, p Place&)       # a reference to the place itself (E12c); ty the reference
     Take(sp source.Span, ty types.TypeId, p Place&)         # the owner a place holds, moved out, null left (E34)
     Promote(sp source.Span, ty types.TypeId, pr Promote&)   # a temporary given storage, a reference to it (E12c)
@@ -174,20 +215,36 @@ type Expr enum {
     Away(sp source.Span, file I64, x Expr&)                 # written in another file (D8a's defaults); x's type
 }
 
+# X given storage where its site's plan says, and a reference to it - or, X being an owner or a destructor-bearing
+# value no slot receives, registered there (O16, O30). An S4d copy is Promote(Read(place)): the place's old value,
+# taken before the store (check decides it by types)
 type Promote struct(X Expr&, Site SiteId) {
     X
     Site
 }
 
+# a constant's value, as Data holds it: a number's bits (as Lit's), text, or an array's elements in order
+type Const enum {
+    Bits(v I64)
+    Bytes(b Array<U8>&)
+    Items(xs Array<Const&>&)
+}
+
+# what a call reaches. A dispatch through a table, for run-time trait values (any Trait&, planned: PRINCIPLES.md 5), is
+# to come as a kind of its own here, beside Value
 type Callee enum {
-    Body(id BodyId)                       # a function instance, a constructor (G10b), a lambda called where written
+    # a function instance, a constructor (G10b, G10d), or a lambda called where it is written that captures nothing
+    # (D16b): one that captures is made a value and called through it
+    Body(id BodyId)
     Extern(f I64)                         # an extern fn (X1), by generic.Program's function index
     Value(x Expr&)                        # through a function value (E13b, T21)
     Helper(kind Helper, t types.TypeId)   # what lowering makes for a type (DESIGN.md 1.8)
 }
 
+# a helper is pure data: it compares or hashes parts by their own built-in operations and calls nothing. A comparison
+# or hash consulting a declared Eq or Hash anywhere in its parts is elaborated by check into calls (E10a, E10b)
 type Helper enum {
-    Equal      # "==" part by part (E10), each part by its own "=="
+    Equal      # "==" part by part (E10)
     Hash       # the supplied Hash (E10b)
 }
 
@@ -195,11 +252,14 @@ type Helper enum {
 # parameter's argument is a reference - a Borrow, a Promote, or a reference's value - and a by-value one's a value.
 # A call to a fallible callee stands inside a Try, the innermost of which takes its errors - but a task's call, whose
 # errors go to its Spawn's clauses and then its join (P4)
-type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId) {
+type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false) {
     Target
     Args
     Scoped     # a written scope argument, "f&x(...)" (E25): Of(x), or Return; None for none
     Site
+    # a type's zero value (D13c): its constructor on its parameters' defaults or zeros. Which it is - all zero bits, the
+    # call, or none (an error at the declaration) - is decided once per type after check, by eval (DESIGN.md 1.8)
+    Zero
 }
 
 type MakeKind enum {
@@ -209,18 +269,20 @@ type MakeKind enum {
     Fill       # Array<T>(n, fill) (D14, T8): Length the length, Items the one fill (or none: the zero value, D13c)
 }
 
-type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr&, Site SiteId) {
+type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr&, Site SiteId, Checked Check) {
     Kind
     Tag
     Items
     Length     # null but for Fill
     Site       # -1 where nothing is allocated: a tuple, a case by value, a fixed array held in place (T7c)
+    Checked    # Fill's length (D14b): Abort, Try under try (E15a); None for every other kind and a length known in range
 }
 
-type Collect struct(Reserve Expr&, Loop Block&, Site SiteId) {
+type Collect struct(Reserve Expr&, Loop Block&, Site SiteId, Checked Check) {
     Reserve    # how many it will hold at most, null where not known (E27)
     Loop
     Site
+    Checked    # the reservation's length, as Fill's (D14b, E15a)
 }
 
 # an operation over numbers, Bools and Chars - and the few the compiler supplies over other types (Len, Bits, the
@@ -276,7 +338,8 @@ type Cond struct(C Expr&, A Expr&, B Expr&) {
     B
 }
 
-# statements run in the block the Seq stands in - their hidden locals are that block's - then X, the value
+# statements run in the block the Seq stands in - their hidden locals are that block's - then X, the value: null, the
+# Seq's type Void, for none (R21's "try x[i] += v" as a statement)
 type Seq struct(Stmts Array<Stmt&>&, X Expr&) {
     Stmts
     X
@@ -288,7 +351,9 @@ type Seq struct(Stmts Array<Stmt&>&, X Expr&) {
 type Match struct(Held Array<Stmt&>&, Arms Array<Arm&>&, NoMatch Arm&, IsValue Bool) {
     Held
     Arms
-    NoMatch    # null for none: an exhaustive match (S13a) that nothing else reaches; else its Code runs
+    # what runs when no arm matches, never null: the written nomatch; an empty arm where nothing happens (a statement
+    # match no arm covers); Exit(Unreachable) where S13a says nothing reaches it but a null reference does (S13a)
+    NoMatch
     IsValue
 }
 
@@ -350,7 +415,9 @@ type Text struct(Pieces Array<Piece&>&, Site SiteId) {
 
 type Piece enum {
     Lit(bytes Array<U8>&)   # text written in the program
-    Render(x Expr&)         # "$x" (E11a)
+    # "$x" (E11a): x evaluated with the others before any piece renders (E11b); an operand naming an array is a Borrow
+    # of it, read when its piece renders (T7b) - "$a $bump(a)" renders a's elements as bump left them
+    Render(x Expr&)
 }
 
 # ---- statements ----
@@ -363,15 +430,18 @@ type Block struct(Id BlockId, Stmts Array<Stmt&>&) {
 type Stmt enum {
     Let(sp source.Span, local LocalId, init Expr&)  # a local declared, with its first value (always one, D13c)
     # a store: Target's subexpressions are evaluated, then Value, then it is stored (S4); a compound assignment's
-    # value reads the old value through Place.Target. Storing into an own slot releases what it held (O30)
+    # value reads the old value through Place.Target. Storing into an own slot releases what it held (O30). Moving an
+    # owner is always a Take written in Value (E34): "x := take p", a call's owned result handed on
     Assign(sp source.Span, target Place&, value Expr&)
     Eval(sp source.Span, x Expr&)                   # a value computed and dropped: a call, a try statement, a match
     If(sp source.Span, i If&)
-    # a loop, its body run until a Jump leaves it; a continue runs Post, then the body again
+    # a loop, its body run until a Jump leaves it; a continue runs Post, then the body again. "do ... for c" is a Post
+    # of "if not c { break }"; S9e's one-shot loop a body ending in Jump(Break)
     Loop(sp source.Span, body Block&, post Block&)
     Jump(sp source.Span, kind JumpKind, loop BlockId)    # break or continue, of the loop whose body block is named
-    Return(sp source.Span, value Expr&)             # null for none; several results a Make of a tuple
-    Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD", or the default error (R15)
+    # null for none; several results a Make of a tuple; an owner local returned is a Take of it (O36, O42)
+    Return(sp source.Span, value Expr&)
+    Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD"; the default error (R15) is DefaultErrT, word 0
     Exit(sp source.Span, kind ExitKind)
     Assert(sp source.Span, cond Expr&, msg Expr&)   # msg null for none; read only when it fails (S17)
     Block(sp source.Span, b Block&)
@@ -406,7 +476,8 @@ type Join struct(Code Block&, Tried Bool, Clauses Array<Clause&>&) {
 }
 
 # a task: Task, a call, run on a thread of its own; its results stored into Targets on that thread (P1g); an error it fails
-# with goes to the first of Clauses naming it, run on that thread (P4a), else to the join (P4b)
+# with goes to the first of Clauses naming it, run on that thread (P4a), else to the join (P4b). At the spawn the
+# targets' places are evaluated first, left to right, then the task's arguments (P1g, S4)
 type Spawn struct(Targets Array<Place&>&, Task Expr&, Clauses Array<TaskClause&>&, Site SiteId) {
     Targets
     Task       # a Call - of a lambda's function value for "spawn fn() { ... }" (D16e)
@@ -418,27 +489,33 @@ type TaskClause struct(Sp source.Span, Items Array<Item>&, All Bool, Handler Exp
     Sp
     Items
     All
-    Handler    # a lambda's function value, called on the task's thread; null for "catch E { }" (P4a)
+    # a lambda's function value, called on the task's thread; null for "catch E { }" (P4a). Its result is the targets'
+    # value: the default for one target, a tuple of them for several; with no targets it has none
+    Handler
 }
 
 # ---- bodies ----
 
 # a body: its locals, blocks and sites, and once checked its outermost block. Params are the receiver first; Vars its
-# scope variables in the order a call passes them; Results the marks on its results (O14: "T&p", "T&return")
+# scope variables, the passed ones in the order a call passes them (SetVars), then its captures
 type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span) {
     Id
     Of
-    Ty         # its function type, the receiver first (a test's and an initializer's fn())
+    # its function type, the receiver first, with its scopes (types.ScopesOf): a constructor's and a payload's RoleCtor,
+    # a destructor's RoleDtor; a test's and a global initializer's fn()
+    Ty
     File
     Sp
     Params List<LocalId>
     Vars List<ScopeVar>
-    Results List<Mark>
     Locals List<Local>
     Blocks List<BlockInfo>
     Sites List<SiteInfo>
-    Fields List<LocalId>    # a constructor's: what its instance is assembled from, in field order (C2a)
-    Root Block& = null      # null until checked
+    # a constructor's: what its instance is assembled from, in field order (C2a). Their Marked are the field marks
+    # section 8 reads (C2d, O20, O23a): a bare field lives with the instance, "&p" where the argument p lived - for an
+    # instance's and a twin's constructor, their own
+    Fields List<LocalId>
+    Root Block& = null      # null until checked; a payload's (Case) stays null
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
@@ -458,6 +535,42 @@ fn (b mut Body&) AddSite(kind SiteKind, sp source.Span) SiteId {
 
 fn (b Body&) Local(id LocalId) Local { return b.Locals[I64(id)] }
 
+# the scope variables a call passes, from types.ScopeVarsOf of the body's type (one function for every pass, so a
+# call, the body and a function value's adapter agree): a parameter's index its Param, ResultVar the result scope - a
+# constructor's instance - and ClosingVar a destructor's closing scope. A lambda's captures follow, added by check
+fn (b mut Body&) SetVars(vars Array<I64>&) {
+    for v in vars {
+        if v == types.ClosingVar {
+            b.Vars.Push(ScopeVar.Closing)
+        } else if v == types.ResultVar {
+            ctor := match b.Of {
+                case BodyOf.Ctor(_, _), BodyOf.Case(_, _) => true
+                case _ => false
+            }
+            b.Vars.Push(ScopeVar.Instance if ctor else ScopeVar.Result)
+        } else {
+            b.Vars.Push(ScopeVar.Param(b.Params[v]))
+        }
+    }
+}
+
+# a parameter's mark, as its body's type says: "&x" where it shares parameter x's scope variable, Bare where it is a
+# reference, None where it is a value
+fn (b Body&) ParamMark(t types.Table&, i I64) Mark {
+    j := t.ShareOf(b.Ty, i)
+    if j >= 0 { return Mark.Of(b.Params[j]) }
+    return Mark.Bare if t.IsRef(t.Items(t.Params(b.Ty))[i]) else Mark.None
+}
+
+# a result's mark, as its body's type says: built (Bare), borrowed from a parameter (Of), or written as a bare type
+# variable (TypeVar)
+fn (b Body&) ResultMark(t types.Table&, k I64) Mark {
+    e := t.ResultFrom(b.Ty, k)
+    if e == types.FromTypeVar { return Mark.TypeVar }
+    if e >= 0 { return Mark.Of(b.Params[e]) }
+    return Mark.Bare
+}
+
 # whether block a is block d or encloses it
 fn (b Body&) Encloses(a BlockId, d BlockId) Bool {
     x := d
@@ -473,17 +586,24 @@ fn (b Body&) Encloses(a BlockId, d BlockId) Bool {
 # where something is built, or what is passed for a scope variable
 type Scope enum {
     Unset               # a site not decided: lowering's stand-in reads it as Program (M7 before M6), as does eval
-    Block(b BlockId)    # a block's arena (O2)
+    Block(b BlockId)    # a block's arena (O2); Block(0) is the frame scope - a constructor's and a destructor's too
     Var(i I64)          # one of the body's own scope variables, by its index in Vars
     Program             # the program's scope (O1b)
-    Region(s SiteId)    # a new own object's region, made at that site (O30)
+    # an own object's region: made at a Promote site (O30), or read at a Region site from the slot it borrows (O32)
+    Region(s SiteId)
     Frame               # the body's frame, no arena: a stack slot; an environment no callee keeps (D16c)
+    # a live scope nothing is built in: passed where a callee only reads - a value O12 lends for reading, the receiver
+    # of a Str "$" calls (E11c) - lowering opens one, and the MIR verifier refuses any build into it
+    Inert
 }
 
 # the scope pass's decisions for one body: where each site builds (Built), where each local's storage is (Stored: a
-# stack slot unless O26a or T7c put it in an arena), the scopes each call passes for its callee's variables (Passed),
-# and which of the body's own variables it may build into (MayBuild: a closure's prologue asks for its part of a
-# captured scope only where it may, P2)
+# stack slot unless O26a or T7c put it in an arena), the scopes each call passes for its callee's variables (Passed) -
+# at a Closure site the scopes of the lambda's captures, or of an adapter's instance (E31), in order - and which of
+# the body's own variables it may build into (MayBuild: a closure's prologue asks for its part of a captured scope
+# only where it may, P2). Placement only: nothing here changes a value. What lowering allocates by fixed rules of its
+# own - a text builder's scratch, Str's per-call scope, hold slots, a task's stand-ins, a try default's slot - is
+# listed in DESIGN.md 1.8; every other allocation into a body's scope variable is a site this plan placed
 type Plan struct(Sites I64, Locals I64, Vars I64) {
     Built mut Array<Scope>& = Array<Scope>(Sites)
     Stored mut Array<Scope>& = Array<Scope>(Locals, Scope.Frame)
@@ -513,7 +633,7 @@ fn (pl Plan&) Passed(site SiteId, i I64) Scope {
 
 fn (x Expr&) Span() source.Span {
     return match x {
-        case Expr.Lit(sp, _, _), Expr.Data(sp, _, _), Expr.Read(sp, _, _), Expr.Borrow(sp, _, _) => sp
+        case Expr.Lit(sp, _, _), Expr.Data(sp, _, _, _), Expr.Read(sp, _, _, _), Expr.Borrow(sp, _, _) => sp
         case Expr.Take(sp, _, _), Expr.Promote(sp, _, _), Expr.Call(sp, _, _), Expr.Make(sp, _, _) => sp
         case Expr.Collect(sp, _, _), Expr.Prim(sp, _, _, _, _), Expr.Slice(sp, _, _), Expr.Cond(sp, _, _) => sp
         case Expr.Seq(sp, _, _), Expr.Match(sp, _, _), Expr.Try(sp, _, _), Expr.Fn(sp, _, _), Expr.Text(sp, _, _) => sp
@@ -523,7 +643,7 @@ fn (x Expr&) Span() source.Span {
 
 fn (x Expr&) Type() types.TypeId {
     return match x {
-        case Expr.Lit(_, ty, _), Expr.Data(_, ty, _), Expr.Read(_, ty, _), Expr.Borrow(_, ty, _) => ty
+        case Expr.Lit(_, ty, _), Expr.Data(_, ty, _, _), Expr.Read(_, ty, _, _), Expr.Borrow(_, ty, _) => ty
         case Expr.Take(_, ty, _), Expr.Promote(_, ty, _), Expr.Call(_, ty, _), Expr.Make(_, ty, _) => ty
         case Expr.Collect(_, ty, _), Expr.Prim(_, ty, _, _, _), Expr.Slice(_, ty, _), Expr.Cond(_, ty, _) => ty
         case Expr.Seq(_, ty, _), Expr.Match(_, ty, _), Expr.Try(_, ty, _), Expr.Fn(_, ty, _), Expr.Text(_, ty, _) => ty
@@ -534,14 +654,14 @@ fn (x Expr&) Type() types.TypeId {
 fn (p Place&) Type() types.TypeId {
     return match p {
         case Place.Local(_, ty, _), Place.Global(_, ty, _, _), Place.Deref(_, ty, _), Place.Field(_, ty, _, _) => ty
-        case Place.Elem(_, ty, _), Place.Payload(_, ty, _), Place.Temp(_, ty, _), Place.Target(_, ty) => ty
+        case Place.Elem(_, ty, _), Place.Payload(_, ty, _), Place.Temp(_, ty, _, _), Place.Target(_, ty) => ty
     }
 }
 
 fn (p Place&) Span() source.Span {
     return match p {
         case Place.Local(sp, _, _), Place.Global(sp, _, _, _), Place.Deref(sp, _, _), Place.Field(sp, _, _, _) => sp
-        case Place.Elem(sp, _, _), Place.Payload(sp, _, _), Place.Temp(sp, _, _), Place.Target(sp, _) => sp
+        case Place.Elem(sp, _, _), Place.Payload(sp, _, _), Place.Temp(sp, _, _, _), Place.Target(sp, _) => sp
     }
 }
 
@@ -633,8 +753,8 @@ fn (w mut printer&) expr(x Expr&) String {
     ty := w.T.Canon(x.Type())
     return match x {
         case Expr.Lit(_, _, v) => "(lit " $ty " " $v ")"
-        case Expr.Data(_, _, bytes) => "(data " $ty " " $bytes.Len() ")"
-        case Expr.Read(_, _, p) => "(read " $w.place(p) ")"
+        case Expr.Data(_, _, f, c) => "(data " $ty " " $f " " $constText(c) ")"
+        case Expr.Read(_, _, p, site) => "(read " $w.place(p) $(" site " $site if site >= SiteId(0) else "") ")"
         case Expr.Borrow(_, _, p) => "(borrow " $ty " " $w.place(p) ")"
         case Expr.Take(_, _, p) => "(take " $w.place(p) ")"
         case Expr.Promote(_, _, pr) => "(promote " $ty " " $w.expr(pr.X) " site " $pr.Site ")"
@@ -645,12 +765,32 @@ fn (w mut printer&) expr(x Expr&) String {
         case Expr.Slice(_, _, s) => "(slice " $w.place(s.Base) " " $w.expr(s.Lo) " " $w.expr(s.Hi) ")"
         case Expr.Cond(_, _, c) => "(cond " $w.expr(c.C) " " $w.expr(c.A) " " $w.expr(c.B) ")"
         case Expr.Seq(_, _, s) => "(seq " $s.Stmts.Len() " " $w.expr(s.X) ")"
-        case Expr.Match(_, _, m) => "(match " $m.Arms.Len() " arms)"
+        case Expr.Match(_, _, m) => "(match " $m.Arms.Len() " arms, nomatch " $m.NoMatch.Code.Stmts.Len() ")"
         case Expr.Try(_, _, t) => "(try " $w.expr(t.X) " " $t.Clauses.Len() " clauses)"
         case Expr.Fn(_, _, f) => "(fn " $ty ")"
         case Expr.Text(_, _, t) => "(text " $t.Pieces.Len() " site " $t.Site ")"
         case Expr.Away(_, file, y) => "(away " $file " " $w.expr(y) ")"
     }
+}
+
+# a constant as text: a number, "text N" for N bytes of text, "[...]" for an array's elements
+fn constText(c Const&) String {
+    return match c {
+        case Const.Bits(v) => $v
+        case Const.Bytes(b) => "text " $b.Len()
+        case Const.Items(xs) => constItems(xs)
+    }
+}
+
+fn constItems(xs Array<Const&>&) String {
+    b := StringBuilder()
+    b.PushChar('[')
+    for i in range xs.Len() {
+        if i > 0 { b.PushChar(' ') }
+        b.Push(constText(xs[i]))
+    }
+    b.PushChar(']')
+    return b.ToString()
 }
 
 # an enum case's name without its type's
@@ -676,7 +816,7 @@ fn (w mut printer&) place(p Place&) String {
         case Place.Field(_, _, base, i) => $w.place(base) "." $i
         case Place.Elem(_, _, e) => $w.place(e.Base) "[" $w.expr(e.Index) "]"
         case Place.Payload(_, _, pl) => $w.place(pl.Base) " as " $pl.Tag
-        case Place.Temp(_, _, v) => "tmp " $w.expr(v)
+        case Place.Temp(_, _, v, site) => "tmp " $w.expr(v) " site " $site
         case Place.Target(_, _) => "target"
     }
 }
@@ -696,9 +836,10 @@ test "a body: locals, blocks and sites, read back and printed" {
     s := b.AddLocal(Local(names.Intern("s"), sp, i32, root, LocalKind.Var, Mark.Infer))
     b.Params.Push(a)
     b.Params.Push(c)
-    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Place.Local(sp, i32, a)),
-                                                              Expr.Read(sp, i32, Place.Local(sp, i32, c))])
-    b.Root = Block(root, Stmt&[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Place.Local(sp, i32, s)))])
+    none := SiteId(-1)
+    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Place.Local(sp, i32, a), none),
+                                                              Expr.Read(sp, i32, Place.Local(sp, i32, c), none)])
+    b.Root = Block(root, Stmt&[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Place.Local(sp, i32, s), none))])
     assert sum.Type() == i32 and sum.Span() == sp
     assert b.Local(s).Marked == Mark.Infer and b.Encloses(root, root)
     got := b.Print(t)
@@ -722,4 +863,54 @@ test "a plan: what each site builds into and each call passes, Unset where nothi
     pl.Pass(call, Scope[Scope.Var(0), Scope.Program])
     assert pl.Built[I64(mk)] == Scope.Block(loop)
     assert pl.Passed(call, 0) == Scope.Var(0) and pl.Passed(call, 1) == Scope.Program and pl.Passed(call, 2) == Scope.Unset
+}
+
+# "fn link(a mut N&, b N&a) N&a { return b }" and its pieces: marks and scope variables read off the type alone
+test "a body's marks and scope variables come from its type; constants, temporaries and matches as check makes them" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m := t.AddModule("t")
+    n := t.Named(t.AddDecl(m, names.Intern("N"), types.DeclKind.Struct, 0, 0), types.ListId(0))
+    i64 := t.Prim("I64")
+    t.SetStructBody(n, t.List1(i64), false)
+    mutN, roN := t.Ref(n, types.Writable), t.Ref(n, types.ReadOnly)
+    ty := t.Func(t.List(types.TypeId[mutN, roN]), roN, types.ListId(0),
+                 t.Scopes(types.RoleFn, I64[types.OwnScope, 0], I64[0]))
+    sp := source.Span(0, 4)
+    b := Body(BodyId(1), BodyOf.Fn(0), ty, 0, sp)
+    root := b.AddBlock(BlockId(-1), BlockKind.Body, sp)
+    a := b.AddLocal(Local(names.Intern("a"), sp, mutN, root, LocalKind.Param, Mark.Bare))
+    c := b.AddLocal(Local(names.Intern("b"), sp, roN, root, LocalKind.Param, Mark.Of(a)))
+    b.Params.Push(a)
+    b.Params.Push(c)
+    b.SetVars(t.ScopeVarsOf(ty))
+    assert b.Vars.Len() == 1 and b.Vars[0] == ScopeVar.Param(a)
+    assert b.ParamMark(t, 0) == Mark.Bare and b.ParamMark(t, 1) == Mark.Of(a) and b.Local(c).Marked == b.ParamMark(t, 1)
+    assert b.ResultMark(t, 0) == Mark.Of(a)
+    # a constructor's result scope is its instance's
+    k := Body(BodyId(2), BodyOf.Ctor(n, types.ListId(0)),
+              t.Func(t.List1(i64), n, types.ListId(0), t.Scopes(types.RoleCtor, I64[types.OwnScope], I64[types.OwnScope])),
+              0, sp)
+    k.Params.Push(k.AddLocal(Local(names.Intern("v"), sp, i64, BlockId(0), LocalKind.Param, Mark.None)))
+    k.SetVars(t.ScopeVarsOf(k.Ty))
+    assert k.Vars.Len() == 1 and k.Vars[0] == ScopeVar.Instance
+    # a read of an own slot borrows it at a Region site; a temporary place has a site; text arrays are constants
+    region := b.AddSite(SiteKind.Region, sp)
+    tmp := b.AddSite(SiteKind.Temp, sp)
+    owner := t.Ref(n, types.Owning | types.Writable)
+    w := printer(t)
+    borrow := Expr.Read(sp, roN, Place.Local(sp, owner, a), region)
+    assert w.expr(borrow) == "(read L0 site 0)", w.expr(borrow)
+    temp := Place.Temp(sp, i64, Expr.Lit(sp, i64, 7), tmp)
+    assert w.place(temp) == "tmp (lit I64 7) site 1" and temp.Type() == i64
+    chars := t.Ref(t.Array(t.Prim("U8"), types.TypeId(0)), types.ReadOnly)
+    words := Expr.Data(sp, t.Ref(t.Array(chars, types.TypeId(0)), types.ReadOnly), 3,
+                       Const.Items(Const&[Const.Bytes(U8[104, 105]), Const.Bytes(U8[])]))
+    assert w.expr(words) == "(data Array<Array<U8>&>& 3 [text 2 text 0])", w.expr(words)
+    # a valueless Seq, and a match whose nomatch is an empty arm where nothing happens
+    seq := Expr.Seq(sp, types.VoidT, Seq(Stmt&[Stmt.Eval(sp, Expr.Lit(sp, i64, 0))], null))
+    assert w.expr(seq) == "(seq 1 _)"
+    none := Arm(sp, Alt&[], null, Block(root, Stmt&[]), null)
+    mt := Expr.Match(sp, types.VoidT, Match(Stmt&[], Arm&[], none, false))
+    assert w.expr(mt) == "(match 0 arms, nomatch 0)"
 }

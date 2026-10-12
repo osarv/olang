@@ -3182,11 +3182,14 @@ shrinks the collection makes it an out-of-range index (E16e) - checked only unde
 (S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
 of storage within it (a field, or an element - any element of an array standing for any other, their indexes not
 compared - reached with no reference followed), takes the place's **old value**: what the place held is copied, built
-where a temporary in that position would be (O18a), and the borrow names the copy. It applies where what the value
-builds can keep the borrow - an enum case's payload, a constructor field holding the argument (C2d), an array literal's
-element, the result of a call whose body can hand the argument back in it (O14c, O10b) - so `x = E.Neg(x)` is the
-negation of the old `x`, `n = Node(n)` puts the old node behind the new one, and no assignment makes a value hold the
-storage it **names**. A compound assignment and an increment are the assignments S5 and E31 define them as, so the same
+where a temporary in that position would be (O18a), and the borrow names the copy. It applies where the value's
+**type** can hold the borrow: where, following fields, elements, payloads, references and type arguments, the assigned
+value's type can hold a reference to storage of the borrowed type (or of a type sharing its representation, T29a), or a
+function value (D16c), which can hold anything. It is decided from the types alone - never from what a callee's body
+does with its argument - so `x = E.Neg(x)` is the negation of the old `x`, `n = Node(n)` puts the old node behind the
+new one, `x = f(x)` copies the old `x` wherever `f`'s result type can hold a reference to `x`'s type whether or not
+`f` keeps it, and no assignment makes a value hold the storage it **names**. The copy is what the borrow names
+throughout: a callee writing through a writable borrow of it writes the copy, and the place then takes the value. A compound assignment and an increment are the assignments S5 and E31 define them as, so the same
 holds for them: `x += E.Lit(2)` through a `Plus` keeping its receiver adds to the old `x`, and so does `x++` through `Inc`
 or `Plus`. The same holds for the targets of a parallel assignment (S4c) and of a spawn (P1g). The place is told by the
 names written, never by where references lead: storage reached through a reference - `r` a reference to `x` in

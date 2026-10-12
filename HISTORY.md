@@ -16038,3 +16038,97 @@ loans would otherwise have to judge; a loop is a body and a post clause, every `
 it, and `break`/`continue` name their loop by its body's block (S9f's run-by-run loops break both); `Away` marks a
 subtree written in another file (D8a's defaults built in their declaration's context). `typed.olang` has the
 definitions, a printer for review and check's tests, and tests building a body and a plan by hand.
+
+### The typed contract, reviewed and revised (DESIGN.md 1.6.1; S4d, T22a, O4a, O4b, O14b, O25a, G16a, G16b, 2026-10-12)
+
+**The review** (`/home/user/review/typed`, read-only, of master 45c14e6) found the shape right - places apart from
+values, sites, a plan beside the body - and listed 17 changes required before M5b and 9 recommended. Two were design
+points rather than missing fields, and one of them was already a stage-0 bug.
+
+**Function types lost their scopes when interned.** `fn link(a mut N&, b N&a)` has one scope variable (`b` shares `a`'s,
+O4b); the function type `fn(a mut N&, b N&)` has two. Stage 0 lets `link` be a value of that type: the call through
+the value passes `(env, s0, s1, a, b)` and `link`'s adapter takes `(env, s0, a, b)`, reading a scope pointer as `a` -
+`review/typed/repro/sharedscopevalue.olang` and `sharedscopestore.olang` segfault when built and print the right answer
+under `-i`. Even with the ABI fixed it is unsound: `link` needs `b` to live where `a` does, which a call through the
+value never checks. The port's types could not have told the two apart either, since `types.Func` was keyed by
+parameters, result and errors only, and after substitution `fn(acc String&, x String&) String&` - a callback's result
+written as a type variable (O14b, T22a) - was indistinguishable from a built result. **Decided (mine)**: a function type
+is interned with a `ScopesId`: its role (a function, a constructor - an enum payload's too - or a destructor), an entry
+per parameter (its own scope variable, or the earlier parameter whose variable it shares) and per result (built,
+borrowed from a parameter, or written as a type variable). `sigType` fills it from the written markers - `&x` naming a
+parameter written before it, the receiver included (O4a) - and `Subst` keeps it. It is outside T22's identity: `Plain`
+gives a type with every function type's scopes left out and `Same` compares plain ids, which is what inference, trait
+satisfaction and every identity question use; an instance's arguments (G16a), a function instance's, and an anonymous
+enum's payloads (T27) are held plain, so one instance is one instance whatever scopes its arguments were written with.
+`types.ScopeVarsOf(f)` then gives the hidden scope arguments from the type alone, one function for `check`, `scope`,
+`lower` and `eval`: each parameter, receiver first, holding a reference and sharing none; then the result scope, where a
+result is built or written as a type variable and holds a reference, or the instance for a constructor; a destructor's
+closing scope alone; never captures. A function made a value of a type whose scopes differ is adapted where the
+difference is one the adapter can bridge (the type shares where the function does not; a borrowed result where it
+builds; a type-variable result where it borrows) and refused where it is not (T22a: it shares where the type does not;
+it borrows, or may hand back an argument, where the type says built or borrowed elsewhere). Canonical texts spell
+scopes that say something as ` ~[role,n,entries]`, read back by `ParseCanon`, so stage 0's texts - which never carry
+any - read and lay out as before (layoutdiff). The stage-0 side - T22a refusing the shared-scope value - is a fix
+another agent makes in C (QB); SPEC's T22a already calls such a relation an obligation, so its text only gains a line
+there.
+
+**S4d depended on a §8 summary.** Stage 0 copies a place's old value where "a call whose body can hand the argument
+back" (`calleeMayKeepArg`) keeps the borrow - a §8 fact `check` would have had to wait for, against DESIGN 1.7's "no
+typing decision depends on a scope", and, carried by the plan instead, a value change check-time evaluation (with no
+plan) would not see. **Decided (the coordinator's call)**: S4d is decided by types - the old value is copied wherever
+the assigned value's type can hold a reference to storage of the borrowed type (following fields, elements, payloads,
+references and type arguments; a function value can hold anything), whatever any callee's body does. SPEC S4d is
+rewritten; it copies more than stage 0 does (`x = f(x)` whenever `f`'s result type could keep `x`), and one corner
+changes meaning - a callee writing through a writable borrow of the place writes the copy. DESIGN section 7 lists it
+among the disagreements to fix in C. In the tree the copy is `Promote(Read(place))`, a borrow of `Place.Target` in a
+compound assignment included.
+
+**The rest of the review's required changes**, all in `typed.olang` and DESIGN 1.6.1:
+- **Marks.** `Mark.Global(module, name)` for `&G` (a local's, O1b); a parameter's mark as written (`Bare`, `Of(x)`
+  sharing, `None` a value), agreeing with its type (`Body.ParamMark`); `Infer` for a local written as a bare type
+  variable (O25a); `TypeVar` for a result written as one (O14b), results' marks read off the type
+  (`Body.ResultMark`) - the `Results` list went, so the type is the one record; field marks are the constructor body's
+  `Fields` locals' (C2d, O20, O23a), per instance and per twin.
+- **Bodies.** `Ctor(t, twin)` - a G10d twin's own constructor; `Case(t, tag)` - an enum payload's parameters and marks,
+  no code (T17c); `Global(module, name)` - one body per global, replacing a module's `Init`, since K2 bakes and refuses
+  globals one by one and a `:=` global's type, G21, B9c and S18c each ask for one; B5a's order is a summary computed once
+  the bodies are checked. `Body.SetVars` fills `Vars` from `ScopeVarsOf(Ty)`.
+- **Locals.** `Held` (transparent: built where its one use puts it - D8d's parts, E29's operand, E30's chain values,
+  S4c's values, E31b's place and indices, a match's subject, a destructured result) apart from `Hidden` (storage of its
+  own: a counter, an iterator, E31b's handle copy).
+- **Sites.** A `Read` of an own slot that borrows it has a `Region` site (O32, O33: the region read there, which a call
+  passes on); `Place.Temp` has a `Temp` site (E16a, T7c); an owner or destructor-bearing value no slot receives has a
+  `Promote` site where it is registered.
+- **Nodes.** `Data` is a constant aggregate (`Const`: bits, text, or an array of constants - T25d's arrays of text),
+  one instance per written position; `Make` and `Collect` carry a `Check` for a fill's length and a reservation (D14b,
+  E15a); a `Call` may be a type's zero value (`Zero`, D13c), which eval decides per type after check; `Match.NoMatch` is
+  never null; `Helper(Equal|Hash)` is pure data, a declared `Eq` or `Hash` elaborated into calls; a `Render` operand
+  naming an array is a `Borrow` (E11b); `Callee` has room for an `any Trait&` dispatch.
+- **Stated**: the default error's word, a valueless `Seq`, `Spawn`'s order, a task clause handler's result, a
+  destructor's `Params[0]`, `Callee.Body` only for capture-free lambdas, `IsCase` on null, zero `Lit`s of aggregates,
+  T29d's synthesized `Return`, `Target`'s binding and its S4d case, and how loops meet `continue`, `do ... for` and S9e.
+- **Sharing.** A subtree holding a `SiteId` or `LocalId` is never shared; a default is built per call with fresh ids in
+  its declaration's context.
+- **The summaries** each have an owner: D9b, K1a and B5a change values and are computed on demand while checking; S8c's
+  fixed locals over the resolved AST, before checking, so S8b's local ifs are decided in one pass; T25c/QC's by-value
+  need and `roByArg`/`roToResult` in check's last step; the rest - O17/O17b, `MayBuild`/`MayBuildInto` and noBuild, own
+  effects, O37, O38, C2d's may-hold, O26a/O18c's "may keep", O10b, O23a, O13c - in `scope`. The E31b handle exemption is
+  scope's error.
+- **The plan's invariant**: placement only, nothing in it changes a value - testable in a debug mode that evaluates
+  each body lowered without and with the plan.
+
+**The recommended changes, all taken.** O39-O41's liveness runs over MIR after lowering (releases, holds, deferred code,
+joins, try exits and evaluation order are explicit only there; a second derivation on the tree is what decision 49's
+reviews kept finding drift in); confinement, regions and reach stay in `scope`. The plan gains `Scope.Inert` - a live
+scope nothing is built in, for what a callee only reads and `$`'s per-call scope for a `Str`'s receiver (str3's N1/N2
+crashed on a null one) - and carries a closure's capture scopes and an adapter's instance scope at its site; `Block(0)`
+is the frame scope in constructors and destructors too; lowering's own allocations are listed as the verifier's
+exemptions. Decisions are kept under keys (S18c by body and assert span, K2 by global, T29d by call site, D13c by type).
+Every type and function instance records where it was first asked for (`generic.Program.Asking`, `TypeOrigin`,
+`InstanceOrigin`, G16b). MIR lowered without a plan is cached apart from MIR lowered with one.
+
+**Not changed.** A scope argument naming a global (`f&G()`) stays E25's error, so `Mark.Global` is a local's mark only
+(the review offered it for both). `Ctor`'s twin is the binding of the constructor's own type variables (a `ListId`),
+which is the twin's identity, rather than a separate index. A type argument written with sharing scopes is held plain,
+so a sharing function cannot be stored in a generic container of functions of that shape - T22a's refusal, sound, and
+nothing in the repository writes one.

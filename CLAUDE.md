@@ -5187,6 +5187,19 @@ and literals made only of such, never existing storage anywhere in it) - it is
   layoutdiff`, in `make verify`): all 9,302 types of 283 root programs read back from their canonical texts and laid
   out as stage 0 lays them out, but 11 listed in `compiler/goldens/layout.deferred` (a length a call computes, a type a
   B9c-decided branch declares - the evaluator's, M8). The contract awaits review.
+- **The typed contract revised after its review (S4d, T22a, O4a, O4b, O14b, O25a, G16a, G16b, 2026-10-12;
+  compiler/DESIGN.md 1.6.1, details mine).** A function type is interned with its **scopes** - role (function,
+  constructor, destructor), each parameter's own scope variable or the earlier one it shares, each result built,
+  borrowed or written as a type variable - outside T22's identity (`Plain`/`Same`; instance arguments held plain), so
+  `types.ScopeVarsOf(f)` gives every pass the hidden scope arguments from the type alone, and a function made a value of
+  a type whose scopes differ is adapted or refused (T22a) by one table. It found a stage-0 bug for the C fix list: `fn
+  link(a mut N&, b N&a)` as a value of `fn(a mut N&, b N&)` passes one scope too many and is unsound. **S4d is decided
+  by types** (the coordinator's call): the old value is copied wherever the assigned value's type can hold a reference
+  to the borrowed storage, whatever any callee does (SPEC S4d; stage 0 to follow). The tree gained global and
+  type-variable marks, per-twin constructor and per-case bodies, one body per global, Held vs Hidden locals, region and
+  temporary sites, constant aggregates, checks on `Make`/`Collect`, zero-value calls; the plan holds placement only
+  (nothing in it changes a value) and gains `Inert`; every summary has an owning pass; liveness (O39-O41) runs on MIR;
+  decisions are kept under keys; instances remember where they were asked for. layoutdiff: 9,403 types as stage 0, 11 deferred.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
