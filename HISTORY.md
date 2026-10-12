@@ -16132,3 +16132,82 @@ Every type and function instance records where it was first asked for (`generic.
 which is the twin's identity, rather than a separate index. A type argument written with sharing scopes is held plain,
 so a sharing function cannot be stored in a generic container of functions of that shape - T22a's refusal, sound, and
 nothing in the repository writes one.
+
+### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
+
+`compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
+read - the contract M7, M8 and M9 are built against independently, as `typed.olang` is M5's and M6's. It holds the data
+structure, a verifier, a textual dump and their tests; DESIGN.md 1.8.1 says it in prose, with how each typed node
+lowers and what each later pass relies on. Written for review before `lower` starts.
+
+**The shape is rustc's MIR**: a control-flow graph of basic blocks over typed locals and places, not SSA (LLVM's
+mem2reg and SROA do that), each block statements and one terminator. **Plain data**: a function's statements index its
+own flat tables (projections, operand lists, scope lists, places, calls, cases, tasks, clauses, error items,
+constants) by `Range`, so a function refers into nothing that outlives it and is reclaimed whole once emitted (DESIGN.md
+3.1). **Locals keep the typed numbering**, lowering's temporaries after, so a typed `LocalId` names the same local in
+MIR with no table between them. **An index projection takes a local** (rustc's), so a place never contains an
+expression and its evaluation order is the statements'.
+
+**Decided (mine), each the simplest form that keeps every later pass from deciding anything again:**
+- **Checks are tests and branches.** No check statement or assert terminator: a guaranteed check branches to an `Exit`
+  naming S18a's text, a checked one (under `try`) to the try's dispatch with `BuiltinError`'s code. E15a's overflow is
+  one rvalue, `Overflows(op, ty, args)` - whether the true result fits - beside the operation; a zero divisor, a shift
+  amount, a length, a bound and a float's finiteness (`r - r == 0`) are ordinary compares. So `emit` and `eval` never
+  check anything MIR does not show, and the "no per-operation check" rule is visible in the IR.
+- **Deferred code is copied onto each exit**, and the exit sequence is fixed: per block left, innermost first, its
+  deferred code, then (a join) its `Wait`, then its `Close` - S19's order and the coordinator's 2026-10-08 call (a
+  deferred `Cancel()` before the join's wait). No defer statement exists in MIR, so nothing downstream can run it in
+  the wrong place.
+- **Scopes obey a strict stack**: `Open` inside the scope opened last that is still open, `Close` (or `Give`) of that
+  one, the same scopes open on every path into a block, none at a `Return` or `Raise`. Regions included: an own object's
+  region is opened where it is built and either given to its slot (`Give`, O30) or closed where nothing stores it. That
+  is what lets `emit` keep scope headers in entry-block slots and close with one call.
+- **Stand-ins for tasks are `Spawn`'s meaning**, made by `emit` and `eval`; no MIR names one (P2).
+- **A text builder is a scope** (`Builder`) written with `Write` and finished by `Text`; a `Render` helper's builder is
+  its one passed scope.
+- **Helpers' ABI is fixed by their kind** (`HelperType`, `PassedCount`), not read off `ScopeVarsOf`: Render passes its
+  builder, Equal and Hash pass nothing and call nothing, Zero passes its result scope. A constructor's assembly is an
+  `Aggregate` in the constructor's own function, not a helper.
+- **A module's initialization is a MIR function** (`FnKey.Init`) running its globals' bodies in B5a's order; a baked
+  global (K2's key) is left out of it.
+- **Error codes are I32 locals under one list each**: a call's error edge gives the code under the callee's list,
+  `Recode` re-encodes it (R6, R17's default error), `Raise` fails with one under the function's own.
+- **The verifier compares types up to representation** (T29: a declared type over another is its representation),
+  `null` into references and function values, and permissions only as subsets (T25b) - the representation is what
+  `emit` and `eval` depend on, and check has already judged the program's types.
+- **No round-trip parser for the dump**: types print as canonical texts that only `generic.Program.ParseCanon` reads
+  back, and a MIR parser would be a second owner of that grammar. Golden dumps in `lower`'s tests stand in.
+
+**The verifier** checks shape (ids and ranges, every block terminated and reachable), types (stores, rvalues, calls'
+arguments, scopes and results, error edges exactly where a callee can fail, raises only where the function can fail,
+returns, switch values, writes, destructor registrations, never a borrow into an own slot) and flow, to a fixed point
+over the CFG: every local initialized on every path before it is read (a call's result on its ok edge, its error code on
+its error edge, a wait's code on its failed edge), arena locals stored into only after their `Live`, scopes nested and
+balanced on every path, nothing built in a scope not open or inert, no join closed with tasks not waited for. Its tests
+build functions by hand - an addition, a loop with a call's error edge raised after its scopes close - with golden
+dumps, and catch 29 malformations one by one.
+
+**Found on the way, a stage-0 use-after-free (left for the C fix list, bootstrap/ being other work's):** a push onto a
+list held in an element of a parameter's list - `f.Blocks[b].Stmts.Push(s)` in a method of `f`, E31b's held handle copy
+lent as its reference - builds the inner list's first chunk where the call's frame is, freed at its return; the next
+walk reads freed memory (`for s in f.Blocks[0].Stmts` read garbage, the scope sanitizer reports it). A copy into a local
+first (`blk := f.Blocks[b]; blk.Stmts.Push(s)`) is correct, and `Fn.Add` does that. Reproducer (16 lines, `-b -d -s`):
+```
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+type F struct(K I64) {
+    K
+    Blocks List<Blk>
+}
+fn (f mut F&) NewBlock() { f.Blocks.Push(Blk()) }
+fn add(f mut F&, b I64, x I64) { f.Blocks[b].S.Push(x) }
+fn main() ? {
+    f := F(1)
+    f.NewBlock()
+    add(f, 0, 7)
+    for s in f.Blocks[0].S { println("for " $s) }
+}
+```
+The same push written in `main` on a local is correct.

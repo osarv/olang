@@ -6,7 +6,8 @@ the round trip are clean on every file and on study2's data, scan and parse toge
 `names`, with `cond`) built the same day - every root's module graph is stage 0's, and every checks case gives the load
 and name errors stage 0 gives; M5a (`types`, `generic`, `typed`) built 2026-10-12 - every type stage 0 holds for every
 root program is interned and laid out as stage 0 lays it out (the layout diff, section 4), and the typed contract is
-written for review (section 1.6.1); the rest is design.
+written, reviewed and revised (section 1.6.1); the MIR contract (`mir`, section 1.8.1) written 2026-10-12 for review;
+the rest is design.
 `SPEC.md` says what olang means; this file says how the compiler written in olang computes it. The C compiler
 (`bootstrap/`) is the reference for behaviour only: its diagnostics, edge cases and test results, never its structure.
 Where the C compiler and `SPEC.md` disagree, the port follows `SPEC.md`, and the disagreement is fixed in C as well (or
@@ -627,6 +628,194 @@ reviews found drifting. It gives errors only, and the plan comes before MIR, so 
 - **Agreement by construction.** Generated code and the evaluator run the same MIR. A review on 2026-10-09 found 12
   disagreements between comptime.c and codegen.c.
 
+### 1.8.1 MIR (`mir`): the contract
+
+`lower` makes a MIR function of each typed body (and of each helper, adapter and module initialization); `eval`,
+`emit` and O39-O41's liveness check read nothing else. `compiler/mir.olang` defines it, with a verifier and a textual
+dump. Written on 2026-10-12, for review before `lower`, `eval` and `emit` are built against it. rustc's MIR is the
+model: a control-flow graph of basic blocks over typed locals and places, not SSA.
+
+**Functions.** A function's key (`FnKey`) is what it is: a typed body (`Body`), an adapter making an instance's `Call`
+a function value (`Adapter`, E31), a helper for a type (`Helper(kind, t)`), or a module's initialization (`Init`), which
+runs the module's globals' bodies in B5a's order. Two MIR functions are one exactly when their keys are equal. A function
+holds its type (the receiver first, with its scopes, as `types.ScopeVarsOf` gives them), its file and span, and:
+- **Locals.** The typed body's locals keep their numbering - MIR local `i` is typed local `i` for every `i` below the
+  body's local count - and lowering's temporaries follow. Each has a name, span, type, kind (`Param`, `Capture`, `Var`,
+  `Temp`) and a **home**: `Frame` (the function's stack frame, live from the entry), or an arena - a scope the function
+  opens or one of its scope variables - where the plan puts it (O26a, T7c's storage over 64 KB), whose storage is made by
+  `Live` and ended by `Dead`. Parameters and captures are listed in order and hold their values at the entry.
+- **Scope variables** (`Vars`): the ones a call passes first - `ScopeVarsOf(ty)` in order (parameter scopes, the result
+  scope, a constructor's instance, a destructor's closing scope), or a helper's fixed list - then the scopes of the
+  captures, carried in the environment (D16c).
+- **Scopes it opens** (`Scopes`), each with its kind, parent, the typed block it stands for and, for a join, the errors
+  its wait can fail with: `Frame` (block 0, opened first, closed by every return, O2), `Block`, `Loop` (opened and closed
+  every turn, O2b), `Join` (P1b), `Region` (an own object's, O30), `Inert` (live, nothing built in it: a `Str`'s
+  receiver, O12/E11c) and `Builder` (a text builder with its scratch arena, E11a/E11b).
+- **Blocks.** Block 0 is the entry. Each holds statements, run in order, and one terminator.
+- **Flat tables** - projections, operand lists, scope lists, places, calls, switch cases, tasks and their clauses,
+  error items, constants - which statements index by `Range`. A function holds no reference into a tree or another
+  function, so it is reclaimed whole when the scope it is built in closes (section 3.1).
+
+**Places and values.** A place is a base - a local, or a global by module and name - and projections: `Field(i)`,
+`Index(local)` (rustc's: an index is a local's value, computed before), `At(i)` (a constant index), `Deref` and
+`Payload(tag)` (the case's record, the case tested before). An operand is a copy of a place, a constant's bits
+(numbers, `Bool`, `Char`, `null` and an aggregate's zero bits as zero), or read-only constant data (`Data`, T25d: one
+instance per written position, file and span, so two evaluations are the same storage). An rvalue computes one value from
+operands already computed:
+
+| rvalue | meaning |
+|---|---|
+| `Use(x)` | the operand |
+| `Ref(p, ty)` | a reference to the place itself (E12c) |
+| `Take(p)` | the owner p holds, moved out, null left (E34) |
+| `Prim(op, ty, args)` | `typed.PrimOp`, unchecked (E6c); the checks `InRange`/`InRangeIncl` are refused - they are tests and branches here |
+| `Overflows(op, ty, args)` | whether op's true result does not fit ty (E15a's OVERFLOW): integer `+ - *`, unary `-`, MIN / -1, a narrowing or float-to-integer conversion |
+| `Tag(p)` | the case an enum value holds, an `I64` |
+| `Aggregate(ty, tag, args)` | a struct (a constructor's assembly), a tuple, a record, an enum case, a fixed array |
+| `New(s, x, ty)` | x given storage in scope s, a reference to it (E12c, O16, O30) |
+| `NewArray(s, ty, n, fill)` | an array value whose storage is n elements in s, each fill (D14, E19, E27); n checked before (D14b) |
+| `Slice(p, lo, hi, ty)` | a reference to p's elements lo up to hi (E16a); bounds checked before (E16b) |
+| `Closure(code, ty, s, args)` | a function value: code, and an environment in s holding args (D16c) or an adapter's instance (E31); a named function's has none. Where ty's scopes differ from code's own, the value adapts them (T22a) |
+| `Recode(code, from, to)` | an error code under one list as the same error under another (R6); one `to` does not name becomes its default error (R17) |
+| `Text(b, into, ty)` | what builder b holds, as text built in `into` (E11b) |
+
+A scope reference (`ScopeRef`) is one this function opens, one of its scope variables, the program's (O1b), the frame
+(storage on the stack, until the return: a temporary nothing keeps, an environment no callee keeps, D16c), or the region
+of the object a local's reference names (`RegionOf`, O32/O33).
+
+**Statements.** `Assign(p, v)`: the place's projections (their index locals) are computed before, then v, then the store
+(S4). `Live(l)`/`Dead(l)`: l's storage made (in its home's arena) or ended. `Open(s)`/`Close(s)`: s opens inside the
+scope opened last that is still open, its `Parent`; it closes with its owners released and its destructors run, last
+registered first (O15, O35), its storage reclaimed. `Give(s)`: region s now belongs to the owner just stored (O30) and
+is no longer this function's to close. `RegisterDtor(s, t, x)`: x's instance destructed when s closes (O16).
+`RegisterOwner(s, p)`: the own slot p released when s closes if it still holds one - an owner local (O35), a hold
+(F3), a result in flight (N3). `Release(p)`: the object the own slot p holds, if any, released and p left null (O35);
+a store into an own slot is preceded by one where the slot held one. `Write(b, how, x)`: x appended to builder b, as
+E11a writes it (`Bytes`, `Char`, `Int`, `Uint`, `Float`, `Bool`). `CopyElems(dst, src, n)`: n elements copied (T11b,
+T7c). `Spawn(j, task)`: a task started in join j (P1).
+
+**Terminators.** `Goto`; `Branch(c, yes, no)` on a `Bool`; `Switch(x, cases, otherwise)` on an integer, each value
+distinct; `Call(c)`; `Return(x)`, with every scope closed; `Raise(code)`, the function failing with code under its own
+error list (R6), every scope closed; `Wait(j, ok, code, failed)`; and `Exit(kind, msg)`.
+
+- **Calls.** A call names its callee - a MIR function by key, an extern (X1), or a function value - its arguments (one
+  per parameter, the receiver first, defaults filled in, D8a), the scopes it passes (`PassedCount` of them: the
+  callee's `ScopeVarsOf`, a helper's fixed list, none for an extern), where its result is stored (or dropped), the block
+  it continues at, and, for a fallible callee, the local its error code is put in - under the callee's own list - and
+  the block that dispatches it. An error edge exists exactly where the callee can fail.
+- **Tasks.** A `Spawn` names its callee, arguments, scopes, the places its results are stored into on its thread (P1g;
+  their addresses taken at the spawn) and its clauses (P4a: the errors each takes and a handler, a function value run
+  on the task's thread whose result is the targets' value; none for `catch E { }`). An error no clause takes is
+  re-encoded under the join's list and carried to the join (P4b). Each scope a task is handed stands in by one of its
+  own, folded into it at the join (P2): that is the meaning of `Spawn`, made by `emit` and `eval`, and nothing in the
+  MIR names a stand-in.
+- **`Wait(j, ok, code, failed)`** waits for join j's tasks (P1b) and continues at ok, or - where a task let an error
+  through - at failed with code holding the earliest-spawned's error under the join's list (P4b). `failed` is absent
+  exactly where none of the join's tasks can fail.
+- **`Exit(kind, msg)`** ends the test or the process: `Done`, `Fail` (S16, S16a), `Abort`, `Unreachable` (S16c, S16d,
+  and a value match no clause selects, S12b), or a failed check printing `FILE:LINE: ` and its text (S18a): `Assert`
+  (with S17's message), `SliceBounds`, `ArrayLength`, `As`, `FixedLength`. No deferred code runs; the scopes still open
+  are the runtime's to unwind in a test (S19c, P1d).
+
+**What lowering makes explicit, once.**
+- **Order of evaluation** (S4, E11b, P1g, S4c): statements are the order. A call's or a task's operands are values
+  computed by the statements before it, left to right; a compound assignment's place is computed once; a join's
+  operands are all evaluated before any piece is rendered.
+- **Checks** (E15a, E16b, D14b, E32, T7d, S18a): a check is a test (`Prim` compares, `Len`, `Overflows`, `x - x == 0`
+  for a float result's finiteness) and a branch - to an `Exit` for a guaranteed check, to the try's dispatch for a
+  checked one, which goes on with `BuiltinError`'s code (R20). There is no check statement, and nothing is checked that
+  MIR does not show.
+- **Errors** (R6-R21): a call's error edge gets the code under the callee's list; dispatch is branches and switches
+  over it; a propagated error is `Recode`d under this function's list and `Raise`d after the scopes on the way out are
+  closed; a catch default is a store into the try's result slot on its own path.
+- **The exit sequence** - every way out of a block (its end, `break`, `continue`, `return`, an error leaving) runs, for
+  each block it leaves, innermost first: the block's deferred code, copied onto that exit (S19, last registered first,
+  only what was reached); then, for a join, its `Wait` (P1b; a failure replaces the way out, P4b, unless an error is
+  already leaving); then its `Close` (O15, O35). A `return` computes its value into a local first (a returned array
+  copied first where deferred code is pending, S19), and an owned result in flight is held (`RegisterOwner` of its slot,
+  N3) until the function returns. `done`, `fail`, `abort`, `unreachable` and a failed check are `Exit`s and run none
+  of it.
+- **Ownership events** (section 1.6.1): every move is a `Take`; a store into an own slot is preceded by its `Release`;
+  an owner local, a hold (F3: an owner held across a later operand that can leave - in a test build a guaranteed check
+  too) and a result in flight are registered where they are made; every destructor-bearing instance is registered in
+  the scope it is built in, once per constructor call (O16), and an owner no slot receives where it is built (O30); an
+  own object is built in a `Region` opened for it and given to its slot (`Give`), or closed where it is never stored.
+- **Placement**: every allocation (`New`, `NewArray`, `Closure` with an environment, `Text`, a local's home, a builder)
+  names its scope, from the plan's site (section 1.6.1) or one of lowering's own fixed rules (a builder's scratch,
+  `Str`'s `Inert` scope, hold slots, a task's stand-ins, a try default's slot).
+
+**Helpers.** `lower` makes them as MIR functions, so `emit` and `eval` run the same code. Their ABI is fixed by their
+kind, not by `ScopeVarsOf`: `Render`, `fn(x T&)`, writes `$x` into the builder that is its one passed scope (E11a,
+calling a `Str` through `Inert`, section 1.8); `Equal`, `fn(a T&, b T&) Bool`, and `Hash`, `fn(x T&) I64`, pass no
+scope and call nothing; `Zero`, `fn() T`, a type's zero value (D13c), passes its result scope where the value holds
+references. A constructor's assembly is an `Aggregate` in the constructor's own function, not a helper.
+
+**Keys.** A decision about a node is kept under a key (`Key`), never written onto the tree or the MIR: an assert S18c
+decided (`BodyId`, span), a baked global K2 (module, name), a literal's constructor T29d (`BodyId`, `SiteId`), a type's
+zero value D13c (type). `lower` reads them: a decided assert is no test, a baked global has no initializer in `Init`,
+a literal's constructor is its value.
+
+**How each typed node lowers.**
+
+| typed | MIR |
+|---|---|
+| `Lit`, `Data` | `Const`, `Data` |
+| `Read(p)` | `Use(Copy(p))`; a read of an own slot that borrows is a copy of its reference (the loan is the liveness check's) |
+| `Borrow`, `Take`, `Promote` | `Ref`; `Take`; `New` at the site's scope (or a `Frame` local and `Ref`), registered (O16, O30) |
+| `Call` | the arguments into temporaries left to right, a `Call` terminator, its error edge dispatched; `Zero` per `Key.Zero` |
+| `Make`, `Collect` | `Aggregate`, or `NewArray` and stores; a fill's length checked (D14b); `Collect` a loop of stores growing the array |
+| `Prim(op, check)` | `Prim`; under `Try` or `Abort`, the operation's test and a branch before it |
+| `Slice` | the bounds test (E16b, E32b's exact length), then `Slice` |
+| `Cond`, `Match`, `Seq` | branches into one slot; a match's tests over `Tag`/`Prim`, its bindings stores; `Seq`'s statements, then its value |
+| `Try` | the operand's error edges (and its checks') to the clauses: tests on the code, each clause's block, its default into the slot |
+| `Fn` | `Closure`: no environment for `Named`, captures for `Lambda`, the instance for `Adapter` |
+| `Text` | operands into temporaries, a `Builder` opened, `Write`s and `Render` calls, `Text`, the builder closed |
+| `Away` | the default's expression, lowered with its own file |
+| places `Local`, `Global`, `Field`, `Payload` | the base and `Field`/`Payload` projections; a checked payload (`as`) its `Tag` test first |
+| `Deref`, `Elem`, `Temp`, `Target` | `Deref`; `Index`/`At` after the bounds test where checked; a temporary local; the assignment's held place |
+| `Let`, `Assign`, `Eval` | a store into the local (with `Live` for an arena home); the place, the value, the store (S4); the value dropped |
+| `If`, `Loop`, `Jump` | `Branch`es; the body as a `Loop` scope each turn, the post clause, back to the test; the exit sequence then `Goto` |
+| `Return`, `Raise` | the value into a local, the exit sequence, `Return`; `Raise` of the error's code under the function's list |
+| `Exit`, `Assert` | `Exit`; the test, its message computed only on the failing path, an `Exit(Assert)` there |
+| `Block`, `Defer` | `Open`/`Close` around it; the deferred block copied onto every exit after its registration |
+| `Join`, `Spawn`, `Yield` | a `Join` scope, `Wait` on every way out; `Spawn` with the task's places and clauses; a store into the `Collect`'s array |
+
+**What `emit` relies on.** Every local's type and home; that a `Frame` local is an `alloca` in the entry block (O2c);
+that a scope this function opens is opened and closed in nesting order on every path, and every join waited for before
+it closes, so a scope's header is an entry-block slot and closing is one call; that a call passes exactly
+`PassedCount` scopes, in order; the error-union ABI (R6) - a fallible function returns `{ i32, T }` and a code is
+`(type's position from 1) << 16 | word` under its own list (`ErrorCode`); that every check is already a branch, so it
+emits no check of its own; that a `Spawn` is the whole task (env, stand-ins, trampoline, clause dispatch are its to
+make); TBAA (T36), DWARF and target attributes from the types and spans.
+
+**What `eval` relies on.** The same: it executes statements and terminators as written, with allocations in arenas
+named by `ScopeRef` (freed at `Close`, destructors and owners run then), floats as bits, and a step budget; it never
+decides order, placement or checks. `Exit` and a failed check stop the request (K1) or `-i` with the same text; an
+extern's call goes through the dynamic call (X1, section 7). Tasks run in sequence at their `Wait`, in spawn order
+(K1).
+
+**What the liveness check (O39-O41) relies on.** Every release is explicit (a `Release`, or the `Close` of a scope
+holding a registration), every move is a `Take`, every loan starts at a read of an own slot into a local and lives to
+that local's last use, and every call's effects come from its callee's key (`scope`'s summaries). Nothing frees memory
+behind the MIR's back.
+
+**The verifier** (`Fn.Verify`) holds a function to this contract and is run on everything `lower` makes in tests:
+- **Shape**: every id and range in bounds, every block terminated, every block reachable from the entry.
+- **Types**: each store fits its place (one representation, T29; `null` into a reference or function value; a
+  reference into one of the same referent with no permission it lacks, T25b; never a borrow into an own slot); each
+  rvalue's operands and result; each call's arguments, scopes and result against its callee's type; an error edge
+  exactly where the callee can fail; a `Raise` only in a function that can fail; a `Return`'s value; switch values
+  distinct; `Write`s by kind; `RegisterDtor` only for a type with a destructor.
+- **Flow**, to a fixed point over the CFG: every local initialized on every path before it is read (a call's result
+  only on its ok edge, its error code only on its error edge, a wait's code only on its failed edge); an arena local
+  stored into only after its `Live`; the open scopes the same on every path into a block, every `Open` in its parent,
+  every `Close` and `Give` of the scope opened last, none open at a `Return` or `Raise`; nothing built in a scope that
+  is not open or is inert; no join closed with tasks not waited for.
+
+`Fn.Dump` writes a function as text (the stage dump of section 4): its header, locals, scopes and blocks, a statement a
+line. Types print as their canonical text, which only `generic.Program.ParseCanon` reads back, so there is no parser:
+golden dumps in `lower`'s tests stand in for round trips.
+
 ### 1.9 LLVM emission (`emit`, `dwarf`)
 
 - **The route is LLVM IR as text**, as now. A bitcode writer is a large component tied to LLVM's version. The LLVM C
@@ -1081,7 +1270,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site |
 | M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call |
 | M6 | `scope` | M5a's `typed` contract | every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38) |
-| M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands |
+| M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1) |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
 | M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 |
 | M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec |
