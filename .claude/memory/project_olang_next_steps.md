@@ -937,3 +937,8 @@ on sight per [[feedback-surface-and-fix-bugs]].
   compiler/check.olang, phased with a PROGRESS.md handoff in the worktree) and wt-mir (M7's MIR contract + verifier,
   DESIGN 1.8.1). Running: vecp2 (vec6 fixes), e31view (review fixes), check, mir. QUEUED stage-0 fixes after vecp2 and
   e31view merge: T22a sharing (typed/repro/sharedscope*), S4d by types in C, E31b's M1.
+- (2026-10-12) MIR contract merged and pushed (2b42c48: compiler/mir.olang, verifier, dump, DESIGN 1.8.1). It found a
+  stage-0 use-after-free, reproduced on the e31view tip too: `f.Blocks[b].S.Push(x)` (a List field of a struct element
+  reached through x[i]) builds the chunk in the call's frame (scratchpad/mirbug/m.olang; HISTORY has it). Handed to the
+  e31view review (e31view2) for diagnosis; fix it in e31view's next round. Running: vecp2 fix (vec7 F1/F2), e31view2
+  review (15841b0, r1 relaxation), check (M5b/M5c).
