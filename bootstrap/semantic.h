@@ -599,6 +599,7 @@ struct statement {
     enum statementType sType;
     int line; //B2e: the source line the statement starts on, for -d's line table; 0 when synthesized
     struct str file; //B2e/M22: the source file that line is in - a package's functions come from several
+    struct token startTok; //its first token as written - for a note pointing at it (E31b); no owner when synthesized
     struct var var;              //VAR_DECL: the declared variable; FOR: the loop variable
     struct operand* target;      //ASSIGN: the lvalue being assigned to
     struct list spawnTargets;    //SPAWN (D8c/P1g): one operand* per result bound, NULL for a "_"; empty for a

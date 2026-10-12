@@ -2954,20 +2954,37 @@ an element of it), `x[i].M()`, or `x[i]` passed for a writable reference paramet
 checked read, `g(try x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
 so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
 `x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
-read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call.
+read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call. A call
+through a function value - a local's, a parameter's, a field's (`h.fv(x[i])`), an element's (`fs[0](x[i])`), a call's
+result (`mk()(x[i])`), a lambda called where it is written - has a body no check can read, so it takes no copy of an
+element for a writable reference parameter at all, a view's or a handle's included: each is the error. So is `try a[i]
+catch default v` (or a field of it) for a writable reference parameter on any collection, a built-in array's included:
+it is the element or `v`, a value either way, which the write would be lost in (R9b); `try a[i]` alone on a built-in
+array is the element itself.
 
 **A view element** - a struct element, no handle, lent to a callee that writes **nothing of the instance's own
 storage** - is lent the same way, as a copy held in a hidden local with nothing written back: `ws.Gemm(c[g, h], ...)`
-over a batch of matrices, `b[i].Fill(0)`. The callee cannot tell such a copy from the element, so no write is lost.
-Whether a callee qualifies is read off its checked body: the parameter is used only through its references (a reference
-field read out, and anything done through it - an element of `c.Data` written, a field of what a reference names
-assigned), its numeric and `Bool` fields and function values read, and the parameter handed on whole to a read-only
-reference parameter, to a by-value one, or to a writable one of a callee that itself qualifies (a fixed point over the
-program's calls, cycles included). Any other use says no: a field of the instance's own storage assigned or incremented
-at any value depth, a reference field repointed, the parameter repointed, a value field lent, sliced or walked, the
-parameter read into a local, captured, compared or handed to a function value, an extern or a lambda; a callee whose
-body is not checked or has errors says no too. What such a callee builds into what the copy holds is judged as for any
-copy (O17, below). `try x[i]` is never lent this way: its copy is not held apart from its `try`.
+over a batch of matrices, `b[i].Fill(0)`. Nothing the callee does through the copy is lost by not writing it back,
+since it writes none of the copy's own storage. The copy is not the element, though: it names what the element referred
+to when it was read. A callee that replaces the element while the call runs - through the collection reached another
+way (a second argument, a global, a capture), or a later argument of the same call doing so before the callee runs
+(`l[0].Put(replace(l))`) - leaves the copy naming the old element's storage, and the callee's writes through the copy
+reach what the old element referred to, not the new element (from a built-in array, where `x[i]` is the element
+itself, they reach the new one). That is memory-safe - the old storage lives where the collection's elements live -
+and is what a handle's copy does too (below). Whether a callee qualifies is read off its checked body: the parameter is
+used only through its references (a reference field read out, and anything done through it - an element of `c.Data`
+written, a field of what a reference names assigned), its numeric and `Bool` fields and function values read, and the
+parameter, or a struct it holds by value (`c.w`), handed on to a read-only reference parameter, to a by-value one (a
+copy), or to a writable one of a callee that itself qualifies (a fixed point over the program's calls, cycles
+included); a handle it holds by value may be handed to a writable parameter using it only through its reference
+(O17b). Any other use says no: a field of the instance's own storage assigned or incremented at any value depth, a
+reference field repointed, the parameter repointed, a value field lent to a writable parameter of a callee that does
+not qualify, sliced or walked, a value field that is neither a number, a `Bool`, a function value nor a reference read
+at all (an enum matched or compared, an inline array's element, a struct rendered), the parameter read into a local,
+captured, compared or handed to a function value, an extern or a lambda; a callee whose body is not checked says no
+too. A callee whose body has errors is no view either, and its own error is what is said. What such a callee builds
+into what the copy holds is judged as for any copy (O17, below). `try x[i]` is never lent this way, with or without a
+default: its copy is not held apart from its `try`.
 
 **A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
 by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked

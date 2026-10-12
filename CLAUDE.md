@@ -5191,6 +5191,19 @@ and literals made only of such, never existing storage anywhere in it) - it is
   pre-existing**: `g(try l[0])` on a List (its check derived from Len) was taken for a plain temporary and the write
   silently lost - E31b's error now, never lent as a view. `checks/checks.olang`
   gained a `bench` scenario compiling every `bench/*.olang` with `-c` (~30 s), so a benchmark cannot stop compiling unseen.
+  **Its review, finished (2026-10-12; the coordinator's decisions, details mine).** (1) The copy is not the element: a
+  callee - or a later argument of the same call - that replaces the element through another path leaves the copy naming
+  the old element's storage, and writes through it reach that; memory-safe, as a handle's copy already does; stated in
+  E31b and pinned by run cases. (2) A call through a computed function value (`h.fv(l[0])`, `fs[0](l[0])`, `mk()(l[0])`,
+  a lambda called where written) skipped E31b and lost the write (pre-existing): the named, method and computed paths
+  share `atWriteBackArgs`, which refuses every element copy where the body is not known. (3) `try a[i] catch default v`
+  for a writable reference parameter is the error on a built-in array too (pre-existing lost write). (4) A view callee
+  may lend a struct it holds by value (`c.w.Fill(x)`) to a callee that is itself a view. (5) Diagnostics: a refused view
+  gets "the callee is no view of the element because of this statement" at the callee's statement; a callee whose body
+  has errors adds no E31b; the held-index note only for a held index. **Recorded, not changed**: `try x[i] catch default`
+  to a view-only callee stays refused (r2); a view callee matching an enum field, reading an inline array element or
+  rendering a value field is no view (r3); an element over 64KB lent as a view in a loop's condition costs a second
+  arena copy per turn (T7c's condition-growth class, doubled), left for later.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

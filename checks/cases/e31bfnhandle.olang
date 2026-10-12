@@ -1,0 +1,12 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (P1): a handle element lent through a function value - its body is not known, so it is not shown to use the
+# handle only through its reference (O17b)
+type H struct(fv fn(c mut List<I64>&)) {
+    fv
+}
+fn main() ? {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    h := H(fn(c mut List<I64>&) { c.Push(1) })
+    h.fv(l[0])
+}

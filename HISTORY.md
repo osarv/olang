@@ -16026,3 +16026,61 @@ so `atWriteRoot` did not see a copy of an element and the argument was promoted 
 `derivedAtRead` recognises it (and a field of it); a non-handle such copy is E31b's error, never lent as a view, since
 it cannot be held in a hidden local apart from its try's clauses (`checks/cases/e31btryat.olang`).
 
+## The view lend's review, finished (E31b, B11, T7c, 2026-10-12)
+
+A soundness review of the view lend (`/home/user/review/e31view`, c9d14a7) found no memory-safety hole and no
+disagreement between the run time, `-d -s`, `-i` and the evaluator. What it found, and what was done, the coordinator's
+decisions with the details mine:
+
+- **F1 - a view's copy is not the element.** A callee that replaces the element through another path (a second
+  argument, a global, a capture) - or a later argument of the same call doing so before the callee runs,
+  `l[0].Put(replace(l))` - leaves the hidden copy naming the old element's storage, so its writes through the copy reach
+  what the old element referred to: the element never sees them, or another slot that now holds the old element does
+  (`s1c`). From a built-in array, where `x[i]` is the element, they land in the new element. The SPEC sentence "the
+  callee cannot tell such a copy from the element, so no write is lost" was false as written. Decided: keep the rule and
+  state the caveat in E31b, as for a handle's copy, which already behaves so (decision 44). Memory-safe, since the old
+  storage lives where the collection's elements do. Narrowing views to callees that cannot reach the collection would
+  need whole-program reach (globals, captures), which O17b never had either. Pinned by four run cases
+  (`e31bviewreplaced`, `e31bviewlaterarg`, `e31bviewotherslot`, `e31bhandlereplaced`) asserting both spellings.
+- **P1 (pre-existing, silent lost writes)** - a call through a computed function value (`h.fv(l[0])`, `fs[0](l[0])`,
+  `bumper()(l[0])`, a lambda called where it is written) went through no E31b check: `atWriteBackArgs` ran only on the
+  named and method paths, so the List copy was promoted as a plain temporary and every write lost. The computed path
+  (`buildValueCallArgs`) now calls the same `atWriteBackArgs`, and that one function decides for all three paths:
+  where the callee's body is not known (`callBodyKnown`: no declared function, method or constructor) every copy of an
+  element, a view's or a handle's included, is the error, and nothing is held. A function value through a local or a
+  parameter, which was refused only once `atHandleThrough`'s walk found no body (or, for a handle, at `settleHandleLends`),
+  is now refused there at once.
+- **T1 (pre-existing)** - `bump(try a[1] catch default Acc())` on a built-in array lent the value (the element or the
+  default) as a temporary, losing the write, while the List spelling was refused. `triedPlace`: an index or member read
+  under `try` with a clause giving a default, for a writable reference parameter, is E31b's error on any collection.
+  `try a[i]` alone on a built-in array stays the element (`e31btryelem`).
+- **r2 (recorded, not fixed)** - `put(try s[2] catch default V(...), 9)` to a view-only callee built before c9d14a7 and
+  is refused since. A view needs no write-back, so in principle the try form's copy would serve; but the derived try is
+  a hidden-local sequence ahead of its own clauses, and holding it apart from them for a view (what the default is,
+  where it lives - R11) is not "the same rule" - left refused, pinned as `e31bviewtrydefault`. The written-out form
+  works.
+- **S2 - SPEC/code mismatch.** E31b now says what `vsOp` accepts: the parameter or a struct it holds by value lent to a
+  read-only or by-value parameter, or to a writable one of a qualifying callee; a handle held by value to an
+  O17b-qualifying one.
+- **r1 (over-rejection, fixed)** - an element holding view structs by value (a layer of matrices), its callee calling
+  `c.w.Fill(3)`: `vsOp` accepted a writable lend to a qualifying callee only for the parameter whole. A value-field path
+  (`c.w`) is part of the copy's own storage, and a callee that is itself a view writes none of its argument's storage,
+  so none of the copy's: the same recursion, now for any struct path `vsPath` reaches (`e31bviewnested`; refused when the
+  method writes `m.off`, `e31bviewnestedwrite`, or repoints its parameter two calls down, `e31bviewnesteddeep`). Kept
+  after the handle rule, so a handle field still qualifies by O17b first.
+- **r3 (recorded)** - in a view callee, `match c.kind` / `c.kind == K.A` on an enum value field, an inline array element
+  read, `$c.p`, `$c`, `c == d` and `w := c` make it no view. The walk consumes a member read only where the field is a
+  reference or a scalar, because what consumes the read could still use it as a place; telling a value read from a lend
+  needs the read's context. Pinned as `e31bviewenumfield`, which also shows the new note.
+- **D1** - the "index is held here" note (B11, `NOTE_HELD_INDEX_WHERE`) fired for any `$`-named hidden local, so a view's
+  `$handle` got it though no index is held; it now fires only for a held index (`$idx`) - `e31bviewnoindexnote`.
+- **D2** - a callee whose body had errors added an E31b at every `x[i]` call; `viewRefused` and the handle path now say
+  nothing more for such a callee (`e31bviewbodyerrors`).
+- **D3** - a refused view says why: `NOTE_VIEW_REFUSED_BY`, "the callee is no view of the element because of this
+  statement", at the innermost statement written in the callee where the walk said no (`htStmt` records it; statements
+  now carry their first token, `startTok`), or at the read of the parameter no use accounted for. Memoized with the
+  answer (`viewMemo.why`). Where the cause is a further callee, the note points at the call to it, one level down.
+- **M1 (recorded, not changed)** - an element over 64KB lent as a view in a loop's condition costs a second arena copy
+  per turn: At's result and the view's hidden copy each come from the enclosing block's arena (T7c), which does not close
+  while the loop runs (5,000 turns: 715MB against 360MB for a plain read, which is itself the pre-existing class). T7c is
+  not changed now; `e31bviewbigcond` pins that it builds and runs.

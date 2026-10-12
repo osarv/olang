@@ -1,0 +1,28 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# also: the callee is no view of the element because of this statement
+# E31b (r1's converse): a field held by value lent on to a method that writes the field's own storage ("m.off = 0")
+# - part of the copy's own storage written, so the callee is no view
+type M struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+fn (m mut M&) Fill(x I64) {
+    m.d[m.off] = x
+    m.off = 0
+}
+type Layer struct(w M, b M) {
+    w
+    b
+}
+type Layers struct(d mut Array<I64>&) {
+    d
+}
+fn (s Layers&) At(i I64) Layer { return Layer(M(s.d, 2 * i), M(s.d, 2 * i + 1)) }
+fn step(c mut Layer&) {
+    c.w.Fill(3)
+}
+fn main() ? {
+    s := Layers(Array<I64>(4))
+    step(s[1])
+    println($s.d)
+}

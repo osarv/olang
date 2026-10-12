@@ -603,6 +603,7 @@ type Diag enum {
     NoteRefillKept
     NoteDeclareWhere
     NoteLoopCopyLent
+    NoteViewRefusedBy
     NoteHeldIndexWhere
     NoteCondValue
     NoteSliceOfTemporary
@@ -2286,6 +2287,9 @@ fn NoteDeclareWhere(text1 String&, text2 String&, text3 String&, text4 String&, 
 
 # NOTE_LOOP_COPY_LENT
 fn NoteLoopCopyLent(text String&) Msg { return Msg(Diag.NoteLoopCopyLent, "", "'" $text "' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") }
+
+# NOTE_VIEW_REFUSED_BY
+fn NoteViewRefusedBy() Msg { return Msg(Diag.NoteViewRefusedBy, "", "the callee is no view of the element because of this statement") }
 
 # NOTE_HELD_INDEX_WHERE
 fn NoteHeldIndexWhere(text String&) Msg { return Msg(Diag.NoteHeldIndexWhere, "", "the index is held here, for both the read and the write, in a block that closes first - make it where '" $text "' lives first, then index with it") }

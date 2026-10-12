@@ -1,0 +1,26 @@
+# check: run
+# E31b (F1): the receiver's copy of l[0] is read first, then a later argument replaces the element, then the method
+# writes through the copy's reference - into the old element's array; on an Array the receiver is the element itself
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn (v mut V&) Put(x I64) { v.d[0] = x }
+fn replace(l mut List<V>&) I64 {
+    l[0] = V(Array<I64>(1), 1)
+    return 5
+}
+fn replaceA(a mut Array<V>&) I64 {
+    a[0] = V(Array<I64>(1), 1)
+    return 5
+}
+fn main() ? {
+    l := List<V>()
+    old := Array<I64>(1)
+    l.Push(V(old, 0))
+    l[0].Put(replace(l))
+    assert l[0].d[0] == 0 and old[0] == 5, "list " $l[0].d[0] " " $old[0]
+    a := V[V(Array<I64>(1), 0)]
+    a[0].Put(replaceA(a))
+    assert a[0].d[0] == 5, "array " $a[0].d[0]
+}
