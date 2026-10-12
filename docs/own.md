@@ -2087,7 +2087,9 @@ promoted into the reference by copying. A reference argument (an array reference
 retyped in place too, so the conversion is the reference. `vec143` runs it with a baked global; the corpus test
 `std/prelude/tests/vec.olang` compares `VecViewBaked` with the run time. Consequence, recorded: `d := String(v.View())`
 holds the Vec's loan, so a callee that may keep it (`keep(h, d)`, the review's `k09`) is O38's error - where it used to
-copy, it now names the buffer, as T29a says.
+copy, it now names the buffer, as T29a says. `copied := String(t.View())` declares that reference too (D15), so
+`vec20byname`, which kept it across a push as a copy, now writes the copy as a typed value declaration (`copied String =
+String(t.View())`, T7b).
 
 ### 26.5 Also
 

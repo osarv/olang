@@ -1,6 +1,7 @@
 # check: run
 # vec1 review: what stays legal - a borrowed own result called by name, used before the owner changes, whether its type is
-# the buffer's or a declared array type converted from it; a conversion copied into a value is the copy's own; a function
+# the buffer's or a declared array type converted from it; a conversion copied into a value (a typed value declaration -
+# ':=' declares the reference the conversion names, T29a) is the copy's own; a function
 # giving a plain borrowed result is still a value
 type Ix Array<I64>
 fn view(v Vec<I64>&) Array<I64>&v { return v.View() }
@@ -24,7 +25,7 @@ fn main() ? {
     t.Push('i')
     s := asText(t)
     assert s == "hi"
-    copied := String(t.View())
+    copied String = String(t.View())
     t.Push('!')
     assert copied == "hi" and t.Len() == 3
     c := CB()
