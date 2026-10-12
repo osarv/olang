@@ -15980,3 +15980,61 @@ checker, not the parse, will be where the time goes.
   reports it correctly, so it was not minimized; semantic.c is other work's.
 - `bench/fused.olang` does not check under the current stage 0 (E31b at six `ws.Gemm(S[g, h], ...)` calls through a
   `Batch`'s `At`), so `make bench` would not build it; left to the linalg/benchmark work.
+
+### Port M5a: types, generics and the typed contract (T16, T25a, T25b, G9a-G9d, G16a, G17, G19, G21, B9c, 2026-10-12)
+
+The fifth milestone's first part (compiler/DESIGN.md sections 1.6, 1.6.1 and 4): `compiler/types.olang` (the interned
+type table and layouts), `compiler/generic.olang` (declared types' bodies, written types resolved, constant arguments
+folded, instances, inference, constraints, functions' signatures and instances' names) and `compiler/typed.olang` (the
+typed core language check makes and the later passes read), with `dump.olang layout`.
+
+**Types are interned.** A `TypeId` is one hash-consed row: the twelve numbers and `Bool` at fixed ids, then declared
+types and instances (`Named`: a `DeclId` and an interned argument list), arrays (an element and a constant length, or
+none for a run-time one), references (a referent and a permission - read-only, writable, owning: T25a and T25b make
+both part of identity, while scope tags are not), functions, tuples, records, anonymous enums, type variables and
+constants. **Decided (mine)**: an instance's `TypeId` is its `InstanceId` - its generic's `DeclId` and its arguments are
+the key DESIGN.md asked for, and interning gives it; a constant argument is a type of its own kind, as stage 0's
+`BASETYPE_CONST` is (`Const`: a type and a value; `ConstExpr`: one still to be computed, keyed by its owner, module and
+position, so it is substituted and folded once its variables are bound); a type variable's owner is `2 x DeclId` for a
+type's and `2 x function + 1` for a function's, and the variable carries the permission written before it (T2).
+
+**Layout once per `TypeId`**, the C ABI's, as stage 0 lays out: the request's state is its in-progress mark, so a type
+asked for again while being laid out is T16's cycle, said once. G17 has both of its bounds: a type nesting more than
+48 deep is refused where it is interned, and a chain of more than 1,000 instances' layouts each asking for the next
+(`C<N I64>` holding a `C<N + 1>`) where layouts are requested. Without the second the chain recursed until the stack
+ran out - found writing its test.
+
+**G21's fold computes what the program computes** - in the operands' types, where they meet (T6b, E6d), wrapping where
+the program wraps (E6c), as G21 says. Stage 0's fold left whatever would wrap to its evaluator; with no evaluator yet
+(M8), the port's computes the wrapped value itself, which is the value the evaluator gives - `Buf<B + 1>` with
+`B U8 = 255` is `Buf<0>`.
+Integer and conversion arguments fold from literals, globals (typed ones and `:=` ones, whose initializer's type is
+inferred - `d15forward`'s `Step := Base / 5`), `-D` constants and the variables bound; only a call (a function
+computing a length) is left as a pattern.
+
+**Acceptance: every type of every program.** `bootstrap/oracle/layoutdump.c` links stage 0 without its driver and
+prints every type a checked root holds, by its canonical text, with its size, alignment, LLVM spelling, struct body,
+field offsets, a function type's result spelling and passing, and an enum's payload offsets; `layoutgold.sh` keeps each
+type under the first of 283 programs holding it (the corpus, std, `compiler/`, checks, fuzz and bench, ordinary and as
+test builds, and every checks case that builds): 9,302 types. `dump.olang layout` reads each back with
+`ParseCanon` - the inverse of `Canon` over the program's types - and lays it out; `layoutdiff.sh` (`make layoutdiff`, in
+`make verify`, about 3 s) requires stage 0's line for all of them but the 11 `layout.deferred` names: ten whose array
+length a call computes (G21) and one type only a top-level `if` a call decides declares (B9c) - both the evaluator's.
+A deferred type listed that comes to be laid out is an error too, so the list cannot go stale. Writing it found the
+fold's gaps one by one: an untyped fold (`KfWrap` needs `U8` wrapping), a global in a type argument (`MutexWords`), the
+`:=` fields whose type comes from a call, a method call, a `try`, an `as` or `alias.Type<T>(...)`, and a `:=` field
+reading a `:=` global (`n := Step + 1`).
+
+**The typed contract (DESIGN.md 1.6.1), written for review.** Bodies with concrete types; locals, blocks and sites as
+tables of ids; places told from values (`Read`, `Borrow`, `Take` of a place, every other expression a temporary); 18
+expressions, 8 places and 15 statements, with the surface's sugar elaborated away by check; and nothing about scopes in
+the tree. **Decided (mine)**: placement lives in a `Plan` beside each body, filled by `scope` - where each site builds,
+where each local's storage is (O26a, T7c), what each call passes for its callee's scope variables, and which of a
+body's own variables it may build into - because nodes are never written after check makes them (O25g) and so cannot
+carry it; a declaration's written scope (`&`, `&x`, `&return`, `:=`) is a `Mark` on its local, field or result, the only
+record of scopes once `TypeId`s carry none; `and`/`or` are `Cond`; a compound assignment's old value is
+`Place.Target`, the place the statement computed once (S4) - no reference to the place is made, which §8 and §8.8's
+loans would otherwise have to judge; a loop is a body and a post clause, every `for` form and `do ... for` mapping onto
+it, and `break`/`continue` name their loop by its body's block (S9f's run-by-run loops break both); `Away` marks a
+subtree written in another file (D8a's defaults built in their declaration's context). `typed.olang` has the
+definitions, a printer for review and check's tests, and tests building a body and a plan by hand.

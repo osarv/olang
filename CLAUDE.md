@@ -5173,6 +5173,20 @@ and literals made only of such, never existing storage anywhere in it) - it is
   remote program's, equal stage 0's; `compiler/tools/namesdiff.sh` (`make namesdiff`, in verify, ~25 s): all 1,132
   checks cases give stage 0's load and name errors by rule and position. Found: `bench/fused.olang` does not check
   under stage 0 (E31b), skipped.
+- **Port M5a: types, generics, and the typed contract (T16, T25a, T25b, G9a-G9d, G16a, G17, G19, G21, 2026-10-12;
+  compiler/DESIGN.md sections 1.6, 1.6.1 and 4, details mine).** `compiler/types.olang` interns every type (`TypeId`;
+  permission part of identity, scope tags not; an instance's `TypeId` is its `InstanceId`; a constant argument a type of
+  its own kind) and lays each out once, as stage 0 does; `compiler/generic.olang` makes bodies, resolves written types,
+  folds constant arguments exactly as the program computes them (G21 - wrapping included, so only a call is left to the
+  evaluator), infers (G9a-G9d), checks constraints (G19), names function instances (G16a), and has G17's two bounds
+  (48 deep where interned, a 1,000-long chain of layouts where requested - the second was missing, an endless recursion);
+  `compiler/typed.olang` is the typed core language check makes and §8, lowering and the evaluator read: concrete types,
+  places told from values, 18 expressions, 8 places, 15 statements, and nothing about scopes in the tree - a declaration's
+  written scope is a `Mark`, and where each site builds, each local is stored and each call passes is a `Plan` the scope
+  pass fills beside the body. **Acceptance**: `bootstrap/oracle/layoutdump.c` and `compiler/tools/layoutdiff.sh` (`make
+  layoutdiff`, in `make verify`): all 9,302 types of 283 root programs read back from their canonical texts and laid
+  out as stage 0 lays them out, but 11 listed in `compiler/goldens/layout.deferred` (a length a call computes, a type a
+  B9c-decided branch declares - the evaluator's, M8). The contract awaits review.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -4,7 +4,9 @@ Status: M1 (`source`, `token`, `scan`) built 2026-10-11 - the token diff is clea
 study2's data, at 93-102 MB/s; M2 (`diag`, `msgs`) and M3 (`ast`, `parse`) built the same day - the structure diff and
 the round trip are clean on every file and on study2's data, scan and parse together at 41-44 MB/s; M4 (`load`, `fetch`,
 `names`, with `cond`) built the same day - every root's module graph is stage 0's, and every checks case gives the load
-and name errors stage 0 gives; the rest is design.
+and name errors stage 0 gives; M5a (`types`, `generic`, `typed`) built 2026-10-12 - every type stage 0 holds for every
+root program is interned and laid out as stage 0 lays it out (the layout diff, section 4), and the typed contract is
+written for review (section 1.6.1); the rest is design.
 `SPEC.md` says what olang means; this file says how the compiler written in olang computes it. The C compiler
 (`bootstrap/`) is the reference for behaviour only: its diagnostics, edge cases and test results, never its structure.
 Where the C compiler and `SPEC.md` disagree, the port follows `SPEC.md`, and the disagreement is fixed in C as well (or
@@ -316,6 +318,114 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
 - **Module boundary.** `check.olang` is one module (about 7,000 lines) with methods on `Checker`; M19 keeps those
   methods in the `Checker` type's module. Section 3.3 gives its compile time. If measured development builds need
   it, expressions can move to a module of free functions taking `c mut Checker&`.
+
+**Built (M5a, 2026-10-12): `types` and `generic`.**
+- **`types.Table`** interns every type into a `TypeId`: the twelve numbers and `Bool` at fixed ids, declared types and
+  instances (`Named`: a `DeclId` and an argument list), arrays (an element and a length: a constant, or none for a
+  run-time length), references (a referent and a permission: read-only, writable, owning), functions, tuples, records,
+  anonymous enums, type variables (an owner and an index; an owner is `2 x DeclId` for a type's, `2 x function + 1` for a
+  function's) and constants (`Const`: a type and a value; `ConstExpr`: an argument still to be computed, keyed by where
+  it is written). An instance is its generic's `DeclId` and its arguments, so its `TypeId` is its `InstanceId`;
+  functions' instances are numbered by `generic.Program.FnInstance`. Lists of types are interned too (`ListId`).
+- **Layout once per `TypeId`**, the C ABI's: fields at their natural alignment, an enum with payloads `{ i64, [K x i64]
+  }`, a function value `{ ptr, ptr }`, an array value or reference with a run-time length `{ i64, ptr }`, a fixed one
+  `[N x T]`, any other reference `ptr`, and a struct over 128 bytes passed through memory. The layout's own state is the
+  request's in-progress mark: asked for again while being made, it is T16's cycle.
+- **Canonical text** (`Canon`) is G16a's injective name, `IDENTITY:Name<args>`, and `generic.Program.ParseCanon` is its
+  inverse over a program's types - which is what lets the layout oracle compare type by type rather than program by
+  program.
+- **`generic.Program`** makes declared types' bodies on request (an instance's by substituting its generic's), resolves
+  written types in a module's context, folds constant arguments, infers type variables (`Unify`/`bind`: G9a-G9d), checks
+  constraints where a variable is bound (`Satisfies`, `BoundMet`: G19), finds methods by receiver key (M19, M21, T29e),
+  makes functions' signatures (G8b's introductions read left to right) and names their instances (G16a).
+- **G17** has both of its bounds: a type nesting more than 48 deep is refused where it is interned, and a chain of more
+  than 1,000 instances' layouts each asking for the next where the layouts are requested (a constant that keeps
+  changing). Each is said once per declaration.
+- **G21's fold computes what the program would**: every value typed, operators where their operands meet (T6b, E6d),
+  results wrapped (E6c) - the evaluator would give the same, so only what needs a call (a function computing a length)
+  is left to it, as a pattern (M8). So is a type only a top-level `if` the evaluator decides declares (B9c).
+
+### 1.6.1 The typed core language (`typed`): the contract
+
+`check` makes a typed body of each function instance, constructor, destructor, lambda, test and module initializer;
+`scope` (M6), `lower` (M7) and `eval` (M8) read nothing else of the program's code. `compiler/typed.olang` defines it;
+this section is the part to review.
+
+**Bodies.** A body's types are concrete - an instance's own (G16): no type variable or constant pattern is left in it,
+and a generic's body is checked once per instance. Each body has:
+- `Locals` (`LocalId`): parameters (the receiver first), variables, hidden locals check makes, an arm's bindings, a
+  lambda's captures, a constructor's fields - each with its name, span, type, the block it is declared in, and its
+  **mark**: what its written type says about where it lives (`&`, `&x`, `&return`, `:=`, O25a). Types carry no scopes,
+  so the marks are §8's only record of them.
+- `Blocks` (`BlockId`, 0 the outermost): each block's parent and kind - a plain block, a loop's body (a scope each turn,
+  O2), a post clause, a catch clause, a join block, deferred code, a comprehension's loop.
+- `Sites` (`SiteId`): every expression that may allocate and every call.
+- `Vars`: its scope variables in the order a call passes them - one per reference parameter and per by-value parameter
+  holding references (O4b), the result scope (O14), a constructor's instance (C2d), a destructor's closing scope (C9a);
+  a lambda's captured scopes are carried in its environment (D16c).
+- `Results`: the marks on its results (`T&` built, `T&p` borrowed, `T&return`); `Fields`: what a constructor's instance
+  is assembled from.
+
+**Places and values.** A place names storage - a local, a global, what a reference names (`Deref`), a field, an element,
+an enum case's payload, a temporary's (`Temp`, for a slice of a value with no storage, E16a), and in an assignment's
+value the place it stores to (`Target`, S4's compound assignment). A value is computed. `Read` copies a place's value,
+`Borrow` makes a reference to the place itself (E12c), `Take` moves an owner out (E34); every other expression is a
+temporary. That one distinction is what §8 needs to tell existing storage from new values.
+
+**The kinds.** 18 expressions - `Lit`, `Data` (read-only constant storage, T25d), `Read`, `Borrow`, `Take`, `Promote`
+(a temporary given storage, E12c), `Call`, `Make` (a tuple, an enum case, an array), `Collect` (a comprehension's array,
+filled by `Yield`), `Prim` (an operation on numbers, Bools and Chars, and the few the compiler supplies: `Len`, bit
+casts, atomics, a case test), `Slice`, `Cond`, `Seq` (statements then a value), `Match`, `Try`, `Fn` (a function value:
+named, a lambda with its captures, a `Call` adapter), `Text` (renderings joined), `Away` (a subtree from another file);
+8 places; and 15 statements - `Let`, `Assign`, `Eval`, `If`, `Loop` (a body and a post clause), `Jump` (break or
+continue, naming its loop), `Return`, `Raise`, `Exit` (done, fail, abort, unreachable), `Assert`, `Block`, `Defer`,
+`Join`, `Spawn`, `Yield`. Every expression and place carries its type and every node its span.
+
+**What check elaborates** (none of it reaches the later passes):
+
+| surface | typed |
+|---|---|
+| an operator, index or slice on a declared type (E31), `x in c` (E29) | a `Call` of the method |
+| `==` on an aggregate (E10) | a `Call` of a `Helper`, or of a declared `Eq` (E10a) |
+| `a and b`, `a or b` (E7) | `Cond` |
+| a comparison chain (E30), a join's operands (E11b), several results passed on (D8d) | `Seq` with hidden locals |
+| a compound assignment (S4) | `Assign` whose value reads `Place.Target` |
+| a write through `x[i]` on a type with `At`/`SetAt` (E31b) | `Seq`: the element held, written, set back |
+| `for`, `for ... in`, `do ... for` (S9-S9f) | `Loop`, `Jump`, hidden locals, a `Try` taking `Exhausted` |
+| a comprehension (E27) | `Collect` and `Yield` |
+| `match` (S12, S13) | `Match`: the subject held once, each alternative a test and its bindings |
+| `match T`, an `if` on a constant (G26), an `if` the build decides (S8b) | the chosen branch alone |
+| a lambda (D16) | a body of its own, and `Fn` with its captures |
+| a numeric widening (T6b), a literal adapting (T6, E4a) | `Prim(Convert)`, a `Lit` of the target type |
+| a zero value (D13c), a default argument (D8a) | a `Lit` of zero bits or a constructor `Call`; the default's tree |
+
+**Order and failure.** Arguments and operands are evaluated left to right; an `Assign` evaluates its target's
+subexpressions, then its value, then stores (S4); a `Text` evaluates every rendered operand before rendering any piece
+(E11b). Only `Cond`'s chosen value is evaluated. A call to a fallible callee, and an operation checked by `try` (E15a),
+fail to the innermost enclosing `Try`, whose clauses are tried in order; what none takes leaves the body under its own
+errors (R17). A task's call is the exception: its errors go to its `Spawn`'s clauses, then to its join (P4).
+
+**Placement: the plan.** Nothing in the tree says where anything is built, and nothing in it is written after check
+makes it (O25g), so any part may be shared. `scope` fills a `Plan` beside each body:
+- `Built[site]`: the scope a site builds in - a block's arena, one of the body's scope variables, the program's scope
+  (O1b), an own object's region (O30), or the frame (no arena: a temporary nothing keeps, an environment no callee keeps,
+  D16c);
+- `Stored[local]`: where a local's storage is - its stack slot, or an arena where O26a moves it or T7c's 64 KB bound puts
+  it;
+- `Passed(site, i)`: what a call passes for its callee's i-th passed scope variable (the result scope, where O18a lands
+  it, among them);
+- `MayBuild[var]`: whether the body may build into one of its own scope variables - a closure's prologue asks for its
+  thread's part of a captured scope only then (P2, decision 48), and a `Str`'s receiver never may (E11c).
+
+`lower` and `eval` read the plan and decide none of it; the MIR verifier rejects an allocation the plan left unplaced.
+Until M6 lands, M7 runs with a stand-in plan: every site in the program's scope, every local in its frame.
+
+**What the contract leaves to each pass.** `check`: types, elaboration, permissions (T25b, T25c), D10a, S3, every
+rule but §8's and K's. `scope`: §8 (O-rules, P2, C2d, §8.8's loans), its summaries (obligations O10b, derived scopes
+O23a, result bindings O13c) and the plan. `lower`: the MIR - releases into own slots by type (O30, O35), holds, the
+error-union ABI, deferred code per exit (S19), joins on every way out (P1b), helpers (`$`, deep `==`, the supplied
+`Hash`), stand-ins for tasks (P2). `eval`: the values - K2's baked globals and S18c's decided asserts, which `lower`
+then reads.
 
 ### 1.7 The scope check, §8, as its own pass (`scope`)
 
@@ -704,19 +814,35 @@ with the installed one; `make bootstrap` is section 5.
      every rule a message names, a lowercase one and a missing one. Limit: until the new compiler makes its own records,
      a span's end is read from the golden's own caret, so a caret's width is checked for consistency only; from M3 the
      records come from the parser's spans and the widths are compared for real.
-5. **Typed tree and MIR.** These are not compared with C; their representations differ by design.
+5. **Type layouts (M5a).**
+   - Tools: `bootstrap/oracle/layoutdump.c` links stage 0 without its driver, checks a root as `olang -c` does, and
+     prints every type it holds - each declared type, instance, array, reference, function type, tuple and anonymous
+     enum - by its canonical text, with its size, alignment, LLVM spelling, struct body and field offsets, a function
+     type's result spelling and passing, and an enum's payload offsets. `compiler/tools/layoutgold.sh` (`make
+     layoutgold`, minutes) runs it on every root of the repository, ordinary and as a test build, and on every checks
+     case that builds, with its flags, and keeps each type under the first program holding it:
+     `compiler/goldens/layout.txt`, 9,302 types from 283 programs.
+   - `dump.olang layout` reads each type back from its canonical text in the program it came from (`ParseCanon`), lays
+     it out, and prints it the same way; `compiler/tools/layoutdiff.sh` (`make layoutdiff`, part of `make verify`,
+     about 3 s) requires every line to be stage 0's. A type may be left unlaid only where
+     `compiler/goldens/layout.deferred` lists it, with why: 11 - ten an array length a call computes (G21) and one a
+     type only a top-level `if` a call decides declares (B9c), both the evaluator's (M8). All 9,291 others are
+     identical.
+   - Unit tests in `generic.olang`: layouts of declared types and instances, canonical texts read back, T16, both of
+     G17's bounds, G21's fold, inference (G9a, G9b, G9d), function instances' names, and G19.
+6. **Typed tree and MIR.** These are not compared with C; their representations differ by design.
    - The MIR verifier runs on every function of the corpus.
    - `dump.olang mir` serves review.
    - Unit `test` blocks live in the compiler's own modules (scanner cases, interning, the pattern converter), and
      `make test` runs them.
-6. **Behaviour against stage 1.**
+7. **Behaviour against stage 1.**
    - P0 parametrizes the compiler under test: the makefile gets `OLANG ?= build/out` (done). `checks/checks.olang`
      (which today hard-codes `build/out`), `fuzz/` and `bench/` read `$OLANG`.
    - `make verify OLANG=build/stage1`.
    - `make race OLANG=build/stage1` must report exactly the one known race.
-7. **Fuzz across compilers.** Each seed is built by stage 0 and by stage 1 and the printed results compared. The
+8. **Fuzz across compilers.** Each seed is built by stage 0 and by stage 1 and the printed results compared. The
    fuzzer's own three-way agreement within stage 1 (compile time, `-O3`, `-i`) is also required.
-8. **Benchmarks.** `bench/run.sh` runs with two compilers. Stage 1's programs must be within 5% of stage 0's
+9. **Benchmarks.** `bench/run.sh` runs with two compilers. Stage 1's programs must be within 5% of stage 0's
    geometric mean, and none more than 15% slower.
 
 | stage | acceptance |
@@ -812,7 +938,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M2 | `diag`, `msgs` | P0 | renders stage 0's diagnostic goldens identically from records; `-e` works (done 2026-10-11) |
 | M3 | `ast`, `parse` (study2's parser is the start) | M1, M2 | parse acceptance (section 4); recovery gives one error per item on every syntax-error case (done 2026-10-11) |
 | M4 | `load`, `fetch`, `names` | M3 | load + names acceptance; the remote, lock and `-u` scenarios pass through a test driver (done 2026-10-11) |
-| M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) |
+| M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) (built 2026-10-12; the contract awaits review) |
 | M5b | `check`: expressions | M5a | together with M5c, the check acceptance |
 | M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b) |
 | M6 | `scope` | M5a's `typed` contract | every O-rule case passes; placement complete |
