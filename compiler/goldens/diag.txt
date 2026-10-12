@@ -6321,6 +6321,21 @@ $ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
+=== vec147samepathlocal.olang
+vec147samepathlocal.olang:28:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   28 |     q.more = take p.lx.toks
+      |              ^~~~
+compilation failed with 1 error
+=== vec148samepathchain.olang
+vec148samepathchain.olang:29:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   29 |     prev.more = take c.lx.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec149samepathparam.olang
+vec149samepathparam.olang:21:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   21 |     q.more = take p.lx.toks
+      |              ^~~~
+compilation failed with 1 error
 === vec14nominalconv.olang
 vec14nominalconv.olang:14:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 13, which is used after it
    14 |     for i in range 1000 { w.Push(i + 100) }
@@ -6335,10 +6350,60 @@ $ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
+=== vec150samepathglobal.olang
+vec150samepathglobal.olang:27:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   27 |     q.more = take G.lx.toks
+      |              ^~~~
+compilation failed with 1 error
+=== vec152getter.olang
+vec152getter.olang:25:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   25 |     d.lx.toks = take p.Lx().toks
+      |                 ^~~~
+vec152getter.olang:25:17: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   25 |     d.lx.toks = take p.Lx().toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec153getterlocal.olang
+vec153getterlocal.olang:26:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   26 |     d.lx.toks = take q.toks
+      |                 ^~~~
+vec153getterlocal.olang:26:17: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   26 |     d.lx.toks = take q.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec154getterglobal.olang
+vec154getterglobal.olang:23:10: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   23 |     G2 = take GP.Lx().toks
+      |          ^~~~
+vec154getterglobal.olang:23:10: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   23 |     G2 = take GP.Lx().toks
+      |          ^~~~
+compilation failed with 1 error
+=== vec155getterlater.olang
+vec155getterlater.olang:28:21: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   28 |         d.lx.toks = take q.toks
+      |                     ^~~~
+vec155getterlater.olang:28:21: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   28 |         d.lx.toks = take q.toks
+      |                     ^~~~
+vec155getterlater.olang:29:15: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   29 |         q = p.Lx()
+      |               ^~
+compilation failed with 2 errors
+=== vec158deeparray.olang
+vec158deeparray.olang:4:37: error[O31]: this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less
+    4 |     a Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Arr...
+      |                                     ^~~~~
+compilation failed with 1 error
 === vec15fnvalue.olang
 vec15fnvalue.olang:13:10: error[O37]: 'view' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'view' by name
    13 |     f := view            # view as a function value
       |          ^~~~
+compilation failed with 1 error
+=== vec160genericselfhold.olang
+vec160genericselfhold.olang:4:5: error[T16]: N<I64> cannot hold itself by value - hold it through a reference ('&')
+    4 |     x N<T> = N<T>()
+      |     ^
 compilation failed with 1 error
 === vec16calladapter.olang
 vec16calladapter.olang:13:16: error[O37]: 'Call' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'Call' by name

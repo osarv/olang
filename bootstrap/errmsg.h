@@ -144,7 +144,7 @@ struct type;
     X(ERR_CONSTRAINT_UNMET_METHOD,      "G19",   "%t does not satisfy the constraint %S on %S: it has no method %S that fits") \
     X(ERR_CONSTRAINT_UNMET_HASH,        "G19, E10b", "%t does not satisfy the constraint %S on %S: it has no Hash - declare 'Hash() I64', agreeing with '=='") \
     X(ERR_UNBOUNDED_INSTANTIATION,      "G17",   "this generic's instantiations never end - each one requires a larger one") \
-    X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%S cannot hold itself by value - hold it through a reference ('&')") \
+    X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%t cannot hold itself by value - hold it through a reference ('&')") \
     X(ERR_ARRAY_TYPE_HOLDS_ITSELF,      "T29",   "%S holds itself through the array it is declared over - hold the array in a struct: 'type %S struct(items %t&)'") \
     X(ERR_MISSING_TYPE_ARGS,            "G7",    "%n is generic - write its type arguments, as '%S<I32>'") \
     X(ERR_TYPE_ARG_COUNT,               "G7",    "type arguments for %S: expected %d, found %d") \
@@ -185,6 +185,7 @@ struct type;
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
+    X(ERR_TYPE_TOO_DEEP_TO_CHECK,       "O31",   "this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less") \
     X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
     X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
     X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')") \
@@ -373,6 +374,7 @@ struct type;
     X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
     X(NOTE_OWN_TASK_BORROWS,            "",      "the task borrows it here") \
     X(NOTE_OWN_TASK_CALLS_VALUE,        "",      "it calls a function value here") \
+    X(NOTE_OWN_REACH_VIA_CALL,          "",      "this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads") \
     X(NOTE_OWN_BORROW_LOCAL,            "",      "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") \
     X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
     X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \

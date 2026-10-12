@@ -463,6 +463,7 @@ struct var {
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
     struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
     bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
+    int regionStmt;             //...the statement whose check made it (ownStmtSerial), for O34's same-path move
     bool regionAnyType;         //...of objects of any own type (a borrowed own result whose object's type is not one known)
     int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
                                 //parameters by own fields, as a result borrowed from them (T&p): the first one's index + 1,

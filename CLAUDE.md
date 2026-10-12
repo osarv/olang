@@ -5153,6 +5153,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   error - it was held to the function's end. Also: a conversion of a reference a call gives names its storage at run
   time (T29a, `String(v.View())` copied), `take` is a flow for O26a (`w := take l.toks; return w`), and a destructor's
   O40 is reported at its own call, not inside Push (B11). Cases `vec128`-`vec146`; fuzzer shapes for all three.
+  **The review of that round (vec7) found two more use-after-frees, fixed (docs/own.md section 27).** F1: the same-path
+  move trusted a variable's name - a cursor repointed between `prev := c.lx` and `prev.more = take c.lx.toks` gave two
+  objects; it now holds only for two reads made in the statement being checked by pure paths (a variable that is no
+  global, then fields; the coordinator's call). F2: a take through a getter giving a borrowed own result (`take
+  p.Lx().toks`, or through a local holding one) read the call's `&p` tag as the reach; it is refused (O34), decided once
+  borrowed own results are settled, so a factory's new object is still taken from. F3 (building through a getter keeps the
+  words in `p`'s block, memory only) recorded. Also: T29a retypes only a call's reference (a conditional of views is a
+  copy again, N1) and a fixed-length one too (X1b); a type too deep to walk is its own error, not O31 (N2); a generic
+  holding itself by value is T16, where the compiler crashed (V1). Cases `vec147`-`vec160`; five fuzzer shapes.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

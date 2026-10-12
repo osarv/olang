@@ -592,7 +592,8 @@ member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenc
 **T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-reference)
 member or payload types - an `Array<T, N>` (T7c) included, since it holds its elements in the value - if that
 chain passes through a reference marker (§2.9) at least once; an unmarked, unbroken self-embedding cycle is a
-compile-time error, reported at the member that closes it.
+compile-time error, reported at the member that closes it. A generic type is judged per instantiation: `x N<T>` in
+`type N<T>` makes every `N<...>` hold itself, reported once each instantiation is made.
 
 ### 2.5 Enum types
 
@@ -1070,8 +1071,8 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
   merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
-  variable, a field, an element, a slice or a reference (a call's result included, `String(v.View())`), `Name(v)` is
-  that storage read as `Name` - it may be written exactly
+  variable, a field, an element, a slice or a reference a call gives (`String(v.View())`, of any length kind), `Name(v)`
+  is that storage read as `Name` - it may be written exactly
   where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
   lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
   assignment may name. An `Array<T, N>` (T7c) is lent as a slice of it. A conversion to a declared type over an
@@ -1079,7 +1080,8 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
   exactly as `v as Array<T, N>&` views it (E32b): the length checked once, where the conversion is evaluated - a
   mismatch aborts as an out-of-range slice does, and under `try` fails with `BuiltinError.OUT_OF_BOUNDS` - and the
   result is a reference to that storage under the declared type's name, of any `v`, a temporary included. Only a
-  temporary `v` of another shape makes the conversion a value of its own.
+  temporary `v` of another shape makes the conversion a value of its own - a conditional or a `match` of references
+  among them (E28, S12b), whose values keep their own types.
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
   usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
   always safe — and it is the same latitude `I32(m)` already gives a named numeric, without needing a
@@ -5084,7 +5086,8 @@ parameter, a type argument, an enum payload - it is a compile-time error naming 
 one. Only an own reference is an owning parameter; an element or an `Array<T, N>` of an owning type is a compile-time
 error (T25e). A global holding an owning type by value is written with its type (`G mut Vec<I64> = Vec<I64>()`): `:=`
 declares a reference, as for any global (D15). A type variable a value of an owning type reaches binds the reference to
-it, as G9d binds one to a destructor-bearing value.)*
+it, as G9d binds one to a destructor-bearing value. A type nesting more than 64 levels of values and arrays is a
+compile-time error of its own - too deep to check whether it holds an owning type by value - never taken to hold one.)*
 
 **O32 (reading a slot: borrows and borrowed copies).** A slot read anywhere but in a move position (O34) keeps its
 owner:
@@ -5160,8 +5163,15 @@ given to it, an owning parameter's its scope variable (O4b), bound at each call 
 that scope is a region, that region's reach: so the objects an owned object owns reach as far as it does, and may be
 moved out of it. A field holding an owning type by value (a `Vec`) inside an object in a region is the exception: what
 its own objects refer to is built in that region (O33), so its reach is the region itself, which outlives nothing - it
-is moved only into another such field of the same object, read by the same path (`p.lx.more = take p.lx.toks`), unless
-nothing it holds can refer outside what it owns; the object moved whole (`take p.lx`) carries the region with it. An owner's reach is, for a value made where it is used, the shortest scope among those the references
+is moved only into another such field of the same object, read by the same path in the same statement
+(`p.lx.more = take p.lx.toks`) - a variable that is no global, then fields only, each own slot read there and not
+through a local holding a borrow - unless nothing it holds can refer outside what it owns; the object moved whole
+(`take p.lx`) carries the region with it. Two reads made in different statements are two objects whatever their
+spelling, since a reference local, a reference parameter or a global may be repointed between them (a cursor walking a
+chain); a global may be repointed by a call within one statement. Where the instance holding the field was reached
+through a call's reference result - directly, or through a variable some such call's result reaches - and the callee
+gives a borrowed own result (O37), the region is not known where the move is checked, and the move is refused as one
+whose reach is not known; through the own field itself (`take p.lx.toks`) it is known. An owner's reach is, for a value made where it is used, the shortest scope among those the references
 it holds outside its region live in - what C2d, E12c and T17c bind for any instance, the program's scope when it holds
 none; for a call's owned result, the call's result scope, which lands where the result is put (O18a); for `take p`,
 the reach of `p`; for an owner local or an owning parameter read for the last time, its slot's.

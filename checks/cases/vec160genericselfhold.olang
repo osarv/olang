@@ -1,0 +1,10 @@
+# check: fail error[T16]: N<I64> cannot hold itself by value
+# vec7 V1: a generic type holding itself by value - each instantiation holds itself (T16), where the compiler crashed
+type N<T> struct() {
+    x N<T> = N<T>()
+    n I64 = 0
+}
+fn main() ? {
+    x := N<I64>()
+    println($x.n)
+}

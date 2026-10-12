@@ -3084,7 +3084,7 @@ static void checkHoldsItself(struct type* t) {
         for (int k = 0; k < n; k++) {
             struct var* fld = t->bType == BASETYPE_CHOICE ? ListGetIdx(&f->type.vars, k) : f;
             if (!typeHoldsByValue(fld->type, t, 0)) continue;
-            Err(fld->tok, ERR_TYPE_HOLDS_ITSELF, t->name);
+            Err(fld->tok, ERR_TYPE_HOLDS_ITSELF, t);
             fld->type = unknownTypeStandIn();
         }
     }
@@ -3183,6 +3183,7 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     //constructor being emitted with a field whose type is still a variable.
     spec->typeParams = argsStillGeneric ? generic->typeParams : ListInit(sizeof(struct str));
     refreshStructSnapshots(spec);
+    if (!argsStillGeneric) checkHoldsItself(spec); //T16 (vec7 V1): "x N<T>" in N<T> - each instantiation holds itself
     //T25e/G18: what an own array's elements may be, asked again once its type variables are bound
     for (int i = 0; !argsStillGeneric && i < spec->vars.len; i++) {
         struct var* f = ListGetIdx(&spec->vars, i);
@@ -4632,15 +4633,17 @@ static bool ownValueAllowed;
 static bool ownValueTop;
 //O31: an owning struct held by value where its type is written - C11's rule, for the same reason: a copy of the value
 //would be a second owner of what its own fields own
-static bool typeHasBareOwningStructAt(struct type t, int depth) {
-    if (t.unknown) return false;
-    if (depth > VALUE_WALK_LIMIT) return true;
+//(0 no, 1 yes, 2 not known: nested past VALUE_WALK_LIMIT - refused as that, vec7 N2, never called owning)
+static int typeHasBareOwningStructAt(struct type t, int depth) {
+    if (t.unknown) return 0;
+    if (depth > VALUE_WALK_LIMIT) return 2;
     if (t.bType == BASETYPE_STRUCT) return !t.structMAlloc && TypeIsOwning(t);
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
-        if (typeHasBareOwningStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) return true;
+        int r = typeHasBareOwningStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1);
+        if (r) return r;
     }
-    return false;
+    return 0;
 }
 
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
@@ -4655,9 +4658,15 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     struct type t = applyRefMarker(base, firstPartOfType(refNode, SNTX_ELEM_REF_MARKER), scopeParams);
     if (typeHasBareDestructStruct(t)) {
         Err(firstTokAnywhere(refNode), ERR_DESTRUCT_TYPE_BY_VALUE, &t, &t);
-    } else if (typeHasBareOwningStructAt(t, 0) && !(ownValueHere && TypeIsOwnValue(t))) {
-        Err(firstTokAnywhere(refNode), ERR_OWNING_TYPE_BY_VALUE, &t, &t, &t);
-        t.unknown = true; //one error: what is declared with it is reported no further
+    } else {
+        int owning = typeHasBareOwningStructAt(t, 0);
+        if (owning == 2) {
+            Err(firstTokAnywhere(refNode), ERR_TYPE_TOO_DEEP_TO_CHECK);
+            t.unknown = true;
+        } else if (owning && !(ownValueHere && TypeIsOwnValue(t))) {
+            Err(firstTokAnywhere(refNode), ERR_OWNING_TYPE_BY_VALUE, &t, &t, &t);
+            t.unknown = true; //one error: what is declared with it is reported no further
+        }
     }
     //T30: a trait is a constraint (G19) and nothing else - never the type of a value, a reference, a field, an element
     if (t.bType == BASETYPE_INTERFACE && !resolvingConstraint) Err(firstTokAnywhere(refNode), ERR_TRAIT_NOT_A_TYPE, &t);
@@ -9124,6 +9133,9 @@ enum { OWN_ROOT_ANY, OWN_ROOT_PARAM, OWN_ROOT_LOCAL };
 //the checker makes for itself (a lowering's hidden local) is never converted
 static struct checkCtx* ownCtx;
 static int ownRegionCount;
+//O34 (vec7 F1): the statement being checked - a number of its own for each, restored after a nested one - so a move can
+//tell two reads of one own slot made in it from one through a borrow taken earlier, whose root may have been repointed
+static int ownStmtSerial, ownStmtCounter;
 
 static struct var* ownRegionNew(struct token tok, struct var* reach, int reachDepth, bool unnamed, int root, int rootParam) {
     struct var* R = VarAllocSetOrigin();
@@ -9139,6 +9151,7 @@ static struct var* ownRegionNew(struct token tok, struct var* reach, int reachDe
     R->regionReachUnnamed = unnamed;
     R->regionRoot = root;
     R->regionRootParam = rootParam;
+    R->regionStmt = ownStmtSerial;
     return R;
 }
 
@@ -9214,6 +9227,37 @@ bool OwnValuePlace(struct operand* op) {
     return false;
 }
 static void ownReachOfBase(struct checkCtx* ctx, struct operand* base, struct var** rv, int* rd, bool* ru);
+//O34 (vec7 F2): a "take" whose instance is reached through a call's reference result, or through a variable that may hold
+//one - its reach is read off the call's scope tag, which is the region's only where the callee gives no borrowed own result
+//(O37), and that is settled once every body is checked (ownBorrowResultsSettle). Recorded here, decided there
+struct ownViaTake { struct token tok; struct operand* call; struct var* v; };
+static struct list ownViaTakes;
+static struct token* ownReachTakeTok; //(set while the place a "take" moves out of is reached)
+static bool opIsCtorCall(struct operand* op);
+//...the call or the variable the instance base was reached from - through fields, elements, slices and conversions - or
+//false where it was reached otherwise (a region: known)
+static bool ownViaRoot(struct operand* op, struct operand** call, struct var** v) {
+    *call = NULL;
+    *v = NULL;
+    for (int g = 0; op && g < 256; g++) {
+        if (ownRegionOf(op)) return false;
+        if (op->opType == OPERATION_FUNCCALL) {
+            if (opIsCtorCall(op)) return false;
+            *call = op;
+            return true;
+        }
+        if (op->opType == OPERATION_READ_VAR) {
+            if (!op->readVar) return false;
+            *v = canonicalVar(op->readVar);
+            return true;
+        }
+        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX && op->opType != OPERATION_SLICE
+             && op->opType != OPERATION_NOMINAL_CONVERT) || !op->args.len)
+            return false;
+        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    }
+    return false;
+}
 //O33: the reach of an owner value place - an owner value local's, a global's the program's scope, a field's where the
 //instance holding it keeps its references
 static bool ownRefersOut(struct type t, int depth);
@@ -9244,6 +9288,13 @@ static void ownValuePlaceReach(struct checkCtx* ctx, struct operand* op, struct 
                     R = canonicalVar(v);
             }
             if (R) { *rv = R; *rd = 0; *ru = false; return; }
+            struct operand* call;
+            struct var* via;
+            if (ownReachTakeTok && ownViaRoot(b, &call, &via)) {
+                if (!ownViaTakes.elemSize) ownViaTakes = ListInit(sizeof(struct ownViaTake));
+                struct ownViaTake t = { *ownReachTakeTok, call, via };
+                ListAdd(&ownViaTakes, &t);
+            }
             ownReachOfBase(ctx, b, rv, rd, ru);
             return;
         }
@@ -13300,10 +13351,12 @@ struct operand* OperandNominalConversion(struct type target, struct operand* arg
     //how long that storage lives. Only a temporary argument makes the conversion a value of its own. An inline field
     //(C2e) is lent as a slice of it, as everywhere a run-time length is wanted. A reference a call gives
     //("String(v.View())") names storage too - the referent's, never a copy of it (vec6 x1: the run time copied it while
-    //the compile-time evaluator and -i named it)
+    //the compile-time evaluator and -i named it), a fixed-length one's as a slice of it (vec7 X1b). Only a call's: a
+    //conditional or a match of references stays a conversion of its own (vec7 N1 - its values keep their own type)
     if (target.bType == BASETYPE_ARRAY && target.arrMalloc && target.arrElem && arg->type.bType == BASETYPE_ARRAY
             && arg->type.arrElem
-            && (OperandIsLvalue(arg) || arg->opType == OPERATION_SLICE || (arg->type.structMAlloc && arg->type.arrMalloc))) {
+            && (OperandIsLvalue(arg) || arg->opType == OPERATION_SLICE
+                || (arg->opType == OPERATION_FUNCCALL && arg->type.structMAlloc))) {
         if (!arg->type.arrMalloc) {
             arg = OperandSlice(arg, NULL, NULL, tok);
             noteSliceBorrow(NULL, arg);
@@ -19979,7 +20032,9 @@ struct operand* buildTake(struct checkCtx* ctx, struct operand* place, struct to
         struct var* rv;
         int rd;
         bool ru;
+        ownReachTakeTok = &tok;
         ownValuePlaceReach(ctx, place, &rv, &rd, &ru);
+        ownReachTakeTok = NULL;
         int rootParam;
         struct var* rootLocal;
         int root = ownRootOf(ctx->func, place, &rootParam, &rootLocal);
@@ -20262,15 +20317,42 @@ static bool ownRefersOut(struct type t, int depth) {
 
 //O34: "take" of an owner value local given to a slot of the same type whose reach is (rv, rd, ru): what the taken value
 //refers to must outlive where it goes
-static bool ownSamePath(struct operand* a, struct operand* b, int depth);
+//O34 (vec7 F1): two reads of one own slot made in the statement being checked, by one pure path - a variable that is no
+//global, then fields only, each own slot on the way read here and not through a borrow local - so they name one object:
+//nothing in one statement repoints a local or a parameter between its reads (a call can repoint a global; a borrow local
+//was read in an earlier statement, after which its root may have moved on - a cursor walking a chain)
+static bool ownSamePathHere(struct operand* a, struct operand* b, int depth) {
+    if (!a || !b || depth > 64 || a->opType != b->opType) return false;
+    if (a->opType == OPERATION_READ_VAR) {
+        if (!a->readVar || !b->readVar || canonicalVar(a->readVar) != canonicalVar(b->readVar)) return false;
+        struct var* v = canonicalVar(a->readVar);
+        return !(v->owner && !v->isFuncDecl) && !(a->readVar->owner && !a->readVar->isFuncDecl) && !ownRegionOf(a)
+               && !ownRegionOf(b);
+    }
+    if (a->opType != OPERATION_MEMBER || !a->args.len || !b->args.len || !StrCmp(a->memberName, b->memberName)) return false;
+    struct operand* ab = *(struct operand**)ListGetIdx(&a->args, 0);
+    struct operand* bb = *(struct operand**)ListGetIdx(&b->args, 0);
+    struct var* ra = ownRegionOf(ab);
+    struct var* rb = ownRegionOf(bb);
+    if (!ra != !rb) return false;
+    if (ra && (ab->ownRegion != ra || bb->ownRegion != rb || ra->regionSlot != ab || rb->regionSlot != bb
+               || ra->regionStmt != ownStmtSerial || rb->regionStmt != ownStmtSerial))
+        return false;
+    return ownSamePathHere(ab, bb, depth + 1);
+}
 static void ownValueTakeReach(struct checkCtx* ctx, struct operand* val, struct var* rv, int rd, bool ru) {
     struct var* S = val->ownRegion;
     if (!S || S->regionReachUnnamed) return;
-    //...a field of an owned object moved into another field of the same object, read by the same path (two reads of one
-    //own slot are two regions to §8, ownSamePath): what it refers to stays in that object's region
+    //...a field of an owned object moved into another field of the same object, both read in this statement by the same
+    //pure path (two reads of one own slot are two regions to §8, ownSamePathHere): what it refers to stays in that
+    //object's region
     struct var* from = S->regionReach && S->regionReach != SCOPE_AMBIGUOUS ? canonicalVar(S->regionReach) : NULL;
     struct var* to = rv && rv != SCOPE_AMBIGUOUS ? canonicalVar(rv) : NULL;
-    if (from && to && from->isRegion && to->isRegion && (from == to || ownSamePath(from->regionSlot, to->regionSlot, 0)))
+    if (from && to && from->isRegion && to->isRegion
+            && (from == to
+                || (from->regionStmt == ownStmtSerial && to->regionStmt == ownStmtSerial && from->regionSlot
+                    && to->regionSlot && from->regionSlot->ownRegion == from && to->regionSlot->ownRegion == to
+                    && ownSamePathHere(from->regionSlot, to->regionSlot, 0))))
         return;
     if (ru || rv == SCOPE_AMBIGUOUS || S->regionReach == SCOPE_AMBIGUOUS
             || !scopeCanFlowInto(ctx->func, S->regionReach, S->regionReachDepth, rv, rd))
@@ -26342,7 +26424,10 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
     obligationOrigin = t;
     int pendingFrom = pendingDischarges.len; //what a statement around this one still owes stays owed
     int scopeGroup = ErrMsgScopeGroupStart(); //B11: one error per statement about where something lives
+    int prevStmt = ownStmtSerial;
+    ownStmtSerial = ++ownStmtCounter;
     struct statement st = buildStatementInner(ctx, s);
+    ownStmtSerial = prevStmt;
     flushPendingDischargesFrom(pendingFrom); //O18a: every landing site in the statement is resolved by now
     ErrMsgScopeGroupEnd(scopeGroup);
     obligationOrigin = prevOrigin;
@@ -29448,9 +29533,89 @@ static bool ownReachesOwn(struct type t) {
 
 //O39-O41: once every body is checked - what each body may release, a least fixed point over calls; then where that is
 //refused (O40, O41), and each body against what its statements borrow (O38/O39)
+//O34 (vec7 F2): once borrowed own results are settled - the takes ownValuePlaceReach recorded whose instance was reached
+//through a call giving one, directly or through a variable some such call's result may have reached (assigned, declared
+//from, a spawn's target - any time in its function, read off the checked bodies): its region is not known there, so the
+//take is refused (O34), as one whose reach is not known
+struct ownViaFlow { struct var* to; struct operand* call; struct var* from; };
+static struct list ownViaFlows;
+static bool ownViaCallGives(struct operand* call) {
+    return call->callee || (call->readVar && canonicalVar(call->readVar)->ownBorrowResult);
+}
+struct ownViaScan { struct var* to; };
+static void ownViaSrcOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
+    (void)r;
+    struct ownViaScan* w = c->ctx;
+    struct ownViaFlow f = { w->to, NULL, NULL };
+    if (op->opType == OPERATION_FUNCCALL && !opIsCtorCall(op)) f.call = op;
+    else if (op->opType == OPERATION_READ_VAR && op->readVar) f.from = canonicalVar(op->readVar);
+    else return;
+    if (f.from == f.to) return;
+    ListAdd(&ownViaFlows, &f);
+}
+static void ownViaNote(struct var* to, struct operand* val) {
+    if (!to || !val) return;
+    struct ownViaScan w = { canonicalVar(to) };
+    struct codeVisit c = { ownViaSrcOp, NULL, NULL, &w, false };
+    CodeDeepOp(val, &c);
+}
+static void ownViaStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
+    (void)c;
+    (void)r;
+    if (s->sType == STATEMENT_VAR_DECL) ownViaNote(&s->var, s->op);
+    if (s->sType == STATEMENT_ASSIGN && s->target && s->target->opType == OPERATION_READ_VAR)
+        ownViaNote(s->target->readVar, s->op);
+    if (s->sType == STATEMENT_FOR && s->forInit) ownViaNote(&s->var, s->forInit);
+    for (int i = 0; i < s->spawnTargets.len; i++) {
+        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+        if (t && t->opType == OPERATION_READ_VAR) ownViaNote(t->readVar, s->op);
+    }
+}
+static void ownViaBody(struct var* f, struct list* block) {
+    (void)f;
+    struct codeVisit c = { NULL, ownViaStmt, NULL, NULL, false };
+    CodeDeepBlock(block, &c);
+}
+static void ownViaSettle(void) {
+    if (!ownViaTakes.len) return;
+    ownViaFlows = ListInit(sizeof(struct ownViaFlow));
+    ownForEachBody(ownViaBody);
+    struct list tainted = ListInit(sizeof(struct var*));
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (int i = 0; i < ownViaFlows.len; i++) {
+            struct ownViaFlow* f = ListGetIdx(&ownViaFlows, i);
+            bool in = false;
+            for (int k = 0; k < tainted.len && !in; k++) in = *(struct var**)ListGetIdx(&tainted, k) == f->to;
+            if (in) continue;
+            bool src = f->call ? ownViaCallGives(f->call) : false;
+            for (int k = 0; k < tainted.len && !src && f->from; k++) src = *(struct var**)ListGetIdx(&tainted, k) == f->from;
+            if (!src) continue;
+            ListAdd(&tainted, &f->to);
+            changed = true;
+        }
+    }
+    struct list done = ListInit(sizeof(struct token));
+    for (int i = 0; i < ownViaTakes.len; i++) {
+        struct ownViaTake* t = ListGetIdx(&ownViaTakes, i);
+        bool bad = t->call ? ownViaCallGives(t->call) : false;
+        for (int k = 0; k < tainted.len && !bad && t->v; k++) bad = *(struct var**)ListGetIdx(&tainted, k) == t->v;
+        if (!bad) continue;
+        bool seen = false;
+        for (int k = 0; k < done.len && !seen; k++) {
+            struct token* d = ListGetIdx(&done, k);
+            seen = d->owner == t->tok.owner && d->tokId == t->tok.tokId;
+        }
+        if (seen) continue;
+        ListAdd(&done, &t->tok);
+        Err(t->tok, ERR_OWN_REACH);
+        Note(t->tok, NOTE_OWN_REACH_VIA_CALL);
+    }
+}
 static void settleOwnBorrows(void) {
     if (!ownUsed) return;
     ownBorrowResultsSettle(); //O37 (vec2 N1): before any loan is made
+    ownViaSettle(); //O34 (vec7 F2)
     ownResultFreshSettle(); //O38 (vec3 F1): which built results are new storage, before any loan is made
     ow.frames = ListInit(sizeof(struct ownFrame));
     ow.holders = ListInit(sizeof(struct ownHolder));

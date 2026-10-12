@@ -2119,3 +2119,81 @@ report. Six differ from d5ddcda: `a9` now agrees with `-i` (x1); `vec1/a3`, `vec
 w.View()` would; `own3/h4` is accepted (O26a follows its `take`) and runs clean under the sanitizer, differing from `-i`
 only because `-i` runs no destructors. Of the review's own attack programs (`work/`), every change is one of this
 section's: the R1, D and L1 shapes refused, `s04`/`s06` accepted, `k09` refused (26.4).
+
+## 27. Vec phase 2a's fix round reviewed (vec7), fixed (2026-10-12)
+
+The read-only review of c7099f6 (`/home/user/review/vec7`) found two high-severity holes, both silent use-after-frees in
+plausible code, and five smaller findings. Each repro is a checks case (`vec147`-`vec160`).
+
+### 27.1 F1: "the same path" is the same object only within one statement (O34)
+
+26.1 accepted a move between two regions whose slots are one path (`ownSamePath`): the same variable, then the same own
+fields. Its argument - the loans keep the slot from changing between the two reads - holds for the own slots on the path,
+not for the root variable: a reference local, a reference parameter used as a cursor (S4a) or a global may be repointed
+between the reads, which releases nothing, so no loan sees it. `prev := c.lx; c = c.next; prev.more = take c.lx.toks`
+moved the second lexer's words into the first lexer, and releasing the second freed them (sanitizer stop, `-i` right,
+`-b` churn text; `f1a`-`f1d`).
+
+Narrowed (the coordinator's decision) to `ownSamePathHere`: both region reads made **in the statement being checked**
+(each region records the statement whose check made it, `regionStmt`, from a counter `buildStatement` sets) and both
+paths **pure** - a variable that is no global, then fields only, each own slot read directly there, never through a
+local holding a borrow (whose region was made in its declaring statement). Nothing in one statement repoints a local or
+a parameter between its reads; a call within the statement can repoint a global, so a global root is not trusted. A
+parallel assignment whose target repoints the root (`p, p.lx.more = b, take p.lx.toks`) is O34's error already (an owner
+value is not held by a parallel assignment). Everything else falls through to the ordinary reach check, which refuses.
+`p.lx.more = take p.lx.toks`, by an owner value local, a parameter or a reference local, stays legal (`vec151`); proving
+a local un-repointed across statements was not attempted.
+
+The other users of `ownSamePath` (O39's `ownLoanBesidePlace`, the chain test in `ownLoanHits`) stay as they were: they
+only skip a conflict between two trees, which conflating two objects never makes unsound (the review's analysis).
+
+### 27.2 F2: a take through a getter (O34)
+
+R1's fix found the region of a Vec field's instance by `ownRegionOf` or `RefExactScope`. An instance reached through a
+call giving a borrowed own result (`p.Lx().toks`, `fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }`) is neither:
+the result is tagged with the parameter's scope variable bound to `p`'s scope, so `ownValuePlaceReach` answered `p`'s
+scope (or the program's, for a global, where the check returned at once) and `d.lx.toks = take p.Lx().toks` was
+accepted - then `p.lx = null` freed the words (`f2a`-`f2c`).
+
+Whether a callee gives a borrowed own result is settled only once every body is checked (`ownBorrowResultsSettle`), so
+the decision is deferred there rather than taken blindly: a take whose instance is reached - through fields, elements,
+slices and conversions - from a call (not a constructor's) or from a variable is recorded (`ownViaTakes`), and after the
+settle (`ownViaSettle`) it is refused (O34, with a note saying the region is not known and to take through the own field)
+when the call's callee gives a borrowed own result (or is a function value), or when some such call's result may reach
+the variable - read off every checked body, flow-insensitively: a declaration, an assignment, a `for`'s initializer, a
+spawn's target, through other variables (a fixed point). So a take from a factory's new object (`q := fresh(3); d.toks =
+take q.toks`) stays legal (`vec156`), and a getter's is refused directly, through a local, on a global, and with the
+local assigned the getter's result only after the take on a later loop turn (`vec152`-`vec155`).
+
+### 27.3 F3: building through a getter, recorded
+
+`p.Lx().toks.Push(x)` builds `x` where the call's result is tagged - `p`'s scope - not in the region of `p.lx`'s object,
+and holds it until `p`'s block closes: memory only (the object's reach is `p`'s storage, so O34 never lets it outlive the
+words), unbounded in a loop that releases and remakes the object (400,000 turns: 152 MB against 1.7 MB written
+`p.lx.toks.Push`). Making the call the region for building needs the landing (O18a) to know at the call what the settle
+decides afterwards, which is not cheap; recorded as a known memory cost: build through the own field, not a getter.
+
+### 27.4 The smaller ones
+
+- **N1 (T29a)**: 26.4's in-place retype applied to any array reference, so a conversion of a conditional or a match of
+  array references was retyped while its values kept `Array<Char>&`, and returning it through a borrowed result said
+  "returns String&, found String&". The retype is limited to a call's reference (`OPERATION_FUNCCALL`); a conditional or
+  a match stays a conversion of its own, a copy - built, interpreted and baked alike (`vec157`). Two review programs
+  refused before (`c7`, `c9`: a converted conditional of views kept across a push) are accepted now, soundly: the
+  conversion is a copy, holding no loan.
+- **X1b (T29a)**: a call giving a fixed-length array reference (`String(view(b))`, `Array<Char, 4>&`) was still copied
+  at run time; it is retyped too, as a slice of the referent - the run time, `-i` and a baked global agree (`vec159`).
+- **N2 (O31)**: past `VALUE_WALK_LIMIT`, `typeHasBareOwningStructAt` answers "not known", reported as its own error
+  (`ERR_TYPE_TOO_DEEP_TO_CHECK`: too deep to check), not as O31's "owns objects" with a `T&&` spelling (`vec158`).
+- **V1 (T16)**: a generic type holding itself by value (`x N<T>` in `N<T>`) reached codegen's layout and recursed until
+  the stack ended; each instantiation is now checked for holding itself when it is made (`instantiateType`), reported
+  as `N<I64> cannot hold itself by value` (T16's message now spells the type, `%t`) (`vec160`).
+
+### 27.5 The fuzzer
+
+`vec2aOp` gained five shapes (k 22-26): a borrow through a cursor, the cursor moved on, a Vec moved into the borrow
+(refused); both reads in one statement and the cursor moved on after (accepted); a Vec taken through a getter, directly
+or through a local holding its result (refused); and through the own field itself (refused, as 26.1).
+Own seeds 1-300, the same generator under both compilers: c7099f6 **18 findings** (878 scenarios run, 2722 refused) - 10
+F1 cursors and 8 F2 getters (3 direct, 5 through a local), every one of them the review's; this tip **none** (860 run,
+2740 refused).

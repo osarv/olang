@@ -15866,3 +15866,33 @@ Two over-rejections were cheap and sound to lift: O26a follows `take` as a flow,
 call. The other two stay recorded.
 
 The fuzzer writes R1, D and L1 now (seven shapes); on d5ddcda, own seeds 1-300 found 22 use-after-frees (14 R1, 8 D); on the fixed tip none.
+
+### Vec phase 2a's fix round reviewed (vec7), fixed: the same path within a statement, a take through a getter (§8.8 O31, O34, T16, T29a, 2026-10-12)
+
+The review of c7099f6 (`/home/user/review/vec7`) found that two of the round's answers were narrower than they looked.
+
+**F1 was an argument that held for the slots and not for the root.** 26.1 accepted a move between two fields of one owned
+object when both were read by one path, reasoning that a live borrow keeps the slot from changing between the two reads.
+True of every own slot on the path - and beside the point for the variable the path starts at, which a reference local,
+a parameter used as a cursor or a global lets the program repoint without releasing anything. A cursor walking a chain
+(`prev := c.lx; c = c.next; prev.more = take c.lx.toks`) is the natural shape, and it moved the second lexer's words into
+the first. The coordinator narrowed it rather than trying to prove a local un-repointed across statements: both reads in
+the statement being checked, by a non-global variable and fields only. Within one statement nothing repoints a local; a
+call can repoint a global, so a global root is not trusted. Each region now records the statement that made it.
+
+**F2 was R1 again, through a call.** R1's fix asked where the instance lives by its region, but an instance reached
+through a getter giving a borrowed own result carries the getter's `&p` tag - `p`'s scope - until borrowed own results
+are settled after every body. Answering "not known" for every call would also refuse taking from a factory's new object,
+so the take is recorded and decided after the settle: refused when the callee gives a borrowed own result, or when such a
+result may reach the variable the instance was read through (a flow-insensitive fixed point over the checked bodies,
+which also covers a variable assigned the getter's result only after the take, on a later loop turn). F3, its building
+twin (`p.Lx().toks.Push(x)` builds in `p`'s block), costs memory only and stays recorded: making the call the region for
+building would need the landing to know at the call what the settle decides later.
+
+**The rest.** N1: the round's T29a retype had reached conditionals and matches, whose values kept their own type - the
+retype is a call's only, and of a fixed-length reference too, which closes X1b (a copy at run time, a name under `-i`).
+N2: the safe answer past the walk limit was reported as "owns objects" with a nonsense spelling; it is its own error now.
+V1: T16 was checked over declared types only, so a generic holding itself by value reached codegen's layout and
+overflowed the stack; each instantiation is checked as it is made.
+
+The fuzzer writes both shapes now; own seeds 1-300 found 18 use-after-frees on c7099f6 (10 F1, 8 F2) and none on the fix.

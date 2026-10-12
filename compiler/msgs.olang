@@ -202,6 +202,7 @@ type Diag enum {
     InvalidReferenceTarget
     DoubleReferenceMarker
     DestructTypeByValue
+    TypeTooDeepToCheck
     OwningTypeByValue
     OwnOnValue
     OwnKindNotYet
@@ -385,6 +386,7 @@ type Diag enum {
     NoteOwnUsedAfter
     NoteOwnTaskBorrows
     NoteOwnTaskCallsValue
+    NoteOwnReachViaCall
     NoteOwnBorrowLocal
     NoteStrBuildsHere
     NoteStrKeepCopies
@@ -962,7 +964,7 @@ fn ConstraintUnmetHash(ty String&, text1 String&, text2 String&) Msg { return Ms
 fn UnboundedInstantiation() Msg { return Msg(Diag.UnboundedInstantiation, "G17", "this generic's instantiations never end - each one requires a larger one") }
 
 # ERR_TYPE_HOLDS_ITSELF
-fn TypeHoldsItself(text String&) Msg { return Msg(Diag.TypeHoldsItself, "T16", $text " cannot hold itself by value - hold it through a reference ('&')") }
+fn TypeHoldsItself(ty String&) Msg { return Msg(Diag.TypeHoldsItself, "T16", $ty " cannot hold itself by value - hold it through a reference ('&')") }
 
 # ERR_ARRAY_TYPE_HOLDS_ITSELF
 fn ArrayTypeHoldsItself(text1 String&, text2 String&, ty String&) Msg { return Msg(Diag.ArrayTypeHoldsItself, "T29", $text1 " holds itself through the array it is declared over - hold the array in a struct: 'type " $text2 " struct(items " $ty "&)'") }
@@ -1083,6 +1085,9 @@ fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "
 
 # ERR_DESTRUCT_TYPE_BY_VALUE
 fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
+
+# ERR_TYPE_TOO_DEEP_TO_CHECK
+fn TypeTooDeepToCheck() Msg { return Msg(Diag.TypeTooDeepToCheck, "O31", "this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less") }
 
 # ERR_OWNING_TYPE_BY_VALUE
 fn OwningTypeByValue(ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.OwningTypeByValue, "O31", $ty1 " owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write " $ty2 "&, or 'own mut " $ty3 "&' to own one") }
@@ -1632,6 +1637,9 @@ fn NoteOwnTaskBorrows() Msg { return Msg(Diag.NoteOwnTaskBorrows, "", "the task 
 
 # NOTE_OWN_TASK_CALLS_VALUE
 fn NoteOwnTaskCallsValue() Msg { return Msg(Diag.NoteOwnTaskCallsValue, "", "it calls a function value here") }
+
+# NOTE_OWN_REACH_VIA_CALL
+fn NoteOwnReachViaCall() Msg { return Msg(Diag.NoteOwnReachViaCall, "", "this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads") }
 
 # NOTE_OWN_BORROW_LOCAL
 fn NoteOwnBorrowLocal() Msg { return Msg(Diag.NoteOwnBorrowLocal, "", "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") }
