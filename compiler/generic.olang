@@ -1,0 +1,1855 @@
+# generic - the program's types (compiler/DESIGN.md section 1.6): every type declaration a DeclId, every written type a
+# TypeId, declared types' bodies and layouts made on request, instances made by substitution, type variables bound by
+# unification, constraints checked where a variable is bound, and functions' instances named.
+#
+# Requests are memoized: a body once made is kept on its type, a layout's progress on its type too (types.LayingOut is
+# the in-progress mark - asked again, it is a cycle and T16's diagnostic). A generic's own body is made once, over its
+# variables, and an instance's is the generic's substituted: an instance is its generic's DeclId with its arguments,
+# interned (types.Named), so the TypeId is the instance's identity and its canonical text its name (G16a).
+
+import "source"
+import "token"
+import "ast"
+import "diag"
+import "msgs"
+import "load"
+import "names"
+import "types"
+import "cond"
+import "fetch"
+import "std/os"
+
+# ---- the program ----
+
+# a variable of a declaration or a function (G1-G3, G19, G20): its owner (types.Var's), its name, the constant's type
+# (Unknown for a type variable) and its constraint (a trait type, Unknown for none)
+type varRow struct(Owner I64, Name source.NameId, Const types.TypeId, Bound types.TypeId) {
+    Owner
+    Name
+    Const
+    Bound
+}
+
+# a constant still to be computed (G21): its expression, written in a module, over an owner's variables
+type pattern struct(Expr ast.Expr&, Mi I64, Owner I64, Want types.TypeId) {
+    Expr
+    Mi
+    Owner
+    Want
+}
+
+# a function or method (D7, M19): where it is declared
+type fnRow struct(Mi I64, F ast.Func&, Extern Bool) {
+    Mi
+    F
+    Extern
+}
+
+# a function's instance: the function, its arguments, its signature and its name (G16a)
+type instance struct(Fn I64, Args types.ListId, Sig types.TypeId, Name String&) {
+    Fn
+    Args
+    Sig
+    Name
+}
+
+# a type's variables bound so far while inferring (G9): by index, Unknown while unbound; whether only literals bound it
+# (G9a), and whether a receiver did (G9b: it does not widen)
+type Binding struct(Owner I64, N I64) {
+    Owner
+    N
+    Vals mut Array<types.TypeId>& = Array<types.TypeId>(N)
+    LiteralOnly mut Array<Bool>& = Array<Bool>(N)
+    Fixed mut Array<Bool>& = Array<Bool>(N)
+}
+
+# a program loaded and its names resolved: its types. L and R are the loader and the resolver it was made from
+type Program struct(L mut load.Loader&, R mut names.Resolver&) {
+    L
+    R
+    T := types.NewTable(L.Names)
+    declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
+    declMi List<I64>                   # by DeclId: its module and its entry in the module's name table
+    declEi List<I64>
+    varsAt Map<I64, I64>               # by owner: where its variables start in vars, and how many
+    varsN Map<I64, I64>
+    vars List<varRow>
+    typeIndex Map<Pair<I64, I64>, I64> # (module, name): the entry declaring a type
+    indexed Map<I64, Bool>             # the modules typeIndex holds
+    identity Map<String&, I64>         # a module by its identity
+    modules I64 = 0                    # how many modules T knows
+    patterns Map<I64, pattern>         # by the pattern's index in T
+    fns List<fnRow>
+    fnsOf Map<I64, Bool>               # the modules fns holds
+    fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
+    fnByName Map<Pair<I64, I64>, I64>  # (module, name): a plain function
+    methods Map<Pair<I64, I64>, I64>   # (receiver key, name): the method
+    instances List<instance>
+    instanceOf Map<Pair<I64, types.ListId>, I64>
+    said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
+    folding Map<I64, Bool>             # the globals being folded (a cycle folds to nothing)
+    chain I64 = 0                      # how many instances' layouts are being made, each asked for by the one before
+}
+
+# the owners of variables: a type declaration's, a function's
+fn DeclOwner(d types.DeclId) I64 { return I64(d) * 2 }
+fn FnOwner(f I64) I64 { return f * 2 + 1 }
+
+fn (p mut Program&) ensureModules() {
+    for mi in range p.modules, p.L.Mods.Len() {
+        p.T.AddModule(p.L.Mods[mi].Identity)
+        p.identity.Put(p.L.Mods[mi].Identity, mi)
+    }
+    p.modules = p.L.Mods.Len()
+}
+
+fn (p Program&) file(mi I64) I64 { return p.L.Mods[mi].File }
+
+fn (p mut Program&) at(mi I64, sp source.Span) diag.Where { return diag.Where.Span(p.file(mi), I64(sp.Start), I64(sp.End)) }
+
+fn (p mut Program&) text(n source.NameId) String&p { return p.L.Names.Text(n) }
+
+# ---- declarations ----
+
+# the type declared by a module's entry (names.Table's): registered the first time it is asked for
+fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
+    key := (mi << 32) | ei
+    d := try p.declAt.Get(key) catch default types.DeclId(-1)
+    if d >= types.DeclId(0) { return d }
+    p.ensureModules()
+    e := p.R.Tables[mi].Entries[ei]
+    kind := types.DeclKind.Error
+    n I32 = 0
+    consts I64 = 0
+    td := e.Decl
+    if td != null {
+        kind = types.DeclKind.Struct
+        if td.Body != null {
+            match td.Body {
+                case ast.TypeBody.Struct(_) { kind = types.DeclKind.Struct }
+                case ast.TypeBody.Enum(_) { kind = types.DeclKind.Enum }
+                case ast.TypeBody.Trait(_) { kind = types.DeclKind.Trait }
+                case ast.TypeBody.Over(_, _) { kind = types.DeclKind.Over }
+            }
+        }
+        if td.Params != null {
+            n = I32(td.Params.Len())
+            for i in range td.Params.Len() {
+                if p.constParam(mi, td.Params[i]) { consts = consts | (1 << i) }
+            }
+        }
+    }
+    d = p.T.AddDecl(mi, e.Name, kind, n, consts)
+    p.declAt.Put(key, d)
+    p.declMi.Push(mi)
+    p.declEi.Push(ei)
+    return d
+}
+
+# whether a type parameter is a constant (G20): its type names no trait
+fn (p mut Program&) constParam(mi I64, tp ast.TypeParam&) Bool {
+    if tp.Ty == null { return false }
+    return match tp.Ty {
+        case ast.TypeRef.Named(sp, _, _) => not p.namesTrait(p.R.Use(p.file(mi), sp.Start))
+        case _ => false
+    }
+}
+
+fn (p mut Program&) namesTrait(ref names.Ref) Bool {
+    if ref.Kind != names.What.Type or ref.Index < 0 { return false }
+    td := p.R.Tables[ref.Module].Entries[ref.Index].Decl
+    if td == null or td.Body == null { return false }
+    return match td.Body {
+        case ast.TypeBody.Trait(_) => true
+        case _ => false
+    }
+}
+
+fn (p Program&) typeDecl(d types.DeclId) ast.TypeDecl&p { return p.R.Tables[p.declMi[I64(d)]].Entries[p.declEi[I64(d)]].Decl }
+
+fn (p Program&) DeclModule(d types.DeclId) I64 { return p.declMi[I64(d)] }
+
+# a type a module declares, by its name; -1 for none
+fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
+    if not (try p.indexed.Get(mi) catch default false) {
+        tab := p.R.Tables[mi]
+        for ei in range tab.Entries.Len() {
+            if tab.Entries[ei].Kind == names.What.Type { p.typeIndex.Put(Pair(mi, I64(tab.Entries[ei].Name)), ei) }
+        }
+        p.indexed.Put(mi, true)
+    }
+    return try p.typeIndex.Get(Pair(mi, I64(name))) catch default -1
+}
+
+# a declared type by its canonical name, "IDENTITY:Name"
+fn (p mut Program&) FindDecl(identity String&, name String&) types.DeclId ? {
+    p.ensureModules()
+    mi := try p.identity.Get(identity) catch { error }
+    ei := p.TypeEntry(mi, p.L.Names.Intern(name))
+    if ei < 0 { error }
+    return p.DeclFor(mi, ei)
+}
+
+# ---- variables ----
+
+fn (p mut Program&) addVars(owner I64, ns Array<source.NameId>&) {
+    if (try p.varsAt.Get(owner) catch default -1) >= 0 { return }
+    p.varsAt.Put(owner, p.vars.Len())
+    p.varsN.Put(owner, ns.Len())
+    for n in ns { p.vars.Push(varRow(owner, n, types.UnknownT, types.UnknownT)) }
+}
+
+# an owner's variables: how many, and the i-th's row
+fn (p mut Program&) VarCount(owner I64) I64 {
+    if owner % 2 == 0 { p.declVars(types.DeclId(I32(owner / 2))) }
+    return try p.varsN.Get(owner) catch default 0
+}
+
+fn (p mut Program&) VarAt(owner I64, i I64) varRow { return p.vars[(try p.varsAt.Get(owner) catch default 0) + i] }
+
+# a type declaration's variables (G6, G19, G20): registered with their constants' types and their constraints, read in
+# the declaration's own context, where every one of them is written bare (G8b)
+fn (p mut Program&) declVars(d types.DeclId) {
+    owner := DeclOwner(d)
+    if (try p.varsAt.Get(owner) catch default -1) >= 0 { return }
+    td := p.typeDecl(d)
+    ns List<source.NameId>
+    if td != null and td.Params != null {
+        for tp in td.Params { ns.Push(tp.Name) }
+    }
+    p.addVars(owner, ns.ToArray())
+    if td == null or td.Params == null { return }
+    c := p.declContext(d)
+    base := try p.varsAt.Get(owner) catch default 0
+    for i in range td.Params.Len() {
+        tp := td.Params[i]
+        if tp.Ty == null { continue }
+        t := p.Resolve(c, tp.Ty)
+        row := p.vars[base + i]
+        if p.T.ParamIsConst(d, i) {
+            p.vars[base + i] = varRow(owner, row.Name, t, types.UnknownT)
+        } else {
+            p.vars[base + i] = varRow(owner, row.Name, types.UnknownT, t)
+        }
+    }
+}
+
+# where a declaration's text is read: its module, its variables by name
+type Context struct(Mi I64, Owner I64) {
+    Mi
+    Owner
+    Vars Map<source.NameId, types.TypeId>
+}
+
+fn (p mut Program&) declContext(d types.DeclId) Context {
+    mi := p.declMi[I64(d)]
+    owner := DeclOwner(d)
+    c := Context(mi, owner)
+    td := p.typeDecl(d)
+    if td != null and td.Params != null {
+        for i in range td.Params.Len() { c.Vars.Put(td.Params[i].Name, p.T.Var(owner, i, types.ReadOnly)) }
+    }
+    return c
+}
+
+# a declared type over its own variables: Named(d, [its variables]) - a non-generic declaration's one type
+fn (p mut Program&) SelfType(d types.DeclId) types.TypeId {
+    p.declVars(d)
+    owner := DeclOwner(d)
+    n := p.T.DeclParams(d)
+    vs := Array<types.TypeId>(n)
+    for i in range n { vs[i] = p.T.Var(owner, i, types.ReadOnly) }
+    return p.T.Named(d, p.T.List(vs))
+}
+
+# ---- written types ----
+
+# the TypeId a written type stands for, read in a context: a name through names' resolution, a variable by the
+# context's, permissions and reference markers (T25b - a scope tag is section 8's, not the type's); Unknown where it
+# names nothing
+fn (p mut Program&) Resolve(c Context&, t ast.TypeRef&) types.TypeId {
+    if t == null { return types.UnknownT }
+    return match t {
+        case ast.TypeRef.Named(sp, path, args) => p.named(c, sp, path, args)
+        case ast.TypeRef.Var(_, n, _) => try c.Vars.Get(n) catch default types.UnknownT
+        case ast.TypeRef.Func(_, s) => p.sigType(c, s, types.UnknownT)
+        case ast.TypeRef.Const(_, _) => types.UnknownT
+        case ast.TypeRef.Shape(_, body) => p.shape(c, body)
+        case ast.TypeRef.Ref(_, of, _) => p.T.Ref(p.Resolve(c, of), types.ReadOnly)
+        case ast.TypeRef.Perm(_, of, writable, owned) => p.perm(p.Resolve(c, of), writable, owned)
+    }
+}
+
+# "mut"/"own" before a type: a reference's permission (T25b, T25e), a variable's where it is bound to a reference (T2);
+# before a value type it says nothing the type holds (the checker's D9/D11a)
+fn (p mut Program&) perm(t types.TypeId, writable Bool, owned Bool) types.TypeId {
+    bits := (types.Writable if writable else types.ReadOnly) | (types.Owning if owned else types.ReadOnly)
+    return match p.T.KindOf(t) {
+        case types.Kind.Ref => p.T.Ref(p.T.Referent(t), p.T.PermOf(t) | bits)
+        case types.Kind.Var => p.T.Var(p.T.A(t), p.T.B(t), p.T.C(t) | bits)
+        case _ => t
+    }
+}
+
+fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&, args Array<ast.TypeRef&>&) types.TypeId {
+    if path.Len() == 1 {
+        v := try c.Vars.Get(path[0]) catch default types.TypeId(-1)
+        if v >= types.TypeId(0) { return v }
+    }
+    ref := p.R.Use(p.file(c.Mi), sp.Start)
+    match ref.Kind {
+        case names.What.Builtin {
+            name := p.text(path[path.Len() - 1])
+            if name == "Array" {
+                if args.Len() == 0 { return types.UnknownT }
+                elem := p.Resolve(c, args[0])
+                if args.Len() == 1 { return p.T.Array(elem, types.TypeId(0)) }
+                return p.T.Array(elem, p.constArg(c, args[1], p.T.Prim("I64")))
+            }
+            if name == "Bool" { return types.BoolT }
+            return p.T.Prim(name)
+        }
+        case names.What.Type {
+            if ref.Index < 0 { return types.UnknownT }
+            d := p.DeclFor(ref.Module, ref.Index)
+            p.declVars(d)
+            n := p.T.DeclParams(d)
+            if n != args.Len() { return types.UnknownT }   # G7: the checker says how many
+            vs := Array<types.TypeId>(n)
+            owner := DeclOwner(d)
+            for i in range n {
+                row := p.VarAt(owner, i)
+                vs[i] = p.constArg(c, args[i], row.Const) if p.T.ParamIsConst(d, i) else p.Resolve(c, args[i])
+            }
+            return p.Instance(d, p.T.List(vs))
+        }
+        nomatch { return types.UnknownT }
+    }
+}
+
+# a type's instance with these arguments (or the type itself, a non-generic one with none): G17 bounds how deep the
+# arguments of an instance may nest
+fn (p mut Program&) Instance(d types.DeclId, args types.ListId) types.TypeId {
+    t := p.T.Named(d, args)
+    if p.T.Depth(t) > MaxDepth {
+        p.unbounded(d)
+        return types.UnknownT
+    }
+    return t
+}
+
+# G17, said once for a declaration
+fn (p mut Program&) unbounded(d types.DeclId) {
+    if try p.said.Get(I64(d)) catch default false { return }
+    p.said.Put(I64(d), true)
+    mi := p.declMi[I64(d)]
+    e := p.R.Tables[mi].Entries[p.declEi[I64(d)]]
+    p.L.Diags.Error(p.at(mi, e.Sp), msgs.UnboundedInstantiation())
+}
+
+# G17: how deep an instance's arguments may nest, and how long a chain of instances, each asked for by the one before,
+# may be (a constant argument that keeps changing)
+MaxDepth I64 = 48
+MaxChain I64 = 1000
+
+# a function type written: its parameters, its result (a tuple for several, D8c) and its errors (R15: "?" alone is the
+# default error); recv, where it is no stand-in, is the parameter before the others (a method's receiver, M19)
+fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId) types.TypeId {
+    ps List<types.TypeId>
+    if recv != types.UnknownT { ps.Push(recv) }
+    for prm in s.Params { ps.Push(p.Resolve(c, prm.Ty)) }
+    result := types.VoidT
+    if s.Results.Len() == 1 {
+        result = p.Resolve(c, s.Results[0])
+    } else if s.Results.Len() > 1 {
+        rs := Array<types.TypeId>(s.Results.Len())
+        for i in range s.Results.Len() { rs[i] = p.Resolve(c, s.Results[i]) }
+        result = p.T.Tuple(p.T.List(rs))
+    }
+    es List<types.TypeId>
+    if s.HasErrors {
+        if s.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
+        for e in s.Errors { es.Push(p.errorType(c, e)) }
+    }
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.T.List(es.ToArray()))
+}
+
+# an error set's item: an error type, its own module's or one an alias chain reaches (names records the head)
+fn (p mut Program&) errorType(c Context&, e ast.Path&) types.TypeId {
+    ref := p.R.Use(p.file(c.Mi), e.Sp.Start)
+    n := e.Parts.Len()
+    if n == 1 {
+        if ref.Kind != names.What.Type or ref.Index < 0 { return types.UnknownT }
+        return p.T.Named(p.DeclFor(ref.Module, ref.Index), types.ListId(0))
+    }
+    if ref.Kind != names.What.Import { return types.UnknownT }
+    mi := ref.Module
+    for k in range 1, n - 1 {
+        mi = p.aliasStep(mi, e.Parts[k])
+        if mi < 0 { return types.UnknownT }
+    }
+    ei := p.TypeEntry(mi, e.Parts[n - 1])
+    if ei < 0 { return types.UnknownT }
+    return p.T.Named(p.DeclFor(mi, ei), types.ListId(0))
+}
+
+# the module an alias of a module reaches, -1 for none
+fn (p mut Program&) aliasStep(mi I64, alias source.NameId) I64 {
+    for imp in p.L.Mods[mi].Imports {
+        if imp.Target >= 0 and p.L.Names.Intern(imp.Alias) == alias { return imp.Target }
+    }
+    return -1
+}
+
+# an anonymous type written in place: an enum's cases, or a struct's fields (T27)
+fn (p mut Program&) shape(c Context&, body ast.TypeBody&) types.TypeId {
+    return match body {
+        case ast.TypeBody.Enum(cases) => p.anonEnum(c, cases)
+        case ast.TypeBody.Struct(s) => p.T.Record(p.paramTypes(c, s.Params))
+        case _ => types.UnknownT
+    }
+}
+
+fn (p mut Program&) anonEnum(c Context&, cases Array<ast.CaseDecl&>&) types.TypeId {
+    ns := Array<source.NameId>(cases.Len())
+    ps := Array<types.TypeId>(cases.Len())
+    for i in range cases.Len() {
+        ns[i] = cases[i].Name
+        ps[i] = p.payload(c, cases[i])
+    }
+    return p.T.AnonEnum(ns, p.T.List(ps))
+}
+
+# an enum case's payload: a record of its fields, none (0) for a case carrying none
+fn (p mut Program&) payload(c Context&, cd ast.CaseDecl&) types.TypeId {
+    if cd.Payload == null or cd.Payload.Len() == 0 { return types.TypeId(0) }
+    return p.T.Record(p.paramTypes(c, cd.Payload))
+}
+
+fn (p mut Program&) paramTypes(c Context&, ps Array<ast.Param&>&) types.ListId {
+    ts := Array<types.TypeId>(ps.Len())
+    for i in range ps.Len() { ts[i] = p.Resolve(c, ps[i].Ty) }
+    return p.T.List(ts)
+}
+
+# ---- constants (G20, G21) ----
+
+# a constant argument of type want: its value where it folds here, a pattern over the context's variables where it
+# reads one not bound yet, and where it needs evaluating (a call - M8's evaluator), the unknown constant: an array with
+# that length, or an instance with that argument, has no layout yet
+fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) types.TypeId {
+    match t {
+        case ast.TypeRef.Const(_, e) { return p.fold(c, e, want) }
+        case ast.TypeRef.Named(sp, path, args) {
+            if args.Len() > 0 { return p.UnknownConst() }
+            if path.Len() == 1 {
+                v := try c.Vars.Get(path[0]) catch default types.TypeId(-1)
+                if v >= types.TypeId(0) { return v }
+            }
+            f := p.foldPath(c, sp, path)
+            return p.constOf(c, f, want, null)
+        }
+        case ast.TypeRef.Var(_, n, _) { return try c.Vars.Get(n) catch default p.UnknownConst() }
+        nomatch { return p.UnknownConst() }
+    }
+}
+
+# the constant no fold reaches: a pattern of its own, which never folds
+fn (p mut Program&) UnknownConst() types.TypeId { return p.T.ConstExpr("?") }
+
+# a fold's outcome: Folded, its value (in Ty's width, Ty Unknown for a literal's exact value, which adapts - T6, E4a);
+# Pending, it reads a variable not bound yet; Unfolded, it needs evaluating
+Folded I64 = 0
+Pending I64 = 1
+Unfolded I64 = 2
+
+type folded struct(St I64, V I64, Ty types.TypeId) {
+    St
+    V
+    Ty
+}
+
+fn unfolded() folded { return folded(Unfolded, 0, types.UnknownT) }
+
+fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeId { return p.constOf(c, p.eval(c, e), want, e) }
+
+fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&) types.TypeId {
+    if f.St == Folded { return p.T.Const(want, p.wrap(f.V, want)) }
+    if f.St == Pending and e != null {
+        sp := e.Span()
+        k := p.T.ConstExpr($c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End ":" $I64(want))
+        p.patterns.Put(p.T.A(k), pattern(e, c.Mi, c.Owner, want))
+        return k
+    }
+    return p.UnknownConst()
+}
+
+# a constant's value in a type's width: an unsigned one's bits, a signed one's sign-extended (E6c: integer arithmetic
+# wraps, as the program's does)
+fn (p mut Program&) wrap(v I64, t types.TypeId) I64 {
+    r := p.numberOf(t)
+    if not p.T.IsInt(r) { return v }
+    bits := p.T.Bits(r)
+    if bits >= 64 { return v }
+    m := (I64(1) << bits) - 1
+    x := v & m
+    if not p.T.IsUnsigned(r) and ((x >> (bits - 1)) & 1) == 1 { x = x | ~m }
+    return x
+}
+
+# the number type a type is, past a declared type over one (T29: Char's U8)
+fn (p mut Program&) numberOf(t types.TypeId) types.TypeId {
+    p.reprReady(t)
+    return p.T.Repr(t)
+}
+
+# an integer expression's value where it folds exactly as the program computes it (G21): literals exact (E4a), names
+# of constant variables and immutable globals in their types, an enum's case by its ordinal, a conversion to a number
+# type, operators in the type their operands meet at (T6b, E6d), wrapping where the program wraps (E6c)
+fn (p mut Program&) eval(c Context&, e ast.Expr&) folded {
+    return match e {
+        case ast.Expr.Lit(sp, kind) => p.evalLit(c.Mi, sp, kind)
+        case ast.Expr.Paren(_, x) => p.eval(c, x)
+        case ast.Expr.Name(sp, n) => p.foldPath(c, sp, Array<source.NameId>(1, n))
+        case ast.Expr.Member(_, x, n) => p.evalMember(c, x, n)
+        case ast.Expr.Unary(_, op, x) => p.evalUnary(c, op, x)
+        case ast.Expr.Binary(_, op, a, b) => p.evalBinary(c, op, a, b)
+        case ast.Expr.Cond(_, a, k, b) => p.evalCond(c, a, k, b)
+        case ast.Expr.Call(_, f, args) => p.evalConversion(c, f, args)
+        case _ => unfolded()
+    }
+}
+
+fn (p mut Program&) evalLit(mi I64, sp source.Span, kind token.Tok) folded {
+    txt := p.L.Mods[mi].Src.TextOf(sp)
+    match kind {
+        case token.Tok.IntLit {
+            v := try txt.ParseInt(0) catch {
+                u := try txt.ParseUint(0) catch { return unfolded() }
+                return folded(Folded, I64(u), p.T.Prim("U64"))   # L10: a decimal literal above I64's maximum is a U64
+            }
+            return folded(Folded, v, types.UnknownT)
+        }
+        case token.Tok.BoolLit { return folded(Folded, 1 if txt == "true" else 0, types.BoolT) }
+        nomatch { return unfolded() }
+    }
+}
+
+# a name in a constant: a constant variable of the context, an immutable global's value in its type (its initializer
+# folded in its module), through an alias chain or not
+fn (p mut Program&) foldPath(c Context&, sp source.Span, path Array<source.NameId>&) folded {
+    if path.Len() == 1 {
+        v := try c.Vars.Get(path[0]) catch default types.TypeId(-1)
+        if v >= types.TypeId(0) {
+            if p.T.KindOf(v) == types.Kind.Const { return folded(Folded, p.T.ConstValue(v), p.T.ConstType(v)) }
+            return folded(Pending, 0, types.UnknownT)
+        }
+    }
+    mi := c.Mi
+    if path.Len() > 1 {
+        ref := p.R.Use(p.file(c.Mi), sp.Start)
+        if ref.Kind != names.What.Import { return unfolded() }
+        mi = ref.Module
+        for k in range 1, path.Len() - 1 {
+            mi = p.aliasStep(mi, path[k])
+            if mi < 0 { return unfolded() }
+        }
+    }
+    return p.foldGlobal(mi, path[path.Len() - 1])
+}
+
+fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
+    v := p.globalDecl(mi, n)
+    if v == null { return unfolded() }
+    key := (mi << 32) | I64(n)
+    if try p.folding.Get(key) catch default false { return unfolded() }   # B5a's cycle: the checker says it
+    i := 0
+    for k in range v.Names.Len() {
+        if v.Names[k] == n { i = k }
+    }
+    if i >= v.Values.Len() { return unfolded() }
+    p.folding.Put(key, true)
+    gc := Context(mi, -1)
+    f := p.eval(gc, v.Values[i])
+    p.folding.Put(key, false)
+    if f.St != Folded or v.Ty == null { return f }
+    t := p.Resolve(gc, v.Ty)
+    return folded(Folded, p.wrap(f.V, t), t)
+}
+
+# an immutable global's declaration in a module, outside every top-level if; null for none (a mutable global is no
+# constant)
+fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl&p {
+    ds := p.L.Mods[mi].Decls
+    if ds == null { return null }
+    for d in ds {
+        match d {
+            case ast.Decl.Global(_, v) {
+                for k in range v.Names.Len() {
+                    if v.Names[k] == n and not mutableGlobal(v) { return v }
+                }
+            }
+            nomatch { }
+        }
+    }
+    return null
+}
+
+fn mutableGlobal(v ast.VarDecl&) Bool {
+    if v.Ty == null { return false }
+    return match v.Ty {
+        case ast.TypeRef.Perm(_, _, writable, _) => writable
+        case _ => false
+    }
+}
+
+# an enum's case as a constant (G20): its ordinal, typed by its enum
+fn (p mut Program&) evalMember(c Context&, x ast.Expr&, n source.NameId) folded {
+    match x {
+        case ast.Expr.Name(sp, _) {
+            ref := p.R.Use(p.file(c.Mi), sp.Start)
+            if ref.Kind != names.What.Type or ref.Index < 0 { return unfolded() }
+            td := p.R.Tables[ref.Module].Entries[ref.Index].Decl
+            if td == null or td.Body == null { return unfolded() }
+            match td.Body {
+                case ast.TypeBody.Enum(cases) {
+                    for i in range cases.Len() {
+                        if cases[i].Name == n { return folded(Folded, i, p.T.Named(p.DeclFor(ref.Module, ref.Index), types.ListId(0))) }
+                    }
+                }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    return unfolded()
+}
+
+# a conversion to a number type, "I64(x)": x's value in that type's width (E26: unchecked)
+fn (p mut Program&) evalConversion(c Context&, f ast.Expr&, args Array<ast.Expr&>&) folded {
+    if args.Len() != 1 { return unfolded() }
+    match f {
+        case ast.Expr.Name(sp, n) {
+            if p.R.Use(p.file(c.Mi), sp.Start).Kind != names.What.Builtin { return unfolded() }
+            t := p.T.Prim(p.text(n))
+            if not p.T.IsInt(t) { return unfolded() }
+            x := p.eval(c, args[0])
+            if x.St != Folded { return x }
+            return folded(Folded, p.wrap(x.V, t), t)
+        }
+        nomatch { return unfolded() }
+    }
+}
+
+fn (p mut Program&) evalUnary(c Context&, op token.Tok, x ast.Expr&) folded {
+    f := p.eval(c, x)
+    if f.St != Folded { return f }
+    return match op {
+        case token.Tok.Minus => folded(Folded, p.wrap(-f.V, f.Ty), f.Ty)
+        case token.Tok.Tilde => folded(Folded, p.wrap(~f.V, f.Ty), f.Ty)
+        case token.Tok.Not => folded(Folded, 1 - f.V, types.BoolT)
+        case _ => unfolded()
+    }
+}
+
+# the type two operands meet at (T6b, E6d): a literal adapts to the other operand where its value fits that type, else
+# meets it at its own (I64); two typed ones meet where one flows into the other; Unknown (the literal's) for two
+# literals; -1 where they do not meet
+fn (p mut Program&) meet(a folded, b folded) types.TypeId {
+    if a.Ty == types.UnknownT and b.Ty == types.UnknownT { return types.UnknownT }
+    if a.Ty == types.UnknownT { return b.Ty if p.wrap(a.V, b.Ty) == a.V else p.meetTyped(p.T.Prim("I64"), b.Ty) }
+    if b.Ty == types.UnknownT { return a.Ty if p.wrap(b.V, a.Ty) == b.V else p.meetTyped(a.Ty, p.T.Prim("I64")) }
+    return p.meetTyped(a.Ty, b.Ty)
+}
+
+fn (p mut Program&) meetTyped(a types.TypeId, b types.TypeId) types.TypeId {
+    if a == b { return a }
+    if p.Flows(a, b) { return b }
+    if p.Flows(b, a) { return a }
+    return types.TypeId(-1)
+}
+
+# T6b: whether a number of type a flows into type b with nothing lost - wider within a signedness, an unsigned into a
+# strictly wider signed, F16 and BF16 into F32 into F64; a declared type into its base and on
+fn (p mut Program&) Flows(a types.TypeId, b types.TypeId) Bool {
+    if a == b { return true }
+    ra := p.numberOf(a)
+    if ra != a { return p.Flows(ra, b) }
+    if not p.T.IsNumber(a) or not p.T.IsNumber(b) { return false }
+    ba, bb := p.T.Bits(a), p.T.Bits(b)
+    if p.T.IsFloat(a) or p.T.IsFloat(b) {
+        if not (p.T.IsFloat(a) and p.T.IsFloat(b)) { return false }
+        return ba < bb and (bb >= 32)
+    }
+    if p.T.IsUnsigned(a) == p.T.IsUnsigned(b) { return ba < bb }
+    return p.T.IsUnsigned(a) and not p.T.IsUnsigned(b) and ba < bb
+}
+
+fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr&) folded {
+    if op == token.Tok.And or op == token.Tok.Or {
+        fa := p.eval(c, a)
+        if fa.St != Folded { return fa }
+        if (op == token.Tok.And and fa.V == 0) or (op == token.Tok.Or and fa.V != 0) { return fa }   # E7
+        return p.eval(c, b)
+    }
+    fa := p.eval(c, a)
+    fb := p.eval(c, b)
+    if fa.St == Unfolded or fb.St == Unfolded { return unfolded() }
+    if fa.St == Pending or fb.St == Pending { return folded(Pending, 0, types.UnknownT) }
+    t := p.meet(fa, fb)
+    if t == types.TypeId(-1) { return unfolded() }
+    x, y := fa.V, fb.V
+    unsigned := t != types.UnknownT and p.T.IsUnsigned(p.numberOf(t))
+    if op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Lt or op == token.Tok.Le or op == token.Tok.Gt or
+       op == token.Tok.Ge {
+        less := (U64(x) < U64(y)) if unsigned else x < y
+        r := match op {
+            case token.Tok.EqEq => x == y
+            case token.Tok.NotEq => x != y
+            case token.Tok.Lt => less
+            case token.Tok.Le => less or x == y
+            case token.Tok.Gt => not less and x != y
+            case _ => not less
+        }
+        return folded(Folded, 1 if r else 0, types.BoolT)
+    }
+    v I64 = 0
+    match op {
+        case token.Tok.Plus { v = x + y }
+        case token.Tok.Minus { v = x - y }
+        case token.Tok.Star { v = x * y }
+        case token.Tok.Slash, token.Tok.Percent {
+            if y == 0 { return unfolded() }   # E6a: undefined, the checker's
+            if unsigned {
+                v = I64(U64(x) / U64(y)) if op == token.Tok.Slash else I64(U64(x) % U64(y))
+            } else {
+                v = x / y if op == token.Tok.Slash else x % y
+            }
+        }
+        case token.Tok.Amp { v = x & y }
+        case token.Tok.Pipe { v = x | y }
+        case token.Tok.Caret { v = x ^ y }
+        case token.Tok.Shl, token.Tok.Shr {
+            t = fa.Ty if fa.Ty != types.UnknownT else (fb.Ty if fb.Ty == types.UnknownT else types.UnknownT)   # E8b
+            w := 64 if t == types.UnknownT else p.T.Bits(p.numberOf(t))
+            if y < 0 or y >= w { return unfolded() }
+            if op == token.Tok.Shl {
+                v = x << y
+            } else {
+                v = I64(U64(x) >> U64(y)) if t != types.UnknownT and p.T.IsUnsigned(p.numberOf(t)) else x >> y
+            }
+        }
+        case token.Tok.Xor { v = 1 if (x != 0) != (y != 0) else 0 }
+        nomatch { return unfolded() }
+    }
+    if op == token.Tok.Xor { return folded(Folded, v, types.BoolT) }
+    return folded(Folded, p.wrap(v, t) if t != types.UnknownT else v, t)
+}
+
+fn (p mut Program&) evalCond(c Context&, a ast.Expr&, k ast.Expr&, b ast.Expr&) folded {
+    f := p.eval(c, k)
+    if f.St != Folded { return f }
+    return p.eval(c, a) if f.V != 0 else p.eval(c, b)
+}
+
+# ---- substitution ----
+
+# a type with an owner's variables replaced by args (G8a, G10b): a variable "mut T" bound to a reference gives it
+# "mut" (T2); a constant still to be computed is folded with the arguments bound
+fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.TypeId {
+    xs := p.T.Items(args)
+    k := p.T.KindOf(t)
+    match k {
+        case types.Kind.Var {
+            if p.T.A(t) != owner or p.T.B(t) >= xs.Len() { return t }
+            v := xs[p.T.B(t)]
+            bits := p.T.C(t)
+            if bits != types.ReadOnly and p.T.KindOf(v) == types.Kind.Ref {
+                return p.T.Ref(p.T.Referent(v), p.T.PermOf(v) | bits)
+            }
+            return v
+        }
+        case types.Kind.ConstExpr {
+            pat := try p.patterns.Get(p.T.A(t)) catch default pattern(null, -1, -2, types.UnknownT)
+            if pat.Owner == -2 { return t }
+            if pat.Owner != owner { return t }
+            c := Context(pat.Mi, owner)
+            n := p.VarCount(owner)
+            for i in range n {
+                if i < xs.Len() { c.Vars.Put(p.VarAt(owner, i).Name, xs[i]) }
+            }
+            return p.fold(c, pat.Expr, pat.Want)
+        }
+        case types.Kind.Named {
+            if p.T.Args(t) == types.ListId(0) { return t }
+            return p.Instance(p.T.DeclOf(t), p.substList(p.T.Args(t), owner, args))
+        }
+        case types.Kind.Array { return p.T.Array(p.Subst(p.T.Elem(t), owner, args), p.Subst(p.T.Length(t), owner, args)) }
+        case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
+        case types.Kind.Func {
+            return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args),
+                            p.substList(p.T.Errors(t), owner, args))
+        }
+        case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
+        case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
+        case types.Kind.AnonEnum { return p.T.AnonEnum(p.T.ShapeNames(t), p.substList(p.T.ShapeCases(t), owner, args)) }
+        nomatch { return t }
+    }
+}
+
+fn (p mut Program&) substList(l types.ListId, owner I64, args types.ListId) types.ListId {
+    if l == types.ListId(0) { return l }
+    xs := p.T.Items(l)
+    out := Array<types.TypeId>(xs.Len())
+    for i in range xs.Len() { out[i] = p.Subst(xs[i], owner, args) }   # an enum's 0, a case carrying none, stays
+    return p.T.List(out)
+}
+
+# ---- bodies ----
+
+# a declared type's body, made the first time it is asked for: a struct's fields from its constructor (C2), an enum's
+# cases' payloads (T17), the type a declared type is over (T29); an instance's is its generic's substituted (G10b).
+# Whether it has one: a declaration that did not parse past its name has none
+fn (p mut Program&) Body(t types.TypeId) Bool {
+    if p.T.KindOf(t) != types.Kind.Named { return true }
+    if p.T.HasBody(t) { return true }
+    d := p.T.DeclOf(t)
+    self := p.SelfType(d)
+    if t != self {
+        if not p.Body(self) { return false }
+        owner := DeclOwner(d)
+        args := p.T.Args(t)
+        match p.T.DeclKindOf(d) {
+            case types.DeclKind.Struct { p.T.SetStructBody(t, p.substList(p.T.Fields(self), owner, args), p.T.Destructs(self)) }
+            case types.DeclKind.Enum { p.T.SetEnumBody(t, p.T.CaseNames(self), p.substList(p.T.Cases(self), owner, args)) }
+            case types.DeclKind.Over { p.T.SetOverBody(t, p.Subst(p.T.Base(self), owner, args)) }
+            nomatch { p.T.SetEmptyBody(t) }
+        }
+        return true
+    }
+    td := p.typeDecl(d)
+    if td == null {
+        p.T.SetEmptyBody(t)   # an error type (T19)
+        return true
+    }
+    if td.Body == null { return false }
+    c := p.declContext(d)
+    match td.Body {
+        case ast.TypeBody.Struct(s) {
+            p.T.SetStructBody(t, p.fields(c, s), s.Dtor != null)
+        }
+        case ast.TypeBody.Enum(cases) {
+            ns := Array<source.NameId>(cases.Len())
+            ps := Array<types.TypeId>(cases.Len())
+            for i in range cases.Len() {
+                ns[i] = cases[i].Name
+                ps[i] = p.payload(c, cases[i])
+            }
+            p.T.SetEnumBody(t, ns, p.T.List(ps))
+        }
+        case ast.TypeBody.Over(base, _) { p.T.SetOverBody(t, p.Resolve(c, base)) }
+        case ast.TypeBody.Trait(_) { p.T.SetEmptyBody(t) }
+    }
+    return true
+}
+
+# a struct's fields (C2, C4): the constructor body's field declarations, in order - written with a type, a pun taking
+# its parameter's, ":=" taking its value's (D15)
+fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
+    known Map<source.NameId, types.TypeId>
+    for prm in s.Params {
+        if prm.Ty != null { known.Put(prm.Name, p.Resolve(c, prm.Ty)) }
+    }
+    out List<types.TypeId>
+    if s.Body == null { return types.ListId(0) }
+    for st in s.Body {
+        match st {
+            case ast.Stmt.Var(_, v) {
+                if not v.Field { continue }
+                for i in range v.Names.Len() {
+                    ft := types.UnknownT
+                    if v.Infer {
+                        x := v.Values[i] if i < v.Values.Len() else null
+                        ft = p.Infer(c, known, x)
+                    } else if v.Ty != null {
+                        ft = p.Resolve(c, v.Ty)
+                    } else {
+                        ft = try known.Get(v.Names[i]) catch default types.UnknownT
+                    }
+                    known.Put(v.Names[i], ft)
+                    out.Push(ft)
+                }
+            }
+            nomatch { }
+        }
+    }
+    return p.T.List(out.ToArray())
+}
+
+# the type of a value a ":=" declaration takes (D15), where it is plain from the expression written: a literal, a name
+# already typed, a constructor call, an array made or written, text; Unknown where it needs the checker (M5b)
+fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x ast.Expr&) types.TypeId {
+    if x == null { return types.UnknownT }
+    return match x {
+        case ast.Expr.Lit(_, kind) => p.literalType(kind)
+        case ast.Expr.Paren(_, y) => p.Infer(c, known, y)
+        case ast.Expr.Unary(_, op, y) => p.unaryType(c, known, op, y)
+        case ast.Expr.Join(_, _) => p.textType()
+        case ast.Expr.Name(sp, n) => try known.Get(n) catch default p.nameType(c, sp, n)
+        case ast.Expr.ArrayLit(_, elem, _) => p.T.Array(p.Resolve(c, elem), types.TypeId(0))
+        case ast.Expr.Call(_, f, _) => p.callType(c, known, f)
+        case ast.Expr.Try(_, y, _) => p.Infer(c, known, y)
+        case ast.Expr.As(_, _, t) => p.Resolve(c, t)
+        case ast.Expr.Binary(_, op, a, b) => p.binaryType(c, known, op, a, b)
+        case _ => types.UnknownT
+    }
+}
+
+# a name's type outside the declaration's own: a global's - its written type, or its initializer's (D15)
+fn (p mut Program&) nameType(c Context&, sp source.Span, n source.NameId) types.TypeId {
+    ref := p.R.Use(p.file(c.Mi), sp.Start)
+    if ref.Kind != names.What.Global or ref.Index < 0 { return types.UnknownT }
+    v := p.anyGlobal(ref.Module, n)
+    if v == null { return types.UnknownT }
+    gc := Context(ref.Module, -1)
+    if v.Ty != null and not v.Infer { return p.Resolve(gc, v.Ty) }
+    key := (ref.Module << 32) | I64(n)
+    if try p.folding.Get(key) catch default false { return types.UnknownT }
+    i := 0
+    for k in range v.Names.Len() {
+        if v.Names[k] == n { i = k }
+    }
+    if i >= v.Values.Len() { return types.UnknownT }
+    p.folding.Put(key, true)
+    none Map<source.NameId, types.TypeId>
+    t := p.Infer(gc, none, v.Values[i])
+    p.folding.Put(key, false)
+    return t
+}
+
+# a global's declaration in a module, outside every top-level if; null for none
+fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl&p {
+    ds := p.L.Mods[mi].Decls
+    if ds == null { return null }
+    for d in ds {
+        match d {
+            case ast.Decl.Global(_, v) {
+                if v.Names.Has(n) { return v }
+            }
+            nomatch { }
+        }
+    }
+    return null
+}
+
+fn (p mut Program&) unaryType(c Context&, known Map<source.NameId, types.TypeId>&, op token.Tok, y ast.Expr&) types.TypeId {
+    if op == token.Tok.Minus or op == token.Tok.Tilde { return p.Infer(c, known, y) }
+    if op == token.Tok.Dollar { return p.textType() }
+    if op == token.Tok.Not { return types.BoolT }
+    return types.UnknownT
+}
+
+fn (p mut Program&) literalType(kind token.Tok) types.TypeId {
+    return match kind {
+        case token.Tok.IntLit => p.T.Prim("I64")
+        case token.Tok.FloatLit => p.T.Prim("F64")
+        case token.Tok.BoolLit => types.BoolT
+        case token.Tok.StrLit => p.textType()
+        case token.Tok.CharLit => p.preludeType("std/prelude/text", "Char")
+        case _ => types.UnknownT
+    }
+}
+
+# T6a: arithmetic of literals declares what its value as one literal would; of anything else the checker's
+fn (p mut Program&) binaryType(c Context&, known Map<source.NameId, types.TypeId>&, op token.Tok, a ast.Expr&, b ast.Expr&) types.TypeId {
+    ta := p.Infer(c, known, a)
+    tb := p.Infer(c, known, b)
+    if ta != tb { return types.UnknownT }
+    if op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Lt or op == token.Tok.Le or op == token.Tok.Gt or
+       op == token.Tok.Ge or op == token.Tok.And or op == token.Tok.Or {
+        return types.BoolT
+    }
+    return ta if p.T.IsNumber(ta) else types.UnknownT
+}
+
+fn (p mut Program&) textType() types.TypeId { return p.preludeType("std/prelude/text", "String") }
+
+fn (p mut Program&) preludeType(identity String&, name String&) types.TypeId {
+    d := try p.FindDecl(identity, name) catch { return types.UnknownT }
+    return p.T.Named(d, types.ListId(0))
+}
+
+# a call's type where it is plain from the callee (D15): a constructor's (C2) - a destructor-declaring type's held by
+# reference (C11) - Array<T>(n) and Array<T, N>(), a conversion to a number, a function's result where it is no generic
+# one, a method's result for the receiver's type (M19; an array's Len, E23)
+fn (p mut Program&) callType(c Context&, known Map<source.NameId, types.TypeId>&, f ast.Expr&) types.TypeId {
+    match f {
+        case ast.Expr.Generic(_, g, args) { return p.genericCall(c, g, args) }
+        case ast.Expr.Name(sp, n) {
+            ref := p.R.Use(p.file(c.Mi), sp.Start)
+            if ref.Kind == names.What.Builtin { return types.BoolT if p.text(n) == "Bool" else p.T.Prim(p.text(n)) }
+            return p.calleeType(ref, n)
+        }
+        case ast.Expr.Member(sp, x, n) {
+            ref := p.R.Member(p.file(c.Mi), sp.End)
+            if ref.Kind != names.What.None { return p.calleeType(ref, n) }
+            recv := p.Infer(c, known, x)
+            if recv == types.UnknownT { return types.UnknownT }
+            if p.text(n) == "Len" and p.isArray(recv) { return p.T.Prim("I64") }
+            m := p.MethodOf(recv, n)
+            if m < 0 { return types.UnknownT }
+            sig := p.MethodSig(m, recv)
+            return types.UnknownT if sig == types.UnknownT else p.T.Result(sig)
+        }
+        nomatch { return types.UnknownT }
+    }
+}
+
+fn (p mut Program&) isArray(t types.TypeId) Bool {
+    x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    p.reprReady(x)
+    return p.T.KindOf(p.T.Repr(x)) == types.Kind.Array
+}
+
+# what calling a name gives: a non-generic type's constructor, a non-generic function's result
+fn (p mut Program&) calleeType(ref names.Ref, n source.NameId) types.TypeId {
+    if ref.Kind == names.What.Type and ref.Index >= 0 {
+        d := p.DeclFor(ref.Module, ref.Index)
+        if p.T.DeclParams(d) == 0 { return p.held(p.T.Named(d, types.ListId(0))) }
+        return types.UnknownT
+    }
+    if ref.Kind == names.What.Func {
+        f := p.FnNamed(ref.Module, n)
+        if f < 0 { return types.UnknownT }
+        sig := p.Sig(f)
+        if p.VarCount(FnOwner(f)) > 0 { return types.UnknownT }   # inferred from the arguments: the checker's
+        return p.T.Result(sig)
+    }
+    return types.UnknownT
+}
+
+# Name<args>(...): an instance's constructor, or Array<T>(n) / Array<T, N>()
+fn (p mut Program&) genericCall(c Context&, g ast.Expr&, args Array<ast.TypeRef&>&) types.TypeId {
+    ref := names.Ref(names.What.None, -1, -1)
+    match g {
+        case ast.Expr.Name(sp, n) {
+            ref = p.R.Use(p.file(c.Mi), sp.Start)
+            if ref.Kind == names.What.Builtin and p.text(n) == "Array" and args.Len() >= 1 {
+                elem := p.Resolve(c, args[0])
+                if args.Len() == 1 { return p.T.Array(elem, types.TypeId(0)) }
+                return p.T.Array(elem, p.constArg(c, args[1], p.T.Prim("I64")))
+            }
+        }
+        case ast.Expr.Member(sp, _, _) { ref = p.R.Member(p.file(c.Mi), sp.End) }
+        nomatch { }
+    }
+    if ref.Kind != names.What.Type or ref.Index < 0 { return types.UnknownT }
+    d := p.DeclFor(ref.Module, ref.Index)
+    p.declVars(d)
+    if args.Len() != p.T.DeclParams(d) { return types.UnknownT }
+    vs := Array<types.TypeId>(args.Len())
+    owner := DeclOwner(d)
+    for i in range args.Len() {
+        vs[i] = p.constArg(c, args[i], p.VarAt(owner, i).Const) if p.T.ParamIsConst(d, i) else p.Resolve(c, args[i])
+    }
+    return p.held(p.Instance(d, p.T.List(vs)))
+}
+
+# a constructor's value as ":=" holds it: a destructor-declaring type's by reference (C11)
+fn (p mut Program&) held(t types.TypeId) types.TypeId {
+    if p.T.KindOf(t) != types.Kind.Named or not p.Body(t) { return t }
+    if p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Struct and p.T.Destructs(t) { return p.T.Ref(t, types.ReadOnly) }
+    return t
+}
+
+# ---- layouts ----
+
+# a type's layout, computed the first time it is asked for, its embedded parts first; whether it has one. A type
+# asked for again while its own layout is being computed holds itself by value: T16's error, said once
+fn (p mut Program&) Layout(t types.TypeId) Bool {
+    st := p.T.LayoutState(t)
+    if st == types.LaidOut { return true }
+    if st == types.NoLayout { return false }
+    if st == types.LayingOut {
+        p.holdsItself(t)
+        return false
+    }
+    isInstance := p.T.KindOf(t) == types.Kind.Named and p.T.Items(p.T.Args(t)).Len() > 0
+    if isInstance and p.chain >= MaxChain {
+        p.unbounded(p.T.DeclOf(t))
+        p.T.SetLayoutState(t, types.NoLayout)
+        return false
+    }
+    p.T.SetLayoutState(t, types.LayingOut)
+    if isInstance { p.chain++ }
+    ok := p.Body(t)
+    if ok { p.reprReady(t) }
+    if ok and p.T.KindOf(t) == types.Kind.Ref { p.reprReady(p.T.Referent(t)) }
+    if ok {
+        for e in p.T.Embedded(t) {
+            if not p.Layout(e) { ok = false }
+        }
+    }
+    if ok { ok = p.T.ComputeLayout(t) }
+    if isInstance { p.chain-- }
+    if p.T.LayoutState(t) == types.LayingOut { p.T.SetLayoutState(t, types.LaidOut if ok else types.NoLayout) }
+    return ok
+}
+
+# the bodies a type's representation passes through (T29: a declared type over another) made, so that Repr reaches it
+fn (p mut Program&) reprReady(t types.TypeId) {
+    r := t
+    for k in range 64 {
+        if p.T.KindOf(r) != types.Kind.Named or not p.Body(r) { return }
+        if p.T.DeclKindOf(p.T.DeclOf(r)) != types.DeclKind.Over { return }
+        r = p.T.Base(r)
+    }
+}
+
+fn (p mut Program&) holdsItself(t types.TypeId) {
+    if p.T.KindOf(t) != types.Kind.Named { return }
+    d := p.T.DeclOf(t)
+    if try p.said.Get(I64(d)) catch default false { return }
+    p.said.Put(I64(d), true)
+    mi := p.declMi[I64(d)]
+    e := p.R.Tables[mi].Entries[p.declEi[I64(d)]]
+    p.L.Diags.Error(p.at(mi, e.Sp), msgs.TypeHoldsItself(msgs.Tok(p.T.Canon(t))))
+}
+
+# ---- functions ----
+
+# a receiver's key, the methods of one type sharing it (M19, M21): a declared type's, every array's (T29e), a number's,
+# a trait's defaults (M19e: a method over a constrained type variable)
+fn keyDecl(d types.DeclId) I64 { return (I64(1) << 40) | I64(d) }
+ArrayKey I64 = 2 << 40
+fn keyPrim(t types.TypeId) I64 { return (I64(3) << 40) | I64(t) }
+fn keyTrait(d types.DeclId) I64 { return (I64(4) << 40) | I64(d) }
+
+# every function and method a module declares (D7, M19), its chosen top-level branches' included: registered the first
+# time a module's are asked for
+fn (p mut Program&) fnsIn(mi I64) {
+    if try p.fnsOf.Get(mi) catch default false { return }
+    p.fnsOf.Put(mi, true)
+    ds := p.L.Mods[mi].Decls
+    if ds != null { p.addFns(mi, ds) }
+}
+
+fn (p mut Program&) allFns() {
+    for mi in range p.L.Mods.Len() { p.fnsIn(mi) }
+}
+
+fn (p mut Program&) addFns(mi I64, ds Array<ast.Decl&>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.Fn(f) { p.addFn(mi, f, false) }
+            case ast.Decl.Extern(f) { p.addFn(mi, f, true) }
+            case ast.Decl.If(_, ti) { p.addFnsIf(mi, ti, p.L.Chosen(mi, ti.Cond.Span().Start), 0) }
+            nomatch { }
+        }
+    }
+}
+
+fn (p mut Program&) addFnsIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
+    if chosen == index and ti.Then.Decls != null { p.addFns(mi, ti.Then.Decls) }
+    if ti.ElseIf != null { p.addFnsIf(mi, ti.ElseIf, chosen, index + 1) }
+    if ti.Else != null and chosen == index + 1 and ti.Else.Decls != null { p.addFns(mi, ti.Else.Decls) }
+}
+
+fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
+    i := p.fns.Len()
+    p.fns.Push(fnRow(mi, f, isExtern))
+    if f.Recv == null {
+        key := Pair(mi, I64(f.Name))
+        if (try p.fnByName.Get(key) catch default -1) < 0 { p.fnByName.Put(key, i) }
+        return
+    }
+    k := p.recvKey(mi, f.Recv.Ty)
+    if k < 0 { return }
+    mk := Pair(k, I64(f.Name))
+    if (try p.methods.Get(mk) catch default -1) < 0 { p.methods.Put(mk, i) }
+}
+
+# a written receiver's key
+fn (p mut Program&) recvKey(mi I64, t ast.TypeRef&) I64 {
+    if t == null { return -1 }
+    match t {
+        case ast.TypeRef.Perm(_, of, _, _) { return p.recvKey(mi, of) }
+        case ast.TypeRef.Ref(_, of, _) { return p.recvKey(mi, of) }
+        case ast.TypeRef.Var(_, _, k) {
+            if k == null { return -1 }
+            match k {
+                case ast.TypeRef.Named(sp, _, _) {
+                    ref := p.R.Use(p.file(mi), sp.Start)
+                    if ref.Kind == names.What.Type and ref.Index >= 0 { return keyTrait(p.DeclFor(ref.Module, ref.Index)) }
+                }
+                nomatch { }
+            }
+            return -1
+        }
+        case ast.TypeRef.Named(sp, path, _) {
+            ref := p.R.Use(p.file(mi), sp.Start)
+            if ref.Kind == names.What.Type and ref.Index >= 0 { return keyDecl(p.DeclFor(ref.Module, ref.Index)) }
+            if ref.Kind == names.What.Builtin {
+                name := p.text(path[path.Len() - 1])
+                if name == "Array" { return ArrayKey }
+                if name == "Bool" { return keyPrim(types.BoolT) }
+                return keyPrim(p.T.Prim(name))
+            }
+            return -1
+        }
+        nomatch { return -1 }
+    }
+}
+
+# a type's key as a receiver; -1 for none
+fn (p mut Program&) typeKey(t types.TypeId) I64 {
+    x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    return match p.T.KindOf(x) {
+        case types.Kind.Named => keyDecl(p.T.DeclOf(x))
+        case types.Kind.Array => ArrayKey
+        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16,
+             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64 => keyPrim(x)
+        case _ => -1
+    }
+}
+
+# a type's method of that name (M19): its own, else - where it extends another (T29f) - its base's; -1 for none
+fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
+    p.allFns()
+    x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    for k in range 16 {
+        key := p.typeKey(x)
+        if key < 0 { return -1 }
+        m := try p.methods.Get(Pair(key, I64(name))) catch default -1
+        if m >= 0 { return m }
+        if p.T.KindOf(x) != types.Kind.Named or not p.Body(x) { return -1 }
+        if p.T.DeclKindOf(p.T.DeclOf(x)) != types.DeclKind.Over or not p.extends(p.T.DeclOf(x)) { return -1 }
+        x = p.T.Base(x)
+    }
+    return -1
+}
+
+fn (p mut Program&) extends(d types.DeclId) Bool {
+    td := p.typeDecl(d)
+    return td != null and td.Extends
+}
+
+# a plain function a module declares, by its name; -1 for none
+fn (p mut Program&) FnNamed(mi I64, name source.NameId) I64 {
+    p.fnsIn(mi)
+    return try p.fnByName.Get(Pair(mi, I64(name))) catch default -1
+}
+
+# a function's signature (D7, D8c, R15; M19: a method's receiver its first parameter), over its variables - each
+# introduced by its first "<T>", read left to right: receiver, parameters, results (G8b)
+fn (p mut Program&) Sig(f I64) types.TypeId {
+    s := try p.fnSig.Get(f) catch default types.TypeId(-1)
+    if s >= types.TypeId(0) { return s }
+    row := p.fns[f]
+    owner := FnOwner(f)
+    c := Context(row.Mi, owner)
+    ns List<source.NameId>
+    if row.F.Recv != null { p.introductions(row.F.Recv.Ty, ns) }
+    for prm in row.F.S.Params { p.introductions(prm.Ty, ns) }
+    for r in row.F.S.Results { p.introductions(r, ns) }
+    p.addVars(owner, ns.ToArray())
+    for i in range ns.Len() { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
+    if row.F.Recv != null { p.constraints(c, row.F.Recv.Ty) }
+    for prm in row.F.S.Params { p.constraints(c, prm.Ty) }
+    for r in row.F.S.Results { p.constraints(c, r) }
+    recv := types.UnknownT
+    if row.F.Recv != null { recv = p.Resolve(c, row.F.Recv.Ty) }
+    sig := p.sigType(c, row.F.S, recv)
+    p.fnSig.Put(f, sig)
+    return sig
+}
+
+# the variables a written type introduces, "<T>" or "<T Constraint>", in order, each once; a constraint's own after it
+fn (p mut Program&) introductions(t ast.TypeRef&, ns mut List<source.NameId>&) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Var(_, n, k) {
+            if not ns.Has(n) { ns.Push(n) }
+            p.introductions(k, ns)
+        }
+        case ast.TypeRef.Named(_, _, args) {
+            for a in args { p.introductions(a, ns) }
+        }
+        case ast.TypeRef.Func(_, sg) {
+            for prm in sg.Params { p.introductions(prm.Ty, ns) }
+            for r in sg.Results { p.introductions(r, ns) }
+        }
+        case ast.TypeRef.Ref(_, of, _) { p.introductions(of, ns) }
+        case ast.TypeRef.Perm(_, of, _, _) { p.introductions(of, ns) }
+        nomatch { }
+    }
+}
+
+# each introduction's type, read once every variable is known (a constraint may name a later one): a trait is its
+# variable's constraint (G19), any other type its constant's type (G20)
+fn (p mut Program&) constraints(c Context&, t ast.TypeRef&) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Var(_, n, k) {
+            if k != null {
+                v := try c.Vars.Get(n) catch default types.UnknownT
+                if p.T.KindOf(v) == types.Kind.Var {
+                    i := (try p.varsAt.Get(c.Owner) catch default 0) + p.T.B(v)
+                    row := p.vars[i]
+                    if row.Const == types.UnknownT and row.Bound == types.UnknownT {
+                        ty := p.Resolve(c, k)
+                        isTrait := p.T.KindOf(ty) == types.Kind.Named and p.T.DeclKindOf(p.T.DeclOf(ty)) == types.DeclKind.Trait
+                        p.vars[i] = varRow(c.Owner, n, types.UnknownT if isTrait else ty, ty if isTrait else types.UnknownT)
+                    }
+                }
+            }
+            p.constraints(c, k)
+        }
+        case ast.TypeRef.Named(_, _, args) {
+            for a in args { p.constraints(c, a) }
+        }
+        case ast.TypeRef.Func(_, sg) {
+            for prm in sg.Params { p.constraints(c, prm.Ty) }
+            for r in sg.Results { p.constraints(c, r) }
+        }
+        case ast.TypeRef.Ref(_, of, _) { p.constraints(c, of) }
+        case ast.TypeRef.Perm(_, of, _, _) { p.constraints(c, of) }
+        nomatch { }
+    }
+}
+
+# a method's signature for a receiver of type t: its receiver's variables bound by unifying the two (G9b), then
+# substituted; the stand-in where t is no receiver it takes
+fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
+    sig := p.Sig(f)
+    owner := FnOwner(f)
+    n := p.VarCount(owner)
+    if n == 0 { return sig }
+    b := Binding(owner, n)
+    ps := p.T.Items(p.T.Params(sig))
+    if ps.Len() == 0 or not p.UnifyArg(ps[0], t, b, false, true) { return types.UnknownT }
+    return p.Subst(sig, owner, p.T.List(b.Vals))
+}
+
+# a function's instance (G16): its signature with its variables bound, and its name - its module, its receiver's type
+# for a method (M21), its name and its arguments' canonical texts, made a symbol (G16a: injective, since every
+# canonical text is)
+fn (p mut Program&) FnInstance(f I64, args types.ListId) I64 {
+    key := Pair(f, args)
+    i := try p.instanceOf.Get(key) catch default -1
+    if i >= 0 { return i }
+    owner := FnOwner(f)
+    sig := p.Subst(p.Sig(f), owner, args)
+    row := p.fns[f]
+    b := StringBuilder()
+    b.Push(p.L.Mods[row.Mi].Identity)
+    b.PushChar('.')
+    if row.F.Recv != null {
+        r := p.T.Items(p.T.Params(sig))[0]
+        b.Push(p.T.Canon(p.T.Referent(r) if p.T.KindOf(r) == types.Kind.Ref else r))
+        b.PushChar('.')
+    }
+    b.Push(p.text(row.F.Name))
+    xs := p.T.Items(args)
+    if xs.Len() > 0 {
+        b.PushChar('<')
+        for k in range xs.Len() {
+            if k > 0 { b.Push(", ") }
+            b.Push(p.T.Canon(xs[k]))
+        }
+        b.PushChar('>')
+    }
+    i = p.instances.Len()
+    p.instances.Push(instance(f, args, sig, types.Symbol(b.ToString())))
+    p.instanceOf.Put(key, i)
+    return i
+}
+
+fn (p Program&) InstanceSig(i I64) types.TypeId { return p.instances[i].Sig }
+fn (p Program&) InstanceName(i I64) String&p { return p.instances[i].Name }
+
+# ---- inference ----
+
+# an argument's type matched against a parameter's (G9): the reference shape may differ at the top (E12c: a value
+# borrowed for a reference parameter, a reference's value copied out for a value one); literal says the argument is a
+# literal (G9a), receiver that it is the receiver (G9b)
+fn (p mut Program&) UnifyArg(pat types.TypeId, actual types.TypeId, b mut Binding&, literal Bool, receiver Bool) Bool {
+    pr := p.T.KindOf(pat) == types.Kind.Ref
+    ar := p.T.KindOf(actual) == types.Kind.Ref
+    if pr and not ar and not p.isVar(pat, b) { return p.Unify(p.T.Referent(pat), actual, b, literal, receiver) }
+    if ar and not pr and p.T.KindOf(pat) != types.Kind.Var { return p.Unify(pat, p.T.Referent(actual), b, literal, receiver) }
+    return p.Unify(pat, actual, b, literal, receiver)
+}
+
+fn (p Program&) isVar(t types.TypeId, b Binding&) Bool { return p.T.KindOf(t) == types.Kind.Var and p.T.A(t) == b.Owner }
+
+# binds b's variables in a pattern so that it matches a type, structurally: whether it does
+fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&, literal Bool, receiver Bool) Bool {
+    if pat == actual or actual == types.UnknownT { return true }
+    pk := p.T.KindOf(pat)
+    if pk == types.Kind.Var and p.T.A(pat) == b.Owner { return p.bind(b, p.T.B(pat), actual, literal, receiver) }
+    if pk == types.Kind.ConstExpr { return true }   # computed once its variables are bound, never solved for (G21)
+    ak := p.T.KindOf(actual)
+    if pk != ak { return false }
+    match pk {
+        case types.Kind.Named {
+            return p.T.DeclOf(pat) == p.T.DeclOf(actual) and p.unifyLists(p.T.Args(pat), p.T.Args(actual), b)
+        }
+        case types.Kind.Array {
+            if not p.Unify(p.T.Elem(pat), p.T.Elem(actual), b, false, receiver) { return false }
+            return p.Unify(p.T.Length(pat), p.T.Length(actual), b, false, receiver)
+        }
+        case types.Kind.Ref { return p.Unify(p.T.Referent(pat), p.T.Referent(actual), b, false, receiver) }
+        case types.Kind.Func {
+            if not p.unifyLists(p.T.Params(pat), p.T.Params(actual), b) { return false }
+            if not p.Unify(p.T.Result(pat), p.T.Result(actual), b, false, false) { return false }
+            return p.unifyLists(p.T.Errors(pat), p.T.Errors(actual), b)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return p.unifyLists(p.T.Parts(pat), p.T.Parts(actual), b) }
+        case types.Kind.AnonEnum {
+            return p.T.ShapeNames(pat) == p.T.ShapeNames(actual) and p.unifyLists(p.T.ShapeCases(pat), p.T.ShapeCases(actual), b)
+        }
+        nomatch { return false }
+    }
+}
+
+fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&) Bool {
+    xs := p.T.Items(a)
+    ys := p.T.Items(c)
+    if xs.Len() != ys.Len() { return false }
+    for i in range xs.Len() {
+        if not p.Unify(xs[i], ys[i], b, false, false) { return false }
+    }
+    return true
+}
+
+# a variable meeting a type (G9a-G9d): unbound, it takes it - a destructor-declaring type's value as its reference
+# (G9d: C11 leaves no other form); bound, a literal adapts and binds nothing while another argument can (G9a), a
+# number widens to a wider one of its family unless a receiver bound it (G9b), two references differing only in
+# permission meet at read-only (G9d)
+fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Bool, receiver Bool) Bool {
+    v := actual
+    if p.T.KindOf(v) == types.Kind.Named and p.Body(v) and p.T.DeclKindOf(p.T.DeclOf(v)) == types.DeclKind.Struct and
+       p.T.Destructs(v) {
+        v = p.T.Ref(v, types.Writable)
+    }
+    cur := b.Vals[i]
+    if cur == types.UnknownT or (b.LiteralOnly[i] and not literal) {
+        b.Vals[i] = v
+        b.LiteralOnly[i] = literal
+        b.Fixed[i] = receiver
+        return true
+    }
+    if cur == v { return true }
+    if literal {
+        if b.LiteralOnly[i] and p.Flows(cur, v) { b.Vals[i] = v }
+        return true
+    }
+    if p.T.IsNumber(p.numberOf(cur)) and p.T.IsNumber(p.numberOf(v)) {
+        if p.Flows(v, cur) { return true }
+        if p.Flows(cur, v) and not b.Fixed[i] {
+            b.Vals[i] = v
+            return true
+        }
+        return false
+    }
+    if p.T.KindOf(cur) == types.Kind.Ref and p.T.KindOf(v) == types.Kind.Ref and p.T.Referent(cur) == p.T.Referent(v) {
+        if not b.Fixed[i] { b.Vals[i] = p.T.Ref(p.T.Referent(v), p.T.PermOf(cur) & p.T.PermOf(v)) }
+        return true
+    }
+    return false
+}
+
+# ---- constraints (G19) ----
+
+# whether a type satisfies a trait instance: for each of the trait's methods, a method of the type's own (M19) of that
+# name whose signature, its receiver bound to the type, matches the trait's with the trait's variables bound -
+# parameter by parameter up to reference shape (a constrained call is a direct call, where E12 borrows), permission
+# agreeing (T31), the result and the errors in order (T22)
+fn (p mut Program&) Satisfies(t types.TypeId, tr types.TypeId) Bool {
+    if p.T.KindOf(tr) != types.Kind.Named { return false }
+    d := p.T.DeclOf(tr)
+    td := p.typeDecl(d)
+    if td == null or td.Body == null { return false }
+    match td.Body {
+        case ast.TypeBody.Trait(methods) {
+            for m in methods {
+                if not p.meets(t, d, p.T.Args(tr), m) { return false }
+            }
+            return true
+        }
+        nomatch { return false }
+    }
+}
+
+fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m ast.Func&) Bool {
+    f := p.MethodOf(t, m.Name)
+    if f < 0 { return false }
+    c := p.declContext(d)
+    want := p.Subst(p.sigType(c, m.S, types.UnknownT), DeclOwner(d), args)
+    have := p.MethodSig(f, t)
+    if have == types.UnknownT { return false }
+    hs := p.T.Items(p.T.Params(have))
+    ws := p.T.Items(p.T.Params(want))
+    if hs.Len() != ws.Len() + 1 { return false }
+    if m.Recv != null and not p.writableRecv(hs[0]) { return false }   # a "mut" method: a writable receiver (T31)
+    for i in range ws.Len() {
+        if not p.sameUpToShape(hs[i + 1], ws[i]) { return false }
+    }
+    return p.T.Result(have) == p.T.Result(want) and p.T.Errors(have) == p.T.Errors(want)
+}
+
+fn (p mut Program&) writableRecv(r types.TypeId) Bool {
+    return p.T.KindOf(r) != types.Kind.Ref or (p.T.PermOf(r) & types.Writable) != 0
+}
+
+fn (p mut Program&) sameUpToShape(a types.TypeId, c types.TypeId) Bool {
+    if a == c { return true }
+    ar := p.T.KindOf(a) == types.Kind.Ref
+    cr := p.T.KindOf(c) == types.Kind.Ref
+    if ar and cr { return false }
+    x := p.T.Referent(a) if ar else a
+    y := p.T.Referent(c) if cr else c
+    return x == y
+}
+
+# a variable's binding checked against its constraint, where it is bound (G19): whether it is met
+fn (p mut Program&) BoundMet(owner I64, args types.ListId) Bool {
+    xs := p.T.Items(args)
+    for i in range xs.Len() {
+        if i >= p.VarCount(owner) { break }
+        row := p.VarAt(owner, i)
+        if row.Bound == types.UnknownT { continue }
+        bound := p.Subst(row.Bound, owner, args)
+        if not p.Satisfies(xs[i], bound) { return false }
+    }
+    return true
+}
+
+# ---- canonical texts ----
+
+# the type a canonical text names (types.Canon's form): the inverse of Canon over a program's types
+fn (p mut Program&) ParseCanon(text String&) types.TypeId ? {
+    cur := cursor(text)
+    t := try p.canonType(cur)
+    if cur.At != text.Len() { error }
+    return t
+}
+
+type cursor struct(Text String&) {
+    Text
+    At I64 = 0
+}
+
+fn (c mut cursor&) eat(s String&) Bool {
+    if c.At + s.Len() > c.Text.Len() { return false }
+    if c.Text[c.At:c.At + s.Len()] != s { return false }
+    c.At += s.Len()
+    return true
+}
+
+fn (c cursor&) peek() Char { return c.Text[c.At] if c.At < c.Text.Len() else Char(0) }
+
+fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? {
+    perm := types.ReadOnly
+    if c.eat("own ") { perm = perm | types.Owning }
+    if c.eat("mut ") { perm = perm | types.Writable }
+    t := try p.canonInner(c)
+    if c.eat("&") { return p.T.Ref(t, perm) }
+    if perm != types.ReadOnly { error }
+    return t
+}
+
+fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? {
+    if c.eat("fn(") { return try p.canonFunc(c) }
+    if c.eat("struct(") { return p.T.Record(try p.canonList(c, ")")) }
+    if c.eat("enum{") { return try p.canonEnum(c) }
+    if c.eat("(") { return p.T.Tuple(try p.canonList(c, ")")) }
+    if c.eat("Array<") {
+        elem := try p.canonType(c)
+        length := types.TypeId(0)
+        if c.eat(", ") { length = p.T.Const(p.T.Prim("I64"), try canonNumber(c)) }
+        if not c.eat(">") { error }
+        return p.T.Array(elem, length)
+    }
+    start := c.At
+    for c.At < c.Text.Len() and nameChar(c.peek()) { c.At++ }
+    word := c.Text[start:c.At]
+    if c.peek() != ':' {
+        if word == "Bool" { return types.BoolT }
+        if word == "default" { return types.DefaultErrT }
+        t := p.T.Prim(word)
+        if t == types.UnknownT { error }
+        return t
+    }
+    c.At++
+    nstart := c.At
+    for c.At < c.Text.Len() and nameChar(c.peek()) and c.peek() != '/' and c.peek() != '.' { c.At++ }
+    d := try p.FindDecl(word, c.Text[nstart:c.At])
+    if not c.eat("<") { return p.Instance(d, types.ListId(0)) }
+    p.declVars(d)
+    owner := DeclOwner(d)
+    args List<types.TypeId>
+    for {
+        i := args.Len()
+        if i >= p.T.DeclParams(d) { error }
+        if p.T.ParamIsConst(d, i) {
+            want := p.VarAt(owner, i).Const
+            if c.eat("true") {
+                args.Push(p.T.Const(want, 1))
+            } else if c.eat("false") {
+                args.Push(p.T.Const(want, 0))
+            } else {
+                args.Push(p.T.Const(want, try canonNumber(c)))
+            }
+        } else {
+            args.Push(try p.canonType(c))
+        }
+        if c.eat(">") { break }
+        if not c.eat(", ") { error }
+    }
+    return p.Instance(d, p.T.List(args.ToArray()))
+}
+
+fn nameChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' or ch == '/' or ch == '.' or ch == '-' or ch == '@' }
+
+fn canonNumber(c mut cursor&) I64 ? {
+    start := c.At
+    if c.peek() == '-' { c.At++ }
+    for c.At < c.Text.Len() and c.peek().IsDigit() { c.At++ }
+    txt := c.Text[start:c.At]
+    v := try txt.ParseInt() catch {
+        u := try txt.ParseUint() catch { error }
+        return I64(u)
+    }
+    return v
+}
+
+fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
+    xs List<types.TypeId>
+    if c.eat(close) { return types.ListId(0) }
+    for {
+        xs.Push(try p.canonType(c))
+        if c.eat(close) { break }
+        if not c.eat(", ") { error }
+    }
+    return p.T.List(xs.ToArray())
+}
+
+fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
+    params := try p.canonList(c, ")")
+    result := types.VoidT
+    if c.eat(" (") {
+        l := try p.canonList(c, ")")
+        xs := p.T.Items(l)
+        result = xs[0] if xs.Len() == 1 else p.T.Tuple(l)
+    } else if c.At < c.Text.Len() and c.peek() == ' ' and not (c.At + 1 < c.Text.Len() and c.Text[c.At + 1] == '?') {
+        c.At++
+        result = try p.canonType(c)
+    }
+    es List<types.TypeId>
+    if c.eat(" ?") {
+        if c.eat(" ") {
+            for {
+                if c.eat("default") {
+                    es.Push(types.DefaultErrT)
+                } else {
+                    es.Push(try p.canonInner(c))
+                }
+                if not c.eat(" + ") { break }
+            }
+        } else {
+            es.Push(types.DefaultErrT)
+        }
+    }
+    return p.T.Func(params, result, p.T.List(es.ToArray()))
+}
+
+fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
+    ns List<source.NameId>
+    ps List<types.TypeId>
+    for not c.eat("}") {
+        if ns.Len() > 0 and not c.eat(" ") { error }
+        start := c.At
+        for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_') { c.At++ }
+        ns.Push(p.L.Names.Intern(c.Text[start:c.At]))
+        if c.eat("(") {
+            ps.Push(p.T.Record(try p.canonList(c, ")")))
+        } else {
+            ps.Push(types.TypeId(0))
+        }
+    }
+    return p.T.AnonEnum(ns.ToArray(), p.T.List(ps.ToArray()))
+}
+# ---- tests ----
+
+# a program of one file, main.olang, loaded over the repository's std with the host's build constants
+fn testLoad(dir String&, text String&) load.Loader {
+    try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true),
+                     source.Names(), diag.Diagnostics(false))
+    l.Load($dir "/main.olang")
+    return l
+}
+
+fn saidRules(l mut load.Loader&) String {
+    b := StringBuilder()
+    for s in l.Diags.AllSaid() {
+        b.Push($s.Rule)
+        b.PushChar(' ')
+    }
+    return b.ToString()
+}
+
+# a canonical text read and written back
+fn (p mut Program&) roundTrip(text String&) Bool {
+    t := try p.ParseCanon(text) catch { return false }
+    return p.T.Canon(t) == text
+}
+
+test "declared types and instances: laid out as C lays them out, their canonical texts read back" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
+                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\nerror E { BAD }\n"
+                       "type Meters extends I32\ntype Buf<N I64> struct() { a Array<U8, N> }\nfn main() ? { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    pt := try p.ParseCanon($m ":P") catch { unreachable }
+    assert p.Layout(pt) and p.T.Size(pt) == 24 and p.T.Align(pt) == 8, $p.T.Size(pt)
+    offs := p.T.Offsets(pt)
+    assert offs.Len() == 3 and offs[0] == 0 and offs[1] == 8 and offs[2] == 16
+    # an instance is its generic's body substituted, laid out once per instance
+    bx := try p.ParseCanon($m ":Box<U8>") catch { unreachable }
+    bs := try p.ParseCanon($m ":Box<std/prelude/text:String&>") catch { unreachable }
+    assert p.Layout(bx) and p.T.Size(bx) == 16 and p.Layout(bs) and p.T.Size(bs) == 24 and bx != bs
+    assert p.T.Offsets(bs)[1] == 16
+    # an enum: a tag word, then the largest payload in whole words
+    sh := try p.ParseCanon($m ":Shape") catch { unreachable }
+    assert p.Layout(sh) and p.T.Size(sh) == 24 and p.T.Llvm(sh) == "{ i64, [2 x i64] }"
+    # a declared number is its base; a constant parameter sizes an inline array
+    mt := try p.ParseCanon($m ":Meters") catch { unreachable }
+    assert p.Layout(mt) and p.T.Size(mt) == 4
+    bf := try p.ParseCanon($m ":Buf<5>") catch { unreachable }
+    assert p.Layout(bf) and p.T.Size(bf) == 5 and p.T.Align(bf) == 1
+    for text in String&["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E",
+                        "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}",
+                        "own mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
+        assert p.roundTrip(text), text
+    }
+    # no such type
+    assert not p.roundTrip($m ":Nothing") and not p.roundTrip("Q32") and not p.roundTrip($m ":Buf<U8>")
+    assert l.Diags.Errors() == 0, saidRules(l)
+}
+
+test "T16 and G17: a type holding itself, and instances nesting without end" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type A struct() { b B }\ntype B struct() { a A }\ntype D<T> struct() { n D<Array<T>> }\n"
+                       "type L struct() { next L& }\ntype C<N I64> struct() { n C<N + 1> }\nfn main() ? { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    a := try p.ParseCanon($m ":A") catch { unreachable }
+    assert not p.Layout(a) and not p.Layout(a)
+    assert saidRules(l) == "T16 ", saidRules(l)
+    d := try p.ParseCanon($m ":D<I32>") catch { unreachable }
+    assert not p.Layout(d)
+    assert saidRules(l) == "T16 G17 ", saidRules(l)
+    # a constant argument that keeps changing: each instance holds the next
+    c := try p.ParseCanon($m ":C<0>") catch { unreachable }
+    assert not p.Layout(c)
+    assert saidRules(l) == "T16 G17 G17 ", saidRules(l)
+    # a reference breaks the cycle (T16)
+    lt := try p.ParseCanon($m ":L") catch { unreachable }
+    assert p.Layout(lt) and p.T.Size(lt) == 8
+}
+
+test "constant arguments fold as the program computes them (G21): typed, wrapping, from globals" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type Buf<N I64> struct() { a Array<U8, N> }\nB U8 = 255\nW I64 = 3\nK := W * 4 + 1\n"
+                       "fn f(x Buf<B + 1>&, y Buf<K - W>&, z Buf<(2 << 3) | 1>&, q Buf<I64(B) + 1>&) { }\nfn main() ? { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    f := p.FnNamed(l.Root, l.Names.Intern("f"))
+    assert f >= 0
+    ps := p.T.Items(p.T.Params(p.Sig(f)))
+    want := String&[$m ":Buf<0>", $m ":Buf<10>", $m ":Buf<17>", $m ":Buf<256>"]
+    for i in range 4 {
+        got := p.T.Canon(p.T.Referent(ps[i]))
+        assert got == want[i], got
+    }
+    assert l.Diags.Errors() == 0, saidRules(l)
+}
+
+test "inference (G9): literals adapt, numbers widen unless a receiver bound them, permissions meet" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type P struct() { }\nfn pick(a <T>, b T) T { return a }\nfn main() ? { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    f := p.FnNamed(l.Root, l.Names.Intern("pick"))
+    ps := p.T.Items(p.T.Params(p.Sig(f)))
+    owner := FnOwner(f)
+    assert p.VarCount(owner) == 1
+    i32 := p.T.Prim("I32")
+    i64 := p.T.Prim("I64")
+    # G9a: a literal binds nothing while another argument can
+    b := Binding(owner, 1)
+    assert p.UnifyArg(ps[0], i64, b, true, false) and p.UnifyArg(ps[1], p.T.Prim("U8"), b, false, false)
+    assert b.Vals[0] == p.T.Prim("U8")
+    # G9b: a number widens to a wider one of its family...
+    b2 := Binding(owner, 1)
+    assert p.UnifyArg(ps[0], i32, b2, false, false) and p.UnifyArg(ps[1], i64, b2, false, false) and b2.Vals[0] == i64
+    # ... unless a receiver bound it, and never across families
+    b3 := Binding(owner, 1)
+    assert p.UnifyArg(ps[0], i32, b3, false, true) and not p.UnifyArg(ps[1], i64, b3, false, false)
+    b4 := Binding(owner, 1)
+    assert p.UnifyArg(ps[0], i32, b4, false, false) and not p.UnifyArg(ps[1], p.T.Prim("F64"), b4, false, false)
+    # G9d: two references differing only in permission meet at read-only, whichever comes first
+    pt := try p.ParseCanon($m ":P") catch { unreachable }
+    b5 := Binding(owner, 1)
+    assert p.UnifyArg(ps[0], p.T.Ref(pt, types.Writable), b5, false, false)
+    assert p.UnifyArg(ps[1], p.T.Ref(pt, types.ReadOnly), b5, false, false) and b5.Vals[0] == p.T.Ref(pt, types.ReadOnly)
+    # an instance is named by its module, name and arguments (G16a), and made once
+    one := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i64)))
+    two := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i32)))
+    assert one != two and one == p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i64)))
+    assert p.InstanceName(one) == types.Symbol($m ".pick<I64>"), p.InstanceName(one)
+    assert p.T.Canon(p.InstanceSig(two)) == "fn(I32, I32) I32", p.T.Canon(p.InstanceSig(two))
+}
+
+test "constraints (G19): a type satisfies a trait by its methods, checked where a variable is bound" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n"
+                       "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<<T>>&) Get(x T) T { return x }\n"
+                       "fn h(x <T Hashable<T>>) { }\nfn main() ? { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    k := try p.ParseCanon($m ":K") catch { unreachable }
+    n := try p.ParseCanon($m ":N") catch { unreachable }
+    hk := try p.ParseCanon("std/prelude/hash:Hashable<" $m ":K>") catch { unreachable }
+    hn := try p.ParseCanon("std/prelude/hash:Hashable<" $m ":N>") catch { unreachable }
+    assert p.Satisfies(k, hk) and not p.Satisfies(n, hn)
+    f := p.FnNamed(l.Root, l.Names.Intern("h"))
+    p.Sig(f)
+    assert p.BoundMet(FnOwner(f), p.T.List(Array<types.TypeId>(1, k)))
+    assert not p.BoundMet(FnOwner(f), p.T.List(Array<types.TypeId>(1, n)))
+    # a method over a generic type, its receiver's variable bound by the receiver (G9b)
+    bx := try p.ParseCanon($m ":Box<I16>") catch { unreachable }
+    g := p.MethodOf(bx, l.Names.Intern("Get"))
+    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16", p.T.Canon(p.MethodSig(g, bx))
+}

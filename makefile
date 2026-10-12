@@ -55,6 +55,11 @@ build/astdump: bootstrap/oracle/astdump.c build/obj/syntax.o build/obj/token.o b
 build/modgraph: bootstrap/oracle/modgraph.c $(filter-out build/obj/main.o,$(OBJ))
 	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
 
+# the layout oracle (compiler/DESIGN.md section 4): every type the C checker holds for a program, with its size,
+# alignment, LLVM spelling and offsets, which the self-hosted type table's must equal (compiler/tools/layoutdiff.sh)
+build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(OBJ))
+	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
+
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
 	$(OLANG) -b compiler/tools/dump.olang
@@ -72,6 +77,16 @@ astdiff: build/astdump build/compiler_tools_dump
 # stage 0 reported, at the same position (compiler/tools/namesdiff.sh, against compiler/goldens/diag.txt)
 namesdiff: build/compiler_tools_dump
 	compiler/tools/namesdiff.sh
+
+# M5a's acceptance: every type stage 0 holds for every root program has the self-hosted type table's layout - size,
+# alignment, LLVM spelling, offsets (compiler/tools/layoutdiff.sh, against compiler/goldens/layout.txt)
+layoutdiff: build/compiler_tools_dump
+	compiler/tools/layoutdiff.sh
+
+# captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
+# (minutes: stage 0 checks each root program whole)
+layoutgold: build/layoutdump
+	compiler/tools/layoutgold.sh
 
 # M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's
 # (compiler/tools/modgraph.sh)
@@ -138,6 +153,7 @@ verify:
 	$(MAKE) tokdiff
 	$(MAKE) astdiff
 	$(MAKE) namesdiff
+	$(MAKE) layoutdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
@@ -191,7 +207,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff layoutdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
