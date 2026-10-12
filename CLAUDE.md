@@ -5200,6 +5200,15 @@ and literals made only of such, never existing storage anywhere in it) - it is
   temporary sites, constant aggregates, checks on `Make`/`Collect`, zero-value calls; the plan holds placement only
   (nothing in it changes a value) and gains `Inert`; every summary has an owning pass; liveness (O39-O41) runs on MIR;
   decisions are kept under keys; instances remember where they were asked for. layoutdiff: 9,403 types as stage 0, 11 deferred.
+- **Port M7's contract: MIR (DESIGN.md 1.8.1, 2026-10-12, details mine).** `compiler/mir.olang` is what `lower` makes
+  of each typed body and all `eval`, `emit` and O39-O41's liveness read: rustc's shape (a CFG of blocks over typed locals
+  and places, not SSA), plain data indexed by `Range` into per-function tables, typed locals' numbering kept. Checks
+  are tests and branches (E15a's overflow one `Overflows` rvalue), deferred code copied onto each exit (deferred code,
+  then a join's `Wait`, then `Close`), scopes a strict stack (regions `Give`n to their slot), task stand-ins `Spawn`'s
+  meaning, a text builder a scope, helpers' ABI fixed by kind, a module's initialization a function (B5a). A verifier
+  (shape, types up to representation, initialization, scope nesting and joins on every path) and a dump, no parser.
+  Found: a stage-0 use-after-free - `f.Blocks[b].Stmts.Push(s)` in a method builds the inner list's chunk in the call's
+  frame (E31b's held copy; HISTORY.md has the reproducer).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
