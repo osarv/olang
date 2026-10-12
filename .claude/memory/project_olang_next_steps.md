@@ -862,6 +862,15 @@ because what it finds about structure feeds the refactor.
   ctor field across modules; std/math "sign and size" under -r/-s). Next: Vec phase 2b (type args/move-aware
   List/Map, tasks, lambdas, Push cost), M4 after M3. LESSON: never pkill by a "vlock make verify" pattern - it kills
   other agents' runs and my own shell; kill by PID with the cwd checked.
+- 2026-10-12 ~01:00 CEST: master = 45c14e6 (pushed): M3 parser, M4 load/fetch/names, M5a types/generic/typed, the
+  `:=` field/global order fix and the LLVM 18 BF16 sign-bit workaround. Vec phase 2a review (/home/user/review/vec6):
+  R1 (take of a Vec field inside an owned object - silent UAF), D (depth cap 8), L1 (leak) - fix agent on wt-vecp2,
+  then a short re-review before merging. wt-e31view: E31b lets a view element (callee writes only through its
+  references) be lent writably - bench/fused.olang regression; REVIEW before merging. Typed-contract review
+  (/home/user/review/typed): 17 required + 8 recommended changes, all accepted; S4d decided by types (spec change);
+  wt-typed2 revises the contract, then M5b/M5c (the checker) start. QUEUED stage-0 fixes (after vecp2/e31view merge, to
+  avoid semantic.c conflicts): T22a refuses a function value with `&x`-sharing parameters (crash +
+  unsound, review repro/sharedscope*.olang); S4d decided by types in C to match the new SPEC.
 - Refactor: behaviour-preserving, accepted only if the IR for the whole corpus is identical before and after
   (normalized, as for the T6b cleanup) and `make verify` passes. Split semantic.c (13k lines) and codegen.c (6.9k) into
   cohesive files - roughly types, modules/imports/conditional compilation, generics, scopes (§8), expressions,
