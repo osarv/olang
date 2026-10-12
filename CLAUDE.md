@@ -5143,6 +5143,16 @@ and literals made only of such, never existing storage anywhere in it) - it is
   for review in 25.7; enum payloads, type arguments, elements, by-value parameters and lambda captures of an owning value
   stay O31/O32 (phase 2b, whose design consequences are 25.6). Cases `vec88`-`vec127`, corpus tests in shared.olang and
   std/prelude/tests/vec.olang (baked beside the run time, also under `-s`), and fifteen shapes in the scope fuzzer.
+  **Its review (vec6) found three holes, fixed (docs/own.md section 26).** R1, a use-after-free in natural code (`return
+  take p.lx.toks`): a Vec field of an OWNED object was given the region's reach, where its words are built in the region -
+  its reach is the region now, so its field moves only within that object by one path (`p.lx.more = take p.lx.toks`) or
+  with it (`take p.lx`). D: a borrowed copy's loans stopped 8 owning value levels down (`ownOwnSlotReads`), and the value
+  walks §8 and own rely on (`TypeHoldsReferences`, `valueRefsAdmitStores`, typeHoldsWritableRefs, the O31 written-type
+  check) answered "holds nothing" past 64 - no cap now where a path guard ends the walk, the safe answer past 64
+  elsewhere, and own's operand-path loops unbounded. L1: a borrowed copy's owning-value part (`c.a = Lexer(1)`) is O32's
+  error - it was held to the function's end. Also: a conversion of a reference a call gives names its storage at run
+  time (T29a, `String(v.View())` copied), `take` is a flow for O26a (`w := take l.toks; return w`), and a destructor's
+  O40 is reported at its own call, not inside Push (B11). Cases `vec128`-`vec146`; fuzzer shapes for all three.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

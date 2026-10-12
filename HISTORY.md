@@ -15833,3 +15833,36 @@ eight accepted agree built, built `-d -s` and interpreted). Own seeds 1-300, one
 0 findings (773 scenarios run, 2827 refused), this tip 0 findings (870 run, 2730 refused). A first master run used a
 stale copy of the compiler from before the fifth review's fixes and reported three findings (seeds 53, 58, 71; the one
 examined was the fifth review's R2b shape) that f743da5 does not have; the comparison was rerun on a fresh build of it.
+
+### Vec phase 2a's review, fixed: a Vec field of an owned object, loans at any depth, a borrowed copy's owning part (§8.8 O26a, O32, O33, O34, O38, O39, O40, T29a, 2026-10-12)
+
+The review of d5ddcda (`/home/user/review/vec6`) said the phase was not safe to merge: one high-severity hole, new in
+this phase, two smaller ones, an older disagreement between the run time and `-i`, and four over-rejections.
+
+**R1 was the own-slot rule applied to a value field.** O34 gives an own slot inside an owned object the object's region's
+reach, so that what an owned object owns reaches as far as it does and may be moved out of it. `ownValuePlaceReach` gave
+a Vec field of an owned object (`p.lx.toks`) the same answer through `ownReachOfBase` - but a Vec held by value is not an
+own slot of the object: its buffer's elements are built where the field lives, in the region itself (Push's obligations
+bind to the field's exact scope). So `return take p.lx.toks`, the natural way to hand a lexer's words out, returned words
+built in a region that `p`'s release freed: under the scope sanitizer "use after scope closed", under `-b` churn text.
+The own-array path had always answered this right (`RefExactScope` of the read), and the fix gives the value-place path
+the same answer: the region, which outlives nothing. Refusing every move out of the region would also refuse a move
+between two fields of the one object, because each read of `p.lx` is a region of its own to §8; `ownValueTakeReach`
+accepts two regions whose slots are one path, the rule O39 already uses for loans, sound because a live borrow keeps the
+slot from being given another object in between.
+
+**D was a constant, and finding its siblings found one more limit.** `ownOwnSlotReads` stopped at depth 8. Uncapping it
+was not enough at 64 levels: `TypeHoldsReferences` - which every value walk §8 relies on goes through - answered "no
+reference" past its limit of 64, so `ownHold` held nothing for the copy. Those limits exist because a walk can meet a type
+holding itself by value before T16 reports it (C2e), so they stay, but each walk §8 or own relies on answers the safe way
+past it; the own pass's own walks have no limit (a path of struct types, or a seen-set, ends them). The operand-path
+loops with guards of 64 were unbounded too: past 64 they had only refused with the wrong message, never accepted.
+
+**L1** was O32 checking only own-reference parts of a borrowed copy; an owning-value part is refused the same way now.
+**x1**: T29a's retyping in place covered a variable, a field, an element and a slice, but not a reference a call gives,
+which became a value conversion that codegen promoted by copying; a reference argument is retyped too. It made `k09`
+(a converted view handed to a callee that may keep it) an O38 error - the conversion now names the buffer, as T29a says.
+Two over-rejections were cheap and sound to lift: O26a follows `take` as a flow, and a destructor's O40 points at its own
+call. The other two stay recorded.
+
+The fuzzer writes R1, D and L1 now (seven shapes); on d5ddcda, own seeds 1-300 found 22 use-after-frees (14 R1, 8 D); on the fixed tip none.

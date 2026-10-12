@@ -2023,3 +2023,97 @@ accepted print the same built `-b`, built `-b -d -s` and interpreted.
 Own seeds 1-300, the same generator under both compilers: f743da5 no findings (773 scenarios run, 2827 refused), this
 tip no findings (870 run, 2730 refused - the 97 more are the shapes f743da5 refuses: a Vec in a field or a global, value
 elements, deep results, `TakeAt`).
+
+## 26. Vec phase 2a's review (vec6), fixed (2026-10-12)
+
+The read-only review of d5ddcda (`/home/user/review/vec6`) found one high-severity hole, two smaller ones and an older
+disagreement. Each is fixed; each repro is a checks case.
+
+### 26.1 R1: a Vec field of an owned object keeps its words in that object's region (O33, O34)
+
+`p.lx.toks.Push(x)` builds `x` where `p.lx.toks` lives - the region R of `p.lx`'s object, since a field of an object in
+a region lives there. But `ownValuePlaceReach` asked `ownReachOfBase(p.lx)`, which answers R's own reach (where `p`
+keeps its references): the reach of an **own slot** inside the object, right for the objects it owns, which reach as far
+as it does. A field holding an owning type **by value** is not such a slot: its own objects' referents are built in R.
+So `take p.lx.toks` was believed to refer only to `p`'s block, and every place of that reach accepted it - another owned
+object's field, a local, a returned result (`return take p.lx.toks`, the natural form) - while `p.lx = null` or `p`'s
+release freed R under it.
+
+The fix is the own-array path's answer (`ownBorrowRead`'s `isArr` branch, which takes `RefExactScope` of the read): a
+field of an instance in a region (`ownRegionOf` the base, or a plain reference into one) reaches **R itself**, which
+outlives nothing. Moving it out is then refused unless what it holds refers to nothing outside what it owns (`Vec<I64>`)
+- O34's "the owner refers to what lives shorter than the slot it is moved into". Two moves stay legal: the object moved
+whole (`take p.lx`), which carries R, and a field moved into another field of the same object read by the same path
+(`p.lx.more = take p.lx.toks`) - each read of `p.lx` is a region of its own to §8, so `ownValueTakeReach` accepts two
+regions whose slots are one path (`ownSamePath`), as O39 already does for loans; the loans keep the slot from changing
+between the two reads. All eight variants (r1a-r1h: another object, a local then an own place, a struct holding the
+Vec by value, globals, a `Vec<Tok>`, a function, the return, a borrow local) are refused (`vec128`-`vec135`).
+
+Over-rejection this brings, recorded: words built in an owned object's region leave it only with the object, or as
+copies (`$w`); `m := take p.lx.toks` used while the object lives is refused too (it had a loan; the region now refuses it
+first).
+
+### 26.2 D: loans at any depth (O38, O39, O31)
+
+`ownOwnSlotReads` - the loans a borrowed copy, or a reference to an owner value local's storage, carries - stopped at
+depth 8, so a Vec 8 owning value levels down had none: a copy read freed memory after a push, and own5's F2 came back
+(`return o` through a reference). The walk is uncapped now; a path of struct types guards it (only a program where T16 is
+already reported has a cycle by value). The same audit of the own pass found the same problem in three more places,
+fixed the same way: `typeIsOwningAt` (cap 8; the `owning` flag answered first, but a type the flag missed would have been
+copied freely), `ownReachTypes` (cap 64, under-collecting what `$`/`==` read; its seen-set ends the walk), and the
+operand-path loops capped at 64 or 256 (`ownArrayRegionOf`, `ownCopyPartOf`, `OwnValuePlace`, `ownValuePlaceReach`,
+`ownChain`, the deep-result source walks - past 64, a field 70 levels down could not be taken at all, E34's error, and
+a take of a borrowed copy's part got that message instead of O32's): an operand tree is finite, so they are unbounded. And at 64 levels the next limit bit: `TypeHoldsReferences` answered "no" past
+`VALUE_WALK_LIMIT`, so the copy was never held (`ownHold` skips a type carrying no scopes). The value walks §8 and own
+rely on - `typeHoldsReferencesAt`, `valueRefsAdmitStoresAt`, `typeHoldsWritableRefsAt`, `typeHasBareOwningStructAt` -
+answer the safe way past the limit now: a type nested 65 levels by value may be over-rejected, never under-checked. The
+limit stays because those walks may meet a self-holding type before T16 is reported (C2e). `vec136`/`vec137` (8
+levels), `vec145` (70 levels, refused), `vec146` (70 levels used, copied and taken, run).
+
+### 26.3 L1: a borrowed copy's owning part is not assigned (O32)
+
+`c.a = Lexer(...)` with `c` a borrowed copy was accepted: O32 checked only own references. The copy owns nothing, so
+nothing released what it was given until the function's scope closed - 8.6KB a turn in a loop. `buildAssignCore` now
+reports `ERR_OWN_COPY_PART` for a target of an owning type held by value that is part of a borrowed copy
+(`ownCopyPartOf`), as `buildOwnAssign` does for an own reference part. Compound assignment reaches the same check;
+`take` of such a part was already refused; a `mut` method or a writable lend of it is T25c's (a borrowed copy is
+read-only); a spawn target is O41's. `vec138`-`vec140`.
+
+### 26.4 x1: a conversion of a reference a call gives names its storage (T29a)
+
+`w String&v = String(v.View())` printed `aa` built and `za` under `-i`. T29a retypes the argument in place where it is
+a variable, a field, an element or a slice; a call's result reached `OPERATION_NOMINAL_CONVERT`, a value, which codegen
+promoted into the reference by copying. A reference argument (an array reference: `{len, ptr}` either way) is now
+retyped in place too, so the conversion is the reference. `vec143` runs it with a baked global; the corpus test
+`std/prelude/tests/vec.olang` compares `VecViewBaked` with the run time. Consequence, recorded: `d := String(v.View())`
+holds the Vec's loan, so a callee that may keep it (`keep(h, d)`, the review's `k09`) is O38's error - where it used to
+copy, it now names the buffer, as T29a says.
+
+### 26.5 Also
+
+- **O26a follows `take`** (over-rejection 2): `take` starts a whole value (`tokStartsWhole`), so `w := take l.toks;
+  return w` and `l.toks = take v; return l` move `l`/`v` into the result scope as `return take l.toks` did (`vec144`,
+  and a corpus test reading the text back after a churn).
+- **B11** (over-rejection 4): a destructor's O40 is reported at the call in its own body (`G.Push(i)`), with a note where
+  the callee releases (`ownRel.site`, the call a release was propagated through) - `vec141`.
+- Not done: over-rejection 1 (`GL = take l` for a struct holding a Vec, `ownRefersOut` taking a Vec field to refer out)
+  and 3 (`x.First().deep.text`, O10) - both safe, recorded.
+
+### 26.6 The fuzzer
+
+`vec2aOp` gained seven shapes (k 15-21, the review's suggestions): a Vec field of an owned object moved into another
+owned object then released, or out through a local (both refused, O34); the whole object moved, and the field moved
+within its object (accepted); a borrowed copy of a Vec 8-12 owning value levels down used after a push (refused, O39) or
+before it (accepted); a borrowed copy's owning field given an owner (refused, O32). Own seeds 1-300, the same generator under both
+compilers: d5ddcda **22 findings** (897 scenarios run, 2703 refused) - 14 R1 shapes and 8 D shapes, every one of them
+the review's (L1 is a leak, which the sanitizer does not see; its shape is refused on the tip); this tip **none** (865
+run, 2735 refused - the 32 fewer run are those 22 shapes and their siblings in the same scenarios, now refused).
+
+### 26.7 Regressions checked
+
+The review's 1,259 older programs (vec1-vec5, own1-own5, own7) built `-b -d -s`, run and interpreted: no sanitizer
+report. Six differ from d5ddcda: `a9` now agrees with `-i` (x1); `vec1/a3`, `vec1/a4`, `vec2/d_convcopy` and
+`vec3/k2` hold a converted view across a push and are O39's error - the conversion names the buffer now, as `t :=
+w.View()` would; `own3/h4` is accepted (O26a follows its `take`) and runs clean under the sanitizer, differing from `-i`
+only because `-i` runs no destructors. Of the review's own attack programs (`work/`), every change is one of this
+section's: the R1, D and L1 shapes refused, `s04`/`s06` accepted, `k09` refused (26.4).
