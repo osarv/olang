@@ -96,6 +96,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
     fnByName Map<Pair<I64, I64>, I64>  # (module, name): a plain function
     methods Map<Pair<I64, I64>, I64>   # (receiver key, name): the method
+    defaultFns List<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
+    defaultTraits List<I64>            # beside each, its trait's DeclId
     instances List<instance>
     instanceOf Map<Pair<I64, types.ListId>, I64>
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
@@ -1227,6 +1229,35 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
     if k < 0 { return }
     mk := Pair(k, I64(f.Name))
     if (try p.methods.Get(mk) catch default -1) < 0 { p.methods.Put(mk, i) }
+    if (k >> 40) == 4 {
+        p.defaultFns.Push(i)
+        p.defaultTraits.Push(k & ((I64(1) << 40) - 1))
+    }
+}
+
+# a trait's default method of a name that a type's own methods meet the trait of (M19e), by its methods' names; -1 for
+# none. The call's inference checks the rest (G19)
+fn (p mut Program&) DefaultMethod(t types.TypeId, name source.NameId) I64 {
+    p.allFns()
+    x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    for i in range p.defaultFns.Len() {
+        f := p.defaultFns[i]
+        if p.fns[f].F.Name != name { continue }
+        td := p.typeDecl(types.DeclId(I32(p.defaultTraits[i])))
+        if td == null or td.Body == null { continue }
+        ok := false
+        match td.Body {
+            case ast.TypeBody.Trait(methods) {
+                ok = true
+                for m in methods {
+                    if p.MethodOf(x, m.Name) < 0 { ok = false }
+                }
+            }
+            nomatch { }
+        }
+        if ok { return f }
+    }
+    return -1
 }
 
 # a written receiver's key
@@ -1665,9 +1696,12 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
     }
     if cur == v { return true }
     if literal {
-        if b.LiteralOnly[i] and p.Flows(cur, v) { b.Vals[i] = v }
+        # G9a: a variable only literals reach takes the widest of their types
+        if b.LiteralOnly[i] and (p.Flows(cur, v) or (p.T.IsInt(cur) and p.T.IsFloat(v))) { b.Vals[i] = v }
         return true
     }
+    # a reference to what the variable holds by value: its value is read out (E12)
+    if p.T.KindOf(v) == types.Kind.Ref and p.T.KindOf(cur) != types.Kind.Ref and p.T.Plain(p.T.Referent(v)) == cur { return true }
     if p.T.IsNumber(p.numberOf(cur)) and p.T.IsNumber(p.numberOf(v)) {
         if p.Flows(v, cur) { return true }
         if p.Flows(cur, v) and not b.Fixed[i] {
