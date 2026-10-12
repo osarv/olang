@@ -83,6 +83,15 @@ namesdiff: build/compiler_tools_dump
 layoutdiff: build/compiler_tools_dump
 	compiler/tools/layoutdiff.sh
 
+# the self-hosted checker's errors and unchecked constructs on files (compiler/tools/checkdump.olang)
+build/compiler_tools_checkdump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/checkdump.olang
+	$(OLANG) -b compiler/tools/checkdump.olang
+
+# M5b/M5c's acceptance, measured: refused checks cases give stage 0's first error, accepted programs check clean
+# (compiler/tools/checkdiff.sh; minutes, not in verify until it is required)
+checkdiff: build/compiler_tools_checkdump
+	compiler/tools/checkdiff.sh -v
+
 # captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
 # (minutes: stage 0 checks each root program whole)
 layoutgold: build/layoutdump
@@ -207,7 +216,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff layoutdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff layoutdiff checkdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.

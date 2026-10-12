@@ -1289,6 +1289,12 @@ fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
     return -1
 }
 
+# whether a declared type extends its base (T29f): it takes the base's methods and operators
+fn (p mut Program&) Extends(t types.TypeId) Bool {
+    return p.T.KindOf(t) == types.Kind.Named and p.Body(t) and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Over and
+           p.extends(p.T.DeclOf(t))
+}
+
 fn (p mut Program&) extends(d types.DeclId) Bool {
     td := p.typeDecl(d)
     return td != null and td.Extends

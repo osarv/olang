@@ -113,6 +113,13 @@ fn (d mut Diagnostics&) lineOf(file I64, at I64) (I64, I64) {
     return lo + 1, d.starts[from + lo]
 }
 
+# where an offset of a file is, as a row writes it: "PATH:LINE:COL"
+fn (d mut Diagnostics&) Locate(file I64, at I64) String {
+    if file < 0 or file >= d.paths.Len() { return "?" }
+    line, start := d.lineOf(file, at)
+    return $d.paths[file] ":" $line ":" $(at - start + 1)
+}
+
 # ---- reporting ----
 
 # reports an error at where m is about; the number it gives names it to Note, and is -1 for an error not reported (the
