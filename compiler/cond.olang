@@ -157,6 +157,12 @@ fn (c mut Consts&) define(flag String&) ? DefineError {
     c.raws[c.raws.Len() - 1] = $value
 }
 
+# a build constant's value, and whether it is an integer above I64's maximum (a U64); a miss where there is none
+fn (c Consts&) ValueOf(name String&) (Value, Bool) ? {
+    i := try c.find(name)
+    return c.values[i], c.big[i]
+}
+
 # -D's value for name as written, for a message
 fn (c Consts&) Raw(name String&) String {
     i := try c.find(name) catch { return "" }

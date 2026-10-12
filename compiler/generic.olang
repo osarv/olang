@@ -1431,6 +1431,122 @@ fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
 }
 
 fn (p Program&) InstanceSig(i I64) types.TypeId { return p.instances[i].Sig }
+fn (p Program&) InstanceFn(i I64) I64 { return p.instances[i].Fn }
+fn (p Program&) InstanceArgs(i I64) types.ListId { return p.instances[i].Args }
+fn (p Program&) InstanceCount() I64 { return p.instances.Len() }
+
+# ---- what the checker reads of declarations (M5b) ----
+
+# every function and method of every module, registered (allFns): how many, and each one's module, declaration and
+# whether it is an extern
+fn (p mut Program&) AllFns() { p.allFns() }
+fn (p Program&) FnCount() I64 { return p.fns.Len() }
+fn (p Program&) FnModule(f I64) I64 { return p.fns[f].Mi }
+fn (p Program&) FnDecl(f I64) ast.Func&p { return p.fns[f].F }
+fn (p Program&) FnIsExtern(f I64) Bool { return p.fns[f].Extern }
+# a declared type's declaration (null for an error type), and its context: its module and its variables by name
+fn (p Program&) TypeDecl(d types.DeclId) ast.TypeDecl&p { return p.typeDecl(d) }
+fn (p mut Program&) DeclContext(d types.DeclId) Context { return p.declContext(d) }
+# a function's context, its variables bound to args (an instance's) - or to themselves where args is the empty list
+fn (p mut Program&) FnContext(f I64, args types.ListId) Context {
+    owner := FnOwner(f)
+    p.Sig(f)
+    c := Context(p.fns[f].Mi, owner)
+    xs := p.T.Items(args)
+    for i in range p.VarCount(owner) {
+        c.Vars.Put(p.VarAt(owner, i).Name, xs[i] if i < xs.Len() else p.T.Var(owner, i, types.ReadOnly))
+    }
+    return c
+}
+# a declared type's context with its variables bound to an instance's arguments
+fn (p mut Program&) InstanceContext(t types.TypeId) Context {
+    d := p.T.DeclOf(t)
+    c := p.declContext(d)
+    td := p.typeDecl(d)
+    xs := p.T.Items(p.T.Args(t))
+    if td != null and td.Params != null {
+        for i in range td.Params.Len() {
+            if i < xs.Len() { c.Vars.Put(td.Params[i].Name, xs[i]) }
+        }
+    }
+    return c
+}
+# a module's method key of a type, and a method by key: M19's table, for the checker's own lookups
+fn (p mut Program&) TypeKey(t types.TypeId) I64 { return p.typeKey(t) }
+fn (p mut Program&) MethodByKey(key I64, name source.NameId) I64 {
+    p.allFns()
+    return try p.methods.Get(Pair(key, I64(name))) catch default -1
+}
+fn TraitKey(d types.DeclId) I64 { return keyTrait(d) }
+# a declared type of a std module by its name, Unknown for none (String, Char, BuiltinError, Exhausted ...)
+fn (p mut Program&) PreludeType(identity String&, name String&) types.TypeId { return p.preludeType(identity, name) }
+# a struct's constructor's signature (C2, G10b), or a declared number's (T29d): its parameters as written, its type the
+# result - a destructor-declaring struct's by reference (C11) - and its errors, with RoleCtor's scopes (C2d); Unknown for
+# a type with no constructor
+fn (p mut Program&) CtorSig(t types.TypeId) types.TypeId {
+    if p.T.KindOf(t) != types.Kind.Named { return types.UnknownT }
+    td := p.typeDecl(p.T.DeclOf(t))
+    if td == null or td.Body == null { return types.UnknownT }
+    c := p.InstanceContext(t)
+    match td.Body {
+        case ast.TypeBody.Struct(s) { return p.paramsSig(c, s.Params, s.Errs, p.held(t)) }
+        case ast.TypeBody.Over(_, ctor) {
+            if ctor == null { return types.UnknownT }
+            return p.paramsSig(c, ctor.S.Params, ctor.S, t)
+        }
+        nomatch { return types.UnknownT }
+    }
+}
+
+# an enum case's payload as a constructor (T17c): its fields the parameters, the enum the result
+fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
+    if p.T.KindOf(t) != types.Kind.Named { return types.UnknownT }
+    td := p.typeDecl(p.T.DeclOf(t))
+    if td == null or td.Body == null { return types.UnknownT }
+    match td.Body {
+        case ast.TypeBody.Enum(cases) {
+            if tag < 0 or tag >= cases.Len() { return types.UnknownT }
+            ps := cases[tag].Payload
+            if ps == null { return p.T.Func(types.ListId(0), t, types.ListId(0)) }
+            return p.paramsSig(p.InstanceContext(t), ps, null, t)
+        }
+        nomatch { return types.UnknownT }
+    }
+}
+
+fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Sig&, result types.TypeId) types.TypeId {
+    ps List<types.TypeId>
+    named List<source.NameId>
+    shares List<I64>
+    if params != null {
+        for prm in params {
+            ps.Push(p.Resolve(c, prm.Ty))
+            shares.Push(p.markedParam(prm.Ty, named, shares))
+            named.Push(prm.Name)
+        }
+    }
+    es List<types.TypeId>
+    if errs != null and errs.HasErrors {
+        if errs.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
+        for e in errs.Errors { es.Push(p.errorType(c, e)) }
+    }
+    scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.T.List(es.ToArray()), scopes)
+}
+
+# a written type's error set item, read in a context: an error type (R1), Unknown for none
+fn (p mut Program&) ErrorType(c Context&, e ast.Path&) types.TypeId { return p.errorType(c, e) }
+# a global's declaration in a module, outside every top-level if; null for none
+fn (p mut Program&) GlobalDecl(mi I64, n source.NameId) ast.VarDecl&p { return p.anyGlobal(mi, n) }
+# whether one number type flows into another, and where two meet (T6b): Unknown where they do not
+fn (p mut Program&) Meet(a types.TypeId, b types.TypeId) types.TypeId { return p.meetTyped(a, b) }
+# a constructor's value as ":=" holds it (C11)
+fn (p mut Program&) Held(t types.TypeId) types.TypeId { return p.held(t) }
+# a function a module declares by name, through FnNamed, as the checker sees the prelude's (print, ...)
+fn (p mut Program&) ModuleIndex(identity String&) I64 {
+    p.ensureModules()
+    return try p.identity.Get(identity) catch default -1
+}
 fn (p Program&) InstanceName(i I64) String&p { return p.instances[i].Name }
 fn (p Program&) InstanceOrigin(i I64) Origin { return p.instances[i].From }
 
