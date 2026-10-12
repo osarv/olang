@@ -1,0 +1,16 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: an increment of the parameter's own field is a write of its own storage
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn f(v mut V&) { v.n++ }
+
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    f(s[0])
+}

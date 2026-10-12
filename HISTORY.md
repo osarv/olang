@@ -15980,3 +15980,49 @@ checker, not the parse, will be where the time goes.
   reports it correctly, so it was not minimized; semantic.c is other work's.
 - `bench/fused.olang` does not check under the current stage 0 (E31b at six `ws.Gemm(S[g, h], ...)` calls through a
   `Batch`'s `At`), so `make bench` would not build it; left to the linalg/benchmark work.
+
+## A view element lent with nothing written back (E31b, O17, 2026-10-12)
+
+**The regression.** `bench/fused.olang` stopped compiling: `ws.Gemm(S[g, h], Q[g, h], false, K[g, h], true, scale, 0,
+threads)`, `S` a `linalg.Batch<F32>` whose `At` gives a `Matrix` view, Gemm's first parameter `c mut Matrix<T>&`. Decision
+42 (study 5's review) made any `mut &` lend of a non-handle `x[i]` copy E31b's error, because the read-modify-write could
+lose a write when the callee reaches the collection another way. Nothing compiled the benchmarks in `make verify`, so it
+went unseen until port M4's module-graph oracle tripped on it. The workaround (`t := S[g, h]; ws.Gemm(t, ...)`) is not an
+answer for the library meant to carry all numeric code.
+
+**The coordinator's decision**: when the callee writes nothing of the parameter's own storage - writes only THROUGH its
+references - the copy and the element are indistinguishable to it, and lending the hidden copy with no write-back loses
+nothing. Decide it from the checked body, not tokens; keep every refusal for callees that do write own storage.
+
+**How it is built.** `atWriteBackArgs` treats a struct copy of `x[i]` that is no handle as it treats a handle's: held in a
+hidden local (`holdHandleCopy`), marked `atViewCopy`, lent as a reference, no write-back. `atHandleThrough` judges it
+against the call's function once known: `viewThroughAt(func, idx)`, the O17b walk (`htScan` with `view` set) over the
+checked body, with a memo of its own and cycles assumed then settled (`settleHandleLends`, pendings now carry `view`).
+`vsOp` consumes: a member read whose field is a reference (whatever follows goes through it) or a scalar (numeric,
+`Bool`, function value), reached through value struct fields (`vsPath`); a call handing the parameter whole to a read-only
+reference parameter, a by-value one, or a writable one that qualifies in turn; a value handle field handed to an
+O17b-qualifying parameter. Assignments, increments and atomics into own storage are `htOwnStorage`'s as before, and any
+read of the parameter the walk does not consume says no - `OperandReadVar` now records reads of every struct reference
+parameter, not only handles'. What the callee builds into what the copy holds is O17's question unchanged: the copy is a
+split value (storage in the statement's block, references where the collection's are), so a callee that can keep a build
+there is refused - `checks/cases/s5atbuilds.olang` (a `mut` method pushing text onto a List the element holds) now gets
+O17's "x[i] gives a copy, and the call can build into what it holds where the copy is" instead of E31b's message.
+
+**Decided (mine).** A generic is judged by the instantiation called - a trait's default too, since its body is checked
+for the concrete type, so the brief's "defaults count as writing" is met by reading the real body rather than refusing;
+only struct elements (an array or enum copy keeps the error); the parameter repointed, read into a local or captured
+says no even where harmless (conservative). `bench/fused.olang` builds and runs again, and under `-d -s`; std/linalg's
+new test writes a Gemm per head into `d[g, h]` and compares it with GemmBatch; `shared.olang` pins view-only callees
+(a method reached through the view, the parameter handed on, a cycle declared after its caller) after an arena churn and
+in a baked global. Must-fail cases `e31bview*`: a field assigned, incremented, a reference field repointed, a `mut`
+method writing own storage, handed on to a writer (declared later), a cycle with one writer, a function value, a local
+alias, a capture, a value field lent, and a build into what the copy holds (O17). **Kept from regressing**: a `bench`
+scenario in `checks/checks.olang` compiles every `bench/*.olang` with `-c`; `compiler/tools/modgraph.sh`'s note about
+skipping fused is gone.
+
+**Found on the way, pre-existing.** `bump(try l[0])` with `l` a `List<Acc>` and `bump(a mut Acc&)` compiled and printed
+0: under `try` a List's index is the derived form - `At` called with an `OPERATION_BOUNDS` index, not marked `isAtCall` -
+so `atWriteRoot` did not see a copy of an element and the argument was promoted as a plain temporary, the write lost.
+`derivedAtRead` recognises it (and a field of it); a non-handle such copy is E31b's error, never lent as a view, since
+it cannot be held in a hidden local apart from its try's clauses (`checks/cases/e31btryat.olang`).
+

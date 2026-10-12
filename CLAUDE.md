@@ -5172,7 +5172,25 @@ and literals made only of such, never existing storage anywhere in it) - it is
   not in verify - stage 0 checks each root whole, ~4.5 min): every root's module graph, ordinary and `-t`, and a
   remote program's, equal stage 0's; `compiler/tools/namesdiff.sh` (`make namesdiff`, in verify, ~25 s): all 1,132
   checks cases give stage 0's load and name errors by rule and position. Found: `bench/fused.olang` does not check
-  under stage 0 (E31b), skipped.
+  under stage 0 (E31b), skipped - compiles again since the view lend (E31b, 2026-10-12, below).
+- **A view element is lent with nothing written back (E31b, O17, 2026-10-12; the coordinator's decision, details
+  mine).** `ws.Gemm(S[g, h], ...)` - `S` a `linalg.Batch`, Gemm's `c mut Matrix<T>&` - was E31b's error (decision 42:
+  a `mut &` lend of a non-handle `x[i]` copy), so `bench/fused.olang` stopped compiling unseen. E31b exists because a
+  write-back can lose a write when the callee reaches the collection another way; a callee writing **nothing of the
+  instance's own storage** cannot tell the copy from the element, so none is needed. Now a struct copy of `x[i]` (or a
+  field of it), no handle, lent to a writable reference parameter or receiver is held in a hidden local as a handle's
+  copy is and lent with no write-back, where the callee's CHECKED body qualifies (`viewThroughAt`, a fixed point like
+  O17b's, every read of the parameter accounted for through `paramReads`): reference fields read out and anything done
+  through them, numeric/`Bool`/function fields read, the parameter whole to a read-only, by-value or (recursively)
+  qualifying writable parameter, a handle field by value to an O17b-qualifying one. Everything else says no - an own
+  field assigned or incremented at any value depth, a reference field or the parameter repointed, a value field lent,
+  sliced or walked, a local alias, a capture, a function value, an extern, a lambda, an unchecked or erroneous body.
+  **Decided (mine)**: a generic is judged by the instantiation called, a trait default included (its body is checked for
+  the concrete type; the brief listed defaults as writing); only structs, never arrays or enums; a callee building into
+  what the copy holds is O17's split-value error as before (`s5atbuilds` now reports that, not E31b). **Found on the way,
+  pre-existing**: `g(try l[0])` on a List (its check derived from Len) was taken for a plain temporary and the write
+  silently lost - E31b's error now, never lent as a view. `checks/checks.olang`
+  gained a `bench` scenario compiling every `bench/*.olang` with `-c` (~30 s), so a benchmark cannot stop compiling unseen.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -15780,6 +15780,69 @@ test "E31b/O17b: nested handle elements are held and lent at every level; a repo
     assert S5NestedBaked == 16807
 }
 
+# E31b (bench/fused): x[i] of a struct element that is no handle - a view, its state reached through a reference - lent
+# to a "mut &" parameter or a "mut" receiver whose body writes nothing of the instance's own storage: only through its
+# references, its scalar fields read, the parameter handed on whole to a read-only parameter or to another such one (a
+# cycle and a function declared after its caller included). The callee cannot tell the hidden copy from the element, so
+# nothing is written back - and what it wrote through the view is in the collection's storage, read back after a churn
+type e31View struct(d mut Array<I64>&, off I64, n I64) {
+    d
+    off
+    n
+}
+type e31Views struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn (s e31Views&) At(i I64) e31View { return e31View(s.d, i * s.n, s.n) }
+fn e31Fill(v mut e31View&, x I64) {
+    for i in range v.n { v.d[v.off + i] = x + i }
+}
+fn (v mut e31View&) Set(i I64, x I64) { v.d[v.off + i] = x }
+fn e31Sum(v e31View&) I64 {
+    t I64 = 0
+    for i in range v.n { t += v.d[v.off + i] }
+    return t
+}
+fn e31Pass(v mut e31View&, x I64) {
+    e31Fill(v, x)
+    v.Set(0, e31Sum(v))
+}
+fn e31ViewStep(vs e31Views&, k I64) {
+    e31Fill(vs[0], 10)
+    vs[1].Set(2, 7 + k)
+    e31Pass(vs[2], 100)
+    e31Down(vs[3], 4)
+}
+fn e31ViewDigest(vs e31Views&) I64 {
+    t I64 = 0
+    for i in range vs.d.Len() { t = t * 3 + vs.d[i] }
+    return t
+}
+fn e31ViewRun(n I64) I64 {
+    vs := e31Views(Array<I64>(12), 3)
+    for k in range n { e31ViewStep(vs, k) }
+    return e31ViewDigest(vs)
+}
+fn e31Down(v mut e31View&, k I64) {
+    if k > 0 { e31Up(v, k - 1) }
+}
+fn e31Up(v mut e31View&, k I64) {
+    v.Set(1, v.d[v.off + 1] + k)
+    e31Down(v, k)
+}
+E31ViewBaked I64 = e31ViewRun(3)
+test "E31b: a view element lent to a callee writing only through its references needs no write-back" {
+    vs := e31Views(Array<I64>(12), 3)
+    for k in range sbRun * 3 {
+        e31ViewStep(vs, k)
+        sbChurn()
+    }
+    sbChurn()
+    assert e31ViewDigest(vs) == 2748384 and vs.d[2] == 12 and vs.d[5] == 9 and vs.d[6] == 303 and vs.d[10] == 18
+    assert E31ViewBaked == 2748384 and e31ViewRun(3) == 2748384
+}
+
 # ---- tonight9's review (rv9) ----
 
 # E16a/C2d: a constructor field the instance keeps a view of - a slice, an "as" view, a conditional of slices, a slice a
