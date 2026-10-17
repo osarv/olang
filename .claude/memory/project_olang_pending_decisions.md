@@ -145,7 +145,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
   test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
   are good"). Being built in wt-runfmt after its current work.
-- QT ASKED 2026-10-17 (after "Write everything in Olang"): should the makefile also become an olang program
+- QT ANSWERED 2026-10-17 ("make can stay make"): the makefile stays. Was asked (after "Write everything in Olang"): should the makefile also become an olang program
   (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
   incremental part). In effect: the makefile stays.
 - QU DECIDED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
@@ -240,6 +240,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stays as it is - free functions and constants; nothing built. QZ is closed.
   Queued after
   wt-errors2 merges (std files).
+- QAA DECIDED 2026-10-17 (the user: "Literals cant call methods, only variables can"): a method call whose receiver is
+  a literal - number, text, array, comprehension - is a compile-time error (`"a,b".Split(",")`, `7.Hash()`); reading
+  taken (stated to the user): any non-literal receiver stays legal (`f().g()`, `x[i].M()`). Both compilers; corpus
+  migrated (receiver into a local); queued after the syntax batch.
+- QL1 (company name): the user, 2026-10-17: "don't worry about the name" - dropped.
+- QJ1/QJ2/QF explained again 2026-10-17 (the user asked "tell me about 2-4"); recommendations unchanged (QJ1 keep -
+  or a bare `b := a` on a Vec an error; QJ2 keep; QF open until Vec phase 2b's move-aware collections, closed with a
+  test of a long-running Map of owned objects staying flat).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
