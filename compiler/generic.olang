@@ -89,6 +89,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     typeIndex Map<Pair<I64, I64>, I64> # (module, name): the entry declaring a type
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
+    r1bSaid Map<Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
     modules I64 = 0                    # how many modules T knows
     patterns Map<I64, pattern>         # by the pattern's index in T
     fns List<fnRow>
@@ -296,7 +297,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef&) types.TypeId {
     return match t {
         case ast.TypeRef.Named(sp, path, args) => p.named(c, sp, path, args)
         case ast.TypeRef.Var(_, n, _) => try c.Vars.Get(n) catch default types.UnknownT
-        case ast.TypeRef.Func(_, s) => p.sigType(c, s, types.UnknownT, source.NameId(0))
+        case ast.TypeRef.Func(sp, s) => p.funcType(c, sp, s)
         case ast.TypeRef.Const(_, _) => types.UnknownT
         case ast.TypeRef.Shape(_, body) => p.shape(c, body)
         case ast.TypeRef.Ref(_, of, _) => p.T.Ref(p.Resolve(c, of), types.ReadOnly)
@@ -391,6 +392,22 @@ MaxChain I64 = 1000
 # variable may hand back an argument where it becomes a reference (O14b); a marker naming nothing it may is the
 # checker's to report, and says nothing here. recv, where it is no stand-in, is the parameter before the others (a
 # method's receiver, M19), named recvName
+# a function type written (T21): its set written out - "?" alone says nothing, since no body says what it is (R1b);
+# said once, read as no errors
+fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeId {
+    f := p.sigType(c, s, types.UnknownT, source.NameId(0))
+    es := p.T.Items(p.T.Errors(f))
+    if es.Len() == 1 and es[0] == types.DefaultErrT {
+        key := Pair(c.Mi, I64(sp.Start))
+        if not (try p.r1bSaid.Get(key) catch default false) {
+            p.r1bSaid.Put(key, true)
+            p.L.Diags.Error(p.at(c.Mi, source.Span(sp.Start, sp.Start + 2)), msgs.FuncTypeErrsUnwritten())
+        }
+        f = p.T.Func(p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
+    }
+    return f
+}
+
 fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
     ps List<types.TypeId>
     named List<source.NameId>

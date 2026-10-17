@@ -78,7 +78,7 @@ type Gap struct(File I64, Sp source.Span, What String&) {
 
 type Checker struct(P mut generic.Program&, Tests Bool) {
     P
-    Tests                                  # a test build: the root module's test blocks are bodies (S15)
+    Tests                                  # a test build (the root module's test blocks are checked in every build, S15)
     RootOnly Bool = false                  # only the root module's declarations, and what they ask for (tests)
     Bodies List<mut typed.Body&>
     Gaps List<Gap>
@@ -96,6 +96,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
+    tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
@@ -284,6 +285,35 @@ fn (c mut Checker&) failForms() {
         c.failForm(f, name, cap, k, sig, es)
         c.pop()
     }
+    # a generic's checked forms per instance, its plain form's set being its type argument's (E31a)
+    insts List<I64>
+    for e in c.fnBodies { insts.Push(e.Key) }
+    for inst in insts {
+        f := c.P.InstanceFn(inst)
+        fd := c.P.FnDecl(f)
+        if fd.Recv == null or c.P.VarCount(generic.FnOwner(f)) == 0 { continue }
+        if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
+        name := c.text(fd.Name)
+        cap := c.operatorRole(name)
+        if cap.Len() == name.Len() or opShapeOf(cap) < 0 { continue }
+        plainName := $name[7:]
+        if name[0].IsLower() { plainName = $plainName[0].ToLower() $plainName[1:] }
+        rt := c.deref(c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0])
+        p := c.P.MethodOf(rt, c.P.L.Names.Intern(plainName))
+        if p < 0 or p == f or c.P.VarCount(generic.FnOwner(p)) != c.P.VarCount(generic.FnOwner(f)) { continue }
+        mine := c.bodyErrors(c.fnBody(inst))
+        theirs := c.bodyErrors(c.fnBody(c.P.FnInstance(p, c.P.InstanceArgs(inst))))
+        for e in c.P.T.Items(theirs) {
+            u := c.uncovered(mine, e)
+            if u != types.UnknownT {
+                c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+                c.err(c.nameSpan(fd), msgs.CheckedNotSuperset(name, plainName, plainName, c.ty(u)))
+                c.pop()
+                break
+            }
+        }
+    }
+    c.drain()
 }
 
 fn (c mut Checker&) failForm(f I64, name String&, cap String&, k I64, sig types.TypeId, es types.ListId) {
@@ -324,13 +354,33 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 for n in v.Names { c.globalBody(mi, n) }
             }
             case ast.Decl.Test(sp, _, body) {
-                if c.Tests and mi == c.P.L.Root { c.testBody(mi, sp, body, tests) }
+                if mi == c.P.L.Root { c.testBody(mi, sp, body, tests) }
                 tests++
             }
-            case ast.Decl.Type(_, td) { c.declaredCtor(mi, td) }
+            case ast.Decl.Type(_, td) {
+                c.declaredCtor(mi, td)
+                c.traitSets(mi, td)
+            }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond.Span().Start), 0) }
             nomatch { }
         }
+    }
+}
+
+# R1b: a trait's method writes its error set - no body says what it is
+fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl&) {
+    if td == null or td.Body == null { return }
+    match td.Body {
+        case ast.TypeBody.Trait(ms) {
+            c.push(-1, mi, types.VoidT, types.ListId(0))
+            for m in ms {
+                if m.S.HasErrors and m.S.Errors.Len() == 0 {
+                    c.err(source.Span(m.Sp.Start, m.Sp.Start + I32(c.text(m.Name).Len())), msgs.TraitErrsUnwritten())
+                }
+            }
+            c.pop()
+        }
+        nomatch { }
     }
 }
 
@@ -2435,6 +2485,11 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         r := c.operatorCall(sp, opSp, op, x, y)
         if r != null { return r }
     }
+    # E31: "@" has no built-in meaning, so only a type declaring MatMul has it
+    if op == token.Tok.At {
+        if not c.notOperator(c.deref(ta), "MatMul", opSp, "'@'", 1, false) { c.err(opSp, msgs.MatmulUndeclared(c.ty(ta))) }
+        return c.unknown(sp)
+    }
     if not c.isNumber(ta) or not c.isNumber(tb) {
         if op == token.Tok.EqEq or op == token.Tok.NotEq { return c.equality(sp, op, x, y) }
         if operatorName(op) != "" and c.notOperator(c.deref(ta), operatorName(op), opSp, msgs.Tok(op.Text()), 1, false) { return c.unknown(sp) }
@@ -3082,6 +3137,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
     base := c.place(y)
     if base == null { return c.unknown(sp) }
     t := base.Type()
+    written := t
     perm := types.Writable
     for k in range 4 {
         if not c.isRef(t) { break }
@@ -3104,8 +3160,13 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
             return c.unknown(sp)
         }
         lm := c.roleMethod(t, "Len", 0)
-        if (hi == null or derived) and lm < 0 {
-            c.gap(sp, "a slice with no end, or a derived CheckedSlice, of a type with no Len (E31, E31a)")
+        if derived and lm < 0 {
+            c.err(c.bracketIn(sp), msgs.TrySliceNeedsLen(c.ty(written)))
+            c.fr().Fallible++   # one error: the checked is not said to cover nothing too (R8)
+            return c.unknown(sp)
+        }
+        if hi == null and lm < 0 {
+            c.gap(sp, "a slice with no end of a type with no Len (E31)")
             return c.unknown(sp)
         }
         l := c.lit(sp, c.i64(), 0) if lo == null else c.value(c.exprTo(lo, c.i64()), lo.Span())
@@ -4123,8 +4184,22 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
 # under checked, x[i] on a type with At and Len but no CheckedAt (E31a): the index checked against Len() before At is called,
 # failing with BuiltinError.OUT_OF_BOUNDS - the At call's checked arguments; null where no such check is derived
 fn (c mut Checker&) derivedCheckedAt(sp source.Span, base typed.Place&c, t types.TypeId, items Array<ast.Expr&>&) Array<typed.Expr&>&c {
-    if items.Len() != 1 or c.roleMethod(t, "CheckedAt", 1) >= 0 { return null }
-    if c.checkOp(typed.Check.None) != typed.Check.Try { return null }
+    if c.roleMethod(t, "CheckedAt", items.Len()) >= 0 { return null }
+    if c.fr().Checks == 0 {
+        c.checkOp(typed.Check.None)
+        return null
+    }
+    if items.Len() != 1 {
+        c.err(c.bracketIn(sp), msgs.TryMultiIndexNeedsTryat(c.ty(t), "CheckedAt"))
+        c.fr().Fallible++   # one error: the checked is not said to cover nothing too (R8)
+        return null
+    }
+    if c.roleMethod(t, "Len", 0) < 0 {
+        c.err(c.bracketIn(sp), msgs.TryIndexNeedsLen(c.ty(base.Type())))
+        c.fr().Fallible++   # one error: the checked is not said to cover nothing too (R8)
+        return null
+    }
+    c.checkOp(typed.Check.None)
     return c.inRange(sp, base, t, items[0])
 }
 
@@ -4253,6 +4328,8 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
 # try e (R8), checked e (E15a): e's fallible calls and operators handled by the clauses - and under checked every
 # check made too, a nested try's operand aside
 fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch&>&, isChecked Bool, want types.TypeId) typed.Expr&c {
+    asValue := not c.tryStmt
+    c.tryStmt = false
     fr := c.fr()
     mark := fr.leaks.Len()
     before := fr.Fallible
@@ -4271,8 +4348,9 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     c.produced(clauses, mark, end)
     cls List<typed.Clause&>
     if clauses != null {
-        for cl in clauses { cls.Push(c.clause(cl, typeOf(x))) }
+        for cl in clauses { cls.Push(c.clause(cl, typeOf(x), asValue)) }
     }
+    if c.clauseRules(clauses, cls, asValue, typeOf(x)) and asValue { return c.unknown(sp) }
     k := c.caught(mark, end, cls)
     c.escapes(source.Span(sp.Start, sp.Start + (7 if isChecked else 3)), mark, k)
     return typed.Expr.Try(sp, typeOf(x), typed.Try(x, cls.ToArray()))
@@ -4334,20 +4412,39 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     if clauses != null {
         for cl in clauses { cls.Push(c.clause(cl, types.VoidT)) }
     }
+    c.clauseRules(clauses, cls, false, types.VoidT)
     k := c.caught(mark, end, cls)
     c.escapes(source.Span(sp.Start, sp.Start + (7 if isChecked else 3)), mark, k)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
 }
 
-fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId) typed.Clause&c {
+fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) typed.Clause&c {
     items List<typed.Item>
     if cl.Items != null {
         for p in cl.Items { c.catchItem(p, items) }
     }
     code typed.Block&c = null
-    if cl.Body != null { code = c.blockOf(cl.Body, typed.BlockKind.Clause, cl.Sp) }
+    if cl.Body != null {
+        body := cl.Body
+        # R11: in value position a block's last value is not the clause's - its default is
+        n := body.Len()
+        if value and (cl.Defaults == null or cl.Defaults.Len() == 0) and n > 0 {
+            match body[n - 1] {
+                case ast.Stmt.ExprS(_, x) {
+                    if not stmtLike(x) {
+                        c.err(x.Span(), msgs.ClauseLastValue(c.src(x.Span())))
+                        body = body[:n - 1]
+                    }
+                }
+                nomatch { }
+            }
+        }
+        code = c.blockOf(body, typed.BlockKind.Clause, cl.Sp)
+    }
     from := c.exprs.Len()
-    if cl.Defaults != null {
+    # several results take one default each (R11): a count that differs is said by clauseRules, the defaults unread
+    countOff := value and cl.Defaults != null and c.P.T.KindOf(t) == types.Kind.Tuple and cl.Defaults.Len() != c.P.T.Items(c.P.T.Parts(t)).Len()
+    if cl.Defaults != null and not countOff and not (value and t == types.VoidT) {
         for i in range cl.Defaults.Len() {
             pt := t
             if c.P.T.KindOf(t) == types.Kind.Tuple and cl.Defaults.Len() > 1 {
@@ -4360,6 +4457,105 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId) typed.Clause&c {
     all := cl.Items == null or cl.Items.Len() == 0
     defaults := gather(c.exprs, from)
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
+}
+
+# whether an expression may stand as a statement (S3): a call, a try of one, an increment, a take - else a value
+fn stmtLike(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Call(_, _, _), ast.Expr.ScopeCall(_, _, _, _), ast.Expr.Try(_, _, _, _), ast.Expr.Postfix(_, _, _) => true
+        case ast.Expr.Paren(_, y) => stmtLike(y)
+        case ast.Expr.Unary(_, op, _) => op == token.Tok.Inc or op == token.Tok.Dec or op == token.Tok.Take
+        case _ => false
+    }
+}
+
+# R11, R11a: a try's clauses in order - none after one taking every error, none whose errors an earlier one takes; as
+# a statement none with a default; as a value each leaving or giving one, not both, as many as the results
+fn (c mut Checker&) clauseRules(clauses Array<ast.Catch&>&, cls List<typed.Clause&>&, value Bool, t types.TypeId) Bool {
+    if clauses == null { return false }
+    for i in range clauses.Len() {
+        cl := clauses[i]
+        k := cls[i]
+        if i > 0 and cls[i - 1].All {
+            c.err(c.catchSpan(cl), msgs.CatchAfterCatchAll())
+            return true
+        }
+        if i > 0 and not k.All and k.Items.Len() > 0 {
+            earlier List<typed.Clause&>
+            for j in range i { earlier.Push(cls[j]) }
+            gone := true
+            for it in k.Items {
+                e := it.Err if it.Word < 0 or it.Word >= 64 else c.P.T.ErrWords(it.Err, U64(1) << it.Word)
+                if c.left(e, earlier) != types.UnknownT { gone = false }
+            }
+            if gone {
+                c.err(c.catchSpan(cl), msgs.CatchUnreachable())
+                return true
+            }
+        }
+        hasDef := cl.Defaults != null and cl.Defaults.Len() > 0
+        if not value {
+            if hasDef {
+                c.err(c.defaultSpan(cl), msgs.DefaultInStatement())
+                return true
+            }
+            continue
+        }
+        if t == types.VoidT {
+            if hasDef {
+                c.err(c.catchSpan(cl), msgs.DefaultNoValue())
+                return true
+            }
+            continue
+        }
+        goes := k.Code != null and leavesValue(k.Code)
+        if goes and hasDef {
+            c.err(c.defaultSpan(cl), msgs.DefaultDead())
+            return true
+        }
+        if not goes and not hasDef {
+            if cl.Body != null and cl.Body.Len() > 0 and lastIsValue(cl.Body) { continue }
+            c.err(c.catchSpan(cl), msgs.CatchMustLeave())
+            return true
+        }
+        if hasDef and c.P.T.KindOf(t) == types.Kind.Tuple {
+            n := c.P.T.Items(c.P.T.Parts(t)).Len()
+            if cl.Defaults.Len() != n {
+                c.err(c.defaultSpan(cl), msgs.DefaultCount(n, cl.Defaults.Len()))
+                return true
+            }
+        }
+    }
+    return false
+}
+
+# a clause whose block ends in a value: said once (ClauseLastValue)
+fn lastIsValue(body Array<ast.Stmt&>&) Bool {
+    return match body[body.Len() - 1] {
+        case ast.Stmt.ExprS(_, x) => not stmtLike(x)
+        case _ => false
+    }
+}
+
+# R9a: a value clause's block leaves - the structural rule (D10a), break and continue too
+fn leavesValue(b typed.Block&) Bool {
+    if leavesBlock(b) { return true }
+    for s in b.Stmts {
+        match s {
+            case typed.Stmt.Jump(_, _, _) { return true }
+            nomatch { }
+        }
+    }
+    return false
+}
+
+# where a clause is written: its "catch"; its "default"
+fn (c mut Checker&) catchSpan(cl ast.Catch&) source.Span { return source.Span(cl.Sp.Start, cl.Sp.Start + 5) }
+
+fn (c mut Checker&) defaultSpan(cl ast.Catch&) source.Span {
+    at := try c.src(cl.Sp).FindLast("default") catch default -1
+    if at < 0 { return c.catchSpan(cl) }
+    return source.Span(cl.Sp.Start + I32(at), cl.Sp.Start + I32(at) + 7)
 }
 
 # what of error set entry e clauses leave (R11, R1c): nothing (Unknown) where an item-less clause or an item naming its
@@ -4605,7 +4801,10 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             return
         }
         case ast.Expr.Try(_, _, _, _) {
+            # a try statement: its clauses give no value (R11)
+            c.tryStmt = true
             c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
+            c.tryStmt = false
             return
         }
         nomatch { }
@@ -4964,7 +5163,16 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             tm := c.checkedForm(dt, "SetAt", items.Len() + 1)
             if tm >= 0 {
                 m = tm
-            } else if items.Len() == 1 and c.checkOp(typed.Check.None) == typed.Check.Try {
+            } else if c.fr().Checks == 0 {
+                c.checkOp(typed.Check.None)
+            } else if items.Len() != 1 {
+                c.err(c.bracketIn(isp), msgs.TryMultiIndexNeedsTryat(c.ty(dt), "CheckedSetAt"))
+                c.fr().Fallible++   # one error: the checked is not said to cover nothing too (R8)
+            } else if c.roleMethod(dt, "Len", 0) < 0 {
+                c.err(c.opAfter(target.Span(), 1), msgs.TrySetatNeedsLen(c.ty(base.Type())))
+                c.fr().Fallible++   # one error: the checked is not said to cover nothing too (R8)
+            } else {
+                c.checkOp(typed.Check.None)
                 ck := c.inRange(isp, base, dt, items[0])
                 if ck != null {
                     pre = Array<typed.Expr&>(2)
