@@ -452,7 +452,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     for prm in fd.S.Params {
         if k < ps.Len() {
             c.param(prm.Name, prm.Sp, ps[k], k)
-            c.mutParam(prm.Ty, ps[k])
+            c.paramWritten(prm, ps[k])
         }
         k++
     }
@@ -463,6 +463,16 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
     }
     c.pop()
+}
+
+# a parameter as written (D9, D9a): no "mut" before a value, an array held by reference - a bare type variable aside,
+# which any type may bind (QP4)
+fn (c mut Checker&) paramWritten(prm ast.Param&, t types.TypeId) {
+    c.mutParam(prm.Ty, t)
+    if prm.Ty != null and not c.namesTypeVar(prm.Ty) and not c.isRef(t) and c.P.T.KindOf(c.under(t)) == types.Kind.Array {
+        nsp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
+        c.err(nsp, msgs.ArrayParamByValue(c.tok(prm.Name), c.ty(t)))
+    }
 }
 
 # D9: a by-value parameter is the callee's own copy - "mut" is for a reference (only on the generic's own check: an
@@ -507,7 +517,10 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
                 ps := c.P.T.Items(c.P.T.Params(sig))
                 if s.Params != null {
                     for i in range s.Params.Len() {
-                        if i < ps.Len() { c.param(s.Params[i].Name, s.Params[i].Sp, ps[i], i) }
+                        if i < ps.Len() {
+                            c.param(s.Params[i].Name, s.Params[i].Sp, ps[i], i)
+                            c.paramWritten(s.Params[i], ps[i])
+                        }
                     }
                 }
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
@@ -571,6 +584,11 @@ fn (c mut Checker&) checkDtor(id I64, t types.TypeId) {
     match td.Body {
         case ast.TypeBody.Struct(s) {
             c.cur().Sp = s.DtorSp
+            if s.Dtor.Len() == 0 {
+                # C7a: a destructor releases something
+                at := try c.src(s.DtorSp).Find("{") catch default 0
+                c.err(source.Span(s.DtorSp.Start + I32(at), s.DtorSp.Start + I32(at + 1)), msgs.EmptyDestructor())
+            }
             root = c.rootStmts(s.Dtor)
         }
         nomatch { root = typed.Block(typed.BlockId(0), Array<typed.Stmt&>(0)) }
@@ -4399,6 +4417,11 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
     kind := typed.LocalKind.Field if v.Field else typed.LocalKind.Var
     for i in range v.Names.Len() {
         nsp := v.NameSps[i]
+        if v.Field {
+            # C2a: a field named like a parameter is a pun, written bare
+            pid := c.localNamed(v.Names[i])
+            if pid >= 0 and c.cur().Locals[pid].Kind == typed.LocalKind.Param { c.err(nsp, msgs.FieldHasParamName(c.tok(v.Names[i]))) }
+        }
         t := declared
         x typed.Expr&c = null
         if i < v.Values.Len() {
@@ -5211,7 +5234,10 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     fr.InferResult = infer
     fr.InferErrors = inferErrs
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
-    for i in range n { c.param(ps[i].Name, ps[i].Sp, pts[i], i) }
+    for i in range n {
+        c.param(ps[i].Name, ps[i].Sp, pts[i], i)
+        if ps[i].Ty != null { c.paramWritten(ps[i], pts[i]) }
+    }
     c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
     root := c.rootStmts(f.Body)
     c.cur().Root = root
