@@ -3677,12 +3677,14 @@ in a `test` block is judged only in a test build (B3a), the only build that runs
 **S18d (asserts decided at the call).** A function's **leading asserts** - the `assert` statements its body begins
 with, before any other statement - are also evaluated at **every call** to it, with what that call knows of its
 arguments: the length of an array argument whose length is known (T7c), the value of an argument that can be evaluated
-at compile time (K1), and the fields of a struct argument that is a local of the caller built by a constructor call
-whose arguments can be evaluated, and that its function never assigns, nor any field of it, nor lends writably (E12a)
-nor captures. Anything else about an argument is **unknown**, and an assert that reads something unknown is undecided:
+at compile time (K1), and a field of a struct argument that is a local of the caller built by a constructor call,
+when the field is a bare pun of a constructor parameter (C4) whose argument can be evaluated, the caller's function
+never assigns the local or that field, nor captures the local, and every call it lends the local to writably (E12a)
+goes to a function whose body - and every body that one lends it on to - never assigns that field (read off the
+bodies, as O17 reads them). Anything else about an argument is **unknown**, and an assert that reads something unknown is undecided:
 nothing is reported, and it runs at run time as written. One decided false is a compile-time error at the call, with a
 note at the assert, carrying its message (S17) where that can be computed. A constructor's leading asserts are its
-body's, at each construction. This is a check only: the asserts still run in the function's body (unless S18c removes
+body's, at each construction - bare pun fields (C4) may come before them, since they only name parameters. This is a check only: the asserts still run in the function's body (unless S18c removes
 them there), and what it knows of a struct argument's fields is used for nothing else - no condition is decided by it
 (S8a, S8b). So with `type Ring<T> struct(cap I64) { assert cap > 0 and (cap & (cap - 1)) == 0 ... }`, `Ring<I32>(6)` is a
 compile-time error at the call, and a matrix product beginning `assert a.Cols == b.Rows` is one at a call whose

@@ -62,7 +62,7 @@ fn main() ? {
     w := dot(x, z)                            # dot at length 3
     r := Array<F32>(os.Args().Len())          # run-time length
     q := dot(r, r)                            # error: a run-time-length array by value; write '&' or 'r[0:3]'
-    v := dot(x, F32[1.0, 2.0])                # error: this assertion is false in dot at 3 and 2 (S18d)
+    v := dot(x, F32[1.0, 2.0])                # error at this call: dot's assert is false at 3 and 2 (S18c)
 }
 ```
 
@@ -213,8 +213,10 @@ Numbered for reference. Each is within QP1-QP4 and the principles, and is the sp
       mismatch is the caller's mistake;
     - beyond instances, at **every call**, the callee's **leading asserts** - the asserts that begin its body, before
       any other statement - are evaluated with what the call knows: the known lengths of its array arguments, the
-      values of constant arguments, and the fields of a struct argument that is a local built by a constructor from
-      constants and never assigned nor lent writably in its function. What is not known is unknown, and an assert that
+      values of constant arguments, and the fields of a struct argument that is a local built by a constructor, where
+      the field is a pun of a constructor parameter given a constant, never assigned in its function, and lent
+      writably only to callees whose bodies never assign that field (a fact read off the bodies, as O17's are) - so
+      `Gemm(c, a, false, b, false)` still knows `c.Rows`, though it writes `c`'s elements. What is not known is unknown, and an assert that
       reads it is undecided: nothing is reported, and the assert runs at run time as written. A false one is the same
       compile-time error at the call. This is diagnostic only: the run-time asserts are unchanged, and the knowledge of
       struct fields used here is used nowhere else (S8a and S8b do not see it, so it never turns a condition into dead
@@ -238,8 +240,9 @@ Numbered for reference. Each is within QP1-QP4 and the principles, and is the sp
 25. **`$`, `==`, `Hash`** do not change meaning: a fixed array renders, compares and hashes as any array. An array
     of arrays renders its element type without a length: `Array<I64>[I64[1, 2, 3], I64[4, 5, 6]]`.
 26. **§8.** Fixed storage lives where its local, global, field or element is (a local's frame, or its block's arena
-    above 64KB, T7c's rule kept); a by-value parameter's storage is the callee's own for every scope rule, whether the
-    implementation shares the caller's array (D9b) or copies it; a fixed result is built in place in the result scope.
+    above 64KB, the rule T7c had); a by-value parameter's storage is the callee's own for every scope rule - a copy for
+    an array parameter (D9a), the caller's array read in place only for a type variable bound to a run-time one (D9b);
+    a fixed result is built in place in the result scope.
     Nothing in §8 refers to a length.
 27. **§8.8.** An own array (`own mut Array<T>&`) is a reference, run-time length, unchanged. An inline array of owners
     is a field `kids := Array<own Node&>(4)` (every element null, T8's rule that an owner fill is an error). A
@@ -250,8 +253,8 @@ Numbered for reference. Each is within QP1-QP4 and the principles, and is the sp
     length (K2b writes `[N x T]` data); S18d needs a new evaluator mode in which an argument may be **partly known** -
     a length without its elements, a struct with some fields - and reading an unknown part makes the evaluation
     undecided (no error, left to run time). G23's constant variables and their values go.
-30. **What QP1's ":= keeps the fixed type" means now**: `:=` declares `Array<T>`, and the storage is fixed by item 8
-    - the same as a typed declaration. The phrase "a written target type wins" was about a written length, and there
+30. **What QP1's ":= keeps the fixed type" means now**: `:=` declares `Array<T>`, and the storage is fixed by item 8,
+    the same as for a typed declaration. The phrase "a written target type wins" was about a written length, and there
     is none.
 
 ## 4. Questions
@@ -295,8 +298,9 @@ written as a type; "ctor" `Array<T, N>()`; "view" `x as Array<T, N>&`; "const" a
 | `fuzz/repro/trygenericindex.olang` | 5 | 0 | 0 | 1 | a by-value parameter at two lengths |
 | `compiler/` (port, master) | 14 (msgs 5, generic 5, types 2, typed 1, ast 1) | 3 | 2 | 4 | §5.4 |
 | port worktrees | `wt-check` check.olang 3, typed 2; `wt-drv` build.olang 5 locals | - | - | - | the checker's G21/G24 code; `build.olang`'s hash state as locals `Array<U32>(64)` |
-| `bench/`, `tools/`, oann | 0 | 0 | 0 | 0 | nothing (oann to be grepped when its compiler moves) |
-| By-value aggregates over 128 bytes | 6 parameters, all `CgBig` (328 bytes) in `shared.olang` 10489-10522 | | | | the >128-byte memory-path test (cgfix) becomes a `checks/cases` program for D9c's error, and its run-time half takes `CgBig&` (the codegen path stays, for results and, if question 2 exempts them, bare type variables) |
+| `bench/`, `tools/` | 0 | 0 | 0 | 0 | nothing |
+| oann (`/home/user/oann`) | 9 in 5 files | 0 | 0 | 0 | inline fields (`kernels`, `sparse`, `quant` tiles, `agent`'s RNG state) as linalg's; `Generator() Array<U64>` and `SetGenerator(s Array<U64>)` as std/rand's - the same script, when oann's compiler moves |
+| By-value aggregates over 128 bytes | 6 parameters and a function type `fn(b CgBig) I64`, all `CgBig` (328 bytes) in `shared.olang` 10489-10522 | | | | the >128-byte memory-path test (cgfix) becomes a `checks/cases` program for D9c's error, and its run-time half takes `CgBig&` (the codegen path stays, for results and, if question 2 exempts them, bare type variables) |
 
 The last row is measured, not estimated: a copy of the compiler built in a scratch directory with one line printing
 every by-value parameter over 128 bytes it emits, run over std, the prelude's tests, worker, runner and shared. Nothing
@@ -318,9 +322,11 @@ What has to stay fast, and why it does:
 - **bench/README.md's numbers are the acceptance test**: single-threaded GEMM F32 57-78 GFLOPS and F64 25-33 (native,
   AVX-512), batched causal attention, the 784-128-10 training step 0.8-1.1 ms. Phase 2 checks that linalg's emitted IR
   is unchanged apart from names, and re-runs `bench/run.sh` for GEMM and the training step.
-- **What linalg gains**: `Gemm`, `Gemv`, `Ger` and the rest begin with asserts on shapes; S18d decides them at each
-  call whose matrices were built from constants in the caller, so a shape mismatch there is a compile-time error -
-  what `Matrix<T, R, C>` was meant to give, through inference. Small fixed vectors and transforms (a 4x4 `F64` is 128
+- **What linalg gains**: its operations check shapes with an assert (`assert productShape(c, a, transA, b,
+  transB)`); S18d decides a leading one at each call whose matrices were built from constants in the caller, so a
+  shape mismatch there is a compile-time error - what `Matrix<T, R, C>` was meant to give, through inference. For that
+  the assert has to be each public entry point's **first statement** (today the plain `Gemm` forwards to the
+  workspace's, whose first statement it is): the migration moves or repeats it there, one assert per call. Small fixed vectors and transforms (a 4x4 `F64` is 128
   bytes) can be taken by value and live in registers.
 
 ### 5.2 shared.olang's constant-generic section
