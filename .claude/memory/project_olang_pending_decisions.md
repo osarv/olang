@@ -303,6 +303,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   Decided (in the doc): make it visible, not analysed - no implicit Vec -> Array<T>& conversion; `v.View()` explicit
   ("a window on the current buffer, valid until v grows"); a view used after a growth of the same Vec in the same
   function is a compile error; no cross-call may-grow analysis (a documented hazard, memory-safe).
+  Then ("Why drop the cross call error check?" ... "Ye let's add it. Make this part of the comptime analysis"):
+  a narrow exact cross-call check - the same Vec seen on both sides of a call (its view plus v or a writable holder of
+  v; or v a mutable global the callee may grow, by name) - in the compile-time checks; reading taken: also the
+  compile-time evaluator and `interpret` report a stale view read exactly (they know each view's Vec), and
+  `-sanitize` poisons old buffers on growth. In the doc.
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
