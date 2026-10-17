@@ -116,6 +116,7 @@ fn (c mut Checker&) CheckProgram() {
         if c.P.FnIsExtern(f) or c.P.FnDecl(f).Body == null { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
+        if c.P.FnDecl(f).Recv != null { c.operatorMethod(f) }
         if c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
         c.fnBody(c.P.FnInstance(f, types.ListId(0)))
     }
@@ -126,6 +127,86 @@ fn (c mut Checker&) CheckProgram() {
     }
     c.drain()
 }
+
+# the operator methods by name (E31, E31a, E10a, E11c): their operands besides the receiver, whether they give a result,
+# may fail and must fail - the checked forms, which "try" calls
+type opShape struct(Name String&, Operands I64, Result Bool, MayFail Bool, MustFail Bool) {
+    Name
+    Operands
+    Result
+    MayFail
+    MustFail
+}
+
+OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, false, false), opShape("Minus", 1, true, false, false),
+    opShape("Mul", 1, true, false, false), opShape("Div", 1, true, false, false), opShape("Rem", 1, true, false, false),
+    opShape("MatMul", 1, true, false, false), opShape("Neg", 0, true, false, false), opShape("Less", 1, true, false, false),
+    opShape("At", 1, true, false, false), opShape("SetAt", 2, false, false, false), opShape("Slice", 2, true, false, false),
+    opShape("BitAnd", 1, true, false, false), opShape("BitOr", 1, true, false, false), opShape("BitXor", 1, true, false, false),
+    opShape("ShiftLeft", 1, true, false, false), opShape("ShiftRight", 1, true, false, false),
+    opShape("BitNot", 0, true, false, false), opShape("Inc", 0, true, false, false), opShape("Dec", 0, true, false, false),
+    opShape("Len", 0, true, false, false), opShape("Eq", 1, true, false, false), opShape("Str", 0, true, false, false),
+    opShape("TryPlus", 1, true, true, true), opShape("TryMinus", 1, true, true, true), opShape("TryMul", 1, true, true, true),
+    opShape("TryDiv", 1, true, true, true), opShape("TryRem", 1, true, true, true), opShape("TryMatMul", 1, true, true, true),
+    opShape("TryNeg", 0, true, true, true), opShape("TryAt", 1, true, true, true), opShape("TrySetAt", 2, false, true, true),
+    opShape("TrySlice", 2, true, true, true), opShape("TryShiftLeft", 1, true, true, true),
+    opShape("TryShiftRight", 1, true, true, true), opShape("TryInc", 0, true, true, true), opShape("TryDec", 0, true, true, true)]
+
+# a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
+# E10a, E11c); its private spelling is held to the same (M6b)
+fn (c mut Checker&) operatorMethod(f I64) {
+    fd := c.P.FnDecl(f)
+    name := c.text(fd.Name)
+    if name.Len() == 0 { return }
+    priv := name[0].IsLower()
+    cap := $name[0].ToUpper() $name[1:] if priv else name
+    k I64 = -1
+    for i in range OpShapes.Len() {
+        if OpShapes[i].Name == cap { k = i }
+    }
+    if k < 0 { return }
+    sh := OpShapes[k]
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    got := ps.Len() - 1
+    atLeast := cap == "At" or cap == "SetAt" or cap == "TryAt" or cap == "TrySetAt"
+    if not (got >= sh.Operands if atLeast else got == sh.Operands) { return }
+    mi := c.P.FnModule(f)
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    at := c.nameSpan(fd)
+    res := c.P.T.Result(sig)
+    nerr := c.P.T.Items(c.P.T.Errors(sig)).Len()
+    if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
+        c.err(at, msgs.OperatorResult(sh.Name))
+    } else if not sh.Result and res != types.VoidT {
+        c.err(at, msgs.SetatResult())
+    } else if nerr > 0 and not sh.MayFail {
+        hasTry := false
+        for o in OpShapes {
+            if o.Name == "Try" $sh.Name { hasTry = true }
+        }
+        if hasTry { c.err(at, msgs.OperatorFallible(sh.Name, sh.Name)) } else { c.err(at, msgs.MethodCannotFail(sh.Name)) }
+    } else if nerr == 0 and sh.MustFail {
+        c.err(at, msgs.TryFormMustFail(sh.Name))
+    } else if sh.Name == "Less" and res != types.BoolT {
+        c.err(at, msgs.LessNotBool())
+    } else if sh.Name == "Len" and res != c.i64() {
+        c.err(at, msgs.LenShape())
+    } else if sh.Name == "Eq" or sh.Name == "Str" {
+        writes := c.writable(ps[0])
+        if sh.Name == "Eq" {
+            writes = writes or c.writable(ps[1])
+            if res != types.BoolT or not c.P.T.Same(c.P.T.Plain(c.deref(ps[0])), c.P.T.Plain(c.deref(ps[1]))) { c.err(at, msgs.EqShape()) }
+        } else if not c.sameRepr(c.deref(res), c.textType()) {
+            c.err(at, msgs.StrShape())
+        }
+        if writes { c.err(at, msgs.EqStrWrites(sh.Name)) }
+    }
+    c.pop()
+}
+
+# whether a parameter's type lets the body write what it is given: a writable reference
+fn (c mut Checker&) writable(t types.TypeId) Bool { return c.isRef(t) and (c.P.T.PermOf(t) & types.Writable) != 0 }
 
 fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
     tests I64 = 0
