@@ -57,6 +57,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b)
     leaks List<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
     captures List<typed.Capture&>
+    Inst I64 = -1              # a destructor's: its instance parameter, whose fields it reads bare (C10)
     InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
     joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
     joinMarks List<I64>        # where each one's errors start in joinErrs
@@ -243,6 +244,7 @@ fn (c mut Checker&) check(id I64) {
         case typed.BodyOf.Fn(inst) { c.checkFn(id, inst) }
         case typed.BodyOf.Ctor(t, _) { c.checkCtor(id, t) }
         case typed.BodyOf.Global(mi, n) { c.checkGlobal(id, mi, n) }
+        case typed.BodyOf.Dtor(t) { c.checkDtor(id, t) }
         nomatch { }
     }
     c.state[id] = 2
@@ -317,12 +319,64 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId) {
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
-                if s.Dtor != null { c.gap(s.DtorSp, "a destructor's body (C9)") }
+                if s.Dtor != null {
+                    c.pop()
+                    c.dtorBody(t, mi)
+                    return
+                }
             }
             nomatch { c.gap(source.Span(0, 0), "a constructor of a declared number (T29d)") }
         }
     }
     c.pop()
+}
+
+# a type's destructor's body (C9), made once its constructor is checked: a function of "mut T&" in the scope closing
+fn (c mut Checker&) dtorBody(t types.TypeId, mi I64) I64 {
+    for i in range c.Bodies.Len() {
+        match c.Bodies[i].Of {
+            case typed.BodyOf.Dtor(u) {
+                if u == t { return i }
+            }
+            nomatch { }
+        }
+    }
+    ty := c.P.T.Func(c.P.T.List1(c.P.T.Ref(t, types.Writable)), types.VoidT, types.ListId(0),
+                     c.P.T.Scopes(types.RoleDtor, I64[types.OwnScope], Array<I64>(0)))
+    return c.newBody(typed.BodyOf.Dtor(t), ty, mi, source.Span(0, 0))
+}
+
+fn (c mut Checker&) checkDtor(id I64, t types.TypeId) {
+    d := c.P.T.DeclOf(t)
+    td := c.P.TypeDecl(d)
+    mi := c.P.T.DeclModule(d)
+    fr := c.push(id, mi, types.VoidT, types.ListId(0))
+    fr.Ctx = c.P.InstanceContext(t)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, source.Span(0, 0))
+    ps := c.P.T.Items(c.P.T.Params(c.cur().Ty))
+    inst := c.local(source.NameId(0), source.Span(0, 0), ps[0], typed.LocalKind.Param, typed.Mark.Bare)
+    c.cur().Params.Push(typed.LocalId(I32(inst)))
+    c.fr().Inst = inst
+    c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
+    root typed.Block&c = null
+    match td.Body {
+        case ast.TypeBody.Struct(s) {
+            c.cur().Sp = s.DtorSp
+            root = c.rootStmts(s.Dtor)
+        }
+        nomatch { root = typed.Block(typed.BlockId(0), Array<typed.Stmt&>(0)) }
+    }
+    c.cur().Root = root
+    c.pop()
+}
+
+# a field of a destructor's instance named bare (C10); null where n is none of them
+fn (c mut Checker&) instField(sp source.Span, n source.NameId) typed.Place&c {
+    inst := c.fr().Inst
+    if inst < 0 { return null }
+    it := c.localType(inst)
+    base := typed.Place.Deref(sp, c.P.T.Referent(it), c.readLocal(sp, inst))
+    return c.field(sp, sp, base, n)
 }
 
 fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
@@ -1356,6 +1410,10 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     ref := c.P.R.Use(c.fr().File, sp.Start)
     if ref.Kind == names.What.Local {
         id := c.localOrCapture(n, sp)
+        if id < 0 and c.fr().Inst >= 0 {
+            fp := c.instField(sp, n)
+            if fp != null { return c.read(sp, fp) }
+        }
         if id < 0 {
             c.gap(sp, "a local the checker has not bound")
             return c.unknown(sp)
@@ -2871,6 +2929,7 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
             ref := c.P.R.Use(c.fr().File, sp.Start)
             if ref.Kind == names.What.Local {
                 id := c.localOrCapture(n, sp)
+                if id < 0 and c.fr().Inst >= 0 { return c.instField(sp, n) }
                 if id < 0 { return null }
                 return typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id)))
             }
@@ -5073,4 +5132,19 @@ test "writes: an immutable global, a read-only reference, a value a call gave ba
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "T25b S6 E31 ", rootRules(l)
+}
+
+test "a destructor reads its fields bare (C9, C10)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n}\n"
+                       "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "E12 ", rootRules(l)
+    assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
 }
