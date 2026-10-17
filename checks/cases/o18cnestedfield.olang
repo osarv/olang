@@ -1,0 +1,26 @@
+# check: run
+# flags: -d -s
+# O18c/O17b (the second review of the view lend, F3): "h := ll[0][0].S; h.Push(x)" - the outer At's receiver is a
+# handle the inner call gave, lent as its reference, so the field read out of it is where the list's elements are
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn add(ll mut List<List<Blk>>&, x I64) {
+    h := ll[0][0].S
+    h.Push(x)
+}
+fn main() ? {
+    ll := List<List<Blk>>()
+    ll.Push(List<Blk>())
+    ll[0].Push(Blk())
+    add(ll, 7)
+    churn()
+    assert ll[0][0].S.Len() == 1 and ll[0][0].S[0] == 7, $ll[0][0].S
+}

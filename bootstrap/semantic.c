@@ -8894,8 +8894,21 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     return t;
 }
 
+//R9b/E31b: whether op, or a value it is a field or an inline element of - reached through no reference - carries catch
+//clauses: "(try a[i] catch default v).P" is a part of the element or of v, a value either way, so no place
+static bool triedUnderPath(struct operand* op) {
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (op->catchClauses.len) return true;
+        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return false;
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->type.structMAlloc) return false;
+        op = b;
+    }
+    return false;
+}
+
 bool OperandIsLvalue(struct operand* op) {
-    if (op->catchClauses.len) return false; //R9b: "try a[i] catch default 0" is a value - on failure there is no element
+    if (triedUnderPath(op)) return false; //R9b: "try a[i] catch default 0" is a value - on failure there is no element
     if (op->copiesOld) return false; //S4d: the place's old value, copied - a temporary
     //a function named as a value (or a lambda) is no storage of anyone's - it is built where it lands, like any
     //temporary (D16)
@@ -13776,7 +13789,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
     ListAdd(&op->args, &in);
     if (in->type.unknown) return op; //an unknown name, reported where it is written
     if (!OperandIsLvalue(in) || in->viaConversion) {
-        Err(tok, ERR_NOT_ASSIGNABLE);
+        Err(tok, triedUnderPath(in) ? ERR_ASSIGN_INTO_TRIED : ERR_NOT_ASSIGNABLE);
         return op;
     }
     if (!OperandIsNumeric(in)) Err(tok, ERR_INCDEC_NOT_NUMBER, tok, &in->type);
@@ -20863,6 +20876,7 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
 //reference (a write through one goes where it points, into no copy) - or NULL
 static struct operand* atWriteRoot(struct operand* op) {
     for (int guard = 0; op && guard < 64; guard++) {
+        if (op->catchClauses.len) return NULL; //R9b: a "try ... catch" value is no place to write back into
         if (op->opType == OPERATION_FUNCCALL && op->isAtCall) return op;
         if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return NULL;
         struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
@@ -21035,8 +21049,40 @@ static bool callBodyKnown(struct var* func) {
 //E31b: "try a[i] catch default v" (a field of one too) - the element when the check holds, v when it fails: no place, so
 //lent for a writable reference a write through it would be lost wherever it came from (R9b)
 static bool triedPlace(struct operand* op) {
-    if (!op->catchClauses.len || (op->opType != OPERATION_INDEX && op->opType != OPERATION_MEMBER)) return false;
-    for (int c = 0; c < op->catchClauses.len; c++) if (((struct catchClause*)ListGetIdx(&op->catchClauses, c))->dflt) return true;
+    //(a field or an inline element of one, reached through no reference, is a part of that value: "(try a[i] catch
+    //default v).P")
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (op->opType != OPERATION_INDEX && op->opType != OPERATION_MEMBER) return false;
+        for (int c = 0; c < op->catchClauses.len; c++)
+            if (((struct catchClause*)ListGetIdx(&op->catchClauses, c))->dflt) return true;
+        if (op->catchClauses.len || !op->args.len || op->isAtCall) return false;
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->type.structMAlloc) return false;
+        op = b;
+    }
+    return false;
+}
+
+//E28/S12b/E31b: whether a value a conditional or a match may choose is a place - a variable, a field or an element reached
+//through no reference, "x[i]" or a field of it - whose copy a call given the whole for a writable reference would write
+static bool condChoosesPlace(struct operand* op) {
+    if (heldResult(op)) return condChoosesPlace(heldResult(op));
+    //(...a field or an inline element of one too, reached through no reference: "(a if c else b).P")
+    if ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX) && op->args.len && !op->isAtCall) {
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        return !b->type.structMAlloc && condChoosesPlace(b);
+    }
+    struct list vs = ListInit(sizeof(struct operand*));
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        ListAdd(&vs, ListGetIdx(&op->args, 1));
+        ListAdd(&vs, ListGetIdx(&op->args, 2));
+    } else if (op->opType == OPERATION_MATCH) vs = SemanticMatchValues(op);
+    else return false;
+    for (int i = 0; i < vs.len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(&vs, i);
+        if (v->type.structMAlloc) continue;
+        if (OperandIsLvalue(v) || atWriteRoot(v) || derivedAtRead(v) || triedPlace(v) || condChoosesPlace(v)) return true;
+    }
     return false;
 }
 
@@ -21061,6 +21107,8 @@ static void atWriteBackArgs(struct checkCtx* ctx, struct var* func, struct list*
         bool atCopy = atWriteRoot(arg) != NULL;
         //"try a[i] catch default v" - an element, or v: a value whatever the collection, which a write would be lost in
         if (triedPlace(arg)) { Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL); continue; }
+        //...and so is "a if c else b", "match k { ... => l[0] ... }" choosing one (E28, S12b)
+        if (condChoosesPlace(arg)) { Err(arg->tok, ERR_COND_LENT_WRITABLE); continue; }
         if (OperandIsLvalue(arg) && !atCopy) continue;
         if (!bodyKnown) {
             if (atCopy || derivedAtRead(arg)) Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL);
@@ -21383,7 +21431,8 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     if (rhs->pendingLambda && !target->type.unknown) FinalizeLambda(rhs, &target->type);
     if (rhs->type.isTuple) Err(rhs->tok, ERR_TUPLE_NOT_A_VALUE);
     if (target->type.unknown) {} //an unknown name, reported where it is written
-    else if (!OperandIsLvalue(target) || target->viaConversion) Err(target->tok, ERR_NOT_ASSIGNABLE);
+    else if (!OperandIsLvalue(target) || target->viaConversion)
+        Err(target->tok, triedUnderPath(target) ? ERR_ASSIGN_INTO_TRIED : ERR_NOT_ASSIGNABLE);
     else if (!OperandIsMutableLvalue(target)) reportWriteBlocked(target->tok, target);
     //O13a/O25h: a value local written into (a field, an element) holds what it is given where its own references are -
     //which no binding its construction recorded says
@@ -25271,7 +25320,8 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct operand* t = NULL;
         if (!(destructTargetName(tn, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) {
             t = buildExprFromSyntax(ctx, tn);
-            if (!OperandIsLvalue(t) || t->viaConversion) Err(t->tok, ERR_NOT_ASSIGNABLE);
+            if (!OperandIsLvalue(t) || t->viaConversion)
+                Err(t->tok, triedUnderPath(t) ? ERR_ASSIGN_INTO_TRIED : ERR_NOT_ASSIGNABLE);
             else if (!OperandIsMutableLvalue(t)) reportWriteBlocked(t->tok, t);
         }
         ListAdd(&stmt.spawnTargets, &t);

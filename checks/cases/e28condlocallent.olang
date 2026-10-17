@@ -1,0 +1,27 @@
+# check: fail a conditional or a match gives a copy of the value it chooses
+# E28/S12b (C1): two locals chosen by a conditional, and by a match, for a writable reference parameter and a "mut"
+# receiver - each a copy the call would write and drop
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn (c mut Acc&) Bump() { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn show(c Acc&) I64 { return c.N }
+fn main() ? {
+    x := Acc()
+    y := Acc()
+    k := 3
+    (x if k > 0 else y).Bump()
+    (match k { case 3 => x
+               case _ => y }).Bump()
+    bumpPt((x if k > 0 else y).P)
+    l := List<Acc>()
+    l.Push(Acc())
+    (l[0] if k > 0 else x).Bump()
+    n := show(x if k > 0 else y) # read-only: a copy is fine
+    println("" $x.N $n)
+}

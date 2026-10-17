@@ -357,6 +357,7 @@ struct type;
     X(ERR_MEMBER_IS_PRIVATE,            "M6a",   "member '%S' of %t is private to its module") \
     /* ---- operators and literals ---- */ \
     X(ERR_NOT_ASSIGNABLE,               "S4",    "this cannot be written - a variable, an element or a member can") \
+    X(ERR_ASSIGN_INTO_TRIED,            "R9b",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store") \
     X(ERR_INCDEC_NOT_NUMBER,            "S3a",   "%n takes a number, found %t") \
     X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
@@ -433,6 +434,7 @@ struct type;
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
     X(ERR_WRITE_THROUGH_AT_NO_SETAT,    "E31",   "this writes through x[i] on %t, which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") \
     X(ERR_WRITE_THROUGH_AT_BUILDS,      "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')") \
+    X(ERR_COND_LENT_WRITABLE,           "E28",   "a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") \
     X(ERR_WRITE_THROUGH_AT_CALL,        "E31b",  "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") \
     X(ERR_DEFAULT_ARG_NOT_ALLOWED,      "E14a",  "'default' stands only for a parameter's declared default, in a call") \
     X(ERR_DEFER_ERROR_ESCAPES,          "S19b",  "an error may not leave deferred code - catch it here") \
