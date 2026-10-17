@@ -205,6 +205,18 @@ design. Do what you want") - nothing to decide until a GUI is written.
   contracts (requires/ensures), doc tests; declined async, exceptions, macros, |>, ?. chaining. Recommended top 3:
   generators, reflection, units. Ideas only - nothing built until the user picks. Written out one per section in
   docs/ideas.md (the user: "Record all the new languages so I can work through them one by one").
+- QY DECIDED 2026-10-17 (the user: "in general 'listing' is done with commas on the same line and newline marker on a
+  new line. This should go for struct members, error set members, function arguments. Return types and error types too.
+  Anywhere we list things. Literal lists too. Change error set unions in return types from '+' to normal listing rules
+  ... Migrate the corpus"). One listing rule everywhere a list appears - parameters, arguments, results, error sets,
+  error words, enum cases, constructor fields, type parameter/argument lists, array literals, catch items: items on one
+  line are separated by `,`, items on different lines by the line break. Details mine: a line break separates where it
+  would end a statement (L18's test), so a line ending in an operator continues the item; a comma directly before a line
+  break is an error (one way to write it; reverses L18a's trailing comma and T17/T19/C2's comma-is-an-error); `+` in
+  error sets and catch items is gone (`? IoError, ParseError`, `catch A, B.X`); in a function TYPE inside another list a
+  multi-item error set is parenthesized (`f fn(I64) ? (A, B)`); `x, y I64` (D12b several names, one declaration) is
+  unchanged. Core syntax: both compilers. Planned as a syntax batch after the errors batch, together with QW (moved out
+  of arrays phase 2); migration by an olang tool, then oann.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/

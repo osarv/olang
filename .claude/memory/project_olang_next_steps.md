@@ -49,6 +49,9 @@ overrated".
   wt-e31view round 4 (U1-U3; review if it relaxes) -> wt-pyport -> wt-errors (big; soundness review of its relaxations
   before merging) -> then arrays phase 2 (with QW) and the port's checker resumed (wt-check, after memfix). Each merge:
   full verify on the merged tip, one at a time.
+- QUEUED after wt-errors: a SYNTAX batch - QY (one listing rule: `,` on a line, a line break between lines, `+` gone from
+  error sets/catch) and QW (function type-parameter lists, the before/after examples from the 2026-10-17 talk) - then
+  arrays phase 2 (semantics only). Both compilers; migration tools in olang; oann after.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.
