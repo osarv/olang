@@ -57,6 +57,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   protocol). Details mine: std's misuse checks reuse BuiltinError's words (RemoveAt/Insert out of range and Pop/First/
   Last on an empty list OUT_OF_BOUNDS, a bad base INVALID); a "nothing there" failure that is no misuse (Map.Get's
   missing key, Find/IndexOf with no match, os.Env unset) gets an error declared beside its function, in its own file.
+- QO1 follow-up 2, ANSWERED ("I agree btw", read as the reply to my "Agree?"): BuiltinError keeps its four words and is
+  raised only by `try` on built-in operations (the line is "the compiler writes the check", not "hardware"); std never
+  raises BuiltinError - every std failure, misuse included (RemoveAt/Insert out of range, Pop on empty, a bad base),
+  has an error declared beside its function. Supersedes follow-up 1's reuse of BuiltinError's words.
+- QO6 (asked 2026-10-17): keep INVALID to IEEE's meaning - a shift amount out of range becomes OUT_OF_BOUNDS, a failed
+  `as` gets its own word (WRONG_CASE). Recommended yes. In effect: as today.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
