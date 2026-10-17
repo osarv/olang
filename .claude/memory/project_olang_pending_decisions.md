@@ -154,6 +154,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   passed, else failed; else the process) - reverses B5b; (3) a prelude result type `Never` (fn Exit(code I32) Never) -
   D10a counts a call to one as leaving, its body checked never to return (Zig noreturn, Rust !); (4) keep `unreachable`
   (the checker inserts and needs it). Asked: all four, or unreachable gone too. In effect: the four keywords stay.
+  REVISED after the user: "I think a test structure where every test is a rejection is both exhaustive and more
+  natural right? ... we pass the test when we don't fail any asserts". Counted: fail ~180 (125 `catch { fail }`, 51
+  `if c { fail }`), done ~20 (expected error, skips, done's own tests), abort 5. Proposed: (1) remove done/fail/abort;
+  (2) a test passes by reaching its end or `return` (S15's error reversed), fails on a failed assert, unreachable, `!`,
+  or an error leaving it (tests may `try` without catching); (3) programs: main normal 0, error 1, os.Exit(code) -
+  os.Exit stays process-wide (B5b kept); (4) keep unreachable; (5) Never result type for os.Exit (recommended). Early
+  exits from helpers (P1d unwinding tests) move to checks/ cases. ~200 sites, in the errors batch. Awaiting the user.
 - QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
   must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
   no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
