@@ -1668,7 +1668,8 @@ fn (p mut Parser&) caseBody() (Array<ast.Stmt&>&p, ast.Expr&p) ? Fail {
 
 # an alternative, read as an expression, as the pattern it is (DESIGN.md point 13): at the top a path, a case with its
 # payload, "_", or a value; in a payload position a name binds, "_" binds nothing, a call shape nests, a literal is a
-# value. A case whose payload holds anything else is a value compared by "==", as the expression it is
+# value, a dotted path a case named without its payload (S13: whatever it holds) or a value the checker compares. A
+# case whose payload holds anything else is a value compared by "==", as the expression it is
 fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
     match x {
         case ast.Expr.Name(sp, n) {
@@ -1676,7 +1677,7 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
             if top { return ast.Pattern.Path(sp, x) }
             return ast.Pattern.Bind(sp, n)
         }
-        case ast.Expr.Member(sp, _, _) { return ast.Pattern.Path(sp, x) if top else ast.Pattern.Value(sp, x) }
+        case ast.Expr.Member(sp, _, _) { return ast.Pattern.Path(sp, x) }
         case ast.Expr.Call(sp, f, args) {
             if isPath(f) {
                 from := p.pats.Len()
@@ -1688,10 +1689,6 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
                                 p.pats.Truncate(from)
                                 return ast.Pattern.Value(sp, x)
                             }
-                        }
-                        case ast.Pattern.Path(_, _) {
-                            p.pats.Truncate(from)
-                            return ast.Pattern.Value(sp, x)
                         }
                         nomatch { }
                     }

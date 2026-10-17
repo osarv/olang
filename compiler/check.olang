@@ -1270,7 +1270,7 @@ fn (c mut Checker&) flowsInto(a types.TypeId, b types.TypeId) Bool {
     if c.P.T.Same(a, b) { return true }
     if c.isOver(a) and c.flowsInto(c.P.T.Base(a), b) { return true }
     if c.P.T.KindOf(a) == types.Kind.Array and c.P.T.KindOf(b) == types.Kind.Array {
-        if c.P.T.Length(b) != types.TypeId(0) and c.P.T.Length(a) != c.P.T.Length(b) { return false }
+        if c.P.T.Length(b) != types.TypeId(0) and not c.lengthsMeet(a, b) { return false }
         return c.P.T.Same(c.P.T.Elem(a), c.P.T.Elem(b)) or c.flowsInto(c.P.T.Elem(a), c.P.T.Elem(b))
     }
     return false
@@ -1284,10 +1284,18 @@ fn (c mut Checker&) sameRepr(a types.TypeId, b types.TypeId) Bool {
     if c.P.T.Same(ua, ub) { return true }
     if c.P.T.IsNumber(ua) and c.P.T.IsNumber(ub) { return ua == ub }
     if c.P.T.KindOf(ua) == types.Kind.Array and c.P.T.KindOf(ub) == types.Kind.Array {
-        if c.P.T.Length(ub) != types.TypeId(0) and c.P.T.Length(ua) != c.P.T.Length(ub) { return false }
+        if c.P.T.Length(ub) != types.TypeId(0) and not c.lengthsMeet(ua, ub) { return false }
         return c.sameRepr(c.P.T.Elem(ua), c.P.T.Elem(ub))
     }
     return false
+}
+
+# whether two arrays' lengths agree: one length, or one a computed length not decided yet, which fits any (G21)
+fn (c mut Checker&) lengthsMeet(a types.TypeId, b types.TypeId) Bool {
+    la := c.P.T.Length(a)
+    lb := c.P.T.Length(b)
+    if la == lb { return true }
+    return c.P.T.KindOf(la) == types.Kind.ConstExpr or c.P.T.KindOf(lb) == types.Kind.ConstExpr
 }
 
 # an expression checked and made to fit a type: a literal adapting to it (T6), the rest by fit
@@ -1994,7 +2002,14 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
         return c.lit(sp, types.BoolT, 0)
     }
     yy := y
-    if not (c.isRef(typeOf(y)) and c.P.T.Same(c.deref(typeOf(y)), c.deref(typeOf(x)))) { yy = c.fit(y, typeOf(x), b.Span()) }
+    dx := c.deref(typeOf(x))
+    dy := c.deref(typeOf(y))
+    if c.isRef(typeOf(y)) and not c.P.T.Same(dy, dx) and c.flowsInto(dx, dy) {
+        # E10c: an Array<T, N>& and an Array<T>& meet at the run-time length, as '==' meets them
+        x = c.fit(x, c.P.T.Ref(dy, types.ReadOnly), a.Span())
+    } else if not (c.isRef(typeOf(y)) and c.P.T.Same(dy, dx)) {
+        yy = c.fit(y, typeOf(x), b.Span())
+    }
     r := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, yy)
     return c.negate(sp, r) if negated else r
 }
@@ -2316,10 +2331,6 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
         case ast.Expr.Name(nsp, n) {
             ref := c.P.R.Use(c.fr().File, nsp.Start)
             if ref.Kind == names.What.Func { return c.invoke(sp, nsp, c.P.FnNamed(ref.Module, n), null, args, null) }
-            if ref.Kind == names.What.PreludeFn {
-                mi := c.P.ModuleIndex("std/prelude/print")
-                return c.invoke(sp, nsp, c.P.FnNamed(mi, n) if mi >= 0 else -1, null, args, null)
-            }
             if ref.Kind == names.What.Builtin { return c.conversion(sp, c.builtinType(n), args) }
             if ref.Kind == names.What.Type {
                 t := c.typeNamed(f)
@@ -4334,6 +4345,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     }
     atm := c.roleMethod(dt, "At", 1)
     lm := c.roleMethod(dt, "Len", 0)
+    if f.Tried and c.roleMethod(dt, "TryAt", 1) >= 0 { atm = c.roleMethod(dt, "TryAt", 1) }
     if atm >= 0 and lm >= 0 {
         c.walkIndexed(sp, f, src, atm, lm, cm, ce)
         return null
@@ -4683,9 +4695,12 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
     c.fr().exits.Push(id)
+    # under try (S9e) the element is read by TryAt where declared - walk chose it - else At, checked against Len
+    if f.Tried { c.fr().Tries++ }
     n := c.invoke(sp, sp, lm, c.readLocal(sp, coll), null, Array<typed.Expr&>(0))
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), n), id))
     e := c.invoke(sp, sp, atm, c.readLocal(sp, coll), null, c.one(c.readLocal(sp, k)))
+    if f.Tried { c.fr().Tries-- }
     c.elementLocals(sp, f, k, e)
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
@@ -4961,9 +4976,12 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
         c.gap(m.Sp, "a match on a type not bound here (G26)")
         return -2
     }
+    isConst := c.P.T.KindOf(st) == types.Kind.Const
     for i in range m.Cases.Len() {
         for tr in m.Cases[i].Types {
-            if c.P.T.Same(c.resolve(tr), st) { return i }
+            # a constant variable's cases are constants of its type, a type variable's types
+            ct := c.P.ConstArg(c.fr().Ctx, tr, c.P.T.ConstType(st)) if isConst else c.resolve(tr)
+            if c.P.T.Same(ct, st) { return i }
         }
     }
     return -1

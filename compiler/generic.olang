@@ -516,6 +516,9 @@ fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) type
     }
 }
 
+# a written constant argument of type want, as a case of "match N" reads one (G26): constArg's
+fn (p mut Program&) ConstArg(c Context&, t ast.TypeRef&, want types.TypeId) types.TypeId { return p.constArg(c, t, want) }
+
 # the constant no fold reaches: a pattern of its own, which never folds
 fn (p mut Program&) UnknownConst() types.TypeId { return p.T.ConstExpr("?") }
 # an expression folded as a constant argument of type want is (G21): a Const where it folds, a pattern where it reads a
@@ -613,6 +616,7 @@ fn (p mut Program&) foldPath(c Context&, sp source.Span, path Array<source.NameI
     mi := c.Mi
     if path.Len() > 1 {
         ref := p.R.Use(p.file(c.Mi), sp.Start)
+        if ref.Kind == names.What.Type and path.Len() == 2 { return p.foldCase(c, sp, path) }
         if ref.Kind != names.What.Import { return unfolded() }
         mi = ref.Module
         for k in range 1, path.Len() - 1 {
@@ -621,6 +625,27 @@ fn (p mut Program&) foldPath(c Context&, sp source.Span, path Array<source.NameI
         }
     }
     return p.foldGlobal(mi, path[path.Len() - 1])
+}
+
+# an enum's case written as a constant (G20: an enum's case is a constant argument): its tag, of the enum's type
+fn (p mut Program&) foldCase(c Context&, sp source.Span, path Array<source.NameId>&) folded {
+    return p.caseConst(p.R.Use(p.file(c.Mi), sp.Start), path[1])
+}
+
+# the case n of the enum a reference names, as a constant: its tag, of the enum's type
+fn (p mut Program&) caseConst(ref names.Ref, n source.NameId) folded {
+    if ref.Kind != names.What.Type or ref.Index < 0 { return unfolded() }
+    td := p.R.Tables[ref.Module].Entries[ref.Index].Decl
+    if td == null or td.Body == null { return unfolded() }
+    match td.Body {
+        case ast.TypeBody.Enum(cases) {
+            for i in range cases.Len() {
+                if cases[i].Name == n { return folded(Folded, i, p.T.Named(p.DeclFor(ref.Module, ref.Index), types.ListId(0))) }
+            }
+        }
+        nomatch { }
+    }
+    return unfolded()
 }
 
 fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
@@ -671,20 +696,7 @@ fn mutableGlobal(v ast.VarDecl&) Bool {
 # an enum's case as a constant (G20): its ordinal, typed by its enum
 fn (p mut Program&) evalMember(c Context&, x ast.Expr&, n source.NameId) folded {
     match x {
-        case ast.Expr.Name(sp, _) {
-            ref := p.R.Use(p.file(c.Mi), sp.Start)
-            if ref.Kind != names.What.Type or ref.Index < 0 { return unfolded() }
-            td := p.R.Tables[ref.Module].Entries[ref.Index].Decl
-            if td == null or td.Body == null { return unfolded() }
-            match td.Body {
-                case ast.TypeBody.Enum(cases) {
-                    for i in range cases.Len() {
-                        if cases[i].Name == n { return folded(Folded, i, p.T.Named(p.DeclFor(ref.Module, ref.Index), types.ListId(0))) }
-                    }
-                }
-                nomatch { }
-            }
-        }
+        case ast.Expr.Name(sp, _) { return p.caseConst(p.R.Use(p.file(c.Mi), sp.Start), n) }
         nomatch { }
     }
     return unfolded()
