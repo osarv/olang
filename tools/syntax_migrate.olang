@@ -387,7 +387,10 @@ fn (g migration&) typeVarOpens(i I64) Bool {
     if i > 0 {
         p := g.v[i - 1]
         adjacentName := p.end == g.v[i].start and (p.k == token.Tok.Iden or p.k == token.Tok.Gt)
-        if adjacentName { return false }
+        # "(a<T>, b T)": a parameter's name - lowercase, after "(" or "," - and its type written against it
+        paramName := p.k == token.Tok.Iden and i > 1 and g.src[p.start].IsLower()
+        if paramName { paramName = g.v[i - 2].k == token.Tok.LParen or g.v[i - 2].k == token.Tok.Comma }
+        if adjacentName and not paramName { return false }
     }
     return true
 }
@@ -800,6 +803,8 @@ test "error sets and catch items take commas" {
 
 test "a function's type variables are listed after its name" {
     assert run("fn max(a <T>, b T) T { return a }\n", false) == "fn max<T>(a T, b T) T { return a }\n"
+    assert run("fn max(a<T>, b T) T { return a }\n", false) == "fn max<T>(a T, b T) T { return a }\n"
+    assert run("g fn(List<T>) I64 = h\n", false) == "g fn(List<T>) I64 = h\n"
     assert run("fn (l List<<T>>&) Push(x T) { }\n", false) == "fn (l List<T>&) Push(x T) { }\n"
     want := "fn (l List<T>&) Map<U>(f fn(x T) U) List<U>& { }\n"
     assert run("fn (l List<<T>>&) Map(f fn(x T) <U>) List<U>& { }\n", false) == want

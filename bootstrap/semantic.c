@@ -2596,10 +2596,49 @@ static void collectTypeVarToks(struct syntax* node, struct list* out) {
 //outside a signature
 static struct list* currentSigIntros; //struct token
 
+//QW: the list item that introduced a variable (its SNTX_TYPE_VAR node, which holds its constraint), by the text pointer
+//of the token introducing it - NULL for one a receiver introduced. A table every signature adds to; nothing is removed
+static char** introKeys;
+static struct syntax** introNodes;
+static int introCap, introLen;
+static unsigned introSlot(char* key) { return (unsigned)(((size_t)key >> 3) * 2654435761u) & (unsigned)(introCap - 1); }
+static void introNodeAdd(struct token t, struct syntax* node) {
+    if (2 * (introLen + 1) > introCap) {
+        int cap = introCap ? 2 * introCap : 1024;
+        char** keys = introKeys;
+        struct syntax** nodes = introNodes;
+        int old = introCap;
+        introKeys = MallocOrCrash((size_t)cap * sizeof(char*));
+        introNodes = MallocOrCrash((size_t)cap * sizeof(struct syntax*));
+        memset(introKeys, 0, (size_t)cap * sizeof(char*));
+        memset(introNodes, 0, (size_t)cap * sizeof(struct syntax*));
+        introCap = cap;
+        introLen = 0;
+        for (int i = 0; i < old; i++) if (keys[i]) introNodeAdd((struct token){.str = {keys[i], 1}}, nodes[i]);
+        free(keys);
+        free(nodes);
+    }
+    unsigned i = introSlot(t.str.ptr);
+    while (introKeys[i] && introKeys[i] != t.str.ptr) i = (i + 1) & (unsigned)(introCap - 1);
+    if (!introKeys[i]) introLen++;
+    introKeys[i] = t.str.ptr;
+    introNodes[i] = node;
+}
+static struct syntax* introNodeOf(struct token t) {
+    if (!introCap) return NULL;
+    unsigned i = introSlot(t.str.ptr);
+    while (introKeys[i]) {
+        if (introKeys[i] == t.str.ptr) return introNodes[i];
+        i = (i + 1) & (unsigned)(introCap - 1);
+    }
+    return NULL;
+}
+
 static void collectSigIntros(struct syntax* node, struct list* out) {
     if (!node) return;
     if (node->type == SNTX_TYPE_VAR || node->type == SNTX_CONST_VAR) {
         struct token t = firstTokOfType(node, TOK_IDEN);
+        if (t.type != TOK_NONE) introNodeAdd(t, node);
         if (t.type != TOK_NONE) {
             bool seen = false;
             for (int i = 0; i < out->len && !seen; i++) {
@@ -2619,6 +2658,16 @@ static void collectSigIntros(struct syntax* node, struct list* out) {
         if (!p->isToken) collectSigIntros(p->sntx, out);
     }
 }
+static bool strListHas(struct list* l, struct str n);
+//QW: the constraint (or a constant's type) the list item introducing name wrote, else NULL
+static struct token* sigIntroOf(struct str name);
+static struct syntax* introConstraintOf(struct str name) {
+    struct token* t = sigIntroOf(name);
+    struct syntax* n = t ? introNodeOf(*t) : NULL;
+    return n ? firstPartOfType(n, SNTX_TYPE_EXPR) : NULL;
+}
+static struct list constraintsResolving; //struct str: the variables whose constraint is being resolved (T Ord<T>)
+
 static struct token* sigIntroOf(struct str name) {
     for (int i = 0; currentSigIntros && i < currentSigIntros->len; i++) {
         struct token* t = ListGetIdx(currentSigIntros, i);
@@ -2672,8 +2721,8 @@ static void writtenAgainIn(struct syntax* node, struct list* names, struct list*
 static int bareVarAt(struct str name, struct token at) {
     if (currentBindings && bindingGet(currentBindings, name)) return 1;
     if (currentConstVars && bindingGet(currentConstVars, name)) return 1;
-    struct token* intro = sigIntroOf(name);
-    if (intro) return intro->str.ptr < at.str.ptr ? 1 : -1;
+    (void)at;
+    if (sigIntroOf(name)) return 1; //QW: a list (or a receiver) introduces its variables for the whole signature
     //a type's own list, or an enclosing declaration's, introduced its type variables before anything they are read in
     for (int i = 0; currentTypeParamNames && i < currentTypeParamNames->len; i++)
         if (StrCmp(*(struct str*)ListGetIdx(currentTypeParamNames, i), name)) return 1;
@@ -4184,8 +4233,9 @@ static struct type resolveConstArg(struct semaModule* mod, struct syntax* node, 
         struct token nameTok = written ? firstTokOfType(whole, TOK_IDEN) : bareTok;
         struct str vname = strFromTok(nameTok);
         if (written && varWrittenAgain(nameTok)) reportWrittenAgain(nameTok, true);
-        //"<N I64>": a constant variable's type written where it is introduced - the parameter's type, or none at all
-        struct syntax* typeNode = written ? firstPartOfType(whole, SNTX_TYPE_EXPR) : NULL;
+        //"N I64": a constant variable's type written where it is introduced (QW: in its list) - the parameter's type, or
+        //none at all
+        struct syntax* typeNode = written ? firstPartOfType(whole, SNTX_TYPE_EXPR) : introConstraintOf(vname);
         if (typeNode) {
             struct type wt = resolveTypeExpr(mod, typeNode, NULL);
             if (wt.bType == BASETYPE_INTERFACE) { Err(nameTok, ERR_CONST_VAR_CONSTRAINED, vname); return bad; }
@@ -4492,7 +4542,17 @@ struct type resolveTypeRefBase(struct semaModule* mod, struct syntax* refNode, s
                 return unknownTypeStandIn();
             }
             if (bv < 0) { reportBeforeIntro(nameTok, false); return unknownTypeStandIn(); }
-            return bound ? *bound : TypeVar(name, nameTok);
+            if (bound) return *bound;
+            struct type tv = TypeVar(name, nameTok);
+            //QW: the variable carries the constraint its list item wrote (G19) - "fn (it mut I&) Count<I Iterator<T>, T>"
+            struct syntax* cNode = introConstraintOf(name);
+            if (!constraintsResolving.elemSize) constraintsResolving = ListInit(sizeof(struct str));
+            if (cNode && !strListHas(&constraintsResolving, name)) {
+                ListAdd(&constraintsResolving, &name);
+                tv.varConstraint = resolveConstraint(mod, cNode, scopeParams);
+                constraintsResolving.len--;
+            }
+            return tv;
         }
         found = typeNamed(mod, name);
         if (!found && StrCmp(name, StrFromCStr("Array"))) {
@@ -5022,7 +5082,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
     struct list ctorVarNames = ListInit(sizeof(struct str));
     struct list* prevIntros = currentSigIntros;
     struct list* prevTPN = currentTypeParamNames;
-    if (!currentBindings) collectSigIntros(paramListNode, &ctorIntros); //a generic type's: where an error points
+    if (!currentBindings) collectSigIntros(firstPartOfType(ctorNode, SNTX_FN_TYPE_PARAMS), &ctorIntros); //QW: "struct<T>(" 
     if (t->typeParams.len == 0 && !currentBindings && !currentSigIntros) {
         for (int i = 0; i < ctorIntros.len; i++) ListAdd(&ctorVarNames, &((struct token*)ListGetIdx(&ctorIntros, i))->str);
         if (ctorIntros.len) {
@@ -5591,6 +5651,29 @@ static void checkSigConstVars(struct semaModule* mod, struct type* ft, struct li
     }
 }
 
+//QW: the variables a receiver's type introduces - every single name written as one of its type arguments, at any depth,
+//that names no type and no variable already in names - added to names and their tokens to toks
+static void collectReceiverVars(struct semaModule* mod, struct syntax* n, bool inArgs, struct list* names, struct list* toks) {
+    if (!n) return;
+    if (inArgs && n->type == SNTX_TYPE_REF) {
+        struct syntax* name = firstPartOfType(n, SNTX_NAME);
+        if (name && name->parts.len == 1 && !firstPartOfType(n, SNTX_TYPE_ARGS)) {
+            struct token t = partAt(name, 0)->tok;
+            struct str v = strFromTok(t);
+            if (!nameIsAType(mod, v) && !strListHas(names, v)) {
+                ListAdd(names, &v);
+                ListAdd(toks, &t);
+            }
+            return;
+        }
+    }
+    for (int i = 0; i < n->parts.len; i++) {
+        if (partAt(n, i)->isToken) continue;
+        struct syntax* c = partSntx(n, i);
+        collectReceiverVars(mod, c, inArgs || n->type == SNTX_TYPE_ARGS, names, toks);
+    }
+}
+
 struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct type t = (struct type){0};
     t.bType = BASETYPE_FUNC;
@@ -5605,6 +5688,14 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct list* prevTPN = currentTypeParamNames;
     struct list sigTypeVars = ListInit(sizeof(struct str));
     collectTypeVarNames(sigNode, &sigTypeVars);
+    //QW: a method's receiver introduces its type's variables - a name no type has, written as an argument of the
+    //receiver's type ("fn (l List<T>&) Push(x T)") - unless the list introduces it (with a constraint, say)
+    struct list recvIntros = ListInit(sizeof(struct token));
+    if (ownSigReceiver && !currentBindings && !currentSigIntros) {
+        struct syntax* plist = firstPartOfType(sigNode, SNTX_PARAM_LIST);
+        struct syntax* recv = plist ? firstPartOfType(plist, SNTX_PARAM) : NULL;
+        collectReceiverVars(mod, recv ? firstPartOfType(recv, SNTX_TYPE_EXPR) : NULL, false, &sigTypeVars, &recvIntros);
+    }
     //G1: a variable named after a type is reported once, where it is first written, and is no variable of this
     //signature - a bare "I32" elsewhere in it stays the type
     struct list varToks = ListInit(sizeof(struct token));
@@ -5632,6 +5723,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     struct list sigIntros = ListInit(sizeof(struct token));
     if (!currentSigIntros && !currentBindings) {
         collectSigIntros(sigNode, &sigIntros);
+        ListAddList(&sigIntros, recvIntros);
         //a trait's method signature introduces none of the trait's own variables - its list did (G8b)
         for (int i = sigIntros.len - 1; prevTPN && i >= 0; i--)
             if (strListHas(prevTPN, strFromTok(*(struct token*)ListGetIdx(&sigIntros, i)))) ListRemoveIdx(&sigIntros, i);

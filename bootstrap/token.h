@@ -128,6 +128,8 @@ bool TokenIfBeginsLine(TokenCtx tc, struct token t);
 bool isLetter(char c);
 bool isDigit(char c);
 struct token TokenFeed(TokenCtx tc);
+bool TokenSkipEnds(TokenCtx tc, bool skip); //L18a: sets whether TokenFeed passes over statement ends; returns what it was
+bool TokenSkippingEnds(TokenCtx tc);
 bool TokenSplitShiftRight(TokenCtx tc);
 bool TokenSplitShiftLeft(TokenCtx tc);
 int TokenEditMark(TokenCtx tc);

@@ -68,6 +68,7 @@ struct type;
     X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
     /* ---- characters and tokens ---- */ \
     X(ERR_UNKNOWN_CHAR,                 "L16",   "unexpected character '%c'") \
+    X(ERR_COMMA_ENDS_LINE,              "L18a",  "a comma never ends a line - items on different lines are separated by the line break; remove it") \
     X(ERR_SEMICOLON,                    "L18",   "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") \
     X(ERR_NON_ASCII,                    "L1",    "non-ASCII byte '%c' - olang source is ASCII") \
     X(ERR_CARRIAGE_RETURN,              "L3",    "carriage return - save the file with LF line endings") \
@@ -91,12 +92,11 @@ struct type;
     X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
     X(ERR_BLOCK_NOT_CLOSED,             "",      "the block opened on line %d has no '}' - found %n") \
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
-    X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
     X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \
     X(ERR_KEYWORD_FIELD_READ,           "L9a",   "%n is a keyword, not a name - a field named by one is reached only after '.', never by the name alone") \
     X(ERR_DESTRUCT_IN_BODY,             "C7",    "'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'") \
     X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
-    X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
+    X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n separates nothing - remove it") \
     X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
     X(ERR_ERROR_AFTER_QUESTION,         "R1a",   "'?' alone is what the body can fail with - write '?', or name the types: '? IoError'") \
     X(ERR_VALUE_AFTER_EQ,               "D12",   "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \

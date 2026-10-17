@@ -9,7 +9,8 @@ enum syntaxType {
     SNTX_TOP_DECL,
     SNTX_IMPORT,
     SNTX_NAME,
-    SNTX_TYPE_VAR,        //"<T>" standing where a whole type-expr would go - a generic type variable
+    SNTX_TYPE_VAR,        //QW: one item of a type parameter list - "T", "T Shape", "N I64" - introducing a variable
+    SNTX_FN_TYPE_PARAMS,  //QW: "<T, U Shape>" after a function's name or a constructor's "struct" (G3, G10d)
                            //(§12.1 G1). Distinct from SNTX_TYPE_ARGS by position: a type-var opens a type
                            //expression, type-args always follow a name
     SNTX_TYPE_CONSTRAINT, //G19: the constraint after a declared type parameter, applying to the item before it
