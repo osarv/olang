@@ -766,8 +766,10 @@ fn LinkFailed(text String&) Msg { return Msg(Diag.LinkFailed, "", "linking " $te
 # ERR_UNKNOWN_CHAR
 fn UnknownChar(ch Char) Msg { return Msg(Diag.UnknownChar, "L16", "unexpected character '" $Esc(ch) "'") }
 
-# ERR_SEMICOLON
+# ERR_COMMA_ENDS_LINE
 fn CommaEndsLine() Msg { return Msg(Diag.CommaEndsLine, "L18a", "a comma never ends a line - items on different lines are separated by the line break; remove it") }
+
+# ERR_SEMICOLON
 fn Semicolon() Msg { return Msg(Diag.Semicolon, "L18", "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") }
 
 # ERR_NON_ASCII
@@ -832,8 +834,6 @@ fn BlockNotClosed(n I64, tok String&) Msg { return Msg(Diag.BlockNotClosed, "", 
 
 # ERR_NESTING
 fn Nesting(n I64) Msg { return Msg(Diag.Nesting, "L21", "nested more than " $n " levels deep - split it into locals or functions") }
-
-# ERR_SEPARATOR_COMMA
 
 # ERR_KEYWORD_AS_NAME
 fn KeywordAsName(tok String&) Msg { return Msg(Diag.KeywordAsName, "L9", $tok " is a keyword, not a name - choose another") }
@@ -1087,10 +1087,6 @@ fn AsArrayShape(ty1 String&, ty2 String&) Msg { return Msg(Diag.AsArrayShape, "E
 # ERR_AS_ARRAY_LENGTH
 fn AsArrayLength(n1 I64, n2 I64) Msg { return Msg(Diag.AsArrayLength, "E32b", "this array's length is " $n1 ", not " $n2) }
 
-# ERR_VAR_WRITTEN_AGAIN
-
-# ERR_VAR_BEFORE_INTRO
-
 # ERR_CONST_VAR_SHADOWED
 fn ConstVarShadowed(tok String&) Msg { return Msg(Diag.ConstVarShadowed, "G22, D3a", $tok " is a constant variable of this declaration - a name means one thing, so name this apart") }
 
@@ -1117,10 +1113,6 @@ fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Dia
 
 # ERR_CONSTRAINT_NOT_TRAIT
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G19", $ty " is not a trait, so it cannot constrain a type variable") }
-
-# ERR_TYPE_VAR_WRITTEN_AGAIN
-
-# ERR_TYPE_VAR_BEFORE_INTRO
 
 # ERR_TYPE_ARG_NAMED_SCOPE
 fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") }
@@ -1733,8 +1725,6 @@ fn NoteLiteralRange(text1 String&, ty1 String&, ty2 String&, text2 String&, ty3 
 
 # NOTE_LITERAL_RANGE_EXPR
 fn NoteLiteralRangeExpr(text String&, ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.NoteLiteralRangeExpr, "", "the range's literals make '" $text "' " $ty1 " - convert its end, '" $ty2 "(...)', for " $ty3 " values") }
-
-# NOTE_INTRODUCED_HERE
 
 # ERR_STR_OF_NOTHING
 fn StrOfNothing() Msg { return Msg(Diag.StrOfNothing, "E11a", "'$' has nothing to render - this call returns no value") }

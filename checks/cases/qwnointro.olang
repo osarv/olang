@@ -1,5 +1,5 @@
 # check: fail error: expected a name, found '<'
 # QW: a function's type variables are introduced by its list after its name ("fn pick<T>(a T, b T) T"); "<T>" in a
 # signature is no type
-fn pick<T>(a T, b T) T { return a }
+fn pick(a <T>, b T) T { return a }
 fn main() ? { }

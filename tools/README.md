@@ -35,7 +35,9 @@ tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. 
 - `syntax_migrate` works on the tokens alone (the port's scanner); it is idempotent and prints what it changed. Give
   `--old` for a tree written wholly in the old syntax (a branch, oann): a line ending in a `-` that may be unary is then
   read as an operator to move up, which an already migrated file cannot tell. Programs written inside strings (tests,
-  generators) are not migrated - search them for `<T>`, `<<` and `+` in error sets by hand.
+  generators) are not migrated - search them for `<T>`, `<<` and `+` in error sets by hand. Two checks cases are written
+  in the old syntax on purpose (`checks/cases/commaendsline.olang`, `qwnointro.olang`): leave `checks/cases` out of a
+  run on this repository, or restore them after it.
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and

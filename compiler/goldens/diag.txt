@@ -504,7 +504,10 @@ cascadetryat.olang:10:13: error[E31a]: CheckedAt is a checked form, which only a
       |             ^~~~~~~~~
 compilation failed with 1 error
 === commaendsline.olang
-built ./build/commaendsline
+commaendsline.olang:5:17: error[L18a]: a comma never ends a line - items on different lines are separated by the line break; remove it
+    5 |     assert add(1,
+      |                 ^
+compilation failed with 1 error
 === compoundnarrow.olang
 compoundnarrow.olang:7:7: error[T6b]: I32 does not flow into U8 - convert it, as U8(x)
     7 |     b += x
@@ -4299,7 +4302,10 @@ qerror.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write 
       |            ^~~~~
 compilation failed with 1 error
 === qwnointro.olang
-built ./build/qwnointro
+qwnointro.olang:4:11: error: expected a name, found '<'
+    4 | fn pick(a <T>, b T) T { return a }
+      |           ^
+compilation failed with 1 error
 === r11clausevalue.olang
 r11clausevalue.olang:18:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
    18 |         -1
