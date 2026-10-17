@@ -10,7 +10,7 @@ for f in $W/checks/cases/*.olang; do
   name=$(basename $f); base=${name%.olang}
   flags=$(grep -m1 "^# flags: " $f | sed 's/^# flags: //')
   cp $f $d/
-  ( cd $d && ASAN_OPTIONS=detect_leaks=0:handle_segv=0:log_path=/tmp/claude-0/sweep/logs/$base.asan OLANG_NOFORK=1 \
+  ( cd $d && ASAN_OPTIONS=detect_leaks=0:handle_segv=0:use_sigaltstack=0:log_path=/tmp/claude-0/sweep/logs/$base.asan OLANG_NOFORK=1 \
     timeout 900 nice -n 19 $A -b $flags $name > /tmp/claude-0/sweep/logs/$base.out 2>&1 )
   echo "$base $?" >> /tmp/claude-0/sweep/done$s.txt
 done
