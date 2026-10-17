@@ -3643,9 +3643,12 @@ o41call.olang:16:28: note: 'drop' releases here
       |                            ^~~
 compilation failed with 1 error
 === o41clause.olang
-o41clause.olang:18:24: error: expected end of line, found 'catch'
-   18 |         spawn fails(s) catch { try look(s.cur) }
-      |                        ^~~~~
+o41clause.olang:19:11: error[O41]: assigning 's.cur' may release the Node the task spawned on line 18 may be using until the join - release it after the join
+   19 |         s.cur = null
+      |           ^~~
+o41clause.olang:13:30: note: the task borrows it here
+   13 | fn fails(h Holder&) ? { if h.cur == null { error } }
+      |                              ^~~
 compilation failed with 1 error
 === o41defer.olang
 o41defer.olang:17:19: error[O41]: assigning 's.cur' may release the Node the task spawned on line 18 may be using until the join - release it after the join
@@ -6759,9 +6762,15 @@ vec59regionscopearg.olang:23:20: note: used here, after it
       |                    ^
 compilation failed with 1 error
 === vec60regionmethod.olang
-vec60regionmethod.olang:25:6: error: expected end of line, found '.'
-   25 |     c.try Rebuild(5)
-      |      ^
+vec60regionmethod.olang:19:7: error[O39]: assigning 'c.text' may release the String borrowed on line 18, which is used after it
+   19 |     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+vec60regionmethod.olang:18:5: note: borrowed here
+   18 |     d mut String&x = $n "-new-text-in-the-field-region"
+      |     ^
+vec60regionmethod.olang:21:20: note: used here, after it
+   21 |     try io.Println(d)
+      |                    ^
 compilation failed with 1 error
 === vec61regionlist.olang
 vec61regionlist.olang:21:7: error[O39]: assigning 'c.items' may release the List<String&> borrowed on line 19, which is used after it
