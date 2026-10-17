@@ -2681,7 +2681,8 @@ length `hi - lo`, and writing through it writes `base`. Slicing a local borrows 
 
 Slicing a value with no storage of its own - an inline array of a call's result held by value (`mk(n).a[0:2]`), of a
 constructor's instance, a literal, a new array (`Array<T>(n)[0:2]`), a payload read with `as` from an enum held by value
-(a copy, E32) - borrows the **temporary** that value is made as,
+(a copy, E32), the value a `try ... catch` gives (the element or what a clause gives, a copy either way, R9a:
+`(try a[0] catch default Array<I64, 2>())[0:2]`) - borrows the **temporary** that value is made as,
 which is made in the block the slice is written in: the slice lives in that block, and goes nowhere that outlives it
 (at a constructor's top level, in the constructor's own frame, which its instance outlives). Two values are not
 temporaries made there: a call's run-time-length array result, whose storage the call builds in its result scope, which
@@ -4928,6 +4929,14 @@ parameter through which something can be stored keeps counting as a store. So a 
 - `Reverse`, `Sort`, a swap through a local - may be lent the value. A callee that only reads the value, or writes
 numbers into it, may be lent it: `toks := split(line);
 count(toks)`, `w.age.values[i] += 1` through a parameter, a `for` over a local iterator.
+A **value with no storage of its own** - a call's value result, a conditional or a `match` of places, `try x[i] catch
+default v` - passed for a reference parameter is the same kind of value where its references already live elsewhere than
+the block it is a temporary of (a call's result landed where its obligations say, O18c; a copy out of existing storage,
+O25h; the element a `try` reads): the call binds the variable where those references live, so what the callee builds
+through them is built there, while its own copy is a temporary of the block the call is written in. Where something can
+be stored through the parameter and the callee keeps something in the value (its body, as above), the same error is
+reported - `addRef(idBox(seed), v)` building through `b.head` is `b Box&seed = idBox(seed)` written out; a callee that
+only reads may be given it. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
@@ -4967,7 +4976,10 @@ to another parameter that does (a fixed point over the program's calls,
 decided from their checked bodies; a call checked while a body its answer rests on is still being checked - a cycle -
 takes it on trust, and is an error once every body is checked if the answer is no) - the call binds
 the parameter's scope variable where the reference leads, as passing the reference itself would, and the handle's own
-storage is no part of the call but to be alive through it. So the grouping idiom builds where the map's lists live:
+storage is no part of the call but to be alive through it. A handle with no storage of its own - a call's result
+(`ll[0]` for `ll[0][0]`), `try a[i] catch default v` on a built-in array (`v` then built where the element's references
+are, as the same `try` through a `List`'s `At` builds it where its result lands) - is lent the same way, its copy a
+temporary of the block. So the grouping idiom builds where the map's lists live:
 
 ```
 for w in words {

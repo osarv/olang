@@ -211,7 +211,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle. No user-declared
   operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
   (`ll[0][0]`), is lent as its reference where its call landed (O17b/O18c); a field of a try-default (R9a) and a
-  conditional or match choosing a place (E28) are values, never lent writably or assigned.
+  conditional or match choosing a place (E28) are values, never lent writably or assigned. Any value with no storage
+  of its own whose references live elsewhere, lent to a reference parameter, is a split value (O17): bound where its
+  references are, refused where the callee keeps something in it; a slice of a `try` value is a temporary's (E16a).
 - **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())` when g's call is
   the only argument; `Pair<A, B>` in the prelude for two things kept together (the user's call).
 - **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot; named arguments rejected

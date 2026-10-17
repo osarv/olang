@@ -18970,3 +18970,41 @@ join renders its pieces after every operand is evaluated, so a piece reading a r
 the later operands that run code. Owners made in a conditional get O34's "gives an own slot nothing yet". Only
 tightens; one new over-rejection, a part borrowed after a releasing call in one statement. Fuzzer: d8c942b 13 findings
 in 60 own seeds (all own7 shapes), now none.
+
+## The view lend's third review: split values with no storage of their own (O17, O17b, E16a, E11c, 2026-10-12)
+
+The third review (`/home/user/review/e31view3`, 193aec4) held round 3's handle relaxation sound and found three
+use-after-frees older than the whole E31b branch (d05c915 has them all). Fixed; the coordinator's decisions, details mine.
+
+- **U1 - a value with no storage of its own lent to a reference parameter.** `addRef(idBox(seed), i)`: `idBox` gives a
+  `Box` value (two fields, so no handle) whose `head` is a copy of seed's pointer. Lent to `addRef(b mut Box&, ...)`, the
+  argument fell through `bindCallScopeVars`: not an lvalue (no borrow), not a by-value parameter, so the variable stayed
+  landing - the block - and `b.head.next = Node(...)` built each node in the loop body and hung it off seed (139 at -b).
+  Now such a value (a call's result, a conditional or match of places, a `try ... catch default`), holding references
+  something can be stored through, whose references live elsewhere than its block (`tempRefsScope`: the landed call's
+  refs scope, `copiedRefsScope`, or the element a `try` reads), is lent as a split value, as a copy local already was:
+  the variable is bound where its references live and the copy is a temporary of the block (`splitLent`, codegen), and
+  where the callee can keep something in it (O17's region facts, `stored` or `handed` - known now or settled with every
+  body, `lendChecks`) it is `ERR_BORROW_SPLIT_SCOPES`, the error a copy local gets. The repros all store a built node,
+  so they are refused; a callee that only reads or writes numbers is accepted (`o17tempreadsonly`). Decided (mine): the
+  error, not a silent rebuild elsewhere - the fix it names (`b Box&seed = idBox(seed)`) says where the copy lives.
+- **U2 - read-only and conditional/try variants.** The same branch covers them: it gates on what can be stored through
+  the value (`RefNarrowingMatters` of the parameter, `ownSlotsAdmitStores` of the value), not on the parameter's
+  permission, so a read-only `b Box&` building through a shallow `mut` field is judged too. The built-in-array asymmetry
+  the reviewer saw: through a List, `(try l[0] catch default Bag())` is an At call landed by its obligations, a handle the
+  F3 branch lends as its reference; on a built-in array it is an INDEX with clauses, which nothing landed. The handle
+  branch now asks `tempRefsScope` too, and for a tried place lands the clauses' defaults where the element's references
+  are - as the List spelling's default is built where its result lands - so both spellings run, and a default taken and
+  kept by the callee lives as long as the elements (`o17btrydefaultkept`).
+- **U3 - a slice of a try value returned as a borrow.** `(try a[0] catch default Array<I64, 2>())[0:2]` returned for
+  `Array<I64>&a`: `RefExactScope` read the slice's base, the tried INDEX, as `a`'s storage before asking E16a, while
+  codegen sliced the try's copy in the frame. A tried value reached through no reference is now a temporary's root
+  (`sliceTemporaryRoot`) and `RefExactScope` asks E16a first for it: O10d, as for `mk()[0:2]`.
+- **The over-rejection fell out.** `$w.ll[0].Len()` in a Str was refused (E11c) since round 3's handle lend: the
+  may-build walk took the handle copy as built where its variable is bound (the receiver's scope). Codegen builds such a
+  copy in the block, so the walk now does too (`mbiCall`, `handleLent`/`splitLent`). Accepted again (`e11ctwolevelfield`).
+- **Fuzzer.** scopegen's `boxOp` lends a copy of the box with no storage of its own - `idBox(b)`, `b if Run > 0 else b` -
+  to a reference parameter building through `head` (read-only and `mut`), and to one only reading, in a loop. Seeds
+  1-120: master 8238cce 3 findings, all this shape; this branch none (own mode 1-40: none).
+- Checks: must-fail `o17temp{callresult,readonly,cond,condarray}` (O17), `e16atrydefaultslice` (O10d); run under `-d -s`
+  after a churn `o17tempreadsonly`, `o17btrydefault{array,kept}`; run `e11ctwolevelfield`.
