@@ -225,21 +225,24 @@ if TestBuild {
         assert failure("GET", "http://127.0.0.1:1/" $Char(0), none, 0) == "INVALID"
     }
 
-    # the port the test server, started in the background, answers on - or -1 when curl or python3 is missing, or it
-    # did not start
+    # the port the test server, started in the background, answers on - or -1 when curl is missing, or -2 when the server
+    # (checks/fixtures/http/server.olang, built here with the compiler running the tests: $OLANG, else build/out) could
+    # not be built or did not start
     fn startServer() I64 {
-        if os.Run("command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1") != 0 { return -1 }
+        if os.Run("command -v curl >/dev/null 2>&1") != 0 { return -1 }
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
-        os.Run("python3 checks/fixtures/http/server.py build/http_port >/dev/null 2>&1 &")
-        for i in range 100 {
+        compiler := try os.RealPath(try os.Env("OLANG") catch default "build/out") catch { return -2 }
+        if os.Run($os.Quote(compiler) " -b checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
+        os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
+        for i in range 200 {
             if os.Exists("build/http_port") { break }
             os.Run("sleep 0.05")
         }
-        text := try os.ReadFile("build/http_port") catch { return -1 }
-        return try text.Trim().ParseInt() catch default -1
+        text := try os.ReadFile("build/http_port") catch { return -2 }
+        return try text.Trim().ParseInt() catch default -2
     }
 
-    # one request of each kind against the test server - skipped, as passed, where curl or python3 is missing
+    # one request of each kind against the test server - skipped, as passed, where curl is missing
     fn live(port I64) ? HttpError {
         base := "http://127.0.0.1:" $port
         hello := try Get($base "/hello")
@@ -272,7 +275,8 @@ if TestBuild {
 
     test "requests against a local server" {
         port := startServer()
-        if port < 0 { done }
+        if port == -1 { done }
+        assert port > 0, "the test server did not start"
         try live(port) catch { fail }
     }
 }
