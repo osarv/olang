@@ -1115,7 +1115,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.Block(sp, body)
         }
-        case token.Tok.Try { return try p.tryStmt() }
+        case token.Tok.Try, token.Tok.Checked { return try p.tryStmt() }
         case token.Tok.Iden { return try p.idenStmt() }
         nomatch { return try p.exprStmt() }
     }
@@ -1376,12 +1376,13 @@ fn (p mut Parser&) namesOf(targets Array<ast.Expr&>&) NameList&p ? Fail {
 # than two levels left the limit is said at X first; a store's target and a call with clauses are read at one level, a
 # try with no clause (an expression) at two
 fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
-    at := try p.want(token.Tok.Try)
+    checked := p.sees(token.Tok.Checked)
+    at := p.advance()
     if p.depth + 2 > MaxNesting { p.tooDeepAt(p.pos) }
     was := p.limitAt
     defer { p.limitAt = was }
     p.limitAt = -1
-    if p.sees(token.Tok.Join) {
+    if not checked and p.sees(token.Tok.Join) {
         j := try p.joinRest(true)
         return ast.Stmt.Join(p.from(at), j)
     }
@@ -1391,7 +1392,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         cl := try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
-        return ast.Stmt.TryStore(sp, inner, cl)
+        return ast.Stmt.TryStore(sp, inner, cl, checked)
     }
     x := try p.postfix()
     k := p.peek()
@@ -1402,7 +1403,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         cl := try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
-        return ast.Stmt.TryStore(sp, inner, cl)
+        return ast.Stmt.TryStore(sp, inner, cl, checked)
     }
     match x {
         case ast.Expr.Postfix(_, op, _) {
@@ -1411,7 +1412,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
                 cl := try p.clauses(false)
                 sp := p.from(at)
                 try p.endStmt()
-                return ast.Stmt.TryStore(sp, inner, cl)
+                return ast.Stmt.TryStore(sp, inner, cl, checked)
             }
         }
         nomatch { }
@@ -1422,7 +1423,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         p.tooDeepAt(reached)
         error Fail.SYNTAX
     }
-    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
+    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl, checked)
     if cl.Len() == 0 {
         e = try p.postfixFrom(e)
         e = try p.binaryFrom(e, 1)
@@ -2135,12 +2136,13 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             try p.want(token.Tok.RParen)
             return ast.Expr.Paren(p.from(at), x)
         }
-        case token.Tok.Try {
+        case token.Tok.Try, token.Tok.Checked {
             listOk := at == p.listTry
+            checked := p.sees(token.Tok.Checked)
             p.advance()
             x := try p.postfix()
             cl := try p.clauses(listOk)
-            return ast.Expr.Try(p.from(at), x, cl)
+            return ast.Expr.Try(p.from(at), x, cl, checked)
         }
         case token.Tok.Fn {
             p.advance()

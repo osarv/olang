@@ -958,7 +958,7 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Name(sp, n) => try known.Get(n) catch default p.nameType(c, sp, n)
         case ast.Expr.ArrayLit(_, elem, _) => p.T.Array(p.Resolve(c, elem), types.TypeId(0))
         case ast.Expr.Call(_, f, _) => p.callType(c, known, f)
-        case ast.Expr.Try(_, y, _) => p.Infer(c, known, y)
+        case ast.Expr.Try(_, y, _, _) => p.Infer(c, known, y)
         case ast.Expr.As(_, _, t) => p.Resolve(c, t)
         case ast.Expr.Binary(_, op, a, b) => p.binaryType(c, known, op, a, b)
         case _ => types.UnknownT

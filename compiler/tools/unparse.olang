@@ -386,8 +386,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.put(" ")
             w.expr(value)
         }
-        case ast.Stmt.TryStore(_, inner, cl) {
-            w.put("try ")
+        case ast.Stmt.TryStore(_, inner, cl, checked) {
+            w.put("checked " if checked else "try ")
             w.stmt(inner)
             w.clauses(cl)
         }
@@ -712,8 +712,8 @@ fn (w mut writer&) expr(x ast.Expr&) {
                 w.expr(y)
             }
         }
-        case ast.Expr.Try(_, y, cl) {
-            w.put("try ")
+        case ast.Expr.Try(_, y, cl, checked) {
+            w.put("checked " if checked else "try ")
             w.expr(y)
             w.clauses(cl)
         }

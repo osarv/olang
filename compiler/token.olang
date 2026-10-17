@@ -21,6 +21,7 @@ type Tok enum {
     If
     Else
     Try
+    Checked
     Catch
     Return
     Join
@@ -140,6 +141,7 @@ fn (k Tok) Text() String& {
         case Tok.If => "if"
         case Tok.Else => "else"
         case Tok.Try => "try"
+        case Tok.Checked => "checked"
         case Tok.Catch => "catch"
         case Tok.Return => "return"
         case Tok.Join => "join"
@@ -260,6 +262,7 @@ fn Keyword(t String&, at I64, n I64) Tok {
         case 'c' {
             if n == 4 and spells(t, at, "case") { return Tok.Case }
             if n == 5 and spells(t, at, "catch") { return Tok.Catch }
+            if n == 7 and spells(t, at, "checked") { return Tok.Checked }
             if n == 8 and spells(t, at, "continue") { return Tok.Continue }
         }
         case 'd' {
@@ -339,7 +342,7 @@ fn spells(t String&, at I64, word String&) Bool {
 }
 
 test "Keyword finds every reserved word and nothing else" {
-    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break,
+    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Checked, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break,
                  Tok.Continue, Tok.Abort, Tok.Unreachable, Tok.Extends, Tok.Done, Tok.Fail, Tok.Assert, Tok.For, Tok.Do,
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum,
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Own, Tok.Take, Tok.Import, Tok.Test, Tok.Destruct,
