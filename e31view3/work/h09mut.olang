@@ -1,0 +1,32 @@
+# a function returning a Box BY VALUE (holding a mut Node& field), lent to a read-only reference whose callee builds
+# through the shallow mut field
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn mkBox(seed mut Box&) Box { return seed }
+fn addVia(b mut Box&, v I64) { b.head.next = Node(v, b.head.next) }
+fn sum(b Box&) I64 {
+    t I64 = 0
+    for n := b.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn main() ? {
+    seed := Box()
+    for i in range 3 {
+        addVia(mkBox(seed), i + 1)
+        churn()
+    }
+    churn()
+    println("seed " $sum(seed))
+}

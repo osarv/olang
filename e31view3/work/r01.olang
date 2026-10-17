@@ -1,0 +1,25 @@
+# a callee given a handle a call gives, that reads the handle's reference into a local and stores it in an outer
+# collection - NOT "used only through the reference": handleThroughParam must say NO
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type St struct() {
+    s mut listState& = listState()
+}
+type listState struct() {
+    v I64 = 0
+}
+fn steal(h St&, sink mut List<St>&) { sink.Push(h) }
+fn getLL(ll mut List<List<St>>&) List<St> ? { return try ll.First() }
+fn main() ? {
+    ll := List<List<St>>()
+    ll.Push(List<St>())
+    ll[0].Push(St())
+    sink := List<St>()
+    steal((try getLL(ll))[0], sink)
+    churn()
+    println("done " $sink.Len())
+}

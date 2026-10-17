@@ -1,0 +1,29 @@
+# minimal UAF: a function-result value holding a mut Node& field, lent to a reference param in a LOOP body - the
+# callee builds a Node through the field, into the loop block, which closes
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn addRef(b mut Box&, v I64) { b.head.next = Node(v, b.head.next) }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    seed := Box()
+    for i in range 3 {
+        addRef(idBox(seed), i + 1)
+        churn()
+    }
+    churn()
+    n := 0
+    for x := seed.head, x != null, x = x.next { n = n * 10 + x.v }
+    println("chain " $n)
+}

@@ -1,0 +1,23 @@
+# the callee copies the handle into a local (a second name) and pushes through the local - not "only through the
+# reference"; given a handle a call gives
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn g(h mut List<I64>&, x I64) {
+    s := h
+    s.Push(x)
+}
+fn getLL(ll mut List<List<I64>>&) List<I64> ? { return try ll.First() }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    for i in range 3 {
+        g((try getLL(ll)), i + 7)
+        churn()
+    }
+    churn()
+    for s in ll[0] { println("for " $s) }
+}

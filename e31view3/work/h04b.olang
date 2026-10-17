@@ -1,0 +1,35 @@
+# a try-default element of a handle array, the receiver of a read-only method building through the handle's reference
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type BagState struct() {
+    head mut Node& = null
+}
+type Bag struct() {
+    s mut BagState& = BagState()
+}
+fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
+fn (b Bag&) Sum() I64 {
+    t I64 = 0
+    for n := b.s.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn main() ? {
+    a := Array<Bag>(1, Bag())
+    l := List<Bag>()
+    l.Push(Bag())
+    for i in range 3 {
+
+        (try l[0] catch default Bag()).Sneak(i + 4)
+        churn()
+    }
+    churn()
+    println("a " $a[0].Sum() " l " $l[0].Sum())
+}

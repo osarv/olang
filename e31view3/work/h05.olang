@@ -1,0 +1,41 @@
+# a handle value whose references are existing storage, the receiver of a read-only method building through it:
+# a conditional of two elements, a match choosing one, a payload read with "as"
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type BagState struct() {
+    head mut Node& = null
+}
+type Bag struct() {
+    s mut BagState& = BagState()
+}
+type E enum {
+    B(b Bag)
+    Z
+}
+fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
+fn (b Bag&) Sum() I64 {
+    t I64 = 0
+    for n := b.s.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn main() ? {
+    a := Array<Bag>(2, Bag())
+    a[1] = Bag()
+    e := E.B(Bag())
+    for i in range 3 {
+        (a[0] if i >= 0 else a[1]).Sneak(i + 1)
+        (match i { case 7 => a[1] case _ => a[0] }).Sneak(i + 4)
+        (e as E.B).Sneak(i + 7)
+        churn()
+    }
+    churn()
+    println("a " $a[0].Sum() " e " $(e as E.B).Sum())
+}
