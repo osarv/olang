@@ -4594,8 +4594,9 @@ static bool typeHasBareDestructStructAt(struct type t, int depth) {
     //"Handle[3]&s" is still three Handle *values* sharing one allocation, exactly what C11 forbids
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
-        if (typeHasBareDestructStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) return true;
+        if (typeHasBareDestructStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool typeHasBareDestructStruct(struct type t) { return typeHasBareDestructStructAt(t, 0); }
@@ -4642,8 +4643,9 @@ static int typeHasBareOwningStructAt(struct type t, int depth) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         int r = typeHasBareOwningStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1);
-        if (r) return r;
+        if (r) { ListDestroy(kids); return r; }
     }
+    ListDestroy(kids);
     return 0;
 }
 
@@ -17997,9 +17999,9 @@ static bool typeHoldsReferencesAt(struct type t, int depth) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc) return true;
-        if (typeHoldsReferencesAt(k, depth + 1)) return true;
+        if (k.structMAlloc || typeHoldsReferencesAt(k, depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool TypeHoldsReferences(struct type t) { return typeHoldsReferencesAt(t, 0); }
@@ -18066,8 +18068,9 @@ static bool valueRefsAdmitStoresAt(struct type t, int depth) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStoresAt(k, depth + 1)) return true;
+        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStoresAt(k, depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool valueRefsAdmitStores(struct type t) { return valueRefsAdmitStoresAt(t, 0); }
@@ -18090,11 +18093,12 @@ static bool typeHoldsWritableRefsAt(struct type t, int depth) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
         if (k.bType == BASETYPE_FUNC) continue; //nothing is written through a function value (D16d)
         if (k.structMAlloc) {
-            if (k.refMut) return true;
+            if (k.refMut) { ListDestroy(kids); return true; }
             continue;
         }
-        if (typeHoldsWritableRefsAt(k, depth + 1)) return true;
+        if (typeHoldsWritableRefsAt(k, depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool TypeHoldsWritableRefs(struct type t) {
