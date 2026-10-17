@@ -152,7 +152,6 @@ type Diag enum {
     BuildDefaultType
     BuildDefaultFit
     UnknownBuildName
-    PreludeWordRedeclared
     NameInUse
     UnknownScopeName
     ReturnScopeNone
@@ -935,9 +934,6 @@ fn BuildDefaultFit(text1 String&, text2 String&, tok String&, ty String&) Msg { 
 
 # ERR_UNKNOWN_BUILD_NAME
 fn UnknownBuildName(tok String&, text String&) Msg { return Msg(Diag.UnknownBuildName, "B10", "unknown name " $tok " - if it is a build constant, define it with '-D " $text "=VALUE', or declare it with a default") }
-
-# ERR_PRELUDE_WORD_REDECLARED
-fn PreludeWordRedeclared(tok String&) Msg { return Msg(Diag.PreludeWordRedeclared, "M19f", $tok " is the prelude's function, seen in every module - choose another name") }
 
 # ERR_NAME_IN_USE
 fn NameInUse(tok String&) Msg { return Msg(Diag.NameInUse, "D2", $tok " is already declared in this module") }

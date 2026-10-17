@@ -134,7 +134,6 @@ struct type;
     X(ERR_BUILD_DEFAULT_TYPE,           "B10c",  "%n is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found %t") \
     X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-D %S=%S does not fit %n, which is %t") \
     X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-D %S=VALUE', or declare it with a default") \
-    X(ERR_PRELUDE_WORD_REDECLARED,      "M19f",  "%n is the prelude's function, seen in every module - choose another name") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
     X(ERR_RETURN_SCOPE_NONE,            "O26",   "'&return' names the result scope, and this function has none") \
