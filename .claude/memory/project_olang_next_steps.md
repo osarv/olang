@@ -55,6 +55,9 @@ overrated".
 - SMALL, after the errors and syntax batches land (they edit SPEC.md): SPEC §5's section numbers are broken - no 5.6, two
   5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
+- QUEUED (QZ2/QZ4, the user 2026-10-17): Pair to std/pair after the syntax batch; after Vec phase 2b, the iterator
+  helpers and StringBuilder onto Vec (`a.ToVec()`), List to std/list; benchmarks before/after. Then Vec phase 2b itself
+  (Vec as a type argument, in tasks and lambdas, move-aware List/Map) comes first of these.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.

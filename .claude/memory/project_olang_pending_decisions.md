@@ -275,6 +275,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   out means `map.Map<K, V>` everywhere (imports are whole modules, names qualified), so keep Map in the prelude (as Go
   and Python build it in). Recommended now: prelude = methods on built-ins, protocol traits/errors, Vec, Map,
   String, StringBuilder, Pair; std = List and every future container (Set starts in std). After Vec phase 2b.
+  ANSWERED ("I think that is good yes", after Pair went to std): prelude = methods on built-in types, protocol traits
+  and errors, Vec, Map, StringBuilder (String and Array are built in); std = List (std/list), Pair (std/pair) and
+  every future container (Set, Deque, Heap, a sorted map). The iterator helpers and StringBuilder move onto Vec
+  (`a.ToVec()`). List moves after Vec phase 2b; Pair after the syntax batch. QZ2 closed.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
