@@ -5054,7 +5054,9 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
     if (f.errors.len) cgBufAdd(b, " ?");
     for (int i = 0; i < f.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&f.errors, i);
-        cgBufAdd(b, "%s%.*s", i ? " + " : " ", e->name.len, e->name.ptr);
+        char item[2048];
+        ErrSpellItems(*e, item, sizeof(item)); //R1c: "T", or the words it names
+        cgBufAdd(b, "%s%s", i ? " + " : " ", item);
     }
     rdSigDepth--;
 }
@@ -5171,6 +5173,7 @@ void RdSpellSig(struct type f, char* buf, size_t n) { rdSpellSig(f, buf, n); }
 //a type as a diagnostic names it (errmsg.c's "%t")
 void DiagSpellType(struct type t, char* buf, size_t n) {
     if (t.bType == BASETYPE_VOID) { snprintf(buf, n, "no value"); return; } //a call returning nothing, never a type
+    if (t.bType == BASETYPE_ERROR && t.errWords) { ErrSpellItems(t, buf, n); return; } //R1c: the words an error set names
     rdForDiag = true;
     t.refMut = false; //a reference's own permission is T25c's to report, in words - inner levels' are part of the type
     rdSpellType(t, buf, n);

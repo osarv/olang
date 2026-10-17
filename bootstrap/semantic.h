@@ -136,6 +136,8 @@ struct type {
 
     //BASETYPE_CHOICE, BASETYPE_ERROR
     struct list words; //list of struct token: choice or error member names
+    unsigned long long errWords; //R1c: BASETYPE_ERROR in an error set - the words of it the set holds (bit = ordinal);
+                                 //0, every word. Not part of the type's identity: TypeIsSame ignores it
 
     //BASETYPE_FUNC
     bool hasRetType;
@@ -989,6 +991,8 @@ void VarListAddSetOrigin(struct list* l, struct var v);
 
 void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
+unsigned long long ErrSetWords(struct type e); //R1c: the words of e an error set holds
+void ErrSpellItems(struct type e, char* buf, size_t n); //R1c: "T", or "T.W + T.V" where the set names words
 bool OperandIsNoReturnCall(struct operand* op); //D8e
 bool operandLeaves(struct operand* op); //D8e: a noreturn call, or a conditional or match giving only such
 

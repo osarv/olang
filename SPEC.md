@@ -1332,7 +1332,7 @@ param-list      ::= [ param { "," param } [ "," ] ]   (a trailing "," only as L1
 param           ::= IDEN type-expr [ "=" expr ]
 ret-type        ::= type-expr | "(" type-expr "," type-expr { "," type-expr } ")"
 error-list      ::= error-list-item { "+" error-list-item }
-error-list-item ::= alias-chain IDEN
+error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
 
 The return value comes first (`ret-type`, bare - no marker of its own), and the error set (if any)
@@ -1343,8 +1343,8 @@ value) are both unambiguous with nothing but an optional bare type-expr ever app
 value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-`error-list-item` must name a declared error type (§2.6). `?` with nothing after it declares an **inferred** error
-set (§7.1 R1a); a list of types declares those types and nothing else.
+`error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
+nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means.
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
@@ -1956,15 +1956,15 @@ the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no 
 `x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NOT_FINITE` for a NaN or an infinity. Both
 are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.
 
-Text has `t.ParseInt(base = 10) I64 ? ParseError` and `t.ParseUint(base = 10) U64 ? ParseError`: the integer `t`
+Text has `t.ParseInt(base Radix = 10) I64 ? ParseError` and `t.ParseUint(base Radix = 10) U64 ? ParseError`: the integer `t`
 writes - an optional sign (`ParseUint` takes `+` only), then digits of `base`, `2` to `36`, the digits past `9` being
 the letters in either case, and nothing else: no surrounding space, no prefix, no `_`. Base `0` reads the digits as an
 integer literal is written (L10): `0x`/`0X` before hexadecimal digits, `0b`/`0B` before binary ones, decimal otherwise,
 with a `_` between two digits as L10b allows it; a hexadecimal or binary literal is a bit pattern, read by `ParseInt`
 as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
 E6c) and by `ParseUint` as the `U64` it is. Each fails with `EMPTY` for no text, `INVALID` for text that is not such a
-number (a sign alone included) and `OVERFLOW` for a number beyond its type's range, and `BAD_BASE` for a base other than `0` or `2` to
-`36`. Text has `PadStart(width, fill = ' ')` and
+number (a sign alone included) and `OVERFLOW` for a number beyond its type's range; the base is a `Radix`, below, refused
+where it is made, so a literal base cannot fail. Text has `PadStart(width, fill = ' ')` and
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
 never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
 with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
@@ -1975,9 +1975,11 @@ lowercase letters, with a `-` before a negative number's digits and nothing else
 `ParseInt` and `ParseUint` read back in the same base, and in base `10` it is `$n`; an unsigned value's text is its
 bits read unsigned (`U64(-1).Format(16)` is sixteen `f`s), and a `Char`'s is its code (`'A'.Format(16)` is `"41"`, the
 method a `Char` inherits from `U8`). The base is a `Radix`, the prelude's `type Radix I64` whose constructor fails with
-`TextError.BAD_BASE` outside `2` to `36` - `0` included, which `ParseInt` reads as any of a literal's three forms: a
-literal base is checked while compiling (T29d), so `(255).Format(16)` cannot fail and `Format(40)` is a compile-time
-error, and a base computed while the program runs is made one with `Radix(b)`, which can fail.
+`TextError.BAD_BASE` (`? TextError.BAD_BASE`, R1c) for a number outside `2` to `36` other than `0` - the base the text
+says, which `ParseInt` and `ParseUint` read as any of a literal's three forms and `Format` writes in decimal: a literal
+base is checked while compiling (T29d), so `(255).Format(16)` and `t.ParseInt(16)` cannot fail for it and `Format(40)`
+is a compile-time error, and a base computed while the program runs is made one with `Radix(b)`, which can fail - one
+error, for every function taking a base.
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
@@ -4164,10 +4166,23 @@ signature declares it may produce; propagation and handling are both explicit.
 **R1.** A function or constructor's own signature (§3.4,
 §9) may declare zero or more
 error types via its `error-list` (D8): `? ErrA + ErrB + ...`. This is the function's own **error
-union** — the complete set of error types (not individual words — an entire declared error type at
-a time) it may produce, to `try` callers (§7.4) and to a coverage-checking `catch` (§7.5). A written list is a
+union** — the complete set of errors it may produce, to `try` callers (§7.4) and to a coverage-checking `catch`
+(§7.5): every word of a type the list names, or the words it names of one (R1c). A written list is a
 **promise** the body is held to: an error the body can produce that the list does not name is a compile-time error
 naming it (R9).
+
+**R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
+`? ListError.EMPTY + IoError`, `? TextError.NOT_FOUND + TextError.BAD_BASE` - and the set then holds that word of the
+type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
+ListError.EMPTY` fails only with `EMPTY`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
+type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
+beside it. An `error` statement (R3) raising a word a written set does not hold is a compile-time error, and so is a
+`try` letting one through (R9), word by word. An inferred set (R1a) holds words too: the words of its `error`
+statements, and what its tried calls let through - each callee's words, less those its clauses take (R11) - so a
+function written `?` calling only `Pop` fails with `ListError.EMPTY`. A function type (R1b) may name words, and a
+function value fits a type whose set holds every word it can fail with (T22); a set's words are part of a function
+type's identity (T27). Codes (R6) do not change: a word's ordinal is its position in its type's declaration, and a
+type's the position of its one entry in the set. Words beyond a type's 64th cannot be named one at a time.
 
 **R1a (inferred error sets).** A signature writing **`?` alone**, with no error types after it, fails with **what its
 body can produce**: the error types of its own `error` statements (R3) and of what its tried calls let through
@@ -4195,7 +4210,8 @@ type.
 possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
 and the final `IDEN` is one of that type's own declared words (T19): every error is of a type, and names its word.
 Valid inside an ordinary function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's
-error union (R1) includes the named error type - or is inferred (R1a), and so takes it on. Not valid in a `test { }` block or a `destruct { }` body
+error union (R1) includes the named error type, and the word if the set names words (R1c) - or is inferred (R1a), and
+so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
 
 **R4.** Executing an `error` statement immediately ends the enclosing function, producing that
@@ -4205,7 +4221,7 @@ the statement is ever evaluated (§9.3 C6).
 
 ### 7.3 Return convention
 
-**R5.** A function that declares one or more errors (R1) returns, conceptually, either its success
+**R5.** A function that can fail (R1, R1a) returns, conceptually, either its success
 value (if it has a `ret-type`, §3 D8) or one specific word of
 one specific declared error type — never both, and a function with no `ret-type` and a nonempty
 error union returns either nothing (success) or an error.
@@ -4213,14 +4229,15 @@ error union returns either nothing (success) or an error.
 **R6.** Concretely, such a function's result is a `(code, payload)` pair: `code = 0` means success,
 and `payload` (present only if the function declares a `ret-type`) holds the success value. A
 nonzero `code` identifies an error as `(typeOrdinal << 16) | wordOrdinal`, where `typeOrdinal` is
-the 1-based position of the produced error's type within *this function's own* `error-list` (R1,
-left to right), and `wordOrdinal` is the 0-based position of the specific word within *that error
+the 1-based position of the produced error's type within *this function's own* `error-list` (R1:
+a written list left to right, an inferred set in R1a's canonical order; several words of one type are one entry, R1c),
+and `wordOrdinal` is the 0-based position of the specific word within *that error
 type's own* declaration (T19, left to right). These ordinals are local to one function's own
 signature and one error type's own declaration; the same error type/word pair may have a different
 `code` at a different call site with a different declared `error-list`.
 
-**R7.** A function with no declared errors at all has no `code`; its result is simply its success
-value, or nothing.
+**R7.** A function with no declared errors at all - none written, or an inferred set (R1a) that turned out
+empty - has no `code`; its result is simply its success value, or nothing.
 
 ### 7.4 `try`
 
@@ -4338,10 +4355,11 @@ fully handled and does not need to appear in the enclosing signature at all — 
 block, a `destruct { }` body, or a function or constructor that declares no errors), as long as
 nothing actually escapes uncaught.
 
-**R14.** Coverage (R9, R13) is judged at the level of the called function's own declared
-`error-list` (R1): if a callee declares a whole error type, the caller must treat every one of that
-type's words as possible, even if the callee happens to only ever actually produce a subset of them
-internally.
+**R14.** Coverage (R9, R13) is judged at the level of the called function's own
+`error-list` (R1) - the words it names, or, where it names a type whole, every one of that type's words, even if the
+callee happens to only ever produce a subset of them internally. A callee written `? ListError.EMPTY` is covered by
+`catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
+type it does not name is (R13).
 
 ### 7.6 Built-in errors
 

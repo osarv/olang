@@ -553,6 +553,9 @@ struct type;
     X(ERR_RETURN_VALUE_IN_VOID,         "D8",    "this function returns no value") \
     X(ERR_RETURN_NEEDS_VALUE,           "D8",    "this function returns %t, so 'return' needs a value") \
     X(ERR_ERROR_OUTSIDE_FUNCTION,       "R3",    "'error' fails a function, and this is not inside one") \
+    X(ERR_ERROR_WORD_TOO_FAR,           "R1c",   "%t has more than 64 words, and an error set names only one of its first 64 - name the type") \
+    X(ERR_ERROR_WORD_NOT_IN_SET,        "R3",    "this function's '?' names %t, not this word - add it after '?'") \
+    X(ERR_CATCH_WORD_NOT_PRODUCED,      "R14",   "the call does not fail with %t - it fails with %t") \
     X(ERR_ERROR_WORD_IS_PRIVATE,        "M6a",   "error word %n is private to its module") \
     X(ERR_ERROR_UNDECLARED,             "R3",    "this function does not declare %n - add it after '?'") \
     /* ---- join and spawn ---- */ \

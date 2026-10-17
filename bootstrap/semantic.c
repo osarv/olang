@@ -26,12 +26,19 @@ static struct list allSyntaxParts(struct syntax* s);
 static void presetInferredErrs(struct var* f);
 //R1/R1a: a signature's error list - the error types written after "?", into out. True for "?" alone, whose set is
 //inferred from the body (R1a); false for a written list, or none
+static struct type* resolveErrorItem(struct semaModule* mod, struct syntax* nameNode, unsigned long long* words);
+static void errSetUnion(struct list* set, struct type* e);
+static struct type* errWithWords(struct type* e, unsigned long long w);
+static struct type** errSetEntry(struct list* set, struct type e);
+static unsigned long long errSetMissing(struct list* set, struct type e);
+static int errSetSize(struct list* set);
 static bool resolveErrorList(struct semaModule* mod, struct syntax* errListNode, struct list* out) {
     if (!errListNode) return false;
     struct list items = allSyntaxParts(errListNode);
     for (int i = 0; i < items.len; i++) {
-        struct type* errType = resolveErrorTypeName(mod, *(struct syntax**)ListGetIdx(&items, i));
-        if (errType) ListAdd(out, &errType);
+        unsigned long long words = 0;
+        struct type* errType = resolveErrorItem(mod, *(struct syntax**)ListGetIdx(&items, i), &words);
+        if (errType) errSetUnion(out, words ? errWithWords(errType, words) : errType); //R1c: "? T.W" names one word
     }
     return items.len == 0;
 }
@@ -552,10 +559,13 @@ bool TypeIsSame(struct type a, struct type b) {
             }
             if (a.hasRetType != b.hasRetType || a.noReturn != b.noReturn) return false;
             if (a.hasRetType && !typeSameNested(*a.retType, *b.retType)) return false;
-            //T22: the same errors in the same order - a fallible call reports an error by its position
+            //T22: the same errors in the same order - a fallible call reports an error by its position - and the same words
+            //of each (R1c)
             if (a.errors.len != b.errors.len) return false;
             for (int i = 0; i < a.errors.len; i++) {
-                if (!TypeIsSame(**(struct type**)ListGetIdx(&a.errors, i), **(struct type**)ListGetIdx(&b.errors, i))) return false;
+                struct type* ea = *(struct type**)ListGetIdx(&a.errors, i);
+                struct type* eb = *(struct type**)ListGetIdx(&b.errors, i);
+                if (!TypeIsSame(*ea, *eb) || ErrSetWords(*ea) != ErrSetWords(*eb)) return false;
             }
             return true;
         }
@@ -662,6 +672,85 @@ void StatementAdd(struct list* codeBlock, struct statement s) {
 static unsigned builtinWordMask;
 struct type* SemanticBuiltinErrorType(void);
 
+//R1c: the words of e an error set holds - every word, unless the set names some
+unsigned long long ErrSetWords(struct type e) {
+    unsigned long long all = e.words.len >= 64 ? ~0ull : ((1ull << e.words.len) - 1);
+    return e.errWords ? (e.errWords & all) : all;
+}
+
+//R1c: e as an error set's entry holding words w - the declared type itself when that is every word, else a copy
+static struct type* errWithWords(struct type* e, unsigned long long w) {
+    struct type all = *e;
+    all.errWords = 0;
+    if (w == ErrSetWords(all)) {
+        if (!e->errWords) return e;
+        struct type* c = MallocOrCrash(sizeof(struct type));
+        *c = all;
+        return c;
+    }
+    struct type* c = MallocOrCrash(sizeof(struct type));
+    *c = all;
+    c->errWords = w;
+    return c;
+}
+
+//R1c: the entry of set that is e's type, or NULL
+static struct type** errSetEntry(struct list* set, struct type e) {
+    for (int i = 0; i < set->len; i++)
+        if (TypeIsSame(**(struct type**)ListGetIdx(set, i), e)) return ListGetIdx(set, i);
+    return NULL;
+}
+
+//R1c: the words of e that set does not hold - 0 when it holds them all
+static unsigned long long errSetMissing(struct list* set, struct type e) {
+    struct type** have = errSetEntry(set, e);
+    return ErrSetWords(e) & ~(have ? ErrSetWords(**have) : 0);
+}
+
+//R1c: adds e's words to set - a new entry, or more words on the one there
+static void errSetUnion(struct list* set, struct type* e) {
+    struct type** have = errSetEntry(set, *e);
+    if (!have) { ListAdd(set, &e); return; }
+    unsigned long long w = ErrSetWords(**have) | ErrSetWords(*e);
+    if (w != ErrSetWords(**have)) *have = errWithWords(*have, w);
+}
+
+//R1c: how much a set holds - every entry and every word it names - which only grows as an inferred set does
+static int errSetSize(struct list* set) {
+    int n = 0;
+    for (int i = 0; i < set->len; i++) n += 1 + __builtin_popcountll(ErrSetWords(**(struct type**)ListGetIdx(set, i)));
+    return n;
+}
+
+//R1c: "T", or "T.W + T.V" where an error set names only some of T's words - as a signature writes it
+void ErrSpellItems(struct type e, char* buf, size_t n) {
+    size_t at = 0;
+    buf[0] = 0;
+    if (!e.errWords) { snprintf(buf, n, "%.*s", e.name.len, e.name.ptr); return; }
+    unsigned long long w = ErrSetWords(e);
+    for (int i = 0; i < e.words.len && i < 64 && at < n; i++) {
+        if (!(w & (1ull << i))) continue;
+        struct token wt = *(struct token*)ListGetIdx(&e.words, i);
+        at += (size_t)snprintf(buf + at, n - at, "%s%.*s.%.*s", at ? " + " : "", e.name.len, e.name.ptr, wt.str.len, wt.str.ptr);
+    }
+}
+
+//R1c: the words of e matches leave uncaught - 0 when they take every word e holds
+static unsigned long long catchLeftWords(struct list* matches, struct type e) {
+    for (int i = 0; i < matches->len; i++) {
+        struct catchMatch* cm = ListGetIdx(matches, i);
+        if (!cm->hasWord && TypeIsSame(cm->errType, e)) return 0;
+    }
+    unsigned long long left = ErrSetWords(e);
+    struct type* builtin = builtinWordMask ? SemanticBuiltinErrorType() : NULL;
+    if (builtin && TypeIsSame(e, *builtin)) left &= builtinWordMask;
+    for (int i = 0; i < matches->len; i++) {
+        struct catchMatch* cm = ListGetIdx(matches, i);
+        if (cm->hasWord && cm->wordOrdinal < 64 && TypeIsSame(cm->errType, e)) left &= ~(1ull << cm->wordOrdinal);
+    }
+    return left;
+}
+
 bool StatementCatchCoversType(struct list* matches, struct type errType) {
     for (int i = 0; i < matches->len; i++) {
         struct catchMatch* cm = ListGetIdx(matches, i);
@@ -671,6 +760,7 @@ bool StatementCatchCoversType(struct list* matches, struct type errType) {
     bool masked = builtin && TypeIsSame(errType, *builtin);
     for (int w = 0; w < errType.words.len; w++) {
         if (masked && !(builtinWordMask & (1u << w))) continue;
+        if (errType.errWords && w < 64 && !(errType.errWords & (1ull << w))) continue; //R1c: a word the set does not hold
         bool covered = false;
         for (int i = 0; i < matches->len; i++) {
             struct catchMatch* cm = ListGetIdx(matches, i);
@@ -1513,6 +1603,34 @@ struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNod
     if (!isPublic(name)) { Err(nameTok, ERR_TYPE_IS_PRIVATE, nameTok); return NULL; }
     resolveTypeDecl(errType);
     return errType;
+}
+//R1/R1c: an error-list item - an error type ("ListError", "io.IoError"), or one of its words ("ListError.EMPTY",
+//"io.IoError.CLOSED"), *words then naming that word. Told apart as a catch item is (resolveCatchAliasChain): where the
+//name is a type's, the last name after it is one of its words
+static struct type* resolveErrorItem(struct semaModule* mod, struct syntax* nameNode, unsigned long long* words) {
+    *words = 0;
+    struct list idens = allTokOfType(nameNode, TOK_IDEN);
+    if (idens.len < 2) return resolveErrorTypeName(mod, nameNode);
+    int trailing = 0;
+    struct semaModule* target = resolveCatchAliasChain(mod, idens, &trailing);
+    if (!target) return NULL; //reported
+    if (trailing != 2) return resolveErrorTypeName(mod, nameNode);
+    bool cross = target != mod;
+    struct token typeTok = *(struct token*)ListGetIdx(&idens, idens.len - 2);
+    struct token wordTok = *(struct token*)ListGetIdx(&idens, idens.len - 1);
+    struct type* errType = cross ? TypeGetList(&target->types, strFromTok(typeTok)) : typeNamed(target, strFromTok(typeTok));
+    if (!errType || errType->bType != BASETYPE_ERROR) { Err(typeTok, ERR_UNKNOWN_ERROR_TYPE, typeTok); return NULL; }
+    if (cross && !isPublic(strFromTok(typeTok))) { Err(typeTok, ERR_TYPE_IS_PRIVATE, typeTok); return NULL; }
+    if (cross && !isPublic(strFromTok(wordTok))) { Err(wordTok, ERR_ERROR_WORD_IS_PRIVATE, wordTok); return NULL; }
+    resolveTypeDecl(errType);
+    for (int w = 0; w < errType->words.len; w++) {
+        if (!StrCmp(strFromTok(*(struct token*)ListGetIdx(&errType->words, w)), strFromTok(wordTok))) continue;
+        if (w >= 64) { Err(wordTok, ERR_ERROR_WORD_TOO_FAR, errType); return errType; }
+        *words = 1ull << w;
+        return errType;
+    }
+    Err(wordTok, ERR_NO_SUCH_ERROR_WORD, errType, wordTok);
+    return NULL;
 }
 struct type* SemanticBuiltinType(struct str name);
 void resolveTypeDecl(struct type* t);
@@ -6727,9 +6845,9 @@ struct checkCtx {
 //(errDecisions, kept across attempts) - a least fixed point reached in as many attempts as the deepest cycle needs, and
 //none at all where nothing is recursive. Once settled each set is put in a canonical order - by the error types'
 //modules, then names - so a function's error codes (R6) are the same in every compilation that infers them
-struct errObs { struct var* f; int len; };
+struct errObs { struct var* f; int len; }; //len: errSetSize, which counts words too (R1c)
 static struct list errObs;          //this attempt's early reads
-struct errKey { struct str mod; struct str name; };
+struct errKey { struct str mod; struct str name; unsigned long long words; }; //words: R1c's, 0 for all
 struct errDecision { struct str key; struct list errs; }; //struct errKey
 static struct list errDecisions;    //what each inferred set was found to be, by the attempt before
 static bool errsRedo;               //this attempt read a set that later grew
@@ -6774,7 +6892,7 @@ static void presetInferredErrs(struct var* f) {
                 struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, m);
                 if (!StrCmp(mod->identity, ek->mod)) continue;
                 struct type* t = TypeGetList(&mod->types, ek->name);
-                if (t && t->bType == BASETYPE_ERROR) ListAdd(&f->type.errors, &t);
+                if (t && t->bType == BASETYPE_ERROR) { t = ek->words ? errWithWords(t, ek->words) : t; ListAdd(&f->type.errors, &t); }
                 break;
             }
         }
@@ -6798,7 +6916,7 @@ static void noteErrsRead(struct checkCtx* ctx, struct var* f) {
             && f->type.retType->bType == BASETYPE_STRUCT) ensureCtorBodyBuilt(f->type.retType);
     else ensureBodyChecked(f);
     if (errsBodyDone(f) && !f->errsUnsettled) return;
-    struct errObs o = { f, f->type.errors.len };
+    struct errObs o = { f, errSetSize(&f->type.errors) };
     ListAdd(&errObs, &o);
     if (ctx && ctx->func) ctx->func->errsUnsettled = true;
 }
@@ -7889,12 +8007,8 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (m->type.noReturn && !f->type.noReturn) return NULL;
     //T31/R1b: every error the method can fail with is one the trait names - a constrained call is a direct call, and its
     //errors are the method's own (an inferred set, in its order, is one the trait's need not repeat)
-    for (int i = 0; i < f->type.errors.len; i++) {
-        bool named = false;
-        for (int k = 0; k < m->type.errors.len && !named; k++)
-            named = TypeIsSame(**(struct type**)ListGetIdx(&f->type.errors, i), **(struct type**)ListGetIdx(&m->type.errors, k));
-        if (!named) return NULL;
-    }
+    for (int i = 0; i < f->type.errors.len; i++) //R1c: word by word
+        if (errSetMissing(&m->type.errors, **(struct type**)ListGetIdx(&f->type.errors, i))) return NULL;
     //M6: a private method name belongs to the module that wrote it, so only a type in THAT module can supply it - which
     //makes a trait with a private method a sealed one: no outside module's type can satisfy it
     if (!isPublic(m->name) && m->owner != f->owner) return NULL;
@@ -8525,7 +8639,9 @@ static bool funcFitsByPermission(struct type want, struct type have) {
     }
     if (want.errors.len != have.errors.len) return false;
     for (int i = 0; i < want.errors.len; i++) {
-        if (!TypeIsSame(**(struct type**)ListGetIdx(&want.errors, i), **(struct type**)ListGetIdx(&have.errors, i))) return false;
+        struct type* ew = *(struct type**)ListGetIdx(&want.errors, i);
+        struct type* eh = *(struct type**)ListGetIdx(&have.errors, i);
+        if (!TypeIsSame(*ew, *eh) || ErrSetWords(*ew) != ErrSetWords(*eh)) return false;
     }
     return true;
 }
@@ -8689,11 +8805,8 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
             && op->readVar && op->readVar->isFuncDecl && !op->readVar->isLambda && !TypeIsSame(target, op->type)) {
         struct type have = op->type;
         bool within = true;
-        for (int i = 0; i < have.errors.len && within; i++) {
-            struct type* e = *(struct type**)ListGetIdx(&have.errors, i);
-            within = false;
-            for (int k = 0; k < target.errors.len && !within; k++) within = TypeIsSame(*e, **(struct type**)ListGetIdx(&target.errors, k));
-        }
+        for (int i = 0; i < have.errors.len && within; i++) //R1c: every word of each, too
+            within = !errSetMissing(&target.errors, **(struct type**)ListGetIdx(&have.errors, i));
         have.errors = target.errors;
         if (within && (TypeIsSame(target, have) || funcFitsByPermission(target, have))) op->type.errors = target.errors;
     }
@@ -16749,12 +16862,8 @@ void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type callee
     if (!ctx->func) { if (ctx->inTest) { testEscapes = true; return; } Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     for (int i = 0; i < calleeType.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&calleeType.errors, i);
-        bool found = false;
-        for (int j = 0; j < ctx->func->type.errors.len; j++) {
-            struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
-            if (TypeIsSame(*e, *fe)) { found = true; break; }
-        }
-        if (!found && !lambdaInferError(ctx->func, e)) { Err(tok, ERR_TRY_ERROR_NOT_DECLARED, e); return; }
+        unsigned long long missing = errSetMissing(&ctx->func->type.errors, *e); //R1c: word by word
+        if (missing && !lambdaInferError(ctx->func, e)) { Err(tok, ERR_TRY_ERROR_NOT_DECLARED, errWithWords(e, missing)); return; }
     }
 }
 
@@ -17005,8 +17114,7 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
                         seen = !cm->hasWord && TypeIsSame(cm->errType, *e);
                     }
                 }
-                for (int k = 0; k < errs->len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(errs, k), *e);
-                if (!seen) ListAdd(errs, &e);
+                if (!seen) errSetUnion(errs, e); //R1c
             }
         }
         for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
@@ -17084,6 +17192,7 @@ static struct list tryErrors(struct operand* callOp, struct list* cover, bool ch
     *checkWords = markChecked(callOp, callOp, &opErrs, checked);
     if (*checkWords) {
         struct type* builtin = SemanticBuiltinErrorType();
+        if (builtin) builtin = errWithWords(builtin, *checkWords); //R1c: the words those checks can fail with
         if (builtin) ListAdd(&errors, &builtin);
     }
     struct list calls = ListInit(sizeof(struct operand*));
@@ -17109,12 +17218,7 @@ static struct list tryErrors(struct operand* callOp, struct list* cover, bool ch
             if (!own) ListAdd(&opErrs, ListGetIdx(es, k));
         }
     }
-    for (int i = 0; i < opErrs.len; i++) {
-        struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
-        bool seen = false;
-        for (int k = 0; k < errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&errors, k), *e);
-        if (!seen) ListAdd(&errors, &e);
-    }
+    for (int i = 0; i < opErrs.len; i++) errSetUnion(&errors, *(struct type**)ListGetIdx(&opErrs, i)); //R1c
     return errors;
 }
 
@@ -17135,12 +17239,7 @@ static void takeCheckedInto(struct operand* root, struct list* taken, struct lis
             a->catchClauses = ListInit(sizeof(struct catchClause));
         }
         *checkWords |= a->absorbWords;
-        for (int k = 0; a->absorbErrs && k < a->absorbErrs->len; k++) {
-            struct type* e = *(struct type**)ListGetIdx(a->absorbErrs, k);
-            bool seen = false;
-            for (int q = 0; q < errors->len && !seen; q++) seen = TypeIsSame(**(struct type**)ListGetIdx(errors, q), *e);
-            if (!seen) ListAdd(errors, &e);
-        }
+        for (int k = 0; a->absorbErrs && k < a->absorbErrs->len; k++) errSetUnion(errors, *(struct type**)ListGetIdx(a->absorbErrs, k));
         a->absorbErrs = NULL;
     }
 }
@@ -17993,6 +18092,19 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             if (ctx->inTextJoin) Err(firstTokOfType(callNode, TOK_PAREN_O), ERR_JOIN_PIECE_CALLED);
             else Err(nameTok, ERR_NOT_CALLABLE, &func->type);
             return unknownPlaceholder(nameTok); //no value - nothing more is said about it
+        }
+        //T29d: "Radix(10)" - a declared number's constructor called on a literal runs while compiling, as the literal
+        //entering the type would (the literal then stands for what it gives), so it cannot fail where it runs
+        if (func->type.hasRetType && func->type.retType->bType != BASETYPE_STRUCT && func->type.retType->ctorFunc == func
+                && args.len == 1) {
+            struct operand* lit = *(struct operand**)ListGetIdx(&args, 0);
+            if (operandIsLiteralLike(lit) && !lit->isNullLiteral && !lit->type.owner && TypeIsNumeric(lit->type)) {
+                struct type t = *func->type.retType;
+                t.structMAlloc = false;
+                t.scopeParam = NULL;
+                reportTypeFit(OperandFitsType(ctx->func, lit, t), lit->tok, lit, t);
+                return lit;
+            }
         }
         struct list wbPre = ListInit(sizeof(struct statement)); //E31b: "f(x[i])" for a "mut &" parameter - a handle's copy
         atWriteBackArgs(ctx, func, &args, nameTok, &wbPre);
@@ -23401,9 +23513,7 @@ static void forInTryNote(struct forInTry* ft, struct checkCtx* ctx, struct opera
     for (int i = 0; i < es->len; i++) {
         struct type* e = *(struct type**)ListGetIdx(es, i);
         if (handled && TypeIsSame(*e, *handled)) continue;
-        bool seen = false;
-        for (int k = 0; k < ft->errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&ft->errors, k), *e);
-        if (!seen) ListAdd(&ft->errors, &e);
+        errSetUnion(&ft->errors, e); //R1c
     }
     ft->ctxs[ft->calls.len] = *ctx;
     ListAdd(&ft->calls, &call);
@@ -25568,12 +25678,15 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (crossModule && !isPublic(strFromTok(wordTok))) { Err(wordTok, ERR_ERROR_WORD_IS_PRIVATE, wordTok); return stmt; }
     resolveTypeDecl(errType);
 
-    lambdaInferError(ctx->func, errType); //D16b
-    bool declared = false;
-    for (int i = 0; i < ctx->func->type.errors.len; i++) {
-        if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == errType) { declared = true; break; }
-    }
-    if (!declared) { Err(errTypeTok, ERR_ERROR_UNDECLARED, errTypeTok); return stmt; }
+    //R1c: the word, which an inferred set takes on and a written one must name
+    long long wordIdx = -1;
+    for (int w = 0; w < errType->words.len && wordIdx < 0; w++)
+        if (StrCmp(strFromTok(*(struct token*)ListGetIdx(&errType->words, w)), strFromTok(wordTok))) wordIdx = w;
+    struct type* raised = wordIdx >= 0 && wordIdx < 64 ? errWithWords(errType, 1ull << wordIdx) : errType;
+    lambdaInferError(ctx->func, raised); //D16b
+    struct type** have = errSetEntry(&ctx->func->type.errors, *errType);
+    if (!have) { Err(errTypeTok, ERR_ERROR_UNDECLARED, errTypeTok); return stmt; }
+    if (wordIdx >= 0 && errSetMissing(&ctx->func->type.errors, *raised)) { Err(wordTok, ERR_ERROR_WORD_NOT_IN_SET, *have); return stmt; }
 
     stmt.op = OperandErrorLiteral(*errType, wordTok);
     return stmt;
@@ -25999,11 +26112,10 @@ static void buildTaskClauses(struct checkCtx* ctx, struct syntax* tryNode, struc
     bool escapes = false;
     for (int i = 0; !sawAll && i < errs->len; i++) {
         struct type* e = *(struct type**)ListGetIdx(errs, i);
-        if (StatementCatchCoversType(&seen, *e)) continue;
+        unsigned long long left = catchLeftWords(&seen, *e); //R1c: the words no clause of the task takes
+        if (!left) continue;
         escapes = true;
-        bool have = false;
-        for (int k = 0; k < ctx->joinErrs->len && !have; k++) have = TypeIsSame(**(struct type**)ListGetIdx(ctx->joinErrs, k), *e);
-        if (!have) ListAdd(ctx->joinErrs, &e);
+        errSetUnion(ctx->joinErrs, errWithWords(e, left));
     }
     builtinWordMask = prevMask;
     if (escapes && stmt->spawnTargets.len && ctx->joinFallibleTarget) *ctx->joinFallibleTarget = true;
@@ -26151,9 +26263,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         //...and its errors are still what the join can fail with, so a "try join" around it is not reported as well
         for (int i = 0; ctx->joinErrs && i < call->readVar->type.errors.len; i++) {
             struct type* e = *(struct type**)ListGetIdx(&call->readVar->type.errors, i);
-            bool have = false;
-            for (int k = 0; k < ctx->joinErrs->len && !have; k++) have = TypeIsSame(**(struct type**)ListGetIdx(ctx->joinErrs, k), *e);
-            if (!have) ListAdd(ctx->joinErrs, &e);
+            errSetUnion(ctx->joinErrs, e);
         }
         return stmt;
     }
@@ -26637,10 +26747,7 @@ void lambdaInferResult(struct var* f, struct list* vals, struct token tok) {
 //its errors, which then reports as it would anywhere else
 bool lambdaInferError(struct var* f, struct type* e) {
     if (!f || !f->inferErrs) return false;
-    for (int i = 0; i < f->type.errors.len; i++) {
-        if (TypeIsSame(**(struct type**)ListGetIdx(&f->type.errors, i), *e)) return true;
-    }
-    ListAdd(&f->type.errors, &e);
+    errSetUnion(&f->type.errors, e); //R1c: the words it lets through, added to those it already has
     return true;
 }
 
@@ -27064,12 +27171,8 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
         else if (crossModule && hasWordTok && !isPublic(strFromTok(wordTok))) Err(wordTok, ERR_ERROR_WORD_IS_PRIVATE, wordTok);
         resolveTypeDecl(errType);
 
-        bool produces = false;
-        for (int j = 0; j < errors->len; j++) {
-            struct type* e = *(struct type**)ListGetIdx(errors, j);
-            if (TypeIsSame(*e, *errType)) { produces = true; break; }
-        }
-        if (!produces) { if (!inInstanceBody) Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
+        struct type** produced = errSetEntry(errors, *errType);
+        if (!produced) { if (!inInstanceBody) Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
 
         struct catchMatch cm = (struct catchMatch){0};
         cm.errType = *errType;
@@ -27080,6 +27183,11 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
                 if (StrCmp(strFromTok(wt), strFromTok(wordTok))) { wordIdx = w; break; }
             }
             if (wordIdx < 0) { Err(wordTok, ERR_NO_SUCH_ERROR_WORD, errType, wordTok); continue; }
+            //R1c/R14: a word the call's set does not hold is no more caught than a type it does not name
+            if (wordIdx < 64 && !(ErrSetWords(**produced) & (1ull << wordIdx))) {
+                if (!inInstanceBody) Err(wordTok, ERR_CATCH_WORD_NOT_PRODUCED, errWithWords(errType, 1ull << wordIdx), *produced);
+                continue;
+            }
             cm.hasWord = true;
             cm.wordOrdinal = wordIdx;
         }
@@ -27095,17 +27203,15 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
     //its own, as long as every possible error is caught locally)
     for (int i = 0; i < errors->len; i++) {
         struct type* e = *(struct type**)ListGetIdx(errors, i);
-        if (StatementCatchCoversType(matches, *e)) continue;
+        unsigned long long left = catchLeftWords(matches, *e); //R1c: what no clause takes, word by word
+        if (!left) continue;
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
         if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
         if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
         if (!ctx->func) { if (ctx->inTest) { testEscapes = true; return; } Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
-        bool found = false;
-        for (int j = 0; j < ctx->func->type.errors.len; j++) {
-            struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
-            if (TypeIsSame(*e, *fe)) { found = true; break; }
-        }
-        if (!found && !lambdaInferError(ctx->func, e)) { Err(tok, ERR_TRY_ERROR_NOT_DECLARED, e); return; }
+        struct type* le = errWithWords(e, left);
+        unsigned long long missing = errSetMissing(&ctx->func->type.errors, *le);
+        if (missing && !lambdaInferError(ctx->func, le)) { Err(tok, ERR_TRY_ERROR_NOT_DECLARED, errWithWords(e, missing)); return; }
     }
 
 }
@@ -27180,12 +27286,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         c->checkRoot = root;
         for (int k = 0; k < c->readVar->type.errors.len; k++) ListAdd(&opErrs, ListGetIdx(&c->readVar->type.errors, k));
     }
-    for (int i = 0; i < opErrs.len; i++) {
-        struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
-        bool seen = false;
-        for (int k = 0; k < errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&errors, k), *e);
-        if (!seen) ListAdd(&errors, &e);
-    }
+    for (int i = 0; i < opErrs.len; i++) errSetUnion(&errors, *(struct type**)ListGetIdx(&opErrs, i)); //R1c
     struct statement out = (struct statement){0};
     out.sType = STATEMENT_EXPR;
     out.op = root;
@@ -30630,7 +30731,7 @@ static void settleInferredErrs(void) {
     errsRedo = false;
     for (int i = 0; i < errObs.len && !errsRedo; i++) {
         struct errObs* o = ListGetIdx(&errObs, i);
-        errsRedo = o->f->type.errors.len != o->len;
+        errsRedo = errSetSize(&o->f->type.errors) != o->len;
     }
     //what each set was found to be - where the next attempt starts, whether this one is redone for it or for a condition
     errDecisions = ListInit(sizeof(struct errDecision));
@@ -30642,7 +30743,7 @@ static void settleInferredErrs(void) {
         if (sorted.len) qsort(sorted.ptr, (size_t)sorted.len, sizeof(struct type*), errTypeCmp);
         for (int k = 0; k < sorted.len; k++) {
             struct type* e = *(struct type**)ListGetIdx(&sorted, k);
-            struct errKey ek = { e->owner ? e->owner->identity : (struct str){0}, e->name };
+            struct errKey ek = { e->owner ? e->owner->identity : (struct str){0}, e->name, e->errWords ? ErrSetWords(*e) : 0 };
             ListAdd(&d.errs, &ek);
         }
         ListAdd(&errDecisions, &d);
@@ -30698,9 +30799,9 @@ static void checkCheckedFormIn(struct var* m, struct var* plainInst) {
     if (p == m) return;
     for (int i = 0; i < p->type.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&p->type.errors, i);
-        bool has = false;
-        for (int k = 0; k < m->type.errors.len && !has; k++) has = TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, k), *e);
-        if (!has) {
+        unsigned long long missing = errSetMissing(&m->type.errors, *e); //R1c: word by word
+        if (missing) {
+            e = errWithWords(e, missing);
             char* nm = StrFmt("%.*s", base.len, base.ptr);
             Err(m->tok, ERR_CHECKED_NOT_SUPERSET, nm, plain, plain, e);
             return;

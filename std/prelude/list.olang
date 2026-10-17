@@ -178,13 +178,13 @@ fn (l mut List<<T>>&) SetAt(i I64, x T) {
 
 # the first element - failing with EMPTY when there is none, as Map.Get fails on a missing key:
 # "try l.First() catch default 0" gives a fallback
-fn (l List<<T>>&) First() T ? ListError {
+fn (l List<<T>>&) First() T ? ListError.EMPTY {
     if l.s.count == 0 { error ListError.EMPTY }
     return l.s.first[0]
 }
 
 # the last element - failing with EMPTY when there is none
-fn (l List<<T>>&) Last() T ? ListError {
+fn (l List<<T>>&) Last() T ? ListError.EMPTY {
     s := l.s
     if s.count == 0 { error ListError.EMPTY }
     if s.used == 0 {
@@ -196,7 +196,7 @@ fn (l List<<T>>&) Last() T ? ListError {
 
 # removes the last element and gives it - failing with EMPTY when there is none, so a list used as a stack or a work
 # list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
-fn (l mut List<<T>>&) Pop() T ? ListError {
+fn (l mut List<<T>>&) Pop() T ? ListError.EMPTY {
     s := l.s
     if s.count == 0 { error ListError.EMPTY }
     s.dropLast()
@@ -251,12 +251,12 @@ fn (l mut List<<T>>&) Truncate(n I64) {
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
-fn (l mut List<<T>>&) RemoveAt(i I64) ? ListError { try l.TakeAt(i) }
+fn (l mut List<<T>>&) RemoveAt(i I64) ? ListError.OUT_OF_RANGE { try l.TakeAt(i) }
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
 # checked once per call
-fn (l mut List<<T>>&) TakeAt(i I64) T ? ListError {
+fn (l mut List<<T>>&) TakeAt(i I64) T ? ListError.OUT_OF_RANGE {
     s := l.s
     if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
     p I64 = i + firstChunk
@@ -283,7 +283,7 @@ fn (l mut List<<T>>&) TakeAt(i I64) T ? ListError {
 # puts x at position i, the elements from i on each moving up one place - so it costs the number of elements after i,
 # and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not fails with OUT_OF_RANGE, checked once
 # per call
-fn (l mut List<<T>>&) Insert(i I64, x T) ? ListError {
+fn (l mut List<<T>>&) Insert(i I64, x T) ? ListError.OUT_OF_RANGE {
     s := l.s
     if i < 0 or i > s.count { error ListError.OUT_OF_RANGE }
     if i == s.count {
@@ -568,7 +568,7 @@ fn (l List<<T>>&) Has(x T) Bool {
 
 # the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none, as
 # Find does: "try l.IndexOf(x) catch default -1" gives a fallback
-fn (l List<<T>>&) IndexOf(x T) I64 ? ListError {
+fn (l List<<T>>&) IndexOf(x T) I64 ? ListError.NOT_FOUND {
     for i, y in l {
         if y == x { return i }
     }
@@ -584,12 +584,12 @@ fn (l mut List<<T>>&) Remove(x T) Bool {
 }
 
 # removes the element at position i as SwapTake does, giving nothing
-fn (l mut List<<T>>&) SwapRemove(i I64) ? ListError { try l.SwapTake(i) }
+fn (l mut List<<T>>&) SwapRemove(i I64) ? ListError.OUT_OF_RANGE { try l.SwapTake(i) }
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
 # the length, where TakeAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
 # one that is not fails with OUT_OF_RANGE, checked once per call, as TakeAt checks it
-fn (l mut List<<T>>&) SwapTake(i I64) T ? ListError {
+fn (l mut List<<T>>&) SwapTake(i I64) T ? ListError.OUT_OF_RANGE {
     s := l.s
     if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
     x := l.At(i)
