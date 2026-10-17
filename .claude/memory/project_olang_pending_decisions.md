@@ -281,6 +281,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   `With` aborts (one compare per Set). Reverses the user's own design (QG-QI, 2026-10-10); a large removal in both
   compilers. ASKED: write it up first in docs/memory.md (server and interpreter worked through) for review? In effect:
   own stays; ownership work frozen (no Vec phase 2b) until answered.
+  The user then: "The compiler is allowed to do tricks all it wants, but the user should not have to deal with it".
+  Revised proposal: no user-visible mechanism at all (no Slot either) - the language rule is only "everything lives in
+  a scope"; freeing earlier is an optimization the compiler makes wherever it proves nothing still refers to the old
+  storage (an overwritten slot, a Vec's old buffer, a removed Map entry - region inference, run on the analysis the
+  own checker does today), else it keeps it until the scope closes (always safe, never an error). Unobservable except
+  in memory, so stage 0 just drops `own` and never frees early; the port does the analysis in its scope pass. A report
+  (`olang build -memory`) lists where replaced storage is kept and why. ASKED: write docs/memory.md for review?
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
