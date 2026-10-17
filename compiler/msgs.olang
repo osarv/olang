@@ -282,6 +282,7 @@ type Diag enum {
     ArrayOneIndex
     OperatorResult
     SetatResult
+    CheckedWithoutPlain
     CheckedNotSuperset
     MethodCannotFail
     LessNotBool
@@ -432,7 +433,6 @@ type Diag enum {
     NoSuchCase
     NoSuchCaseMeant
     ScopeArgCount
-    OnlyTryForm
     MatmulUndeclared
     NotExtendedOp
     CondNotBoolType
@@ -559,6 +559,9 @@ type Diag enum {
     ReturnValueInVoid
     ReturnNeedsValue
     ErrorOutsideFunction
+    ErrorWordTooFar
+    ErrorWordNotInSet
+    CatchWordNotProduced
     ErrorWordIsPrivate
     ErrorUndeclared
     JoinWithoutSpawn
@@ -1344,6 +1347,9 @@ fn OperatorResult(text String&) Msg { return Msg(Diag.OperatorResult, "E31", $te
 # ERR_SETAT_RESULT
 fn SetatResult() Msg { return Msg(Diag.SetatResult, "E31", "SetAt gives no result") }
 
+# ERR_CHECKED_WITHOUT_PLAIN
+fn CheckedWithoutPlain(text1 String&, text2 String&) Msg { return Msg(Diag.CheckedWithoutPlain, "E31a", $text1 " is a checked form, which only adds checks to its plain form - declare " $text2 " beside it") }
+
 # ERR_CHECKED_NOT_SUPERSET
 fn CheckedNotSuperset(text1 String&, text2 String&, text3 String&, ty String&) Msg { return Msg(Diag.CheckedNotSuperset, "E31a", $text1 " is " $text2 "'s checked form, so it fails with every error " $text3 " can - add " $ty " after its '?'") }
 
@@ -1794,9 +1800,6 @@ fn NoSuchCaseMeant(ty String&, tok String&, text String&) Msg { return Msg(Diag.
 # ERR_SCOPE_ARG_COUNT
 fn ScopeArgCount() Msg { return Msg(Diag.ScopeArgCount, "E25", "a call takes at most one scope argument") }
 
-# ERR_ONLY_TRY_FORM
-fn OnlyTryForm(ty String&, text String&) Msg { return Msg(Diag.OnlyTryForm, "E31a", $ty " has only the checked form of this operation, " $text " - write it under 'checked'") }
-
 # ERR_MATMUL_UNDECLARED
 fn MatmulUndeclared(ty String&) Msg { return Msg(Diag.MatmulUndeclared, "E31", "'@' has no built-in meaning, and " $ty " declares no MatMul") }
 
@@ -2174,6 +2177,15 @@ fn ReturnNeedsValue(ty String&) Msg { return Msg(Diag.ReturnNeedsValue, "D8", "t
 
 # ERR_ERROR_OUTSIDE_FUNCTION
 fn ErrorOutsideFunction() Msg { return Msg(Diag.ErrorOutsideFunction, "R3", "'error' fails a function, and this is not inside one") }
+
+# ERR_ERROR_WORD_TOO_FAR
+fn ErrorWordTooFar(ty String&) Msg { return Msg(Diag.ErrorWordTooFar, "R1c", "an error set names one of " $ty "'s first 64 words alone, and this is past them - name the type whole") }
+
+# ERR_ERROR_WORD_NOT_IN_SET
+fn ErrorWordNotInSet(ty String&) Msg { return Msg(Diag.ErrorWordNotInSet, "R3", "this function's '?' names " $ty ", not this word - add it after '?'") }
+
+# ERR_CATCH_WORD_NOT_PRODUCED
+fn CatchWordNotProduced(ty1 String&, ty2 String&) Msg { return Msg(Diag.CatchWordNotProduced, "R14", "the call does not fail with " $ty1 " - it fails with " $ty2) }
 
 # ERR_ERROR_WORD_IS_PRIVATE
 fn ErrorWordIsPrivate(tok String&) Msg { return Msg(Diag.ErrorWordIsPrivate, "M6a", "error word " $tok " is private to its module") }

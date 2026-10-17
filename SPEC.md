@@ -2275,7 +2275,7 @@ signed type (`I32`, `I64`) is two's complement, so `I32` 2147483647 + 1 is -2147
 negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
 out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
-rely on it. A program wanting overflow detected checks for it itself, or writes `try` (E15a), which checks it there.
+rely on it. A program wanting overflow detected checks for it itself, or writes `checked` (E15a), which checks it there.
 Wrapping is deliberate, not a gap: it is the one defined result that costs nothing, where a check on every operation
 would be a cost the code does not show. Division is the exception, by E6a.
 
@@ -2701,7 +2701,7 @@ the same reading C gives it, and one of exactly two places in this language wher
 storage it does not own (the other is `extern fn`, §11 X1a).
 
 Where the index and the length are **both known at compile time** — a constant index into a
-compile-time-length array — an out-of-range index written without `try` is a **compile-time error**. That check
+compile-time-length array — an out-of-range index written without `checked` is a **compile-time error**. That check
 costs nothing at run time and is not affected by the above. Under `checked` (E16d) the index is the checked form,
 whose failure is defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a generic over the length
 (`fn third(a Array<I32, <N>>&) I32 { return checked a[2] catch default -1 }`) one instantiation may have the element
@@ -3090,8 +3090,13 @@ naming the error to add. Where a type declares no checked form:
   j]`) that does not declare `CheckedAt` (or `CheckedSetAt`) itself, since `Len` checks one position.
 - every other operation is its plain form, which `checked` then calls as `try` would.
 
-A type declaring only the checked form of an operation (`CheckedAt` and no `At`) has that operation only under
-`checked`: `x[i]` without it is an error. A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
+A checked form **requires its plain form**: a type declaring `CheckedX` and no `X` - `CheckedAt` with no `At` - is a
+compile-time error at the checked form, naming `X` (`CheckedInc` and `CheckedDec` are satisfied by the `Plus` and
+`Minus` an increment is derived from, E31). `checked` only adds checks, and `try` never turns one on (R8), so no
+operation is reachable under one keyword and not under the other. The superset rule above is judged for a generic type
+per instantiation, since a plain form written `?` alone may fail with what its type argument's operation fails with -
+an instantiation whose checked form leaves out one of those errors is the error, with a note at the use that
+instantiated it (G16b). A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
@@ -3426,7 +3431,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
   and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
-  borrowed (E12c), never copied. A type with `CheckedAt` and `Len` but no `At` is walked through `CheckedAt`, under `checked` (S9e).
+  borrowed (E12c), never copied. The loop calls `At` - never a checked form, `for x in try c` included (S9e).
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
@@ -3436,7 +3441,8 @@ a loop in its own module calls (M6b). Anything else after `in` is a compile-time
 apply as in every loop; `continue` moves to the next value.
 
 **S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
-a call, `Iter()`, `Next()`, `At()` - and any of them may declare errors. Such a loop is written with `try` after
+a call, `Iter()`, `Next()`, `At()` - and any of them may declare errors. `try` here, as anywhere (R8), turns no check
+on: the loop calls a type's plain `At`, never its `CheckedAt`. Such a loop is written with `try` after
 `in`, which covers exactly those calls (a call written in the body takes its own `try`); one whose own calls cannot
 fail may not be written with it, and one whose own calls can fail must be. `Exhausted` from `Next()` is not such a
 failure: it ends the loop, as in S9a, and is never a clause's to name. `Next()` may declare other errors beside it -
@@ -3700,7 +3706,7 @@ the program (K1), and a true one needs, and gets, no run-time check. This holds 
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
-**S18d (the error return trace).** A test build (`-t`) and a debug build (`-d`, §10) keep, for each thread, a trace of
+**S18d (the error return trace).** A test build (`test`) and a debug build (`-debug`, §10) keep, for each thread, a trace of
 where the error being returned went - its last 32 places: an `error` statement (R3) or a check failing under `checked`
 (E15a) **raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
 on a task's error (P4b), adds its place; a clause that takes an error clears it. Nothing is recorded where nothing fails,
@@ -3712,7 +3718,7 @@ place - `raised here`, `try passed it on`, `a task failed, and its join passed i
 - when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
 
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead. A program run
-with `-i` (B3e) prints the trace as a debug build does.
+with `interpret` (B3e) prints the trace as a debug build does.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
 error leaving the test (S16) — runs the
@@ -6444,7 +6450,7 @@ must state exactly the prototype below (X1a).
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
 | `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `interpret` as the call `f()`, the evaluator's own limits on depth standing for the stack |
-| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `-i` the message is written first when the interpreter's process crashes |
+| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `interpret` the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
 
