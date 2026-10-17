@@ -22,6 +22,21 @@ only depends on concepts already introduced by earlier ones:
 | 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
 | 12 Generics | Type and constant parameters on functions and struct types, inference, `match` over a type, monomorphization |
 
+Each rule is named by a letter for its area and a number, `T7`, sometimes with a lowercase letter for a later rule
+that refines it, `O25h`. Numbers are given in the order rules are written and are never reused, so a removed rule leaves
+a gap and a name always means the same rule. Diagnostics print the name (`error[O25]`) and `olang explain O25` prints
+the rule. The letters:
+
+| Letter | Area | Letter | Area |
+|---|---|---|---|
+| L | lexical structure (§1) | R | error handling (§7) |
+| T | types (§2) | O | ownership and scopes (§8) |
+| D | declarations (§3) | C | constructors and destructors (§9) |
+| M | modules (§4) | B | the build: compilation model and command line (§10) |
+| E | expressions (§5) | X | external functions (§11) |
+| S | statements (§6) | G | generics (§12) |
+| P | concurrency (§6.8) | K | compile-time evaluation |
+
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
 and always name the target section and rule, never an internal implementation detail (a function
 name, a struct field).
