@@ -139,6 +139,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   character; (2) GNU short+long; (3) Go-style single-dash words; (4) subcommands for modes (`olang build/compile/test/
   interpret/format/explain`, bare `olang FILE` runs) with single-dash word modifiers (-debug -race -sanitize -target
   -define -update -o). Recommended 4. In effect: one-character flags (B1).
+  The user chose 4 ("mutually exclusive options like build compile interpret etc have their own branches ... Full
+  names are readable"). Proposed list (awaiting OK): modes - bare FILE (run, new), build (-b), compile (-c), test (-t),
+  interpret (-i), format (-f), explain (-e), help (new); options - -output (-o: build, compile), -debug (-d), -race (-r),
+  -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
+  test interpret), -check (-l: format); single dash, no aliases for the old flags.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
