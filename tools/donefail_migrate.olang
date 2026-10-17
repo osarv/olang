@@ -1,0 +1,232 @@
+# donefail_migrate - moves olang code off "done", "fail" and "abort", which are gone (SPEC S16, S16d, D8e): a test
+# passes by reaching its end or "return", and fails by a failed assert, "unreachable", a "!", or an error leaving it.
+#
+#   - "try X catch { fail }" in a test body is "try X": the error it lets through fails the test (S16);
+#     anywhere else it is "X!", which ends the program as the old "fail" did, naming the error (E35);
+#   - "catch E { fail }" ending a try in a test body is dropped, for the same reason;
+#   - "if C { fail }" is "assert not C" - parenthesized where C has an "and", "or", "xor" or "if" of its own;
+#   - "{ done }" and a "done" line in a test body, or in main, are "return";
+#   - what is left of "fail" in a test body, and every "abort", is "unreachable".
+#
+# It reads text, not the program, and leaves alone what it cannot be sure of - a "fail" or "done" in an ordinary
+# function or a lambda, a "try ... catch { fail }" whose operand it cannot find - listing each for a person. Run it on
+# files or directories:
+#
+#     build/out -b tools/donefail_migrate.olang && build/tools_donefail_migrate shared.olang std/ ...
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+
+fn isIdent(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# l with its strings, characters and comment blanked - the same length, so an offset in one is the offset in the other
+fn codeOf(l String&) String {
+    b := StringBuilder()
+    k I64 = 0
+    for k < l.Len() {
+        c := l[k]
+        if c == '#' {
+            for k < l.Len() {
+                b.PushChar(' ')
+                k++
+            }
+            break
+        }
+        if c == '"' or c == '\'' {
+            b.PushChar(c)
+            k++
+            for k < l.Len() and l[k] != c {
+                if l[k] == '\\' {
+                    b.PushChar(' ')
+                    k++
+                }
+                if k < l.Len() {
+                    b.PushChar(' ')
+                    k++
+                }
+            }
+            if k < l.Len() { b.PushChar(c) }
+        } else { b.PushChar(c) }
+        k++
+    }
+    return b.ToString()
+}
+
+# where the whole word w stands in code at or after from, else -1
+fn wordAt(code String&, w String&, from I64) I64 {
+    k := from
+    for k + w.Len() <= code.Len() {
+        at := try code[k:].Find(w) catch default -1
+        if at < 0 { return -1 }
+        p := k + at
+        e := p + w.Len()
+        if (p == 0 or not isIdent(code[p - 1])) and (e == code.Len() or not isIdent(code[e])) { return p }
+        k = p + 1
+    }
+    return -1
+}
+
+# the "try" whose operand ends just before off in code: the last whole word "try" before it with the brackets between
+# balanced, else -1
+fn tryBefore(code String&, off I64) I64 {
+    k := off - 1
+    depth I64 = 0
+    for k >= 0 {
+        c := code[k]
+        if c == ')' or c == ']' { depth++ }
+        if c == '(' or c == '[' {
+            if depth == 0 { return -1 }
+            depth--
+        }
+        if depth == 0 and k + 4 <= off and code[k:k + 4] == "try " and (k == 0 or not isIdent(code[k - 1])) { return k }
+        k--
+    }
+    return -1
+}
+
+# a condition written after "assert not": parenthesized where an operator binding looser than "not" stands in it
+fn negated(c String&) String {
+    t := c.Trim()
+    if t.StartsWith("not ") and wordAt(codeOf(t[4:]), "and", 0) < 0 and wordAt(codeOf(t[4:]), "or", 0) < 0 {
+        return $t[4:]
+    }
+    code := codeOf(t)
+    # one "==" or "!=" and nothing looser: the comparison turned round
+    eq := try code.Find(" == ") catch default -1
+    ne := try code.Find(" != ") catch default -1
+    plain := (wordAt(code, "and", 0) < 0 and wordAt(code, "or", 0) < 0 and wordAt(code, "xor", 0) < 0
+              and wordAt(code, "if", 0) < 0 and wordAt(code, "not", 0) < 0 and code.CountOf("==") + code.CountOf("!=") == 1)
+    if plain and eq >= 0 { return $t[:eq] " != " $t[eq + 4:] }
+    if plain and ne >= 0 { return $t[:ne] " == " $t[ne + 4:] }
+    loose := (wordAt(code, "and", 0) >= 0 or wordAt(code, "or", 0) >= 0 or wordAt(code, "xor", 0) >= 0
+              or wordAt(code, "if", 0) >= 0)
+    return ("not (" $t ")") if loose else ("not " $t)
+}
+
+# one line migrated; inTest whether it is in a test body, inMain whether in main; the line unchanged when nothing
+# applies, and what is left for a person added to left
+fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut List<String&>&) String {
+    out := $l
+    for {
+        code := codeOf(out)
+        at := try code.Find("catch { fail }") catch default -1
+        if at < 0 { break }
+        k := at - 1
+        for k >= 0 and code[k] == ' ' { k-- }
+        t := tryBefore(code, k + 1)
+        if inTest {
+            # the clause dropped - with whatever spaces stood before it
+            out = $out[:k + 1] $out[at + 14:]
+        } else if t >= 0 and (try code[t:at].Find(" catch ") catch default -1) < 0 {
+            out = $out[:t] $out[t + 4:k + 1] "!" $out[at + 14:]
+        } else {
+            left.Push($where ": try ... catch { fail } - its operand was not found")
+            break
+        }
+    }
+    code := codeOf(out)
+    # "catch E { fail }" ending a try in a test
+    if inTest {
+        f := try code.Find(" { fail }") catch default -1
+        c := try code.FindLast(" catch ") catch default -1
+        if f >= 0 and c >= 0 and c < f and code[f + 9:].Trim().Len() == 0 {
+            out = $out[:c] $out[f + 9:]
+            code = codeOf(out)
+        }
+    }
+    # "if C { fail }" on a line of its own
+    t := code.Trim()
+    if t.StartsWith("if ") and t.EndsWith(" { fail }") and (try t[3:].Find("{") catch default -1) == t.Len() - 11 {
+        ind := code.Len() - code.TrimStart().Len()
+        s := ind + 3
+        e := code.TrimEnd().Len() - 9
+        out = $out[:ind] "assert " $negated(out[s:e])
+        code = codeOf(out)
+    }
+    # done: "return" in a test or main
+    if wordAt(code, "done", 0) >= 0 {
+        d := wordAt(code, "done", 0)
+        lone := code.Trim() == "done" or (try code.Find("{ done }") catch default -1) >= 0
+        if (inTest or inMain) and lone {
+            out = $out[:d] "return" $out[d + 4:]
+            code = codeOf(out)
+        } else if lone { left.Push($where ": done - outside a test or main") }
+    }
+    # what is left of fail in a test, and abort anywhere: unreachable
+    f := wordAt(code, "fail", 0)
+    lone := f >= 0 and (code.Trim() == "fail" or (try code.Find("{ fail }") catch default -1) >= 0 or
+                        (try code.Find("=> fail") catch default -1) >= 0)
+    if lone {
+        if inTest {
+            out = $out[:f] "unreachable" $out[f + 4:]
+            code = codeOf(out)
+        } else { left.Push($where ": fail - outside a test") }
+    }
+    a := wordAt(code, "abort", 0)
+    if a >= 0 and (code.Trim() == "abort" or (try code.Find("{ abort }") catch default -1) >= 0) {
+        out = $out[:a] "unreachable" $out[a + 5:]
+    }
+    return out
+}
+
+# one file migrated; how many lines changed
+fn migrate(file String&, left mut List<String&>&) I64 ? {
+    text := try os.ReadFile(file)
+    b := StringBuilder()
+    changed I64 = 0
+    depth I64 = 0
+    testAt I64 = -1   # the depth a test body opened at, else -1
+    mainAt I64 = -1
+    n I64 = 1
+    first Bool = true
+    for l in text.Lines() {
+        if not first { b.PushChar('\n') }
+        first = false
+        tl := l.Trim()
+        if testAt < 0 and tl.StartsWith("test \"") { testAt = depth }
+        if mainAt < 0 and tl.StartsWith("fn main()") { mainAt = depth }
+        m := migrateLine(l, testAt >= 0, mainAt >= 0, $file ":" $n, left)
+        if m != l { changed++ }
+        b.Push(m)
+        for c in codeOf(l) {
+            if c == '{' { depth++ }
+            if c == '}' { depth-- }
+        }
+        if testAt >= 0 and depth <= testAt { testAt = -1 }
+        if mainAt >= 0 and depth <= mainAt { mainAt = -1 }
+        n++
+    }
+    if text.EndsWith("\n") { b.PushChar('\n') }
+    if changed > 0 { try os.WriteFile(file, b.ToString()) }
+    return changed
+}
+
+# the .olang files of the paths given, directories walked
+fn filesOf(paths Array<String&>&) List<String&> ? {
+    out := List<String&>()
+    for p in paths {
+        if os.IsDir(p) {
+            sub := List<String&>()
+            for n in try os.ReadDir(p) { sub.Push(filepath.Join(p, n)) }
+            for f in try filesOf(sub.ToArray()) { out.Push($f) }
+        } else if p.EndsWith(".olang") { out.Push(p) }
+    }
+    return out
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: donefail_migrate PATH...")
+        os.Exit(2)
+    }
+    left := List<String&>()
+    total I64 = 0
+    for f in try filesOf(args[1:]) {
+        if f.EndsWith("donefail_migrate.olang") { continue }
+        total += try migrate(f, left)
+    }
+    try io.Println($total " lines changed")
+    for l in left { try io.Println(l) }
+}
