@@ -113,6 +113,13 @@ fn (d mut Diagnostics&) lineOf(file I64, at I64) (I64, I64) {
     return lo + 1, d.starts[from + lo]
 }
 
+# where an offset of a file is, as a row writes it: "PATH:LINE:COL"
+fn (d mut Diagnostics&) Locate(file I64, at I64) String {
+    if file < 0 or file >= d.paths.Len() { return "?" }
+    line, start := d.lineOf(file, at)
+    return $d.paths[file] ":" $line ":" $(at - start + 1)
+}
+
 # ---- reporting ----
 
 # reports an error at where m is about; the number it gives names it to Note, and is -1 for an error not reported (the
@@ -241,6 +248,24 @@ fn (d mut Diagnostics&) Hold() I64 {
 # closes the group opened last
 fn (d mut Diagnostics&) EndHold() { try d.held.Pop() catch { } }
 
+# how many diagnostics have been reported, held ones included - whether a step reported one
+fn (d Diagnostics&) Count() I64 { return d.records.Len() }
+
+# forgets every diagnostic reported since Count gave mark, and the notes on them - a step done again from the start
+# (the checker's attempts, R1a)
+fn (d mut Diagnostics&) Forget(mark I64) {
+    if mark >= d.records.Len() { return }
+    d.records.Truncate(mark)
+    k I64 = 0
+    for i in range d.notes.Len() {
+        if d.notes[i].rec < mark {
+            d.notes[k] = d.notes[i]
+            k++
+        }
+    }
+    d.notes.Truncate(k)
+}
+
 # opens group g again: what is reported until EndHold belongs to it, as what the parser met in a branch does - a later
 # pass reporting inside a branch the build decides
 fn (d mut Diagnostics&) Reopen(g I64) { d.held.Push(g) }
@@ -265,6 +290,9 @@ fn (d mut Diagnostics&) Drop(g I64) { d.groupState[g] = Dropped }
 fn (d mut Diagnostics&) ChooseAll() {
     for g in range d.groupState.Len() { d.groupState[g] = Chosen }
 }
+
+# whether group g was dropped: its branch was not taken
+fn (d Diagnostics&) IsDropped(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Dropped }
 
 # whether group g, or a group inside it, holds a diagnostic - a branch that met a syntax error
 fn (d Diagnostics&) Holds(g I64) Bool {
