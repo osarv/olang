@@ -8,7 +8,7 @@ fn churn() ? io.IoError {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (try a[0] catch default Array<I64, 2>())[0:2] }
+fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (checked a[0] catch default Array<I64, 2>())[0:2] }
 fn deep(n I64) I64 {
     b := Array<I64, 8>()
     for i in range 8 { b[i] = n * 1000 + i }

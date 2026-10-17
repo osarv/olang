@@ -947,9 +947,9 @@ e15atryonlychecks.olang:3:37: error[E15a]: nothing here fails as written - write
       |                                     ^~~
 compilation failed with 1 error
 === e16atrydefaultslice.olang
-e16atrydefaultslice.olang:11:57: error[E15a]: nothing here fails as written - write 'checked' to check it
-   11 | fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (try a[0] catch default Array<I64, 2>())[0:2] }
-      |                                                         ^~~
+e16atrydefaultslice.olang:11:100: error[O10d]: this value lives in this function's own scope, which closes first
+   11 | fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (checked a[0] catch default Array<I64, 2>())[0:2] }
+      |                                                                                                    ^
 compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
