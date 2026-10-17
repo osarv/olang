@@ -59,13 +59,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   built-in set is dropped and error sets stay as they are (bare `?` = the default error, named sets closed,
   BuiltinError only under `try`). Still standing from the user: "No std function may ever exit" (so Print's
   stop-the-program is provisional and Print becomes fallible, "another story"), and callbacks may carry `?`. Open:
-  QO4 - how std's misuse checks (RemoveAt out of range, Send on a closed channel, a bad base) report without exiting:
-  (a) a named error on each such function, (b) keep them as aborts, since they are the caller's bug like an assert.
-  Recommended (b), with Try forms (TryRemoveAt) where a caller wants an error.
+  QO4 ANSWERED the same day (reading taken, stated to the user): "if try is fine for Print then it's basically always
+  fine" -> (a): std's misuse checks (RemoveAt/Insert out of range, Send on a closed channel, a bad base, a percentile
+  outside 0..100, ...) fail with a named error and callers write `try`; language guarantees (a failed assert,
+  unreachable, out of memory, a thread that will not start) still abort; plain indexing stays unchecked. QUEUED after
+  wt-ioprint merges.
 - QO5 ANSWERED 2026-10-17: the user, after the no-try proposal: "I guess try for Print isn't that bad after all". So
   io.Print/Println/PrintErr/PrintErrln fail with IoError and are written `try io.Print(...)`; nothing stops the program;
   main keeps its rule. Hello world: `fn main() ? { try io.Println("Hello World!") }`. wt-ioprint changed course to this.
-- QO2. Too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
+- QO2 CLOSED 2026-10-17 (the user: try "is basically always fine"). Was: too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
   replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
   Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
   control flow). Recommended: (a) now, (b) only if real code still reads noisy.
