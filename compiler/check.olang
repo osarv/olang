@@ -137,10 +137,58 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 if c.Tests and mi == c.P.L.Root { c.testBody(mi, sp, body, tests) }
                 tests++
             }
+            case ast.Decl.Type(_, td) { c.declaredCtor(mi, td) }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond.Span().Start), 0) }
             nomatch { }
         }
     }
+}
+
+# a type's constructor checked whether or not a call asks for it (C2, T29d): a struct's, or a declared number's that
+# declares one - neither a generic's (checked per instance, G16) nor one whose parameters introduce variables (G10d)
+fn (c mut Checker&) declaredCtor(mi I64, td ast.TypeDecl&) {
+    if td == null or td.Body == null or (td.Params != null and td.Params.Len() > 0) { return }
+    ps Array<ast.Param&>&td = null
+    match td.Body {
+        case ast.TypeBody.Struct(s) { ps = s.Params }
+        case ast.TypeBody.Over(_, ctor) {
+            if ctor == null { return }
+            ps = ctor.S.Params
+        }
+        nomatch { return }
+    }
+    if ps != null {
+        for p in ps {
+            if introduces(p.Ty) { return }
+        }
+    }
+    ei := c.P.TypeEntry(mi, td.Name)
+    if ei < 0 { return }
+    c.ctorBody(c.P.T.Named(c.P.DeclFor(mi, ei), types.ListId(0)))
+}
+
+# whether a written type introduces a variable anywhere in it (G8b's "<T>")
+fn introduces(t ast.TypeRef&) Bool {
+    if t == null { return false }
+    match t {
+        case ast.TypeRef.Var(_, _, _) { return true }
+        case ast.TypeRef.Named(_, _, args) {
+            for a in args {
+                if introduces(a) { return true }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Perm(_, of, _, _) { return introduces(of) }
+        case ast.TypeRef.Func(_, sg) {
+            for p in sg.Params {
+                if introduces(p.Ty) { return true }
+            }
+            for r in sg.Results {
+                if introduces(r) { return true }
+            }
+        }
+        nomatch { }
+    }
+    return false
 }
 
 fn (c mut Checker&) declsIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
@@ -1234,7 +1282,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                     v := c.fit(c.read(sp, typed.Place.Deref(sp, hr, x)), wr, sp)
                     return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
                 }
-                c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(have)))
+                c.err(sp, msgs.ReadOnlyToWritable())
                 return x
             }
             if c.P.T.Same(hr, wr) { return x }

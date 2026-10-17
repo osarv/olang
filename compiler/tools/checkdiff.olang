@@ -69,7 +69,7 @@ fn run(args Array<String&>&) {
         if want == "" { continue }
         total++
         rule := ruleOf(want)
-        if otherPass(rule) { continue }
+        if ownedElsewhere(want) { continue }
         if decidedAway(rule) {
             decided++
             continue
@@ -228,6 +228,15 @@ fn ruleOf(what String&) String& {
 fn errorOf(what String&) String& {
     sp := try what.Find(" ") catch default -1
     return $what[sp + 1:]
+}
+
+# whether an error row's rules name one another pass owns: "E11c, O12" is the scope pass's
+fn ownedElsewhere(what String&) Bool {
+    sp := try what.Find(" ") catch default -1
+    for r in what[sp + 1:].Split(", ") {
+        if otherPass(r) { return true }
+    }
+    return false
 }
 
 # a rule another pass owns: section 8's scope pass (M6: the O rules, C2d, C2g, T17c, D16d, P2, T22a, E12c), the
