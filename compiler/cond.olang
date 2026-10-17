@@ -108,7 +108,6 @@ fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I6
 
 # what is wrong with a -D flag (B10, B10a)
 error DefineError {
-    MISSING
     SHAPE
     NOT_NAME
     TWICE
@@ -128,17 +127,20 @@ fn (c mut Consts&) Define(flag String&, d mut diag.Diagnostics&) ? Bad {
     eq := try flag.FindByte('=') catch default flag.Len()
     name := flag[:eq]
     value := flag[eq + 1:] if eq < flag.Len() else flag[flag.Len():]
-    at := diag.Where.Nowhere
     try c.define(flag)
-        catch DefineError.SHAPE { d.Error(at, msgs.DefineShape(flag)) }
-        catch DefineError.NOT_NAME { d.Error(at, msgs.DefineNotName(name, value)) }
-        catch DefineError.TWICE { d.Error(at, msgs.DefineTwice(name, value)) }
-        catch DefineError.BUILTIN { d.Error(at, msgs.DefineBuiltin(name)) }
-        catch DefineError.BAD_NUMBER { d.Error(at, msgs.DefineBadNumber(name, value)) }
-        catch DefineError.INT_RANGE { d.Error(at, msgs.DefineIntRange(name, value)) }
-        catch DefineError.NEG_RANGE { d.Error(at, msgs.DefineNegRange(name, value)) }
-        catch DefineError.FLOAT_RANGE { d.Error(at, msgs.DefineFloatRange(name, value)) }
-        catch { return }
+        catch DefineError.SHAPE { try badDefine(d, msgs.DefineShape(flag)) }
+        catch DefineError.NOT_NAME { try badDefine(d, msgs.DefineNotName(name, value)) }
+        catch DefineError.TWICE { try badDefine(d, msgs.DefineTwice(name, value)) }
+        catch DefineError.BUILTIN { try badDefine(d, msgs.DefineBuiltin(name)) }
+        catch DefineError.BAD_NUMBER { try badDefine(d, msgs.DefineBadNumber(name, value)) }
+        catch DefineError.INT_RANGE { try badDefine(d, msgs.DefineIntRange(name, value)) }
+        catch DefineError.NEG_RANGE { try badDefine(d, msgs.DefineNegRange(name, value)) }
+        catch DefineError.FLOAT_RANGE { try badDefine(d, msgs.DefineFloatRange(name, value)) }
+}
+
+# a -D flag's mistake, reported where the command line's are
+fn badDefine(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
+    d.Error(diag.Where.Nowhere, m)
     error Bad.FLAG
 }
 
