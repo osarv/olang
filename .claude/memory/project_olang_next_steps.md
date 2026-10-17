@@ -59,7 +59,8 @@ overrated".
   array literals keep them), both compilers.
 - QUEUED (QZ2/QZ4, the user 2026-10-17): Pair to std/pair after the syntax batch; after Vec phase 2b, the iterator
   helpers and StringBuilder onto Vec (`a.ToVec()`), List to std/list; benchmarks before/after. Then Vec phase 2b itself
-  (Vec as a type argument, in tasks and lambdas, move-aware List/Map) comes first of these.
+  (Vec as a type argument, in tasks and lambdas, move-aware List/Map) comes first of these. It also closes QF: a test of a long-running
+  Map of owned objects staying flat in memory.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.

@@ -257,6 +257,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QJ1/QJ2/QF explained again 2026-10-17 (the user asked "tell me about 2-4"); recommendations unchanged (QJ1 keep -
   or a bare `b := a` on a Vec an error; QJ2 keep; QF open until Vec phase 2b's move-aware collections, closed with a
   test of a long-running Map of owned objects staying flat).
+- QJ2 ANSWERED 2026-10-17 ("sounds right the way you have done it yes, although I am not sure exactly"): kept - a
+  callback frees nothing through its captures (O40); the handler takes the owner as a parameter. Revisit (additive) if
+  real code keeps hitting it.
+- QF CLOSED as a question 2026-10-17 (the user: "no decision for me to make ... wait for the right time to build it"):
+  covered by `own` once Vec phase 2b makes List/Map move-aware; a work item, closed by a test of a long-running Map of
+  owned objects staying flat.
 - QJ1 revised 2026-10-17 (the user: "isn't it best not to allow copies of owned things in general? So if you want to
   move it you use take always?"). Proposed: a value that owns something (Vec, a struct holding an owner) is never
   copied implicitly - `b := a`, `b = a`, a by-value argument, a store into a field/element are errors; write `take a`
