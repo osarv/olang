@@ -14,7 +14,10 @@ while p.poll() is None:
         pids = [p.pid]; i = 0
         while i < len(pids):
             try:
-                for c in open(f"/proc/{pids[i]}/task/{pids[i]}/children").read().split():
+                kids = []
+                for t in os.listdir(f"/proc/{pids[i]}/task"):
+                    kids += open(f"/proc/{pids[i]}/task/{t}/children").read().split()
+                for c in kids:
                     if open(f"/proc/{c}/comm").read().strip() == os.path.basename(cmd[0])[:15]: pids.append(int(c))
             except Exception: pass
             i += 1
