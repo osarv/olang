@@ -245,6 +245,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
   (maybe `Number`), sealed by a private method so only the primitives satisfy them (and declared types extending one),
   used as `fn Sqrt(x <T Float>) T`. Reverses the user's 2026-10-07 deferral. Recommended yes. In effect: none.
+  ANSWERED ("Yes, add those traits in the prelude. Do one for Float Integer Number. Are SignedInteger and
+  UnsignedInteger worth it?"): Float, Integer, Number built (wt-numtraits); Signed/UnsignedInteger not now - no std
+  function splits them (only inside math.Abs, which takes both); additive later, named SignedInteger/UnsignedInteger.
 - QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
   Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
   and `a.ToList()` build Lists (M19d: methods on built-ins live only in the prelude) and for convenience. Options: (a)
