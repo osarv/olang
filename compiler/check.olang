@@ -744,6 +744,38 @@ fn (c mut Checker&) opAfter(sp source.Span, n I64) source.Span {
 # where an index is written: its "[" (E16, E31)
 fn (c mut Checker&) bracketOf(base ast.Expr&) source.Span { return c.opAfter(base.Span(), 1) }
 
+# x[i] on a type with no At of i's shape (E31, E31a, E16): only its checked form, only SetAt, an At of another shape, or
+# nothing - said at the index's "[" (sp the index's span; written the type of what is indexed, its reference included)
+fn (c mut Checker&) noIndex(sp source.Span, t types.TypeId, written types.TypeId, n I64) {
+    bsp := c.bracketIn(sp)
+    if c.roleMethod(t, "TryAt", n) >= 0 {
+        c.err(bsp, msgs.OnlyTryForm(c.ty(t), "TryAt"))
+        return
+    }
+    if c.notOperator(t, "At", bsp, "'x[i]'", 1, true) { return }
+    if c.roleMethod(t, "SetAt", n + 1) >= 0 {
+        c.err(bsp, msgs.AtUndeclared(c.ty(written)))
+        return
+    }
+    c.err(bsp, msgs.NotIndexable(c.ty(t)))
+}
+
+# an index's "[": the one matching the "]" its span ends with
+fn (c mut Checker&) bracketIn(sp source.Span) source.Span {
+    t := c.src(sp)
+    if t.Len() == 0 or t[t.Len() - 1] != ']' { return sp }
+    depth I64 = 0
+    for kk in range t.Len() {
+        k := t.Len() - 1 - kk
+        if t[k] == ']' { depth++ }
+        if t[k] == '[' {
+            depth--
+            if depth == 0 { return source.Span(sp.Start + I32(k), sp.Start + I32(k + 1)) }
+        }
+    }
+    return sp
+}
+
 # where a write into a place is written (T25b, S6): a member's name, an index's "[", else the whole target
 fn (c mut Checker&) writeAt(target ast.Expr&) source.Span {
     match target {
@@ -1180,7 +1212,11 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     }
     if c.P.T.IsFloat(target) { return c.lit(sp, want, floatBits(target, F64(v.I))) }
     if not intFits(c.P.T, v, target) {
-        c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
+        if c.opOf(x) != sp {
+            c.err(c.opOf(x), msgs.LiteralExprRange(c.ty(want)))
+        } else {
+            c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
+        }
         return c.unknown(sp)
     }
     return c.lit(sp, want, v.I)
@@ -1758,17 +1794,26 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     opSp := c.between(a.Span(), b.Span(), op.Text().Len())
     la := c.fold(a)
     lb := c.fold(b)
+    # E4a, E6a: an integer division by a literal-only zero is an error wherever it is written
+    if (op == token.Tok.Slash or op == token.Tok.Percent) and lb.Ok and not lb.Float and not lb.Big and lb.I == 0 and not (la.Ok and la.Float) {
+        c.err(c.opOf(b), msgs.DivideByZero())
+        return c.unknown(sp)
+    }
     shift := op == token.Tok.Shl or op == token.Tok.Shr
     if not la.Ok and not lb.Ok and (c.litLike(a) != c.litLike(b)) {
         if c.litLike(b) {
             x0 := c.value(c.expr(a, types.UnknownT), a.Span())
             tb0 := c.literalBeside(typeOf(x0)) if c.isNumber(typeOf(x0)) else types.UnknownT
-            y0 := c.expr(b, tb0 if c.litLikeFits(b, tb0) else types.UnknownT)
+            fits0 := c.litLikeFits(b, tb0)
+            y0 := c.expr(b, tb0 if fits0 else types.UnknownT)
+            if not fits0 and c.noMeet(opSp, typeOf(x0), typeOf(y0)) { return c.unknown(sp) }
             return c.opValues(sp, opSp, op, x0, y0, a.Span(), b.Span())
         }
         y1 := c.value(c.expr(b, types.UnknownT), b.Span())
         ta1 := c.literalBeside(typeOf(y1)) if c.isNumber(typeOf(y1)) else types.UnknownT
-        x1 := c.expr(a, ta1 if c.litLikeFits(a, ta1) else types.UnknownT)
+        fits1 := c.litLikeFits(a, ta1)
+        x1 := c.expr(a, ta1 if fits1 else types.UnknownT)
+        if not fits1 and c.noMeet(opSp, typeOf(y1), typeOf(x1)) { return c.unknown(sp) }
         return c.opValues(sp, opSp, op, x1, y1, a.Span(), b.Span())
     }
     x typed.Expr&c = null
@@ -1778,11 +1823,13 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         tb := c.literalBeside(typeOf(y))
         if shift { tb = want if c.isInt(want) else c.i64() }
         x = c.litOf(a, la, tb) if c.litFits(la, tb) else c.litOf(a, la, types.UnknownT)
+        if not shift and not c.litFits(la, tb) and c.noMeet(opSp, typeOf(y), typeOf(x)) { return c.unknown(sp) }
     } else if lb.Ok and not la.Ok {
         x = c.value(c.expr(a, want if shift else types.UnknownT), a.Span())
         ta := c.literalBeside(typeOf(x))
         if not c.isNumber(ta) { ta = c.opParam(typeOf(x), op) }
         y = c.litOf(b, lb, ta) if c.litFits(lb, ta) else c.litOf(b, lb, types.UnknownT)
+        if not shift and not c.litFits(lb, ta) and c.noMeet(opSp, typeOf(x), typeOf(y)) { return c.unknown(sp) }
     } else if c.shiftLit(b) and not c.shiftLit(a) {
         x = c.value(c.expr(a, types.UnknownT), a.Span())
         y = c.value(c.expr(b, c.literalBeside(typeOf(x)) if c.isInt(typeOf(x)) else types.UnknownT), b.Span())
@@ -1794,6 +1841,24 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         y = c.value(c.expr(b, types.UnknownT), b.Span())
     }
     return c.opValues(sp, opSp, op, x, y, a.Span(), b.Span())
+}
+
+# E6d: a literal that does not fit the other operand's number type, which does not flow into the literal's own -
+# said at the operator, and true
+fn (c mut Checker&) noMeet(sp source.Span, other types.TypeId, lit types.TypeId) Bool {
+    if not c.isNumber(other) or not c.isNumber(lit) or c.isNamed(other) { return false }
+    if c.P.Meet(other, lit) >= types.TypeId(0) { return false }
+    c.err(sp, msgs.LiteralDoesNotMeet(c.ty(other), c.ty(other), c.ty(lit)))
+    return true
+}
+
+# where a literal-only expression's operation is written: its outermost operator, else itself (E4a, E6a)
+fn (c mut Checker&) opOf(x ast.Expr&) source.Span {
+    match x {
+        case ast.Expr.Paren(_, y) { return c.opOf(y) }
+        case ast.Expr.Binary(_, op, a, b) { return c.between(a.Span(), b.Span(), op.Text().Len()) }
+        nomatch { return x.Span() }
+    }
 }
 
 # the type a binary operator's method on t takes its operand as (E31), Unknown for none
@@ -2975,8 +3040,10 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     if sig == types.UnknownT { return c.unknown(sp) }
     ps := c.P.T.Items(c.P.T.Params(sig))
     sfrom := c.stmts.Len()
+    spreadAt := source.Span(-1, -1)
     if pre == null and args != null and args.Len() == 1 and ps.Len() - (1 if recv != null else 0) > 1 and callLike(args[0]) {
         pre = c.spread(args[0])
+        spreadAt = c.calleeSpan(args[0])
     }
     from := c.exprs.Len()
     k I64 = 0
@@ -2986,6 +3053,12 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     }
     n := pre.Len() if pre != null else args.Len()
     wanted := ps.Len() - k
+    if spreadAt.Start >= 0 and n > 1 and n != wanted {
+        # D8d: several results passed as the arguments are as many as the parameters
+        c.err(spreadAt, msgs.SpreadCount())
+        c.exprs.Truncate(from)
+        return c.unknown(sp)
+    }
     if n > wanted {
         c.err(sp, msgs.ArgCount(wanted, "" if wanted == 1 else "s", n))
         c.exprs.Truncate(from)
@@ -2995,6 +3068,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         e typed.Expr&c = null
         asp := sp
         if args != null and i < args.Len() { asp = args[i].Span() }
+        if spreadAt.Start >= 0 { asp = spreadAt }
         if pre != null and pre[i] != null {
             e = c.fit(pre[i], ps[k], asp)
         } else if args != null and i < args.Len() {
@@ -3006,7 +3080,14 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             if isDefault {
                 e = c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target))
             } else {
-                e = c.exprTo(args[i], ps[k])
+                e = c.expr(args[i], ps[k])
+                if c.P.T.KindOf(typeOf(e)) == types.Kind.Tuple and c.P.T.KindOf(ps[k]) != types.Kind.Tuple {
+                    # D8c: several results are one value nowhere but as all of a call's arguments (D8d)
+                    c.err(c.calleeSpan(args[i]), msgs.TupleNotAValue())
+                    e = c.unknown(asp)
+                } else {
+                    e = c.fit(e, ps[k], args[i].Span())
+                }
             }
         } else {
             e = c.unknown(asp)
@@ -3056,6 +3137,20 @@ fn callLike(x ast.Expr&) Bool {
 
 # f(g()) where g gives several results and f takes as many (D8d): g's call held, each of its parts an argument; an
 # argument giving one value is that argument
+# where a call is named: its function's name - a member's name for a method - the span stage 0's diagnostics give
+fn (c mut Checker&) calleeSpan(x ast.Expr&) source.Span {
+    match x {
+        case ast.Expr.Call(_, f, _) {
+            match f {
+                case ast.Expr.Member(msp, _, n) { return memberSpan(msp, c.text(n).Len()) }
+                nomatch { return f.Span() }
+            }
+        }
+        case ast.Expr.Paren(_, y) { return c.calleeSpan(y) }
+        nomatch { return x.Span() }
+    }
+}
+
 fn (c mut Checker&) spread(x ast.Expr&) Array<typed.Expr&>&c {
     e := c.expr(x, types.UnknownT)
     t := typeOf(e)
@@ -3394,8 +3489,7 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
         }
         m := c.roleMethod(dt, "At", items.Len())
         if m >= 0 { return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, dt, items)) }
-        bsp := c.bracketOf(x)
-        if not c.notOperator(dt, "At", bsp, "'x[i]'", 1, true) { c.err(bsp, msgs.NotIndexable(c.ty(dt))) }
+        c.noIndex(sp, dt, base.Type(), items.Len())
         return c.unknown(sp)
     }
     p := c.elemPlace(sp, base, items)
@@ -3461,7 +3555,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         # under try the checked form (E31a): TryAt where the type declares one - a chain's every link (E24)
         tm := c.roleMethod(t, "TryAt", items.Len()) if c.fr().Tries > 0 else -1
         if m < 0 and tm < 0 {
-            c.err(sp, msgs.NotIndexable(c.ty(t)))
+            c.noIndex(sp, t, b.Type(), items.Len())
             return null
         }
         call := c.invoke(sp, sp, tm, c.read(sp, base), items, null) if tm >= 0 else c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, t, items))
@@ -3471,7 +3565,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         return typed.Place.Temp(sp, typeOf(call), call, site)
     }
     if items.Len() != 1 {
-        c.err(sp, msgs.ArrayOneIndex(c.ty(t)))
+        c.err(items[1].Span(), msgs.ArrayOneIndex(c.ty(t)))
         return null
     }
     i := c.value(c.expr(items[0], c.i64()), items[0].Span())
