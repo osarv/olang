@@ -2365,7 +2365,7 @@ test "a message is its C twin's text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))
     assert m.Text == "expected '}', found 'South'" and m.Rule == "" and m.Kind == Diag.Expected
     assert UnknownChar('@').Rule == "L16"
-    assert NoMain().Text == "no main function - a program starts at 'fn main() ? { }'"
+    assert NoMain().Text == "no main function - a program starts at 'fn main() { }'"
 }
 
 test "a byte that does not print is escaped, in a character and in a token" {

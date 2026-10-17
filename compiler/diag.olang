@@ -655,7 +655,7 @@ test "notes follow their error, and a note on an error not reported is dropped" 
     e := d.Error(Where.Span(f, 2, 3), msgs.NoMain())
     d.Note(e, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
     d.Note(-1, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
-    want := "c.olang:2:1: error[B4]: no main function - a program starts at 'fn main() ? { }'\n    2 | b\n      | ^\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n"
+    want := "c.olang:2:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    2 | b\n      | ^\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n"
     assert d.Render() == want
 }
 
@@ -727,7 +727,7 @@ test "an error inside an instantiation says where it was asked for; one in the l
     d.Error(Where.Span(lib, 0, 3), msgs.NoMain())
     d.PopContext()
     out := d.Render()
-    want := "main.olang:1:1: error[B4]: no main function - a program starts at 'fn main() ? { }'\n    1 | use()\n      | ^~~\n" "lib.olang:1:1: note: in the standard library's code, here\n    1 | bad\n      | ^~~\n" "main.olang:1:1: note: instantiated here\n    1 | use()\n      | ^~~\n"
+    want := "main.olang:1:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    1 | use()\n      | ^~~\n" "lib.olang:1:1: note: in the standard library's code, here\n    1 | bad\n      | ^~~\n" "main.olang:1:1: note: instantiated here\n    1 | use()\n      | ^~~\n"
     assert out == want
 }
 

@@ -80,7 +80,7 @@ Tests String& = (
     "    m := Expected(\"'}'\", Tok(\"South\"))\n"
     "    assert m.Text == \"expected '}', found 'South'\" and m.Rule == \"\" and m.Kind == Diag.Expected\n"
     "    assert UnknownChar('@').Rule == \"L16\"\n"
-    "    assert NoMain().Text == \"no main function - a program starts at 'fn main() ? { }'\"\n"
+    "    assert NoMain().Text == \"no main function - a program starts at 'fn main() { }'\"\n"
     "}\n"
     "\n"
     "test \"a byte that does not print is escaped, in a character and in a token\" {\n"
