@@ -12,7 +12,7 @@
 - [olang: natural-language direction](user_olang_natural_language.md) — user wants olang syntax to read more like natural language (for x in a); weigh that in syntax proposals
 - [Language-change checklist](feedback_keep_evaluator_current.md) — walk the checklist in the repo CLAUDE.md for every language change; keep comptime.c current
 - [Errors are errors](feedback_errors_are_errors.md) — never (value, Bool) in olang APIs; empty/exhausted/missing is an error
-- [No per-operation runtime checks](feedback_no_runtime_checks.md) — olang never checks per operation; opt-in via try only; do not even offer it
+- [No per-operation runtime checks](feedback_no_runtime_checks.md) — olang never checks per operation; opt-in via `checked` only; do not even offer it
 - [Number the questions](feedback_numbered_questions.md) — flagged calls and open questions always as a numbered list
 - [No Claude attribution in commits](feedback_no_claude_attribution.md) — author as the user, no Co-Authored-By / Claude-Session lines
 - [Dictated messages](user_dictation.md) — expect misheard words and spoken self-corrections; read for intent, state the reading taken when ambiguous
