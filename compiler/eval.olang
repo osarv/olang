@@ -2318,12 +2318,14 @@ fn (m mut Machine&) term(fi I64, t mir.Term) {
         }
         case mir.Term.Return(sp, x) {
             m.at0(f, sp)
-            if not m.operandReady(fi, x) { return }
+            if not m.frames[fi].Done and not m.operandReady(fi, x) { return }
             m.leave(fi, false, x, 0)
         }
         case mir.Term.Raise(sp, x) {
             m.at0(f, sp)
-            m.leave(fi, true, mir.Operand.None, m.intValue(m.scalar(fi, x), mir.I32T))
+            # read once: when the frame's storage has closed, the code is already kept on the frame
+            code := m.frames[fi].Code if m.frames[fi].Done else m.intValue(m.scalar(fi, x), mir.I32T)
+            m.leave(fi, true, mir.Operand.None, code)
         }
         case mir.Term.Wait(sp, j, ok, code, failed) {
             m.at0(f, sp)
@@ -3356,4 +3358,91 @@ test "loops and recursion: a loop's scope every turn, calls to depth, a loop tha
                ("fn " $k ": heap " $heap " -> " $m.HeapBytes() ", allocations " $allocs " -> " $m.Allocations()
                 ", scopes " $scopes " -> " $m.ScopeSlots())
     }
+}
+
+# an error type E of the module, and the list naming it alone
+fn terr(t mut types.Table&, names mut source.Names&, name String&) types.TypeId {
+    mod := t.AddModule("eval_test_" $name)
+    return t.Named(t.AddDecl(mod, names.Intern(name), types.DeclKind.Error, 0, 0), types.ListId(0))
+}
+
+# "fn g(x I64) I64 ? E { if x < 0 { error E.word2 }; return x }", keyed Body(id)
+fn failFn(t mut types.Table&, id I64, errs types.ListId, code I64) mir.Fn {
+    i64 := t.Prim("I64")
+    f := tfn(t, id, t.Func(t.List1(i64), i64, errs))
+    c := f.AddTemp(types.BoolT, Sp0)
+    bad, good := f.NewBlock(), f.NewBlock()
+    tprim(f, B0, I64(c), typed.PrimOp.Lt, types.BoolT, tcopy(0), mir.Operand.Const(i64, 0))
+    f.End(B0, mir.Term.Branch(mir.Operand.Copy(mir.L(c)), bad, good))
+    f.Add(bad, mir.Stmt.Close(Sp0, S0))
+    f.End(bad, mir.Term.Raise(Sp0, mir.Operand.Const(mir.I32T, code)))
+    f.Add(good, mir.Stmt.Close(Sp0, S0))
+    f.End(good, mir.Term.Return(Sp0, tcopy(0)))
+    return f
+}
+
+# "fn h(x I64) I64 { return try g(x) catch E.word2 { -1 } catch { -2 } }": the code dispatched by a switch
+fn catchFn(t mut types.Table&, id I64, g I64, gty types.TypeId, word2 I64) mir.Fn {
+    i64 := t.Prim("I64")
+    f := tfn(t, id, t.Func(t.List1(i64), i64, types.ListId(0)))
+    r, code := f.AddTemp(i64, Sp0), f.AddTemp(mir.I32T, Sp0)
+    ok, err, two, other := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
+    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r), true, ok,
+                            code, err))
+    f.End(B0, mir.Term.Call(Sp0, k))
+    f.Add(ok, mir.Stmt.Close(Sp0, S0))
+    f.End(ok, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(r))))
+    f.End(err, mir.Term.Switch(mir.Operand.Copy(mir.L(code)), f.AddCases(mir.Case[mir.Case(word2, two)]), other))
+    f.Add(two, mir.Stmt.Close(Sp0, S0))
+    f.End(two, mir.Term.Return(Sp0, mir.Operand.Const(i64, -1)))
+    f.Add(other, mir.Stmt.Close(Sp0, S0))
+    f.End(other, mir.Term.Return(Sp0, mir.Operand.Const(i64, -2)))
+    return f
+}
+
+# "fn p(x I64) I64 ? to { return try g(x) }": the error re-encoded under p's own list and raised
+fn passFn(t mut types.Table&, id I64, g I64, gty types.TypeId, from types.ListId, to types.ListId) mir.Fn {
+    i64 := t.Prim("I64")
+    f := tfn(t, id, t.Func(t.List1(i64), i64, to))
+    r, code, mine := f.AddTemp(i64, Sp0), f.AddTemp(mir.I32T, Sp0), f.AddTemp(mir.I32T, Sp0)
+    ok, err := f.NewBlock(), f.NewBlock()
+    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r), true, ok,
+                            code, err))
+    f.End(B0, mir.Term.Call(Sp0, k))
+    f.Add(ok, mir.Stmt.Close(Sp0, S0))
+    f.End(ok, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(r))))
+    f.Add(err, mir.Stmt.Assign(Sp0, mir.L(mine), mir.Rvalue.Recode(mir.Operand.Copy(mir.L(code)), from, to)))
+    f.Add(err, mir.Stmt.Close(Sp0, S0))
+    f.End(err, mir.Term.Raise(Sp0, mir.Operand.Copy(mir.L(mine))))
+    return f
+}
+
+test "errors: raised under the function's own list, dispatched by a switch, re-encoded where they pass on (R6, R17)" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    i64 := t.Prim("I64")
+    e, o := terr(t, names, "E"), terr(t, names, "O")
+    el := t.List(types.TypeId[o, e])
+    gty := t.Func(t.List1(i64), i64, el)
+    word2 := mir.ErrorCode(t, el, e, 2)
+    tdefine(t, m, failFn(t, 1, el, word2))
+    tdefine(t, m, catchFn(t, 2, 1, gty, word2))
+    tdefine(t, m, failFn(t, 3, el, mir.ErrorCode(t, el, o, 0)))
+    tdefine(t, m, catchFn(t, 4, 3, gty, word2))
+    assert m.Eval(tkey(1), I64[5]) == Stop.None and m.Int(m.Result, i64) == 5
+    assert m.Eval(tkey(1), I64[-5]) == Stop.Raised(word2)
+    assert m.Eval(tkey(2), I64[7]) == Stop.None and m.Int(m.Result, i64) == 7
+    sx := m.Eval(tkey(2), I64[-7])
+    assert sx == Stop.None and m.Int(m.Result, i64) == -1, $sx " " $m.Int(m.Result, i64)
+    assert m.Eval(tkey(4), I64[-7]) == Stop.None and m.Int(m.Result, i64) == -2
+    # passed on: under a list naming E second, the same error; under one naming only the default error, that (R17)
+    named := t.List(types.TypeId[e])
+    tdefine(t, m, passFn(t, 5, 1, gty, el, named))
+    s5 := m.Eval(tkey(5), I64[-1])
+    assert s5 == Stop.Raised(65538), $s5
+    def := t.List1(types.DefaultErrT)
+    tdefine(t, m, passFn(t, 6, 1, gty, el, def))
+    assert m.Eval(tkey(6), I64[-1]) == Stop.Raised(1 << 16)
+    assert m.Eval(tkey(6), I64[3]) == Stop.None and m.Int(m.Result, i64) == 3
 }
