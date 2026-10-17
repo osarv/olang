@@ -4,7 +4,7 @@
 # for C's array. A List now has RunFrom(at), the contiguous run of its elements from position at, and "for x in l"
 # walks it run by run - an outer loop asking for the next run, an inner counted loop over it - which is what the array
 # case is: 0.24s at load 7, against 0.22s for C.
-# See it: repro/opt.sh list_sum, then  grep -n "xor <" build/list_sum.opt.ll  (the vector xor of the inner loop)
+# See it: bench/repro/opt.olang (build/bench_repro_opt list_sum), then  grep -n "xor <" build/list_sum.opt.ll  (the vector xor of the inner loop)
 import "std/io"
 import "std/os"
 

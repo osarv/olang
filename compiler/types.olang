@@ -22,7 +22,7 @@
 #
 # A type's canonical text (Canon) names it injectively, the declaring module's identity before every declared name, so
 # it serves as an instance's name (G16a) and as the text the layout oracle and this table are compared by
-# (compiler/tools/layoutdiff.sh). Symbol makes a linker symbol of such a text, injectively.
+# (compiler/tools/layoutdiff.olang). Symbol makes a linker symbol of such a text, injectively.
 import "source"
 
 # ---- ids ----

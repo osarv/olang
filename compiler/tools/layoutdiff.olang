@@ -1,0 +1,114 @@
+# layoutdiff - M5a's acceptance (compiler/DESIGN.md section 4): every type stage 0 holds for every root program of the
+# repository (compiler/goldens/layout.txt, captured by compiler/tools/layoutgold.olang) has, in the self-hosted type
+# table, stage 0's size, alignment, LLVM spelling, struct body and field offsets, a function type's result spelling and
+# how it is passed, and an enum's payload offsets - read back from its canonical text, resolved in the program it came
+# from and laid out once. A type may be left unlaid ("deferred") only where compiler/goldens/layout.deferred lists it.
+# Prints the differences and exits 1 if there are any.
+#
+# Run from the repository root after "make build/compiler_tools_dump". If the golden is older than a change to std's
+# types, "make layoutgold" captures it again (minutes: stage 0 checks each program whole). LAYOUTDIFF_DUMP names another
+# build of the dump.
+
+import "std/os"
+import "toolkit"
+
+fn main() {
+    dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
+    golden := "compiler/goldens/layout.txt"
+    deferred := "compiler/goldens/layout.deferred"
+    if not toolkit.Built(dump) { toolkit.Die("layoutdiff: " $dump " is not built (make " $dump ")") }
+    o := toolkit.Run(String&[dump, "layout", golden])
+    if o.Status != 0 {
+        toolkit.Say(o.Stderr)
+        toolkit.Die("layoutdiff: " $dump " layout failed")
+    }
+    if o.Stderr.Len() > 0 {
+        toolkit.Say(o.Stderr)
+        toolkit.Die("layoutdiff: " $dump " layout wrote diagnostics")
+    }
+    allowed := List<String&>()
+    for r in toolkit.Rows(toolkit.Read(deferred)) {
+        if not r.StartsWith("#") and r != "" { allowed.Push($r) }
+    }
+    report := compare(toolkit.Rows(toolkit.Read(golden)), toolkit.Rows(o.Stdout), allowed.ToArray())
+    toolkit.Say(report.text)
+    toolkit.Say("layoutdiff: " $report.same " types as stage 0 lays them out, " $report.deferred " deferred to the evaluator\n")
+    if report.bad > 0 { os.Exit(1) }
+}
+
+# what comparing the golden with the self-hosted rendering found: the report to print, the types that agree, the ones left
+# deferred where that is allowed, and how many differences
+type outcome struct() {
+    text String& = ""
+    same I64 = 0
+    deferred I64 = 0
+    bad I64 = 0
+}
+
+# the self-hosted rows against the golden's, row by row
+fn compare(golden List<String&>&, got List<String&>&, allowed Array<String&>&) outcome {
+    ok := Map<String&, Bool>()
+    for a in allowed { ok.Put(a, true) }
+    seen := Map<String&, Bool>()
+    r := outcome()
+    b := StringBuilder()
+    for i, row in got {
+        g String& = golden[i] if i < golden.Len() else ""
+        if g == row {
+            if not row.StartsWith("== ") { r.same++ }
+            continue
+        }
+        gkey := key(g)
+        rkey := key(row)
+        if rest(row) == "deferred" and rkey == gkey and rkey in ok {
+            r.deferred++
+            seen.Put(rkey, true)
+            continue
+        }
+        r.bad++
+        b.Push("layoutdiff: " $gkey "\n  stage 0:   " $g "\n  self-host: " $row "\n")
+    }
+    if got.Len() != golden.Len() {
+        b.Push("layoutdiff: " $got.Len() " lines, the golden has " $golden.Len() "\n")
+        r.bad++
+    }
+    for a in allowed {
+        if a not in seen {
+            b.Push("layoutdiff: " $a " is listed as deferred and is laid out - take it off compiler/goldens/layout.deferred\n")
+            r.bad++
+        }
+    }
+    r.text = b.ToString()
+    return r
+}
+
+# the first tab-separated field of a row
+fn key(row String&) String&row {
+    tab := try row.FindByte('\t') catch default row.Len()
+    return row[0:tab]
+}
+
+# the second
+fn rest(row String&) String&row {
+    tab := try row.FindByte('\t') catch default -1
+    if tab < 0 { return row[row.Len():] }
+    after := row[tab + 1:]
+    tab2 := try after.FindByte('\t') catch default after.Len()
+    return after[0:tab2]
+}
+
+test "equal rows count, a deferred row is allowed where listed, anything else is a difference" {
+    golden := toolkit.Rows("== A\nint\t4 4\nlist\t16 8\nmap\t8 8\n")
+    got := toolkit.Rows("== A\nint\t4 4\nlist\tdeferred\nmap\tdeferred\n")
+    r := compare(golden, got, String&["list"])
+    assert r.same == 1
+    assert r.deferred == 1
+    assert r.bad == 1
+    assert r.text.Contains("layoutdiff: map\n  stage 0:   map\t8 8\n  self-host: map\tdeferred\n")
+}
+
+test "a listed type that is laid out, and a different number of rows, are differences" {
+    golden := toolkit.Rows("== A\nint\t4 4\n")
+    r := compare(golden, toolkit.Rows("== A\nint\t4 4\nextra\t1 1\n"), String&["int"])
+    assert r.bad == 3
+}

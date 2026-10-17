@@ -19380,3 +19380,25 @@ std formatted and used through `OLANG_STD`).
     tools; first written in Python and ported, giving the same output on checks.olang) rewrites old command lines wherever the compiler is invoked (`"$OLANG"`, `$(OLANG)`,
     `build/out`, `olang ...`) and the checks' `# flags:` headers; it migrated the makefile, checks, fuzz, bench, the
     port's tools and docs, and is re-runnable for oann. HISTORY.md keeps the old spellings, being history.
+
+## The shell and awk scripts are olang programs (2026-10-17, the user's rule: nothing in the repository but C for stage 0 and the benchmarks)
+
+Ported after the Python scripts: `compiler/tools/{tokdiff,astdiff,namesdiff,layoutdiff,layoutgold,modgraph,diaggold_capture}`
+(sharing `compiler/tools/toolkit.olang`: `os.Exec` without a shell, a program's output as rows, a scratch directory,
+`diff`), `bench/{run,ir}` and `bench/repro/opt` (sharing `bench/benchlib.olang`: the compiler to build with, running in
+`bench/`, the `BENCH_LOCK` flock through an `extern fn`), and `checks/fixtures/frameenv/envcheck`. `gemm.sh` and
+`fused.sh` became `bench/rungemm.olang` and `bench/runfused.olang`, since `gemm.olang` and `fused.olang` are the
+programs they run. The makefile targets build the tool with the compiler under test (`build/compiler_tools_NAME`, one
+pattern rule) and run it; `build/compiler_tools_dump` and `_fmt` no longer depend on every file in `compiler/tools/`.
+
+How each was held to its script: the diff tools gave the same text and status on the whole repository (astdiff's
+current difference included: the same three `L21` rows, status 1; tokdiff, namesdiff, layoutdiff and modgraph the same
+verdict lines), `diaggold_capture` and `layoutgold` wrote byte-identical goldens, the bench drivers ran the same
+commands in the same order in the same directories (a logging `clang` and compiler on PATH) and printed the same text
+over stand-in benchmark binaries, and `ir`/`opt` left identical files. **Decided (mine)**: the tools run from the
+repository root, as their scripts' headers said; `diaggold_capture` builds four cases at a time with `join`/`spawn` (the
+script used `xargs -P 4`); a timed benchmark's output is gathered in a memory file and dropped (the script sent it to
+/dev/null); `layoutgold` takes `LAYOUTGOLD_OUT` to write somewhere else, to compare a capture without replacing the golden.
+**Found on the way**: `catch default a - b` reads as `(... catch default a) - b` (a default is a unary), which made a
+first `Rows` slice out of range. Not ported: the inline `awk` in the makefile's `checkir` and in two commands of
+`checks/checks.olang` (one-liners in a recipe and a test, no script file).
