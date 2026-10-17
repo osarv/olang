@@ -104,3 +104,16 @@ supersedes the "one agent at a time, stay on the line" pacing above. Run as many
 independent work that does not cost effect per token: no duplicated work, no merge-conflict churn (split by file/area),
 no agents queued idle on the verify slots, and the same quality bar (reviews before merging relaxations). Running out
 of the week early is fine; arm a send_later for just after the reset when it happens.
+
+**Never lose work to a limit (the user, 2026-10-17: "Make sure you don't lose any work when the limits are hit").** The
+weekly limit hit on 2026-10-12 stopped every agent, and nothing woke the session until the user did on 10-17 - five
+days lost, though no files were. Standing measures:
+1. A recurring Routine `olang: resume after usage limits` (trig_017cXPwPDKrFi8trMLqFdUpt, every 2 hours) wakes this
+   session: snapshot, read usage, resume any agent a rate limit stopped (SendMessage keeps its context). A wake during
+   a limit fails and the next one, after the reset, gets through - so a stop costs at most 2 hours.
+2. `/home/user/wipsnap.sh` (outside the repo - recreate it in a new container) saves every worktree's uncommitted
+   work into `refs/wip/<name>` in the shared repo, through a private index, never touching the agent's index, HEAD or
+   files. Run at every check-in. It guards against an agent's mistake or a killed process, not a lost container.
+3. Every agent brief says: commit each coherent piece on your branch as you go, never one big commit at the end.
+4. Against a lost container only a push helps; pushing branches other than the designated one needs the user's OK
+   (asked 2026-10-17, ledger QM).

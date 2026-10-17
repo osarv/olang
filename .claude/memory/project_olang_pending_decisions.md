@@ -48,6 +48,12 @@ self-hosted compiler is done.
   companies first, so a reply can become a meeting.
 - QL4. Offered, no answer yet: drafting a compute-credits application.
 
+**Asked 2026-10-17 (the user: "Make sure you don't lose any work when the limits are hit"):**
+- QM. May I push agents' work branches (`wt-*`, or `refs/wip/*` snapshots) to GitHub as backups? Only a push survives a
+  lost container; the designated branch rule forbids other branches without the user's OK. In effect: local only
+  (2-hourly snapshots and commits survive restarts, as on 10-10 and 10-17). Recommended: yes, as `backup/<name>`
+  branches, pushed by the 2-hourly check-in, deleted once merged.
+
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
 **Answered 2026-10-10 08:15 CEST:**
 - QD (integer literal's own type I64): YES ("1) yes"). BUILT 43ce396 (T6a; oann migrates with tools/int_literal_i64.py).
