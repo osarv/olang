@@ -2,6 +2,7 @@
 # of the line into the result - so each line is reclaimed with its turn. It used to move the line into the result scope,
 # keeping every one of them: four million lines needed about 96 MB. Run under an address-space limit that is far below
 # that (study 4's r01, from a log tailer)
+import "std/io"
 type Summary struct() {
     best I64 = 0
     names List<String&> = List<String&>()
@@ -18,5 +19,5 @@ fn scan(n I64) Summary {
     return s
 }
 fn main() ? {
-    println($scan(4000000).best)
+    io.Println($scan(4000000).best)
 }

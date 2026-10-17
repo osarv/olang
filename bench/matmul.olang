@@ -35,5 +35,5 @@ fn main() ? {
     multiply(a, b, c, n)
     sum F64 = 0.0
     for x in c { sum += x }
-    try io.Print($sum " " $c[0] " " $c[n * n - 1] "\n")
+    io.Print($sum " " $c[0] " " $c[n * n - 1] "\n")
 }

@@ -1,11 +1,12 @@
 # check: fail error[O31]: Lexer owns objects
 # Vec phase 2a (O31): a type argument does not hold an owning value yet (phase 2b) - List<Lexer&> holds references
 # also: List<Lexer>
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
 }
 fn main() ? {
     a := List<Lexer>()
-    println($a.Len())
+    io.Println($a.Len())
 }

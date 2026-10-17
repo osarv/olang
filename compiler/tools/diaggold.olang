@@ -11,6 +11,7 @@
 import "std/os"
 import "../diag"
 import "../msgs"
+import "std/io"
 
 # a case's golden output, row by row, and what diag makes of it
 type golden struct(name String&, text String&) {
@@ -167,7 +168,7 @@ test "diag renders stage 0's diagnostics on every checks/cases program byte for 
         count++
         why := check(c)
         if why.Len() > 0 {
-            eprintln($c.name ": " $why)
+            io.PrintErrln($c.name ": " $why)
             bad++
         }
     }
@@ -206,7 +207,7 @@ test "-e prints each rule a message names as stage 0 does" {
         want := try os.ReadFile($out "/e.txt") catch default ""
         got := try diag.Explain(spec, r) catch default "(none)"
         if got != want {
-            eprintln("-e " $r ": differs")
+            io.PrintErrln("-e " $r ": differs")
             bad++
         }
     }

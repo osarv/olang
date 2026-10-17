@@ -57,7 +57,7 @@ fn main() ? {
         if args.Len() > 3 { Cases = try args[3].ParseInt() catch default 30 }
         only I64 = -1
         if args.Len() > 4 { only = try args[4].ParseInt() catch default -1 }
-        try io.Print(gen.Program(U64(seed), Cases, only, true, Array<String&>(0), Array<Bool>(0))) catch { }
+        io.Print(gen.Program(U64(seed), Cases, only, true, Array<String&>(0), Array<Bool>(0)))
         return
     }
     if args[1] == "scopeshow" {
@@ -71,7 +71,7 @@ fn main() ? {
             keep = Array<Bool>(Scenarios)
             keep[only] = true
         }
-        try io.Print(scopegen.Program(U64(seed), Scenarios, keep)) catch { }
+        io.Print(scopegen.Program(U64(seed), Scenarios, keep))
         return
     }
     if args[1] == "scope" and args.Len() >= 4 {
@@ -94,7 +94,7 @@ fn main() ? {
         for w in range jobs { spawn worker(queue, w) }
     }
     summary String& = "fuzz: " $Ran " programs, " $Total " cases (" $Baked " globals baked while compiling)"
-    try io.Print($summary ", " $Found " findings" $endRun() "\n") catch { }
+    io.Print($summary ", " $Found " findings" $endRun() "\n")
     if Found > 0 { fail }
 }
 
@@ -102,7 +102,7 @@ fn main() ? {
 fn newRun() {
     os.Run("mkdir -p " $os.Quote($Root "/build/fz"))
     Run = try os.MkTemp($Root "/build/fz", "run") catch {
-        try io.PrintErr("fuzz: cannot make a run directory under build/fz\n") catch { }
+        io.PrintErr("fuzz: cannot make a run directory under build/fz\n")
         fail
     }
 }
@@ -118,8 +118,8 @@ fn endRun() String& {
 }
 
 fn usage() {
-    try io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
-                     " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]\n")) catch { }
+    io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
+                     " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]\n"))
     fail
 }
 
@@ -247,7 +247,7 @@ fn finding(dir String&, seed I64, ci I64, what String&, detail String&) {
         try os.WriteFile($to "/case" $ci ".olang", one) catch { }
     }
     line String& = "seed " $seed " case " $ci ": " $what "\n"
-    try io.Print(line) catch { }
+    io.Print(line)
     os.Run("printf '%s' " $os.Quote(line) " >> " $os.Quote($Run "/findings.txt"))
     if detail.Len() > 0 {
         try os.WriteFile($to "/detail" $ci ".txt", detail) catch { }
@@ -274,7 +274,7 @@ fn scopeMain(args Array<String&>&) {
         for w in range jobs { spawn scopeWorker(queue, w) }
     }
     summary String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
-    try io.Print($summary ", " $Found " findings" $endRun() "\n") catch { }
+    io.Print($summary ", " $Found " findings" $endRun() "\n")
     if Found > 0 { fail }
 }
 
@@ -410,7 +410,7 @@ fn scopeFinding(dir String&, seed I64, k I64, what String&, detail String&) {
         try os.WriteFile($to "/scenario" $k ".olang", scopegen.Program(U64(seed), Scenarios, keep)) catch { }
     }
     line String& = "scope seed " $seed " scenario " $k ": " $what "\n"
-    try io.Print(line) catch { }
+    io.Print(line)
     os.Run("printf '%s' " $os.Quote(line) " >> " $os.Quote($Run "/scope/findings.txt"))
     if detail.Len() > 0 { try os.WriteFile($to "/detail" $k ".txt", detail) catch { } }
 }

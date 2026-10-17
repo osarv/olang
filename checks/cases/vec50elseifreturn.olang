@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line
 # vec4 (f1a_else_if_catch_return): the review's repro
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -25,5 +26,5 @@ fn main() ? {
     d := bufFor("?", v.ViewMut(), other)
     for i in range 1000 { v.Push(i) }
     churn()
-    println($d[0] " " $d[1])
+    io.Println($d[0] " " $d[1])
 }

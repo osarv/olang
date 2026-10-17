@@ -4,6 +4,7 @@
 # call started and the tasks bumped the main thread's arena unsynchronised. The checks scenario "capscope" builds this
 # and reads its IR: every lambda here asks for its captured scope (__olang_capture_scope), the Call adapter for its
 # instance's (__olang_scope_mine)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -84,5 +85,5 @@ fn main() ? {
     for k in range 20, 26 {
         if nodes[k].v != N - 1 { fail }
     }
-    println("capscope: ok")
+    io.Println("capscope: ok")
 }

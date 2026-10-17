@@ -1,6 +1,7 @@
 # check: fail error[O10c]
 # vec2: a clone's elements refer where the original's do - kept past the block they were made in, it would read them
 # after that block's scope closes
+import "std/io"
 fn main() ? {
     keep := Vec<String&>()
     for i in range 3 {
@@ -8,5 +9,5 @@ fn main() ? {
         w.Push($i "x")
         keep = w.Clone()
     }
-    println($keep)
+    io.Println($keep)
 }

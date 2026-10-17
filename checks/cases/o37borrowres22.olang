@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'Grow' may release the Array<I64> borrowed
 # O37/O38 (Vec phase 1): a borrowed own result - ...copied into another local
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -60,5 +61,5 @@ fn main() ? {
     a := d
     v.Grow()
     churn()
-    println($a[0])
+    io.Println($a[0])
 }

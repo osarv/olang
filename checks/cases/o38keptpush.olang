@@ -1,6 +1,7 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38: a borrowed copy is held only by this function's locals - a call that can keep it (List.Push) is refused, where
 # phase 2a's review (F2) held the loan until the list's block ended (reversed by own4: the holders could not all be found)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -20,5 +21,5 @@ fn main() ? {
     l := List<Outer&>()
     l.Push(b)
     v.o = null
-    println($l[0].o.deep.text)
+    io.Println($l[0].o.deep.text)
 }

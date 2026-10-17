@@ -1,5 +1,6 @@
 # check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
 # R1: taken out into a local - the region outlives nothing, so the words cannot leave it
+import "std/io"
 type Lex3 struct() {
     toks Vec<String&> = Vec<String&>()
 }
@@ -24,5 +25,5 @@ fn main() ? {
     g.lx.toks = take m
     h.lx = null
     churn()
-    println(g.lx.toks[0])
+    io.Println(g.lx.toks[0])
 }

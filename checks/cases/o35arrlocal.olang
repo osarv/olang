@@ -1,10 +1,11 @@
 # check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
 # a typed own array local, released at its block's end, read through a borrow kept past it: must fail
+import "std/io"
 fn main() ? {
     y Array<I64>& = I64[0]
     {
         x own mut Array<I64>& = Array<I64>(4)
         y = x
     }
-    println($y[0])
+    io.Println($y[0])
 }

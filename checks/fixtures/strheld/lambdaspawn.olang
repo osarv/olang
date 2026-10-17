@@ -1,4 +1,5 @@
 # E11c/D16e: a Str spawning a lambda that renders a receiver field
+import "std/io"
 type Cell struct() {
     v I64 = 3
 }
@@ -16,5 +17,5 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Cell())
-    println($b)
+    io.Println($b)
 }

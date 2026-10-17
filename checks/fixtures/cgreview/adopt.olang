@@ -5,5 +5,5 @@ import "std/os"
 fn main() ? io.IoError {
     a := Array<I32>(os.Args().Len() + 10)
     a[5] = 3
-    try io.Print($a[5] "\n")
+    io.Print($a[5] "\n")
 }

@@ -1,5 +1,6 @@
 # check: fail error[O41]: calling 'drop' may release the Node the task spawned on line
 # a call releasing, in a join block after a task borrowing the same
+import "std/io"
 type Node struct(n I64) {
     n
     name String& = "node" $n
@@ -10,7 +11,7 @@ type Holder struct() {
 }
 fn work(h Holder&) {
     c := h.cur
-    println(c.name)
+    io.Println(c.name)
 }
 fn drop(h mut Holder&) { h.cur = null }
 fn main() ? {

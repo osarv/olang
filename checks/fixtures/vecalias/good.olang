@@ -1,6 +1,7 @@
 import "vlib"
 import "olib"
 import "glib"
+import "std/io"
 # what stays legal through an import alias: a borrowed own result called by name and used before the owner changes, a
 # plain function made a value, a scope-relating one called by name, a releasing one called once nothing is borrowed
 fn main() ? {
@@ -15,5 +16,5 @@ fn main() ? {
     n olib.Node& = olib.Node(7)
     olib.Stash(h, n)
     glib.Drop()
-    println($s " " $f(v) " " $h.N.V " " $glib.G.Data[0])
+    io.Println($s " " $f(v) " " $h.N.V " " $glib.G.Data[0])
 }

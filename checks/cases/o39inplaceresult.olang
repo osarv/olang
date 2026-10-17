@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'h.cur' may release the In3 borrowed on line 16
 # O39 (own7 F1): a result borrowed from an inline field lent where it is holds the loan on the owned object
+import "std/io"
 type Plain struct(k I64) {
     k
 }
@@ -15,5 +16,5 @@ fn main() ? {
     h.cur = In3(5)
     x := same(h.cur.pl)
     h.cur = null
-    println($x.k)
+    io.Println($x.k)
 }

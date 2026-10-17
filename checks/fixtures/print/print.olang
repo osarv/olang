@@ -1,12 +1,13 @@
 # M19f: the prelude's words for writing text - no try, no error set on main; built and interpreted alike
+import "std/io"
 fn main() ? {
     n := 42
-    print("n is ")
-    println($n)
-    println("joined " $n " and " $(n + 1))
-    println()
-    eprint("to the ")
-    eprintln("standard error")
+    io.Print("n is ")
+    io.Println($n)
+    io.Println("joined " $n " and " $(n + 1))
+    io.Println()
+    io.PrintErr("to the ")
+    io.PrintErrln("standard error")
     say := println                # a function value, as any function is
     say("through a value")
 }

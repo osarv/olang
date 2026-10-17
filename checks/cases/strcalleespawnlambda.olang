@@ -1,5 +1,6 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/O12: the same with a spawned lambda capturing the node (D16e): refused
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -18,7 +19,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn peek(n Node&) I64 {
-    join { spawn fn() { println($n.v) } }
+    join { spawn fn() { io.Println($n.v) } }
     return n.v
 }
 fn (b Bag&) Str() String {
@@ -28,5 +29,5 @@ fn main() ? {
     b := Bag(Node(4, null))
     s := $b
     churn()
-    println(s)
+    io.Println(s)
 }

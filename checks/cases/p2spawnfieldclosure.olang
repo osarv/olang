@@ -1,6 +1,7 @@
 # check: fail error[P2, D16e]: this function value closes before the join does
 # P2/E13b: a task calling a function value read out of a field ("spawn h.f()") is held to P2 as an argument is: the
 # closure lives no shorter than the storage it was read from, here a loop body's, which closes while the task runs
+import "std/io"
 extern fn usleep(us U32) I32
 type Hold struct(f fn()) { f }
 fn main() ? {
@@ -15,5 +16,5 @@ fn main() ? {
             spawn h.f()
         }
     }
-    println($c[0] " " $c[1] " " $c[2] " " $c[3])
+    io.Println($c[0] " " $c[1] " " $c[2] " " $c[3])
 }

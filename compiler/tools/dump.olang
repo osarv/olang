@@ -60,7 +60,7 @@ fn main() ? {
     mode := args[1] if args.Len() >= 3 else ""
     if mode != "tokens" and mode != "speed" and mode != "ast" and mode != "parse" and mode != "roundtrip" and
        mode != "modules" and mode != "names" and mode != "layout" {
-        eprintln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
+        io.PrintErrln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(mode, args) })
@@ -137,7 +137,7 @@ fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) 
 # every group of a golden file of layouts, its program loaded and each type read back and laid out
 fn layout(out mut io.Writer&, std String&, golden String&) {
     text := try os.ReadFile(golden) catch os.OsError {
-        eprintln("dump: cannot read " $golden)
+        io.PrintErrln("dump: cannot read " $golden)
         os.Exit(2)
         unreachable
     }

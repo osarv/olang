@@ -1,6 +1,7 @@
 # check: fail the callee needs one argument's scope to outlive another's
 # D16c/D16d: a lambda capturing a value holding references lives where they do - here the loop's block, which the list
 # of functions outlives
+import "std/io"
 type Reading struct(Sensor String&, Value F64) {
     Sensor
     Value
@@ -13,5 +14,5 @@ fn main() ? {
         x := Reading(t, 1.5)
         fs.Push(fn() I64 { return x.Sensor.Len() })
     }
-    for f in fs { println($f()) }
+    for f in fs { io.Println($f()) }
 }

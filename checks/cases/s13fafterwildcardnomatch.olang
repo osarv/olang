@@ -1,9 +1,10 @@
 # check: fail error[S13f]: no value reaches this - an earlier 'case _' with no guard takes every one
 # S13f: a nomatch after an unguarded "case _" is never reached either
+import "std/io"
 fn f(x I64) I64 {
     match x {
         case _ { return 1 }
         nomatch { return 2 }
     }
 }
-fn main() ? { println($f(2)) }
+fn main() ? { io.Println($f(2)) }

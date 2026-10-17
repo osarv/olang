@@ -1,5 +1,6 @@
 # check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
 # C2d/O23a (review of rv3fix, #7): a reference read through a '&p' field passed to a by-value parameter the callee builds through
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -30,5 +31,5 @@ fn main() ? {
         f(h)
     }
     churn()
-    println($rd(k))
+    io.Println($rd(k))
 }

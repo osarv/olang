@@ -1,5 +1,6 @@
 # check: fail error[O34]: moving out of 'x' would leave it empty - write 'take x'
 # an owner local passed for an owning parameter without take
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -15,5 +16,5 @@ type Server struct() {
 fn consume(c own mut Conn&) I64 { return c.fd }
 fn main() ? {
     x own mut Conn& = Conn(3)
-    println($consume(x))
+    io.Println($consume(x))
 }

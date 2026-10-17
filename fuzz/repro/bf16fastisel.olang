@@ -7,5 +7,5 @@ fn c19(x0 U8, x1 I16) String {
 v0 mut U8 = 255
 v1 mut I16 = 4018
 fn main() ? io.IoError {
-    try io.Print($c19(v0, v1) "\n")
+    io.Print($c19(v0, v1) "\n")
 }

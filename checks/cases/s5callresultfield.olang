@@ -1,6 +1,7 @@
 # check: fail the callee needs one argument's scope to outlive another's
 # O18c/O20: a reference read out of a call's value result leads where that result's references are - here the text the
 # loop's block holds - so it cannot be kept in a list the loop's block does not outlive
+import "std/io"
 type Box struct(s String&) { s }
 fn box(s String&) Box { return Box(s) }
 
@@ -10,5 +11,5 @@ fn main() ? {
         t := $k "-text"
         ss.Push(box(t).s)
     }
-    for s in ss { println(s) }
+    for s in ss { io.Println(s) }
 }

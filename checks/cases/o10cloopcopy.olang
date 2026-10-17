@@ -3,6 +3,7 @@
 # storage of the loop's block, while the element itself lives where the array does (a recorded limit: the callee's
 # obligation cannot tell the referent's storage from what it holds). A handle (a List, a Map) is lent as its reference
 # instead (O17b, checks/cases/o17bloopcopy.olang); this struct holds a count beside its map, so it is none
+import "std/io"
 type Counts struct() {
     m Map<String&, I64> = Map<String&, I64>()
     n I64 = 0
@@ -26,4 +27,4 @@ fn total(words Array<String&>&) I64 {
     for p in parts { merge(sum, p) }
     return sum.Len()
 }
-fn main() ? { println($total(String&["x", "y", "x"])) }
+fn main() ? { io.Println($total(String&["x", "y", "x"])) }

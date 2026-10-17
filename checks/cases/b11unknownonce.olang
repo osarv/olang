@@ -7,6 +7,7 @@
 # B11: a type written without its module's alias is one error, naming the import's type - its uses in case patterns, the
 # names those bind, and a condition testing a case of it add none (study 4's r14)
 import "std/json"
+import "std/io"
 fn kind(j Json&) String {
     return match j {
         case Json.Null => "null"
@@ -20,5 +21,5 @@ fn nested(j json.Json&) Bool {
     return false
 }
 fn main() ? {
-    println($kind(json.Json.Null) " " $nested(json.Json.Null))
+    io.Println($kind(json.Json.Null) " " $nested(json.Json.Null))
 }

@@ -2,6 +2,7 @@
 # where that costs nothing or is forced - here the callees build new text and a new array into their result scopes, so
 # each call is the loop body's and is reclaimed every turn. Landed where the lexer, or base, lives, every turn's would
 # be kept until that scope closes (review chk5: 206 MB and 1 GB). Run under an address-space limit far below that
+import "std/io"
 type Token struct(kind I64, text String&) {
     kind
     text
@@ -70,5 +71,5 @@ fn walked(src String&, n I64) I64 {
 fn main() ? {
     lx := Lexer("abcdef")
     base := "base"
-    println($fields(lx, 8000000) " " $wholes(lx, 8000000) " " $arrays(base, 1000000) " " $walked(base, 8000000))
+    io.Println($fields(lx, 8000000) " " $wholes(lx, 8000000) " " $arrays(base, 1000000) " " $walked(base, 8000000))
 }

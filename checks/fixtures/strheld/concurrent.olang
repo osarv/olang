@@ -1,4 +1,5 @@
 # E11b/E11c: four tasks rendering Strs, Lists and Maps through joins at once (clean under -r)
+import "std/io"
 type P struct(x I64, name String&) {
     x
     name
@@ -34,5 +35,5 @@ fn main() ? {
     join {
         for k in range 4 { spawn out[k] = work(b, k) }
     }
-    println($out)
+    io.Println($out)
 }

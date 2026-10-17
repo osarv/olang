@@ -1,4 +1,5 @@
 # C11/O16: conditionals and matches of destructor temporaries through generics, returns and spawn targets
+import "std/io"
 Made mut I64 = 0
 Gone mut I64 = 0
 type Res struct(k I64) {
@@ -15,7 +16,7 @@ fn r3(c Bool) Res& {
     }
 }
 fn mk(c Bool) Res& { return Res(5) if c else Res(6) }
-fn show(i I64) { println($i ": " $(Made - Gone)) }
+fn show(i I64) { io.Println($i ": " $(Made - Gone)) }
 fn main() ? {
     c := false
     { x := r1(c) }

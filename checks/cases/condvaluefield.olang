@@ -1,6 +1,7 @@
 # check: fail error[O11, O12]
 # O12/E28: a reference read out of a conditional of values from two scopes lives in neither known here, so nothing is
 # built through it (a use-after-free: the list grew in a loop body's block)
+import "std/io"
 type In struct() {
     k I64 = 0
     l List<I64> = List<I64>()
@@ -32,6 +33,6 @@ fn main() ? {
         w((i if j < 0 else o).m.inner)
     }
     churn()
-    println($o.m.inner.k " " $o.m.inner.l.Len() " " $o.m.inner.l[19])
-    println($o.m.inner.l.ToArray()[:3])
+    io.Println($o.m.inner.k " " $o.m.inner.l.Len() " " $o.m.inner.l[19])
+    io.Println($o.m.inner.l.ToArray()[:3])
 }

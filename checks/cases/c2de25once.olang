@@ -2,6 +2,7 @@
 # also: compilation failed with 1 error
 # B11: one error per cause - a ':=' judging where a scope argument puts its instance, then the statement storing it
 # there, reached the same fault at the same argument and reported it twice (review chk5)
+import "std/io"
 type Info struct(n I64) { n }
 type Env struct(r Info&) {
     r
@@ -20,5 +21,5 @@ fn main() ? {
     g := Info(1)
     c mut Holder& = Holder(Env(g))
     build(c)
-    println($c.e.r.n)
+    io.Println($c.e.r.n)
 }

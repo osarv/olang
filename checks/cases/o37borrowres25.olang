@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'v.o' may release the Inner borrowed
 # O37/O38 (Vec phase 1): a borrowed own result - ...passed through a function borrowing its argument
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -60,5 +61,5 @@ fn main() ? {
     f := pass(v.First())
     v.o = null
     churn()
-    println($f.k)
+    io.Println($f.k)
 }

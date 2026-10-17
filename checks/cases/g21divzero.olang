@@ -2,10 +2,11 @@
 # also: note: instantiated here, with N = 0
 # also: compilation failed with 1 error
 # G21/G16b: a constant argument that cannot be computed for an instantiation is reported once, at that instantiation
+import "std/io"
 type Box<N I64> struct() {
     a Array<I32, 10 / N>
 }
 fn main() ? {
     b := Box<0>()
-    println($b.a.Len())
+    io.Println($b.a.Len())
 }

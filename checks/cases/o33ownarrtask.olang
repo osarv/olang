@@ -1,5 +1,6 @@
 # check: fail error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is
 # O17/O33: ...a task handed it, whose stand-in folds into the buffer's region
+import "std/io"
 type B struct() {
     names own mut Array<String&>& = Array<String&>(3)
 }
@@ -9,5 +10,5 @@ fn main() ? {
     join { spawn fill(b.names) }
     e := b.names[0]
     b.names = Array<String&>(1)
-    println(e)
+    io.Println(e)
 }

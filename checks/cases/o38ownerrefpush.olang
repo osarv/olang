@@ -1,5 +1,6 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38: ...nor kept by a call (own5 F2)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -17,5 +18,5 @@ fn main() ? {
     v.o = Inner(1)
     v.o.deep = Leaf(5)
     l.Push(v)
-    println($l[0].o.k)
+    io.Println($l[0].o.k)
 }

@@ -2,6 +2,7 @@
 # vec5 R2a: what stays legal - a constructor building in its own instance scope outlives the block it was given text in;
 # one building in a parameter's scope is used where the argument lives, or put there by a scope argument ('H&x(...)',
 # 'mk&x(...)'), its region live while it is read
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -40,5 +41,5 @@ fn main() ? {
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
     assert c.text == "2-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-    println("ok")
+    io.Println("ok")
 }

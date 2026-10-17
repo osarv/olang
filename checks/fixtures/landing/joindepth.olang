@@ -2,6 +2,7 @@
 # rendered - so a recursion through one goes as deep as any other (a builder held across the call cost 4KB of arena
 # and 32 bytes of stack a frame: 60,000 deep overflowed an 8MB stack, which a frame of 112 bytes, this one's at -O3,
 # does not)
+import "std/io"
 Depth mut I64 = 60000
 fn r(n I64, name String&) I64 {
     if n == 0 { return 0 }
@@ -10,5 +11,5 @@ fn r(n I64, name String&) I64 {
 }
 fn main() ? {
     d := Depth
-    println($r(d, "x"))
+    io.Println($r(d, "x"))
 }

@@ -5,6 +5,7 @@
 # conversion, "as" - or a catch clause; N6: a constructor failing after making its own fields releases them.
 # Built, built -s, built -d and, where valgrind is installed, run under it: every object made is released, nothing is
 # lost and no slot is read after its frame is gone
+import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
 type Leaf struct(n I64) {
@@ -138,7 +139,7 @@ fn main() ? {
         x := take2(Leaf(20), try fails(i) catch { break })
     }
     r := viaReturn(s)
-    println("made " $Made " dropped " $Dropped " return " $r)
+    io.Println("made " $Made " dropped " $Dropped " return " $r)
     {
         head own mut Deep& = null
         for i in range 1000 {
@@ -148,7 +149,7 @@ fn main() ? {
         }
     }
     churn()
-    println("made " $Made " dropped " $Dropped)
+    io.Println("made " $Made " dropped " $Dropped)
     arr := I64[1, 2, 3]
     try viaIndex(arr, 9) catch { }
     try viaDiv(0) catch { }
@@ -164,5 +165,5 @@ fn main() ? {
     try mkFail(1) catch { }                 # FailMany fails after making its three
     s.a = null
     churn()
-    println("made " $Made " dropped " $Dropped)
+    io.Println("made " $Made " dropped " $Dropped)
 }

@@ -1,6 +1,7 @@
 # check: fail error[O17]: this value's references live where its own storage does not
 # O17: a view of the lent value's own inline array ("b.head.view = b.data") is the value's storage, not something read
 # out of its region - no reference is followed on the way to it
+import "std/io"
 type Node struct() {
     view Array<I64>& = null
 }
@@ -31,5 +32,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    println($w.b.head.view[1])
+    io.Println($w.b.head.view[1])
 }

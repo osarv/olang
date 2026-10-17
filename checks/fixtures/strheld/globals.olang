@@ -1,4 +1,5 @@
 # E11b/E11c: later operands reassigning global arrays, a struct and an enum
+import "std/io"
 G mut Array<I64> = I64[1, 2]
 H mut Array<I64> = I64[1, 2]
 type T struct(n I64) {
@@ -24,5 +25,5 @@ fn bump() I64 {
     return 0
 }
 fn main() ? {
-    println($G " " $H " " $E " " $C " " $growG() $sameH() $bump() " " $G " " $H " " $E " " $C)
+    io.Println($G " " $H " " $E " " $C " " $growG() $sameH() $bump() " " $G " " $H " " $E " " $C)
 }

@@ -19,5 +19,5 @@ fn main() ? {
             m.Update(k, 0, fn(c) { return c + 1 })                  # one of each
         }
     }
-    try io.Print($m.Len() "\n")
+    io.Print($m.Len() "\n")
 }

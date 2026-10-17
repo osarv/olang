@@ -1,5 +1,6 @@
 # check: fail error[E11c, O12]
 # E11c/O12: the same through a spawned lambda
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -23,6 +24,6 @@ fn main() ? {
     b := Bag(Node(1, null))
     s := $b
     churn()
-    println(s)
-    println($b.head.next.v)
+    io.Println(s)
+    io.Println($b.head.next.v)
 }

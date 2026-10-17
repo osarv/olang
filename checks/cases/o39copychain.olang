@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'a' may release the Array<I64> borrowed on line
 # a copy of a copy borrows from the same source
+import "std/io"
 type Buf struct() {
     data own mut Array<I64>& = Array<I64>(2)
     n I64 = 0
@@ -24,5 +25,5 @@ fn main() ? {
     b := a
     c := b
     a = Buf()
-    println($c.n)
+    io.Println($c.n)
 }

@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'c.text' may release the String borrowed on line
 # vec5 R2b: deferred code building in a borrow's region runs at the block's end, after the release
+import "std/io"
 type CB struct() {
     text own mut String& = $1 "-ttttttttttttttt"
 }
@@ -8,7 +9,7 @@ fn main() ? {
     x := c.text
     defer {
         d mut String&x = $5 "-built-on-the-way-out"
-        println(d)
+        io.Println(d)
     }
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
 }

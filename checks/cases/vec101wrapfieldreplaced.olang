@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'w.lx' may release the Array<I64> borrowed on line 13, which is used after it
 # Vec phase 2a (O31/O35): ...and replacing the inner one, the field holding the Vec's holder
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
@@ -12,5 +13,5 @@ fn main() ? {
     w.lx.toks.Push(1)
     d := w.lx.toks.View()
     w.lx = Lexer(2)
-    println($d[0])
+    io.Println($d[0])
 }

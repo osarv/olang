@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'v' may release the Array<I64> borrowed
 # O37/O38 (Vec phase 1): a borrowed own result - ...used after the owner value local is given a new owner
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -60,5 +61,5 @@ fn main() ? {
     e := mkO(5)
     v = take e
     churn()
-    println($d[0])
+    io.Println($d[0])
 }

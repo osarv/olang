@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'c.text' may release the String borrowed on line
 # vec4 (r1b_scope_argument_names_borrow): the review's repro
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -19,5 +20,5 @@ fn main() ? {
     d := mk&x(5)
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(d)
+    io.Println(d)
 }

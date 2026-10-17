@@ -1,5 +1,6 @@
 # vec3 F3: a spawn target set from a borrowed own result reached through an import alias chain (mid.Vl.View2)
 import "mid"
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -15,7 +16,7 @@ fn grow(w mut Vec<I64>&) {
     }
     for i in range 1000 { w.Push(i + 100) }
     churn()
-    println($d[0] " " $d[1])
+    io.Println($d[0] " " $d[1])
 }
 fn main() ? {
     v := Vec<I64>()

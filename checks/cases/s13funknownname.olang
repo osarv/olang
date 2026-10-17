@@ -2,6 +2,7 @@
 # never: error: unknown name
 # S13f: a lone unknown name in a case was meant to take the value - which "case _ if" does. One error: the guard reading
 # the name is not reported again
+import "std/io"
 fn classify(n I64) String {
     return match n {
         case 0 => "zero"
@@ -9,4 +10,4 @@ fn classify(n I64) String {
         nomatch => "small"
     }
 }
-fn main() ? { println(classify(500)) }
+fn main() ? { io.Println(classify(500)) }

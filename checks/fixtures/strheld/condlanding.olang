@@ -1,5 +1,6 @@
 # O18a/E28: a conditional of a call still landing and a new value, passed on, is built where the call stands - each
 # instance destructed in its iteration
+import "std/io"
 Made mut I64 = 0
 Gone mut I64 = 0
 type Res struct(k I64) {
@@ -17,10 +18,10 @@ fn work() I64 {
     for i in range 100000 {
         t += takeR(id(Res(i)) if c else Res(16))
     }
-    println("in work: made " $Made " gone " $Gone)
+    io.Println("in work: made " $Made " gone " $Gone)
     return t
 }
 fn main() ? {
     t := work()
-    println("after: made " $Made " gone " $Gone " " $t)
+    io.Println("after: made " $Made " gone " $Gone " " $t)
 }

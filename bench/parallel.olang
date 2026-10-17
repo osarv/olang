@@ -44,5 +44,5 @@ fn main() ? {
             answerLen = lens[t]
         }
     }
-    try io.Print($answer " " $answerLen "\n")
+    io.Print($answer " " $answerLen "\n")
 }

@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
 # Vec phase 2a (O31/O39): a view of a field's Vec is a loan on its buffer - a push through the struct while it is used
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
@@ -9,5 +10,5 @@ fn main() ? {
     for i in range 3 { l.toks.Push(i) }
     d := l.toks.View()
     l.toks.Push(9)
-    println($d[0])
+    io.Println($d[0])
 }

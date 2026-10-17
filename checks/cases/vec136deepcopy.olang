@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed
 # Vec phase 2a review D (O38/O39): a borrowed copy's loans reach every owning value field, at any depth - here 8
+import "std/io"
 type L0 struct() {
     toks Vec<I64> = Vec<I64>()
 }
@@ -43,5 +44,5 @@ fn main() ? {
     z := Vec<I64>()
     for i in range 5 { z.Push(777) }
     churn()
-    println($c.x.x.x.x.x.x.x.x.toks[0] " " $z.Len())
+    io.Println($c.x.x.x.x.x.x.x.x.toks[0] " " $z.Len())
 }

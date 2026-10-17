@@ -1,4 +1,5 @@
 # E11b/E11c: a join reaching a Str in deferred code run by a return from a nested block
+import "std/io"
 type Bag struct(n I64) {
     n
 }
@@ -16,5 +17,5 @@ fn f(b Bag&, k I64) I64 {
 fn main() ? {
     t I64 = 0
     for i in range 500 { t += f(Bag(i), i) }
-    println($t)
+    io.Println($t)
 }

@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'close' may release the Sock borrowed on line
 # a method releasing below its receiver, while a borrow of what it releases is used after
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -19,5 +20,5 @@ fn main() ? {
     s.cur.sock = Sock(1)
     k := s.cur.sock
     s.cur.close()
-    println($k.n)
+    io.Println($k.n)
 }

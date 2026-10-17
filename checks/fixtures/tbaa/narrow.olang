@@ -2,6 +2,7 @@
 # always had. Each array below is written through the struct holding it, as std/linalg's Map does - the loop that did
 # not vectorize while a BF16 store carried no tag - and read back; a count beside the arrays is a field of every
 # narrow type, so a field and an element of one type share a loop. Run at -O3 and at -d: the answers must agree.
+import "std/io"
 
 type Code extends U16
 
@@ -119,5 +120,5 @@ fn main() ? {
     c := a.codes
     assert viewed(c, c) == 10000
     assert c[0] == Code(10) and c[n - 1] == Code(10), $c[0]
-    println("narrow: ok")
+    io.Println("narrow: ok")
 }

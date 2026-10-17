@@ -6,5 +6,5 @@ fn main() ? io.IoError {
     n I64 = 2305843009213693952 + os.Args().Len()
     a := Array<I64>(n)
     a[3] = 77
-    try io.Print("reached " $a.Len() "\n")
+    io.Print("reached " $a.Len() "\n")
 }

@@ -1,5 +1,6 @@
 # check: fail error[O38, O26a]: this result reaches the owner value local 'v' by reference, and its owners are released as i
 # O37/O38 (Vec phase 1): a borrowed own result - ...returned from a function whose owner value local it borrows
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -62,5 +63,5 @@ fn leak() mut Inner& {
 fn main() ? {
     x := leak()
     churn()
-    println($x.k)
+    io.Println($x.k)
 }

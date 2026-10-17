@@ -1,6 +1,7 @@
 # check: fail error[O20]: the container outlives what this refers to
 # Vec phase 2a (O33/O20): an element's field written through a view keeps what lives where the Vec does - not a
 # loop turn's text
+import "std/io"
 type Tok struct(text String&, line I64) {
     text
     line
@@ -13,5 +14,5 @@ fn main() ? {
         m := v.ViewMut()
         m[0].text = t
     }
-    println($v[0].text)
+    io.Println($v[0].text)
 }

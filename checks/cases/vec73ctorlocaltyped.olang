@@ -1,6 +1,7 @@
 # check: fail error[C2d]: this instance would outlive what its '&p' field refers to
 # vec5 (r2a_ctor_local_typed_no_own): the text built in a constructor local typed in a parameter's scope, then the field
 # given that local
+import "std/io"
 type H struct(x String&, n I64) {
     t String&x = $n "-new-text-in-x's-scope"
     y := t
@@ -12,7 +13,7 @@ fn main() ? {
         h = H(s, 5 + i)
     }
     churn()
-    println(h.y)
+    io.Println(h.y)
 }
 fn churn() I64 {
     t := 0

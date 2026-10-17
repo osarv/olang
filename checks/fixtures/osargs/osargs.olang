@@ -11,7 +11,7 @@ error Bad {
 Count := os.Args().Len()
 
 fn say(text String&) ? Bad {
-    try io.Print($text "\n") catch { error Bad.OUTPUT }
+    try io.Write(io.Stdout, $text "\n") catch { error Bad.OUTPUT }
 }
 
 fn main() ? Bad {

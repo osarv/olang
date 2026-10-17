@@ -1,5 +1,6 @@
 # check: fail error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is
 # O17/O33: ...a slice of it, which keeps the buffer's storage (E16a), lent whole or held in a local
+import "std/io"
 type C struct() {
     names own mut Array<String&>& = Array<String&>(3)
 }
@@ -13,5 +14,5 @@ fn main() ? {
     fill(s)
     e := h.c.names[1]
     h.c.names = Array<String&>(1)
-    println(e)
+    io.Println(e)
 }

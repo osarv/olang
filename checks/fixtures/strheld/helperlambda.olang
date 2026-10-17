@@ -1,4 +1,5 @@
 # D16c: a helper's local lambda that is only ever called lives in its frame - nothing built where the node lives
+import "std/io"
 type Node struct(v I64) {
     v
 }
@@ -10,4 +11,4 @@ fn peek(n Node&) I64 {
     return f()
 }
 fn (b Bag&) Str() String { return "b" $peek(b.head) }
-fn main() ? { println($Bag(Node(4))) }
+fn main() ? { io.Println($Bag(Node(4))) }

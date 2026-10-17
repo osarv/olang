@@ -1,5 +1,6 @@
 # check: fail error[O39]: taking 's.cur' moves the Conn borrowed on line
 # 'take' moves the object to an owner that may let it go - a borrow of it used after is refused
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -17,6 +18,6 @@ fn main() ? {
     s.cur = Conn(3)
     c := s.cur
     d := take s.cur
-    println(c.name)
-    println(d.name)
+    io.Println(c.name)
+    io.Println(d.name)
 }

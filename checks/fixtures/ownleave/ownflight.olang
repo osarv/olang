@@ -2,6 +2,7 @@
 # runs first runs. A join failing in the return's place (P4b) gives the result to nobody, and releases it: an owned
 # result, an owner value local moved into the result, one returned through memory (over 128 bytes), and an own array.
 # The joins that do not fail return each result as usual. Every object made is released.
+import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
 type Res struct(n I64) {
@@ -67,35 +68,35 @@ fn mkCaught(k I64) own mut Res& {
 }
 fn main() ? {
     for k in range 2 {
-        x := try mkOwned(k) catch Bad { println("mkOwned failed") } default null
-        if x != null { println("owned " $x.n) }
+        x := try mkOwned(k) catch Bad { io.Println("mkOwned failed") } default null
+        if x != null { io.Println("owned " $x.n) }
         y := try mkValue(k) catch Bad {
-            println("mkValue failed")
+            io.Println("mkValue failed")
             continue
         }
-        println("value " $y.r.n)
+        io.Println("value " $y.r.n)
         z := try mkBig(k) catch Bad {
-            println("mkBig failed")
+            io.Println("mkBig failed")
             continue
         }
-        println("big " $z.r.n " " $z.pad[19])
+        io.Println("big " $z.r.n " " $z.pad[19])
         a := try mkArr(k) catch Bad {
-            println("mkArr failed")
+            io.Println("mkArr failed")
             continue
         }
-        println("array " $a.Len())
+        io.Println("array " $a.Len())
     }
     for k in range 1 {
-        a := try mkArr(1) catch Bad { println("mkArr failed") } default null
-        println($(a == null))
+        a := try mkArr(1) catch Bad { io.Println("mkArr failed") } default null
+        io.Println($(a == null))
         z := try mkBig(1) catch Bad {
-            println("mkBig failed")
+            io.Println("mkBig failed")
             continue
         }
-        println("big " $z.r.n)
+        io.Println("big " $z.r.n)
     }
     c := mkCaught(2)
-    println("caught " $c.n)
+    io.Println("caught " $c.n)
     c = null
-    println("made " $Made.AtomicLoad() " dropped " $Dropped.AtomicLoad())
+    io.Println("made " $Made.AtomicLoad() " dropped " $Dropped.AtomicLoad())
 }

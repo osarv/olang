@@ -1,6 +1,7 @@
 # check: fail error[O17a]: this value's references live where its own storage does not, so it is not held by reference
 # O17a: a read-only reference too - what is read through it (a writable "mut Node&" field) is taken to live where the
 # copy does, so a node built through it would be built in the copy's block
+import "std/io"
 type Node struct() {
     next mut Node& = null
     v I64 = 0
@@ -18,5 +19,5 @@ fn readOnly(src mut W&) {
 fn main() ? {
     w := W(Box())
     readOnly(w)
-    println($w.b.head.v)
+    io.Println($w.b.head.v)
 }

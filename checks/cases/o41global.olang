@@ -1,5 +1,6 @@
 # check: fail error[O41]: assigning 'G.cur' may release the Node the task spawned on line
 # a task borrowing through a global while the spawner releases it
+import "std/io"
 type Node struct(n I64) {
     n
     name String& = "node" $n
@@ -11,7 +12,7 @@ type Holder struct() {
 G := Holder()
 fn work() {
     c := G.cur
-    println(c.name)
+    io.Println(c.name)
 }
 fn main() ? {
     G.cur = Node(1)

@@ -11,6 +11,7 @@
 # receiver that is a constructor's field local - here "left", whose scope is the instance's (%here) - binds Push's scope
 # variable with boundTo NULL and boundDepth 0, so SemanticBoundScopeDepth (~6685) answers the call's own block depth,
 # and codegen's cgBoundScopeArg -> cgScopeSlotAt passes the loop body's scope rather than cgOwnAllocSlot's %here.
+import "std/io"
 type Countdown struct(n I64) {
     left List<I64>
     for i in range n { left.Push(n - i) }
@@ -19,5 +20,5 @@ fn main() ? {
     c := Countdown(20)
     s I64 = 0
     for v in c.left { s += v }
-    println($s)
+    io.Println($s)
 }

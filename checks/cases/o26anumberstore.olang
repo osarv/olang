@@ -2,6 +2,7 @@
 # also: make it where 's' lives: 'mk&s(...)'
 # O26a: a number computed from a line carries nothing into the result - but a function storing the line itself into the
 # returned summary does, which flow by numbers does not see: the call is held to it (O10c), and the note's fix compiles
+import "std/io"
 type S struct() {
     best I64 = 0
     names List<String&> = List<String&>()
@@ -20,4 +21,4 @@ fn scan(n I64) S {
     }
     return s
 }
-fn main() ? { println($scan(3).names.Len()) }
+fn main() ? { io.Println($scan(3).names.Len()) }

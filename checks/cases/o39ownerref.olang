@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line
 # O39: the owner releases nothing through its own name while a reference to its storage is used (own5 F2)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -17,5 +18,5 @@ fn main() ? {
     v.o.deep = Leaf(5)
     r mut Outer& = v
     v.o = Inner(9)
-    println($r.o.k)
+    io.Println($r.o.k)
 }

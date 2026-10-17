@@ -1,5 +1,6 @@
 # check: fail error[O39]: taking 'v.o' moves the Leaf borrowed on line 19
 # Vec phase 2a (O37/E34): ...and moving the holder
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -18,5 +19,5 @@ fn main() ? {
     v := Outer()
     d := v.Deep()
     t := take v.o
-    println(d.text)
+    io.Println(d.text)
 }

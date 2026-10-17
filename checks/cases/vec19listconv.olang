@@ -1,11 +1,12 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # vec1 review, found beside it: a conversion names its argument's storage (T29a), so "String(v.View())" keeps the view's
 # loan - pushed into a List of text it would outlive the buffer the next Push replaces
+import "std/io"
 fn main() ? {
     v := Vec<Char>()
     v.Push('a')
     l := List<String&>()
     l.Push(String(v.View()))
     for i in range 100 { v.Push('b') }
-    println(l[0])
+    io.Println(l[0])
 }

@@ -14,7 +14,7 @@ ErfBaked F16 = math.Erf(F16(0.7))
 FmaBaked F64 = math.Fma(0.1, 10.0, -1.0)
 RoundBaked BF16 = math.RoundEven(BF16(2.5))
 
-fn line(t String&) ? io.IoError { try io.Print($t "\n") }
+fn line(t String&) ? io.IoError { io.Print($t "\n") }
 
 fn main() ? io.IoError {
     try line($SqrtTwo " " $ExpSeven " " $PowBaked " " $TanhBaked " " $ErfBaked " " $FmaBaked " " $RoundBaked)

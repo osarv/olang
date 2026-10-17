@@ -2,6 +2,7 @@
 # slice's bounds, an 'as' that does not hold, an array's length - abandons the test (S18, P1d), whose unwinder releases
 # the owner from its hidden slot. Every argument but literals, reads, and unchecked operators on numbers holds it there
 # (cgMayLeave's whitelist). The last test sees every owner made released.
+import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
 type Res struct(n I64) {
@@ -24,17 +25,17 @@ test "a slice out of range after an owner is made" {
     lo := 2
     hi := 1
     x := eat(Res(1), a[lo:hi])
-    println($x)
+    io.Println($x)
 }
 test "an 'as' that does not hold after an owner is made" {
     e := E.B(3)
     x := eat3(Res(2), (e as E.A))
-    println($x)
+    io.Println($x)
 }
 test "an array length out of range after an owner is made" {
     n := -1
     x := eat(Res(3), Array<I64>(n))
-    println($x)
+    io.Println($x)
 }
 test "a constructor's region made before its argument fails a check" {
     b := Box()
@@ -47,9 +48,9 @@ test "an owner moved out of a slot before a later argument fails a check" {
     b.r = Res(4)
     e := E.B(5)
     x := eat3(take b.r, (e as E.A))
-    println($x)
+    io.Println($x)
 }
 test "every owner made was released" {
-    println("made " $Made " dropped " $Dropped)
+    io.Println("made " $Made " dropped " $Dropped)
     assert Made == Dropped
 }

@@ -12,6 +12,7 @@ import "std/time"
 import "std/os"
 import "std/rand"
 import "std/linalg"
+import "std/io"
 
 reps mut I64 = 15
 
@@ -31,16 +32,16 @@ fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, 
             times[v * reps + r] = time.Since(t0)
         }
     }
-    print(title)
+    io.Print(title)
     for v in range n {
         xs := Array<I64>(reps)
         for r in range reps { xs[r] = times[v * reps + r] }
         xs.Sort(fn(x, y) { return x < y })
         ms := (F64(xs[reps / 2]) / 1e6).Fixed(3)
         nm := names[v]
-        print("  " $nm " " $ms)
+        io.Print("  " $nm " " $ms)
     }
-    println()
+    io.Println()
 }
 
 fn attention(T I64, threads I64) {

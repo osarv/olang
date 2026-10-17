@@ -1,6 +1,7 @@
 # check: fail error[P2]: this argument's storage closes before the join does
 # P2/O18c: a task's argument read off a call's value result, the call's result landing where a local of a loop body
 # inside the join lives - which closes before the join
+import "std/io"
 type V struct(Data mut Array<F64>&) {
     Data
 }
@@ -21,5 +22,5 @@ fn task(g G&) F64 {
 }
 fn main() ? {
     g := G(4)
-    println($task(g))
+    io.Println($task(g))
 }

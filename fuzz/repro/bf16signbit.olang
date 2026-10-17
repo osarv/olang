@@ -1,6 +1,7 @@
 # std/math's "sign and size" failed under -d and -r (bf16signbit.ll): the sign bit of a BF16 read from memory was taken
 # for a known zero, so each of these printed false there - and the third crashed the -O3 link
 import "std/math"
+import "std/io"
 fn stored(a Array<BF16>&, b mut Array<BF16>&) Bool {
     x := a[1]
     b[0] = x
@@ -9,5 +10,5 @@ fn stored(a Array<BF16>&, b mut Array<BF16>&) Bool {
 fn main() ? {
     a := BF16[1.0, -2.0]
     b := Array<BF16>(2)
-    println($math.SignBit(a[1]) " " $(F32(a[1]).Bits() >> 31 == 1) " " $stored(a, b))
+    io.Println($math.SignBit(a[1]) " " $(F32(a[1]).Bits() >> 31 == 1) " " $stored(a, b))
 }

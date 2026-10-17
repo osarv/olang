@@ -1,5 +1,6 @@
 # E11b/E11c: a conditional of a reference and a new value where both live in one scope, a global's or a parameter's,
 # compiles and runs
+import "std/io"
 type P struct(v I64) {
     v
 }
@@ -12,11 +13,11 @@ fn main() ? {
     h mut Hold& = Hold()
     for i in range 3 {
         h.f = G if i == 0 else P(7)
-        println($h.f.v)
+        io.Println($h.f.v)
     }
     l P& = P(4)
     setIt(h, l, true)
-    println($h.f.v)
+    io.Println($h.f.v)
     setIt(h, l, false)
-    println($h.f.v)
+    io.Println($h.f.v)
 }

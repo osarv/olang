@@ -31,5 +31,5 @@ fn main() ? io.IoError {
         spawn workA(1000000)
         spawn workB(1000000)
     }
-    try io.Print($BadA " " $BadB "\n")
+    io.Print($BadA " " $BadB "\n")
 }

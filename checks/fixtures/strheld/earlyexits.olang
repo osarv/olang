@@ -1,4 +1,5 @@
 # E11b/E11c: joins reaching a Str left by continue and by a propagated error leave nothing behind
+import "std/io"
 type Big struct(n I64) {
     n
 }
@@ -23,5 +24,5 @@ fn main() ? {
         t += s.Len()
         t += try h(b, i) catch default 0
     }
-    println($t)
+    io.Println($t)
 }

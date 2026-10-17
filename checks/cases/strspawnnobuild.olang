@@ -1,6 +1,7 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # P2: every task gets a stand-in for each scope its call binds, made in that scope - so a task handed the receiver's
 # node is refused even where its call builds nothing there (no raw scope for a task, C2/C4)
+import "std/io"
 type Node struct(v I64) {
     v
 }
@@ -14,4 +15,4 @@ fn hjoin(n Node&) I64 {
     return x
 }
 fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
-fn main() ? { println($Bag(Node(6))) }
+fn main() ? { io.Println($Bag(Node(6))) }

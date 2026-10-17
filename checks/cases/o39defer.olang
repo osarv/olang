@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
 # deferred code reading a borrow uses it at the end of its block
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -16,6 +17,6 @@ fn main() ? {
     s := Server()
     s.cur = Conn(1)
     c := s.cur
-    defer { println(c.name) }
+    defer { io.Println(c.name) }
     s.cur = null
 }

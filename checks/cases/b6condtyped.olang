@@ -2,6 +2,7 @@
 # E28/O12 (the batch 6 review): a conditional whose values live in different scopes, declared with a written type, is held
 # where it is declared and read there - nothing is built through it, which would be built in its block and kept where
 # the outer node really is
+import "std/io"
 type Nd struct(v I64) {
     v
     next mut Nd& = null
@@ -12,5 +13,5 @@ fn main() ? {
         q mut Nd& = n if i == 1 else Nd(7)
         q.next = Nd(100 + i)
     }
-    println($n.next.v)
+    io.Println($n.next.v)
 }

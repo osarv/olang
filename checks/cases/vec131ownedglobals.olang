@@ -1,5 +1,6 @@
 # check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
 # R1: between two globals' owned objects
+import "std/io"
 type Lex3 struct() {
     toks Vec<String&> = Vec<String&>()
 }
@@ -23,5 +24,5 @@ fn main() ? {
     GG.lx.toks = take GH.lx.toks
     GH.lx = null
     churn()
-    println(GG.lx.toks[0])
+    io.Println(GG.lx.toks[0])
 }

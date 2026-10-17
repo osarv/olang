@@ -1,2 +1,3 @@
 import "../x"
-fn main() ? { println($x.X()) }
+import "std/io"
+fn main() ? { io.Println($x.X()) }

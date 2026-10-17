@@ -1,5 +1,6 @@
 # check: fail error[O41]: assigning 's.cur' may release the Node the task spawned on line
 # deferred code in a join block runs before the join waits - while the task may still be using what it releases
+import "std/io"
 type Node struct(n I64) {
     n
     name String& = "node" $n
@@ -8,7 +9,7 @@ type Holder struct() {
     cur own mut Node&
     other own mut Node&
 }
-fn look(n Node&) { println(n.name) }
+fn look(n Node&) { io.Println(n.name) }
 fn main() ? {
     s := Holder()
     s.cur = Node(3)

@@ -2,10 +2,11 @@
 # R11/B5b: os.Exit ends the program, but as an ordinary call - a clause in value position ending in it still needs
 # "unreachable" after it, which the error says (study 4's r18)
 import "std/os"
+import "std/io"
 fn main() ? {
     text := try os.ReadFile("/nonexistent") catch os.OsError {
-        eprintln("cannot read")
+        io.PrintErrln("cannot read")
         os.Exit(2)
     }
-    println(text)
+    io.Println(text)
 }

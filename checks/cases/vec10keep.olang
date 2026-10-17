@@ -1,6 +1,7 @@
 # check: run
 # Vec phase 1: an element of a Vec of text or of nodes refers outside the buffer (an own array's elements live where the
 # Vec does), so it is kept across growth and across the Vec being given another buffer
+import "std/io"
 type N struct(v I64) { v }
 fn main() ? {
     v := Vec<String&>()
@@ -13,5 +14,5 @@ fn main() ? {
     n := w[0]
     for i in range 100 { w.Push(N(i)) }
     w = Vec<N&>()
-    println($s " " $n.v)
+    io.Println($s " " $n.v)
 }

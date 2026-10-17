@@ -1,5 +1,6 @@
 # E11b/E11c: later operands running At, Slice, Less, a chain and a conditional, each writing a global an earlier piece
 # holds
+import "std/io"
 type Cnt struct(n I64) {
     n
 }
@@ -23,11 +24,11 @@ fn (c C&) Less(d C&) Bool {
 fn main() ? {
     c := C(5)
     d := C(6)
-    println($G " " $c[1])
-    println($G " " $c[1:2])
-    println($G " " $(c < d))
-    println($G " " $(1 < c[0] < 9))
-    println($G " " $(c[0] if c.k > 0 else 0))
+    io.Println($G " " $c[1])
+    io.Println($G " " $c[1:2])
+    io.Println($G " " $(c < d))
+    io.Println($G " " $(1 < c[0] < 9))
+    io.Println($G " " $(c[0] if c.k > 0 else 0))
     a := I64[1, 2, 3]
-    println($G " " $a[c[0] - 5])
+    io.Println($G " " $a[c[0] - 5])
 }

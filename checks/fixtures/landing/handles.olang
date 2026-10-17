@@ -2,6 +2,7 @@
 # than its own storage - a copy taken out of a collection, a copy in an inner block, a by-value parameter - is lent as
 # that reference to a callee that uses it only through it. What the calls build lives where the handle's state does;
 # each result is read back after the arena has been churned
+import "std/io"
 type St struct() {
     x I64 = 0
 }
@@ -85,8 +86,8 @@ fn main() ? {
     for k in range 3 {
         for x in try g.Get(k) { t = $t $x }
     }
-    println(t)
-    println(try aliases())
-    println(try builders())
-    println($(try counters()))
+    io.Println(t)
+    io.Println(try aliases())
+    io.Println(try builders())
+    io.Println($(try counters()))
 }

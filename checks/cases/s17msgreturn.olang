@@ -1,6 +1,7 @@
 # check: fail error[S17]: an assert's message may not return
 # vec4 (x1_assert_message_return_i_vs_b): the review's repro
 # -i and the built program disagree: a return inside an assert message's catch block
+import "std/io"
 fn h(k I64) String ? {
     if k < 5 { error }
     return "ok"
@@ -10,5 +11,5 @@ fn f(k I64) I64 {
     return 3
 }
 fn main() ? {
-    println($f(1))
+    io.Println($f(1))
 }

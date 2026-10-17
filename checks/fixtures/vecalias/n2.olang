@@ -1,4 +1,5 @@
 import "vlib"
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -12,7 +13,7 @@ fn grow(w mut Vec<I64>&) {
     d := f(w)
     for i in range 1000 { w.Push(i + 100) }
     churn()
-    println($d[0] " " $d[1])
+    io.Println($d[0] " " $d[1])
 }
 fn main() ? {
     v := Vec<I64>()

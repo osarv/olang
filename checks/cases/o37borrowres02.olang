@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'v.data' may release the Array<I64> borrowed
 # O37/O38 (Vec phase 1): a borrowed own result - ...after the array is released through the owner's own name
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -59,5 +60,5 @@ fn main() ? {
     d := v.View()
     v.data = null
     churn()
-    println($d[0])
+    io.Println($d[0])
 }

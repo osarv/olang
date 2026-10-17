@@ -1,7 +1,8 @@
 # check: fail error[O31]: Vec<I64> owns objects
 # Vec phase 2a (O31): an enum payload is no place to hold an owning value - it is copied freely and nothing takes it out
+import "std/io"
 type E enum {
     A(v Vec<I64>)
     B
 }
-fn main() ? { println("x") }
+fn main() ? { io.Println("x") }

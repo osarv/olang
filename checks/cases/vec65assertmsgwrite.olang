@@ -1,6 +1,7 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line
 # vec4 F1': the local rebound to the argument inside an assert message's catch block - the write scan sees it, so the
 # result is not proven fresh and keeps the loan on the Vec's buffer
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -27,5 +28,5 @@ fn main() ? {
     d := longer(v.ViewMut(), other)
     for i in range 1000 { v.Push(i) }
     churn()
-    println($d[0] " " $d[1])
+    io.Println($d[0] " " $d[1])
 }

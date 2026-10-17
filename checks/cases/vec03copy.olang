@@ -1,9 +1,10 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 6
 # Vec phase 1 (O32/O39): a borrowed copy of a Vec kept across a Push on the Vec it was copied from
+import "std/io"
 fn main() ? {
     v := Vec<I64>()
     v.Push(1)
     b := v
     v.Push(2)
-    println($b.Len())
+    io.Println($b.Len())
 }

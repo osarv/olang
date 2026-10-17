@@ -1,6 +1,7 @@
 # check: fail error[T25c]: a read-only reference cannot become writable
 # T25c: a for-in over a reference a read-only copy holds borrows it read-only (study 6's r05) - a walk that writes, a
 # 'mut' At, is refused at that call
+import "std/io"
 type Ring struct() {
     data mut Array<I64>& = Array<I64>(3)
     reads I64 = 0
@@ -21,5 +22,5 @@ fn walk(hs List<Holder>&) I64 {
 fn main() ? {
     hs := List<Holder>()
     hs.Push(Holder())
-    println($walk(hs))
+    io.Println($walk(hs))
 }

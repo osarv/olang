@@ -1,6 +1,7 @@
 # check: fail error[O39]: taking 'p.cur' moves the Node borrowed on line
 # a move from below a parameter into an owner local of the parameter's reach, while a borrow of it is in use - released
 # through the owner local, the loan rooted at the parameter would not be met
+import "std/io"
 type Node struct(n I64) {
     n
     name String& = "node" $n
@@ -14,7 +15,7 @@ fn f(p mut Holder&) {
     c := p.cur
     o.cur = take p.cur
     o.cur = null
-    println(c.name)
+    io.Println(c.name)
     p.sub = take o
 }
 fn main() ? {

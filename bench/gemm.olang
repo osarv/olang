@@ -43,7 +43,7 @@ fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError
         perText := per.Fixed(1)
         total T = like
         for v in y { total = total + v }
-        try io.Print($n "x" $m " " $mode " " $perText "ns " $rate " GFLOPS check " $total "\n")
+        io.Print($n "x" $m " " $mode " " $perText "ns " $rate " GFLOPS check " $total "\n")
         return
     }
     best I64 = 0
@@ -56,7 +56,7 @@ fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError
     flops F64 = 2.0 * F64(n) * F64(n) * F64(n)
     secs := (F64(best) * 1e-9).Fixed(6)
     rate := (flops / F64(best)).Fixed(2)
-    try io.Print($n " " $threads " " $secs "s " $rate " GFLOPS check " $c.Sum() "\n")
+    io.Print($n " " $threads " " $secs "s " $rate " GFLOPS check " $c.Sum() "\n")
 }
 
 fn main() ? {

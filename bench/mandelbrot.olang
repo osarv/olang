@@ -24,6 +24,6 @@ fn main() ? {
             if tr + ti <= 4.0 { bits[y * rowBytes + x / 8] |= U8(128) >> U8(x % 8) }
         }
     }
-    try io.Print("P4\n" $n " " $n "\n")
+    io.Print("P4\n" $n " " $n "\n")
     try io.Write(io.Stdout, bits)
 }

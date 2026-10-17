@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
 # a loop reads a borrow again on its next turn, after the release later in the turn
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -17,7 +18,7 @@ fn main() ? {
     s.cur = Conn(3)
     c := s.cur
     for i in range 3 {
-        println(c.name)
+        io.Println(c.name)
         if i == 1 { s.cur = Conn(i) }
     }
 }

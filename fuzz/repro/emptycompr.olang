@@ -10,6 +10,7 @@
 # (OPERATION_COMPR_RESERVE); with no push it stays null. Fix: reserve the 100 elements before the loop when nothing
 # else reserves (or have the evaluator model the lazy buffer and change the spec). Not fixed here: the lowering is
 # outside this batch's files.
+import "std/io"
 fn cc(n I32) String {
     m := Map<I8, U32>()
     a Array<U16> = U16[1 for x in m.Values()]
@@ -22,6 +23,6 @@ fn cc(n I32) String {
 K String = cc(3)
 v mut I32 = 3
 fn main() ? {
-    println($K)
-    println($cc(v))
+    io.Println($K)
+    io.Println($cc(v))
 }

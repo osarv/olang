@@ -48,5 +48,5 @@ fn main() ? {
         vBv += u[i] * v[i]
         vv += v[i] * v[i]
     }
-    try io.Print($sqrt(vBv / vv) "\n")
+    io.Print($sqrt(vBv / vv) "\n")
 }

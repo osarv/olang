@@ -1,5 +1,6 @@
 # check: fail error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
 # an element text that dies before the container: must fail
+import "std/io"
 type B struct() {
     data own mut Array<String&>& = null
 }
@@ -13,5 +14,5 @@ fn fill(b mut B&) {
 fn main() ? {
     b := B()
     fill(b)
-    println(b.data[0])
+    io.Println(b.data[0])
 }

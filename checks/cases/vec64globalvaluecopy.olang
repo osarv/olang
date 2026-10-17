@@ -1,6 +1,7 @@
 # check: run
 # vec4 (over-rejection 1): a global value copied from a global's own text holds no reference, so it keeps no loan,
 # as in a local
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -18,5 +19,5 @@ T String = Docs.title
 fn main() ? {
     Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(T)
+    io.Println(T)
 }

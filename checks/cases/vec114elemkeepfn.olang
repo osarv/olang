@@ -1,6 +1,7 @@
 # check: fail error[O10c]: the callee needs one argument's scope to outlive another's
 # Vec phase 2a (O10c): a function pushing a Tok of its text argument into a Vec it is given needs the text to outlive
 # the Vec
+import "std/io"
 type Tok struct(text String&, line I64) {
     text
     line
@@ -14,5 +15,5 @@ fn main() ? {
         t := "w" $i
         keep(v, t)
     }
-    println($v[0].text)
+    io.Println($v[0].text)
 }

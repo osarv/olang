@@ -1,5 +1,6 @@
 # check: fail error[O20]: the container outlives what this refers to
 # vec4 (r1e_note_source): the review's repro
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -22,5 +23,5 @@ fn main() ? {
         s := $i "-new-text"
         b.s = s
     }
-    println(b.s)
+    io.Println(b.s)
 }

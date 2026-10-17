@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and an owner, or a value with a destructor, would hold it past its loans
 # O38: ...nor by an owner made from it - an owned result whose own array holds the copy (own4 N4)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -25,5 +26,5 @@ fn main() ? {
     v.o.deep = Leaf(5)
     b := v
     arr own mut Array<Box&>& = withFirst(b)
-    println($arr[0].x.o.k)
+    io.Println($arr[0].x.o.k)
 }

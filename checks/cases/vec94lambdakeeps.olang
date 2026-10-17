@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
 # Vec phase 2a (O38/O39): a lambda capturing a view of a field's Vec holds its loan until the lambda's last use
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
@@ -10,5 +11,5 @@ fn main() ? {
     d := l.toks.View()
     f := fn() I64 { return d[0] }
     l.toks.Push(4)
-    println($f())
+    io.Println($f())
 }

@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'c.text' may release the String borrowed on line
 # vec4 (r1c_in_a_method): the review's repro
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -17,7 +18,7 @@ fn (c mut CB&) Rebuild(n I64) {
     d mut String&x = $n "-new-text-in-the-field-region"
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(d)
+    io.Println(d)
 }
 fn main() ? {
     c := CB()

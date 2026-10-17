@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'c.items' may release the List<String&> borrowed on line
 # vec4 (r1d_owned_list_text): the review's repro
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -19,5 +20,5 @@ fn main() ? {
     l.Push(s)
     c.items = List<String&>()
     churn()
-    println(s)
+    io.Println(s)
 }

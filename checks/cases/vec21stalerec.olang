@@ -1,6 +1,7 @@
 # check: fail error[O39]: assigning 'c.text' may release the String borrowed on line 23
 # vec2 N1: a borrowed own result's object type settled over calls once every body is checked - b, checked while a's body
 # still was, borrows c.text too (a's last return), so b's loan meets a release of a String
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -23,7 +24,7 @@ fn use(c mut CB&) {
     t := b(c, 2)
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(t)
+    io.Println(t)
 }
 fn main() ? {
     c := CB()

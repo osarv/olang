@@ -3,6 +3,7 @@
 # here the handle reaches a stored field as the operand of a user operator ('h.c.kept & h' calls BitAnd, which hands
 # its argument back), so stash keeps the handle's own storage - a copy in a loop body - and the lend is judged as any
 # split lend is (a token scan read the '&' as a scope marker and lent it as its reference: a use-after-free)
+import "std/io"
 type Cell struct() {
     v I64 = 0
     kept mut Box& = null
@@ -35,5 +36,5 @@ fn main() ? {
     try run(m)
     churn()
     b := try m.Get(1)
-    println($b.c.kept.c.v)
+    io.Println($b.c.kept.c.v)
 }

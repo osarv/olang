@@ -2,6 +2,7 @@
 # O17/O17a: a constructor keeping a reference parameter in its instance hands what it reaches to the caller, as a return
 # does, so a copy whose references live elsewhere than its storage is not lent to it - "h.r.head.next = Node()" would
 # build in the copy's block
+import "std/io"
 type Node struct() {
     next mut Node& = null
     v I64 = 0
@@ -19,5 +20,5 @@ fn viaCtor(src mut W&) {
 fn main() ? {
     w := W(Box())
     viaCtor(w)
-    println($w.b.head.v)
+    io.Println($w.b.head.v)
 }

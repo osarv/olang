@@ -1,5 +1,6 @@
 # check: fail error[O34]: 'take' gives an owner, which only an own slot receives
 # an owner taken out of its slot goes into another own slot, never into a plain reference
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -12,7 +13,7 @@ type Server struct() {
     cur own mut Conn&
     other own mut Conn&
 }
-fn show(c Conn&) { println($c.fd) }
+fn show(c Conn&) { io.Println($c.fd) }
 fn main() ? {
     s := Server()
     s.cur = Conn(1)

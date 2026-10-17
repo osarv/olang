@@ -1,6 +1,7 @@
 # check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
 # O18c/O17: a part read off a call's result keeps its references where the call landed, but its own storage is its
 # block - a reference to it that outlives the block is refused (the relaxation of study 6's r05 must not reach it)
+import "std/io"
 type Inner struct(s String&) { s }
 type Outer struct(inner Inner) { inner }
 type Store struct() {
@@ -15,5 +16,5 @@ fn main() ? {
         x := st.get(0).inner
         held = x
     }
-    println(held.s)
+    io.Println(held.s)
 }

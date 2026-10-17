@@ -17,5 +17,5 @@ fn main() ? {
     args := os.Args()
     n := try args[1].ParseInt()
     a := filled(n)
-    try io.Print($a[n - 1] "\n")
+    io.Print($a[n - 1] "\n")
 }

@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'Push' may release the Array<Char> borrowed on line
 # vec3 F1: the same through a Map - Put, then Get
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -18,5 +19,5 @@ fn main() ? {
     d := k(v.ViewMut())
     for i in range 1000 { v.Push('z') }
     churn()
-    println($d[0] $d[1])
+    io.Println($d[0] $d[1])
 }

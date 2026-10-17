@@ -1,5 +1,6 @@
 # check: fail error[O11, O12]: where this reference's referent lives is not known here
 # O25h/O12 (review of rv3fix, #4): a copy out of a member of a conditional takes the conditional's scope - here one not known, which nothing is built into
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -36,5 +37,5 @@ fn main() ? {
         growv(h)
     }
     churn()
-    println($rd(k1))
+    io.Println($rd(k1))
 }

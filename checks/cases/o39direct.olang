@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
 # a borrow of an owned object is in use after its slot is given null
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -17,5 +18,5 @@ fn main() ? {
     s.cur = Conn(3)
     c := s.cur
     s.cur = null
-    println(c.name)
+    io.Println(c.name)
 }

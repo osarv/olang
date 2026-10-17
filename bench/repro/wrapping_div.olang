@@ -17,5 +17,5 @@ fn main() ? {
     for i in range n {
         for j in range n { s += entry(i, j) }
     }
-    try io.Print($s "\n")
+    io.Print($s "\n")
 }

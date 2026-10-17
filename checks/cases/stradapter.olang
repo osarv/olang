@@ -2,6 +2,7 @@
 # E11c/E31: a part of the receiver with a Call method passed where a function value is wanted - the adapter is made where
 # the part lives (no frame adapter: a callee keeping nothing of it may still hand it to a function value that keeps it,
 # C8), so it is refused though Call builds nothing there
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -32,5 +33,5 @@ fn main() ? {
     b := Bag(Node(4, null))
     s := $b
     churn()
-    println(s)
+    io.Println(s)
 }

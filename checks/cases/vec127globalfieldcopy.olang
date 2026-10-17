@@ -1,5 +1,6 @@
 # check: fail error[O32]: Vec<I64> owns objects: ':=' declares an owner from a value made here
 # Vec phase 2a (O32): ...nor from a global's field
+import "std/io"
 type Lexer struct() {
     toks Vec<I64> = Vec<I64>()
 }
@@ -7,5 +8,5 @@ GL mut Lexer = Lexer()
 fn main() ? {
     GL.toks.Push(4)
     c := GL.toks
-    println($c.Len())
+    io.Println($c.Len())
 }

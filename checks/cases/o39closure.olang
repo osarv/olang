@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 's.cur' may release the Conn borrowed on line
 # a closure capturing a borrow holds it until the closure's last use
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -16,7 +17,7 @@ fn main() ? {
     s := Server()
     s.cur = Conn(1)
     c := s.cur
-    f := fn() { println(c.name) }
+    f := fn() { io.Println(c.name) }
     s.cur = null
     f()
 }

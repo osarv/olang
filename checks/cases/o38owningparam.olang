@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and an owner, or a value with a destructor, would hold it past its loans
 # O38: ...or handed to an owning parameter (own4 N4)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -30,5 +31,5 @@ fn main() ? {
     b := v
     g := Big2()
     keepFirst(g, withFirst(b))
-    println($g.bx.x.o.k)
+    io.Println($g.bx.x.o.k)
 }

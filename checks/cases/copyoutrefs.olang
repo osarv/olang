@@ -2,6 +2,7 @@
 # O25h/O20: a value copied out of a reference keeps its references where the referent is - so assigning one to a local
 # whose references are claimed to be in its block is held to that claim, exactly where something can be stored through
 # them (O25g); it was accepted, and a node built through the local then lived in its block
+import "std/io"
 type Node struct() {
     next mut Node& = null
     v I64 = 0
@@ -17,5 +18,5 @@ fn copyOut(src Box&) {
 fn main() ? {
     b := Box()
     copyOut(b)
-    println($b.head.v)
+    io.Println($b.head.v)
 }

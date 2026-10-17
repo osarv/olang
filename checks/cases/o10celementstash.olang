@@ -2,6 +2,7 @@
 # also: 'g' is declared here, in a block that closes first - declare it where 'h' lives
 # O20/O10c: an element borrowed out of a reference parameter's array field lives where that parameter's instance does,
 # so storing it into another parameter's holder is an obligation - a caller whose instance dies first is refused
+import "std/io"
 type Elem struct() { n I64 = 0 }
 type G struct() { arr mut Array<Elem>& = Array<Elem>(3) }
 type Keeper struct() { e Elem& = null }
@@ -13,5 +14,5 @@ fn main() ? {
         g.arr[0].n = i
         stash(g, h)
     }
-    println($h.e.n)
+    io.Println($h.e.n)
 }

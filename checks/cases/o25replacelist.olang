@@ -3,6 +3,7 @@
 # B11/O25: a collection made in a block put in place of one kept longer - the headline names the local, and the notes
 # say both ways out: make it where it is kept (which keeps every one made until that scope closes), or refill the one
 # kept in place (study 6's r10: the message said "declare it with ':='" of a ':=' local)
+import "std/io"
 type World struct() {
     alive mut List<I64>& = List<I64>()
 }
@@ -16,5 +17,5 @@ fn (w mut World&) age(s I64) {
 fn main() ? {
     w := World()
     for s in range 3 { w.age(s) }
-    println($w.alive.Len())
+    io.Println($w.alive.Len())
 }

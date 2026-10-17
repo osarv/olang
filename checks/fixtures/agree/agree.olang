@@ -114,24 +114,24 @@ extern fn memset(p Array<F16>, c I32, n I64) I64
 
 fn main() ? io.IoError {
     z := neg(F64(run - 1))
-    try io.Print($z " " $F32(z) " " $F16(z) " " $BF16(z) "\n")
-    try io.Print($f32Bits(1152921573326323712 + run) " " $bf16Bits(1157425104234217472 + run) "\n")
-    try io.Print($identity(run + 1) "\n")
-    try io.Print($(copyOut(P(run)) == P(run)) "\n")
+    io.Print($z " " $F32(z) " " $F16(z) " " $BF16(z) "\n")
+    io.Print($f32Bits(1152921573326323712 + run) " " $bf16Bits(1157425104234217472 + run) "\n")
+    io.Print($identity(run + 1) "\n")
+    io.Print($(copyOut(P(run)) == P(run)) "\n")
     a := classify(run + 6)
     b := classify(run)
-    try io.Print($a " " $b "\n")
-    try io.Print($sites(run + 1) "\n")
-    try io.Print($inPlace(run + 6) "\n")
-    try io.Print($chain(I32(run) - 1) " " $comprDeep(run + 99) "\n")
-    try io.Print($F(4) " " $G(4) "\n")
+    io.Print($a " " $b "\n")
+    io.Print($sites(run + 1) "\n")
+    io.Print($inPlace(run + 6) "\n")
+    io.Print($chain(I32(run) - 1) " " $comprDeep(run + 99) "\n")
+    io.Print($F(4) " " $G(4) "\n")
     F = tri
-    try io.Print($F(4) " " $Early " " $Late "\n")
+    io.Print($F(4) " " $Early " " $Late "\n")
     Hold.a[0] = 9
-    try io.Print($Poked " " $After " " $Hold.a[0] " " $Hold.a[1] "\n")
+    io.Print($Poked " " $After " " $Hold.a[0] " " $Hold.a[1] "\n")
     h := F16[1.5, 2.5, 3.5]
     k := Array<BF16>(3)
     m I64 = memset(h, 0, 2) + memcpy(k, BF16[0.5, 1.5, 2.5], 4)
-    try io.Print($h " " $k "\n")
-    try io.Print($adapters(I32(run) + 1) "\n")
+    io.Print($h " " $k "\n")
+    io.Print($adapters(I32(run) + 1) "\n")
 }

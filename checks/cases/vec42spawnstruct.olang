@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec3 F3: the same with a struct's borrowed own result
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -19,7 +20,7 @@ fn use(c mut CB&) {
     }
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"   # releases it
     churn()
-    println(d)
+    io.Println(d)
 }
 fn main() ? {
     c := CB()

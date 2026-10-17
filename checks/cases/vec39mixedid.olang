@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec3 F2: the unrecorded return is a generic pass-through, id(h(c))
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -22,7 +23,7 @@ fn use(c mut CB&) {
     t := f(c, 1)
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(t)
+    io.Println(t)
 }
 fn main() ? {
     c := CB()

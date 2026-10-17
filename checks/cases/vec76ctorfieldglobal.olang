@@ -1,6 +1,7 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec5 (r2a_ctor_field_global_own): a global built from a global's own object through a constructor field in the
 # parameter's scope
+import "std/io"
 type Doc struct() {
     title own mut String& = $1 "-title-built-at-run-time"
 }
@@ -24,7 +25,7 @@ G H = H(Docs.title)
 fn main() ? {
     Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(G.y)
+    io.Println(G.y)
 }
 fn churn() I64 {
     t := 0

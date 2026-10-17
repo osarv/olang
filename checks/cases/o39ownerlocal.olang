@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'a.sock' may release the Sock borrowed on line
 # an owner local's tree is reached through it: a release below it hits a borrow below it
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -17,5 +18,5 @@ fn main() ? {
     a.sock = Sock(2)
     k := a.sock
     a.sock = null
-    println($k.n)
+    io.Println($k.n)
 }

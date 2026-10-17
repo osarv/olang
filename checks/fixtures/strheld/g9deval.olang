@@ -1,4 +1,5 @@
 # G9d: the evaluator and the run time agree on generic calls of destructor temporaries
+import "std/io"
 Made mut I64 = 0
 type Res struct(k I64) {
     k
@@ -15,6 +16,6 @@ fn count(l List<<T>>&, x T) I64 { return l.Len() }
 fn main() ? {
     l := List<Res&>()
     l.Push(Res(1))
-    println($G.k " " $H.k " " $A.Len() " " $(A[0] is A[1]) " " $count(l, Res(2)))
+    io.Println($G.k " " $H.k " " $A.Len() " " $(A[0] is A[1]) " " $count(l, Res(2)))
     assert id(Res(9)).k == 9
 }

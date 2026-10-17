@@ -1,5 +1,6 @@
 # check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
 # O17b, a control for checks/cases/o17bbitand.olang: a struct with two fields is no handle, so the lend is O17's
+import "std/io"
 type Cell struct() {
     v I64 = 0
     kept mut Box& = null
@@ -35,5 +36,5 @@ fn main() ? {
     try run(m)
     churn()
     b := try m.Get(1)
-    println($b.c.kept.c.v)
+    io.Println($b.c.kept.c.v)
 }

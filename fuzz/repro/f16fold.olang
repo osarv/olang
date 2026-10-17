@@ -5,5 +5,5 @@ fn c(x5 I32) String {
     return $(F16((x6 * 4) * 31358))
 }
 fn main() ? io.IoError {
-    try io.Print($c(v) "\n")
+    io.Print($c(v) "\n")
 }
