@@ -1,0 +1,25 @@
+# check: fail this value's references live where its own storage does not, and the callee can store through it
+# O17/O17b (F1): a handle a call gives, lent to a callee capturing the parameter in a returned lambda - no use only
+# through its reference, and kept: the same error
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+fn idList(x mut List<I64>&) List<I64> { return x }
+fn leak(l List<I64>&) fn() I64 { return fn() I64 { return l.Len() } }
+fn main() ? {
+    base := List<I64>()
+    base.Push(1)
+    base.Push(2)
+    fs := List<fn() I64>()
+    for i in range 3 {
+        fs.Push(leak(idList(base)))
+        churn()
+    }
+    churn()
+    t := 0
+    for f in fs { t = t + f() }
+    assert t == 6, $t
+}

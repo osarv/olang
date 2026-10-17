@@ -1,0 +1,31 @@
+# check: fail this value's references live where its own storage does not, and the callee can store through it
+# O17 (the fourth review of the view lend, F1): a split value - a call's result - lent to a callee that captures the
+# parameter in a lambda it returns: the closure keeps the copy's own storage, a temporary of the loop body - kept
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(7)
+    tag I64 = 0
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }
+fn main() ? {
+    seed := Box()
+    fs := List<fn() I64>()
+    for i in range 3 {
+        fs.Push(leak(idBox(seed)))
+        churn()
+    }
+    churn()
+    t := 0
+    for f in fs { t = t + f() }
+    assert t == 21, $t
+}

@@ -355,6 +355,8 @@ Prelude := (
     "fn addVia(b Box&, v I64) { b.head.next = Node(v) }\n"
     "fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }\n"
     "fn readBox(b Box&) I64 { return chain(b.head) }\n"
+    "fn keepBox(b Box&) fn() I64 { return fn() I64 { return chain(b.head) } }\n"
+    "fn useBox(b Box&) I64 {\n    f := fn() I64 { return chain(b.head) }\n    return f() + f()\n}\n"
     "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
     "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
     "# fallible: growF and mkF succeed, failF fails after building, mkFail fails\n"
@@ -847,10 +849,17 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
     if k == 12 {    # a copy with no storage of its own - a call's result, a conditional of the box - lent to a reference
         v := g.val() # parameter that builds through its shallow "mut" field, in a loop (O17: refused), or only reads it
         i := g.name("i")
-        m := g.r(4)
+        m := g.r(6)
         if m == 0 { return $ind "for " $i " in range 3 { addVia(idBox(" $b "), " $v " + " $i ") }\n" }
         if m == 1 { return $ind "for " $i " in range 3 { addVia(" $b " if Run > 0 else " $b ", " $v " + " $i ") }\n" }
         if m == 2 { return $ind "for " $i " in range 3 { addViaMut(idBox(" $b "), " $v " + " $i ") }\n" }
+        if m == 4 {    # the callee keeps the copy in a lambda it returns, read after a churn (O17: refused)
+            ks := g.name("ks")
+            kk := g.name("k")
+            return ($ind "{\n" $ind "    " $ks " := List<fn() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
+                    $b "))) }\n" $ind "    churn()\n" $ind "    for " $kk " in " $ks " { if " $kk "() == -7 { abort } }\n" $ind "}\n")
+        }
+        if m == 5 { return $ind "for " $i " in range 3 { useBox(idBox(" $b ")) }\n" }    # a lambda only called in the callee
         return $ind "for " $i " in range 3 { readBox(idBox(" $b ")) }\n"
     }
     if k == 10 and d > 0 {    # a helper taking the box by reference
