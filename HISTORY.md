@@ -19417,3 +19417,42 @@ standing for what it gives.
 function declaring errors"; R5-R7 and R14 knew only a declared list read left to right; E15a said "other than inside a
 call" where arguments are checked; PRINCIPLES.md had `try` opting into checks, `done`/`fail` among the words and `-i`;
 CLAUDE.md had `chan.Send` stopping the program and checks opted into with `try`.
+
+### Numeric traits: `Float`, `Integer` and `Number` in the prelude (T35c, T31, G19, 2026-10-17; the user's decision, details mine)
+
+The user asked for three prelude traits naming the built-in numbers, so generic numeric code says what it takes and a
+wrong type is an error at the caller's call naming the trait, rather than a `match T` with no case for it inside std
+(`math.Sqrt(4)` used to report G15 at std/math's line 92, with the program's call only a note).
+
+**How they are sealed.** `std/prelude/number.olang` declares each trait with one private method (`floatType`,
+`integerType`, `numberType`) and gives that method, with an empty body, to the built-in types that satisfy it. T31
+already said a private method seals a trait. Stage 0 checked only that the method was declared in the trait's module,
+so a program's `type Dist extends F64` - which inherits F64's methods (T29f), the private one included - satisfied
+`Float`, and then failed inside `math.Sqrt` at its `match T`. The port's checker looked methods up by name alone, so a
+program's own `fn (f Fake) floatType()` satisfied it there too.
+
+**Decided (mine): no declared type satisfies them, `Char` and `extends` types included.** The coordinator's lean was
+that an extending type should inherit the trait as it inherits the method. Measured against the bodies, that is the
+wrong answer. Every numeric body in std picks per type with `match T` over the built-in types, and an extending type
+matches none of their cases. Its result would also be the base type where the body returns `T`. So a trait it satisfied
+would promise what the bodies cannot keep, which is the very error the traits exist to move. T31 now reads: a private
+method is supplied only for a type declared in its own module, or a built-in type that module gives it - an inherited
+one supplies nothing. Both compilers enforce this (`InterfaceMethodImpl` in bootstrap/semantic.c, `sealedBy` in
+compiler/generic.olang). A program's numeric type that wants generic numeric code converts at the call (`math.Sqrt(F64(d))`).
+`Char` is text to generic numeric code, which also reads right.
+
+**The diagnostic.** A sealed trait's miss is its own error, `G19, T31`: "Dist does not satisfy the constraint Float on
+T: Float is sealed - only the types its own module gives 'floatType' satisfy it". It replaced "it has no method
+floatType that fits" plus a note saying the inherited or same-named method had "another signature", which was false.
+
+**Where they are used.** std/math: every float function takes `<T Float>`. Abs, Min, Max and Clamp stay unconstrained,
+since Min/Max take any type declaring `Less` (the corpus has one) and Abs any type with `<` and unary `-`. std/stats:
+the public functions take `Array<<T Number>>&` (they convert each element with `F64(x)`). std/linalg: FastExp,
+FastTanh and FastSigmoid take `<T Float>`. FastExp covered only F32 and F64, so F16 and BF16 now compute in F32 and
+round once, which keeps the constraint exact. The Matrix operations stay open: they take the prelude's F8 structs and
+the integers as well, which no trait names. No prelude method was limited by an exhaustive `match T`.
+
+**The evaluator** needed nothing: constraints are resolved before anything runs. The corpus test (tests/shared.olang,
+T35c) bakes globals through constrained calls and decides asserts on literals while compiling, beside the same calls
+on mutable globals at run time. checks/cases/numtrait*.olang hold the five refusals: an integer to math.Sqrt, a Bool
+as a Number, a program type declaring `floatType`, an `extends F64` type, and a Char as an Integer.

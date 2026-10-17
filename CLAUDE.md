@@ -575,6 +575,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
   loading and names, M5a types and the typed contract, M7's MIR contract; the compiler under test is `OLANG ?=
   build/out`.
+- **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
+  (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
+  `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
+  supplied only for a type its own module declares (or a built-in one), so `Char` and `type Dist extends F64` inherit
+  the method and satisfy nothing - that is what lets a body pick by `match T` over the built-ins, which would have no
+  case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by std/math's float
+  functions (`<T Float>`), std/stats (`<T Number>`), linalg's FastExp/FastTanh/FastSigmoid (`<T Float>`, F16/BF16 now
+  through F32); Abs/Min/Max/Clamp and the Matrix operations stay open (Less types, F8 elements).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

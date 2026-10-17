@@ -17835,3 +17835,27 @@ EbBangBaked := ebBang(5)
 test "E35: a postfix '!' gives the value where nothing fails" {
     assert ebBang(5) == 15 and EbBangBaked == 15
 }
+
+# T35c: the prelude's sealed Float, Integer and Number traits constrain generic code to the built-in numbers; each
+# body still picks per type with "match T"
+fn ntHalf(x <T Float>) T { return x / 2.0 }
+fn ntKind(x <T Number>) I64 {
+    return match T {
+        case F16, BF16, F32, F64 => 1
+        case I8, I16, I32, I64, U8, U16, U32, U64 => 2
+    }
+}
+fn ntNext(x <T Integer>) T { return x + 1 }
+NtHalfBaked F64 = ntHalf(3.0)
+NtKindsBaked := ntKind(F16(1.0)) + ntKind(BF16(1.0)) + ntKind(F32(1.0)) + ntKind(1.0) + ntKind(I8(1)) * 10 +
+    ntKind(U64(1)) * 100 + ntKind(U8(1)) * 1000
+NtNextBaked := ntNext(U8(255))
+ntRun mut F64 = 3.0
+ntRunI mut I32 = 41
+test "T35c: Float, Integer and Number - decided while compiling, and the same at run time" {
+    assert ntHalf(3.0) == 1.5 and ntHalf(F16(3.0)) == 1.5 and ntHalf(BF16(3.0)) == 1.5 and ntHalf(F32(3.0)) == 1.5
+    assert ntHalf(ntRun) == 1.5 and ntHalf(F16(ntRun)) == 1.5 and NtHalfBaked == ntHalf(ntRun)
+    assert NtKindsBaked == 4 + 20 + 200 + 2000
+    assert ntKind(ntRunI) == 2 and ntKind(ntRun) == 1 and ntKind(I16(ntRunI)) == 2
+    assert ntNext(I32(41)) == 42 and ntNext(ntRunI) == 42 and NtNextBaked == 0 and ntNext(U8(ntRunI)) == 42
+}

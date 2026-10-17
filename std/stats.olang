@@ -32,10 +32,10 @@ error StatsError {
 
 # the sum of the elements, as an F64 - pairwise, so its error grows only with the logarithm of the length. The empty
 # array sums to 0
-fn Sum(a Array<<T>>&) F64 { return pairSum(a, 0, a.Len()) }
+fn Sum(a Array<<T Number>>&) F64 { return pairSum(a, 0, a.Len()) }
 
 # the arithmetic mean
-fn Mean(a Array<<T>>&) F64 ? StatsError {
+fn Mean(a Array<<T Number>>&) F64 ? StatsError {
     if a.Len() == 0 { error StatsError.TOO_FEW }
     return pairSum(a, 0, a.Len()) / F64(a.Len())
 }
@@ -43,33 +43,33 @@ fn Mean(a Array<<T>>&) F64 ? StatsError {
 # the sample variance - the squared distances from the mean summed and divided by one less than the count (Bessel's
 # correction): what estimates the variance of the population the values were drawn from. numpy's var(a, ddof=1),
 # Python's statistics.variance. Needs two values
-fn Variance(a Array<<T>>&) F64 ? StatsError {
+fn Variance(a Array<<T Number>>&) F64 ? StatsError {
     if a.Len() < 2 { error StatsError.TOO_FEW }
     return squaredDeviations(a) / F64(a.Len() - 1)
 }
 
 # the population variance - the squared distances from the mean divided by the count: the variance of exactly these
 # values. numpy's var(a), Python's statistics.pvariance
-fn PopulationVariance(a Array<<T>>&) F64 ? StatsError {
+fn PopulationVariance(a Array<<T Number>>&) F64 ? StatsError {
     if a.Len() == 0 { error StatsError.TOO_FEW }
     return squaredDeviations(a) / F64(a.Len())
 }
 
 # the sample standard deviation, the square root of Variance. Needs two values
-fn StdDev(a Array<<T>>&) F64 ? StatsError { return math.Sqrt(try Variance(a)) }
+fn StdDev(a Array<<T Number>>&) F64 ? StatsError { return math.Sqrt(try Variance(a)) }
 
 # the population standard deviation, the square root of PopulationVariance
-fn PopulationStdDev(a Array<<T>>&) F64 ? StatsError { return math.Sqrt(try PopulationVariance(a)) }
+fn PopulationStdDev(a Array<<T Number>>&) F64 ? StatsError { return math.Sqrt(try PopulationVariance(a)) }
 
 # the middle value - the mean of the two middle ones for an even count. Percentile(a, 50.0)
-fn Median(a Array<<T>>&) F64 ? StatsError { return try Percentile(a, 50.0) }
+fn Median(a Array<<T Number>>&) F64 ? StatsError { return try Percentile(a, 50.0) }
 
 # the value p percent of the way through the values in order, p from 0 to 100: linear interpolation between the two
 # closest ranks (numpy's default, Excel's PERCENTILE.INC) - in order v[0] .. v[n-1], the position p / 100 * (n - 1),
 # between v[floor] and v[floor + 1] in proportion. So 0 is the least, 100 the greatest and 50 the median. The array is
 # not changed: the values are copied and only the two needed are put in place (a selection, O(n) on average, not a
 # sort). For several percentiles of one array, Percentiles sorts once
-fn Percentile(a Array<<T>>&, p F64) F64 ? StatsError {
+fn Percentile(a Array<<T Number>>&, p F64) F64 ? StatsError {
     if not (p >= 0.0 and p <= 100.0) { error StatsError.OUT_OF_RANGE }
     n I64 = a.Len()
     if n == 0 { error StatsError.TOO_FEW }
@@ -90,7 +90,7 @@ fn Percentile(a Array<<T>>&, p F64) F64 ? StatsError {
 }
 
 # Percentile for each of ps, in their order, with the values sorted once
-fn Percentiles(a Array<<T>>&, ps Array<F64>&) Array<F64> ? StatsError {
+fn Percentiles(a Array<<T Number>>&, ps Array<F64>&) Array<F64> ? StatsError {
     n I64 = a.Len()
     if n == 0 { error StatsError.TOO_FEW }
     v := Array<F64>(n)
@@ -115,7 +115,7 @@ fn Percentiles(a Array<<T>>&, ps Array<F64>&) Array<F64> ? StatsError {
 }
 
 # the least element, as it is - a NaN if there is one, as math.Min gives it
-fn Min(a Array<<T>>&) T ? StatsError {
+fn Min(a Array<<T Number>>&) T ? StatsError {
     if a.Len() == 0 { error StatsError.TOO_FEW }
     m := a[0]
     for i in range 1, a.Len() { m = math.Min(m, a[i]) }
@@ -123,7 +123,7 @@ fn Min(a Array<<T>>&) T ? StatsError {
 }
 
 # the greatest element, as it is - a NaN if there is one, as math.Max gives it
-fn Max(a Array<<T>>&) T ? StatsError {
+fn Max(a Array<<T Number>>&) T ? StatsError {
     if a.Len() == 0 { error StatsError.TOO_FEW }
     m := a[0]
     for i in range 1, a.Len() { m = math.Max(m, a[i]) }
@@ -134,7 +134,7 @@ fn Max(a Array<<T>>&) T ? StatsError {
 # holding the values from edges[i] up to but not including edges[i + 1] - the last one including its right edge as
 # well. A value below the first edge or above the last, or a NaN, is in no bin. Edges that are not two or more and
 # increasing fail with BAD_EDGES
-fn Histogram(a Array<<T>>&, edges Array<F64>&) Array<I64> ? StatsError {
+fn Histogram(a Array<<T Number>>&, edges Array<F64>&) Array<I64> ? StatsError {
     if edges.Len() < 2 { error StatsError.BAD_EDGES }
     for i in range 1, edges.Len() {
         if not (edges[i - 1] < edges[i]) { error StatsError.BAD_EDGES }

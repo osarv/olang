@@ -2292,8 +2292,8 @@ fn columnSumsIn(m Matrix<<T>>&, out mut Matrix<T>&, beta F64, z <A>) {
 # std/math's Exp and Tanh are the C library's (X8): within about an ulp and the same while compiling, but a call per
 # element, so a loop over them does not vectorize. These are written in olang from arithmetic and bit operations
 # only, so a Map with one of them inlined runs in vector registers - in F32, 14 instructions an element for FastExp
-# and 17 for FastTanh, against the C library's 39 for exp and 129 for tanh. Each is generic over F32 and F64 and
-# computed in its own type. Their errors, measured against the C library at two million points spread over
+# and 17 for FastTanh, against the C library's 39 for exp and 129 for tanh. Each takes any Float, an F32 or an F64
+# computed in its own type and an F16 or a BF16 in F32, rounded once. Their errors, measured against the C library at two million points spread over
 # [-100, 100]: FastExp's relative error under 3e-7 in F32 and 6e-16 in F64 (about 2.5 ulp); FastTanh's and
 # FastSigmoid's absolute error under 2e-7 in F32 and 3e-16 in F64 (near zero FastTanh's relative error is larger).
 # Beyond the range of the type FastExp gives infinity or zero (a result below the smallest normal number is zero), a
@@ -2301,10 +2301,12 @@ fn columnSumsIn(m Matrix<<T>>&, out mut Matrix<T>&, beta F64, z <A>) {
 
 # e to the power x: x = k ln 2 + r with |r| <= ln 2 / 2, e^r by its Taylor series (to r^6 in F32, r^12 in F64), and
 # 2^k made from its bits
-fn FastExp(x <T>) T {
+fn FastExp(x <T Float>) T {
     return match T {
         case F32 => fastExp32(x)
         case F64 => fastExp64(x)
+        case F16 => F16(fastExp32(F32(x)))
+        case BF16 => BF16(fastExp32(F32(x)))
     }
 }
 
@@ -2349,11 +2351,16 @@ infinity32 F32 = F32(math.Inf)
 
 # the hyperbolic tangent: 1 - 2 / (e^(2|x|) + 1), with x's sign. |x| is held below the point past which tanh rounds
 # to 1 in the type (10 in F32, 20 in F64), so that e^(2|x|) stays finite; a NaN is not held and gives a NaN
-fn FastTanh(x <T>) T {
+fn FastTanh(x <T Float>) T {
+    match T {
+        case F16 { return F16(FastTanh(F32(x))) }           # an F16 or a BF16 in F32, rounded once
+        case BF16 { return BF16(FastTanh(F32(x))) }
+        nomatch { }
+    }
     a T = math.Abs(x)
     limit T = match T {
-        case F32 => 10.0
         case F64 => 20.0
+        nomatch => 10.0
     }
     a = limit if a > limit else a
     v T = 1.0 - 2.0 / (FastExp(a + a) + 1.0)
@@ -2361,8 +2368,12 @@ fn FastTanh(x <T>) T {
 }
 
 # the logistic function 1 / (1 + e^-x)
-fn FastSigmoid(x <T>) T {
-    return 1.0 / (1.0 + FastExp(-x))
+fn FastSigmoid(x <T Float>) T {
+    return match T {
+        case F16 => F16(FastSigmoid(F32(x)))
+        case BF16 => BF16(FastSigmoid(F32(x)))
+        nomatch => 1.0 / (1.0 + FastExp(-x))
+    }
 }
 
 # ---- conversions between element types ----

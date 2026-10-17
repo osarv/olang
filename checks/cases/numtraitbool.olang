@@ -1,0 +1,6 @@
+# check: fail Bool does not satisfy the constraint Number on T: Number is sealed
+# T35c: a Bool is no Number
+fn nbTwice(x <T Number>) T { return x + x }
+fn main() ? {
+    r := nbTwice(true)
+}

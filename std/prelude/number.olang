@@ -2,9 +2,10 @@
 # over numbers says which it takes - `fn Sqrt(x <T Float>) T` - and a call with any other type is an error at the call
 # naming the trait (G19), not a case missing inside the library.
 #
-# Each trait is sealed (T31): its one method is private, declared here on each built-in type that satisfies it, so no
-# other module's type can supply it. A declared type satisfies one only by extending a type that does (T29f inherits
-# the method): Char, `type Char extends U8`, is an Integer and a Number, while `type Meters I32` is neither.
+# Each trait is sealed (T31, T35c): its one method is private, declared here on each built-in type that satisfies it,
+# so no other module's type can supply it - not by declaring a method of that name, and not by extending a number: Char
+# (`type Char extends U8`) and `type Dist extends F64` inherit the method (T29f) and satisfy nothing. So a body
+# constrained by one may choose per type with "match T" over the built-in numbers alone, as std/math's do.
 
 # F16, BF16, F32 and F64
 type Float trait {
