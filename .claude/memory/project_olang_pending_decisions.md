@@ -44,6 +44,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
 **Asked/answered 2026-10-17 (syntax talk):**
 - QN (Python-like indentation instead of `{}`): ANSWERED - keep `{}` ("Ok we keep {}"), after my recommendation
   against (blocks inside expressions - lambdas, catch-with-default, match values - and silent misindentation).
+- QO1 REOPENED 2026-10-17 (QO3, which was to replace it, was withdrawn; the user: "Now for error declaration in
+  headers. We still haven't settled that"). Offered: (a) keep (bare `?` = the default error, generalizing what passes
+  through; `? E` = exactly E); (b) Zig's inferred sets - bare `?` is the set the body can produce, inferred exactly (a
+  fixed point over calls, order of appearance as D16b does for lambdas), so a caller sees and can catch every name, the
+  default error only where the body writes a bare `error`; `? E` is a written, checked promise; a function type still
+  writes its set; (c) open named sets (undone 2026-10-05); (d) `? E + error`. Recommended (b). In effect: (a).
 - QO1. `? IoError` reads as FEWER errors than bare `?`. The user proposed `? IoError` = "any error, and IoError's words
   knowable". In effect: closed sets (R15, Swift's `throws` vs `throws(E)`). That proposal is what the first default-error
   version did and the user reverted on 2026-10-05 ("it is the presence of error"; 51 `catch { unreachable }` removed).
