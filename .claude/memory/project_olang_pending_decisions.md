@@ -133,7 +133,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   no wrapping. Being built (wt-runfmt). And (the user: "add an option to decide output file for building and compiling"): `-o PATH`
   names the executable (-b) or object (-c); default unchanged. Being built in wt-runfmt.
   ASKED: the user objected to `-f -c` (clashes with -c) and suggested `-fc`; proposed `-l` instead (gofmt's name, one
-  character, no clash). In effect in wt-runfmt: `-f -c` until answered.
+  character, no clash). DECIDED (the user: "Do that for now yes"): `olang -l files...`.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
