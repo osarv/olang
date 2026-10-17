@@ -1,6 +1,6 @@
 ---
 name: feedback-no-runtime-checks
-description: olang - never propose a per-operation run-time check (index, shift, conversion, division); opt-in via try only
+description: olang - never propose a per-operation run-time check (index, shift, conversion, division); opt-in via `checked` only
 metadata:
   type: feedback
 ---
