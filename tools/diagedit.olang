@@ -8,6 +8,17 @@ import "std/os"
 import "std/filepath"
 import "srcmask"
 
+# one edit a diagnostic asks for: its file (a real path), the line and column it points at, what kind of edit (the tool
+# says), the one word the edit needs (a name or a type) and the row of the error it answers
+type Request struct(Path String&, Line I64, Col I64, Kind String&, Arg String&, Why String&) {
+    Path
+    Line
+    Col
+    Kind
+    Arg
+    Why
+}
+
 # the number of files being compiled, shared by the workers of CompileAll (each takes the next index atomically)
 Taken mut I64 = 0
 

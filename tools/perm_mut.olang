@@ -43,16 +43,6 @@ DropTexts Array<String&>& = String&["a by-value parameter is the callee's own co
 # the message of a note at a local declared read-only, up to the name it asks to declare "mut"
 DeclarePrefix String& = "' is declared read-only here - declare it '"
 
-# one edit a diagnostic asks for: kind "drop" removes the "mut" at line:col, "add" puts " mut" after the name there
-type Request struct(path String&, line I64, col I64, kind String&, name String&, why String&) {
-    path
-    line
-    col
-    kind
-    name
-    why
-}
-
 # ---- the text pass: puns ----
 
 # the end of the names and of the "mut" after them, when a pun's names start at q: [ \t]*NAMES[ \t]+mut followed only by
@@ -154,7 +144,7 @@ fn dropPunMut(src String&) (String, I64) {
 # ---- the compiler pass ----
 
 # the edits the compiler's output asks for in the allowed paths
-fn editsFrom(output String&, allowed List<String&>&, out mut List<Request>&) {
+fn editsFrom(output String&, allowed List<String&>&, out mut List<diagedit.Request>&) {
     current := ""
     for row in output.Split("\n") {
         path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
@@ -163,7 +153,7 @@ fn editsFrom(output String&, allowed List<String&>&, out mut List<Request>&) {
             current = $row
             for k in range DropRules.Len() {
                 if rule == DropRules[k] and msg.StartsWith(DropTexts[k]) and diagedit.Allowed(full, allowed) {
-                    out.Push(Request($full, line, col, "drop", "", $row))
+                    out.Push(diagedit.Request($full, line, col, "drop", "", $row))
                 }
             }
             continue
@@ -174,17 +164,17 @@ fn editsFrom(output String&, allowed List<String&>&, out mut List<Request>&) {
             start := at
             for start > 0 and srcmask.IsWord(msg[start - 1]) { start-- }
             if start > 0 and msg[start - 1] == '\'' and srcmask.IsIdStart(msg[start]) {
-                out.Push(Request($full, line, col, "add", $msg[start:at], $current))
+                out.Push(diagedit.Request($full, line, col, "add", $msg[start:at], $current))
             }
         }
     }
 }
 
 # the edits applied to their files; how many "mut" were removed and added
-fn apply(requests List<Request>&) (I64, I64) {
+fn apply(requests List<diagedit.Request>&) (I64, I64) {
     paths List<String&>
     for r in requests {
-        if not (r.path in paths) { paths.Push($r.path) }
+        if not (r.Path in paths) { paths.Push($r.Path) }
     }
     drops I64 = 0
     adds I64 = 0
@@ -197,28 +187,28 @@ fn apply(requests List<Request>&) (I64, I64) {
         expect List<String&>
         diagedit.ExpectedTexts(src, expect)
         lines := src.Split("\n")
-        mine List<Request>
+        mine List<diagedit.Request>
         for r in requests {
-            if r.path == path { mine.Push(r) }
+            if r.Path == path { mine.Push(r) }
         }
         # by line, and right to left within a line, so earlier columns stay put
         mine.Sort(fn(a, b) {
-            if a.line != b.line { return a.line < b.line }
-            return a.col > b.col
+            if a.Line != b.Line { return a.Line < b.Line }
+            return a.Col > b.Col
         })
         seen List<String&>
         shLine List<I64>
         shAt List<I64>
         shDelta List<I64>
         for r in mine {
-            if diagedit.ContainsAny(r.why, expect) { continue }
-            key := $r.line ":" $r.col ":" $r.kind
-            if key in seen or r.line - 1 >= lines.Len() { continue }
+            if diagedit.ContainsAny(r.Why, expect) { continue }
+            key := $r.Line ":" $r.Col ":" $r.Kind
+            if key in seen or r.Line - 1 >= lines.Len() { continue }
             seen.Push($key)
-            idx := r.line - 1
+            idx := r.Line - 1
             text := $lines[idx]
-            at := r.col - 1
-            if r.kind == "drop" {
+            at := r.Col - 1
+            if r.Kind == "drop" {
                 if diagedit.Sub(text, at, at + 3) != "mut" or (at + 3 < text.Len() and srcmask.IsWord(text[at + 3])) { continue }
                 end := at + 3
                 for end < text.Len() and (text[end] == ' ' or text[end] == '\t') { end++ }
@@ -231,7 +221,7 @@ fn apply(requests List<Request>&) (I64, I64) {
                     lines[idx] = $text[:at] $text[end:]
                 }
             } else {
-                name := r.name
+                name := r.Arg
                 if diagedit.Sub(text, at, at + name.Len()) != name { continue }
                 after := at + name.Len()
                 # one of several names sharing a type (D12b): "mut" goes once, before the type, after the last name
@@ -249,10 +239,10 @@ fn apply(requests List<Request>&) (I64, I64) {
                 lines[idx] = $text[:after] " mut" $text[after:]
             }
             diagedit.Realign(lines, idx, lines[idx].Len() - text.Len(), at)
-            shLine.Push(r.line)
+            shLine.Push(r.Line)
             shAt.Push(at)
             shDelta.Push(lines[idx].Len() - text.Len())
-            if r.kind == "drop" { drops++ } else { adds++ }
+            if r.Kind == "drop" { drops++ } else { adds++ }
         }
         diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
         try os.WriteFile(path, lines.Join("\n")) catch {
@@ -342,7 +332,7 @@ fn main() ? {
     fileArray := files.ToArray()
     for round in range 1, 9 {
         outputs := diagedit.CompileAll(olang, fileArray, work, false)
-        requests List<Request>
+        requests List<diagedit.Request>
         for o in outputs { editsFrom(o, allowed, requests) }
         drops, adds := apply(requests)
         srcmask.Say("round " $round ": " $drops " 'mut' removed, " $adds " 'mut' added")
