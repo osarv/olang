@@ -46,7 +46,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Block I64 = 0
     bound Map<source.NameId, I64>
     undo List<Pair<source.NameId, I64>>
-    loops List<I64>        # the loops around, innermost last: each one's body block
+    loops List<I64>        # the loops around, innermost last: each one's body block, what continue moves on
+    exits List<I64>        # beside each, the loop break leaves: a run-wise walk's outer loop for its inner (S9f)
     InTest Bool = false
     InCtor Bool = false
     Tries I64 = 0          # how many tries enclose: a fallible call needs one (R8)
@@ -1234,6 +1235,7 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.NotIn(sp, a, b) { return c.negate(sp, c.membership(sp, a, b)) }
         case ast.Expr.Chain(sp, ch) { return c.chain(sp, ch) }
         case ast.Expr.MatchE(sp, m) { return c.matchValue(sp, m, want) }
+        case ast.Expr.Compr(sp, cm) { return c.comprehension(sp, cm) }
         nomatch {
             c.gap(x.Span(), exprKindName(x))
             return c.unknown(x.Span())
@@ -3223,11 +3225,13 @@ fn (c mut Checker&) loop(sp source.Span, k ast.Expr&, body Array<ast.Stmt&>&, po
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
+    c.fr().exits.Push(id)
     if k != null { c.emit(c.breakUnless(sp, c.cond1(k), id)) }
     if body != null {
         for s in body { c.stmt(s) }
     }
     try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
     pb typed.Block&c = null
     if post != null {
@@ -3261,10 +3265,12 @@ fn (c mut Checker&) doFor(sp source.Span, body Array<ast.Stmt&>&, k ast.Expr&) {
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
+    c.fr().exits.Push(id)
     if body != null {
         for s in body { c.stmt(s) }
     }
     try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
@@ -3279,43 +3285,262 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
         c.gap(sp, "'for x in try c' (S9e)")
         return
     }
-    match f.Source {
-        case ast.Expr.Range(_, rargs) {
-            c.forRange(sp, f, rargs)
-            return
-        }
-        nomatch { }
-    }
-    src := c.expr(f.Source, types.UnknownT)
-    st := typeOf(src)
-    at := c.arrayOf(st)
-    if at == types.UnknownT {
-        if st != types.UnknownT { c.gap(f.Source.Span(), "for-in over an iterator or an indexable type (S9a, S9d)") }
-        return
-    }
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Plain, sp)
-    # the collection, borrowed once (S9a)
-    rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
-    coll := c.hidden(sp, rt)
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), c.fit(src, rt, f.Source.Span())))
-    k := c.hidden(sp, c.i64())
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
-    n := c.hidden(sp, c.i64())
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, coll), null)))
-    c.counted(sp, f, k, n, coll, at, -1, -1)
+    c.walk(sp, f, null, types.UnknownT)
     b := c.close(id, outer, mark, from)
     c.emit(typed.Stmt.Block(sp, b))
 }
 
-# for i in range [start,] end [, step] (S9b): upward, a count worked out once
-fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&>&) {
-    if f.Key != source.NameId(0) {
-        c.gap(sp, "two names over a range")
+# what for-in walks, decided by the source's type (S9a): a range (S9b), an array, a value stored in runs (S9f), an
+# iterator, an iterable (S9c), an indexable value (S9d). Its statements go into the block open; each value runs the
+# loop's body, or, for a comprehension cm, yields its element (E27). Gives the reserve a comprehension may make: an
+# array's length, a range's count, null where not known
+fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.TypeId) typed.Expr&c {
+    match f.Source {
+        case ast.Expr.Range(_, rargs) { return c.forRange(sp, f, rargs, cm, ce) }
+        nomatch { }
+    }
+    src := c.expr(f.Source, types.UnknownT)
+    st := typeOf(src)
+    if st == types.UnknownT { return null }
+    at := c.arrayOf(st)
+    if at != types.UnknownT {
+        # the collection, borrowed once (S9a)
+        rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
+        coll := c.hidden(sp, rt)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), c.fit(src, rt, f.Source.Span())))
+        k := c.hidden(sp, c.i64())
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
+        n := c.hidden(sp, c.i64())
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, coll), null)))
+        c.counted(sp, f, k, n, coll, at, -1, -1, cm, ce)
+        return c.readLocal(sp, n)
+    }
+    dt := c.deref(st)
+    runs := c.roleMethod(dt, "RunFrom", 1)
+    next := c.roleMethod(dt, "Next", 0)
+    if runs >= 0 and next < 0 {
+        c.walkRuns(sp, f, src, runs, cm, ce)
+        return null
+    }
+    if next >= 0 {
+        c.walkIter(sp, f, src, next, cm, ce)
+        return null
+    }
+    iter := c.roleMethod(dt, "Iter", 0)
+    if iter >= 0 {
+        it := c.invoke(sp, f.Source.Span(), iter, src, null, Array<typed.Expr&>(0))
+        nt := c.roleMethod(c.deref(typeOf(it)), "Next", 0)
+        if nt < 0 {
+            c.gap(f.Source.Span(), "an Iter() whose result is no iterator (S9c)")
+            return null
+        }
+        c.walkIter(sp, f, it, nt, cm, ce)
+        return null
+    }
+    atm := c.roleMethod(dt, "At", 1)
+    lm := c.roleMethod(dt, "Len", 0)
+    if atm >= 0 and lm >= 0 {
+        c.walkIndexed(sp, f, src, atm, lm, cm, ce)
+        return null
+    }
+    c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
+    return null
+}
+
+# T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
+# storage reserved from an array's length or a range's count where the walk knows it, else grown (Reserve null)
+fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
+    et := c.resolve(cm.Elem)
+    at := c.P.T.Array(et, types.TypeId(0))
+    f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, null, null)
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Collect, sp)
+    c.walk(sp, f, cm, et)
+    b := c.close(id, outer, mark, from)
+    return typed.Expr.Collect(sp, at, typed.Collect(null, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None))
+}
+
+# the body run for each value: the loop's statements, or a comprehension's element yielded where its filter holds
+fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr&, ce types.TypeId) {
+    if cm == null {
+        if f.Body != null {
+            for s in f.Body { c.stmt(s) }
+        }
         return
     }
+    sp := cm.Value.Span()
+    v := c.exprTo(cm.Value, ce)
+    if cm.Filter == null {
+        c.emit(typed.Stmt.Yield(sp, v))
+        return
+    }
+    k := c.cond1(cm.Filter)
     from := c.stmts.Len()
-    id, outer, mark := c.open(typed.BlockKind.Plain, sp)
+    c.stmts.Push(typed.Stmt.Yield(sp, v))
+    y typed.Block&c = typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, from))
+    c.emit(typed.Stmt.If(cm.Filter.Span(), typed.If(k, y, null)))
+}
+
+# a call the loop makes that fails with Exhausted at the end (S9a, S9f): tried, that clause leaving the loop
+fn (c mut Checker&) exhaustedOrBreak(sp source.Span, call typed.Expr&c, loop I64) typed.Expr&c {
+    ex := c.P.PreludeType("std/prelude/iterator", "Exhausted")
+    from := c.stmts.Len()
+    c.stmts.Push(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(loop))))
+    code := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, from))
+    items mut Array<typed.Item>&c = Array<typed.Item>(1)
+    items[0] = typed.Item(ex, -1)
+    cl := Array<typed.Clause&>(1)
+    cl[0] = typed.Clause(sp, items, false, code, Array<typed.Expr&>(0))
+    return typed.Expr.Try(sp, typeOf(call), typed.Try(call, cl))
+}
+
+# a fallible call the loop makes with no try written: Exhausted aside, it may fail with nothing else (S9e)
+fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Array<typed.Expr&>&c) typed.Expr&c {
+    fr := c.fr()
+    fr.Tries++
+    x := c.invoke(sp, sp, f, recv, null, args)
+    fr.Tries--
+    return x
+}
+
+# an iterator (S9a): the loop's own copy of it, Next() called each iteration, Exhausted ending the loop
+fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, next I64, cm ast.Compr&, ce types.TypeId) {
+    it := c.hidden(sp, typeOf(src))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(it)), src))
+    k I64 = -1
+    if f.Key != source.NameId(0) {
+        k = c.hidden(sp, c.i64())
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
+    }
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Loop, sp)
+    c.fr().loops.Push(id)
+    c.fr().exits.Push(id)
+    call := c.loopCall(sp, next, c.readLocal(sp, it), Array<typed.Expr&>(0))
+    v := c.exhaustedOrBreak(sp, call, id)
+    c.elementLocals(sp, f, k, v)
+    c.walkBody(f, cm, ce)
+    try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
+    b := c.close(id, outer, mark, from)
+    c.emit(typed.Stmt.Loop(sp, b, c.countPost(sp, k)))
+}
+
+# the key and the value locals of an iteration
+fn (c mut Checker&) elementLocals(sp source.Span, f ast.ForIn&, k I64, v typed.Expr&c) {
+    if f.Key != source.NameId(0) and k >= 0 {
+        key := c.local(f.Key, sp, c.i64(), typed.LocalKind.Var, typed.Mark.None)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(key)), c.readLocal(sp, k)))
+    }
+    x := c.local(f.Name, sp, typeOf(v), typed.LocalKind.Var, typed.Mark.Infer)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), v))
+}
+
+# a loop's post clause counting k up by one; null where there is no k
+fn (c mut Checker&) countPost(sp source.Span, k I64) typed.Block&c {
+    if k < 0 { return null }
+    pfrom := c.stmts.Len()
+    pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+                             c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
+    return c.close(pid, pouter, pmark, pfrom)
+}
+
+# the collection borrowed once, as a local reference (E12c)
+fn (c mut Checker&) borrowedSource(sp source.Span, src typed.Expr&c) I64 {
+    st := typeOf(src)
+    rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
+    coll := c.hidden(sp, rt)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), c.fit(src, rt, sp)))
+    return coll
+}
+
+# a value stored in runs (S9f): RunFrom(at) asked where the last run ended, each run walked as an array; break leaves
+# the whole walk
+fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&c, runs I64, cm ast.Compr&, ce types.TypeId) {
+    coll := c.borrowedSource(sp, src)
+    at := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(at)), c.lit(sp, c.i64(), 0)))
+    k I64 = -1
+    if f.Key != source.NameId(0) {
+        k = c.hidden(sp, c.i64())
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
+    }
+    ofrom := c.stmts.Len()
+    oid, oouter, omark := c.open(typed.BlockKind.Loop, sp)
+    c.fr().loops.Push(oid)
+    c.fr().exits.Push(oid)
+    call := c.loopCall(sp, runs, c.readLocal(sp, coll), c.one(c.readLocal(sp, at)))
+    rt := typeOf(call)
+    run := c.hidden(sp, rt)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(run)), c.exhaustedOrBreak(sp, call, oid)))
+    n := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, run), null)))
+    j := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(j)), c.lit(sp, c.i64(), 0)))
+    # the run, walked as an array; break leaves the outer loop
+    ifrom := c.stmts.Len()
+    iid, iouter, imark := c.open(typed.BlockKind.Loop, sp)
+    try c.fr().loops.Pop() catch { }
+    c.fr().loops.Push(iid)
+    c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, j), c.readLocal(sp, n)), iid))
+    ra := c.arrayOf(rt)
+    base typed.Place&c = typed.Place.Deref(sp, c.deref(rt), c.readLocal(sp, run))
+    e := c.read(sp, typed.Place.Elem(sp, c.P.T.Elem(ra), typed.Elem(base, c.readLocal(sp, j), typed.Check.None)))
+    c.elementLocals(sp, f, k, e)
+    c.walkBody(f, cm, ce)
+    try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
+    ib := c.close(iid, iouter, imark, ifrom)
+    pfrom := c.stmts.Len()
+    pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(j))),
+                             c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, j), c.lit(sp, c.i64(), 1))))
+    if k >= 0 {
+        c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+                                 c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
+    }
+    pb := c.close(pid, pouter, pmark, pfrom)
+    c.emit(typed.Stmt.Loop(sp, ib, pb))
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(at))),
+                             c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, at), c.readLocal(sp, n))))
+    ob := c.close(oid, oouter, omark, ofrom)
+    c.emit(typed.Stmt.Loop(sp, ob, null))
+}
+
+# an indexable value (S9d): positions 0 to Len() - 1, Len() read every iteration, x each At(i)
+fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, atm I64, lm I64, cm ast.Compr&, ce types.TypeId) {
+    coll := c.borrowedSource(sp, src)
+    k := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Loop, sp)
+    c.fr().loops.Push(id)
+    c.fr().exits.Push(id)
+    n := c.invoke(sp, sp, lm, c.readLocal(sp, coll), null, Array<typed.Expr&>(0))
+    c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), n), id))
+    e := c.invoke(sp, sp, atm, c.readLocal(sp, coll), null, c.one(c.readLocal(sp, k)))
+    c.elementLocals(sp, f, k, e)
+    c.walkBody(f, cm, ce)
+    try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
+    b := c.close(id, outer, mark, from)
+    pfrom := c.stmts.Len()
+    pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+                             c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
+    pb := c.close(pid, pouter, pmark, pfrom)
+    c.emit(typed.Stmt.Loop(sp, b, pb))
+}
+
+# for i in range [start,] end [, step] (S9b): upward, a count worked out once
+fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&>&, cm ast.Compr&, ce types.TypeId) typed.Expr&c {
+    if f.Key != source.NameId(0) {
+        c.gap(sp, "two names over a range")
+        return null
+    }
     # the first argument that is no literal gives the range its type; literals alone count in I64 (S9b)
     t types.TypeId = types.UnknownT
     vfrom := c.exprs.Len()
@@ -3364,17 +3589,17 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), cnt))
     k := c.hidden(sp, t)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, t, 0)))
-    c.counted(sp, f, k, n, -1, types.UnknownT, lo, st)
-    b := c.close(id, outer, mark, from)
-    c.emit(typed.Stmt.Block(sp, b))
+    c.counted(sp, f, k, n, -1, types.UnknownT, lo, st, cm, ce)
+    return c.readLocal(sp, n)
 }
 
 # the counted loop of a for-in: k from 0 below n, the element - coll's at k, or lo + k * st - and the position (the
 # key) declared each turn
-fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64, at types.TypeId, lo I64, st I64) {
+fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64, at types.TypeId, lo I64, st I64, cm ast.Compr&, ce types.TypeId) {
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
+    c.fr().exits.Push(id)
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), c.readLocal(sp, n)), id))
     kt := c.localType(k)
     if f.Key != source.NameId(0) {
@@ -3391,10 +3616,9 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
     }
     x := c.local(f.Name, sp, typeOf(e), typed.LocalKind.Var, typed.Mark.Infer)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), e))
-    if f.Body != null {
-        for s in f.Body { c.stmt(s) }
-    }
+    c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
@@ -3451,6 +3675,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
             return
         }
         l := fr.loops[fr.loops.Len() - 1]
+        if kind == token.Tok.Break { l = fr.exits[fr.exits.Len() - 1] }
         jk := typed.JumpKind.Break if kind == token.Tok.Break else typed.JumpKind.Continue
         c.emit(typed.Stmt.Jump(sp, jk, typed.BlockId(I32(l))))
         return
@@ -3922,4 +4147,22 @@ test "type errors: E12, T6b, D10a, S3" {
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "D10a E12 T6b S3 ", rootRules(l)
+}
+
+test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9a, S9c, S9d, S9f, E27)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
+                       "fn main() ? {\n    l := List<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
+                       "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n"
+                       "    a := I64[x * 2 for x in range 4 if x > 1]\n    b := I64[x for x in l]\n"
+                       "    for x in a { if x > 3 { break }\n        t += x }\n    assert t + b.Len() > 0\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "", rootRules(l)
+    assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
 }
