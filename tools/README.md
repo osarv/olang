@@ -16,7 +16,7 @@ still the Python scripts, run as `python3 tools/NAME.py`.
 | `perm_mut.py` | T25b: `mut` speaks only about what a reference reaches | `tools/perm_mut.py [--olang PATH] [-j N] FILE\|DIR...` |
 | `int_literal_i64.py` | T6a: an integer literal's own type is `I64` | `tools/int_literal_i64.py [--olang PATH] [-j N] FILE\|DIR...` |
 | `io_print.olang` | M19f: the prelude's `print` words became `io.Print` and friends | `build/tools_io_print [--dry] PATH...` |
-| `io_try.py` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `python3 tools/io_try.py PATH...` |
+| `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `build/tools_io_try PATH...` |
 | `io_fix.py` | after `io_try.py`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `python3 tools/io_fix.py OLANG FILE...` |
 
 - `bare_typevars.py` works on the text alone. `--check` writes nothing and the exit status says whether anything

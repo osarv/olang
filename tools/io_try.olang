@@ -1,0 +1,95 @@
+# Puts `try` before every call of std/io's Print/Println/PrintErr/PrintErrln in code (M19f: they fail with IoError).
+#
+#     build/out -b tools/io_try.olang && build/tools_io_try PATH...
+#
+# Calls inside string or character literals and in comments are left alone. Idempotent.
+#
+# A port of the Python script of the same name (same arguments, same edits, same output); a file that is not valid UTF-8 is
+# skipped, and the files it writes get Python's text-mode newlines ("\r\n" and "\r" become "\n"). A PATH below a directory
+# named build or .git is not searched, nor is a PATH that has such a name in it. Called with no PATH it adds nothing.
+
+import "std/os"
+import "srcmask"
+
+# the names of std/io's print functions
+Names Array<String&>& = String&["Println", "PrintErrln", "PrintErr", "Print"]
+
+# whether the text before position i ends in "try" and some whitespace, "try" starting a word - looking only at the
+# twelve characters before i, as the Python script did
+fn followsTry(text String&, i I64) Bool {
+    window := text[(i - 12 if i > 12 else 0):i]
+    e := window.Len()
+    for e > 0 and srcmask.IsPySpace(window[e - 1]) { e-- }
+    if e == window.Len() or e < 3 or window[e - 3:e] != "try" { return false }
+    return e == 3 or not srcmask.IsWord(window[e - 4])
+}
+
+# whether text has s at position i
+fn hasAt(text String&, i I64, s String&) Bool {
+    return i + s.Len() <= text.Len() and text[i:i + s.Len()] == s
+}
+
+# text with "try " put before each call of ALIAS.Print and its three siblings in code, and how many
+fn migrate(text String&, alias String&) (String, I64) {
+    mask := srcmask.Mask(text, false)
+    out := StringBuilder()
+    last I64 = 0
+    count I64 = 0
+    for i in range text.Len() {
+        if i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.' or text[i - 1] == '$') { continue }
+        if not hasAt(text, i, alias) or not hasAt(text, i + alias.Len(), ".") { continue }
+        p := i + alias.Len() + 1
+        q := p
+        for q < text.Len() and srcmask.IsWord(text[q]) { q++ }
+        if not (text[p:q] in Names) or not hasAt(text, q, "(") { continue }
+        if mask[i] != 'c' or followsTry(text, i) { continue }
+        out.Push(text[last:i])
+        out.Push("try ")
+        last = i
+        count++
+    }
+    out.Push(text[last:])
+    return out.ToString(), count
+}
+
+# whether a path has build or .git as one of its parts
+fn inBuildOrGit(path String&) Bool {
+    for part in path.Split("/") {
+        if part == "build" or part == ".git" { return true }
+    }
+    return false
+}
+
+fn main() ? {
+    args := os.Args()
+    files List<String&>
+    for i in range 1, args.Len() {
+        root := args[i]
+        info := try os.Stat(root) catch { continue }
+        if info.Kind == os.FileKind.FILE {
+            files.Push($root)
+        } else if info.Kind == os.FileKind.DIR and not inBuildOrGit(root) {
+            srcmask.Walk(root, files)
+        }
+    }
+    total I64 = 0
+    for p in files {
+        raw := try os.ReadFile(p) catch {
+            srcmask.SayErr("io_try: cannot read " $p)
+            os.Exit(1)
+            unreachable
+        }
+        if not srcmask.ValidUtf8(raw) { continue }
+        text := srcmask.Translate(raw)
+        alias := try srcmask.IoAlias(text, p) catch { continue }
+        changed, n := migrate(text, alias)
+        if n > 0 {
+            try os.WriteFile(p, changed) catch {
+                srcmask.SayErr("io_try: cannot write " $p)
+                os.Exit(1)
+            }
+            total += n
+        }
+    }
+    srcmask.Say("added try to " $total " calls")
+}
