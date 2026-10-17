@@ -13,7 +13,7 @@ type Box struct() {
 fn churn() {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { abort }
+        if a[0] == 3 { unreachable }
     }
 }
 fn idBox(seed mut Box&) Box { return seed }
