@@ -1,6 +1,6 @@
 # check: run
 # vec2 over-rejection 1: Clone of a Vec whose elements are references - the clone's elements refer where the original's
-# do, and it owns a buffer of its own, so the original may grow while the clone is used (no loan on its buffer)
+# do, and it has a buffer of its own, so the original may grow while the clone is used
 import "std/io"
 fn churn() I64 {
     t := 0

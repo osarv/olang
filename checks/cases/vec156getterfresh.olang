@@ -1,7 +1,7 @@
 # check: run
 # flags: -debug -sanitize
-# vec7 F2: a take through a call's reference result is refused only where the callee gives a borrowed own result (O37) -
-# one building a new object, its result held in a local, is taken from as any other reference
+# vec7 F2: a field's Vec given a clone of a Vec reached through a call's built result held in a local (round 1 of
+# docs/memory.md: a Vec is a handle, so storage of its own in the own object's region is a Clone)
 type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
 }
@@ -25,7 +25,7 @@ fn main() ? {
     d := Parser()
     d.lx = Lexer()
     q := fresh(3)
-    d.lx.toks = take q.toks
+    d.lx.toks = q.toks.Clone()
     churn()
-    assert d.lx.toks.Len() == 3 and d.lx.toks[1] == "1-fresh" and q.toks.Len() == 0
+    assert d.lx.toks.Len() == 3 and d.lx.toks[1] == "1-fresh" and q.toks.Len() == 3
 }

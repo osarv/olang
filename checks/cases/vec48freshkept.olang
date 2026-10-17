@@ -1,6 +1,6 @@
 # check: run
-# vec3 F1: what stays legal - a built result proven new storage keeps no loan on the buffer: ToArray, a wrapper returning
-# ToArray's result directly or through a local, and Clone (an owned result), all kept across Pushes
+# vec3 F1: what stays legal - a built result, new storage apart from the buffer: ToArray, a wrapper returning ToArray's
+# result directly or through a local, and Clone, all kept across Pushes
 fn churn() I64 {
     t := 0
     for i in range 3000 {

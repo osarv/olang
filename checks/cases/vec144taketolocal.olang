@@ -1,7 +1,7 @@
 # check: run
 # flags: -debug -sanitize
-# Vec phase 2a review (O26a): a local a 'take' moves from flows where the taker goes - 'w := take l.toks; return w' and
-# 'l.toks = take v; return l' keep what l and v refer to in the result scope, as 'return take l.toks' did
+# Vec phase 2a review (O26a): a Vec read from a returned local, and one stored into a returned local's field, keep what
+# l and v refer to in the result scope (round 1 of docs/memory.md: a Vec is a handle, named, never taken)
 type Tok struct(text String&, n I64) {
     text
     n
@@ -21,15 +21,14 @@ fn viaLocal() Vec<Tok> {
     t := "x" $5 "-function-block-text"
     l := Lex2()
     l.toks.Push(Tok(t, 1))
-    w := take l.toks
-    return w
+    return l.toks
 }
 fn viaField() Lex2 {
     t := "y" $6 "-function-block-text"
     v := Vec<Tok>()
     v.Push(Tok(t, 1))
     l := Lex2()
-    l.toks = take v
+    l.toks = v
     return l
 }
 fn main() ? {
