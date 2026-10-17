@@ -243,10 +243,13 @@ fn ComputeChecked(a I32, b I32, lo I32, hi I32) I32 ? MathError + RangeError {
     return result
 }
 
-# the default error (R15): "?" alone declares a function that can fail without saying how - a plain "error"
-# raises it, and an untyped "catch" catches it. A function naming its errors fails with those and nothing else.
+# an inferred set (R1a): "?" alone declares a function failing with what its body can - RangeError here - and an
+# untyped "catch" catches it. A function naming its errors fails with those and nothing else.
+error Oops {
+    BAD
+}
 fn mightFailWithBareError(n I32) I32 ? {
-    if n < 0 { error }
+    if n < 0 { error RangeError.TOO_SMALL }
     return n * 2
 }
 
@@ -2727,7 +2730,7 @@ fn (t Trio<<T>>&) Sum() T {
 }
 fn firstOf(xs Array<<T>>&, keep fn(x T) Bool) T ? {
     for x in xs { if keep(x) { return x } }
-    error
+    error Oops.BAD
 }
 fn widthOf(v <T>) I32 {
     return match T {
@@ -3232,12 +3235,12 @@ test "slicing a runtime-length array, and slicing a slice" {
 }
 
 # E16c: "try a[lo:hi]" makes the slice fallible instead of aborting - the ordinary try expression on the
-# ordinary terms. The error is the BARE error (R16): out of range is one fact with no further detail worth
-# tracking, so no new error type is needed and "?"/"catch { }" already compose. A slice with no
+# ordinary terms. The error is BuiltinError.OUT_OF_BOUNDS (R20): out of range is one fact with no further detail
+# worth tracking, so no new error type is needed and "?"/"catch { }" already compose. A slice with no
 # "try" keeps E16b's abort, so bounds that provably hold cost nothing and force no signature change on any
 # caller - which is why this is opt-in rather than making every slice fallible.
 fn sliceLenOrPropagate(buf Array<U8>&, n I32) I64 ? {
-    b := try buf[2:2+n]
+    b := checked buf[2:2+n]
     return b.Len()
 }
 
@@ -3597,7 +3600,7 @@ test "try/catch: SafeDiv reports failure on divide by zero" {
     assert failed
 }
 
-test "the default error: success path is unaffected by the mixed error union" {
+test "an inferred set: the success path is unaffected" {
     failed Bool = false
     try mightFailWithBareError(5) catch {
         failed = true
@@ -3613,14 +3616,13 @@ test "a function naming its errors is fully handled by catching them" {
     assert result == -1
 }
 
-# R17: a bare "?" function lets what it tries through as its own unnamed failure - RangeError leaves it as the
-# default error
+# R1a: a bare "?" function infers what it tries - RangeError leaves it as itself
 fn onlyGenericEscapes(n I32) I32 ? {
     v := try mightFailWithRange(n)
     return v
 }
 
-test "the default error: an untyped catch catches it" {
+test "an inferred set: an untyped catch catches what it holds" {
     result I32 = 0
     try onlyGenericEscapes(200) catch {
         result = -99
@@ -3628,8 +3630,8 @@ test "the default error: an untyped catch catches it" {
     assert result == -99
 }
 
-# R17: and so does a try statement whose clauses take only part of what its call can fail with - the rest leaves a bare
-# "?" function as its own failure, as an uncaught "try" expression's does
+# R1a: and so does a try statement whose clauses take only part of what its call can fail with - the rest leaves a bare
+# "?" function as itself, as an uncaught "try" expression's does
 error R17Err {
     Loud
     Quiet
@@ -6628,14 +6630,14 @@ test "R9a: a default binds as tightly as the try, and is one value inside an arg
 
 test "R9a: a checked index and a slice take a default for out-of-range" {
     a Array<I32> = I32[1, 2, 3]
-    assert (try a[1] catch default -1) == 2
+    assert (checked a[1] catch default -1) == 2
     three I32 = 3
-    assert (try a[three] catch default -1) == -1
+    assert (checked a[three] catch default -1) == -1
     i I32 = -4
-    assert (try a[i] catch default 42) == 42
-    s := try a[2:9] catch default null
+    assert (checked a[i] catch default 42) == 42
+    s := checked a[2:9] catch default null
     assert s.Len() == 0
-    t := try a[0:2] catch default null
+    t := checked a[0:2] catch default null
     assert t.Len() == 2
 }
 
@@ -6768,7 +6770,7 @@ test "R9b: break and continue leave a clause in value position" {
 test "R9b: a checked index names the bare error, and several defaults sit in one clause" {
     a Array<I32> = I32[1, 2]
     j I32 = 7
-    assert (try a[j] catch default -1) == -1
+    assert (checked a[j] catch default -1) == -1
     n, m := try safeDivD(7, 0) catch DivError default 5, 6
     assert n == 5
     assert m == 6
@@ -7850,12 +7852,12 @@ type OpSafe struct(n I64) {
     cells mut Array<I32>& = Array<I32>(n)
 }
 
-fn (g OpSafe&) TryAt(i I64) I32 ? OpGridError {
+fn (g OpSafe&) CheckedAt(i I64) I32 ? OpGridError {
     if i < 0 or i >= g.n { error OpGridError.OUT }
     return g.cells[i]
 }
 
-fn (g OpSafe&) TrySlice(lo I64, hi I64) Array<I32> ? OpGridError {
+fn (g OpSafe&) CheckedSlice(lo I64, hi I64) Array<I32> ? OpGridError {
     if lo < 0 or hi > g.n { error OpGridError.OUT }
     return I32[g.cells[i] for i in range lo, hi]
 }
@@ -7863,7 +7865,7 @@ fn (g OpSafe&) TrySlice(lo I64, hi I64) Array<I32> ? OpGridError {
 fn (g OpSafe&) Len() I64 { return g.n }
 
 fn opMaybeArray(n I32) Array<I32> ? {
-    if n > 3 { error }
+    if n > 3 { error Oops.BAD }
     return I32[1, 2]
 }
 
@@ -7914,7 +7916,7 @@ test "E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from P
     assert OpBitsBaked == 15
 }
 
-test "E31: Call makes a value callable and passable as a function; try calls TryAt and TrySlice" {
+test "E31: Call makes a value callable and passable as a function; try calls CheckedAt and CheckedSlice" {
     next mut OpIdGen& = OpIdGen()
     a := next()
     b := next()
@@ -7927,11 +7929,11 @@ test "E31: Call makes a value callable and passable as a function; try calls Try
     assert OpCallBaked == 21
     g OpSafe& = OpSafe(3)
     g.cells[1] = 5
-    assert (try g[1] catch default -1) == 5
-    assert (try g[7] catch OpGridError.OUT default -2) == -2
-    s := try g[0:2] catch default I32[9]
+    assert (checked g[1] catch default -1) == 5
+    assert (checked g[7] catch OpGridError.OUT default -2) == -2
+    s := checked g[0:2] catch default I32[9]
     assert s.Len() == 2
-    t := try g[0:9] catch default I32[9]
+    t := checked g[0:9] catch default I32[9]
     assert t.Len() == 1
     u := try opMaybeArray(5) catch default I32[4, 4, 4]
     assert u.Len() == 3
@@ -8113,8 +8115,8 @@ test "S9d: for-in walks At and Len as a counted loop; an own Iter wins; Indexabl
     assert u == 2        # the own Iter's two values, not the counted loop's three
 }
 
-# E31/S9e: the checked forms. "try" calls TryAt, TrySlice, TrySetAt, TryDiv, TryInc ... when a type declares them, and
-# derives TryAt, TrySlice and TrySetAt from At, Slice, SetAt and Len otherwise; "try" before a store or an increment
+# E31/S9e: the checked forms. "try" calls CheckedAt, CheckedSlice, CheckedSetAt, CheckedDiv, CheckedInc ... when a type declares them, and
+# derives CheckedAt, CheckedSlice and CheckedSetAt from At, Slice, SetAt and Len otherwise; "try" before a store or an increment
 # checks the statement; "for x in try c" covers what the loop calls by itself
 type TxGrid struct(n I64) {
     n
@@ -8135,7 +8137,7 @@ type TxSparse struct(bad I64) {
     bad
 }
 
-fn (s TxSparse&) TryAt(i I64) I32 ? TxErr {
+fn (s TxSparse&) CheckedAt(i I64) I32 ? TxErr {
     if i == s.bad { error TxErr.MISSING }
     return I32(i) * 10
 }
@@ -8146,7 +8148,7 @@ type TxQ struct(v I32) {
 }
 
 fn (a TxQ) Div(b TxQ) TxQ { return TxQ(a.v / b.v) }
-fn (a TxQ) TryDiv(b TxQ) TxQ ? TxErr {
+fn (a TxQ) CheckedDiv(b TxQ) TxQ ? TxErr {
     if b.v == 0 { error TxErr.ZERO }
     return TxQ(a.v / b.v)
 }
@@ -8156,7 +8158,7 @@ type TxCtr struct(n I32) {
     n
 }
 
-fn (c TxCtr) TryInc() TxCtr ? TxErr {
+fn (c TxCtr) CheckedInc() TxCtr ? TxErr {
     if c.n >= 2 { error TxErr.ZERO }
     return TxCtr(c.n + 1)
 }
@@ -8184,31 +8186,31 @@ fn (k mut TxSink&) SetAt(i I64, v I32) { k.last = v + I32(i) }
 fn txReads() I32 {
     g mut TxGrid& = TxGrid(4)
     for i in range I64(4) { g[i] = I32(i) * 10 }
-    a := try g[2] catch default -1
-    b := try g[7] catch BuiltinError.OUT_OF_BOUNDS default -1
-    s := try g[1:3] catch default I32[0]
-    t := try g[3:9] catch default I32[5, 5, 5]
+    a := checked g[2] catch default -1
+    b := checked g[7] catch BuiltinError.OUT_OF_BOUNDS default -1
+    s := checked g[1:3] catch default I32[0]
+    t := checked g[3:9] catch default I32[5, 5, 5]
     sp TxSparse& = TxSparse(1)
-    x := try sp[3] catch default 0
-    y := try sp[1] catch TxErr default 7
-    z := try (TxQ(10) / TxQ(0) + TxQ(1)) catch TxErr default TxQ(99)
-    w := try (TxQ(10) / TxQ(2) + TxQ(1)) catch TxErr default TxQ(99)
+    x := checked sp[3] catch default 0
+    y := checked sp[1] catch TxErr default 7
+    z := checked (TxQ(10) / TxQ(0) + TxQ(1)) catch TxErr default TxQ(99)
+    w := checked (TxQ(10) / TxQ(2) + TxQ(1)) catch TxErr default TxQ(99)
     return a + b + I32(s.Len()) + I32(t.Len()) + x + y + z.v + w.v
 }
 
 fn txStores() I32 {
     g mut TxGrid& = TxGrid(3)
     m I32 = 0
-    try g[1] = 5 catch { m += 1 }
-    try g[5] = 9 catch BuiltinError.OUT_OF_BOUNDS { m += 10 }
-    try g[1] += 2 catch { m += 100 }
+    checked g[1] = 5 catch { m += 1 }
+    checked g[5] = 9 catch BuiltinError.OUT_OF_BOUNDS { m += 10 }
+    checked g[1] += 2 catch { m += 100 }
     a := I32[1, 2]
-    try a[2] = 3 catch { m += 1000 }
+    checked a[2] = 3 catch { m += 1000 }
     n I32 = 2147483647
-    try n++ catch BuiltinError.OVERFLOW { m += 10000 }
+    checked n++ catch BuiltinError.OVERFLOW { m += 10000 }
     c TxCtr = TxCtr(1)
-    try c++ catch { m += 100000 }
-    try c++ catch { m += 200000 }
+    checked c++ catch { m += 100000 }
+    checked c++ catch { m += 200000 }
     return m + g[1] + c.n
 }
 
@@ -8275,7 +8277,7 @@ fn txMember(down Bool) I32 {
 
 fn txCollect(n I32, failAt I32) I32 {
     l mut TxLines& = TxLines(n, failAt)
-    xs := try I32[x * 2 for x in l if x != 2] catch TxErr + BuiltinError default I32[-1]
+    xs := checked I32[x * 2 for x in l if x != 2] catch TxErr + BuiltinError default I32[-1]
     t I32 = 0
     for x in xs { t += x }
     return t
@@ -8336,7 +8338,7 @@ fn icToks() I64 {
     if e is IcTok.End { t += 1000 }
     v := x as IcTok.Num
     a, b := y as IcTok.Pair
-    w := try (y as IcTok.Num) catch default -1
+    w := checked (y as IcTok.Num) catch default -1
     return t + v + a + w + b
 }
 
@@ -8941,7 +8943,7 @@ test "E6c: integer arithmetic wraps" {
 # a checked index or slice fails with BuiltinError.OUT_OF_BOUNDS, from the prelude - caught by name, or let
 # through by a signature naming it, as any error type is
 fn builtinAt(a Array<I32>&, i I64) I32 ? BuiltinError {
-    v I32 = try a[i]
+    v I32 = checked a[i]
     return v
 }
 
@@ -8954,45 +8956,45 @@ test "BuiltinError.OUT_OF_BOUNDS from a checked index, caught by name and propag
     a := I32[4, 5, 6]
     assert builtinCode(a, 1) == 5
     assert builtinCode(a, 7) == -1
-    assert (try a[9] catch BuiltinError.OUT_OF_BOUNDS default -2) == -2
+    assert (checked a[9] catch BuiltinError.OUT_OF_BOUNDS default -2) == -2
     n := 3
-    s := try a[1:n] catch BuiltinError default a[0:0]
+    s := checked a[1:n] catch BuiltinError default a[0:0]
     assert s.Len() == 2
-    t := try a[2:n + 5] catch BuiltinError default a[0:0]        # n + 5 is checked too: OVERFLOW is possible
+    t := checked a[2:n + 5] catch BuiltinError default a[0:0]    # n + 5 is checked too: OVERFLOW is possible
     assert t.Len() == 0
     near U8 = 1
     far U8 = 200
-    assert (try a[near] catch default -1) == 5        # a U8 index is unsigned
-    assert (try a[far] catch default -1) == -1
+    assert (checked a[near] catch default -1) == 5    # a U8 index is unsigned
+    assert (checked a[far] catch default -1) == -1
 }
 
 # R20: "try (...)" checks every operation inside that can fail - integer overflow, a zero divisor, a shift amount
 # outside the width, a conversion out of range, a float result becoming infinite or NaN, a negative array length,
 # an index - each failing with its BuiltinError word, caught or propagated like any error
 fn ckAdd32(a I32, b I32) I32 ? BuiltinError {
-    r I32 = try (a + b)
+    r I32 = checked (a + b)
     return r
 }
 fn ckSafe(a I32, b I32) I32 {
-    r I32 = try (a + b) catch BuiltinError.OVERFLOW default -1
+    r I32 = checked (a + b) catch BuiltinError.OVERFLOW default -1
     return r
 }
 fn ckDivide(a I32, b I32) I32 {
-    r I32 = try (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1 catch BuiltinError.OVERFLOW default -2
+    r I32 = checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1 catch BuiltinError.OVERFLOW default -2
     return r
 }
-fn ckShift(a I64, n I32) I64 { return try (a << n) catch default -1 }
-fn ckNarrow(v I64) I32 { return try I32(v) catch default -1 }
-fn ckToInt(f F64) I32 { return try I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
-fn ckFdiv(a F64, b F64) F64 { return try (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1.0 catch default -2.0 }
-fn ckFmul(a F64, b F64) F64 { return try (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
-fn ckByteAdd(a U8, b U8) I32 { return try (a + b) catch default 0 }
-fn ckNeg(a I32) I32 { return try (-a) catch default 7 }
+fn ckShift(a I64, n I32) I64 { return checked (a << n) catch default -1 }
+fn ckNarrow(v I64) I32 { return checked I32(v) catch default -1 }
+fn ckToInt(f F64) I32 { return checked I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
+fn ckFdiv(a F64, b F64) F64 { return checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1.0 catch default -2.0 }
+fn ckFmul(a F64, b F64) F64 { return checked (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
+fn ckByteAdd(a U8, b U8) I32 { return checked (a + b) catch default 0 }
+fn ckNeg(a I32) I32 { return checked (-a) catch default 7 }
 fn ckLen(n I32) I64 {
-    a := try Array<I32>(n) catch default Array<I32>(0)
+    a := checked Array<I32>(n) catch default Array<I32>(0)
     return a.Len()
 }
-fn ckMixed(a Array<I32>&, i I64, k I32) I32 { return try (a[i] * k) catch BuiltinError.OUT_OF_BOUNDS default -1 catch default -2 }
+fn ckMixed(a Array<I32>&, i I64, k I32) I32 { return checked (a[i] * k) catch BuiltinError.OUT_OF_BOUNDS default -1 catch default -2 }
 
 test "R20: try (...) checks arithmetic, shifts, conversions and lengths" {
     big I32 = 2147483647
@@ -9024,12 +9026,12 @@ test "R20: try (...) checks arithmetic, shifts, conversions and lengths" {
 # check found no clauses and was emitted as unreachable. CkWideIn is mutable, so the test runs them at run time;
 # CkWideBaked runs the same calls while compiling (K2).
 fn ckWidenDecl(a U8, b U8) I32 {
-    x I32 = try (a + b) catch default 0
+    x I32 = checked (a + b) catch default 0
     return x
 }
-fn ckWidenOperand(a U8, b U8, w I32) I32 { return (try (a + b) catch default 7) + w }
+fn ckWidenOperand(a U8, b U8, w I32) I32 { return (checked (a + b) catch default 7) + w }
 fn ckId64(n I64) I64 { return n }
-fn ckWidenArg(a U8, b U8) I64 { return ckId64(try (a * b) catch default 9) }
+fn ckWidenArg(a U8, b U8) I64 { return ckId64(checked (a * b) catch default 9) }
 CkWideIn mut U8 = 200
 CkWideBaked I64 = ckByteAdd(200, 200) + ckWidenDecl(200, 200) + ckWidenOperand(200, 200, 1000) + ckWidenArg(200, 200)
 
@@ -9042,17 +9044,17 @@ test "T6b/R20: a tried value widened where it lands keeps its checks" {
 
 # R20/K1: the compile-time evaluator runs checked operations as the generated code does - each global below is
 # baked from a check that failed and was caught (one through a call), and the test reads the same at run time
-fn ctSafe(a I32, b I32) I32 { return try (a + b) catch BuiltinError.OVERFLOW default -1 }
-fn ctDiv(a I32, b I32) I32 { return try (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1 catch BuiltinError.OVERFLOW default -2 }
-fn ctShift(a I64, n I32) I64 { return try (a << n) catch default -1 }
-fn ctNarrow(v I64) I32 { return try I32(v) catch default -1 }
-fn ctToInt(f F64) I32 { return try I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
-fn ctFmul(a F64, b F64) F64 { return try (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
+fn ctSafe(a I32, b I32) I32 { return checked (a + b) catch BuiltinError.OVERFLOW default -1 }
+fn ctDiv(a I32, b I32) I32 { return checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1 catch BuiltinError.OVERFLOW default -2 }
+fn ctShift(a I64, n I32) I64 { return checked (a << n) catch default -1 }
+fn ctNarrow(v I64) I32 { return checked I32(v) catch default -1 }
+fn ctToInt(f F64) I32 { return checked I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
+fn ctFmul(a F64, b F64) F64 { return checked (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
 fn ctIdx(i I64) I32 {
     a := I32[1, 2, 3]
-    return try (a[i] * 2) catch BuiltinError.OUT_OF_BOUNDS default -1 catch default -2
+    return checked (a[i] * 2) catch BuiltinError.OUT_OF_BOUNDS default -1 catch default -2
 }
-fn ctProp(a I32, b I32) I32 ? BuiltinError { return try (a * b) }
+fn ctProp(a I32, b I32) I32 ? BuiltinError { return checked (a * b) }
 fn ctOuter(a I32) I32 { return try ctProp(a, a) catch BuiltinError.OVERFLOW default -9 catch default -8 }
 
 CtBaked1 I32 = ctSafe(2147483647, 1)
@@ -9971,7 +9973,7 @@ fn primAll(one I32) Bool {
     floats Bool = F64(h) == 0.0999755859375 and F64(b) == 0.333984375 and F64(h * F16(2)) == 0.199951171875
     text Bool = $umax == "18446744073709551615" and $I8(-5) == "-5" and $F16(1.5) == "1.5" and $U16(65535) == "65535"
     big I32 = 300 * one
-    tried Bool = (try U8(big) catch default U8(7)) == 7 and (try (i8 - I8(1)) catch default I8(0)) == 0
+    tried Bool = (checked U8(big) catch default U8(7)) == 7 and (checked (i8 - I8(1)) catch default I8(0)) == 0
     return wrap and divs and flows and floats and text and tried
 }
 PrimsBaked := primAll(1)
@@ -10376,8 +10378,8 @@ fn cgMk() Array<I64>& {
 }
 test "a checked index evaluates its base once" {
     cgMkCalls = 0
-    x I64 = try cgMk()[1] catch default 0
-    y I64 = try (cgMk()[2] + 1) catch default 0
+    x I64 = checked cgMk()[1] catch default 0
+    y I64 = checked (cgMk()[2] + 1) catch default 0
     assert x == 1 and y == 3 and cgMkCalls == 2
 }
 
@@ -10428,7 +10430,7 @@ test "an array filled with a struct holds the struct in every element" {
 # D14b: a length whose byte count would not fit an I64 is out of range, as a negative one is - it wrapped to a small
 # allocation the array then ran past
 fn cgLenOut(n I64) I64 {
-    a := try Array<I64>(n) catch BuiltinError.OUT_OF_BOUNDS default Array<I64>(1, 7)
+    a := checked Array<I64>(n) catch BuiltinError.OUT_OF_BOUNDS default Array<I64>(1, 7)
     return a.Len() * 10 + a[0]
 }
 CgLenBaked I64 = cgLenOut(2305843009213693953)
@@ -11043,8 +11045,8 @@ type SfWorld struct() {
 }
 fn sfShow(n SfNode&) I64 { return n.v }
 fn sfFirstTwice(w SfWorld&) I64 ? {
-    x := sfShow(try w.items[0])
-    y := try w.items[0]
+    x := sfShow(checked w.items[0])
+    y := checked w.items[0]
     return x + y.v
 }
 
@@ -12119,7 +12121,7 @@ type sbIndex struct() {
 }
 fn (c mut sbIndex&) bump(k I64) I64 ? {
     n := try c.nodes.Get(k) catch {
-        error
+        error Oops.BAD
     }
     n.v++
     n.next = sbNode(n.v * 10)
@@ -12615,11 +12617,11 @@ type mxGrid struct(rows I64, cols I64) {
 }
 fn (g mxGrid&) At(i I64, j I64) I64 { return g.cells[i * g.cols + j] }
 fn (g mxGrid&) SetAt(i I64, j I64, v I64) { g.cells[i * g.cols + j] = v }
-fn (g mxGrid&) TryAt(i I64, j I64) I64 ? BuiltinError {
+fn (g mxGrid&) CheckedAt(i I64, j I64) I64 ? BuiltinError {
     if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
     return g[i, j]
 }
-fn (g mxGrid&) TrySetAt(i I64, j I64, v I64) ? BuiltinError {
+fn (g mxGrid&) CheckedSetAt(i I64, j I64, v I64) ? BuiltinError {
     if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
     g[i, j] = v
 }
@@ -12634,7 +12636,7 @@ fn mxTrace(n I64) I64 {
     g[1, 1] += 100
     t I64 = 0
     for i in range n { t = t + g[i, i] }
-    return t + (try g[n, 0] catch default -1000)
+    return t + (checked g[n, 0] catch default -1000)
 }
 MxBaked I64 = mxTrace(3)
 test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
@@ -12644,9 +12646,9 @@ test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
     assert MxCalls == 2 and g[1, 0] == 5
     g[mxNext() - 2, 0] *= 3
     assert MxCalls == 3 and g[1, 0] == 15
-    try g[1, 1] = 4 catch { fail }
-    try g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
-    assert MxCalls == 0 and g[1, 1] == 4 and (try g[-1, 0] catch default 7) == 7
+    checked g[1, 1] = 4 catch { fail }
+    checked g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
+    assert MxCalls == 0 and g[1, 1] == 4 and (checked g[-1, 0] catch default 7) == 7
 }
 
 # S18a: "assert cond, message" - the message (any text: a literal, a join, "$x", a String a call gives) is evaluated
@@ -12937,7 +12939,7 @@ fn kSum(a Array<I32>&) I64 {
     return s
 }
 fn kView(r Array<I32>&) I64 {
-    v := try (r as Array<I32, 3>&) catch default I32[0, 0, 0]
+    v := checked (r as Array<I32, 3>&) catch default I32[0, 0, 0]
     return kTotalI32(v)
 }
 fn kTotalI32(a Array<I32, <N>>&) I64 {
@@ -12986,7 +12988,7 @@ type KfV3 extends Array<F32, 3>
 fn kfThird(v KfV3&) F32 { return v[2] }
 fn kfRun(n I64) Array<F32> { return Array<F32>(n, 1.5) }
 fn kfSafe(a Array<F32>&) F32 ? BuiltinError {
-    v := try KfV3(a)
+    v := checked KfV3(a)
     return v[0] + v[2]
 }
 KfThirdBaked F32 = kfThird(KfV3(kfRun(3)))
@@ -13447,8 +13449,8 @@ fn s3CopyOutLocal(a Array<F64, 3>&) Array<F64, 3> {
     v := a
     return v
 }
-fn s3RowOf(row Array<F64>&) Array<F64, 3> ? {
-    v := try (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
+fn s3RowOf(row Array<F64>&) Array<F64, 3> {
+    v := checked (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
     return v
 }
 fn s3BigOut(a Array<I64, 40>&) Array<I64, 40> { return a }     # big enough to be returned through memory
@@ -13457,8 +13459,8 @@ fn s3FixedOut() F64 {
     a := s3CopyOut(y)
     y[0] = 9.0                                    # the result is a copy, not the caller's storage
     b := s3CopyOutLocal(y)
-    c := try s3RowOf(F64[4.0, 5.0, 6.0]) catch { unreachable }
-    d := try s3RowOf(F64[1.0]) catch { unreachable }
+    c := s3RowOf(F64[4.0, 5.0, 6.0])
+    d := s3RowOf(F64[1.0])
     big Array<I64, 40> = Array<I64, 40>()
     big[39] = 7
     g := s3BigOut(big)
@@ -13532,7 +13534,7 @@ fn (w mut s3World&) spawn() I32 {
 fn (w s3World&) done() Bool { return w.next >= 2 }
 fn (w mut s3World&) fail(why String&) ? {
     w.errors++
-    error
+    error Oops.BAD
 }
 fn (w s3World&) in(lo I32, hi I32) Bool { return lo <= w.next <= hi }
 fn s3Keywords() I32 {
@@ -13702,7 +13704,7 @@ test "O17: a value whose references live elsewhere, lent to callees that read it
 }
 
 # E31/S3a: "x[i]++" and "x[i]--" on a type with At and SetAt are "x[i] += 1" - through a field and a parameter too, and
-# under "try" through the derived TryAt; and "h.v[1] += 3" through a value field keeps the write (it was lost)
+# under "try" through the derived CheckedAt; and "h.v[1] += 3" through a value field keeps the write (it was lost)
 fn sc3BumpField(s mut sc3Vals&, i I64) { s.values[i]++ }
 type sc3Quad struct() {
     d Array<I64, 4>
@@ -13719,7 +13721,7 @@ fn sc3Increments() I64 {
     l[0]++
     l[1]--
     oob I64 = 0
-    try l[7]++ catch BuiltinError { oob = 1 }
+    checked l[7]++ catch BuiltinError { oob = 1 }
     s := sc3Vals()
     s.values.Push(10)
     sc3BumpField(s, 0)
@@ -14311,7 +14313,7 @@ test "S5/E31: an increment evaluates its place once" {
     assert IncCalls == 2 and c[1].v == 1 and c[2].v == -1
     IncCalls = 0
     b := Array<I64>(4, 0)
-    try b[incNext()]++ catch BuiltinError { b[0] = 99 }
+    checked b[incNext()]++ catch BuiltinError { b[0] = 99 }
     assert IncCalls == 1 and b[1] == 1 and b[0] == 0
 }
 
@@ -14370,17 +14372,17 @@ test "P2: a task calls a function value read out of storage that lasts until the
     assert c[1] == 7
 }
 
-# E16/E16d: under "try" a constant index is the checked form - out of the array's range it fails with OUT_OF_BOUNDS where
+# E16/E16d: under "checked" a constant index is the checked form - out of the array's range it fails with OUT_OF_BOUNDS where
 # it runs, so a generic over the length can ask for an element one instantiation has and another has not. The globals
 # are baked while compiling, the asserts decided there too, and the mutable ones read at run time
-fn e16Third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }
+fn e16Third(a Array<I32, <N>>&) I32 { return checked a[2] catch default -1 }
 E16Has := e16Third(I32[4, 5, 6])
 E16HasNot := e16Third(I32[4, 5])
 e16Short mut Array<I32, 2> = I32[1, 2]
 test "E16: try on a constant index known to be out of range compiles, and fails where it runs" {
     assert E16Has == 6 and E16HasNot == -1
-    assert (try e16Short[5] catch default 9) == 9
-    assert (try e16Short[1] catch default 9) == 2
+    assert (checked e16Short[5] catch default 9) == 9
+    assert (checked e16Short[1] catch default 9) == 2
     x Array<I32, 3> = I32[7, 8, 9]
     assert e16Third(x) == 9
 }
@@ -14473,7 +14475,10 @@ test "O26a: '&x' of a returned local is the result scope" {
 type o26sCounts struct() {
     counts Map<String&, I64> = Map<String&, I64>()
 }
-fn o26sLine(i I64) String& ? { return "k" $(i % 5) " tail " $i }
+fn o26sLine(i I64) String& ? {
+    if i < 0 { error Oops.BAD }
+    return "k" $(i % 5) " tail " $i
+}
 fn o26sCollect(n I64) o26sCounts {
     s := o26sCounts()
     for i in range n {
@@ -15531,10 +15536,10 @@ fn s5TryWrites() I64 {
     l := List<s5Acc>()
     l.Push(s5Acc())
     r I64 = 0
-    try l[0].N = 5 catch { r += 1000 }
-    try l[3].N = 5 catch { r += 100 }
-    try l[0].N += 2 catch { r += 1000 }
-    try l[7].N++ catch { r += 10 }
+    checked l[0].N = 5 catch { r += 1000 }
+    checked l[3].N = 5 catch { r += 100 }
+    checked l[0].N += 2 catch { r += 1000 }
+    checked l[7].N++ catch { r += 10 }
     return r + l[0].N
 }
 S5TryBaked I64 = s5TryWrites()
@@ -16486,17 +16491,17 @@ test "P4: a spawned lambda fails, and nested joins pass a failure out" {
     assert m == 9
 }
 
-# R17/P4c: a task calling a function declared with "?" alone fails with the default error, which only an untyped clause
-# takes; and a "try join" in a function declared with "?" alone lets every failure out as its own
+# R1a/P4c: a task calling a function declared with "?" alone fails with what it infers, which an untyped clause takes;
+# and a "try join" in a function declared with "?" alone lets every failure out as itself
 fn peBare(n I64) ? {
-    if n < 0 { error }
+    if n < 0 { error Oops.BAD }
 }
 fn peBareJoin(n I64) ? {
     try join {
         spawn try peSq(n)
     }
 }
-test "R17/P4c: the default error through a join" {
+test "R1a/P4c: an inferred set through a join" {
     k I64 = 0
     try join {
         spawn try peBare(-sbRun)
@@ -17430,7 +17435,7 @@ test "O38: a borrowed copy a constructor keeps in its instance is borrowed while
     assert n == 8 and OwnDropped == 1
 }
 fn ownFails(k I64) I64 ? {
-    if k > 0 { error }
+    if k > 0 { error Oops.BAD }
     return k
 }
 fn ownTake2(c own mut OwnConn&, k I64) I64 { return c.fd + k }
@@ -17537,9 +17542,9 @@ test "O38: a number read through a borrow holds nothing of it - kept across a re
     assert ownNamedThrough(5 * OwnRun) + ownCopyLen(123 * OwnRun) == OwnThroughBaked and OwnThroughBaked == 29
     assert sbChurn() > 0
 }
-fn ownViaIndex(a Array<I64>&, i I64) I64 ? { return ownTake2(OwnConn(30), try a[i]) }
-fn ownViaDiv(z I64) I64 ? { return ownTake2(OwnConn(31), try (10 / z)) }
-fn ownViaSlice(a Array<I64>&, n I64) I64 ? { return ownTake2(OwnConn(32), (try a[1:n]).Len()) }
+fn ownViaIndex(a Array<I64>&, i I64) I64 ? { return ownTake2(OwnConn(30), checked a[i]) }
+fn ownViaDiv(z I64) I64 ? { return ownTake2(OwnConn(31), checked (10 / z)) }
+fn ownViaSlice(a Array<I64>&, n I64) I64 ? { return ownTake2(OwnConn(32), (checked a[1:n]).Len()) }
 type OwnFailing struct(n I64) ? {
     n
     c own mut OwnConn& = OwnConn(n)
@@ -17549,7 +17554,7 @@ type OwnFailing struct(n I64) ? {
 type OwnFailingOwn struct(n I64) ? {
     n
     c own mut OwnConn& = OwnConn(n)
-    if n > 0 { error }
+    if n > 0 { error Oops.BAD }
 }
 test "O35, O36: an owner left behind by a checked operation under try, and a failing constructor's own fields, are released" {
     OwnDropped = 0

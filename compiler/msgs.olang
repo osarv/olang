@@ -143,6 +143,8 @@ type Diag enum {
     UnknownFunction
     UnknownFunctionMeant
     UnknownErrorType
+    FuncTypeErrsUnwritten
+    TraitErrsUnwritten
     TypeIsPrivate
     TypeNameInUse
     BuiltinTypeRedeclared
@@ -269,7 +271,7 @@ type Diag enum {
     ArrayOneIndex
     OperatorResult
     SetatResult
-    OperatorFallible
+    CheckedNotSuperset
     TryFormMustFail
     MethodCannotFail
     LessNotBool
@@ -432,6 +434,7 @@ type Diag enum {
     NotCallable
     JoinPieceCalled
     UnhandledFallibleCall
+    OperatorCallFails
     IsNotReferences
     IsNotOneType
     AsNeedsCase
@@ -470,6 +473,7 @@ type Diag enum {
     DefaultNoValue
     DefaultNeedsCatch
     TryNothingFails
+    TryOnlyChecks
     NestedArrayLiteral
     ArrayOfErrors
     ErrorTypeAsValue
@@ -540,8 +544,6 @@ type Diag enum {
     ReturnValueInVoid
     ReturnNeedsValue
     ErrorOutsideFunction
-    DefaultErrorNamedSig
-    DefaultErrorUndeclared
     ErrorWordIsPrivate
     ErrorUndeclared
     JoinWithoutSpawn
@@ -583,7 +585,6 @@ type Diag enum {
     MissingReturn
     BreakOutsideLoop
     DeferLoopJump
-    CatchDefaultNotProduced
     CatchNotProduced
     TryCatchOnSlice
     EmptyDestructor
@@ -807,7 +808,7 @@ fn TrailingComma(tok1 String&, tok2 String&) Msg { return Msg(Diag.TrailingComma
 fn VarListCount(n1 I64, n2 I64) Msg { return Msg(Diag.VarListCount, "D12b", $n1 " names need as many values, found " $n2) }
 
 # ERR_ERROR_AFTER_QUESTION
-fn ErrorAfterQuestion() Msg { return Msg(Diag.ErrorAfterQuestion, "R15", "'?' alone is the default error - write '?', or name the types: '? IoError'") }
+fn ErrorAfterQuestion() Msg { return Msg(Diag.ErrorAfterQuestion, "R1a", "'?' alone is what the body can fail with - write '?', or name the types: '? IoError'") }
 
 # ERR_VALUE_AFTER_EQ
 fn ValueAfterEq(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.ValueAfterEq, "D12", "a declaration's value follows '=' - write '" $text1 " = " $text2 "', or '" $text3 " := " $text4 "'") }
@@ -910,6 +911,12 @@ fn UnknownFunctionMeant(tok String&, text String&) Msg { return Msg(Diag.Unknown
 
 # ERR_UNKNOWN_ERROR_TYPE
 fn UnknownErrorType(tok String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok) }
+
+# ERR_FUNC_TYPE_ERRS_UNWRITTEN
+fn FuncTypeErrsUnwritten() Msg { return Msg(Diag.FuncTypeErrsUnwritten, "R1b", "a function type writes its error set - '? IoError' - since no body says what it is") }
+
+# ERR_TRAIT_ERRS_UNWRITTEN
+fn TraitErrsUnwritten() Msg { return Msg(Diag.TraitErrsUnwritten, "R1b", "a trait's method writes its error set - '? IoError' - since no body says what it is") }
 
 # ERR_TYPE_IS_PRIVATE
 fn TypeIsPrivate(tok String&) Msg { return Msg(Diag.TypeIsPrivate, "M6", "type " $tok " is private to its module") }
@@ -1278,7 +1285,7 @@ fn DeclaredOverAggregate(ty String&) Msg { return Msg(Diag.DeclaredOverAggregate
 fn NotTheOperator(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.NotTheOperator, "E31", $ty "'s " $text1 " takes " $text2 " besides its receiver - an ordinary method, not the one " $text3 " calls, which takes " $text4) }
 
 # ERR_TRY_MULTI_INDEX_NEEDS_TRYAT
-fn TryMultiIndexNeedsTryat(ty String&, text String&) Msg { return Msg(Diag.TryMultiIndexNeedsTryat, "E31a", "'try' on several indices needs " $ty " to declare " $text " - a check derived from Len checks one position") }
+fn TryMultiIndexNeedsTryat(ty String&, text String&) Msg { return Msg(Diag.TryMultiIndexNeedsTryat, "E31a", "'checked' on several indices needs " $ty " to declare " $text " - a check derived from Len checks one position") }
 
 # ERR_ARRAY_ONE_INDEX
 fn ArrayOneIndex(ty String&) Msg { return Msg(Diag.ArrayOneIndex, "E31", $ty " takes one index - several are passed to a type's At or SetAt") }
@@ -1289,14 +1296,14 @@ fn OperatorResult(text String&) Msg { return Msg(Diag.OperatorResult, "E31", $te
 # ERR_SETAT_RESULT
 fn SetatResult() Msg { return Msg(Diag.SetatResult, "E31", "SetAt gives no result") }
 
-# ERR_OPERATOR_FALLIBLE
-fn OperatorFallible(text1 String&, text2 String&) Msg { return Msg(Diag.OperatorFallible, "E31a", $text1 " cannot fail - its checked form is a method of its own, Try" $text2 ", which 'try' calls") }
+# ERR_CHECKED_NOT_SUPERSET
+fn CheckedNotSuperset(text1 String&, text2 String&, text3 String&, ty String&) Msg { return Msg(Diag.CheckedNotSuperset, "E31a", $text1 " is " $text2 "'s checked form, so it fails with every error " $text3 " can - add " $ty " after its '?'") }
 
 # ERR_TRY_FORM_MUST_FAIL
 fn TryFormMustFail(text String&) Msg { return Msg(Diag.TryFormMustFail, "E31a", $text " is a checked form, so it declares the errors it fails with") }
 
 # ERR_METHOD_CANNOT_FAIL
-fn MethodCannotFail(text String&) Msg { return Msg(Diag.MethodCannotFail, "E31", $text " cannot fail - the operation calling it has nowhere to write 'try'") }
+fn MethodCannotFail(text String&) Msg { return Msg(Diag.MethodCannotFail, "E31", $text " cannot fail - the operation calling it has nowhere to handle an error") }
 
 # ERR_LESS_NOT_BOOL
 fn LessNotBool() Msg { return Msg(Diag.LessNotBool, "E31", "Less, which '<' calls, gives a Bool") }
@@ -1590,7 +1597,7 @@ fn MemberIsPrivate(text String&, ty String&) Msg { return Msg(Diag.MemberIsPriva
 fn NotAssignable() Msg { return Msg(Diag.NotAssignable, "S4", "this cannot be written - a variable, an element or a member can") }
 
 # ERR_ASSIGN_INTO_TRIED
-fn AssignIntoTried() Msg { return Msg(Diag.AssignIntoTried, "R9a", "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store") }
+fn AssignIntoTried() Msg { return Msg(Diag.AssignIntoTried, "R9a", "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store") }
 
 # ERR_INCDEC_NOT_NUMBER
 fn IncdecNotNumber(tok String&, ty String&) Msg { return Msg(Diag.IncdecNotNumber, "S3a", $tok " takes a number, found " $ty) }
@@ -1743,7 +1750,7 @@ fn NoSuchCaseMeant(ty String&, tok String&, text String&) Msg { return Msg(Diag.
 fn ScopeArgCount() Msg { return Msg(Diag.ScopeArgCount, "E25", "a call takes at most one scope argument") }
 
 # ERR_ONLY_TRY_FORM
-fn OnlyTryForm(ty String&, text String&) Msg { return Msg(Diag.OnlyTryForm, "E31a", $ty " has only the checked form of this operation, " $text " - write it under 'try'") }
+fn OnlyTryForm(ty String&, text String&) Msg { return Msg(Diag.OnlyTryForm, "E31a", $ty " has only the checked form of this operation, " $text " - write it under 'checked'") }
 
 # ERR_MATMUL_UNDECLARED
 fn MatmulUndeclared(ty String&) Msg { return Msg(Diag.MatmulUndeclared, "E31", "'@' has no built-in meaning, and " $ty " declares no MatMul") }
@@ -1778,6 +1785,9 @@ fn JoinPieceCalled() Msg { return Msg(Diag.JoinPieceCalled, "E11b", "'(' after a
 # ERR_UNHANDLED_FALLIBLE_CALL
 fn UnhandledFallibleCall() Msg { return Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
 
+# ERR_OPERATOR_CALL_FAILS
+fn OperatorCallFails(text String&) Msg { return Msg(Diag.OperatorCallFails, "E31", "this operator calls " $text ", which can fail - write 'try' before the expression") }
+
 # ERR_IS_NOT_REFERENCES
 fn IsNotReferences(ty1 String&, ty2 String&) Msg { return Msg(Diag.IsNotReferences, "E10c", "'a is b' asks whether two references name one instance, and " $ty1 " and " $ty2 " are not both references") }
 
@@ -1803,10 +1813,10 @@ fn AsNothing(text String&) Msg { return Msg(Diag.AsNothing, "E32", "case " $text
 fn IsAsNotEnum(ty String&) Msg { return Msg(Diag.IsAsNotEnum, "E32", "'is' and 'as' ask which case an enum value is, and this is " $ty) }
 
 # ERR_TRY_INDEX_NEEDS_LEN
-fn TryIndexNeedsLen(ty String&) Msg { return Msg(Diag.TryIndexNeedsLen, "E31a", "'try c[i]' checks against Len, and " $ty " has neither TryAt nor Len") }
+fn TryIndexNeedsLen(ty String&) Msg { return Msg(Diag.TryIndexNeedsLen, "E31a", "'checked c[i]' checks against Len, and " $ty " has neither CheckedAt nor Len") }
 
 # ERR_TRY_SLICE_NEEDS_LEN
-fn TrySliceNeedsLen(ty String&) Msg { return Msg(Diag.TrySliceNeedsLen, "E31a", "'try c[lo:hi]' checks against Len, and " $ty " has neither TrySlice nor Len") }
+fn TrySliceNeedsLen(ty String&) Msg { return Msg(Diag.TrySliceNeedsLen, "E31a", "'checked c[lo:hi]' checks against Len, and " $ty " has neither CheckedSlice nor Len") }
 
 # ERR_SLICE_NEEDS_LEN
 fn SliceNeedsLen(ty String&) Msg { return Msg(Diag.SliceNeedsLen, "E31", "a slice with no end runs to Len(), and " $ty " has none") }
@@ -1890,7 +1900,10 @@ fn DefaultNoValue() Msg { return Msg(Diag.DefaultNoValue, "R11", "this call retu
 fn DefaultNeedsCatch() Msg { return Msg(Diag.DefaultNeedsCatch, "R11", "a default belongs to a catch clause: 'catch default v'") }
 
 # ERR_TRY_NOTHING_FAILS
-fn TryNothingFails() Msg { return Msg(Diag.TryNothingFails, "R20", "'try' needs something that can fail - a fallible call, or an operation it can check") }
+fn TryNothingFails() Msg { return Msg(Diag.TryNothingFails, "R8", "nothing here can fail - write it without 'try'") }
+
+# ERR_TRY_ONLY_CHECKS
+fn TryOnlyChecks() Msg { return Msg(Diag.TryOnlyChecks, "E15a", "nothing here fails as written - write 'checked' to check it") }
 
 # ERR_NESTED_ARRAY_LITERAL
 fn NestedArrayLiteral() Msg { return Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") }
@@ -1977,7 +1990,7 @@ fn MutOnLocal(ty String&) Msg { return Msg(Diag.MutOnLocal, "D11a", "a local is 
 fn MutOnInferredLocal() Msg { return Msg(Diag.MutOnInferredLocal, "D11a", "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") }
 
 # ERR_TRY_SETAT_NEEDS_LEN
-fn TrySetatNeedsLen(ty String&) Msg { return Msg(Diag.TrySetatNeedsLen, "E31a", "'try c[i] = v' checks against Len, and " $ty " has neither TrySetAt nor Len") }
+fn TrySetatNeedsLen(ty String&) Msg { return Msg(Diag.TrySetatNeedsLen, "E31a", "'checked c[i] = v' checks against Len, and " $ty " has neither CheckedSetAt nor Len") }
 
 # ERR_NOT_A_STATEMENT
 fn NotAStatement() Msg { return Msg(Diag.NotAStatement, "S3", "this computes a value and discards it - only a call, '++' or '--' stands alone") }
@@ -2102,12 +2115,6 @@ fn ReturnNeedsValue(ty String&) Msg { return Msg(Diag.ReturnNeedsValue, "D8", "t
 # ERR_ERROR_OUTSIDE_FUNCTION
 fn ErrorOutsideFunction() Msg { return Msg(Diag.ErrorOutsideFunction, "R3", "'error' fails a function, and this is not inside one") }
 
-# ERR_DEFAULT_ERROR_NAMED_SIG
-fn DefaultErrorNamedSig() Msg { return Msg(Diag.DefaultErrorNamedSig, "R16", "this function names its errors, so it fails with one of them: 'error T.WORD'") }
-
-# ERR_DEFAULT_ERROR_UNDECLARED
-fn DefaultErrorUndeclared() Msg { return Msg(Diag.DefaultErrorUndeclared, "R16", "this function declares no errors - add '?' to fail with the default error") }
-
 # ERR_ERROR_WORD_IS_PRIVATE
 fn ErrorWordIsPrivate(tok String&) Msg { return Msg(Diag.ErrorWordIsPrivate, "M6a", "error word " $tok " is private to its module") }
 
@@ -2230,9 +2237,6 @@ fn BreakOutsideLoop(tok String&) Msg { return Msg(Diag.BreakOutsideLoop, "S11", 
 
 # ERR_DEFER_LOOP_JUMP
 fn DeferLoopJump(tok String&) Msg { return Msg(Diag.DeferLoopJump, "S19b", $tok " may not leave deferred code - it runs while its block is left") }
-
-# ERR_CATCH_DEFAULT_NOT_PRODUCED
-fn CatchDefaultNotProduced() Msg { return Msg(Diag.CatchDefaultNotProduced, "R18", "the call does not fail with the default error") }
 
 # ERR_CATCH_NOT_PRODUCED
 fn CatchNotProduced(ty String&) Msg { return Msg(Diag.CatchNotProduced, "R14", "the call does not fail with " $ty) }

@@ -14970,6 +14970,7 @@ static const char* eqMethodName(struct checkCtx* ctx, struct type t) {
     return m && eqWellShaped(m) ? StrDupStr(m->name) : NULL;
 }
 
+static bool loopOwnCall; //S9e: the operator call being built is a for-in's own (its At), which the loop tries itself
 static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
                                         struct token tok) {
     //M6b: a protocol method by its private spelling is called only from its own module - where it is not, what stands
@@ -14993,7 +14994,7 @@ static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* re
     //Call it stands for, else as one of the calls in the try's operand (tryCover), else it is an error naming it
     bool prevAllow = ctx->allowFallibleCall;
     bool callForm = (name[0] == 'C' || name[0] == 'c') && !strcmp(name + 1, "all");
-    ctx->allowFallibleCall = callForm && prevAllow;
+    ctx->allowFallibleCall = (callForm || loopOwnCall) && prevAllow;
     const char* prevOp = operatorBeingCalled;
     operatorBeingCalled = name;
     struct operand* call = buildMethodCall(ctx, recv, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
@@ -16914,7 +16915,19 @@ static struct list tryErrors(struct operand* callOp, struct list* cover, bool ch
         if (errsUnknown(c->readVar)) *unknown = true;
         if (c != callOp) c->checkRoot = callOp;
         struct list* es = &c->readVar->type.errors;
-        for (int k = 0; k < es->len; k++) ListAdd(&opErrs, ListGetIdx(es, k));
+        for (int k = 0; k < es->len; k++) {
+            //what the call's own clauses take whole - a loop's Next taking Exhausted (S9a) - never reaches the try
+            struct type* e = *(struct type**)ListGetIdx(es, k);
+            bool own = false;
+            for (int q = 0; q < c->catchClauses.len && !own; q++) {
+                struct catchClause* cc = ListGetIdx(&c->catchClauses, q);
+                for (int m = 0; m < cc->matches.len && !own; m++) {
+                    struct catchMatch* cm = ListGetIdx(&cc->matches, m);
+                    own = !cm->hasWord && TypeIsSame(cm->errType, *e);
+                }
+            }
+            if (!own) ListAdd(&opErrs, ListGetIdx(es, k));
+        }
     }
     for (int i = 0; i < opErrs.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
@@ -23671,8 +23684,17 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     landKeptAll = spec != NULL;
     if (isArray || indexable) {
         if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
+        //S9e: the loop's own At is its to try - forInTryNote below says whether "in try" was written
+        bool prevAllow = lctx.allowFallibleCall;
+        struct list* prevCover = lctx.tryCover;
+        lctx.allowFallibleCall = true;
+        lctx.tryCover = NULL;
+        loopOwnCall = true;
         struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
                                          : OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
+        loopOwnCall = false;
+        lctx.allowFallibleCall = prevAllow;
+        lctx.tryCover = prevCover;
         if (!indexable) elem->noCheck = true;
         if (indexable) forInTryNote(&ft, &lctx, elem, NULL);
         if (indexable && split) forInSplitCall(elem, splitSrc, kw);
