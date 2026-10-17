@@ -21,3 +21,8 @@ std/os, std/filepath, text, extern fn where needed). Tell every agent in its bri
 compiler/tools/*.sh and genmsgs.py, bench/*.sh, checks/fixtures/http/server.py, the awk fixture) is rewritten in olang,
 each checked to give the same output; the one-off migrations are ported too.
 Whether the makefile also becomes olang (`olang build.olang`) was asked (QT).
+
+**Status 2026-10-17:** every Python script is ported (wt-pyport, merged): tools/*.olang (io_print, io_try, io_fix,
+bare_typevars, perm_mut, int_literal_i64, shared srcmask/diagedit), compiler/tools/genmsgs.olang, the HTTP test server
+in olang over sockets. Run a tool as `build/out -b tools/X.olang && build/tools_X ARGS` (tools/README.md). Left: the
+shell scripts (compiler/tools/*.sh, bench/*.sh, the awk fixture) - a later port.

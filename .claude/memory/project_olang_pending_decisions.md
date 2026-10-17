@@ -221,7 +221,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
   PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
-  print/println/eprint/eprintln and M19f's exception removed; tools/io_print.py migrates (wt-ioprint, started).
+  print/println/eprint/eprintln and M19f's exception removed; tools/io_print (now olang) migrates (wt-ioprint, started).
 - QO3 WITHDRAWN 2026-10-17. The user first chose bare `?` = the built-in errors (BuiltinError + the default error,
   named errors on top), then, told the cost (every callee may fail with the built-ins, so a complete `catch Named` in a
   function without `?` needs another catch), said "Ok nvm. Let's just not have built in errors". Reading taken: the
