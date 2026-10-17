@@ -5922,6 +5922,11 @@ t29dparams.olang:3:14: error[T29d]: this constructor takes one parameter, of typ
     3 | type Twin I32(a I32, b I32) { }
       |              ^
 compilation failed with 1 error
+=== t29dradixbad.olang
+t29dradixbad.olang:4:16: error[T29d]: this literal enters Radix through its constructor, which does not run on it while compiling: it fails with an error no clause handles
+    4 |     r := Radix(40)
+      |                ^~
+compilation failed with 1 error
 === t29dreturn.olang
 t29dreturn.olang:4:18: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
     4 |     if v > 100 { return 100 }
