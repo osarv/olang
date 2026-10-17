@@ -52,6 +52,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InCtor Bool = false
     Tries I64 = 0          # how many tries enclose: a fallible call needs one (R8)
     Fallible I64 = 0       # how many fallible calls and checked operations were met under one (R20)
+    LoopFails I64 = 0      # how many of a for-in's own calls can fail with more than Exhausted (S9e)
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
@@ -1771,8 +1772,12 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
 
 # a function named as a value (T21): its instance's body, no environment
 fn (c mut Checker&) fnValue(sp source.Span, f I64) typed.Expr&c {
-    if f < 0 or c.P.FnIsExtern(f) or c.P.VarCount(generic.FnOwner(f)) > 0 {
-        c.gap(sp, "a generic or extern function as a value (T21)")
+    if f >= 0 and not c.P.FnIsExtern(f) and c.P.VarCount(generic.FnOwner(f)) > 0 {
+        c.err(sp, msgs.GenericNotAValue(c.tok(c.P.FnDecl(f).Name)))
+        return c.unknown(sp)
+    }
+    if f < 0 or c.P.FnIsExtern(f) {
+        c.gap(sp, "an extern function as a value (T21)")
         return c.unknown(sp)
     }
     c.P.Sig(f)
@@ -2416,6 +2421,11 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     yy := y
     dx := c.deref(typeOf(x))
     dy := c.deref(typeOf(y))
+    if c.isRef(typeOf(y)) and c.isRef(typeOf(x)) and not c.meets(dx, dy) {
+        # E10c: references of two types never name one instance
+        c.err(c.between(a.Span(), b.Span(), 2), msgs.IsNotOneType(c.ty(typeOf(x)), c.ty(typeOf(y))))
+        return c.lit(sp, types.BoolT, 0)
+    }
     if c.isRef(typeOf(y)) and not c.P.T.Same(dy, dx) and c.flowsInto(dx, dy) {
         # E10c: an Array<T, N>& and an Array<T>& meet at the run-time length, as '==' meets them
         x = c.fit(x, c.P.T.Ref(dy, types.ReadOnly), a.Span())
@@ -2807,7 +2817,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             return c.methodCall(sp, x, n, nsp, args)
         }
         case ast.Expr.Generic(gsp, g, targs) { return c.genericCall(sp, gsp, g, targs, args, want) }
-        nomatch { return c.callValue(sp, f.Span(), c.expr(f, types.UnknownT), args) }
+        nomatch { return c.callValue(sp, c.opAfter(f.Span(), 1), c.expr(f, types.UnknownT), args) }
     }
 }
 
@@ -3246,7 +3256,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.exprs.Push(c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target)))
         k++
     }
-    if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.gap(nsp, "a fallible call outside a try (R8)") }
+    if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.err(nsp, msgs.UnhandledFallibleCall()) }
     if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 { c.fr().Fallible++ }
     c.leak(c.P.T.Errors(sig))
     c.lastErrs = c.P.T.Errors(sig)
@@ -4900,9 +4910,16 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
     fr := c.fr()
     lmark := fr.leaks.Len()
     from := c.stmts.Len()
+    fails := fr.LoopFails
+    fallible := fr.Fallible
     id, outer, mark := c.open(typed.BlockKind.Plain, sp)
     c.walk(sp, f, null, types.UnknownT)
     b := c.close(id, outer, mark, from)
+    # S9e: a loop whose own calls can fail is written "for x in try c", and one whose calls cannot is not
+    forSp := source.Span(sp.Start, sp.Start + 3)
+    if not f.Tried and fr.LoopFails > fails { c.err(forSp, msgs.ForInNeedsTry()) }
+    if f.Tried and fr.LoopFails == fails and fr.Fallible == fallible { c.err(forSp, msgs.ForInTryNothing()) }
+    fr.LoopFails = fails
     if not f.Tried {
         c.emit(typed.Stmt.Block(sp, b))
         return
@@ -4913,7 +4930,12 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
     if f.Clauses != null {
+        # its clauses run once the loop has ended: no loop of theirs to break or continue (S9e) - a stand-in loop says so
+        fr.loops.Push(-2)
+        fr.exits.Push(-2)
         for cl in f.Clauses { cls.Push(c.clause(cl, types.VoidT)) }
+        try fr.loops.Pop() catch { }
+        try fr.exits.Pop() catch { }
     }
     c.caught(lmark, cls)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
@@ -4970,7 +4992,10 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     }
     atm := c.roleMethod(dt, "At", 1)
     lm := c.roleMethod(dt, "Len", 0)
-    if f.Tried and c.roleMethod(dt, "TryAt", 1) >= 0 { atm = c.roleMethod(dt, "TryAt", 1) }
+    if f.Tried and c.roleMethod(dt, "TryAt", 1) >= 0 {
+        atm = c.roleMethod(dt, "TryAt", 1)
+        c.fr().LoopFails++
+    }
     if atm >= 0 and lm >= 0 {
         c.walkIndexed(sp, f, src, atm, lm, cm, ce)
         return null
@@ -5200,6 +5225,10 @@ fn (c mut Checker&) exhaustedOrBreak(sp source.Span, call typed.Expr&c, loop I64
 # a fallible call the loop makes with no try written: Exhausted aside, it may fail with nothing else (S9e)
 fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Array<typed.Expr&>&c) typed.Expr&c {
     fr := c.fr()
+    ex := c.P.PreludeType("std/prelude/iterator", "Exhausted")
+    for e in c.P.T.Items(c.P.T.Errors(c.P.Sig(f))) {
+        if not c.P.T.Same(e, ex) { fr.LoopFails++ }
+    }
     fr.Tries++
     x := c.invoke(sp, sp, f, recv, null, args)
     fr.Tries--
@@ -5533,6 +5562,10 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
             return
         }
         l := fr.loops[fr.loops.Len() - 1]
+        if l == -2 {
+            c.err(sp, msgs.ForInClauseExit())
+            return
+        }
         if kind == token.Tok.Break { l = fr.exits[fr.exits.Len() - 1] }
         jk := typed.JumpKind.Break if kind == token.Tok.Break else typed.JumpKind.Continue
         c.emit(typed.Stmt.Jump(sp, jk, typed.BlockId(I32(l))))
