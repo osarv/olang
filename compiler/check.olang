@@ -82,7 +82,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     queued I64 = 0
     state List<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
     fnBodies Map<I64, I64>                 # a function instance's body
-    ctorBodies Map<types.TypeId, I64>      # a type's constructor's body
+    ctorBodies Map<Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
     instsOf Map<I64, I64>                  # by generic function: how many instances were made (G17)
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
     globalBodies Map<Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
@@ -225,13 +225,61 @@ fn (c mut Checker&) fnBody(inst I64) I64 {
 }
 
 # a struct's constructor's body (C2), made and queued the first time a call asks for it
-fn (c mut Checker&) ctorBody(t types.TypeId) I64 {
-    id := try c.ctorBodies.Get(t) catch default -1
+fn (c mut Checker&) ctorBody(t types.TypeId) I64 { return c.twinBody(t, types.ListId(0)) }
+
+# the constructor's body of one binding of its own variables (G10d's twin; none for an ordinary constructor)
+fn (c mut Checker&) twinBody(t types.TypeId, args types.ListId) I64 {
+    key := Pair(I64(t), I64(args))
+    id := try c.ctorBodies.Get(key) catch default -1
     if id >= 0 { return id }
     d := c.P.T.DeclOf(t)
-    id = c.newBody(typed.BodyOf.Ctor(t, types.ListId(0)), c.P.CtorSig(t), c.P.T.DeclModule(d), source.Span(0, 0))
-    c.ctorBodies.Put(t, id)
+    id = c.newBody(typed.BodyOf.Ctor(t, args), c.P.CtorSigAt(t, args), c.P.T.DeclModule(d), source.Span(0, 0))
+    c.ctorBodies.Put(key, id)
     return id
+}
+
+# a call of a constructor introducing type variables (G10d): its variables inferred from the arguments as a generic
+# function's are (G9), the twin of that binding checked and called - every twin one type
+fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, args Array<ast.Expr&>&) typed.Expr&c {
+    sig := c.P.CtorSig(t)
+    if sig == types.UnknownT { return c.unknown(sp) }
+    d := c.P.T.DeclOf(t)
+    owner := generic.CtorOwner(d)
+    nv := c.P.CtorVars(d)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    b := generic.Binding(owner, nv)
+    checked List<typed.Expr&>
+    for i in range args.Len() {
+        e typed.Expr&c = null
+        v := c.fold(args[i])
+        if v.Ok or c.litLike(args[i]) {
+            fl := v.Float if v.Ok else c.litFloat(args[i])
+            if i < ps.Len() { c.unify(ps[i], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
+        } else {
+            match args[i] {
+                case ast.Expr.Lambda(_, _), ast.Expr.Default(_) { }
+                nomatch { e = c.expr(args[i], types.UnknownT) }
+            }
+        }
+        if e != null and i < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[i], c.bindType(e), b, false, false) }
+        checked.Push(e)
+    }
+    c.P.InferThroughBounds(b)
+    for i in range nv {
+        if b.Vals[i] == types.UnknownT {
+            c.err(nsp, msgs.CtorVarsNotInferable(c.ty(t)))
+            return c.unknown(sp)
+        }
+    }
+    vals := c.P.T.List(b.Vals)
+    isig := c.P.CtorSigAt(t, vals)
+    if isig == types.UnknownT { return c.unknown(sp) }
+    id := c.twinBody(t, vals)
+    was := c.ctorCalled
+    c.ctorCalled = t
+    r := c.callBody(sp, nsp, isig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, checked.ToArray())
+    c.ctorCalled = was
+    return r
 }
 
 fn (c mut Checker&) testBody(mi I64, sp source.Span, body Array<ast.Stmt&>&, index I64) {
@@ -292,7 +340,7 @@ fn (c mut Checker&) check(id I64) {
     c.state[id] = 1
     match c.Bodies[id].Of {
         case typed.BodyOf.Fn(inst) { c.checkFn(id, inst) }
-        case typed.BodyOf.Ctor(t, _) { c.checkCtor(id, t) }
+        case typed.BodyOf.Ctor(t, twin) { c.checkCtor(id, t, twin) }
         case typed.BodyOf.Global(mi, n) { c.checkGlobal(id, mi, n) }
         case typed.BodyOf.Dtor(t) { c.checkDtor(id, t) }
         nomatch { }
@@ -348,13 +396,13 @@ fn (c mut Checker&) nameSpan(fd ast.Func&) source.Span {
 }
 
 # a constructor's body (C2): its parameters, then its statements, every field declaration one of its Fields
-fn (c mut Checker&) checkCtor(id I64, t types.TypeId) {
+fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
     d := c.P.T.DeclOf(t)
     td := c.P.TypeDecl(d)
     mi := c.P.T.DeclModule(d)
     sig := c.Bodies[id].Ty
     fr := c.push(id, mi, types.VoidT, c.P.T.Errors(sig))
-    fr.Ctx = c.P.InstanceContext(t)
+    fr.Ctx = c.P.CtorContext(t, twin)
     fr.InCtor = true
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, source.Span(0, 0))
     if td != null and td.Body != null {
@@ -2656,6 +2704,7 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         return c.unknown(sp)
     }
     k := c.declKind(t)
+    if k == types.DeclKind.Struct and c.P.CtorVars(c.P.T.DeclOf(t)) > 0 { return c.twinCall(sp, nsp, t, args) }
     if k == types.DeclKind.Struct {
         sig := c.P.CtorSig(t)
         if sig == types.UnknownT { return c.unknown(sp) }

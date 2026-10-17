@@ -111,6 +111,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
 # the owners of variables: a type declaration's, a function's
 fn DeclOwner(d types.DeclId) I64 { return I64(d) * 2 }
 fn FnOwner(f I64) I64 { return f * 2 + 1 }
+# the variables a parameterless struct's constructor introduces (G10d) - its own, apart from the type's
+fn CtorOwner(d types.DeclId) I64 { return -(I64(d) * 2 + 2) }
 
 fn (p mut Program&) ensureModules() {
     for mi in range p.modules, p.L.Mods.Len() {
@@ -218,7 +220,7 @@ fn (p mut Program&) addVars(owner I64, ns Array<source.NameId>&) {
 
 # an owner's variables: how many, and the i-th's row
 fn (p mut Program&) VarCount(owner I64) I64 {
-    if owner % 2 == 0 { p.declVars(types.DeclId(I32(owner / 2))) }
+    if owner >= 0 and owner % 2 == 0 { p.declVars(types.DeclId(I32(owner / 2))) }
     return try p.varsN.Get(owner) catch default 0
 }
 
@@ -1535,11 +1537,48 @@ fn (p mut Program&) PreludeType(identity String&, name String&) types.TypeId { r
 # a struct's constructor's signature (C2, G10b), or a declared number's (T29d): its parameters as written, its type the
 # result - a destructor-declaring struct's by reference (C11) - and its errors, with RoleCtor's scopes (C2d); Unknown for
 # a type with no constructor
-fn (p mut Program&) CtorSig(t types.TypeId) types.TypeId {
+fn (p mut Program&) CtorSig(t types.TypeId) types.TypeId { return p.CtorSigAt(t, types.ListId(0)) }
+
+# the variables a struct's constructor introduces in its parameters (G10d) - none for a generic type's, whose
+# parameters write the type's own (G8b) - registered under CtorOwner: how many
+fn (p mut Program&) CtorVars(d types.DeclId) I64 {
+    owner := CtorOwner(d)
+    if (try p.varsAt.Get(owner) catch default -1) >= 0 { return p.VarCount(owner) }
+    ns List<source.NameId>
+    td := p.typeDecl(d)
+    if td != null and td.Body != null and (td.Params == null or td.Params.Len() == 0) {
+        match td.Body {
+            case ast.TypeBody.Struct(s) {
+                if s.Params != null {
+                    for prm in s.Params { p.introductions(prm.Ty, ns) }
+                }
+            }
+            nomatch { }
+        }
+    }
+    p.addVars(owner, ns.ToArray())
+    return ns.Len()
+}
+
+# a struct's context with its constructor's own variables bound (G10d): to args, a twin's binding, or where args is
+# empty to themselves
+fn (p mut Program&) CtorContext(t types.TypeId, args types.ListId) Context {
+    c := p.InstanceContext(t)
+    d := p.T.DeclOf(t)
+    owner := CtorOwner(d)
+    xs := p.T.Items(args)
+    for i in range p.CtorVars(d) {
+        c.Vars.Put(p.VarAt(owner, i).Name, xs[i] if i < xs.Len() else p.T.Var(owner, i, types.ReadOnly))
+    }
+    return c
+}
+
+# a constructor's signature with its own variables bound to args (G10d; CtorSig's for none)
+fn (p mut Program&) CtorSigAt(t types.TypeId, args types.ListId) types.TypeId {
     if p.T.KindOf(t) != types.Kind.Named { return types.UnknownT }
     td := p.typeDecl(p.T.DeclOf(t))
     if td == null or td.Body == null { return types.UnknownT }
-    c := p.InstanceContext(t)
+    c := p.CtorContext(t, args)
     match td.Body {
         case ast.TypeBody.Struct(s) { return p.paramsSig(c, s.Params, s.Errs, p.held(t)) }
         case ast.TypeBody.Over(_, ctor) {
