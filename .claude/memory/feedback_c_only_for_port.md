@@ -1,18 +1,25 @@
 ---
 name: feedback-c-only-for-port
-description: The C compiler (stage 0) changes only when the self-hosted compiler needs it to compile; the port is written in the best olang and C is amended to follow, never the reverse
+description: Stage 0 (C) keeps the language core and fundamentals in parity with the self-hosted compiler and gets every bug fix; extra domain features (arbitrary precision, FPGA targets...) live only in the self-hosted compiler
 metadata:
   type: feedback
 ---
 
-The user, 2026-10-17: "The C compiler only changes when a change is necessary to compile the 'real' self-hosted Olang
-compiler. This means that any features added to Olang that are not needed to compile the self-hosted compiler are not
-added to the C compiler. Furthermore, when building the Olang compiler, always build the best solution and amend the C
-compiler if that is necessary. We don't want to restrict the self-hosted compiler because the C compiler needs it."
+The user, 2026-10-17, first: "The C compiler only changes when a change is necessary to compile the 'real' self-hosted
+Olang compiler ... always build the best solution and amend the C compiler if that is necessary. We don't want to
+restrict the self-hosted compiler because the C compiler needs it." Then, refining it: "if something really
+fundamentally changes things, like the command line arguments that make the two compilers fundamentally different, then
+update the C one as well. Fix bugs in both etc. What I meant to say is that new flashy features for other things, like
+for example arbitrary precision types etc should be restricted to the real compiler. The C compiler should be fully
+functioning with all the relevant (and flashy) features to build the main compiler, but without the extra stuff like
+FPGA targets and stuff like that."
 
-**How to apply:** (1) a language feature, tool mode or driver option goes into the self-hosted compiler (compiler/);
-into bootstrap/ only if the port's own source (or the std it imports) uses it and stage 0 must compile that. (2) Write
-the port in the best olang the spec allows; if stage 0 cannot compile that, amend stage 0 - never bend the port's code
-around stage 0. (3) Fixes to stage 0 are made when they matter for compiling the port (memory, miscompiles the port
-could hit), not for their own sake. (4) Consequence: features that live only in the port are tested once stage 1 runs.
-Supersedes QB's "fixes only" where they differ.
+**How to apply:**
+- Into BOTH compilers: the language core and anything that would make the two fundamentally different (syntax, error
+  model, array model, generics, the command line, test semantics), everything the port's own source or its std uses,
+  and every bug fix (found in one, fixed in both).
+- ONLY into the self-hosted compiler: extra features for other domains - arbitrary-precision or arbitrary-width types,
+  FPGA/HLS targets, new backends, units of measure, generators, reflection and the like - unless the port itself comes to
+  need one, in which case stage 0 gets it.
+- The port is written in the best olang; stage 0 is amended to follow, never the reverse.
+- Today's batches (errors, arrays incl. QW, the word command line, formatter) are core: they go into both.
