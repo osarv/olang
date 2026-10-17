@@ -67,6 +67,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     TargetFails I64 = 0        # tasks binding targets that can fail into their join (P4d)
     DeferLoops I64 = -1        # in deferred code: the loops around it then - none of them a jump may leave (S19b)
     MsgLoops I64 = -1          # in an assert's message: the same (S17)
+    DeferJoins I64 = -1        # in deferred code: the joins around it then, none of which its spawns may join (S19b)
     joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
     joinMarks List<I64>        # where each one's errors start in joinErrs
     joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
@@ -101,6 +102,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
+    opIn source.Span = source.Span(-1, -1)    # where "in" is written, for the Has or Contains being built (E29)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
@@ -1040,8 +1042,13 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
         case typed.Place.Field(_, _, base, _) { c.mustWrite(base, sp, store) }
         case typed.Place.Elem(_, _, e) { c.mustWrite(e.Base, sp, store) }
         case typed.Place.Payload(_, _, pl) { c.mustWrite(pl.Base, sp, store) }
-        case typed.Place.Temp(_, _, _, _) {
-            if store { c.err(sp, msgs.WriteIntoCallValue()) }
+        case typed.Place.Temp(_, _, x, _) {
+            # a try's value is the element or what a clause gives - a copy either way (R9a)
+            tried := match x {
+                case typed.Expr.Try(_, _, _) => true
+                case _ => false
+            }
+            if store { c.err(sp, msgs.AssignIntoTried() if tried else msgs.WriteIntoCallValue()) }
         }
         nomatch { }
     }
@@ -3233,6 +3240,9 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
         c.err(b.Span(), msgs.UnknownMethod(c.ty(ct), "'" $name "'"))
         return c.lit(sp, types.BoolT, 0)
     }
+    # E29: a Has or Contains that can fail is written under try - said at "in"
+    c.opCall = c.text(c.P.FnDecl(m).Name)
+    c.opIn = c.between(a.Span(), b.Span(), 2)
     return c.invoke(sp, sp, m, coll, null, c.one(x))
 }
 
@@ -3718,6 +3728,8 @@ fn (c mut Checker&) unify(pat types.TypeId, actual types.TypeId, b mut generic.B
 fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, target typed.Callee&c, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c) typed.Expr&c {
     op := c.opCall
     c.opCall = ""
+    opIn := c.opIn
+    c.opIn = source.Span(-1, -1)
     decided := c.decided
     c.decided = false
     if sig == types.UnknownT { return c.unknown(sp) }
@@ -3784,7 +3796,13 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     }
     errs := types.ListId(0) if decided else c.calleeErrors(target, sig)
     if c.P.T.Items(errs).Len() > 0 and c.fr().Tries == 0 {
-        if op.Len() > 0 { c.err(nsp, msgs.OperatorCallFails(op)) } else { c.err(nsp, msgs.UnhandledFallibleCall()) }
+        if opIn.Start >= 0 {
+            c.err(opIn, msgs.MembershipNeedsTry(op))
+        } else if op.Len() > 0 {
+            c.err(nsp, msgs.OperatorCallFails(op))
+        } else {
+            c.err(nsp, msgs.UnhandledFallibleCall())
+        }
     }
     if c.P.T.Items(errs).Len() > 0 { c.fr().Fallible++ }
     c.leak(errs)
@@ -4467,12 +4485,35 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) ty
                 ps := c.P.T.Items(c.P.T.Parts(t))
                 if i < ps.Len() { pt = ps[i] }
             }
+            # R11: a default for a value holding references builds all it holds - nothing existing in it
+            if value and not c.isRef(pt) and c.P.T.HoldsRefs(pt) and not builtAst(cl.Defaults[i]) {
+                c.err(cl.Defaults[i].Span(), msgs.DefaultHoldsReferences())
+            }
             c.exprs.Push(c.exprTo(cl.Defaults[i], pt))
         }
     }
     all := cl.Items == null or cl.Items.Len() == 0
     defaults := gather(c.exprs, from)
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
+}
+
+# whether an expression builds all it holds (R11): literals, written text, calls and array literals of such, a case
+fn builtAst(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(_, _), ast.Expr.Join(_, _), ast.Expr.Member(_, _, _) => true
+        case ast.Expr.Paren(_, y) => builtAst(y)
+        case ast.Expr.Unary(_, op, y) => op == token.Tok.Minus and builtAst(y)
+        case ast.Expr.Call(_, _, args), ast.Expr.ScopeCall(_, _, _, args), ast.Expr.ArrayLit(_, _, args) => allBuilt(args)
+        case _ => false
+    }
+}
+
+fn allBuilt(xs Array<ast.Expr&>&) Bool {
+    if xs == null { return true }
+    for x in xs {
+        if not builtAst(x) { return false }
+    }
+    return true
 }
 
 # whether an expression may stand as a statement (S3): a call, a try of one, an increment, a take - else a value
@@ -4795,9 +4836,12 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
             id, outer, mark := c.open(typed.BlockKind.Defer, sp)
             # S19b: deferred code runs while its block is left - nothing may leave it
             was := c.fr().DeferLoops
+            wasJ := c.fr().DeferJoins
             c.fr().DeferLoops = c.fr().loops.Len()
+            c.fr().DeferJoins = c.fr().joins.Len()
             c.stmt(inner)
             c.fr().DeferLoops = was
+            c.fr().DeferJoins = wasJ
             b := c.close(id, outer, mark, from)
             c.emit(typed.Stmt.Defer(sp, b))
         }
@@ -4927,6 +4971,10 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
 # innermost join; what its clauses do not take reaches the join (P4b)
 fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call ast.Expr&) {
     fr := c.fr()
+    if fr.DeferLoops >= 0 and fr.joins.Len() <= fr.DeferJoins {
+        c.err(sp, msgs.SpawnInDefer())
+        return
+    }
     if fr.joins.Len() == 0 {
         c.err(sp, msgs.SpawnOutsideJoin())
         return
@@ -6022,9 +6070,16 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
     at := c.P.T.Array(et, types.TypeId(0))
     f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, null, null)
     from := c.stmts.Len()
+    fails := c.fr().LoopFails
     id, outer, mark := c.open(typed.BlockKind.Collect, sp)
     c.walk(sp, f, cm, et)
     b := c.close(id, outer, mark, from)
+    # E27, S9e: a comprehension whose own calls can fail is written under try - said at its "for"
+    if c.fr().LoopFails > fails and c.fr().Tries == 0 {
+        fa := try c.src(sp).Find(" for ") catch default -1
+        c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprNeedsTry())
+    }
+    c.fr().LoopFails = fails
     return typed.Expr.Collect(sp, at, typed.Collect(null, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None))
 }
 
