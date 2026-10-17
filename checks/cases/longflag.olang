@@ -1,4 +1,4 @@
-# check: fail unknown flag
-# flags: -race
-# B1: every flag is one character - a long spelling is an unknown flag, never taken for a file name
+# check: fail unknown option '-r'
+# flags: -r
+# B1: an option is a word - a one-character flag is an unknown option, never taken for a file name
 fn main() ? { }

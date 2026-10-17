@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # O18c/O17b (F3): handles all the way, "h := lll[0][0]; h.Push(x)"
 type Blk struct() {
     S List<I64>

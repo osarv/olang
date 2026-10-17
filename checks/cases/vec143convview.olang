@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # Vec phase 2a review x1 (T29a): a conversion of a reference a call gives names the referent's storage - the run time
 # copied it, where the compile-time evaluator and -i named it
 fn viewed() I64 {

@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/D16c: a lambda a Str makes calls a helper whose closure over the receiver's node is only ever called - nothing is
 # built where the node lives, and nothing left behind over 2M renderings (the closure once read the null scope as the
 # program's and was never reclaimed)

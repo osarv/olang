@@ -1232,7 +1232,7 @@ struct semaModule* semaLoadModule(struct str fileName) {
     char* buf = StrDupStr(fileName);
     if (pathIsDir(buf)) ErrFatal(fileName, ERR_IS_DIRECTORY);
     //M22a: a root takes its identity from where it really is - its path from the working directory, or its
-    //file name when outside it; a std module named directly ("olang -t std/list.olang") is the same module
+    //file name when outside it; a std module named directly ("olang test std/list.olang") is the same module
     //its importers call "std/list", so it gets the identity - and the symbols and object names - they give it
     char canon[PATH_MAX], cwd[PATH_MAX], stdCanon[PATH_MAX];
     char* named = realpath(buf, canon) ? canon : buf;

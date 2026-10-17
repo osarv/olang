@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E31b/O17b (G1): calls on a handle element of a handle element, and on an element of the List a Map gives, build
 # where the innermost list's state lives - read back after a churn under the scope sanitizer
 fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }

@@ -1,0 +1,25 @@
+# B13: every rule of the layout, once
+import "std/os"
+type Pair2 struct(a I64,b I64){
+  a
+     b
+}
+fn ( p Pair2& ) Sum( ) I64{return p.a+p.b}     # a trailing comment
+fn two( ) ( I64 , I64 ) { return 1,-2 }   # aligned with the one above
+
+
+
+fn main()?{
+  xs:=I64[1,2,3]
+  l := List<List<I64>>( )
+  n:=xs.Len()+ xs[0]*-xs[1]
+  if n>2 and
+  n<100 {
+      println( $n )
+  }
+  s := xs[ 1 : 2 ]
+  f:=fn(x I64)I64{ return x+1 }
+  a,b:=two()
+  println($f(a)  $b $s.Len() $l.Len()  )   ## a block comment ##
+  for i in range 3 {    }
+}

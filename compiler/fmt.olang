@@ -1,4 +1,4 @@
-# fmt - a file written in olang's one layout (SPEC.md B13), as "olang -f" writes it and "olang -l" checks it.
+# fmt - a file written in olang's one layout (SPEC.md B13), as "olang format" writes it and "olang format -check" checks it.
 #
 # The formatter works on the scanner's tokens, never on the tree: only what stands between two tokens changes - the
 # spaces on a line and the indentation before it - so the tokens, and with them the tree, are the file's own. The

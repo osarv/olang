@@ -146,7 +146,7 @@ fn runSeed(seed I64, dir String&) {
     expect Array<String&> = Array<String&>(Cases, "")
     has Array<Bool> = Array<Bool>(Cases)
     if not write(dir, seed, expect, has) { return }
-    if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b -d p.olang > c1.txt 2>&1") != 0 {
+    if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build -debug p.olang > c1.txt 2>&1") != 0 {
         finding(dir, seed, -1, "does not compile at -d (step 1)", read(dir, "c1.txt"))
         return
     }
@@ -171,7 +171,7 @@ fn runSeed(seed I64, dir String&) {
     # step 2: the asserts, built -O3; one decided false is a finding, and is left out to see the rest
     for attempt in range 3 {
         if not write(dir, seed, expect, has) { return }
-        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b p.olang > c2.txt 2>&1") == 0 { break }
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build p.olang > c2.txt 2>&1") == 0 { break }
         c2 := read(dir, "c2.txt")
         bad := falseAsserts(c2)
         if bad.Len() == 0 {
@@ -191,7 +191,7 @@ fn runSeed(seed I64, dir String&) {
     st := sh(dir, "timeout 120 ./build/p > b.txt 2> berr.txt")
     compare(dir, seed, out, read(dir, "b.txt"), "-b")
     if st != 0 { finding(dir, seed, -1, "-b run failed", read(dir, "berr.txt")) }
-    st = sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -i p.olang > i.txt 2> ierr.txt")
+    st = sh(dir, "timeout 600 nice -n 19 \"$OLANG\" interpret p.olang > i.txt 2> ierr.txt")
     compare(dir, seed, out, read(dir, "i.txt"), "-i")
     if st != 0 { finding(dir, seed, -1, "-i run failed", read(dir, "ierr.txt")) }
 }
@@ -298,7 +298,7 @@ fn scopeSeed(seed I64, dir String&) {
             scopeFinding(dir, seed, -1, "cannot write the program", "")
             return
         }
-        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b -d -s p.olang > c.txt 2>&1") == 0 {
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build -debug -sanitize p.olang > c.txt 2>&1") == 0 {
             built = true
             break
         }
@@ -323,7 +323,7 @@ fn scopeSeed(seed I64, dir String&) {
     #-i runs no destructors, so a program with them is held to itself: built -b, it must print what -d -s does, and every
     #resource made must have been destructed (the last line, "dtors 0")
     if scopegen.HasDtors(U64(seed)) {
-        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -b p.olang > cb.txt 2>&1") != 0 {
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build p.olang > cb.txt 2>&1") != 0 {
             scopeFinding(dir, seed, -1, "builds -d -s but not -b", read(dir, "cb.txt"))
             return
         }
@@ -332,7 +332,7 @@ fn scopeSeed(seed I64, dir String&) {
         if st == 0 and bst == 0 and sOut == bOut and sOut.Contains("\ndtors 0\n") {
             #own5 F3: its test blocks, if it has any, abandon tests past owners held for a call - each must be released
             if not read(dir, "p.olang").Contains("\ntest \"") { return }
-            sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -t -d -s p.olang > t.txt 2>&1")
+            sh(dir, "timeout 600 nice -n 19 \"$OLANG\" test -debug -sanitize p.olang > t.txt 2>&1")
             if read(dir, "t.txt").Contains("ok - every held owner was released") { return }
             scopeFinding(dir, seed, -1, "a test abandoned past an owner held for a call left it unreleased", read(dir, "t.txt"))
             return
@@ -346,7 +346,7 @@ fn scopeSeed(seed I64, dir String&) {
             return
         }
     } else {
-        ist := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" -i p.olang > i.txt 2> ierr.txt")
+        ist := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" interpret p.olang > i.txt 2> ierr.txt")
         if ist != 0 {
             scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
             return

@@ -3296,7 +3296,7 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
 static int ctRunStopped(struct ctState* st) {
     fflush(NULL);
     struct str f = st->whyTok.owner ? TokenGetFileName(st->whyTok.owner) : StrFromCStr("?");
-    fprintf(stderr, "olang -i: %.*s:%d: %s\n", f.len, f.ptr, st->whyTok.lineNr, st->why ? st->why : "it cannot go on");
+    fprintf(stderr, "olang interpret: %.*s:%d: %s\n", f.len, f.ptr, st->whyTok.lineNr, st->why ? st->why : "it cannot go on");
     return 1;
 }
 

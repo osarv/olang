@@ -62,7 +62,7 @@ build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
-	$(OLANG) -b compiler/tools/dump.olang
+	$(OLANG) build compiler/tools/dump.olang
 
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump
@@ -110,16 +110,16 @@ bootstrap: build/stage0
 	@echo "bootstrap: stage 0 is build/stage0 - compiler/ holds no olang compiler yet, so there are no later stages"
 
 run: $(OLANG)
-	$(OLANG_ENV) $(OLANG) -b runner.olang
+	$(OLANG_ENV) $(OLANG) build runner.olang
 
 # picks up every *.olang file automatically - a new test file needs no makefile edit to be included.
 # (usertest.olang is the one deliberate exception - a gitignored scratch file, never part of the suite.)
 test: $(OLANG)
-	$(OLANG_ENV) $(OLANG) -t $(OLANG_TESTS)
+	$(OLANG_ENV) $(OLANG) test $(OLANG_TESTS)
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
 usertest: $(OLANG)
-	$(OLANG) -b usertest.olang
+	$(OLANG) build usertest.olang
 	./build/usertest
 
 # O2c: every alloca this compiler emits belongs in its function's entry block, or a declaration inside a
@@ -161,7 +161,7 @@ verify:
 # that the language permits one since P3 was withdrawn - so a correct run of this target REPORTS exactly
 # one race, in shared.Tally.readOut, and exits nonzero for it. More than one means something regressed.
 race: $(OLANG)
-	-$(OLANG) -t -r $(filter-out checks/checks.olang, $(OLANG_TESTS))
+	-$(OLANG) test -race $(filter-out checks/checks.olang, $(OLANG_TESTS))
 	@echo "race: expect exactly one report, in shared.Tally.readOut (the intentional one)"
 
 # the differential fuzzer (fuzz/, K1): random programs whose every value is computed while compiling, built -O3, built
@@ -173,7 +173,7 @@ COUNT ?= 100
 JOBS ?= 2
 CASES ?= 30
 fuzz: $(OLANG)
-	nice -n 19 $(OLANG) -b -d fuzz/fuzz.olang
+	nice -n 19 $(OLANG) build -debug fuzz/fuzz.olang
 	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
 
 # the suite under the scope sanitizer (B2f): every use of storage after its scope closed stops the program, or fails the
@@ -181,14 +181,14 @@ fuzz: $(OLANG)
 # expected count either: a correct run passes every test, and a failure is a use after free the static check (section
 # 8) let through. checks.olang is left out: what it checks is the compiler, and it runs its own sanitized builds.
 scopesan: $(OLANG)
-	$(OLANG) -t -d -s $(filter-out checks/checks.olang, $(OLANG_TESTS))
+	$(OLANG) test -debug -sanitize $(filter-out checks/checks.olang, $(OLANG_TESTS))
 
 # the scope fuzzer (fuzz/scopegen.olang, B2f): random programs storing, lending, copying and returning where scopes close,
 # built under the scope sanitizer and interpreted, the two outputs compared. "make scopefuzz SEED=1 COUNT=300 SCENARIOS=12";
 # a run's findings land in its own directory's scope/, a line each in scope/findings.txt (named when there are any).
 SCENARIOS ?= 12
 scopefuzz: $(OLANG)
-	nice -n 19 $(OLANG) -b -d fuzz/fuzz.olang
+	nice -n 19 $(OLANG) build -debug fuzz/fuzz.olang
 	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz.debug scope $(SEED) $(COUNT) $(JOBS) $(SCENARIOS)
 
 # M2 of the port (compiler/DESIGN.md section 6): the self-hosted compiler's diagnostics - msgs.olang's and diag.olang's own
@@ -198,7 +198,7 @@ scopefuzz: $(OLANG)
 DIAG_TESTS = compiler/msgs.olang compiler/diag.olang compiler/tools/diaggold.olang
 OLANG_TESTS += compiler/tools/diaggold.olang  # msgs and diag are already in compiler/*.olang
 diagtest: build/out
-	build/out -t $(DIAG_TESTS)
+	build/out test $(DIAG_TESTS)
 diaggold: build/out
 	compiler/tools/diaggold_capture.sh build/out
 

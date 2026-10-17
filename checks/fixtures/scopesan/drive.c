@@ -1,5 +1,5 @@
 /* drives the scope sanitizer's runtime (B2f) directly: a closed scope's storage used after the close, by each way
-   the runtime tells apart, and a fault that is not the sanitizer's. Linked with the objects "olang -b -d -s stub.olang"
+   the runtime tells apart, and a fault that is not the sanitizer's. Linked with the objects "olang build -debug -sanitize stub.olang"
    builds, its "main" renamed out of the way */
 #include <stdint.h>
 #include <stdio.h>

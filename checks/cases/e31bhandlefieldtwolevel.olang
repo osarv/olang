@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # E31b/O17b/O18c (F2, F3): two levels, "ll[0][0].S.Push(x)" - the inner read "ll[0]" lent to the outer At as its reference
 type Blk struct() {
     S List<I64>

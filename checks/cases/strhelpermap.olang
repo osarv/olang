@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/O18c: a helper walking a Map handed the receiver's map ('for e in m', 'm.Keys()') builds nothing where it
 # lives - its iterators are its own (E11c): it runs, as the same loops in Str's body do
 fn total(m Map<String&, I64>&) I64 {

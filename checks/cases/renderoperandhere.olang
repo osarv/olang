@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11a/C2d: a value built only to be rendered is built where the '$' stands and judged there - never where the text
 # lands, which may outlive what it holds: its destructor-bearing field ran after 'local' was gone and read garbage
 type Node struct(v I64) {

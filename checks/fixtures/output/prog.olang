@@ -1,0 +1,2 @@
+# B3h: built where -output says
+fn main() ? { println("written where -output said") }

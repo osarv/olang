@@ -36,7 +36,7 @@ for c in "$@"; do
     for f in $flags; do
         case "$f" in
             -t) args="$args -t" ;;
-            -D) want=1; continue ;;
+            -define) want=1; continue ;;
             *) [ -n "$want" ] && args="$args -D $f" ;;
         esac
         want=""

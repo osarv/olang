@@ -1,4 +1,4 @@
-# fmt - the formatter "olang -f" and "olang -l" run (SPEC.md B13), over the self-hosted scanner and parser
+# fmt - the formatter "olang format" and "olang format -check" run (SPEC.md B13), over the self-hosted scanner and parser
 # (compiler/fmt.olang). Built by the compiler, which finds this file beside itself (bootstrap/main.c).
 #
 #     fmt -f FILE...    each file rewritten in place in the one layout

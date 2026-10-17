@@ -44,7 +44,7 @@ for c in checks/cases/*.olang; do
     for f in $(sed -n 's/^# flags: *//p' "$c" | head -1); do
         case "$f" in
             -t) flags="$flags -t" ;;
-            -D) want=1; continue ;;
+            -define) want=1; continue ;;
             *) [ -n "$want" ] && flags="$flags -D $f" ;;
         esac
         want=""
