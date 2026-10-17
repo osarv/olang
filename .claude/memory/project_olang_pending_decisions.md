@@ -124,7 +124,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   into the C driver now (tiny) and the port's; the formatter is written in olang on the port's scanner/parser
   (compiler/), the C `-f` handing files to it until self-hosting. Asked: 1. no flag or a flag; 2. 4 spaces, no wrap.
   DECIDED (the user: "1) and 2) are good. Is -f unused today?" - yes, free): no flag runs; `-f` formats, 4 spaces,
-  no wrapping. Being built (wt-runfmt).
+  no wrapping. Being built (wt-runfmt). And (the user: "add an option to decide output file for building and compiling"): `-o PATH`
+  names the executable (-b) or object (-c); default unchanged. Being built in wt-runfmt.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
