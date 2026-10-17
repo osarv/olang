@@ -312,6 +312,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QAC OPEN 2026-10-17: the static race-safety idea (next steps, recorded the same day) was built on `own`/`take` (a
   task's writable arguments moved in); with own removed (QAB) it needs a version without ownership, or dropping in
   favour of `-race`. Mine to bring back once docs/memory.md is settled.
+  The user: "2) good, do that" - rethought: without ownership the compiler cannot know two writable references are
+  distinct (why P3 was withdrawn), so static race safety is dropped; `-race` stays the checker (Go's position); safe
+  shapes made easy: `spawn out[i] = f(i)` (race-free by construction) and a std helper splitting an array into
+  disjoint pieces (`a.Chunks(n)`, as Rust's chunks_mut). In effect unless the user objects.
+- QAB APPROVED IN ADVANCE 2026-10-17 (the user, on docs/memory.md: "1) do it"): build as soon as the doc lands - own
+  and take removed from both compilers, Vec as a handle with explicit `v.View()`, early freeing by the compiler,
+  destructors unchanged at scope close, idempotent Close in std; come back only for a real direction question.
+- QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
