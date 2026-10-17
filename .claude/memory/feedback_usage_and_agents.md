@@ -116,5 +116,8 @@ days lost, though no files were. Standing measures:
    work into `refs/wip/<name>` in the shared repo, through a private index, never touching the agent's index, HEAD or
    files. Run at every check-in. It guards against an agent's mistake or a killed process, not a lost container.
 3. Every agent brief says: commit each coherent piece on your branch as you go, never one big commit at the end.
-4. Against a lost container only a push helps; pushing branches other than the designated one needs the user's OK
-   (asked 2026-10-17, ledger QM).
+4. Against a lost container: the user, 2026-10-17: "You can push to GitHub. I want to make sure I don't lose any progress
+   by running in the cloud. Else is rather run locally". So wipsnap.sh pushes, every 10 minutes when changed, each
+   worktree of olang, oann and oagent as `backup/<name>` (its branch plus a snapshot commit of uncommitted work), and
+   the review notes (/home/user/review, text only, through /home/user/.review-git) as olang's `backup/review`. Recovery:
+   `git fetch origin backup/<name>`. Delete a backup branch once its work is merged and the worktree removed.

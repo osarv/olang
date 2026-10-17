@@ -49,7 +49,7 @@ self-hosted compiler is done.
 - QL4. Offered, no answer yet: drafting a compute-credits application.
 
 **Asked 2026-10-17 (the user: "Make sure you don't lose any work when the limits are hit"):**
-- QM. May I push agents' work branches (`wt-*`, or `refs/wip/*` snapshots) to GitHub as backups? Only a push survives a
+- QM. ANSWERED YES 2026-10-17 ("You can push to GitHub ... Else is rather run locally") - built, wipsnap.sh. Was: May I push agents' work branches (`wt-*`, or `refs/wip/*` snapshots) to GitHub as backups? Only a push survives a
   lost container; the designated branch rule forbids other branches without the user's OK. In effect: local only
   (2-hourly snapshots and commits survive restarts, as on 10-10 and 10-17). Recommended: yes, as `backup/<name>`
   branches, pushed by the 2-hourly check-in, deleted once merged.
