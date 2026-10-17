@@ -211,7 +211,7 @@ type Stmt enum {
     Return(sp source.Span, values Array<Expr&>&)
     Jump(sp source.Span, kind token.Tok)               # break continue unreachable
     Assert(sp source.Span, cond Expr&, msg Expr&)
-    Raise(sp source.Span, word Path&)                  # error T.WORD, or the default error (null)
+    Raise(sp source.Span, word Path&)                  # error T.WORD
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
     Join(sp source.Span, j JoinS&)
     Defer(sp source.Span, s Stmt&)

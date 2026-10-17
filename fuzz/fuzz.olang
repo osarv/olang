@@ -88,7 +88,7 @@ fn main() ? {
     os.Run("mkdir -p " $os.Quote($Run "/found"))
     queue mut chan.Chan<I64>& = chan.Chan<I64>(count)
     chan.Init(queue)
-    for i in range count { chan.Send(queue, start + i) }
+    for i in range count { chan.Send(queue, start + i)! }
     chan.Close(queue)
     join {
         for w in range jobs { spawn worker(queue, w) }
@@ -268,7 +268,7 @@ fn scopeMain(args Array<String&>&) ? io.IoError {
     os.Run("mkdir -p " $os.Quote($Run "/scope"))
     queue mut chan.Chan<I64>& = chan.Chan<I64>(count)
     chan.Init(queue)
-    for i in range count { chan.Send(queue, start + i) }
+    for i in range count { chan.Send(queue, start + i)! }
     chan.Close(queue)
     join {
         for w in range jobs { spawn scopeWorker(queue, w) }

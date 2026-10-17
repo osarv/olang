@@ -79,13 +79,18 @@ fn (f mut Fetcher&) load() {
     }
 }
 
+# Locked's miss: the lock file has no line for the key
+error unlocked {
+    KEY
+}
+
 # the commit the lock file names for key, or a miss
 fn (f mut Fetcher&) Locked(key String&) String&f ? {
     f.load()
     for i in range f.keys.Len() {
         if f.keys[i] == key { return f.commits[i] }
     }
-    error
+    error unlocked.KEY
 }
 
 # records key at commit and writes the whole file back, sorted, so it reads the same however it was built up - a line

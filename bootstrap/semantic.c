@@ -16994,7 +16994,7 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     if (errors.len == 0) {
         //what failed to build was reported already, and a callee whose set is not known has said why in its body
         if (!callOp->type.unknown && !unknown && !inInstanceBody)
-            Err(tok, checked ? ERR_TRY_NOTHING_FAILS : tryWouldCheck(callOp) ? ERR_TRY_ONLY_CHECKS : ERR_TRY_NOTHING_FAILS);
+            { if (checked || !tryWouldCheck(callOp)) Err(tok, ERR_TRY_NOTHING_FAILS, checked ? "checked" : "try"); else Err(tok, ERR_TRY_ONLY_CHECKS); }
         return callOp;
     }
     callOp->isTried = true;
@@ -26928,7 +26928,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
     out.sType = STATEMENT_EXPR;
     out.op = root;
     if (!errors.len) {
-        if (!unknown && !inInstanceBody) Err(tok, checked ? ERR_TRY_NOTHING_FAILS : ERR_TRY_ONLY_CHECKS);
+        if (!unknown && !inInstanceBody) { if (checked) Err(tok, ERR_TRY_NOTHING_FAILS, "checked"); else Err(tok, ERR_TRY_ONLY_CHECKS); }
         return out;
     }
     root->isTried = true;
@@ -26991,7 +26991,7 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct list errors = tryErrors(callOp, &cover, checked, &checkWords, &unknown);
     if (!errors.len) {
         if (!callOp->type.unknown && !unknown && !inInstanceBody)
-            Err(tok, checked ? ERR_TRY_NOTHING_FAILS : tryWouldCheck(callOp) ? ERR_TRY_ONLY_CHECKS : ERR_TRY_NOTHING_FAILS);
+            { if (checked || !tryWouldCheck(callOp)) Err(tok, ERR_TRY_NOTHING_FAILS, checked ? "checked" : "try"); else Err(tok, ERR_TRY_ONLY_CHECKS); }
         return stmt;
     }
     struct operand* root = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_VOID));
@@ -27737,14 +27737,34 @@ static bool ensureGlobalBuilt(struct var* v) {
     return !v->type.unknown && v->type.bType != BASETYPE_VOID;
 }
 
+//R1a: a global whose type is written is built once every body has been checked - its type is all a body reads of it -
+//so what its initializer calls has its error set known when the initializer is checked: built before them, it read a
+//set still being inferred, and the whole program was checked again for it. A ":=" global is built first, its type being
+//its initializer's, and so is one owning what it holds (O31, O34)
+static struct list laterGlobals; //struct globalInitArg, in initialization order
 void semaBuildGlobalInits(struct semaModule* mod) {
     SemanticMethodScope = mod;
     for (int i = 0; i < mod->syn.decls.len; i++) {
         struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
         struct syntax* actual = partSntx(decl, 0);
         if (actual->type != SNTX_VAR_DECL) continue;
+        struct var* v = VarGetList(&mod->vars, strFromTok(firstTokOfType(actual, TOK_IDEN)));
+        if (v && firstPartOfType(actual, SNTX_TYPE_EXPR) && firstPartOfType(actual, SNTX_EXPR) && !v->type.refOwn
+                && !TypeIsOwnValue(v->type) && !v->type.unknown) {
+            struct globalInitArg a = { mod, actual };
+            ListAdd(&laterGlobals, &a);
+            continue;
+        }
         buildGlobalInit(mod, actual);
     }
+}
+static void buildLaterGlobals(void) {
+    for (int i = 0; i < laterGlobals.len; i++) {
+        struct globalInitArg* a = ListGetIdx(&laterGlobals, i);
+        SemanticMethodScope = a->mod;
+        buildGlobalInit(a->mod, a->actual);
+    }
+    laterGlobals.len = 0;
 }
 static void buildGlobalInit(struct semaModule* mod, struct syntax* actual) {
     {
@@ -30345,23 +30365,22 @@ static void settleInferredErrs(void) {
         struct errObs* o = ListGetIdx(&errObs, i);
         errsRedo = o->f->type.errors.len != o->len;
     }
-    if (errsRedo) {
-        errDecisions = ListInit(sizeof(struct errDecision));
-        for (int i = 0; i < inferredFuncs.len; i++) {
-            struct var* f = *(struct var**)ListGetIdx(&inferredFuncs, i);
-            struct errDecision d = { errFuncKey(f), ListInit(sizeof(struct errKey)) };
-            struct list sorted = ListInit(sizeof(struct type*));
-            ListAddList(&sorted, f->type.errors);
-            if (sorted.len) qsort(sorted.ptr, (size_t)sorted.len, sizeof(struct type*), errTypeCmp);
-            for (int k = 0; k < sorted.len; k++) {
-                struct type* e = *(struct type**)ListGetIdx(&sorted, k);
-                struct errKey ek = { e->owner ? e->owner->identity : (struct str){0}, e->name };
-                ListAdd(&d.errs, &ek);
-            }
-            ListAdd(&errDecisions, &d);
+    //what each set was found to be - where the next attempt starts, whether this one is redone for it or for a condition
+    errDecisions = ListInit(sizeof(struct errDecision));
+    for (int i = 0; i < inferredFuncs.len; i++) {
+        struct var* f = *(struct var**)ListGetIdx(&inferredFuncs, i);
+        struct errDecision d = { errFuncKey(f), ListInit(sizeof(struct errKey)) };
+        struct list sorted = ListInit(sizeof(struct type*));
+        ListAddList(&sorted, f->type.errors);
+        if (sorted.len) qsort(sorted.ptr, (size_t)sorted.len, sizeof(struct type*), errTypeCmp);
+        for (int k = 0; k < sorted.len; k++) {
+            struct type* e = *(struct type**)ListGetIdx(&sorted, k);
+            struct errKey ek = { e->owner ? e->owner->identity : (struct str){0}, e->name };
+            ListAdd(&d.errs, &ek);
         }
-        return;
+        ListAdd(&errDecisions, &d);
     }
+    if (errsRedo) return;
     //settled: each in its canonical order, in place, so every copy of its type made since reads it so too
     for (int i = 0; i < inferredFuncs.len; i++) {
         struct var* f = *(struct var**)ListGetIdx(&inferredFuncs, i);
@@ -30424,6 +30443,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     fixedCacheReset();
     bodiesPhase = false; //O10b
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
+    laterGlobals = ListInit(sizeof(struct globalInitArg)); //R1a
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
     paramDefaults = ListInit(sizeof(struct paramDefault*));
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
@@ -30545,6 +30565,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     for (int i = 0; i < inits.len; i++) semaBuildGlobalInits(*(struct semaModule**)ListGetIdx(&inits, i));
     buildParamDefaults(); //D8a: every global's type is known now
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
+    buildLaterGlobals(); //R1a: the globals whose types are written, once what they call is known
     //every instantiation discovered while checking those bodies, plus everything those discover in turn
     //one fixed point over both queues, not two in sequence: a function copy's body can instantiate a
     //generic type and a type copy's constructor body can call a generic function, in either order
@@ -30828,9 +30849,17 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
         }
         //S8b: an attempt whose local conditions all turned out runtime - already parsed as ordinary ifs - is
         //the final one, so a program with no compile-time conditions pays for no second attempt
+        //R1a: an attempt whose decisions only add code - a top-level condition, or a local one whose branches were skipped -
+        //keeps the sets found as where the next one starts, since its sets can only grow; one that may take code away (a
+        //local if parsed whole and now decided) finds them again from nothing
+        bool onlyAdds = true;
+        for (int i = 0; i < pending->len; i++) {
+            struct pendingCond* pc = ListGetIdx(pending, i);
+            if (pc->local && !pc->skipped) onlyAdds = false;
+        }
         bool decided = pending->len && decidePendingConditions();
         if (!decided && !layoutChanged) { ErrMsgBufferFlush(); return root; }
         ErrMsgBufferDiscard();
-        errDecisions = ListInit(sizeof(struct errDecision)); //R1a: another program now - its sets are found again
+        if (!onlyAdds) errDecisions = ListInit(sizeof(struct errDecision));
     }
 }

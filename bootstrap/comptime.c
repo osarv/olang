@@ -7,8 +7,8 @@
 //
 //What makes a computation impossible here, and so falls back to run time: reading a mutable global (its
 //value is the running program's), writing any global (skipping the computation at run time would then skip
-//the write), an extern call, a call through a function value whose target cannot be, done/fail, reaching
-//abort/unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
+//the write), an extern call, a call through a function value whose target cannot be, reaching
+//unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
 //shift or conversion (undefined at run time - refused here rather than guessed), and running out of the step
 //budget. Every one of those is reported with the operation that caused it. A join's tasks run in sequence, each
 //to completion at the join, in the order spawned (K1).
@@ -19,7 +19,7 @@
 //
 //B3e: under "-i" the same evaluation runs a whole program (CtRunProgram), and what it refuses above because
 //only a running program may do it is done instead: globals are read and written, an extern is called in this
-//process through libffi (the runtime's own functions, X6, by this file's versions of them), done/fail exit, a
+//process through libffi (the runtime's own functions, X6, by this file's versions of them), os.Exit exits, a
 //guaranteed check aborts with the runtime's message, and there is no step budget. What the built program leaves
 //undefined still stops it, now naming the operation and its place. Tasks and destructors are not interpreted yet.
 //Memory is still never reclaimed, which a long run will notice.

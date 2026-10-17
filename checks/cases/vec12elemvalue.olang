@@ -23,7 +23,7 @@ fn main() ? {
     churn()
     assert first.text == "a" and v.Len() == 41 and v[0].text == "a" and v[40].text == "t9"
     v[1] = Tok("b", 2)
-    taken := v.TakeAt(1)
+    taken := try v.TakeAt(1)
     churn()
     assert taken.text == "b" and v.Len() == 40 and v[1].text == "t1"
 }

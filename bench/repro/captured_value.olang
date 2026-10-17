@@ -17,8 +17,8 @@ fn captured(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) ? {
     try y.Map(x, fn(s) { return linalg.Cast(gelu(linalg.Cast(s, z)), like) })
 }
 
-fn declared(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) {
-    y.Map(x, fn(s) {
+fn declared(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) ? {
+    try y.Map(x, fn(s) {
         w A
         like T
         return linalg.Cast(gelu(linalg.Cast(s, w)), like)
@@ -37,7 +37,7 @@ type Op enum {
 fn run(c mut linalg.Matrix<F32>&, a linalg.Matrix<F32>&, b linalg.Matrix<F32>&, op Op) ? {
     match op {
         case Op.Captured { try captured(c, a, F32(0)) }
-        case Op.Declared { declared(c, a, F32(0)) }
+        case Op.Declared { try declared(c, a, F32(0)) }
         case Op.Add { try c.Map2(a, b, fn(p, q) { return p + q }) }
         case Op.Mul { try c.Map2(a, b, fn(p, q) { return p * q }) }
         case Op.Scale(k) {

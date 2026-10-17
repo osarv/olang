@@ -559,9 +559,14 @@ fn ruleIdAt(line String&) String&line {
     return l[2:p]
 }
 
+# Explain's failure: the specification states no such rule
+error RuleError {
+    NOT_FOUND
+}
+
 # rule's text in the specification spec, under the heading of the section holding it, as -e RULE prints it: from the
 # line defining it to the next rule or heading. A first letter written in lowercase is read as uppercase (-e t6b is
-# T6b). Fails with the default error when spec states no such rule
+# T6b). Fails with RuleError.NOT_FOUND when spec states no such rule
 fn Explain(spec String&, rule String&) String ? {
     want := StringBuilder()
     for i, c in rule { want.PushChar(c.ToUpper() if i == 0 else c) }
@@ -605,7 +610,7 @@ fn Explain(spec String&, rule String&) String ? {
         }
         out.Push(line)
     }
-    if not found { error }
+    if not found { error RuleError.NOT_FOUND }
     return out.ToString()
 }
 

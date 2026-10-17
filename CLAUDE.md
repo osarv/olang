@@ -302,7 +302,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (owner module, then name) so separately compiled modules agree; it may come out empty, and in a generic differ per
   instantiation. `? E` is a promise the body is held to. A function type and a trait method write their set (R1b); a
   named function fits a superset list, re-encoded. The default error, bare `error`, R15-R19 and generalization are
-  gone (the user: "error should always require an actual error"). `main` may have no `?` at all (B4).
+  gone (the user: "error should always require an actual error"). `main` may have no `?` at all (B4). Stage 0 checks
+  the program again whenever a set read before it was final grows - a recursive call, a cycle - keeping both
+  attempts' memory; a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
 - **`try` handles what fails as written; `checked` is try plus every check (R8, E15a, E24, QQ1, the user's design).**
   One `try` covers every fallible call and operator in its operand - arguments, a chain (`try f().g()`, reversing
   E24's one-call reading), a parenthesized expression - and never turns a check on; a `try` covering nothing is an

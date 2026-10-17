@@ -16499,12 +16499,15 @@ test "D10a/P4c: a function may end in a join that leaves" {
     assert (try peEndsInJoin(2000 * sbRun) catch peErr.BIG default -2 catch default -3) == -2
 }
 
-# P4b: a test left early by "done" while a task's failure is pending still waits for its tasks (P1d) and drops the error
-test "P4b: a test ending early waits for a failing task and drops its error" {
+# P4b: a test's "return" inside a join whose task fails waits for the task, and the join's failure replaces the return
+# (it used to be "done", which ended the test and dropped the error - S16, decision 50's every way out)
+test "P4b: a return inside a failing join is replaced by the join's failure" {
+    caught := false
     try join {
         spawn try peSpin(-sbRun, 200000)
         return
-    } catch peErr { unreachable }
+    } catch peErr { caught = true }
+    assert caught
 }
 
 # ---- the batch 6 review (2026-10-10): stores through a collection's element, conditionals of references, a

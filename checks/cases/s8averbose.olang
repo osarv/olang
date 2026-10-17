@@ -7,5 +7,5 @@ FromBuild Bool = DebugBuild or false
 fn helper3() I32 { return 3 }
 fn main() ? E {
     x := 3
-    assert Verbose != 1
+    if Verbose == 1 { return }
 }

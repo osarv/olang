@@ -5274,7 +5274,7 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
 }
 
 //a scope of an expression's own, opened in the code being emitted and closed by cgScratchScopeClose before the expression is
-//done with - while a test runs it is on the unwind chain (P1d), so a "done", "fail" or failed check before the close still
+//done with - while a test runs it is on the unwind chain (P1d), so an "unreachable", a "!" or a failed check before the close still
 //reclaims it (and runs what was registered in it)
 static char* cgScratchScopeOpen(struct cgCtx* ctx, char** nodeOut, char** prevTopOut) {
     char* scope = cgNewTmp(ctx);
@@ -5308,7 +5308,7 @@ static void cgScratchScopeClose(struct cgCtx* ctx, char* scope, char* node, char
 
 //E11c: the text the type's own Str gives for the value at addr - called once, where the rendering reaches it, which is
 //only ever while one is built in one pass (a rendering reaching a Str always is). Its result lives in a scope of its
-//own, closed once the text is copied; while a test runs that scope is on the unwind chain (P1d), so a "done", "fail" or
+//own, closed once the text is copied; while a test runs that scope is on the unwind chain (P1d), so an "unreachable", a "!" or
 //failed check inside Str still runs what it registered. Where the receiver lives is not known in Str's body (O12), so
 //nothing is built there - the checker's walk (SemanticMayBuildInto) found nothing, and codegen holds every body to that
 //(cgCheckMayBuild) - and the receiver's scope variables are handed that same scope: a real one, which a closure's or an
@@ -7652,10 +7652,8 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     ctx->terminated = true;
 }
 
-//exit is treated as a plain OS process exit (like C's exit()), unrelated to the function's declared error
-//S16c/S16d: both go through the same path a failed check does - abort with a message outside a test,
-//recoverable inside one, exactly as "assert(false)" already behaved. That is the point: "abort" is
-//assert(false) with its intent stated, and "unreachable" states a different intent again.
+//S16d: "unreachable" goes through the same path a failed check does - abort with a message outside a test, recoverable
+//inside one
 //S18a: where a written check failed, as its message's prefix - "FILE:LINE: what" and then sep ("\n", or ": " before a
 //message of the program's own). A statement the compiler made has no line of its own, and says only what failed
 static char* cgCheckWhere(struct cgCtx* ctx, struct statement* s, const char* what, const char* sep) {

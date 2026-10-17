@@ -196,12 +196,17 @@ fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
     return try p.typeIndex.Get(Pair(mi, I64(name))) catch default -1
 }
 
+# FindDecl's miss: no module of that identity, or no type of that name in it
+error Undeclared {
+    TYPE
+}
+
 # a declared type by its canonical name, "IDENTITY:Name"
 fn (p mut Program&) FindDecl(identity String&, name String&) types.DeclId ? {
     p.ensureModules()
-    mi := try p.identity.Get(identity) catch { error }
+    mi := try p.identity.Get(identity) catch { error Undeclared.TYPE }
     ei := p.TypeEntry(mi, p.L.Names.Intern(name))
-    if ei < 0 { error }
+    if ei < 0 { error Undeclared.TYPE }
     return p.DeclFor(mi, ei)
 }
 
@@ -1629,11 +1634,16 @@ fn (p mut Program&) BoundMet(owner I64, args types.ListId) Bool {
 
 # ---- canonical texts ----
 
+# what a canonical text that names no type fails with
+error BadCanon {
+    TEXT
+}
+
 # the type a canonical text names (types.Canon's form): the inverse of Canon over a program's types
 fn (p mut Program&) ParseCanon(text String&) types.TypeId ? {
     cur := cursor(text)
     t := try p.canonType(cur)
-    if cur.At != text.Len() { error }
+    if cur.At != text.Len() { error BadCanon.TEXT }
     return t
 }
 
@@ -1651,17 +1661,17 @@ fn (c mut cursor&) eat(s String&) Bool {
 
 fn (c cursor&) peek() Char { return c.Text[c.At] if c.At < c.Text.Len() else Char(0) }
 
-fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? {
+fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon + Undeclared {
     perm := types.ReadOnly
     if c.eat("own ") { perm = perm | types.Owning }
     if c.eat("mut ") { perm = perm | types.Writable }
     t := try p.canonInner(c)
     if c.eat("&") { return p.T.Ref(t, perm) }
-    if perm != types.ReadOnly { error }
+    if perm != types.ReadOnly { error BadCanon.TEXT }
     return t
 }
 
-fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? {
+fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon + Undeclared {
     if c.eat("fn(") { return try p.canonFunc(c) }
     if c.eat("struct(") { return p.T.Record(try p.canonList(c, ")")) }
     if c.eat("enum{") { return try p.canonEnum(c) }
@@ -1670,7 +1680,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? {
         elem := try p.canonType(c)
         length := types.TypeId(0)
         if c.eat(", ") { length = p.T.Const(p.T.Prim("I64"), try canonNumber(c)) }
-        if not c.eat(">") { error }
+        if not c.eat(">") { error BadCanon.TEXT }
         return p.T.Array(elem, length)
     }
     start := c.At
@@ -1680,7 +1690,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? {
         if word == "Bool" { return types.BoolT }
         if word == "default" { return types.DefaultErrT }
         t := p.T.Prim(word)
-        if t == types.UnknownT { error }
+        if t == types.UnknownT { error BadCanon.TEXT }
         return t
     }
     c.At++
@@ -1693,7 +1703,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? {
     args List<types.TypeId>
     for {
         i := args.Len()
-        if i >= p.T.DeclParams(d) { error }
+        if i >= p.T.DeclParams(d) { error BadCanon.TEXT }
         if p.T.ParamIsConst(d, i) {
             want := p.VarAt(owner, i).Const
             if c.eat("true") {
@@ -1707,7 +1717,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? {
             args.Push(try p.canonType(c))
         }
         if c.eat(">") { break }
-        if not c.eat(", ") { error }
+        if not c.eat(", ") { error BadCanon.TEXT }
     }
     return p.Instance(d, p.T.List(args.ToArray()))
 }
@@ -1720,7 +1730,7 @@ fn canonNumber(c mut cursor&) I64 ? {
     for c.At < c.Text.Len() and c.peek().IsDigit() { c.At++ }
     txt := c.Text[start:c.At]
     v := try txt.ParseInt() catch {
-        u := try txt.ParseUint() catch { error }
+        u := try txt.ParseUint() catch { error BadCanon.TEXT }
         return I64(u)
     }
     return v
@@ -1732,7 +1742,7 @@ fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
     for {
         xs.Push(try p.canonType(c))
         if c.eat(close) { break }
-        if not c.eat(", ") { error }
+        if not c.eat(", ") { error BadCanon.TEXT }
     }
     return p.T.List(xs.ToArray())
 }
@@ -1769,9 +1779,9 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
         for {
             xs.Push(try canonNumber(c))
             if c.eat("]") { break }
-            if not c.eat(",") { error }
+            if not c.eat(",") { error BadCanon.TEXT }
         }
-        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error }
+        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error BadCanon.TEXT }
         n := xs[1]
         all := xs.ToArray()
         scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
@@ -1783,7 +1793,7 @@ fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
     ns List<source.NameId>
     ps List<types.TypeId>
     for not c.eat("}") {
-        if ns.Len() > 0 and not c.eat(" ") { error }
+        if ns.Len() > 0 and not c.eat(" ") { error BadCanon.TEXT }
         start := c.At
         for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_') { c.At++ }
         ns.Push(p.L.Names.Intern(c.Text[start:c.At]))

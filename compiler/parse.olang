@@ -1064,8 +1064,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         }
         case token.Tok.Error {
             p.advance()
-            word ast.Path&p = null
-            if p.sees(token.Tok.Iden) { word = try p.path() }
+            word := try p.path()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Raise(sp, word)
@@ -2338,7 +2337,7 @@ fn (p mut Parser&) hint(want String&) Bool {
     pr := f - 1
     pk := p.kindAt(pr)
     pl := p.lineAt(pr)
-    # L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
+    # L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
     if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Arrow {
         p.reportAt(f, msgs.KeywordFieldRead(p.named(f)))
         return true

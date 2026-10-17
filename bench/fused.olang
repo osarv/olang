@@ -69,37 +69,37 @@ fn attention(T I64, threads I64) ? io.IoError + linalg.ShapeError {
     try compare(title, String&["per head", "batched", "batched causal"], fn() {
         for g in range B {
             for h in range heads {
-                try ws.Gemm(S[g, h], Q[g, h], false, K[g, h], true, scale, 0, threads)
-                try ws.Gemm(Y[g, h], P[g, h], false, V[g, h], false, 1, 0, threads)
+                ws.Gemm(S[g, h], Q[g, h], false, K[g, h], true, scale, 0, threads)!
+                ws.Gemm(Y[g, h], P[g, h], false, V[g, h], false, 1, 0, threads)!
             }
         }
     }, fn() {
-        try ws.GemmBatch(S, Q, false, K, true, scale, 0, linalg.Triangular.None, 0, threads)
-        try ws.GemmBatch(Y, P, false, V, false, 1, 0, linalg.Triangular.None, 0, threads)
+        ws.GemmBatch(S, Q, false, K, true, scale, 0, linalg.Triangular.None, 0, threads)!
+        ws.GemmBatch(Y, P, false, V, false, 1, 0, linalg.Triangular.None, 0, threads)!
     }, fn() {
-        try ws.GemmBatch(S, Q, false, K, true, scale, 0, linalg.Triangular.Result, 0, threads)
-        try ws.GemmBatch(Y, P, false, V, false, 1, 0, linalg.Triangular.Left, 0, threads)
+        ws.GemmBatch(S, Q, false, K, true, scale, 0, linalg.Triangular.Result, 0, threads)!
+        ws.GemmBatch(Y, P, false, V, false, 1, 0, linalg.Triangular.Left, 0, threads)!
     })
     title2 := "attention T " $T " threads " $threads " backward (dP = dO V^T, dQ = dS K, dK = dS^T Q, dV = P^T dO), ms:"
     try compare(title2, String&["per head", "batched", "batched causal"], fn() {
         for g in range B {
             for h in range heads {
-                try ws.Gemm(DP[g, h], DY[g, h], false, V[g, h], true, 1, 0, threads)
-                try ws.Gemm(DQ[g, h], P[g, h], false, K[g, h], false, 1, 0, threads)
-                try ws.Gemm(DK[g, h], P[g, h], true, Q[g, h], false, 1, 0, threads)
-                try ws.Gemm(DV[g, h], P[g, h], true, DY[g, h], false, 1, 0, threads)
+                ws.Gemm(DP[g, h], DY[g, h], false, V[g, h], true, 1, 0, threads)!
+                ws.Gemm(DQ[g, h], P[g, h], false, K[g, h], false, 1, 0, threads)!
+                ws.Gemm(DK[g, h], P[g, h], true, Q[g, h], false, 1, 0, threads)!
+                ws.Gemm(DV[g, h], P[g, h], true, DY[g, h], false, 1, 0, threads)!
             }
         }
     }, fn() {
-        try ws.GemmBatch(DP, DY, false, V, true, 1, 0, linalg.Triangular.None, 0, threads)
-        try ws.GemmBatch(DQ, P, false, K, false, 1, 0, linalg.Triangular.None, 0, threads)
-        try ws.GemmBatch(DK, P, true, Q, false, 1, 0, linalg.Triangular.None, 0, threads)
-        try ws.GemmBatch(DV, P, true, DY, false, 1, 0, linalg.Triangular.None, 0, threads)
+        ws.GemmBatch(DP, DY, false, V, true, 1, 0, linalg.Triangular.None, 0, threads)!
+        ws.GemmBatch(DQ, P, false, K, false, 1, 0, linalg.Triangular.None, 0, threads)!
+        ws.GemmBatch(DK, P, true, Q, false, 1, 0, linalg.Triangular.None, 0, threads)!
+        ws.GemmBatch(DV, P, true, DY, false, 1, 0, linalg.Triangular.None, 0, threads)!
     }, fn() {
-        try ws.GemmBatch(DP, DY, false, V, true, 1, 0, linalg.Triangular.Result, 0, threads)
-        try ws.GemmBatch(DQ, P, false, K, false, 1, 0, linalg.Triangular.Left, 0, threads)
-        try ws.GemmBatch(DK, P, true, Q, false, 1, 0, linalg.Triangular.Left, 0, threads)
-        try ws.GemmBatch(DV, P, true, DY, false, 1, 0, linalg.Triangular.Left, 0, threads)
+        ws.GemmBatch(DP, DY, false, V, true, 1, 0, linalg.Triangular.Result, 0, threads)!
+        ws.GemmBatch(DQ, P, false, K, false, 1, 0, linalg.Triangular.Left, 0, threads)!
+        ws.GemmBatch(DK, P, true, Q, false, 1, 0, linalg.Triangular.Left, 0, threads)!
+        ws.GemmBatch(DV, P, true, DY, false, 1, 0, linalg.Triangular.Left, 0, threads)!
     })
 }
 
@@ -115,13 +115,13 @@ fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) ? io.IoError 
     ws mut linalg.GemmWorkspace<F32>& = linalg.GemmWorkspace<F32>()
     title := "dense " $rows " x " $inner " -> " $outer " " $act ", ms:"
     try compare(title, String&["Gemm+AddRow+Activate", "GemmAct with pre", "GemmAct"], fn() {
-        try ws.Gemm(z, x, false, w, true)
-        try z.AddRow(b)
-        try y.Activate(z, act)
+        ws.Gemm(z, x, false, w, true)!
+        z.AddRow(b)!
+        y.Activate(z, act)!
     }, fn() {
-        try ws.GemmAct(y, x, false, w, true, b, act, 1, 0, 1, z)
+        ws.GemmAct(y, x, false, w, true, b, act, 1, 0, 1, z)!
     }, fn() {
-        try ws.GemmAct(y, x, false, w, true, b, act)
+        ws.GemmAct(y, x, false, w, true, b, act)!
     })
 }
 
@@ -188,26 +188,26 @@ fn conv(C I64, H I64, W I64, K I64, outC I64) ? io.IoError + linalg.ShapeError {
     title := "conv " $C "->" $outC " on " $H "x" $W ", batch 128, forward with bias and ReLU, ms:"
     try compare(title, String&["oann im2col+Gemm+AddRow+ReLU", "Im2col+GemmAct", "GemmPatches"], fn() {
         oannIm2col(x.Data, n, C, H, W, K, 1, 1, cols.Data)
-        try ws.Gemm(y, cols, false, w, true)
-        try y.AddRow(b)
-        try y.Activate(y, linalg.Activation.Relu)
+        ws.Gemm(y, cols, false, w, true)!
+        y.AddRow(b)!
+        y.Activate(y, linalg.Activation.Relu)!
     }, fn() {
-        try p.Im2col(cols)
-        try ws.GemmAct(y, cols, false, w, true, b, linalg.Activation.Relu)
+        p.Im2col(cols)!
+        ws.GemmAct(y, cols, false, w, true, b, linalg.Activation.Relu)!
     }, fn() {
-        try ws.GemmPatches(y, p, w, true, b, linalg.Activation.Relu)
+        ws.GemmPatches(y, p, w, true, b, linalg.Activation.Relu)!
     })
     title3 := "conv " $C "->" $outC " on " $H "x" $W ", the products alone (patches made), ms:"
     try compare(title3, String&["forward, y = cols w^T", "dW = dY^T cols"], fn() {
-        try ws.Gemm(y, cols, false, w, true)
+        ws.Gemm(y, cols, false, w, true)!
     }, fn() {
-        try ws.Gemm(dw, g, true, cols, false)
+        ws.Gemm(dw, g, true, cols, false)!
     })
     title4 := "conv " $C " channels on " $H "x" $W ": making the patches, ms:"
     try compare(title4, String&["oann im2col", "Im2col"], fn() {
         oannIm2col(x.Data, n, C, H, W, K, 1, 1, cols.Data)
     }, fn() {
-        try p.Im2col(cols)
+        p.Im2col(cols)!
     })
 }
 

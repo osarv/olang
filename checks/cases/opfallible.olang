@@ -1,7 +1,19 @@
-# check: fail error[E31a]: Mul cannot fail
-# E31: an operator method's shape
+# check: run
+# E31/QQ1: a plain operator method may declare errors - the operator then fails as written, under 'try' like a call
+# (it used to be E31a's "Mul cannot fail")
+error VErr {
+    ZERO
+}
 type V struct(x I32) {
     x
 }
-fn (a V) Mul(b V) V ? { return a }
-fn main() ? { }
+fn (a V) Mul(b V) V ? VErr {
+    if b.x == 0 { error VErr.ZERO }
+    return V(a.x * b.x)
+}
+fn main() ? {
+    p := try (V(3) * V(4))
+    assert p.x == 12
+    q := try (V(3) * V(0)) catch VErr default V(-1)
+    assert q.x == -1
+}

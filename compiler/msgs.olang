@@ -1898,7 +1898,7 @@ fn DefaultNoValue() Msg { return Msg(Diag.DefaultNoValue, "R11", "this call retu
 fn DefaultNeedsCatch() Msg { return Msg(Diag.DefaultNeedsCatch, "R11", "a default belongs to a catch clause: 'catch default v'") }
 
 # ERR_TRY_NOTHING_FAILS
-fn TryNothingFails() Msg { return Msg(Diag.TryNothingFails, "R8", "nothing here can fail - write it without 'try'") }
+fn TryNothingFails(text String&) Msg { return Msg(Diag.TryNothingFails, "R8", "nothing here can fail - write it without '" $text "'") }
 
 # ERR_BANG_NOTHING_FAILS
 fn BangNothingFails() Msg { return Msg(Diag.BangNothingFails, "E35", "nothing here can fail - write it without '!'") }

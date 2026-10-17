@@ -134,6 +134,7 @@ fn (w mut writer&) sig(s ast.Sig&) {
     w.put("(")
     w.params(s.Params)
     w.put(")")
+    if s.NoReturn { w.put(" noreturn") }
     if s.Results.Len() == 1 {
         w.put(" ")
         w.ty(s.Results[0])
@@ -386,8 +387,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.put(" ")
             w.expr(value)
         }
-        case ast.Stmt.TryStore(_, inner, cl, checked) {
-            w.put("checked " if checked else "try ")
+        case ast.Stmt.TryStore(_, inner, cl, isChecked) {
+            w.put("checked " if isChecked else "try ")
             w.stmt(inner)
             w.clauses(cl)
         }
@@ -712,8 +713,8 @@ fn (w mut writer&) expr(x ast.Expr&) {
                 w.expr(y)
             }
         }
-        case ast.Expr.Try(_, y, cl, checked) {
-            w.put("checked " if checked else "try ")
+        case ast.Expr.Try(_, y, cl, isChecked) {
+            w.put("checked " if isChecked else "try ")
             w.expr(y)
             w.clauses(cl)
         }

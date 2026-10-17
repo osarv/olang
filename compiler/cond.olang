@@ -73,12 +73,17 @@ fn (c mut Consts&) text(t String&) I64 {
     return c.Texts.Len() - 1
 }
 
+# a name that is not there: a build constant (Consts.find) or a global (Scope.find)
+error missing {
+    NAME
+}
+
 # the index of a build constant, or a miss
 fn (c Consts&) find(name String&) I64 ? {
     for i in range c.names.Len() {
         if c.names[i] == name { return i }
     }
-    error
+    error missing.NAME
 }
 
 # whether name is a build constant, and whether it is one of B10a's
@@ -265,7 +270,7 @@ fn (s Scope&) find(name String&) Global&s ? {
     for g in s.globals {
         if g.Name == name { return g }
     }
-    error
+    error missing.NAME
 }
 
 # ---- evaluation ----

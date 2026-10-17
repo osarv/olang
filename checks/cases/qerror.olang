@@ -1,4 +1,4 @@
-# check: fail error[R15]: '?' alone is the default error
-# R15: the default error is '?' by itself
+# check: fail error[R1a]: '?' alone is what the body can fail with
+# R1a: an error set is '?' alone, or named types after it
 fn main() ?error {
 }

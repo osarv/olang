@@ -55,13 +55,13 @@ fn runAll() Array<String&>& {
     outcomes mut Array<String&>&return = Array<String&>(n)
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
-    for k in range Scenarios.Len() { chan.Send(queue, k) }
+    for k in range Scenarios.Len() { chan.Send(queue, k)! }
     join {
         for w in range Workers { spawn worker(queue, outcomes) }
         seed := fresh(Seed)
         try os.WriteFile($seed "/seed.olang", "fn main() ? { }\n") catch { }
         sh(seed, "\"$OLANG\" -b seed.olang > out.txt 2>&1")
-        for k in range Scenarios.Len(), n { chan.Send(queue, k) }
+        for k in range Scenarios.Len(), n { chan.Send(queue, k)! }
         chan.Close(queue)
     }
     return outcomes

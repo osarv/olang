@@ -19112,3 +19112,14 @@ purpose (inside a join, two frames down, in a helper with deferred code, in a St
 an escaping error, by a `!`), each read back by the test after it, the whole output compared with a `.want`, plus
 programs whose escaping error and `!` traces are compared built, built `-d` and interpreted. Bare `error` statements left
 in checks cases and fixtures were given an `error Stop { HERE }` of their own.
+The `if C { fail }` rule is wrong for one kind of program: a must-fail check whose subject is the `if` itself (S8a's
+dead branches). Four such cases were turned into asserts and stopped failing; they now end their branch with `return`.
+
+**Found on the way: inferred sets made the corpus checks run twice as often.** R1a's fixed point redoes an attempt when
+a set grows, and a global initializer that calls a function read its set before the body had been checked - always
+empty, so every program with such a global took a second attempt (shared.olang's test build was OOM-killed under it).
+Two changes, neither visible to a program: a global whose type is written is built after the bodies, as its type
+does not depend on it (one whose type comes from its initializer still comes first); and the sets settled by one
+attempt seed the next whenever that attempt only adds - every condition still pending is a top-level one or a
+skipped branch - so a condition attempt never starts the fixed point again. shared.olang's `-c` is 4 attempts and
+4.2GB again, as before the batch.
