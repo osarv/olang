@@ -1,0 +1,10 @@
+reading file "msgs100.gz" - please wait, this might take some time...
+Debuggee command was: build/out -c /home/user/review/mem/scale/msgs100.olang
+finished reading file, now analyzing data:
+
+total runtime: 1.815000s.
+calls to allocation functions: 163624 (90150/s)
+temporary memory allocations: 8087 (4455/s)
+peak heap memory consumption: 933.00M
+peak RSS (including heaptrack overhead): 576.80M
+total memory leaked: 932.36M
