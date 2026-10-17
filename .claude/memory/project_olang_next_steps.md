@@ -34,7 +34,8 @@ overrated".
 - QUEUED language batches from 2026-10-17 (ledger QO1-QO6, QP1-QP3), one after the other after wt-ioprint and
   wt-e31view merge, the port's checker already told: (1) ERRORS - inferred error sets, the default error and bare
   `error` removed, std's own errors (never BuiltinError), new `try` checks (<< overflow, float narrowing, sign changes),
-  INVALID to IEEE, WRONG_CASE for `as`; (2) ARRAYS - one constructor `Array<T>(n)`, lengths inferred where made and
+  INVALID to IEEE, WRONG_CASE for `as`; QQ1 (try for what fails as written, `checked` = try + checks, Try forms renamed Checked forms,
+  their errors a superset of the plain method's, plain operator methods may declare errors); (2) ARRAYS - one constructor `Array<T>(n)`, lengths inferred where made and
   through results, written `Array<T, N>` and constant generics (G20-G28) dropped, arrays by value (an instance per
   known length; a run-time length by value an error), call-site asserts.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).

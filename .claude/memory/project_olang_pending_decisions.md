@@ -94,7 +94,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   generic's parameter checked per instantiation - holds at most 128 bytes as laid out (padding included); a larger one
   is a compile-time error naming its size and `&`. Results are not capped. Part of the arrays batch; the corpus and std
   migrated by the compiler's own errors.
-- QQ1 ASKED 2026-10-17 (the user: "try (...) should cover all of ..."; "try f().g() should bind to both. Why did we
+- QQ1 DECIDED 2026-10-17 (the user: "try (...) should cover all of ..."; "try f().g() should bind to both. Why did we
   decide against that?" - answered: never decided, an artifact of the one-call allowance, E13b/E24 2026-10-07/09).
   Proposed and confirmed in substance ("So try is for calls and checked for operators and calls?" - yes): `try` covers
   every fallible call in its operand, a parenthesized expression or a chain included, and never turns on a check;
@@ -107,7 +107,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   extra ones - "I don't like that operators can sometimes have a try but no checked". RECOMMENDED (asked): the second -
   a plain operator method may declare errors (`try` handles them, as for a call); its Checked form must declare a
   superset of them (checked at the declaration), so checked only adds; with no Checked form, `checked` calls the plain
-  method (indexing keeps its derived Len check). Awaiting the user.
+  method (indexing keeps its derived Len check). DECIDED (the user: "This requires the checked version to have a
+  superset of errors right?" - yes - "Anything else is a compile error"; reading taken: the whole QQ1 design accepted):
+  try for what fails as written (calls, chains, operators whose plain method declares errors; covers every such call in
+  its operand); checked = try + every optional check; Checked forms' errors a superset of the plain method's, else a
+  compile error at the declaration; no try-block. QUEUED in the errors batch.
   The Try forms are renamed to match (the user: "So then tryAt etc becomes checkedAt?" - yes): CheckedAt, CheckedPlus,
   CheckedSetAt, CheckedSlice, ... (private checkedAt), reversing the user's own TryAt pick of 2026-10-07. `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
   built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
