@@ -27176,7 +27176,8 @@ static void buildGlobalInit(struct semaModule* mod, struct syntax* actual) {
                 ownValueGiven(&ctx, rhs, v->type, NULL, 0, true);
                 v->initExpr = rhs;
                 buildDefaultFor(mod, v, nameTok);
-                continue;
+                ListRemoveIdx(&globalsBuilding, globalsBuilding.len - 1);
+                return;
             }
             if (v->type.refOwn || rhs->opType == OPERATION_TAKE) { //O34: an own global - its reach the program's scope
                 if (!v->type.refOwn) v->type = rhs->type;
