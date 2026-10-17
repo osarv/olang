@@ -26,6 +26,8 @@ import "math"
 # why a statistic has no value
 error StatsError {
     TOO_FEW             # an empty array, or one value for a sample variance or deviation
+    OUT_OF_RANGE        # a percentile p outside 0 to 100
+    BAD_EDGES           # a histogram's edges not two or more and increasing, or Edges given no bin or an empty range
 }
 
 # the sum of the elements, as an F64 - pairwise, so its error grows only with the logarithm of the length. The empty
@@ -68,7 +70,7 @@ fn Median(a Array<<T>>&) F64 ? StatsError { return try Percentile(a, 50.0) }
 # not changed: the values are copied and only the two needed are put in place (a selection, O(n) on average, not a
 # sort). For several percentiles of one array, Percentiles sorts once
 fn Percentile(a Array<<T>>&, p F64) F64 ? StatsError {
-    assert p >= 0.0 and p <= 100.0, "stats.Percentile: p is a percentage, from 0 to 100"
+    if not (p >= 0.0 and p <= 100.0) { error StatsError.OUT_OF_RANGE }
     n I64 = a.Len()
     if n == 0 { error StatsError.TOO_FEW }
     v := Array<F64>(n)
@@ -100,7 +102,7 @@ fn Percentiles(a Array<<T>>&, ps Array<F64>&) Array<F64> ? StatsError {
     out := Array<F64>(ps.Len())
     if not nan { v.Sort(fn(x, y) { return x < y }) }
     for j, p in ps {
-        assert p >= 0.0 and p <= 100.0, "stats.Percentiles: p is a percentage, from 0 to 100"
+        if not (p >= 0.0 and p <= 100.0) { error StatsError.OUT_OF_RANGE }
         if nan {
             out[j] = math.NaN
             continue
@@ -131,11 +133,11 @@ fn Max(a Array<<T>>&) T ? StatsError {
 # how many elements fall in each bin the edges bound, numpy's histogram: k + 1 increasing edges make k bins, bin i
 # holding the values from edges[i] up to but not including edges[i + 1] - the last one including its right edge as
 # well. A value below the first edge or above the last, or a NaN, is in no bin. Edges that are not two or more and
-# increasing are a mistake in the program, which stops it
-fn Histogram(a Array<<T>>&, edges Array<F64>&) Array<I64> {
-    assert edges.Len() >= 2, "stats.Histogram: two edges at least, for one bin"
+# increasing fail with BAD_EDGES
+fn Histogram(a Array<<T>>&, edges Array<F64>&) Array<I64> ? StatsError {
+    if edges.Len() < 2 { error StatsError.BAD_EDGES }
     for i in range 1, edges.Len() {
-        assert edges[i - 1] < edges[i], "stats.Histogram: the edges must increase"
+        if not (edges[i - 1] < edges[i]) { error StatsError.BAD_EDGES }
     }
     counts := Array<I64>(edges.Len() - 1)
     last I64 = edges.Len() - 1
@@ -155,8 +157,8 @@ fn Histogram(a Array<<T>>&, edges Array<F64>&) Array<I64> {
 
 # bins + 1 edges spaced evenly from lo to hi, the last exactly hi (numpy's linspace) - for Histogram:
 # stats.Histogram(a, stats.Edges(0.0, 1.0, 10)) counts the values in ten bins of a tenth each
-fn Edges(lo F64, hi F64, bins I64) Array<F64> {
-    assert bins >= 1 and lo < hi, "stats.Edges: one bin at least, between lo and a greater hi"
+fn Edges(lo F64, hi F64, bins I64) Array<F64> ? StatsError {
+    if bins < 1 or not (lo < hi) { error StatsError.BAD_EDGES }
     out := Array<F64>(bins + 1)
     step F64 = (hi - lo) / F64(bins)
     for i in range bins { out[i] = lo + F64(i) * step }

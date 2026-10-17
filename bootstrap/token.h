@@ -19,6 +19,7 @@ enum tokenType {
     TOK_IF,
     TOK_ELSE,
     TOK_TRY,
+    TOK_CHECKED, //"checked (...)", "checked a[i]" - a try that also turns on every optional check inside (E15a)
     TOK_CATCH,
     TOK_RET,
     TOK_JOIN,  //"join { ... }" - a block that waits for every task spawned in it before it ends (P1)

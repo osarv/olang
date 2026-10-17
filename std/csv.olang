@@ -31,6 +31,7 @@
 error CsvError {
     BARE_QUOTE          # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
     TEXT_AFTER_QUOTE    # something other than a separator or a line break after a field's closing quote: "a"b
+    BAD_SEPARATOR       # a separator that is a quote or a line break, which could never be told apart from the text
     UNCLOSED_QUOTE      # the text ends inside a quoted field
 }
 
@@ -54,7 +55,7 @@ type Rows struct(of String&, sep Char = ',') {
 # the next record's fields - failing with Exhausted when the text has no more, and with CsvError when the next one is
 # not CSV, the reader then staying where it was
 fn (r mut Rows&) Next() Array<String&> ? CsvError + Exhausted {
-    assert r.sep != '"' and r.sep != '\n' and r.sep != '\r', "csv: a separator cannot be a quote or a line break"
+    if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error CsvError.BAD_SEPARATOR }
     t := r.text
     n I64 = t.Len()
     if r.at >= n { error Exhausted.END }
@@ -141,8 +142,8 @@ fn unquote(inner String&, pairs I64) String {
 # separator, a quote or a line break - with its quotes doubled. Other fields are written as they are, so
 # Record(String&["a", "b c", "say \"hi\""]) is a,b c,"say ""hi"""\n. No fields at all is "\n", which reads back as
 # one empty field - CSV has no record of none. New text, built at its length once, where its result is put
-fn Record(fields Array<String&>&, sep Char = ',') String {
-    assert sep != '"' and sep != '\n' and sep != '\r', "csv: a separator cannot be a quote or a line break"
+fn Record(fields Array<String&>&, sep Char = ',') String ? CsvError {
+    if sep == '"' or sep == '\n' or sep == '\r' { error CsvError.BAD_SEPARATOR }
     n I64 = fields.Len() if fields.Len() > 0 else 1    # the separators and the line break
     for f in fields {
         n += f.Len()

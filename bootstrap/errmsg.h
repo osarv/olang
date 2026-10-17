@@ -463,7 +463,8 @@ struct type;
     X(ERR_CLAUSE_LAST_VALUE,            "R11",   "a block's last value is not the clause's value - write '} default %S' after the block") \
     X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
-    X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
+    X(ERR_TRY_NOTHING_FAILS,            "R8",    "nothing here can fail - write it without 'try'") \
+    X(ERR_TRY_ONLY_CHECKS,              "E15a",  "nothing here fails as written - write 'checked' to check it") \
     /* ---- literals and constructions ---- */ \
     X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") \
     X(ERR_ARRAY_OF_ERRORS,              "T20",   "%t has no values to put in an array") \

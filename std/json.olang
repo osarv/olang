@@ -29,6 +29,7 @@ error JsonError {
     DEPTH               # arrays and objects nest more than MaxDepth deep
     MISSING             # no member by that name, or no item at that index
     WRONG_KIND          # the value is not the kind asked for: AsNum on a string, a name asked of an array
+    UNEVEN              # an Object built from names and values of different counts
 }
 
 # how deeply arrays and objects may nest in a text Parse reads - a bound that keeps code walking a tree recursively,
@@ -49,11 +50,11 @@ type Json enum {
 # name gives the LAST member by it, as most readers of JSON do. Built from the two arrays, which must be as long as
 # each other: Json.Obj(Object(String&["a", "b"], Json&[Json.Num(1.0), Json.Null])). Objects with more than
 # eight members are indexed by a hash of their names when built, so asking costs the same whatever their size.
-type Object struct(Keys Array<String&>&, Values Array<Json&>&) {
+type Object struct(Keys Array<String&>&, Values Array<Json&>&) ? JsonError {
+    if Keys.Len() != Values.Len() { error JsonError.UNEVEN }
     Keys
     Values
     index Array<I32>& = nameIndex(Keys)         # empty, or slots of member position + 1 (0 an empty slot)
-    assert Keys.Len() == Values.Len()
 }
 
 # where Parse stopped: the byte offset into the text, and the line and the column there, both from 1 - a column
@@ -182,26 +183,26 @@ fn (o Object&) Has(key String&) Bool {
     return true
 }
 
-# where the last member named key is, failing - with the default error - when none is. Names are compared byte by
+# where the last member named key is, failing with MISSING when none is. Names are compared byte by
 # byte rather than with "==", so that key may be text passed by value (a generic's String), which it can only index
-fn (o Object&) find(key <K>) I64 ? {
+fn (o Object&) find(key <K>) I64 ? JsonError {
     if o.index.Len() == 0 {
         i I64 = o.Keys.Len() - 1
         for i >= 0 {
             if sameName(o.Keys[i], key) { return i }
             i--
         }
-        error
+        error JsonError.MISSING
     }
     mask I64 = o.index.Len() - 1
     s I64 = nameHash(key) & mask
     for probe in range o.index.Len() {
         at I64 = I64(o.index[s])
-        if at == 0 { error }
+        if at == 0 { error JsonError.MISSING }
         if sameName(o.Keys[at - 1], key) { return at - 1 }
         s = (s + 1) & mask
     }
-    error
+    error JsonError.MISSING
 }
 
 fn sameName(a String&, b <K>) Bool {

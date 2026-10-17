@@ -32,6 +32,7 @@ struct tokRule tokRules[] = {
     {TOK_IF, "if", NULL},
     {TOK_ELSE, "else", NULL},
     {TOK_TRY, "try", NULL},
+    {TOK_CHECKED, "checked", NULL},
     {TOK_CATCH, "catch", NULL},
     {TOK_RET, "return", NULL},
     {TOK_JOIN, "join", NULL},

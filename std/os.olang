@@ -97,11 +97,11 @@ fn Args() Array<String&>& {
     return args
 }
 
-# the value of the environment variable "name" - failing, with the default error, when it is not set (one set to
-# nothing is "")
-fn Env(name String&) String& ? {
+# the value of the environment variable "name" - failing with NOT_FOUND when it is not set (one set to nothing is "")
+fn Env(name String&) String& ? OsError {
     key := $name "\0"
-    return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) }) catch OsError { error }
+    return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) })
+        catch OsError { error OsError.NOT_FOUND }
 }
 
 # B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the same exit path

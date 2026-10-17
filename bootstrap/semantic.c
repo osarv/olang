@@ -16802,17 +16802,22 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
 
 //R20: marks every operation in a tried expression that can fail a check as checked by root, and returns the
 //BuiltinError words they can produce. Not through a call (which has its own signature) or a nested try.
-static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs);
+static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs, bool checks);
 //E31: an operator, index or slice a declared type implements is a call the compiler made, and is reached through as the
-//built-in operation would be; one that is a Try form can fail, so it is checked by root too, its errors added to errs.
-static unsigned markChecked(struct operand* op, struct operand* root, struct list* errs) {
+//built-in operation would be; one that is a Checked form, or a plain one that can fail, is checked by root too, its
+//errors added to errs. checks (QQ1, "checked"): the built-in operations are checked too - without it only the calls
+//fail through root. A call written by name is the try's cover's (tryErrors); its arguments are reached through.
+static unsigned markChecked(struct operand* op, struct operand* root, struct list* errs, bool checks) {
     //a call with clauses of its own that is also under root (a comprehension's Next, S9a): root takes what they do not
     bool ownAndRoot = op && op->isTried && op->isOperatorCall && op->opType == OPERATION_FUNCCALL;
-    if (!op || (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) || (op != root && !ownAndRoot && (op->isTried || op->checkRoot)))
-        return 0;
+    if (!op || (op != root && !ownAndRoot && (op->isTried || op->checkRoot))) return 0;
     unsigned w = 0;
+    if (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) {
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
+        return w;
+    }
     //held operands, an increment; a comprehension's loop, whose own calls a "try" around it covers (S9e)
-    if (op->opType == OPERATION_SEQ || op->opType == OPERATION_COMPREHENSION) w |= markCheckedStmts(&op->comprBody, root, errs);
+    if (op->opType == OPERATION_SEQ || op->opType == OPERATION_COMPREHENSION) w |= markCheckedStmts(&op->comprBody, root, errs, checks);
     if (op->opType == OPERATION_FUNCCALL) {
         struct list* es = &op->readVar->type.errors;
         if (es->len) {
@@ -16831,7 +16836,11 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
                 if (!seen) ListAdd(errs, &e);
             }
         }
-        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs);
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
+        return w;
+    }
+    if (!checks) {
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
         return w;
     }
     unsigned dbz = 1u << SemanticBuiltinErrorWord("DIVIDE_BY_ZERO"), ovf = 1u << SemanticBuiltinErrorWord("OVERFLOW");
@@ -16865,34 +16874,83 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
         default: break;
     }
     if (w) op->checkRoot = root;
-    for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs);
+    for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
     return w;
 }
 
-//E31: whether a try's operand is, as written, a call - "try f(x)", "try a.b().c()" - whose own signature says what
-//can fail; anything else is what "try" checks (R20), its operators calling their Try forms
-static bool tryOperandIsWrittenCall(struct syntax* n) {
-    if (!n) return false;
-    if (n->type == SNTX_EXPR_POSTFIX && n->parts.len > 1) {
-        struct syntaxPart* last = partAt(n, n->parts.len - 1);
-        if (last->isToken) return false;
-        if (last->sntx->type == SNTX_EXPR_VALUE_CALL) return true;
-        return last->sntx->type == SNTX_EXPR_MEMBR && firstPartOfType(last->sntx, SNTX_EXPR_ARGS);
+
+//QQ1: every operation in op's tree failing through from fails through to instead
+static void reRootChecks(struct operand* op, struct operand* from, struct operand* to) {
+    if (!op) return;
+    if (op->checkRoot == from) op->checkRoot = to;
+    if (op != from && op->isTried) return;
+    for (int i = 0; i < op->args.len; i++) reRootChecks(*(struct operand**)ListGetIdx(&op->args, i), from, to);
+    for (int i = 0; i < op->comprBody.len; i++) {
+        struct statement* st = ListGetIdx(&op->comprBody, i);
+        reRootChecks(st->op, from, to);
+        reRootChecks(st->target, from, to);
     }
-    if (n->type == SNTX_EXPR_POSTFIX) return tryOperandIsWrittenCall(partSntx(n, 0));
-    return n->type == SNTX_EXPR_PRIMARY && firstPartOfType(n, SNTX_EXPR_CALL);
+}
+
+//QQ1: the keyword of a try node - "try" or "checked"
+static struct token tryKwOf(struct syntax* s, bool* checked) {
+    *checked = !hasTokOfType(s, TOK_TRY);
+    return firstTokOfType(s, *checked ? TOK_CHECKED : TOK_TRY);
+}
+
+//R8/E24/E15a (QQ1): what a try - or checked - operand built as callOp, with cover holding the fallible calls built in it
+//below the keyword, can fail with: each call's errors (every call in a chain, an argument or a parenthesized operand -
+//cover's, which take callOp as the try they fail through), and under "checked" BuiltinError's words for the operations
+//it checks (*checkWords), and a Checked form's errors. None when nothing in it can fail
+static struct list tryErrors(struct operand* callOp, struct list* cover, bool checked, unsigned* checkWords, bool* unknown) {
+    struct list errors = ListInit(sizeof(struct type*));
+    struct list opErrs = ListInit(sizeof(struct type*));
+    *unknown = false;
+    //markChecked first: it stops at a call already taken by a try, and a covered call's arguments are what it checks too
+    *checkWords = markChecked(callOp, callOp, &opErrs, checked);
+    if (*checkWords) {
+        struct type* builtin = SemanticBuiltinErrorType();
+        if (builtin) ListAdd(&errors, &builtin);
+    }
+    struct list calls = ListInit(sizeof(struct operand*));
+    if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar) ListAdd(&calls, &callOp);
+    for (int i = 0; i < cover->len; i++) ListAdd(&calls, ListGetIdx(cover, i));
+    for (int i = 0; i < calls.len; i++) {
+        struct operand* c = *(struct operand**)ListGetIdx(&calls, i);
+        if (errsUnknown(c->readVar)) *unknown = true;
+        if (c != callOp) c->checkRoot = callOp;
+        struct list* es = &c->readVar->type.errors;
+        for (int k = 0; k < es->len; k++) ListAdd(&opErrs, ListGetIdx(es, k));
+    }
+    for (int i = 0; i < opErrs.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
+        bool seen = false;
+        for (int k = 0; k < errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&errors, k), *e);
+        if (!seen) ListAdd(&errors, &e);
+    }
+    return errors;
+}
+
+//QQ1: a "try" on what can fail only where checked - what it once checked is now written "checked"
+static bool tryWouldCheck(struct operand* callOp) {
+    return !(callOp->opType == OPERATION_FUNCCALL && !callOp->isOperatorCall);
 }
 
 struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
-    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool checked = false;
+    struct token tok = tryKwOf(s, &checked);
     bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
     ctx->allowFallibleCall = true;
+    ctx->tryCover = &cover;
     struct syntax* operandNode = firstPartOfType(s, SNTX_EXPR_POSTFIX);
     if (!operandNode) operandNode = firstPartOfType(s, SNTX_EXPR_PRIMARY);
-    ctx->checkingTry = !tryOperandIsWrittenCall(operandNode);
+    ctx->checkingTry = checked;
     struct operand* callOp = buildExprFromSyntax(ctx, operandNode);
     ctx->allowFallibleCall = prevAllow;
     ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
     bool hasClauses = firstPartOfType(s, SNTX_CATCH_CLAUSE) != NULL;
     //R9a's catch-everything shorthand, retired by R9b: a default belongs to a clause, and handling every
     //error is written as one - so what a default covers is always what is written to its left
@@ -16901,34 +16959,16 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         callOp->isTried = true;
         return callOp;
     }
-
-    //E16c: "try a[lo:hi]" makes the slice fallible instead of aborting on an out-of-range bound (E16b) - the
-    //ordinary try expression, on the ordinary terms: it propagates, and the enclosing signature must cover
-    //what it can produce. The error it produces is the BARE error (R16): out-of-range is one fact with no
-    //further detail worth tracking, and reusing it means no new error type and no new machinery - "? error"
-    //and "catch error { }" already compose with everything. A slice with no "try" keeps E16b's abort, so a
-    //slice whose bounds provably hold costs nothing and forces no signature change on its caller.
-    //E16d: "try a[i]" is the opt-IN to a bounds check, where E16c is a slice's opt-out of the abort. An
-    //ordinary index is unchecked (E16), so "try" is what asks for the check at all - and it reports the
-    //failure the same way a slice does, by propagating the bare error.
-    struct list errors;
-    struct type* rt;
-    struct list opErrs = ListInit(sizeof(struct type*));
-    bool writtenCall = callOp->opType == OPERATION_FUNCCALL && !callOp->isOperatorCall;
-    unsigned checkWords = writtenCall ? 0 : markChecked(callOp, callOp, &opErrs);
-    if (checkWords || opErrs.len) {
-        //R20: "try a[i]", "try (a + b)" - the checks inside, each failing with a word of BuiltinError, and (E31) the
-        //errors of the Try forms of a declared type's operators
-        errors = ListInit(sizeof(struct type*));
-        struct type* builtin = SemanticBuiltinErrorType();
-        if (builtin && checkWords) ListAdd(&errors, &builtin);
-        for (int i = 0; i < opErrs.len; i++) ListAdd(&errors, ListGetIdx(&opErrs, i));
-        rt = &callOp->type;
-    } else if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar->type.errors.len > 0) {
-        errors = callOp->readVar->type.errors;
+    unsigned checkWords = 0;
+    bool unknown = false;
+    struct list errors = tryErrors(callOp, &cover, checked, &checkWords, &unknown);
+    struct type* rt = &callOp->type;
+    if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar && !callOp->isOperatorCall)
         rt = callOp->readVar->type.hasRetType ? callOp->readVar->type.retType : NULL;
-    } else {
-        if (!callOp->type.unknown) Err(tok, ERR_TRY_NOTHING_FAILS); //what failed to build was reported already
+    if (errors.len == 0) {
+        //what failed to build was reported already, and a callee whose set is not known has said why in its body
+        if (!callOp->type.unknown && !unknown)
+            Err(tok, checked ? ERR_TRY_NOTHING_FAILS : tryWouldCheck(callOp) ? ERR_TRY_ONLY_CHECKS : ERR_TRY_NOTHING_FAILS);
         return callOp;
     }
     callOp->isTried = true;
@@ -26739,22 +26779,23 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
 }
 
 //R20/E31: marks every check in statements built under "try" by root, as markChecked does for an expression
-static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs) {
+static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs, bool checks) {
     unsigned w = 0;
     for (int i = 0; i < stmts->len; i++) {
         struct statement* st = ListGetIdx(stmts, i);
-        w |= markChecked(st->target, root, errs) | markChecked(st->op, root, errs) | markChecked(st->fillValue, root, errs);
-        w |= markChecked(st->forInit, root, errs);
+        w |= markChecked(st->target, root, errs, checks) | markChecked(st->op, root, errs, checks)
+             | markChecked(st->fillValue, root, errs, checks);
+        w |= markChecked(st->forInit, root, errs, checks);
         if (st->forPost) {
             struct list one = ListInit(sizeof(struct statement));
             ListAdd(&one, st->forPost);
-            w |= markCheckedStmts(&one, root, errs);
+            w |= markCheckedStmts(&one, root, errs, checks);
         }
-        w |= markCheckedStmts(&st->block, root, errs);
+        w |= markCheckedStmts(&st->block, root, errs, checks);
         if (st->elseStmnt) {
             struct list one = ListInit(sizeof(struct statement));
             ListAdd(&one, st->elseStmnt);
-            w |= markCheckedStmts(&one, root, errs);
+            w |= markCheckedStmts(&one, root, errs, checks);
         }
     }
     return w;
@@ -26764,13 +26805,17 @@ static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struc
 //store (TrySetAt, or SetAt after a check against Len(); an array's bounds), the value, and an operator it implies
 //(the Try forms, or the built-in checks). An error a clause takes continues after the statement.
 struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool checked = false;
+    struct token tok = tryKwOf(s, &checked);
     struct syntax* inner = partSntx(s, 1);
     struct operand* root = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_VOID));
     root->comprBody = ListInit(sizeof(struct statement));
     root->isTryStmt = true;
     bool prevChecking = ctx->checkingTry;
-    ctx->checkingTry = true;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
+    ctx->checkingTry = checked;
+    ctx->tryCover = &cover;
     struct statement st;
     if (inner->type == SNTX_STMNT_ASSIGN) st = buildAssignStmnt(ctx, inner);
     else {
@@ -26784,6 +26829,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         ctx->incDecRoot = prevRoot;
     }
     ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
     //a hidden-locals wrapper ("if true { ... }") is flattened, so a clause's jump to after the statement leaves no
     //block of its own behind
     if (st.sType == STATEMENT_IF && !st.elseStmnt && st.op && st.op->isLiteral && st.op->opType == OPERATION_NONE
@@ -26791,15 +26837,30 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         for (int i = 0; i < st.block.len; i++) ListAdd(&root->comprBody, ListGetIdx(&st.block, i));
     } else ListAdd(&root->comprBody, &st);
     struct list opErrs = ListInit(sizeof(struct type*));
-    unsigned w = markCheckedStmts(&root->comprBody, root, &opErrs);
-    struct statement out = (struct statement){0};
-    out.sType = STATEMENT_EXPR;
-    out.op = root;
-    if (!w && !opErrs.len) { Err(tok, ERR_TRY_NOTHING_FAILS); return out; }
+    unsigned w = markCheckedStmts(&root->comprBody, root, &opErrs, checked);
     struct list errors = ListInit(sizeof(struct type*));
     struct type* builtin = SemanticBuiltinErrorType();
     if (builtin && w) ListAdd(&errors, &builtin);
-    for (int i = 0; i < opErrs.len; i++) ListAdd(&errors, ListGetIdx(&opErrs, i));
+    bool unknown = false;
+    for (int i = 0; i < cover.len; i++) {
+        struct operand* c = *(struct operand**)ListGetIdx(&cover, i);
+        if (errsUnknown(c->readVar)) unknown = true;
+        c->checkRoot = root;
+        for (int k = 0; k < c->readVar->type.errors.len; k++) ListAdd(&opErrs, ListGetIdx(&c->readVar->type.errors, k));
+    }
+    for (int i = 0; i < opErrs.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
+        bool seen = false;
+        for (int k = 0; k < errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&errors, k), *e);
+        if (!seen) ListAdd(&errors, &e);
+    }
+    struct statement out = (struct statement){0};
+    out.sType = STATEMENT_EXPR;
+    out.op = root;
+    if (!errors.len) {
+        if (!unknown) Err(tok, checked ? ERR_TRY_NOTHING_FAILS : ERR_TRY_ONLY_CHECKS);
+        return out;
+    }
     root->isTried = true;
     if (firstPartOfType(s, SNTX_CATCH_CLAUSE)) {
         unsigned prevMask = builtinWordMask;
@@ -26815,7 +26876,8 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
 }
 
 struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool checked = false;
+    struct token tok = tryKwOf(s, &checked);
     //parseStmntTryCatch takes a POSTFIX expression (so "try a[lo:hi] catch" reaches here at all rather than
     //stopping at the bare name); the PRIMARY fallback is for nothing in particular now, but costs nothing
     //and keeps this independent of which node shape the parser happened to build.
@@ -26825,11 +26887,15 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.sType = STATEMENT_TRY_CATCH;
 
     bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
     ctx->allowFallibleCall = true;
-    ctx->checkingTry = !tryOperandIsWrittenCall(primaryNode);
+    ctx->checkingTry = checked;
+    ctx->tryCover = &cover;
     struct operand* callOp = buildExprFromSyntax(ctx, primaryNode);
     ctx->allowFallibleCall = prevAllow;
     ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
     stmt.op = callOp;
 
     //the catch-STATEMENT form handles a fallible call. A tried slice (E16c) is deliberately not accepted
@@ -26841,13 +26907,46 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(tok, ERR_TRY_CATCH_ON_SLICE);
         return stmt;
     }
-    if (callOp->opType != OPERATION_FUNCCALL || callOp->readVar->type.errors.len == 0) {
-        Err(tok, ERR_TRY_NOTHING_FAILS);
+    //the plain shape - one call written by name, nothing else in it failing and nothing checked: its clauses, as R10 has
+    if (!checked && !cover.len && callOp->opType == OPERATION_FUNCCALL && callOp->readVar && !callOp->isOperatorCall
+            && callOp->readVar->type.errors.len) {
+        buildCatchClauses(ctx, s, callOp, &callOp->readVar->type.errors, false, NULL, tok, &stmt.catchClauses);
         return stmt;
     }
-
-    buildCatchClauses(ctx, s, callOp, &callOp->readVar->type.errors, false, NULL, tok, &stmt.catchClauses);
-    return stmt;
+    //QQ1: anything else - several calls, an operator, what "checked" checks - is held as a checked statement is (R21),
+    //its clauses a statement's, every failure inside running them
+    unsigned checkWords = 0;
+    bool unknown = false;
+    struct list errors = tryErrors(callOp, &cover, checked, &checkWords, &unknown);
+    if (!errors.len) {
+        if (!callOp->type.unknown && !unknown)
+            Err(tok, checked ? ERR_TRY_NOTHING_FAILS : tryWouldCheck(callOp) ? ERR_TRY_ONLY_CHECKS : ERR_TRY_NOTHING_FAILS);
+        return stmt;
+    }
+    struct operand* root = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_VOID));
+    root->comprBody = ListInit(sizeof(struct statement));
+    root->isTryStmt = true;
+    root->isTried = true;
+    struct statement es = (struct statement){0};
+    es.sType = STATEMENT_EXPR;
+    es.op = callOp;
+    ListAdd(&root->comprBody, &es);
+    //what failed through callOp fails through root, the statement's try
+    callOp->checkRoot = root;
+    callOp->isTried = false;
+    for (int i = 0; i < cover.len; i++) {
+        struct operand* c = *(struct operand**)ListGetIdx(&cover, i);
+        c->checkRoot = root;
+    }
+    reRootChecks(callOp, callOp, root);
+    unsigned prevMask = builtinWordMask;
+    if (checkWords) builtinWordMask = checkWords;
+    buildCatchClauses(ctx, s, root, &errors, false, NULL, tok, &root->catchClauses);
+    builtinWordMask = prevMask;
+    struct statement out = (struct statement){0};
+    out.sType = STATEMENT_EXPR;
+    out.op = root;
+    return out;
 }
 
 static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax* s);

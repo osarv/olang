@@ -2277,11 +2277,17 @@ struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk) {
     return s;
 }
 
+//E15a/QQ1: "try", or "checked" - try with every optional check inside turned on - before an operand or a statement
+static struct token acceptTryKw(SyntaxCtx sc) {
+    struct token kw = acceptTok(sc, TOK_TRY);
+    return kw.type != TOK_NONE ? kw : acceptTok(sc, TOK_CHECKED);
+}
+
 //"try f()" alone propagates (see parseExprTry, a general expression); this is the catch-handling
 //statement form - control flow only, the caught error is never exposed as a value
 struct syntax* parseStmntTryCatch(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     //postfix, for the same reason parseExprTry takes one: a slice is a postfix on a primary (E16c)
     struct syntax* primary = parseExprPostfix(sc);
@@ -2315,7 +2321,7 @@ static bool syntaxIsIncDec(struct syntax* n) {
 //store, the value and the operator it implies - with catch clauses, as a try-catch statement has, after it
 struct syntax* parseStmntTryStore(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     struct syntax* inner = NULL;
     int at = TokenGetCursor(sc->tc);
@@ -2535,7 +2541,7 @@ struct syntax* parseExprUnary(SyntaxCtx sc);
 struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk);
 struct syntax* parseExprTry(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     //R9a: decided before the operand is read - a return statement inside it (in a lambda) resets defaultListAt
     bool listOk = cur == sc->defaultListAt;
@@ -2747,7 +2753,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             addSntx(s, m);
             return s;
         }
-        case TOK_TRY: {
+        case TOK_TRY: case TOK_CHECKED: {
             struct syntax* tryExpr = parseExprTry(sc);
             if (!tryExpr) return NULL;
             struct syntax* s = newNode(SNTX_EXPR_PRIMARY);

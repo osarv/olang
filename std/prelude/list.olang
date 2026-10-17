@@ -827,21 +827,21 @@ if TestBuild {
         assert one[0] == 6 and one.Len() == 1
     }
 
-    # E31a: a List has no TryAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
+    # E31a: a List has no CheckedAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
     # with OUT_OF_BOUNDS as an array index does; "try l[i] = x" checks a store the same way (R21)
     test "a checked index into a List" {
         l mut List<I32>& = List<I32>()
         for i in range 20 { l.Push(I32(i)) }
-        assert (try l[19] catch default -1) == 19
-        assert (try l[20] catch default -1) == -1
-        assert (try l[-1] catch default -1) == -1
+        assert (checked l[19] catch default -1) == 19
+        assert (checked l[20] catch default -1) == -1
+        assert (checked l[-1] catch default -1) == -1
         missed := false
-        try l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
+        checked l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
         assert missed and l.Len() == 20
-        try l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
+        checked l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
         assert l[3] == 30
         e List<I32>& = List<I32>()
-        assert (try e[0] catch default 7) == 7
+        assert (checked e[0] catch default 7) == 7
     }
 
     # a List of structs and of references indexes like any other
@@ -935,7 +935,7 @@ if TestBuild {
         s I64 = 0
         for i in range l.Len() { s += l[i] }
         for x in l { s += x }
-        return s + (try l[42] catch default 7)
+        return s + (checked l[42] catch default 7)
     }
 
     listIndexedBaked := listIndexed()
