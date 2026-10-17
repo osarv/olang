@@ -6172,20 +6172,22 @@ static bool eqWellShaped(struct var* m) {
 //whether it gives a result. The same name with a lowercase first letter is the module's private operator.
 struct operatorShape { const char* name; int operands; bool result; bool mayFail; bool mustFail; };
 static const struct operatorShape operatorShapes[] = {
-    {"Plus", 1, true, false, false}, {"Minus", 1, true, false, false}, {"Mul", 1, true, false, false},
-    {"Div", 1, true, false, false}, {"Rem", 1, true, false, false}, {"MatMul", 1, true, false, false},
-    {"Neg", 0, true, false, false}, {"Less", 1, true, false, false}, {"At", 1, true, false, false},
-    {"SetAt", 2, false, false, false}, {"Slice", 2, true, false, false}, {"BitAnd", 1, true, false, false},
-    {"BitOr", 1, true, false, false}, {"BitXor", 1, true, false, false}, {"ShiftLeft", 1, true, false, false},
-    {"ShiftRight", 1, true, false, false}, {"BitNot", 0, true, false, false}, {"Inc", 0, true, false, false},
-    {"Dec", 0, true, false, false}, {"Len", 0, true, false, false},
+    //QQ1: a plain operator may fail, declaring its errors - "try (a + b)" handles them as for a call
+    {"Plus", 1, true, true, false}, {"Minus", 1, true, true, false}, {"Mul", 1, true, true, false},
+    {"Div", 1, true, true, false}, {"Rem", 1, true, true, false}, {"MatMul", 1, true, true, false},
+    {"Neg", 0, true, true, false}, {"Less", 1, true, true, false}, {"At", 1, true, true, false},
+    {"SetAt", 2, false, true, false}, {"Slice", 2, true, true, false}, {"BitAnd", 1, true, true, false},
+    {"BitOr", 1, true, true, false}, {"BitXor", 1, true, true, false}, {"ShiftLeft", 1, true, true, false},
+    {"ShiftRight", 1, true, true, false}, {"BitNot", 0, true, true, false}, {"Inc", 0, true, true, false},
+    {"Dec", 0, true, true, false}, {"Len", 0, true, false, false},
     {"Eq", 1, true, false, false}, {"Str", 0, true, false, false}, //E10a/E11c: what "==" and "$" consult
-    //the checked forms, which "try" calls (TryAt and TrySlice are derived from At/Slice and Len when not declared)
-    {"TryPlus", 1, true, true, true}, {"TryMinus", 1, true, true, true}, {"TryMul", 1, true, true, true},
-    {"TryDiv", 1, true, true, true}, {"TryRem", 1, true, true, true}, {"TryMatMul", 1, true, true, true},
-    {"TryNeg", 0, true, true, true}, {"TryAt", 1, true, true, true}, {"TrySetAt", 2, false, true, true},
-    {"TrySlice", 2, true, true, true}, {"TryShiftLeft", 1, true, true, true}, {"TryShiftRight", 1, true, true, true},
-    {"TryInc", 0, true, true, true}, {"TryDec", 0, true, true, true},
+    //E31a: the checked forms, which "checked" calls (CheckedAt, CheckedSlice and CheckedSetAt are derived from the plain
+    //form and Len when not declared) - each a superset of its plain form's errors (checkCheckedForms)
+    {"CheckedPlus", 1, true, true, true}, {"CheckedMinus", 1, true, true, true}, {"CheckedMul", 1, true, true, true},
+    {"CheckedDiv", 1, true, true, true}, {"CheckedRem", 1, true, true, true}, {"CheckedMatMul", 1, true, true, true},
+    {"CheckedNeg", 0, true, true, true}, {"CheckedAt", 1, true, true, true}, {"CheckedSetAt", 2, false, true, true},
+    {"CheckedSlice", 2, true, true, true}, {"CheckedShiftLeft", 1, true, true, true},
+    {"CheckedShiftRight", 1, true, true, true}, {"CheckedInc", 0, true, true, true}, {"CheckedDec", 0, true, true, true},
 };
 
 //M6b: while the prelude's Equal and HashElements are checked for an instantiation - the element-wise "==" and the
@@ -6230,7 +6232,7 @@ static int protocolArity(const char* cap, bool* atLeast) {
     for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++) {
         const struct operatorShape* sh = &operatorShapes[k];
         if (strcmp(sh->name, cap) != 0) continue;
-        *atLeast = !strcmp(cap, "At") || !strcmp(cap, "SetAt") || !strcmp(cap, "TryAt") || !strcmp(cap, "TrySetAt");
+        *atLeast = !strcmp(cap, "At") || !strcmp(cap, "SetAt") || !strcmp(cap, "CheckedAt") || !strcmp(cap, "CheckedSetAt");
         return sh->operands;
     }
     if (!strcmp(cap, "Call")) return -1;
@@ -6287,17 +6289,7 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
     if (sh) {
         if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
-        else if (a->type.errors.len > 0 && !sh->mayFail) {
-            //E31a: the operations that can fail have a checked form; the rest - Less, the bitwise ones, Len, Eq, Str -
-            //have none, so no "Try" to point at
-            char tn[32];
-            snprintf(tn, sizeof(tn), "Try%s", sh->name);
-            bool hasTry = false;
-            for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++)
-                hasTry = hasTry || !strcmp(operatorShapes[k].name, tn);
-            if (hasTry) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
-            else Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
-        }
+        else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
         else if (a->type.errors.len == 0 && sh->mustFail) Err(a->tok, ERR_TRY_FORM_MUST_FAIL, sh->name);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) Err(a->tok, ERR_LESS_NOT_BOOL);
         else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) Err(a->tok, ERR_LEN_SHAPE);
@@ -6788,8 +6780,10 @@ static const char* operatorBeingCalled;
 static void checkCallFallible(struct checkCtx* ctx, struct operand* call, bool allowed, struct token tok) {
     if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) return;
     struct var* f = call->readVar;
-    if (errsUnknown(f) || f->type.errors.len == 0 || allowed) return;
+    if (errsUnknown(f) || f->type.errors.len == 0) return;
+    //under a try every one is its cover's, the one directly under the keyword included (tryErrors tells them apart)
     if (ctx->tryCover) { ListAdd(ctx->tryCover, &call); return; }
+    if (allowed) return;
     if (operatorBeingCalled) Err(tok, ERR_OPERATOR_CALL_FAILS, operatorBeingCalled);
     else Err(tok, ERR_UNHANDLED_FALLIBLE_CALL);
 }
@@ -15015,8 +15009,8 @@ static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* re
 
 //E31: the checked form of an operator on t - "TryX", or its private "tryX" - when t declares it
 static const char* tryOperatorName(struct checkCtx* ctx, struct type t, const char* capName) {
-    char* tn = MallocOrCrash(strlen(capName) + 4);
-    sprintf(tn, "Try%s", capName);
+    char* tn = MallocOrCrash(strlen(capName) + 8);
+    sprintf(tn, "Checked%s", capName);
     return operatorMethodName(ctx, t, tn);
 }
 
@@ -15755,7 +15749,8 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     prebuiltMethodArgs = NULL;
     if (call->opType == OPERATION_FUNCCALL) {
         call->isOperatorCall = true;
-        if (call->readVar && call->readVar->type.errors.len && !ctx->checkingTry) Err(tok, ERR_MEMBERSHIP_NEEDS_TRY, mName);
+        if (call->readVar && call->readVar->type.errors.len && !ctx->tryCover && !errsUnknown(call->readVar))
+            Err(tok, ERR_MEMBERSHIP_NEEDS_TRY, mName);
     }
     if (!OperandIsBool(call)) Err(tok, ERR_MEMBERSHIP_NOT_BOOL, mName);
     struct operand* result = call;
@@ -16261,9 +16256,9 @@ static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base
     const char* atName = operatorFor(ctx, base->type, "At", sq);
     if (!atName) return unknownPlaceholder(sq); //reported: what is read from it says nothing more
     struct operand* seq = NULL;
-    bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
+    bool derived = ctx->checkingTry && strcmp(atName + 1, "heckedAt") != 0;
     if (derived && idxs.len > 1) { //reported once: the "try" around it has nothing more to say (R20)
-        Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TryAt");
+        Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "CheckedAt");
         return unknownPlaceholder(sq);
     }
     if (derived) {
@@ -16290,7 +16285,7 @@ static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base
     if (!slName) return unknownPlaceholder(sq);
     const char* lenName = operatorMethodName(ctx, base->type, "Len");
     struct operand* seq = NULL;
-    bool derived = ctx->checkingTry && strcmp(slName + 1, "rySlice") != 0;
+    bool derived = ctx->checkingTry && strcmp(slName + 1, "heckedSlice") != 0;
     if ((derived || !hi) && !lenName) {
         Err(sq, derived ? ERR_TRY_SLICE_NEEDS_LEN : ERR_SLICE_NEEDS_LEN, &base->type);
         derived = false;
@@ -16860,7 +16855,8 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
             if (isInt) w = dbz | (TypeIsUnsigned(a0->type) ? 0 : ovf);
             break;
         case OPERATION_MINUS: if (isInt) w = ovf; break;
-        case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: w = inv; break;
+        case OPERATION_BTSFT_L: w = oob | (isInt ? ovf : 0); break; //QO6: an amount out of range; set bits shifted out
+        case OPERATION_BTSFT_R: w = oob; break;
         case OPERATION_NUMERIC_CONVERT:
             //T4: whatever the target cannot hold of the source - nothing where the source flows into it (T6b); an integer
             //into a float overflows only into F16, whose range is small
@@ -16869,7 +16865,7 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
                 w = TypeIsFloat(t) && !TypeIsFloat(a0->type) ? (t.bType == BASETYPE_F16 ? ovf : 0) : ovf;
             break;
         case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
-        case OPERATION_AS: w = inv; break; //E32: the value is not what "as" names
+        case OPERATION_AS: w = op->castEnum ? 1u << SemanticBuiltinErrorWord("WRONG_CASE") : oob; break; //E32, E32b
         case OPERATION_INDEX: if (!op->noCheck) w = oob; break;
         default: break;
     }
@@ -16914,7 +16910,8 @@ static struct list tryErrors(struct operand* callOp, struct list* cover, bool ch
     }
     struct list calls = ListInit(sizeof(struct operand*));
     if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar) ListAdd(&calls, &callOp);
-    for (int i = 0; i < cover->len; i++) ListAdd(&calls, ListGetIdx(cover, i));
+    for (int i = 0; i < cover->len; i++)
+        if (*(struct operand**)ListGetIdx(cover, i) != callOp) ListAdd(&calls, ListGetIdx(cover, i));
     for (int i = 0; i < calls.len; i++) {
         struct operand* c = *(struct operand**)ListGetIdx(&calls, i);
         if (errsUnknown(c->readVar)) *unknown = true;
@@ -21217,8 +21214,8 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
             Err(opTok, ERR_SETAT_UNDECLARED, &base->type);
         return (struct statement){0};
     }
-    bool derived = ctx->checkingTry && strcmp(setName + 1, "rySetAt") != 0;
-    if (derived && idxs.len > 1) { Err(opTok, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TrySetAt"); derived = false; }
+    bool derived = ctx->checkingTry && strcmp(setName + 1, "heckedSetAt") != 0;
+    if (derived && idxs.len > 1) { Err(opTok, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "CheckedSetAt"); derived = false; }
     const char* lenName = derived ? operatorMethodName(ctx, base->type, "Len") : NULL;
     if (derived && !lenName) { Err(opTok, ERR_TRY_SETAT_NEEDS_LEN, &base->type); derived = false; }
     bool isCompound = false;
@@ -23461,7 +23458,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* nextCall = NULL;
     struct forInTry ft = (struct forInTry){0};
     ft.on = hasTokOfType(s, TOK_TRY);
-    ft.inExpr = spec && ctx->checkingTry; //S9e: "try T[e for x in c]"
+    ft.inExpr = spec && (ctx->checkingTry || ctx->tryCover); //S9e: "try T[e for x in c]", "checked T[...]"
     ft.isCompr = spec != NULL;
     if (ft.inExpr) ft.on = true;
     ft.s = s;
@@ -26908,7 +26905,7 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
         return stmt;
     }
     //the plain shape - one call written by name, nothing else in it failing and nothing checked: its clauses, as R10 has
-    if (!checked && !cover.len && callOp->opType == OPERATION_FUNCCALL && callOp->readVar && !callOp->isOperatorCall
+    if (!checked && (!cover.len || (cover.len == 1 && *(struct operand**)ListGetIdx(&cover, 0) == callOp)) && callOp->opType == OPERATION_FUNCCALL && callOp->readVar && !callOp->isOperatorCall
             && callOp->readVar->type.errors.len) {
         buildCatchClauses(ctx, s, callOp, &callOp->readVar->type.errors, false, NULL, tok, &stmt.catchClauses);
         return stmt;
@@ -26931,12 +26928,13 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     es.sType = STATEMENT_EXPR;
     es.op = callOp;
     ListAdd(&root->comprBody, &es);
-    //what failed through callOp fails through root, the statement's try
-    callOp->checkRoot = root;
+    //what failed through callOp fails through root, the statement's try - a call itself, an operation only where it was
+    //checked (reRootChecks: its checkRoot was callOp)
+    if (callOp->opType == OPERATION_FUNCCALL) callOp->checkRoot = root;
     callOp->isTried = false;
     for (int i = 0; i < cover.len; i++) {
         struct operand* c = *(struct operand**)ListGetIdx(&cover, i);
-        c->checkRoot = root;
+        if (c != callOp) c->checkRoot = root;
     }
     reRootChecks(callOp, callOp, root);
     unsigned prevMask = builtinWordMask;
@@ -30302,6 +30300,45 @@ static void settleInferredErrs(void) {
     }
 }
 
+//E31a (QQ1): a Checked form fails with every error its plain form can - "checked" only adds checks. Judged once every
+//set is known (an inferred one, R1a), on each method named for a Checked form beside its plain form on one receiver
+static void checkCheckedFormIn(struct var* m) {
+    if (!m || !m->isMethod || m->type.bType != BASETYPE_FUNC || m->name.len < 8) return;
+    bool priv = m->name.ptr[0] == 'c';
+    if (strncmp(m->name.ptr, priv ? "checked" : "Checked", 7) != 0 || m->name.ptr[7] < 'A' || m->name.ptr[7] > 'Z') return;
+    struct type* recv = SemanticMethodReceiver(m);
+    if (!recv) return;
+    char* plain = MallocOrCrash((size_t)m->name.len);
+    snprintf(plain, (size_t)m->name.len, "%.*s", m->name.len - 7, m->name.ptr + 7);
+    if (priv) plain[0] = (char)(plain[0] - 'A' + 'a');
+    struct var* p = VarGetMethod(m->owner, StrFromCStr(plain), *recv);
+    if (!p || p == m || p->type.bType != BASETYPE_FUNC) return;
+    for (int i = 0; i < p->type.errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&p->type.errors, i);
+        bool has = false;
+        for (int k = 0; k < m->type.errors.len && !has; k++) has = TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, k), *e);
+        if (!has) {
+            char* nm = StrFmt("%.*s", m->name.len, m->name.ptr);
+            Err(m->tok, ERR_CHECKED_NOT_SUPERSET, nm, plain, plain, e);
+            return;
+        }
+    }
+}
+static void checkCheckedForms(void) {
+    for (int i = 0; i < allModules.len; i++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, i);
+        for (int k = 0; k < mod->vars.len; k++) {
+            struct var* m = ListGetIdx(&mod->vars, k);
+            if (m->inferErrs && m->type.typeParams.len) continue; //an instantiation's set is its own, judged below
+            checkCheckedFormIn(m);
+        }
+    }
+    for (int i = 0; i < instantiations.len; i++) {
+        struct instantiation* in = ListGetIdx(&instantiations, i);
+        if (in->specialized->inferErrs) checkCheckedFormIn(in->specialized);
+    }
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
     ErrMsgSetLibraryTest(isLibraryFile);
@@ -30439,6 +30476,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     }
     settleInferredErrs(); //R1a: every body's error set is known now - or one read early grew, and this attempt is redone
     if (errsRedo) return rootModule;
+    checkCheckedForms(); //E31a
     dischargeLateObligations(); //O10c: every body's obligations are known now
     settleRegions(); //O17: and what each stores where
     settleHandleLends(); //O17b: and the handles lent while a body they rested on was being checked

@@ -4,6 +4,8 @@
 error BuiltinError {
     OUT_OF_BOUNDS      # an index or slice outside its array, or an array length out of range
     DIVIDE_BY_ZERO     # an integer or float "/" or "%" by zero
-    OVERFLOW           # a result the type cannot hold
-    INVALID            # an operand the operation does not accept: a shift amount, a NaN or infinity
+    OVERFLOW           # a result the type cannot hold: an integer operation's, a shift's set bits shifted out, a
+                       # conversion that changes the value, a float narrowed to infinity
+    INVALID            # IEEE's invalid operation: a NaN from operands that are not, a NaN or infinity made an integer
+    WRONG_CASE         # an "as" naming a case the value is not
 }

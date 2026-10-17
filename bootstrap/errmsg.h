@@ -253,13 +253,13 @@ struct type;
     X(ERR_DECLARED_OVER_AGGREGATE,      "T29",   "a type is declared over a number or an array, not over %t - hold it in a struct's field instead") \
     /* ---- methods and operators ---- */ \
     X(ERR_NOT_THE_OPERATOR,             "E31",   "%t's %S takes %s besides its receiver - an ordinary method, not the one %s calls, which takes %s") \
-    X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'try' on several indices needs %t to declare %s - a check derived from Len checks one position") \
+    X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'checked' on several indices needs %t to declare %s - a check derived from Len checks one position") \
     X(ERR_ARRAY_ONE_INDEX,              "E31",   "%t takes one index - several are passed to a type's At or SetAt") \
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
-    X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \
+    X(ERR_CHECKED_NOT_SUPERSET,         "E31a",  "%s is %s's checked form, so it fails with every error %s can - add %t after its '?'") \
     X(ERR_TRY_FORM_MUST_FAIL,           "E31a",  "%s is a checked form, so it declares the errors it fails with") \
-    X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to write 'try'") \
+    X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to handle an error") \
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
@@ -361,7 +361,7 @@ struct type;
     X(ERR_MEMBER_IS_PRIVATE,            "M6a",   "member '%S' of %t is private to its module") \
     /* ---- operators and literals ---- */ \
     X(ERR_NOT_ASSIGNABLE,               "S4",    "this cannot be written - a variable, an element or a member can") \
-    X(ERR_ASSIGN_INTO_TRIED,            "R9a",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store") \
+    X(ERR_ASSIGN_INTO_TRIED,            "R9a",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store") \
     X(ERR_INCDEC_NOT_NUMBER,            "S3a",   "%n takes a number, found %t") \
     X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
@@ -412,7 +412,7 @@ struct type;
     X(ERR_NO_SUCH_CASE,                 "T17",   "%t has no case %n") \
     X(ERR_NO_SUCH_CASE_MEANT,           "T17",   "%t has no case %n - did you mean '%S'?") \
     X(ERR_SCOPE_ARG_COUNT,              "E25",   "a call takes at most one scope argument") \
-    X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'try'") \
+    X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'checked'") \
     X(ERR_MATMUL_UNDECLARED,            "E31",   "'@' has no built-in meaning, and %t declares no MatMul") \
     X(ERR_NOT_EXTENDED_OP,              "T29f",  "%t does not extend its base, so it takes no %n - declare its method %s, or declare it with 'extends'") \
     X(ERR_COND_NOT_BOOL_TYPE,           "",      "a condition is a Bool, found %t") \
@@ -433,8 +433,8 @@ struct type;
     X(ERR_IS_AS_MARKER,                 "E32",   "'&%S' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x %s T) & %S'") \
     X(ERR_AS_NOTHING,                   "E32",   "case %S carries nothing for 'as' to give - ask with 'is'") \
     X(ERR_IS_AS_NOT_ENUM,               "E32",   "'is' and 'as' ask which case an enum value is, and this is %t") \
-    X(ERR_TRY_INDEX_NEEDS_LEN,          "E31a",  "'try c[i]' checks against Len, and %t has neither TryAt nor Len") \
-    X(ERR_TRY_SLICE_NEEDS_LEN,          "E31a",  "'try c[lo:hi]' checks against Len, and %t has neither TrySlice nor Len") \
+    X(ERR_TRY_INDEX_NEEDS_LEN,          "E31a",  "'checked c[i]' checks against Len, and %t has neither CheckedAt nor Len") \
+    X(ERR_TRY_SLICE_NEEDS_LEN,          "E31a",  "'checked c[lo:hi]' checks against Len, and %t has neither CheckedSlice nor Len") \
     X(ERR_SLICE_NEEDS_LEN,              "E31",   "a slice with no end runs to Len(), and %t has none") \
     X(ERR_AT_UNDECLARED,                "E31",   "%t declares SetAt but not At, which reading x[i] calls") \
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
@@ -496,7 +496,7 @@ struct type;
     /* ---- statements ---- */ \
     X(ERR_MUT_ON_LOCAL,                 "D11a",  "a local is always writable - 'mut' is for a reference, and %t is none") \
     X(ERR_MUT_ON_INFERRED_LOCAL,        "D11a",  "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") \
-    X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'try c[i] = v' checks against Len, and %t has neither TrySetAt nor Len") \
+    X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'checked c[i] = v' checks against Len, and %t has neither CheckedSetAt nor Len") \
     X(ERR_NOT_A_STATEMENT,              "S3",    "this computes a value and discards it - only a call, '++' or '--' stands alone") \
     X(ERR_JOIN_NEXT_LINE,               "S3, E11b", "text on a line of its own does nothing - a join continues onto the next line only inside parentheses") \
     X(ERR_CONDITION_CONSTANT,           "S8a",   "this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it") \

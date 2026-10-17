@@ -844,9 +844,16 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                     if (!TypeIsUnsigned(t) && y == -1 && !ctFits(t, -x)) return ctCheckFail(st, op, "OVERFLOW");
                     break;
                 case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: {
-                    //the amount in its own type: a negative one, or one past the width, is INVALID
+                    //the amount in its own type: a negative one, or one past the width, is OUT_OF_BOUNDS (QO6)
                     ctWide n = ctExact(b);
-                    if (n < 0 || n >= w) return ctCheckFail(st, op, "INVALID");
+                    if (n < 0 || n >= w) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
+                    if (op->opType == OPERATION_BTSFT_L) { //QO6: the true value x * 2^n has to fit
+                        const struct primInfo* p = PrimInfo(t.bType);
+                        bool un = p->kind == 'u';
+                        ctWide mx = un ? (((ctWide)1 << p->bits) - 1) : (((ctWide)1 << (p->bits - 1)) - 1);
+                        ctWide mn = un ? 0 : -((ctWide)1 << (p->bits - 1));
+                        if (x > (mx >> n) || x < (mn >> n)) return ctCheckFail(st, op, "OVERFLOW");
+                    }
                     break;
                 }
                 default: break;
@@ -2273,7 +2280,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 bool hit = v && v->kind != CT_NULL && v->i == op->castTag; //T17d: a null reference holds no case
                 if (!isAs) return ctBool(hit);
                 if (!hit) {
-                    if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
+                    if (op->checkRoot) return ctCheckFail(st, op, "WRONG_CASE");
                     if (ctRun) ctRunAbortTok(op->tok, "'as' named what the value is not\n");
                     return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
                 }

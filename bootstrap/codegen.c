@@ -3343,7 +3343,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
             char* tooFar = cgNewTmp(ctx);
             //unsigned compare: a negative amount reads as huge, so one compare covers both ends
             fprintf(ctx->fnOut, "  %s = icmp uge %s %s, %s\n", tooFar, bty, bv, wv);
-            cgFailIf(ctx, op, tooFar, "INVALID");
+            cgFailIf(ctx, op, tooFar, "OUT_OF_BOUNDS"); //QO6: the amount is a position in the value
         }
         if (isF && (op->opType == OPERATION_ADD || op->opType == OPERATION_SUB || op->opType == OPERATION_MUL
                     || op->opType == OPERATION_DIV)) {
@@ -3389,6 +3389,15 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
     if (instr && !strcmp(aty, "bfloat")) return cgBF16Arith(ctx, instr, av, bv);
     if (instr) {
         fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", r, instr, aty, av, bv);
+        //QO6: "<<" checked - set bits shifted out, the true value x * 2^n not fitting, is OVERFLOW: shifted back, it is
+        //not what it was
+        if (op->checkRoot && op->opType == OPERATION_BTSFT_L) {
+            char* back = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", back, isU ? "lshr" : "ashr", aty, r, bv);
+            char* lost = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp ne %s %s, %s\n", lost, aty, back, av);
+            cgFailIf(ctx, op, lost, "OVERFLOW");
+        }
         return r;
     }
 
@@ -4818,7 +4827,7 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
         snprintf(badLbl, sizeof(badLbl), "as.bad.%d", id);
         fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", hit, okLbl, badLbl);
         ctx->terminated = true;
-        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID",
+        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "WRONG_CASE",
                       cgCheckMsg(ctx, op, "'as' named what the value is not"));
     }
     //the payload: in place behind a reference, else spilled - then its one field, or all of them as several results
