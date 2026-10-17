@@ -1,6 +1,6 @@
 // layoutdump [-t] [-D NAME=VALUE]... FILE - the C compiler's types and their layouts, the oracle the self-hosted
 // compiler's type table is compared with (compiler/DESIGN.md section 4, compiler/tools/layoutdiff.sh). The program
-// rooted at FILE is analyzed as "olang -c" analyzes it, as modgraph does, and every type it holds that has a layout is
+// rooted at FILE is analyzed as "olang compile" analyzes it, as modgraph does, and every type it holds that has a layout is
 // written once, sorted, one line each:
 //
 //     TYPE <tab> SIZE ALIGN <tab> LLVM <tab> BODY <tab> PARTS

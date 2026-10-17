@@ -72,6 +72,12 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     decls List<ast.Decl&>
     salvage List<ast.Decl&>            # a function or type whose body did not parse, as the declaration it still is
     typeParamsRead Array<ast.TypeParam&>& = null   # the type parameters of the type declaration being read
+    # where angle brackets were read as type brackets, by token index (a split "<<" or ">>" is there twice): a
+    # type-argument list's "<", a type variable's "<" (G8b) and either one's ">". The formatter (compiler/fmt.olang)
+    # spaces them; nothing in the compiler reads them
+    ArgAngles List<I64>
+    VarAngles List<I64>
+    CloseAngles List<I64>
 }
 
 # ---- reading tokens ----
@@ -795,7 +801,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
             return ast.TypeRef.Func(p.from(at), s)
         }
         case token.Tok.Lt, token.Tok.Shl {
-            try p.openAngle()
+            try p.openAngle(true)
             name := try p.name()
             p.vars.Push(name)
             constraint ast.TypeRef&p = null
@@ -853,8 +859,11 @@ fn (p Parser&) closesAngle() Bool {
 }
 
 # "<" where one opens a type-argument list: a "<<" is split, its second half read next (G8b: List<<T>>)
-fn (p mut Parser&) openAngle() ? Fail {
-    if p.accept(token.Tok.Lt) { return }
+fn (p mut Parser&) openAngle(variable Bool = false) ? Fail {
+    if p.accept(token.Tok.Lt) {
+        p.angle(variable)
+        return
+    }
     if p.peek() == token.Tok.Shl and p.half == token.Tok.Eof {
         at := p.advance()
         p.prevKind = token.Tok.Lt
@@ -863,9 +872,19 @@ fn (p mut Parser&) openAngle() ? Fail {
         p.halfStart = at + 1
         p.pos--
         p.pos++
+        p.angle(variable)
         return
     }
     try p.fail(token.Tok.Lt.Describe())
+}
+
+# the token just read opened a type-argument list, or a type variable's "<T>"
+fn (p mut Parser&) angle(variable Bool) {
+    if variable {
+        p.VarAngles.Push(p.pos - 1)
+    } else {
+        p.ArgAngles.Push(p.pos - 1)
+    }
 }
 
 # ">" closing a type-argument list: ">>", ">=" and ">>=" are split, the rest read next - a half may split again
@@ -873,6 +892,7 @@ fn (p mut Parser&) closeAngle() ? Fail {
     k := p.peek()
     if not p.closesAngle() { try p.fail(token.Tok.Gt.Describe()) }
     at := p.advance()
+    p.CloseAngles.Push(p.pos - 1)
     if k == token.Tok.Gt { return }
     p.half = token.Tok.Gt if k == token.Tok.Shr else (token.Tok.Assign if k == token.Tok.Ge else token.Tok.Ge)
     p.halfStart = at + 1
@@ -2156,8 +2176,10 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
         case token.Tok.Lt {
             # "<N>": an introduction written again in an expression, for the checker to report (G8b)
             p.advance()
+            p.VarAngles.Push(p.pos - 1)
             n := try p.name()
             try p.want(token.Tok.Gt)
+            p.CloseAngles.Push(p.pos - 1)
             return ast.Expr.TypeVar(p.from(at), n)
         }
         case token.Tok.Iden {

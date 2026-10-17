@@ -6,7 +6,7 @@ same sizes and byte-identical output, timed against each other.
 
 ```
 bench/run.sh                 # build both, check the outputs agree, time (median of 7, interleaved)
-bench/run.sh -x              # also baseline x86-64 for both (olang -a x86-64, C with no -march)
+bench/run.sh -x              # also baseline x86-64 for both (olang -target x86-64, C with no -march)
 bench/run.sh -q              # build and check only
 bench/run.sh -r 9 nbody text # 9 repetitions, only some rows
 BENCH_LOCK=/home/user/verify.lock bench/run.sh   # hold a lock while checking and timing, on a shared machine
@@ -21,7 +21,7 @@ not one of them.
 (`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization - and, since
 olang builds for the machine it runs on (B12, 2026-10-09), `-march=native`, with `-ffp-contract=off`, because clang's
 default would fuse `a*b+c` into an FMA wherever the target has one and change the results - olang never contracts, and
-fuses only where a program writes `math.Fma`. The `-x` columns build both for baseline x86-64 (`olang -a x86-64`, C with
+fuses only where a program writes `math.Fma`. The `-x` columns build both for baseline x86-64 (`olang -target x86-64`, C with
 no `-march`). The tables below the next section were measured before B12, when olang built for baseline x86-64 and the
 `-n` columns were its IR relinked with `-march=native`. Both versions print floats as
 olang's `$` does (the fewest digits that read back as the same value; `c/common.h` copies util.c's `FloatShortest`),

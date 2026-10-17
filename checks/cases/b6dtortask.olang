@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # C9a/P2 (the batch 6 review): a destructor's task builds into the scope being closed, in a part of it made while the
 # destructor runs - folded in as the destructor returns, so what the task built is destructed and reclaimed with the
 # scope. It was left linked to a closed header: no Tracker was ever destructed

@@ -12,7 +12,7 @@ OLANG=${OLANG:-build/out}
 case $OLANG in /*) ;; *) OLANG=$(cd .. && pwd)/$OLANG ;; esac
 [ -x "$OLANG" ] || make -C .. build/out >/dev/null
 mkdir -p build/fused
-(cd build/fused && $OLANG -b ../../fused.olang >/dev/null)
+(cd build/fused && $OLANG build ../../fused.olang >/dev/null)
 if [ -n "${BENCH_LOCK:-}" ]; then
     exec 9>"$BENCH_LOCK"
     echo "waiting for $BENCH_LOCK ..." >&2

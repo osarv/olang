@@ -4,13 +4,13 @@ Programs that rewrite olang sources after a language change. Each was written fo
 kept so other code (a branch, oann) can be migrated the same way. They edit files in place, so commit first.
 
 They are olang programs (they were Python scripts; the ports give the same edits and the same output). Build one with
-`build/out -b tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
-arguments below. `build/out -i tools/NAME.olang ARGS` runs one without building, which is fine for a few files.
+`build/out build tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
+arguments below. `build/out interpret tools/NAME.olang ARGS` runs one without building, which is fine for a few files.
 `srcmask.olang` is the module they share: telling code from comments and literals, reading files as Python's text mode
 did, walking a directory for `.olang` files; `diagedit.olang` is what the two driven by the compiler's diagnostics share
-(reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/out -t
-tools/srcmask.olang` and `build/out -t tools/diagedit.olang` run their tests. Every tool has a few tests of its own
-(`build/out -t tools/NAME.olang`), and `make test` runs them with the rest.
+(reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/out test
+tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. Every tool has a few tests of its own
+(`build/out test tools/NAME.olang`), and `make test` runs them with the rest.
 
 | tool | the change | run |
 |---|---|---|
@@ -22,6 +22,7 @@ tools/srcmask.olang` and `build/out -t tools/diagedit.olang` run their tests. Ev
 | `io_fix.olang` | after `io_try`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `build/tools_io_fix OLANG FILE...` |
 | `errors_migrate.olang` | the errors batch: Try forms renamed Checked, `try` that only checked made `checked`, `try` on calls that now fail | `build/tools_errors_migrate OLANG FILE\|DIR...` |
 | `donefail_migrate.olang` | S16: `done`, `fail` and `abort` removed - `!`, `try`, `assert`, `return`, `unreachable` | `build/tools_donefail_migrate FILE\|DIR...` |
+| `cli_words.olang` | B1: the command line in words (`-b` -> `build`, `-d` -> `-debug`, ...), in commands and `# flags:` | `build/tools_cli_words FILE...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.

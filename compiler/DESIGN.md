@@ -870,12 +870,17 @@ golden dumps in `lower`'s tests stand in for round trips.
 
 ### 1.11 Driver (`olang`, `build`, `target`)
 
-- **The command line is unchanged** (B1): `-b`, `-c`, `-t`, `-i`, `-r`, `-d`, `-u`, `-a`, `-D`, `-e`.
+- **The command line is stage 0's** (B1, words since 2026-10-17): the modes `build`, `compile`, `test`, `interpret`,
+  `format`, `explain`, `help`, and a file built and run (B3g); the options `-output`, `-debug`, `-race`, `-sanitize`,
+  `-target`, `-define`, `-update`, `-check`, each checked against the modes it applies to by one table (an option, its
+  value's name, its modes, its help line) that both the parsing and `help` read. `format` runs the formatter, which is
+  already olang (`compiler/fmt.olang`): stage 1 calls it as a module rather than building and running it as stage 0
+  does.
 - **What a build must guarantee is unchanged**: never reusing a stale object (B3), whether stale by source, `-D`
   values (B10b), target (B12b) or compiler; and injective symbols (B3b). How it is guaranteed changes: objects are
   addressed by the content they were built from (section 3.4).
 - **Process spawning.** Every external program runs through `os.Exec`: clang, git, the test binaries, and the
-  compiler re-running itself for `-t`. None runs through a shell.
+  compiler re-running itself for `test`. None runs through a shell.
 
 ## 2. The thirteen grammar points
 
@@ -1003,13 +1008,13 @@ Rules:
   study2 measured 172-199 MB for 4.6 MB of source.
 
 Estimated peak for a build of the compiler itself (about 1.2 MB of compiler source plus 0.6 MB of std):
-150-250 MB. The C compiler frees nothing and peaks at 3.0 GB on `runner.olang`. M5 measures the real figure.
+150-250 MB. The C compiler frees nothing and peaks at 3.0 GB on `tests/runner.olang`. M5 measures the real figure.
 
-### 3.2 `-t`: one process per file
+### 3.2 `test`: one process per file
 
 - **Isolation.** A file's build lives in its own process, as in B3a: a crash or a fatal error ends that file only,
   and memory is returned between files.
-- **Mechanism.** olang has no `fork`, so `-t a b c` re-runs the compiler (`os.ReadLink("/proc/self/exe")`) once
+- **Mechanism.** olang has no `fork`, so `test a b c` re-runs the compiler (`os.ReadLink("/proc/self/exe")`) once
   per file through `os.Exec`, with output captured and replayed in file order. That costs about 50-100 ms of
   start-up per file against builds of seconds.
 - **One file at a time** at first, as B3a decided. Running several files at once becomes an internal change once
@@ -1110,7 +1115,7 @@ with the installed one; `make bootstrap` is section 5.
      nesting is checked against stage 0 with both built for a limit of 40 (96 forms at 36-40 levels) and at 1,000 and
      4,000 levels, and the new parser alone at 20,000 (stage 0 is superlinear in depth).
 3. **Module graphs and name errors (M4).**
-   - Tools: `bootstrap/oracle/modgraph.c` links stage 0 without its driver and analyzes a root as `olang -c` does (its
+   - Tools: `bootstrap/oracle/modgraph.c` links stage 0 without its driver and analyzes a root as `olang compile` does (its
      build-decided branches decided), printing every module's identity and its imports, sorted;
      `dump.olang modules` prints the self-hosted loader's graph the same way (`Loader.Graph()`).
    - `compiler/tools/modgraph.sh` (`make modgraph`) compares them on every root of the repository - the corpus, std,
@@ -1138,7 +1143,7 @@ with the installed one; `make bootstrap` is section 5.
      a span's end is read from the golden's own caret, so a caret's width is checked for consistency only; from M3 the
      records come from the parser's spans and the widths are compared for real.
 5. **Type layouts (M5a).**
-   - Tools: `bootstrap/oracle/layoutdump.c` links stage 0 without its driver, checks a root as `olang -c` does, and
+   - Tools: `bootstrap/oracle/layoutdump.c` links stage 0 without its driver, checks a root as `olang compile` does, and
      prints every type it holds - each declared type, instance, array, reference, function type, tuple and anonymous
      enum - by its canonical text, with its size, alignment, LLVM spelling, struct body and field offsets, a function
      type's result spelling and passing, and an enum's payload offsets. `compiler/tools/layoutgold.sh` (`make

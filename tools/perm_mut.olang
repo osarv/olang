@@ -18,7 +18,7 @@
 # field ("x mut <T>", "v mut T = n") meant the binding's before and means "writable when bound to a reference" now -
 # drop it where it meant the binding.
 #
-#     build/out -b tools/perm_mut.olang && build/tools_perm_mut [--olang PATH] [-j N] FILE|DIR...
+#     build/out build tools/perm_mut.olang && build/tools_perm_mut [--olang PATH] [-j N] FILE|DIR...
 #
 #   --olang  the compiler to run (default: build/out in the repository this tool is in)
 #   -j       how many compilations run at once (default 3)

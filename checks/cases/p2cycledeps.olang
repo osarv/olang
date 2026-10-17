@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # P2: a task whose call reaches a call cycle handing a building callback on - every task gets a stand-in for each scope
 # its call binds, so four tasks building into their nodes' block never share an arena (C2)
 type Node struct(v I64) {

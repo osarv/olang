@@ -19,12 +19,20 @@ fn Unparse(decls Array<ast.Decl&>&, names source.Names&, text String&, diags dia
     return w.b.ToString()
 }
 
+# the branches the build may decide that met a syntax error, which Unparse writes as their text: their spans, in order
+fn HeldBranches(decls Array<ast.Decl&>&, names source.Names&, text String&, diags diag.Diagnostics&) Array<source.Span> {
+    w := writer(names, text, diags)
+    for d in decls { w.decl(d) }
+    return w.held.ToArray()
+}
+
 type writer struct(names source.Names&, text String&, diags diag.Diagnostics&) {
     names
     text
     diags
     b StringBuilder = StringBuilder()
     ind I64 = 0
+    held List<source.Span>          # the branches written as their text
 }
 
 fn (w mut writer&) put(s String&) { w.b.Push(s) }
@@ -103,6 +111,7 @@ fn (w mut writer&) topIf(i ast.TopIf&) {
 fn (w mut writer&) topBranch(b ast.TopBranch&) {
     if w.diags.Holds(b.Group) {
         w.span(b.Sp)
+        w.held.Push(b.Sp)
         return
     }
     w.put("{")
@@ -499,6 +508,7 @@ fn (w mut writer&) ifStmt(i ast.If&) {
 fn (w mut writer&) branch(b ast.Branch&) {
     if b.Body == null or w.diags.Holds(b.Group) {
         w.span(b.Sp)
+        w.held.Push(b.Sp)
         return
     }
     w.block(b.Body)

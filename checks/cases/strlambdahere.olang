@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/D16d/D16e: a lambda a Str makes capturing what its receiver reaches lives in the block it is made in, since
 # nothing is built where the receiver lives - called there, handed to a helper, or spawned (built in the join block)
 type Cell struct() {

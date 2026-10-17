@@ -665,7 +665,7 @@ test "a whole file, a line, and the compilation as a whole are written with what
     d.Error(Where.File(f), msgs.CannotOpen())
     d.Error(Where.Line(f, 7), msgs.NotRegular())
     d.Fatal(Where.Nowhere, msgs.DefineMissing())
-    assert d.Render() == "d.olang:7: error: not a regular file\nd.olang: error: cannot open this file\nolang: error[B10]: -D needs Name=value after it\n"
+    assert d.Render() == "d.olang:7: error: not a regular file\nd.olang: error: cannot open this file\nolang: error[B10]: -define needs Name=value after it\n"
     assert d.Summary() == "compilation failed with 3 errors\n"
 }
 

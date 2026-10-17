@@ -1,5 +1,5 @@
 # check: run
-# flags: -D Flag=true -D Ratio=0.75 -D Huge=5000000000 -D Level=1 -D Mode=fast -D Expect=-1
+# flags: -define Flag=true -define Ratio=0.75 -define Huge=5000000000 -define Level=1 -define Mode=fast -define Expect=-1
 error E { X }
 if Level > 2 and Mode == "fast" {
     fn pick() I32 { return Level * 10 }

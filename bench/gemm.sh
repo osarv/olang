@@ -19,8 +19,8 @@ mkdir -p build/la
 # built for this machine too, with C's floating point kept as written (-ffp-contract=off), as olang's is (B12c)
 for p in gemm mlp; do
     mkdir -p build/la/$p
-    (cd build/la/$p && $OLANG -a x86-64 -b ../../../$p.olang >/dev/null && cp build/$p build/$p.base \
-        && $OLANG -b ../../../$p.olang >/dev/null)
+    (cd build/la/$p && $OLANG build -target x86-64 ../../../$p.olang >/dev/null && cp build/$p build/$p.base \
+        && $OLANG build ../../../$p.olang >/dev/null)
 done
 clang -O3 -flto -march=native -ffp-contract=off -o build/la/gemm_c c/gemm.c -lopenblas -lpthread
 clang -O3 -flto -march=native -ffp-contract=off -o build/la/mlp_c c/mlp.c -lopenblas -lpthread -lm

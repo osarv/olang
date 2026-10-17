@@ -36,6 +36,6 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 Each module has `test { }` blocks.
 
 ```
-build/out -t std/json.olang          # one module
+build/out test std/json.olang          # one module
 make test                            # all of std, with the rest of the suite
 ```

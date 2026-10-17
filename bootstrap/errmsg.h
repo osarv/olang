@@ -6,7 +6,7 @@ struct type;
 
 //B11: every diagnostic is one row - "path:line:col: error[RULE]: message" - then the source line and a caret under
 //what it is about, and any notes as rows of their own ("path:line:col: note: ..."). RULE is the rule of the
-//specification the diagnostic applies, and "olang -e RULE" prints that rule's text (B11a): the long explanation lives
+//specification the diagnostic applies, and "olang explain RULE" prints that rule's text (B11a): the long explanation lives
 //there, under the rule, and a message says what is wrong here, in a few words, and what to write instead where that is
 //obvious. Messages are lowercase, one line, with no period at the end.
 //
@@ -23,30 +23,41 @@ struct type;
 //specification states.
 #define DIAGNOSTICS(X) \
     /* ---- the command line ---- */ \
-    X(ERR_USAGE,                        "B1",    "nothing to do - write a mode and a file, as 'olang -b main.olang'") \
-    X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are -b, -c, -t, -i and -e") \
+    X(ERR_USAGE,                        "B1",    "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") \
+    X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run") \
     X(ERR_MODE_ONE_FILE,                "B1",    "%s takes exactly one file") \
     X(ERR_MODE_NEEDS_FILE,              "B1",    "%s needs a file") \
-    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -s -u -a -D") \
-    X(ERR_TARGET_MISSING,               "B12",   "-a needs a target after it, as '-a x86-64-v3'") \
+    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown option '%s' - 'olang help' lists the options of %s") \
+    X(ERR_OPTION_NOT_FOR_MODE,          "B1",    "%s applies to %s, not to %s") \
+    X(ERR_OPTION_NEEDS_VALUE,           "B1",    "%s needs a value after it: %s") \
+    X(ERR_NOT_A_SOURCE,                 "B1",    "'%s' is no olang file to run - a file's name ends in .olang") \
+    X(ERR_MODE_FIRST,                   "B1",    "the mode comes first: 'olang %s' and then its options") \
+    X(ERR_HELP_ONE_MODE,                "B1",    "help takes at most one mode") \
+    X(ERR_OUTPUT_IS_DIR,                "B3h",   "-output %s is a directory - name the file to write") \
+    X(ERR_OUTPUT_NO_DIR,                "B3h",   "-output %s: there is no directory %s") \
+    X(ERR_OUTPUT_CANNOT_WRITE,          "B3h",   "cannot write it") \
+    X(ERR_CANNOT_RUN,                   "B3g",   "the program cannot be run: %s") \
+    X(ERR_FORMATTER_MISSING,            "B13",   "the formatter's source is not beside this compiler: %s") \
+    X(ERR_FORMATTER_BUILD,              "B13",   "the formatter could not be built - %s says why") \
+    X(ERR_TARGET_MISSING,               "B12",   "-target needs a target after it, as '-target x86-64-v3'") \
     X(ERR_TARGET_UNKNOWN,               "B12",   "unknown target '%s' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") \
     X(ERR_TARGET_UNSUPPORTED,           "B12",   "olang does not build for '%s' - it builds for x86_64 and aarch64 Linux with the GNU C library") \
-    X(ERR_TARGET_NATIVE_FOREIGN,        "B12",   "'-a %s': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") \
-    X(ERR_TARGET_FOREIGN_MODE,          "B12a",  "%s builds and runs on this machine, and '-a %s' is another architecture or system - only -c builds for it") \
+    X(ERR_TARGET_NATIVE_FOREIGN,        "B12",   "'-target %s': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") \
+    X(ERR_TARGET_FOREIGN_MODE,          "B12a",  "%s builds and runs on this machine, and '-target %s' is another architecture or system - only compile builds for it") \
     X(ERR_TARGET_NO_BACKEND,            "B12a",  "this clang cannot build for '%s': its back end for that architecture cannot generate the BF16 code the runtime holds") \
     X(ERR_TARGET_NO_CLANG,              "B12",   "clang not found on PATH - it is what builds the program, and what says what target '%s' is") \
-    X(ERR_EXPLAIN_NEEDS_RULE,           "B11a",  "-e takes one rule, as 'olang -e B1'") \
+    X(ERR_EXPLAIN_NEEDS_RULE,           "B11a",  "explain takes one rule, as 'olang explain B1'") \
     X(ERR_NO_SPEC,                      "B11a",  "no specification at %s") \
     X(ERR_NO_RULE,                      "B11a",  "the specification has no rule %s") \
-    X(ERR_DEFINE_MISSING,               "B10",   "-D needs Name=value after it") \
-    X(ERR_DEFINE_SHAPE,                 "B10",   "-D takes Name=value, found '%s'") \
-    X(ERR_DEFINE_NOT_NAME,              "B10",   "-D %s=%s: the name is not an identifier") \
-    X(ERR_DEFINE_TWICE,                 "B10",   "-D %s=%s: defined twice") \
-    X(ERR_DEFINE_BAD_NUMBER,            "B10",   "-D %s=%s: not a number - '0x' and '0b' take digits of their own base") \
-    X(ERR_DEFINE_INT_RANGE,             "B10",   "-D %s=%s: beyond 64 bits") \
-    X(ERR_DEFINE_NEG_RANGE,             "B10",   "-D %s=%s: below I64's minimum") \
-    X(ERR_DEFINE_FLOAT_RANGE,           "B10",   "-D %s=%s: beyond F64's range") \
-    X(ERR_DEFINE_BUILTIN,               "B10a",  "-D cannot redefine the built-in constant %s") \
+    X(ERR_DEFINE_MISSING,               "B10",   "-define needs Name=value after it") \
+    X(ERR_DEFINE_SHAPE,                 "B10",   "-define takes Name=value, found '%s'") \
+    X(ERR_DEFINE_NOT_NAME,              "B10",   "-define %s=%s: the name is not an identifier") \
+    X(ERR_DEFINE_TWICE,                 "B10",   "-define %s=%s: defined twice") \
+    X(ERR_DEFINE_BAD_NUMBER,            "B10",   "-define %s=%s: not a number - '0x' and '0b' take digits of their own base") \
+    X(ERR_DEFINE_INT_RANGE,             "B10",   "-define %s=%s: beyond 64 bits") \
+    X(ERR_DEFINE_NEG_RANGE,             "B10",   "-define %s=%s: below I64's minimum") \
+    X(ERR_DEFINE_FLOAT_RANGE,           "B10",   "-define %s=%s: beyond F64's range") \
+    X(ERR_DEFINE_BUILTIN,               "B10a",  "-define cannot redefine the built-in constant %s") \
     /* ---- files and the toolchain ---- */ \
     X(ERR_CANNOT_OPEN,                  "",      "cannot open this file") \
     X(ERR_NOT_REGULAR,                  "",      "not a regular file") \
@@ -99,9 +110,9 @@ struct type;
     X(ERR_COND_NOT_BOOL,                "B9",    "the condition beginning %n is not a Bool") \
     /* ---- imports and modules ---- */ \
     X(ERR_IMPORT_REMOTE_BAD_NAME,       "M23a",  "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-'") \
-    X(ERR_IMPORT_LOCK_NOT_A_COMMIT,     "M23b",  "olang.lock names no commit for %s - delete its line, or build with -u") \
+    X(ERR_IMPORT_LOCK_NOT_A_COMMIT,     "M23b",  "olang.lock names no commit for %s - delete its line, or build with -update") \
     X(ERR_IMPORT_FETCH_FAILED,          "M23a",  "could not fetch %s with git - check the path and the connection") \
-    X(ERR_IMPORT_LOCKED_FETCH_FAILED,   "M23b, M23c", "could not fetch the commit olang.lock names for %s - delete its line, or build with -u") \
+    X(ERR_IMPORT_LOCKED_FETCH_FAILED,   "M23b, M23c", "could not fetch the commit olang.lock names for %s - delete its line, or build with -update") \
     X(ERR_IMPORT_PATH_TOO_LONG,         "M23",   "this import path is too long to name a file") \
     X(ERR_IMPORT_FILE_NOT_FOUND,        "M23",   "no .olang file at %s") \
     X(ERR_IMPORT_HAS_EXTENSION,         "M23",   "an import names its file without '.olang'") \
@@ -134,8 +145,8 @@ struct type;
     X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
     X(ERR_BUILD_DEFAULT_MUT,            "B10c",  "%n is a build constant, and a declaration giving it a default is immutable - drop 'mut'") \
     X(ERR_BUILD_DEFAULT_TYPE,           "B10c",  "%n is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found %t") \
-    X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-D %S=%S does not fit %n, which is %t") \
-    X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-D %S=VALUE', or declare it with a default") \
+    X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-define %S=%S does not fit %n, which is %t") \
+    X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-define %S=VALUE', or declare it with a default") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
     X(ERR_RETURN_SCOPE_NONE,            "O26",   "'&return' names the result scope, and this function has none") \

@@ -1,5 +1,5 @@
 # check: fail S8a
-# a constant global of a type no -D value has (B10c) - one of those would be a build constant's default, configuration
+# a constant global of a type no -define value has (B10c) - one of those would be a build constant's default, configuration
 error E { X }
 Verbose := U8(0)
 Level U8 = 2 + 1

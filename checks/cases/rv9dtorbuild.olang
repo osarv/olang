@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # C9/O16 (tonight9's review): a destructor's top level is the scope being closed, where its instance lives - so a node it
 # builds through its instance's field ("n.next = Node(k)") lives until that scope's destructors have all run, and the
 # next destructor reads it. It was built in a scope of the destructor's own, closed as it returned

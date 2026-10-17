@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # Vec phase 2a review D: a Vec 70 owning value levels down is used, copied and taken as one at the top
 type L0 struct() {
     toks Vec<I64> = Vec<I64>()

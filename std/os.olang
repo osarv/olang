@@ -84,7 +84,7 @@ fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? OsError {
     unreachable
 }
 
-# the program's command line (B4a): its own name first - the path it was started by, or under "olang -i" the file
+# the program's command line (B4a): its own name first - the path it was started by, or under "olang interpret" the file
 # being interpreted - then each argument, as given
 fn Args() Array<String&>& {
     n := __olang_arg_count()

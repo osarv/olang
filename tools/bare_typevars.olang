@@ -8,7 +8,7 @@
 # Comments and string literals are left alone. Files are rewritten in place; with --check nothing is written and the
 # exit status says whether anything would change.
 #
-#     build/out -b tools/bare_typevars.olang && build/tools_bare_typevars [--check] [-v] FILE|DIR...
+#     build/out build tools/bare_typevars.olang && build/tools_bare_typevars [--check] [-v] FILE|DIR...
 #
 #   A type a file declares, std's (the std directory of the repository this tool is in) and the built-in ones are known
 #   types: "a<X>" right after a parameter's name is a type variable only when X is none of them.

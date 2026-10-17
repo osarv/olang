@@ -2,7 +2,7 @@
 # diagnostic row, compiling many files side by side, keeping a trailing comment where it was after an edit, and moving the
 # LINE:COL a checks/cases header names along with the edit on its line.
 #
-# Test it with: build/out -t tools/diagedit.olang
+# Test it with: build/out test tools/diagedit.olang
 
 import "std/os"
 import "std/filepath"
@@ -221,12 +221,12 @@ fn hasTestLine(src String&) Bool {
     return false
 }
 
-# compiles one file in dir, "" when it cannot be read or the compiler ran out its time. The mode is -t for a file with
+# compiles one file in dir, "" when it cannot be read or the compiler ran out its time. The mode is test for a file with
 # tests (one that mentions TestBuild, and with testLines also one with a test "..." block), else -c
 fn compileOne(olang String&, file String&, dir String&, testLines Bool) String {
     src := try srcmask.ReadText(file) catch { return "" }
-    mode := "-c"
-    if src.Contains("TestBuild") or (testLines and hasTestLine(src)) { mode = "-t" }
+    mode := "compile"
+    if src.Contains("TestBuild") or (testLines and hasTestLine(src)) { mode = "test" }
     out := try srcmask.Capture(String&[olang, mode, file], dir, 900000) catch os.OsError {
         srcmask.SayErr("could not run " $olang)
         os.Exit(1)

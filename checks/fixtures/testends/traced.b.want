@@ -1,2 +1,2 @@
 unhandled error: FxErr.GONE
-(build with -d to see where it came from)
+(build with -debug to see where it came from)

@@ -11,7 +11,7 @@ set -e
 dump=${MODGRAPH_DUMP:-build/compiler_tools_dump}
 oracle=build/modgraph
 for t in "$dump" "$oracle"; do [ -x "$t" ] || { echo "modgraph: $t is not built (make $t)"; exit 1; }; done
-[ $# -gt 0 ] || set -- *.olang geom/*.olang std/*.olang compiler/*.olang compiler/tools/*.olang checks/checks.olang \
+[ $# -gt 0 ] || set -- tests/*.olang tests/geom/*.olang std/*.olang compiler/*.olang compiler/tools/*.olang checks/checks.olang \
     fuzz/*.olang bench/*.olang
 work=$(mktemp -d "${TMPDIR:-/tmp}/modgraph.XXXXXX")
 trap 'rm -rf "$work"' EXIT

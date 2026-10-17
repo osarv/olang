@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48): os.RunOnStack - its thread builds as its caller would, the caller waiting: on the main thread into the
 # main thread's scope, on a task into that task's part of it, beside the main thread building there; and tasks spawned
 # from inside it

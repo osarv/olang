@@ -6070,7 +6070,7 @@ static void cgTrace(struct cgCtx* ctx, struct operand* op, const char* what, boo
 static void cgTraceHint(struct cgCtx* ctx, char* text, size_t n) {
     if (ctx->emitUnwind || ctx->debug) return;
     size_t l = strlen(text);
-    snprintf(text + l, n - l, "\n(build with -d to see where it came from)");
+    snprintf(text + l, n - l, "\n(build with -debug to see where it came from)");
 }
 
 //E35/S16: the error a failure path holds, named as a program writes it: one of funcType's words picked by code, or the
@@ -8002,7 +8002,7 @@ static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, lon
             if (v->kind != CT_AGG) return true;
             struct type c = ((struct var*)ListGetIdx(&t.vars, (int)v->i))->type;
             struct ctVal shape = *v;
-            shape.type = c;
+            shape.type = CtType(c);
             return cgConstBytes(&shape, c, buf + 8, ChoicePayloadSize(t));
         }
         case BASETYPE_STRUCT: {
@@ -8921,7 +8921,7 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     //S18d: where it came from, in a build that keeps the trace; elsewhere how to get it
     if (ctx->emitUnwind || ctx->debug) fprintf(ctx->fnOut, "  call void @__olang_ert_print(ptr %s)\n", errStream);
     else fprintf(ctx->fnOut, "  call i32 @fputs(ptr %s, ptr %s)\n",
-                 cgGlobalStringConst(ctx, "(build with -d to see where it came from)\n"), errStream);
+                 cgGlobalStringConst(ctx, "(build with -debug to see where it came from)\n"), errStream);
     fputs("  ret i32 1\n", ctx->fnOut);
 
     cgLabel(ctx, okLbl);

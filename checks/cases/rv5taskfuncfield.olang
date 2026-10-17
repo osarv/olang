@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48, replacing decision 40's refusal): tasks calling closures held in structs they are given - each closure
 # builds into the scope it captured from the task's thread, into that thread's own part of it
 type N struct(v I64) {

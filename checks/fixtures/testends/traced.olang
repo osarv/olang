@@ -1,4 +1,4 @@
-# S18d: an error escaping main - its trace in a -d build and under -i, a hint to rebuild with -d in any other; and a "!"
+# S18d: an error escaping main - its trace in a -debug build and under interpret, a hint to rebuild with -debug in any other; and a "!"
 error FxErr {
     GONE
 }

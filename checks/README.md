@@ -36,7 +36,7 @@ naming, `-i` against `-b`, the scope sanitizer, the fuzzer on fixed seeds.
 
 ```
 make test                              # runs it with the rest of the suite
-build/out -t checks/checks.olang       # only this
+build/out test checks/checks.olang       # only this
 ```
 
 Every check works in its own directory under `build/checks/`, so nothing touches the tree. It uses the compiler in
