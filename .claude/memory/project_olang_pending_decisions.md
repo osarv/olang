@@ -167,6 +167,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   evaluated only on failure, reports its line, test-aware); library = OS calls (Exit) - so the language keeps assert and
   unreachable only; done/fail/abort freed as names; (4) Never as a type (Swift Never, Kotlin Nothing, Zig noreturn, Rust
   !): fits result positions, function types and generics, a call to one fits where a value is expected. Awaiting OK.
+  The user: "Not final shape yet. Still thinking"; Never as a type allows `n Never` (nonsense) - agreed: a marker in
+  the result position, lowercase `never` (fn Exit(code I32) never; also in function types; a call to one fits where a
+  value is expected). Asked how os.Exit differs from halting: in a program done/fail are os.Exit(0/1) exactly; in a
+  test they end the test, unwinding its scopes; an unwinding halt in production (defers, destructors) would need
+  open-scope tracking on every block (2.4x measured in test builds) - principle 2 says no. Options: keep halting
+  (differs only in tests) or tests-pass-by-ending (recommended). THE USER IS STILL THINKING - do not build.
 - QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
   must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
   no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
