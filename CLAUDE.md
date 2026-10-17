@@ -91,7 +91,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `choice`, `+` on arrays, lowercase primitives) are simply unknown - their diagnostics were removed at the user's
   request.
 - **Comments: `#` to the line's end, `## ... ##` a block (L4/L4a, the user's call).**
-- **Every flag is one character (B1, the user's call):** `-b -c -t -i -r -d -s -u -a -e -D`.
+- **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
+  compile test interpret format explain help`; options `-output -debug -race -sanitize -target -define -update -check`,
+  each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.py`).
+- **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
+  compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
+- **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
+  (`compiler/fmt.olang`, on the port's scanner and parser) built once into the cache; only whitespace changes.
 - **Logic is in words: `and`/`or`/`not`/`xor` (E7/E7a, the user's design).** `and`/`or` short-circuit (the user's
   call); `not` binds looser than comparisons, as in Python. No compound logic assignments.
 - **One loop keyword, `for` (S9, S9a, the user's direction).** `for { }`, `for cond { }`, three clauses (post clause a
@@ -110,7 +116,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `break` of its own leaves, a leaving `join` counts. `unreachable` is checked, never assumed (S16d); `abort` behaves
   as a failed assert (S16c). `done`/`fail` end the current test, else the process, with 0/1 (S16, `crash` renamed
   `fail` by the user). `os.Exit(code)` for any status (B5b).
-- **`assert cond[, message]` is a statement (S17/S18, the user's call for the message).** Outside `-t` a failure
+- **`assert cond[, message]` is a statement (S17/S18, the user's call for the message).** Outside `test` a failure
   aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
   process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
@@ -374,7 +380,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 - **`join { }` with `spawn` calls inside (P1-P1b).** Binding is lexical, one level; the join waits on every way out; a
   task's arguments must outlive the join block (P2). P3/P5 (no shared writes) were withdrawn - a spawning program owns
-  its races, which `-r` (ThreadSanitizer, P7) detects - Go's position, for Go's reason: no static check without an
+  its races, which `-race` (ThreadSanitizer, P7) detects - Go's position, for Go's reason: no static check without an
   ownership discipline, and a borrow checker would cost the doubly linked list, the graph and the parent pointer.
   Every ordering olang can express goes through pthread or LLVM atomics, so TSan sees all of it.
 - **`spawn x = f()` binds a result (P1g)**; parallel map is `spawn out[i] = f(i)`.
@@ -405,28 +411,28 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   rule). An import's alias is reserved in its module (M20). The prelude (`std/prelude`) gives built-in types their
   methods and types by bare name (M19d). No package-private visibility for now (the user's call).
 - **Remote packages** are fetched with git into a cache keyed by commit and pinned by `olang.lock` (M23b, the user's
-  call); `-u` updates (M23c); every part is validated and nothing runs through a shell.
-- **Separate compilation (B1-B8).** `-c` one module, `-b` build and link, `-t` each file's tests in a process of its
-  own (B3a), `-i` interprets through the evaluator (B3e). Imports are resolved from source - no header files. Objects
+  call); `-update` updates (M23c); every part is validated and nothing runs through a shell.
+- **Separate compilation (B1-B8).** `compile` one module, `build` build and link, `test` each file's tests in a process
+  of its own (B3a), `interpret` interprets through the evaluator (B3e). Imports are resolved from source - no header files. Objects
   are named by a hash of everything compiled against and rebuilt when the compiler is newer; a root's object is its
   own artifact. Globals initialize imports first, then in dependency order (B5a; a cycle is an error). No interface
   file exists because a function's scope obligations are derived from its body, which only the source has.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (what the machine can do unless asked otherwise; LTO also
-  made builds faster, ThinLTO measured no better at this size); `-d` is `-O0` with DWARF; `-r` ThreadSanitizer; `-s`
+  made builds faster, ThinLTO measured no better at this size); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
   the scope sanitizer (B2f: closed chunks poisoned and protected).
-- **Targets (B12, the user's call):** native CPU by default, `-a TARGET` to cross-compile (`-c` only); target
+- **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile (`compile` only); target
   constants `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's
   call).
-- **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-D Name=value` build constants; an
-  immutable top-level global is a default `-D` replaces (B10c); a local `if` the build decides is conditional
+- **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
+  an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b, the user's call); a constant condition not depending on the build is a dead-branch error
   (S8a).
 - **Diagnostics are one row each (B11/B11a, the user's design).** `path:line:col: error[RULE]: message`, the source
-  line and a caret, `note:` rows; source order, one error per cause; `olang -e RULE` prints the spec rule.
+  line and a caret, `note:` rows; source order, one error per cause; `olang explain RULE` prints the spec rule.
 - **Build details.** Objects for a different mode are different artifacts (`.main.o`, `.test.o`, `.tmod.o`, `.race.o`,
-  `.debug.o`, `.san.o`, a `-D` hash, B4/B10b); the target is in the object hash (B12b); symbols are mangled from
+  `.debug.o`, `.san.o`, a `-define` hash, B4/B10b); the target is in the object hash (B12b); symbols are mangled from
   module identity with every character but letters and digits escaped (B3b); two modules of one base name are fine
-  (identity is the path). `-D` values are typed as the literal would be, text a `String` (B10); the token evaluator
+  (identity is the path). `-define` values are typed as the literal would be, text a `String` (B10); the token evaluator
   (B9a) decides only what it decides exactly and defers the rest to the compile-time evaluator (B9c), which checks the
   program again with each decision. An untaken top-level branch is not parsed.
 - **Declared module identity was deferred until packaging, and is now the import path (M22).** Individual function or
@@ -447,7 +453,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   destructor-bearing values outside a global's own frame (K2c), anything past the step and 256MB budgets. Reaching
   `abort`/`unreachable` where a value is required is an error at the place. Every disagreement with the run time found
   (by reviews and the differential fuzzer) is a bug fixed in the evaluator.
-- **`-i` is stage 1** (no memory reclaimed, no destructors, tasks in sequence); stage 2 is the port's M8, not built in
+- **`interpret` is stage 1** (no memory reclaimed, no destructors, tasks in sequence); stage 2 is the port's M8, not built in
   C.
 
 ### std
@@ -493,8 +499,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Fuzzers:** `fuzz/` (differential: baked, decided, run - `make fuzz`) and the scope fuzzer (`make scopefuzz`).
 - **Runtime facts.** Runtime thread-locals are `initialexec`; the runtime's globals sit in comdats; every function
   carries the target's CPU and features and `null_pointer_is_valid`; LLVM 18's BF16/F16 bugs are worked around (BF16
-  narrowing as integer arithmetic, asm fences on F16 bitcasts, FastISel off in `-d`, AVX512-BF16 conversions removed -
-  T4, E33, B2c, B12c). The arena under `-s` poisons with `0x7FF5...`, protects and holds back closed chunks.
+  narrowing as integer arithmetic, asm fences on F16 bitcasts, FastISel off in `-debug`, AVX512-BF16 conversions removed -
+  T4, E33, B2c, B12c). The arena under `-sanitize` poisons with `0x7FF5...`, protects and holds back closed chunks.
 - **Testing.** `make verify` runs the corpus (`shared.olang`, `worker.olang`, `runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
@@ -505,7 +511,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   rebuilds it from C with no committed binary, and will walk `bootstrap/CHAIN` once stage 1 exists. From the port's
   start it takes fixes only (QB, the user's call). The refactor was modest: no splitting files for size (the user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
-  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `-i`
+  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
   loading and names, M5a types and the typed contract, M7's MIR contract; the compiler under test is `OLANG ?=

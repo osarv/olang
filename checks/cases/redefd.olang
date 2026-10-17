@@ -1,6 +1,6 @@
 # check: fail error[B10]: 'Level' is a build constant - choose another name
 # flags: -define Level=3
-# B10: a declaration of a name -D defines is an error - unless it gives the constant a default (B10c), which a function
+# B10: a declaration of a name -define defines is an error - unless it gives the constant a default (B10c), which a function
 # never does
 error E { X }
 fn Level() I32 { return 1 }

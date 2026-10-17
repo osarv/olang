@@ -1,7 +1,7 @@
 # check: run
 # flags: -define Profile=prod -define Port=443 -define Ratio=2 -define Verbose=true
-# B10c: an immutable global of a type a -D value can have is a build constant's default - -D replaces it, fitted to the
-# declared type; a top-level condition (B9a) and a local one (S8b) read the value -D gave
+# B10c: an immutable global of a type a -define value can have is a build constant's default - -define replaces it, fitted to the
+# declared type; a top-level condition (B9a) and a local one (S8b) read the value -define gave
 Profile := "dev"
 Port I64 = 8080
 Ratio F64 = 1.5

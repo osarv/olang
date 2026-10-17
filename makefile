@@ -64,6 +64,15 @@ build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
 	$(OLANG) build compiler/tools/dump.olang
 
+# the formatter (SPEC.md B13): "olang format" builds it into its own cache; this is the copy the tests use
+build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
+	$(OLANG) build compiler/tools/fmt.olang
+
+# B13's acceptance: every file of the repository formatted reads back as the same tree, keeps its comments, and is its
+# own layout (compiler/tools/fmtdiff.sh)
+fmtdiff: build/compiler_tools_fmt
+	compiler/tools/fmtdiff.sh
+
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump
 	compiler/tools/tokdiff.sh
@@ -154,6 +163,7 @@ verify:
 	$(MAKE) astdiff
 	$(MAKE) namesdiff
 	$(MAKE) layoutdiff
+	$(MAKE) fmtdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
@@ -207,7 +217,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff layoutdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
