@@ -44,7 +44,21 @@ fn table() Array<String&>& {
         "sum: for x in Array|sum|sum|array 100000 8000",
         "sum: Array.Iter().Fold|sum|sum|arrayfold 100000 8000",
         "parallel, 4 tasks|parallel|parallel|10000000 4",
-        "text|text|text|5000000"
+        "text|text|text|5000000",
+        "Vec: for x in v|vec|vec|walk vec 1000000 100",
+        "Array: for x in a|vec|vec|walk array 1000000 100",
+        "Vec: v[idx[i]]|vec|vec|gather vec 1000000 10",
+        "Array: a[idx[i]]|vec|vec|gather array 1000000 10",
+        "Vec: v[i] = v[i] * 2|vec|vec|store vec 1000000 100",
+        "Array: a[i] = a[i] * 2|vec|vec|store array 1000000 100",
+        "Vec: two fields|vec|vec|fields vec 1000000 100",
+        "Array: two fields|vec|vec|fields array 1000000 100",
+        "Vec push|vec|vec|push vec 50000000 0",
+        "List push (vec.olang)|vec|vec|push list 50000000 0",
+        "Vec: opaque call|vec|vec|opaque vec 1000000 100",
+        "Array: opaque call|vec|vec|opaque array 1000000 100",
+        "Vec Sort|vec|vec|sort vec 1000000 0",
+        "Array Sort|vec|vec|sort array 1000000 0"
     ]
 }
 
