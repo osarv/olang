@@ -77,3 +77,6 @@ SAME worker.olang (4593471 bytes IR)
 SAME compiler/generic.olang (4205278 bytes IR)
 SAME compiler/tools/dump.olang (3947674 bytes IR)
 NOIR f1 compiler/check.olang
+SAME compiler/check.olang (7203348 bytes IR)
+SAME compiler/tools/checkdump.olang (4163731 bytes IR)
+SAME compiler/generic.olang (4330663 bytes IR)
