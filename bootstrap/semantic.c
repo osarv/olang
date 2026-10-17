@@ -9955,8 +9955,10 @@ static struct operand* sliceTemporaryRoot(struct operand* slice) {
     if (slice->opType != OPERATION_SLICE || !slice->args.len) return NULL;
     struct operand* r = *(struct operand**)ListGetIdx(&slice->args, 0);
     while ((r->opType == OPERATION_MEMBER || r->opType == OPERATION_INDEX) && !r->type.structMAlloc && r->args.len
-           && !r->isAtCall)
+           && !r->isAtCall && !r->catchClauses.len)
         r = *(struct operand**)ListGetIdx(&r->args, 0);
+    //(a "try ... catch" value - the element, or what a clause gives - is a copy made where it is read, R9a: a temporary)
+    if (r->catchClauses.len && !r->type.structMAlloc) return r;
     //(a payload read with "as" from an enum held by value is a copy made where it is read - a temporary, whatever the enum
     //is; one read through a reference is in place, where the referent is)
     if (r->opType == OPERATION_AS && r->args.len && !(*(struct operand**)ListGetIdx(&r->args, 0))->type.structMAlloc) return r;
@@ -11295,6 +11297,21 @@ static bool landedCallRefsScope(struct checkCtx* ctx, struct operand* op, struct
     return false;
 }
 
+//O17 (U1/U2): where the references held by a value with no storage of its own live - a call's result landed by its
+//obligations, a copy out of existing storage (a conditional or a match of places, a borrowed result), or a part of the
+//element "try x[i] catch default v" reads (its default built where that is). False for a fresh temporary
+static bool copiesExistingRefs(struct checkCtx* ctx, struct operand* op);
+static bool copiedRefsScope(struct checkCtx* ctx, struct operand* rhs, struct var** hv, int* hd, bool* hu);
+static bool triedUnderPath(struct operand* op);
+static bool valueRefsScope(struct checkCtx* ctx, struct operand* op, struct var** v, int* d, bool* u);
+static bool tempRefsScope(struct checkCtx* ctx, struct operand* op, struct var** v, int* d, bool* u) {
+    if (landedCallRefsScope(ctx, op, v, d, u)) return true;
+    if (copiesExistingRefs(ctx, op) && copiedRefsScope(ctx, op, v, d, u)) return true;
+    if (triedUnderPath(op) && (op->opType == OPERATION_INDEX || op->opType == OPERATION_MEMBER))
+        return valueRefsScope(ctx, op, v, d, u);
+    return false;
+}
+
 static bool condOfRefs(struct operand* op) {
     if (heldResult(op)) return condOfRefs(heldResult(op));
     return (op->opType == OPERATION_COND && op->args.len == 3) || op->opType == OPERATION_MATCH;
@@ -11410,8 +11427,22 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 struct var* hv;
                 int hd;
                 bool hu;
-                if (landedCallRefsScope(ctx, arg, &hv, &hd, &hu) && hv != SCOPE_AMBIGUOUS
+                if (tempRefsScope(ctx, arg, &hv, &hd, &hu) && hv != SCOPE_AMBIGUOUS
                         && handleThroughParam(func, j, arg->tok)) {
+                    //(a "try a[i] catch default v" on a built-in array: v is built where the element's references are, as
+                    //the same try through a List's At builds it where its result lands - either is then what is lent)
+                    if (triedUnderPath(arg)) {
+                        for (struct operand* t = arg; t; ) {
+                            for (int c = 0; c < t->catchClauses.len; c++) {
+                                struct catchClause* cc = ListGetIdx(&t->catchClauses, c);
+                                if (cc->dflt) landCallIn(cc->dflt, hu ? NULL : hv, hu ? 0 : (hv ? 0 : hd), hu);
+                            }
+                            if (t->catchClauses.len || (t->opType != OPERATION_MEMBER && t->opType != OPERATION_INDEX)
+                                    || !t->args.len)
+                                break;
+                            t = *(struct operand**)ListGetIdx(&t->args, 0);
+                        }
+                    }
                     if (hu) { hv = NULL; hd = 0; } //O1b: the program's scope
                     if (determined && (!sameExactScope(hv, hd, boundTo, boundDepth) || hu != unnamed)) {
                         Err(tok, ERR_SCOPE_ARGS_DISAGREE);
@@ -11422,6 +11453,43 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                     arg->handleLent = true;
                     boundTo = hv;
                     boundDepth = hd;
+                    unnamed = hu;
+                    determined = true;
+                    detArg = arg;
+                    continue;
+                }
+            }
+            //O17 (U1/U2): any other value with no storage of its own - a call's result ("idBox(seed)"), a conditional or a
+            //match of places, a "try ... catch default" - whose references live elsewhere than the block it is a temporary
+            //of, lent to a reference parameter through which something can be stored, is a split value as a copy local is:
+            //the variable is bound where its references live, so what the callee builds through them is built there, and
+            //the copy itself is a temporary of this block (codegen). Where the callee can store into what it is lent, or
+            //hand it back, what it keeps would be in neither - O17's error, as for a local copy. Left a plain temporary,
+            //the variable was the block's: "addRef(idBox(seed), i)" in a loop built each node there and hung it off seed
+            if (ctx && ctx->hasOwnScope && ctx->scope && !arg->type.structMAlloc && !OperandIsLvalue(arg) && !arg->isNullLiteral
+                    && TypeHoldsReferences(arg->type) && RefNarrowingMatters(pt) && ownSlotsAdmitStores(arg->type, 0)
+                    && !argDeterminesScope(arg)) {
+                struct var* hv;
+                int hd;
+                bool hu;
+                if (tempRefsScope(ctx, arg, &hv, &hd, &hu)
+                        && (hu || hv == SCOPE_AMBIGUOUS || !sameExactScope(hv, hd, NULL, normDepth(ctx->blockDepth)))) {
+                    if (func->owner || calleeBodyKnown(func)) {
+                        struct lendCheck lc = { func, sv, arg->tok, false, false, false, ErrMsgSaveContext() };
+                        if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
+                        else if (calleeStoresRegion(func, sv)) Err(arg->tok, ERR_BORROW_SPLIT_SCOPES);
+                    } else if (calleeStoresRegion(func, sv)) Err(arg->tok, ERR_BORROW_SPLIT_SCOPES);
+                    if (hv == SCOPE_AMBIGUOUS) continue; //(where its references are is not known here, O12)
+                    if (hu) { hv = NULL; hd = 0; } //O1b: the program's scope
+                    if (determined && (!sameExactScope(hv, hd, boundTo, boundDepth) || hu != unnamed)) {
+                        Err(tok, ERR_SCOPE_ARGS_DISAGREE);
+                        noteArgsDisagree(ctx, arg, hv, hd, hu, detArg, boundTo, boundDepth, unnamed);
+                        boundTo = SCOPE_AMBIGUOUS;
+                        break;
+                    }
+                    arg->splitLent = true;
+                    boundTo = hv;
+                    boundDepth = hv ? 0 : hd;
                     unnamed = hu;
                     determined = true;
                     detArg = arg;
@@ -12516,6 +12584,9 @@ static bool mbiCall(struct operand* op, bool tgt) {
             struct type pt = ((struct var*)ListGetIdx(&f->type.vars, i))->type;
             //(cgResolveParamScopeOverride: a temporary for a reference parameter is built where its scope is bound)
             if (pt.scopeParam) at = tgt || mbiBound(op, pt.scopeParam);
+            //(...but a value lent as where its references are - a handle a call gives, a split value, O17b/O17 - is
+            //copied into the block the call stands in, whatever its variable is bound to)
+            if ((a->handleLent || a->splitLent) && !OperandIsLvalue(a) && !a->type.structMAlloc) at = false;
             if ((mbBoundary(pt, a) && at) || mbiAdapter(pt, a)) return mbiSite(a);
         }
         //D16c: a capturing lambda made for a callee that keeps nothing of it lives in this frame, as codegen makes it
@@ -18761,7 +18832,9 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
     }
     if (op->opType == OPERATION_SLICE) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
-        if (RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed)) return true;
+        //(a value "try ... catch" gives is a copy made where it is read, never the element's storage, R9a)
+        bool tried = !base->type.structMAlloc && triedUnderPath(base);
+        if (!tried && RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed)) return true;
         //E16a: a slice of a temporary borrows it where it is made - the block the slice is written in - unless what it
         //borrows is a call's result, built where the slice is put (O18a), or text written in the program, which is
         //constant data, as long-lived as the program (T25d), and read-only

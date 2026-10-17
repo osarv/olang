@@ -3788,7 +3788,7 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         if (!argBuilds) ctx->capReadOnly--;
         //O17b: a handle a call gave, lent as its reference - the variable bound where that leads; the handle's own copy
         //is a temporary of this block (the callee uses it only through its reference)
-        if (argOp->handleLent && !OperandIsLvalue(argOp) && !argOp->type.structMAlloc)
+        if ((argOp->handleLent || argOp->splitLent) && !OperandIsLvalue(argOp) && !argOp->type.structMAlloc)
             scopeOverride = cgScopeSlotAt(ctx, ctx->blockDepth);
         //C2d: a constructor parameter whose reference names no scope fills a field of the instance, so
         //an argument with no storage of its own is built where the instance lands

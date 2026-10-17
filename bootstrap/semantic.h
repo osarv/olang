@@ -761,6 +761,9 @@ struct operand {
     bool hereChecked; //C2d/T17c: checkCtorHereFits has judged this value where it landed - once is enough
     bool storeRelied; //O18c: a store's target was read through this call's result and judged where the result was then -
                       //the end of the statement never lands it anywhere else
+    bool splitLent; //O17: a value with no storage of its own (a call's result, a conditional's, a try's) whose references
+                    //live elsewhere, lent to a reference parameter: bound where its references are, its copy built in the
+                    //block (codegen)
     bool handleLent; //O17b: a handle borrowed for a call that uses it only through its reference - lent as that reference,
                      //so the call's scope variable is where the reference leads and the handle's own storage is no part of it
     struct list args; //list of struct operand*: operator operands, call args, or [base, index]/[base] for index/member
