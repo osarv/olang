@@ -2305,9 +2305,9 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
             rt = ta
         } else if ta == types.NullT and (c.isRef(tb) or c.P.T.KindOf(tb) == types.Kind.Func) {
             rt = tb
-        } else if c.isRef(ta) and c.P.T.Same(c.P.T.Referent(ta), tb) {
+        } else if c.isRef(ta) and not c.isRef(tb) and c.flowsInto(tb, c.P.T.Referent(ta)) {
             rt = ta
-        } else if c.isRef(tb) and c.P.T.Same(c.P.T.Referent(tb), ta) {
+        } else if c.isRef(tb) and not c.isRef(ta) and c.flowsInto(ta, c.P.T.Referent(tb)) {
             rt = tb
         } else if c.isRef(ta) and c.isRef(tb) and c.P.T.Same(c.deref(ta), c.deref(tb)) {
             rt = c.P.T.Ref(c.deref(ta), c.P.T.PermOf(ta) & c.P.T.PermOf(tb))
@@ -2610,6 +2610,15 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 return c.construct(sp, nsp, t, args)
             }
         }
+        case ast.Expr.Member(msp, _, _) {
+            # alias.Name<args>(...): a type another module declares (M10)
+            ref := c.P.R.Member(c.fr().File, msp.End)
+            if ref.Kind == names.What.Type and ref.Index >= 0 {
+                t := c.P.Apply(c.fr().Ctx, c.P.DeclFor(ref.Module, ref.Index), targs)
+                if t == types.UnknownT { return c.unknown(sp) }
+                return c.construct(sp, msp, t, args)
+            }
+        }
         nomatch { }
     }
     c.gap(gsp, "a generic call of this kind")
@@ -2627,7 +2636,10 @@ fn (c mut Checker&) conversion(sp source.Span, t types.TypeId, args Array<ast.Ex
         return c.unknown(sp)
     }
     lv := c.fold(args[0])
-    x := c.value(c.expr(args[0], t if not lv.Ok or c.litFits(lv, t) else types.UnknownT), args[0].Span())
+    # a literal adapts to the type (T6) where it fits, as a shift of one does (E8b); any other value keeps its own type
+    w := types.UnknownT
+    if (lv.Ok and c.litFits(lv, t)) or (not lv.Ok and (c.litLike(args[0]) or c.shiftLit(args[0]))) { w = t }
+    x := c.value(c.expr(args[0], w), args[0].Span())
     xt := typeOf(x)
     if xt == t or xt == types.UnknownT { return x }
     if not (c.isNumber(xt) and c.isNumber(t)) {
@@ -3393,11 +3405,13 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         # x[i] on a type with At (E31): the element read, a value with no storage - written through, it is written
         # back by SetAt (E31b, writeBack)
         m := c.roleMethod(t, "At", items.Len())
-        if m < 0 {
+        # under try the checked form (E31a): TryAt where the type declares one - a chain's every link (E24)
+        tm := c.roleMethod(t, "TryAt", items.Len()) if c.fr().Tries > 0 else -1
+        if m < 0 and tm < 0 {
             c.err(sp, msgs.NotIndexable(c.ty(t)))
             return null
         }
-        call := c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, t, items))
+        call := c.invoke(sp, sp, tm, c.read(sp, base), items, null) if tm >= 0 else c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, t, items))
         if typeOf(call) == types.UnknownT { return null }
         site := c.site(typed.SiteKind.Temp, sp)
         c.atRecs.Push(atRec(c.fr().Body, I64(site), base, t))

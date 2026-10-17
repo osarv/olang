@@ -330,20 +330,25 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
         }
         case names.What.Type {
             if ref.Index < 0 { return types.UnknownT }
-            d := p.DeclFor(ref.Module, ref.Index)
-            p.declVars(d)
-            n := p.T.DeclParams(d)
-            if n != args.Len() { return types.UnknownT }   # G7: the checker says how many
-            vs := Array<types.TypeId>(n)
-            owner := DeclOwner(d)
-            for i in range n {
-                row := p.VarAt(owner, i)
-                vs[i] = p.constArg(c, args[i], row.Const) if p.T.ParamIsConst(d, i) else p.Resolve(c, args[i])
-            }
-            return p.Instance(d, p.T.List(vs))
+            return p.Apply(c, p.DeclFor(ref.Module, ref.Index), args)
         }
         nomatch { return types.UnknownT }
     }
+}
+
+# a declared type with its written arguments read in a context: its instance (G7: Unknown for the wrong count, which
+# the checker says)
+fn (p mut Program&) Apply(c Context&, d types.DeclId, args Array<ast.TypeRef&>&) types.TypeId {
+    p.declVars(d)
+    n := p.T.DeclParams(d)
+    if n != args.Len() { return types.UnknownT }
+    vs := Array<types.TypeId>(n)
+    owner := DeclOwner(d)
+    for i in range n {
+        row := p.VarAt(owner, i)
+        vs[i] = p.constArg(c, args[i], row.Const) if p.T.ParamIsConst(d, i) else p.Resolve(c, args[i])
+    }
+    return p.Instance(d, p.T.List(vs))
 }
 
 # a type's instance with these arguments (or the type itself, a non-generic one with none): G17 bounds how deep the
