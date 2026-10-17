@@ -1749,6 +1749,33 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
     return NULL; //an error, a failure, or a stray break
 }
 
+//E35: the program ends, naming the error st holds, as a failed check does - while compiling, K1's abort. ends 2: a test's
+//escaping error (S16)
+static void ctBangEnds(struct ctState* st, struct operand* op, int ends) {
+    if (ctRun) {
+        fflush(NULL);
+        if (op->tok.owner && op->tok.lineNr > 0) {
+            struct str f = TokenGetFileName(op->tok.owner);
+            fprintf(stderr, "%.*s:%d: ", f.len, f.ptr, op->tok.lineNr);
+        }
+        struct str q = (struct str){0};
+        struct semaModule* o = st->errType.owner;
+        if (o && o->identity.len && !(o->identity.len >= 11 && !strncmp(o->identity.ptr, "std/prelude", 11))
+                && o != st->mod) {
+            q = o->identity;
+            for (int k = q.len - 1; k >= 0; k--)
+                if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
+        }
+        struct token w = st->errWord >= 0 && st->errWord < st->errType.words.len
+                         ? *(struct token*)ListGetIdx(&st->errType.words, st->errWord) : (struct token){0};
+        fprintf(stderr, "%.*s%s%.*s.%.*s\n", q.len, q.ptr, q.len ? "." : "", st->errType.name.len,
+                st->errType.name.ptr, w.str.len, w.str.ptr);
+        ctTracePrint();
+        abort();
+    }
+    ctFail(st, op->tok, ends == 2 ? CT_WHY_TEST_ERROR : CT_WHY_BANG);
+}
+
 //R9/R9a/R9b: a tried operand's failure - handled by the first clause that names it, else propagated
 static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
     if (st->flow != CF_ERROR || st->errBypass) return NULL;
@@ -1761,31 +1788,7 @@ static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
         }
         if (!match) continue;
         if (!cc->ends) ctErtN = 0; //S18d: taken
-        if (cc->ends) { //E35: the program ends, naming the error, as a failed check does - while compiling, K1's abort
-            if (ctRun) {
-                fflush(NULL);
-                if (op->tok.owner && op->tok.lineNr > 0) {
-                    struct str f = TokenGetFileName(op->tok.owner);
-                    fprintf(stderr, "%.*s:%d: ", f.len, f.ptr, op->tok.lineNr);
-                }
-                struct str q = (struct str){0};
-                struct semaModule* o = st->errType.owner;
-                if (o && o->identity.len && !(o->identity.len >= 11 && !strncmp(o->identity.ptr, "std/prelude", 11))
-                        && o != st->mod) {
-                    q = o->identity;
-                    for (int k = q.len - 1; k >= 0; k--)
-                        if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
-                }
-                struct token w = st->errWord >= 0 && st->errWord < st->errType.words.len
-                                 ? *(struct token*)ListGetIdx(&st->errType.words, st->errWord) : (struct token){0};
-                fprintf(stderr, "%.*s%s%.*s.%.*s\n", q.len, q.ptr, q.len ? "." : "", st->errType.name.len,
-                        st->errType.name.ptr, w.str.len, w.str.ptr);
-                ctTracePrint();
-                abort();
-            }
-            ctFail(st, op->tok, cc->ends == 2 ? CT_WHY_TEST_ERROR : CT_WHY_BANG);
-            return NULL;
-        }
+        if (cc->ends) { ctBangEnds(st, op, cc->ends); return NULL; }
         st->flow = CF_NORMAL;
         if (cc->hasBlock) {
             size_t mark = (size_t)st->locals->len;
@@ -2683,6 +2686,12 @@ static void ctRunTasks(struct ctState* st, struct list* tasks, struct ctJoinFail
             } else {
                 struct catchClause* cc = ListGetIdx(&t->s->catchClauses, hit);
                 struct ctCallFrame* cf = ListGetIdx(&t->clauses, hit);
+                if (cc->ends) { //E35: "spawn f(x)!"
+                    ctTaskRunning = outerTask;
+                    ctTasksPending -= tasks->len - 1 - i;
+                    ctBangEnds(st, t->op, cc->ends);
+                    return;
+                }
                 st->flow = CF_NORMAL;
                 st->errBypass = false;
                 v = cf->func ? ctCallRun(st, cc->taskCall, cf) : ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));

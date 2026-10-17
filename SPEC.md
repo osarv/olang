@@ -1194,7 +1194,10 @@ of that name whose
   permission (T25b), so a method never writes through what its trait only lets it read,
 - return type agrees — both absent, or both present and the same type, a reference's permission included,
 - error set (§7.1) is held by the signature's: every error the method can fail with - written or inferred (R1a) -
-  is one the signature lists (R1b).
+  is one the signature lists (R1b),
+- `noreturn` agrees (D8e): a `noreturn` signature is met only by a `noreturn` method - generic code counts a call to it
+  as leaving (D10a) - and a `noreturn` method meets a signature with no result and no errors, which it does all of by
+  never returning (T22).
 
 A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
 supply it. A trait with a private method is therefore **sealed**: no other module's type can satisfy it.
@@ -1351,11 +1354,17 @@ to a `noreturn` function or through a `noreturn` function value, by `unreachable
 `break` of its own. It declares no error set (an error is a way back to its caller), so whatever can fail inside it is
 handled there. A call to a `noreturn` function, written as a statement, leaves for D10a; and as an expression it fits
 wherever a value of any type is expected - `catch default os.Exit(2)`, `x I64 = Fatal("no x") if bad else 3`, an
-argument - since control never arrives where the value would be used. `noreturn` is not a type: no variable,
+argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used. Beside
+other values (E28, S12b) it gives way to theirs, and a conditional or `match` all of whose values are such calls fits
+wherever a value is expected too; as a generic argument it takes no part in inference (G9a), as `null` takes none. A
+`noreturn` call written in a value position has no type of its own, so no diagnostic names one: where it does not fit
+(`:=`, below) it is said that it gives no value. `noreturn` is not a type: no variable,
 parameter, field, element or type argument is `noreturn`, and `:=` from such a call is a compile-time error (D15). A
 function type may write it too (`fn(I32) noreturn`, T21); a `noreturn` function fits such a type, and also one with the
 same parameters, no result and no error set, which it satisfies by never returning (T22). A method and an `extern fn`
-may be `noreturn`; a constructor, a destructor, an operator method (E31), a lambda and `main` may not.
+may be `noreturn`, and so may a trait's method signature (T31); a constructor, a destructor, an operator method (E31), a
+lambda (`fn() noreturn { ... }` is a compile-time error - a lambda's type is inferred, D16b, and a function type
+expected of one says no more than its parameters and result) and `main` may not.
 
 **D8c (several results).** A `ret-type` written as a parenthesized list of two or more types declares that
 the function returns **several values**, one per type, in that order. They are not one value: there is no
@@ -2644,8 +2653,9 @@ compile-time error.
 
 **E15a (checked operations).** `checked` is `try` (R8) **plus every check** the language can make on what it
 covers: `checked (a * b / c)`, `checked a[i]`, `checked a[lo:hi]`, `checked Array<T>(n)`, `checked (x as Shape.Circle)`
-- a call, a chain and a parenthesized expression as `try` covers them, with every operation in them checked too,
-other than inside a call (which has its own signature), a nested `try`, a lambda, or a `match` used as a value
+- a call, a chain and a parenthesized expression as `try` covers them, with every operation in them checked too - a
+call's arguments included - other than in the called function's body (which has its own signature), a nested `try`, a
+lambda, or a `match` used as a value
 (S12b), whose clauses are statements' bodies. An operation a type declares (E31) is checked by calling its checked
 form (E31a), whose own errors the expression then can produce too; with no checked form it calls the plain method, as
 `try` would. Each check fails with a word of `BuiltinError` (§7.6) instead of doing what the unchecked operation
@@ -2673,7 +2683,9 @@ zero; a finite value that becomes infinite or does not fit an integer type is `O
 tightly as a unary operator, as `try` does, so a checked computation is parenthesized: `checked a + b` is
 `(checked a) + b`. A `checked` covering nothing that can fail or be checked is a compile-time error, and so is a `try`
 whose operand only `checked` would make fallible - it names `checked`. The words a checked expression can produce are
-exactly those of the operations in it, and catching those is complete (R13). Written without `checked`, every
+exactly those of the operations in it, and catching those is complete (R13). A `checked` with no clauses, written in
+what a `try` or a `!` covers, hands its errors to that one (E35): `(checked a[i])!` ends the program on an index out of
+range, and `try (checked e) + 1` propagates what `e`'s checks find with the rest. Written without `checked`, every
 operation behaves as the rules above state - wrapping, IEEE results, or undefined.
 
 ### 5.5 Indexing and member access
@@ -3212,6 +3224,13 @@ operator, tighter than any prefix one: `-f(x)!` is `-(f(x)!)`; the chain may go 
 covered). A `!` directly followed by `=` is the `!=` token (L16), which a postfix `!` never needs to stand before.
 While compiling, an error reaching `!` is in K1's abort class: where a value is required it is a compile-time error,
 and elsewhere evaluation stops there.
+
+A `checked` with no clauses written in what `!` or a `try` covers (E15a) hands what it checks to them: `(checked a[i])!`
+is the bounds-checked index that ends the program when `i` is out of range, and `try (checked a[i]) + 1` propagates
+its `OUT_OF_BOUNDS` with whatever else the `try` covers - the inner `checked` neither propagates on its own nor needs
+the enclosing function to name `BuiltinError` for it. A `checked` with clauses handles its errors itself, as a nested
+`try` does. On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
+call fails, as a failed `assert` there does (P6); no error reaches the join.
 
 ## 6. Statements
 
@@ -3945,7 +3964,7 @@ its signal. And ThreadSanitizer records each thread's calls on a stack of fixed 
 chain deeper than roughly 200,000 frames (possible on `os.RunOnStack`'s stacks) corrupts its state: such a run may
 crash, abort, or hang inside the detector, and only a build without `-race` runs it as written.
 
-**P4.** A spawned call **may fail**. A task whose call can fail - a function declaring errors (§7 R1), or a spawned
+**P4.** A spawned call **may fail**. A task whose call can fail - a function that can fail (§7 R1, R1a), or a spawned
 lambda (D16e) whose body lets one out - is written `spawn try CALL`, optionally with catch clauses (§7.5) after it:
 
 ```
@@ -3956,7 +3975,8 @@ join {
 ```
 
 `try` there is required, as before a fallible call anywhere (R8): a fallible spawned call without it is a compile-time
-error, and so is `try` before one that cannot fail. Without targets a spawn is never an expression; its call's result,
+error, and so is `try` before one that cannot fail. `spawn f(x)!` handles the call as `!` does (E35): a failure ends
+the program from the task's thread, as a failed `assert` there does (P6), and reaches no join. Without targets a spawn is never an expression; its call's result,
 if any, is discarded (P1).
 
 **P4a.** A task's **clauses run on the task's thread**. Each clause written after a spawned `try` is part of the task:
@@ -6290,11 +6310,13 @@ builds it, once.
 
 ## 11. External Functions
 
-**X1.** `extern-func-decl ::= "extern" "fn" IDEN "(" extern-param-list ")" [ extern-ret-type ]
+**X1.** `extern-func-decl ::= "extern" "fn" IDEN "(" extern-param-list ")" [ extern-ret-type | "noreturn" ]
 STMNT_END` is a top-level declaration (D1) naming a function defined outside this compilation and
 resolved by the platform's linker at build time. Unlike an ordinary `func-decl` (D7), it declares no
 `error-list` and has no `block` body of any kind — `STMNT_END` ends the declaration directly where an
-ordinary function's body would otherwise begin.
+ordinary function's body would otherwise begin. One written `noreturn` (`extern fn exit(status I32) noreturn`) is a
+`noreturn` function (D8e), taken at its word as the rest of the prototype is (X1a): a foreign function that returns
+after declaring `noreturn` is undefined behaviour.
 
 **X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a data race
 (§6.8 P8b), one of the places in the language where memory safety rests on something the compiler does not
@@ -6542,7 +6564,8 @@ that matching while any other argument binds the same variable: the variable is 
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
 literal operands (§5.4). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
-`Pick(1, 2.5)` at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
+`Pick(1, 2.5)` at `F64`. `null` and a `noreturn` call (D8e) take no part in that matching at all - each fits whatever
+the other arguments bind (`pick(3, os.Exit(1))` is `pick` at `I64`). Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
 such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
 at `I64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
 

@@ -1,0 +1,24 @@
+# check: run
+# D8e/G9a/S12b/E28/T31: a noreturn call fits as a match value, beside a conditional's other value, as a generic argument
+# (taking no part in inference), and a noreturn method meets a trait method with no result
+import "std/os"
+Big mut I64 = 0
+type Stopper trait {
+    Stop()
+}
+type Q struct() { }
+fn (q Q&) Stop() noreturn { os.Exit(9) }
+fn halt(q <T Stopper>&, n I64) I64 {
+    if n > 100 { q.Stop() }
+    return n
+}
+fn pick(a <T>, b T) T { return a }
+fn c(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => 2 } }
+fn d(x I64) I64 { return match x { case 1 => 7 case _ => os.Exit(5) } }
+fn e(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => os.Exit(6) } }
+fn main() {
+    a := pick(3, os.Exit(1) if Big > 9 else 4)
+    b := pick(os.Exit(1), 5) if Big > 9 else 6
+    assert c(2) == 2 and d(1) == 7 and a == 3 and b == 6 and halt(Q(), 4) == 4
+    if Big > 9 { assert e(Big) == 0 }
+}
