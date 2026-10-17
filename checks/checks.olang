@@ -1724,6 +1724,7 @@ fn testends(r mut report&) ? Failed {
         try r.expect(sh(dir, "\"$OLANG\" interpret " $n ".olang > i.txt 2>&1; grep -v '^Aborted' i.txt | cmp -s - " $n ".d.want") == 0,
                      $n " -i", dir)
     }
+}
 
 # B3g: a file written where the mode would stand is built and run - its arguments after it, an option's spelling
 # included, its status its own, a signal's as a shell reports it; a file starting "#!/usr/bin/env olang" runs as a
