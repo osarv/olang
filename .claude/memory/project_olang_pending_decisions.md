@@ -161,6 +161,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   or an error leaving it (tests may `try` without catching); (3) programs: main normal 0, error 1, os.Exit(code) -
   os.Exit stays process-wide (B5b kept); (4) keep unreachable; (5) Never result type for os.Exit (recommended). Early
   exits from helpers (P1d unwinding tests) move to checks/ cases. ~200 sites, in the errors batch. Awaiting the user.
+  The user then asked: os.Abort? main without ?? why exit/abort library but assert not? free done/fail as names;
+  Never vs a keyword (exits/leaves). Answered: (1) no os.Abort - `assert false, "why"`/unreachable cover it; (2) main may
+  omit `?`; (3) the line: language = what the compiler understands (assert is decided while compiling, its message
+  evaluated only on failure, reports its line, test-aware); library = OS calls (Exit) - so the language keeps assert and
+  unreachable only; done/fail/abort freed as names; (4) Never as a type (Swift Never, Kotlin Nothing, Zig noreturn, Rust
+  !): fits result positions, function types and generics, a call to one fits where a value is expected. Awaiting OK.
 - QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
   must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
   no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
