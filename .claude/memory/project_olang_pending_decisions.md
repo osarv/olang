@@ -53,15 +53,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
   PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
   print/println/eprint/eprintln and M19f's exception removed; tools/io_print.py migrates (wt-ioprint, started).
-- QO3 ANSWERED 2026-10-17 (replaces QO1 and PRINT's "stop the program"). The user: no exceptions; "No std function
-  may ever exit really ever"; bare `?` means "the built-in errors" - "only the things we have already built in" -
-  and named errors are declared on top (`? IoError` = built-ins + IoError); `try` is written as today (my first reading
-  of "try" as the keyword was wrong - dictation). (1) yes: std's misuse checks become built-in errors, language
-  guarantees still abort; (2) yes: function types may carry `?`. IO is NOT built in; "fixing the try on io.Print is
-  another story" (later). Details mine: the set is BuiltinError's words plus the default error; a test block counts as
-  a `?` body. Cost told to the user: every fallible callee now may fail with the built-ins, so a complete `catch Named`
-  in a function without `?` needs a catch for them too - a smaller form of what was undone 2026-10-05. QUEUED after
-  wt-ioprint and wt-e31view merge (both touch the corpus and semantic.c); the port's checker told.
+- QO3 WITHDRAWN 2026-10-17. The user first chose bare `?` = the built-in errors (BuiltinError + the default error,
+  named errors on top), then, told the cost (every callee may fail with the built-ins, so a complete `catch Named` in a
+  function without `?` needs another catch), said "Ok nvm. Let's just not have built in errors". Reading taken: the
+  built-in set is dropped and error sets stay as they are (bare `?` = the default error, named sets closed,
+  BuiltinError only under `try`). Still standing from the user: "No std function may ever exit" (so Print's
+  stop-the-program is provisional and Print becomes fallible, "another story"), and callbacks may carry `?`. Open:
+  QO4 - how std's misuse checks (RemoveAt out of range, Send on a closed channel, a bad base) report without exiting:
+  (a) a named error on each such function, (b) keep them as aborts, since they are the caller's bug like an assert.
+  Recommended (b), with Try forms (TryRemoveAt) where a caller wants an error.
 - QO2. Too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
   replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
   Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
