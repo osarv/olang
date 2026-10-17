@@ -11179,6 +11179,13 @@ static bool lendStores(struct var* func, struct var* sv, bool lambda) {
 //answer too early would keep a stale one
 //(builtOnly: a binding no argument determined - one a scope argument wrote, or one O18b landed - which says where the callee
 //builds, and nothing about what it stores, which O17 asks of the arguments alone)
+struct lambdaKeep { struct var* func; struct var* r; struct operand* lambda; struct token tok; };
+static struct list lambdaKeeps;
+struct lambdaArg { struct operand* lambda; struct var* callee; int idx; };
+static struct list lambdaArgs; //O17 (round 5): a capturing lambda made as a named function's argument
+bool SemanticParamTransient(struct var* func, int j);
+struct frameLambda { struct var* local; struct operand* lambda; };
+static struct list frameLambdas;
 struct regionEdge { struct var* rFunc; struct var* r; struct var* func; struct var* sv; struct token tok; bool builtOnly; };
 //(ownArr: an own array's borrow lent, O33 - said as that; a lambda's capture is judged by its body's own facts, as
 //calleeStoresRegion cannot: a lambda's body is known as it is made, its edges settled with every other)
@@ -11228,8 +11235,31 @@ static void bindingEdges(void) {
 }
 
 static void flushRegionLocalStores(struct var* func);
+//O17 (round 5): a lambda capturing a reference parameter of the function it is made in keeps that parameter's own
+//storage for as long as the closure lives - in a closure returned, stored or handed on, beyond the call. A value lent there
+//whose storage is not where its references are (a split value, a handle's copy, O17/O17b) is then kept in neither, so
+//such a capture counts as a store into the parameter's region, settled with the rest; one in a local that is only ever
+//called (settleFrameLambdas) never leaves the frame and keeps nothing
+static void settleLambdaKeeps(void) {
+    for (int i = 0; i < lambdaKeeps.len; i++) {
+        struct lambdaKeep* k = ListGetIdx(&lambdaKeeps, i);
+        bool frame = false;
+        for (int f = 0; f < frameLambdas.len && !frame; f++) {
+            struct frameLambda* fl = ListGetIdx(&frameLambdas, f);
+            frame = fl->lambda == k->lambda && !canonicalVar(fl->local)->valueEscapes;
+        }
+        //(...nor one made for a named callee keeping nothing of it beyond the call, D16c: "sortMergeBuffered(p, fn(i, j)
+        //Bool { return less(a[i], a[j]) })")
+        for (int f = 0; f < lambdaArgs.len && !frame; f++) {
+            struct lambdaArg* la = ListGetIdx(&lambdaArgs, f);
+            frame = la->lambda == k->lambda && SemanticParamTransient(la->callee, la->idx);
+        }
+        if (!frame) markRegionStored(k->func, k->r, k->tok);
+    }
+}
 static void settleRegions(void) {
     flushRegionLocalStores(NULL); //O17: a lambda's, or any body's left
+    settleLambdaKeeps();
     bindingEdges();
     for (bool changed = true; changed; ) {
         changed = false;
@@ -11329,6 +11359,14 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 && (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam
                 && !(*(struct var*)ListGetIdx(&func->type.vars, j)).type.refOwn)
             landDeclByObligations(ctx, arg);
+    }
+    for (int j = 0; j < args.len && j < func->type.vars.len && (func->owner || func->isMethod); j++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&args, j);
+        if (a->pendingLambda || (a->opType == OPERATION_READ_VAR && a->readVar && a->readVar->isLambda)) {
+            if (!lambdaArgs.elemSize) lambdaArgs = ListInit(sizeof(struct lambdaArg));
+            struct lambdaArg la = { a, func, j };
+            ListAdd(&lambdaArgs, &la);
+        }
     }
     if (scopeArgNodes.len > func->type.scopeVars.len && !instanceArg) Err(tok, ERR_SCOPE_ARG_NOT_ACCEPTED, func->name);
     for (int i = 0; i < func->type.scopeVars.len; i++) {
@@ -11667,6 +11705,15 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                     //through - shallow permission, T25b - and it was skipped, so such a store built in a scope the
                     //call's caller was told nothing about)
                     if (!ct.scopeParam || canonicalVar(ct.scopeParam) != canonicalVar(sv)) continue;
+                    //O17 (round 5): a reference capture of the parameter itself keeps the lent value's own storage in
+                    //the closure - kept, unless the closure never leaves the frame (settleLambdaKeeps)
+                    struct operand* ca = j < args.len ? *(struct operand**)ListGetIdx(&args, j) : NULL;
+                    if (ct.structMAlloc && ca && ca->opType == OPERATION_READ_VAR && ca->readVar
+                            && varIsParamOf(ca->readVar, ctx->func)) {
+                        if (!lambdaKeeps.elemSize) lambdaKeeps = ListInit(sizeof(struct lambdaKeep));
+                        struct lambdaKeep k = { ctx->func, r, op, tok };
+                        ListAdd(&lambdaKeeps, &k);
+                    }
                     if (!L || L->bodyHadErrors) {
                         markRegionStored(ctx->func, r, tok);
                         builtAt(ctx, r, tok);
@@ -19351,8 +19398,6 @@ static bool typeExprIsBareTypeVar(struct syntax* typeExprNode) {
 }
 
 //D16c: a capturing lambda held in a local (settleFrameLambdas)
-struct frameLambda { struct var* local; struct operand* lambda; };
-static struct list frameLambdas;
 
 //O26a: the tokens of a syntax node, in order
 static void syntaxTokensInto(struct syntax* n, struct list* out) {
