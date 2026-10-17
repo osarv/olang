@@ -5200,6 +5200,9 @@ and literals made only of such, never existing storage anywhere in it) - it is
   temporary sites, constant aggregates, checks on `Make`/`Collect`, zero-value calls; the plan holds placement only
   (nothing in it changes a value) and gains `Inert`; every summary has an owning pass; liveness (O39-O41) runs on MIR;
   decisions are kept under keys; instances remember where they were asked for. layoutdiff: 9,403 types as stage 0, 11 deferred.
+- **Port M5b/M5c in progress: `compiler/check.olang` elaborates the resolved AST into typed core (D16, E31a/E31b, R21,
+  S9e, S13a, G10c, E25, QP1/QP2, 2026-10-17).** One place types construction (`Array<T>(n)` fixed when n folds), one
+  place computes error sets; acceptance last 12/511 cases, 133/227 roots; it needs >6GB to compile under stage 0.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

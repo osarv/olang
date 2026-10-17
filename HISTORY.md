@@ -16132,3 +16132,44 @@ Every type and function instance records where it was first asked for (`generic.
 which is the twin's identity, rather than a separate index. A type argument written with sharing scopes is held plain,
 so a sharing function cannot be stored in a generic container of functions of that shape - T22a's refusal, sound, and
 nothing in the repository writes one.
+
+## Port M5b/M5c: the checker, `compiler/check.olang` (2026-10-17, in progress)
+
+`check.olang` elaborates the resolved AST (`names`) into the typed core (`typed.olang`, DESIGN.md 1.6.1),
+demand-driven: a function's body is checked when first needed, instances of generics per binding through
+`generic.Program.FnInstance`/`Instance`. Built in phases, each committed with its targeted tests (5d28b9d through
+9e1e93f): the skeleton, expressions and statements; operators, methods, conversions, slices, destructuring and
+`match`; built results writable, D8d, E32 on enums, `Call` adapters, exact literal folding; for-in over iterators,
+runs, iterables and indexables and comprehensions as `Collect`/`Yield`; lambdas (D16a-D16c: expected types, inferred
+results and errors, captures; G9a/G9c through lambdas and constraints); `x[i]` through `At` as a place with stores
+written back by `SetAt` (E31b, the held element a `Temp`); join and spawn (P1, P1g, P4-P4c) with task clauses as
+lambdas and D10a through joins; `take` (E34) and every write checked (S6, T25b, D16c); destructor bodies reading
+fields bare (C9, C10).
+
+**Decided (mine).** Error sets are computed in one place - a frame's leaks, the clauses that catch, what a `try`
+takes - so QO1's inferred sets (a bare `?` is the set the body lets out, a fixed point; no default error, no R17) grow
+from it rather than from a second analysis; the default error and R17 are not built into the port. `Array<T>(n)` and
+`Array<T>(n, fill)` are typed in one function (`arrayMake`): a fixed length where `n` folds (`generic.FoldConst`,
+G21's exact fold), a run-time `Array<T>` otherwise, a written target type winning (QP1); `Array<T, N>()` is reported as
+a gap, the written `Array<T, N>` and constant generics being dropped (QP2) - a fixed length stays an internal
+property of an array type, never parsed. S13a's coverage is Maranget's usefulness over the clauses' rows
+(`coversRows`): Bool and enum cases specialized, payload columns expanded, the default matrix where column 0 names
+not every constructor. The derived Try forms (`TryAt`, `TrySetAt`) are `PrimOp.InRange` checks against `Len()` under
+`Check.Try`, so `try c[i]` on a user type checks as on an array. A compound assignment or `++` on a declared type
+goes through its operator method (`Inc`/`Dec`, else `Plus`/`Minus` with a literal 1 of the parameter's type). A
+generic constructor's arguments are inferred against the wanted type first (G10c), a reference binding read-only.
+
+**Ownership is not checked here** (section 8, M6): every move is a `Take`, every owner and destructor-bearing
+temporary a site, and S4d is decided by types, so the scope pass has what it needs.
+
+**Where it stopped.** The last commit (9e1e93f) is untested: it built once before its last two edits (a G17 bound of
+1,000 instances per function, and a default-matrix shortcut in `coversRows`), which were never compiled. Stage 0
+cannot compile `check.olang` within the ~6GB a compile may take on the shared machine: `-c compiler/check.olang` fails
+with "out of memory" under a 7GB virtual-memory cap (peak resident 3.6GB), and the checkdump tool importing it
+reached 13.6GB and got other agents' verifies OOM-killed. So the targeted tests, `checkdiff` and `make verify` were
+not run on it. The last acceptance measured, before this batch: 12 of 511 checker-rule cases give stage 0's first
+error (11 exactly its errors), 133 of 227 roots check clean. The checkdump binary built before the last two edits ran
+out of memory checking a 5-line constant-generic recursion (`kTotal(a[1:] as Array<I64, N - 1>&)`) and reached 9.5GB on
+`shared.olang` inside `FnInstance` - a chain of instances that never ends, which the uncompiled G17 bound is meant to
+stop. **Gaps**: QP3's by-value array parameters and inferred array results; E10a on arrays and enums; a derived
+`TrySlice`; the inferred error sets themselves.

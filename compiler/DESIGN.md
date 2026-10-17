@@ -1078,8 +1078,8 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M3 | `ast`, `parse` (study2's parser is the start) | M1, M2 | parse acceptance (section 4); recovery gives one error per item on every syntax-error case (done 2026-10-11) |
 | M4 | `load`, `fetch`, `names` | M3 | load + names acceptance; the remote, lock and `-u` scenarios pass through a test driver (done 2026-10-11) |
 | M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) (built 2026-10-12; reviewed and revised the same day: function types' scopes, marks, body kinds, sites, keys - section 1.6.1) |
-| M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site |
-| M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call |
+| M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site (in progress 2026-10-17: 5,664 lines; last measured 12 of 511 refused cases give stage 0's first error, 133 of 227 roots clean; stage 0 cannot compile it under ~6GB - section 1.6.1's HISTORY entry) |
+| M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call (in progress, with M5b) |
 | M6 | `scope` | M5a's `typed` contract | every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38) |
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
