@@ -232,7 +232,7 @@ if TestBuild {
         if os.Run("command -v curl >/dev/null 2>&1") != 0 { return -1 }
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
         compiler := try os.RealPath(try os.Env("OLANG") catch default "build/out") catch { return -2 }
-        if os.Run($os.Quote(compiler) " -b checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
+        if os.Run($os.Quote(compiler) " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
         os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
         for i in range 200 {
             if os.Exists("build/http_port") { break }

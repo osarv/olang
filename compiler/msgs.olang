@@ -52,6 +52,17 @@ type Diag enum {
     ModeOneFile
     ModeNeedsFile
     UnknownFlag
+    OptionNotForMode
+    OptionNeedsValue
+    NotASource
+    ModeFirst
+    HelpOneMode
+    OutputIsDir
+    OutputNoDir
+    OutputCannotWrite
+    CannotRun
+    FormatterMissing
+    FormatterBuild
     TargetMissing
     TargetUnknown
     TargetUnsupported
@@ -624,10 +635,10 @@ type Diag enum {
 # errmsg.h's entries, one function each, under the C id each comes from
 
 # ERR_USAGE
-fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a mode and a file, as 'olang -b main.olang'") }
+fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
 
 # ERR_NOT_A_MODE
-fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are -b, -c, -t, -i and -e") }
+fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run") }
 
 # ERR_MODE_ONE_FILE
 fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
@@ -636,10 +647,43 @@ fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " ta
 fn ModeNeedsFile(text String&) Msg { return Msg(Diag.ModeNeedsFile, "B1", $text " needs a file") }
 
 # ERR_UNKNOWN_FLAG
-fn UnknownFlag(text String&) Msg { return Msg(Diag.UnknownFlag, "B1", "unknown flag '" $text "' - the flags are -b -c -t -i -e -r -d -s -u -a -D") }
+fn UnknownFlag(text1 String&, text2 String&) Msg { return Msg(Diag.UnknownFlag, "B1", "unknown option '" $text1 "' - 'olang help' lists the options of " $text2) }
+
+# ERR_OPTION_NOT_FOR_MODE
+fn OptionNotForMode(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.OptionNotForMode, "B1", $text1 " applies to " $text2 ", not to " $text3) }
+
+# ERR_OPTION_NEEDS_VALUE
+fn OptionNeedsValue(text1 String&, text2 String&) Msg { return Msg(Diag.OptionNeedsValue, "B1", $text1 " needs a value after it: " $text2) }
+
+# ERR_NOT_A_SOURCE
+fn NotASource(text String&) Msg { return Msg(Diag.NotASource, "B1", "'" $text "' is no olang file to run - a file's name ends in .olang") }
+
+# ERR_MODE_FIRST
+fn ModeFirst(text String&) Msg { return Msg(Diag.ModeFirst, "B1", "the mode comes first: 'olang " $text "' and then its options") }
+
+# ERR_HELP_ONE_MODE
+fn HelpOneMode() Msg { return Msg(Diag.HelpOneMode, "B1", "help takes at most one mode") }
+
+# ERR_OUTPUT_IS_DIR
+fn OutputIsDir(text String&) Msg { return Msg(Diag.OutputIsDir, "B3h", "-output " $text " is a directory - name the file to write") }
+
+# ERR_OUTPUT_NO_DIR
+fn OutputNoDir(text1 String&, text2 String&) Msg { return Msg(Diag.OutputNoDir, "B3h", "-output " $text1 ": there is no directory " $text2) }
+
+# ERR_OUTPUT_CANNOT_WRITE
+fn OutputCannotWrite() Msg { return Msg(Diag.OutputCannotWrite, "B3h", "cannot write it") }
+
+# ERR_CANNOT_RUN
+fn CannotRun(text String&) Msg { return Msg(Diag.CannotRun, "B3g", "the program cannot be run: " $text) }
+
+# ERR_FORMATTER_MISSING
+fn FormatterMissing(text String&) Msg { return Msg(Diag.FormatterMissing, "B13", "the formatter's source is not beside this compiler: " $text) }
+
+# ERR_FORMATTER_BUILD
+fn FormatterBuild(text String&) Msg { return Msg(Diag.FormatterBuild, "B13", "the formatter could not be built - " $text " says why") }
 
 # ERR_TARGET_MISSING
-fn TargetMissing() Msg { return Msg(Diag.TargetMissing, "B12", "-a needs a target after it, as '-a x86-64-v3'") }
+fn TargetMissing() Msg { return Msg(Diag.TargetMissing, "B12", "-target needs a target after it, as '-target x86-64-v3'") }
 
 # ERR_TARGET_UNKNOWN
 fn TargetUnknown(text String&) Msg { return Msg(Diag.TargetUnknown, "B12", "unknown target '" $text "' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") }
@@ -648,10 +692,10 @@ fn TargetUnknown(text String&) Msg { return Msg(Diag.TargetUnknown, "B12", "unkn
 fn TargetUnsupported(text String&) Msg { return Msg(Diag.TargetUnsupported, "B12", "olang does not build for '" $text "' - it builds for x86_64 and aarch64 Linux with the GNU C library") }
 
 # ERR_TARGET_NATIVE_FOREIGN
-fn TargetNativeForeign(text String&) Msg { return Msg(Diag.TargetNativeForeign, "B12", "'-a " $text "': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") }
+fn TargetNativeForeign(text String&) Msg { return Msg(Diag.TargetNativeForeign, "B12", "'-target " $text "': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") }
 
 # ERR_TARGET_FOREIGN_MODE
-fn TargetForeignMode(text1 String&, text2 String&) Msg { return Msg(Diag.TargetForeignMode, "B12a", $text1 " builds and runs on this machine, and '-a " $text2 "' is another architecture or system - only -c builds for it") }
+fn TargetForeignMode(text1 String&, text2 String&) Msg { return Msg(Diag.TargetForeignMode, "B12a", $text1 " builds and runs on this machine, and '-target " $text2 "' is another architecture or system - only compile builds for it") }
 
 # ERR_TARGET_NO_BACKEND
 fn TargetNoBackend(text String&) Msg { return Msg(Diag.TargetNoBackend, "B12a", "this clang cannot build for '" $text "': its back end for that architecture cannot generate the BF16 code the runtime holds") }
@@ -660,7 +704,7 @@ fn TargetNoBackend(text String&) Msg { return Msg(Diag.TargetNoBackend, "B12a", 
 fn TargetNoClang(text String&) Msg { return Msg(Diag.TargetNoClang, "B12", "clang not found on PATH - it is what builds the program, and what says what target '" $text "' is") }
 
 # ERR_EXPLAIN_NEEDS_RULE
-fn ExplainNeedsRule() Msg { return Msg(Diag.ExplainNeedsRule, "B11a", "-e takes one rule, as 'olang -e B1'") }
+fn ExplainNeedsRule() Msg { return Msg(Diag.ExplainNeedsRule, "B11a", "explain takes one rule, as 'olang explain B1'") }
 
 # ERR_NO_SPEC
 fn NoSpec(text String&) Msg { return Msg(Diag.NoSpec, "B11a", "no specification at " $text) }
@@ -669,31 +713,31 @@ fn NoSpec(text String&) Msg { return Msg(Diag.NoSpec, "B11a", "no specification 
 fn NoRule(text String&) Msg { return Msg(Diag.NoRule, "B11a", "the specification has no rule " $text) }
 
 # ERR_DEFINE_MISSING
-fn DefineMissing() Msg { return Msg(Diag.DefineMissing, "B10", "-D needs Name=value after it") }
+fn DefineMissing() Msg { return Msg(Diag.DefineMissing, "B10", "-define needs Name=value after it") }
 
 # ERR_DEFINE_SHAPE
-fn DefineShape(text String&) Msg { return Msg(Diag.DefineShape, "B10", "-D takes Name=value, found '" $text "'") }
+fn DefineShape(text String&) Msg { return Msg(Diag.DefineShape, "B10", "-define takes Name=value, found '" $text "'") }
 
 # ERR_DEFINE_NOT_NAME
-fn DefineNotName(text1 String&, text2 String&) Msg { return Msg(Diag.DefineNotName, "B10", "-D " $text1 "=" $text2 ": the name is not an identifier") }
+fn DefineNotName(text1 String&, text2 String&) Msg { return Msg(Diag.DefineNotName, "B10", "-define " $text1 "=" $text2 ": the name is not an identifier") }
 
 # ERR_DEFINE_TWICE
-fn DefineTwice(text1 String&, text2 String&) Msg { return Msg(Diag.DefineTwice, "B10", "-D " $text1 "=" $text2 ": defined twice") }
+fn DefineTwice(text1 String&, text2 String&) Msg { return Msg(Diag.DefineTwice, "B10", "-define " $text1 "=" $text2 ": defined twice") }
 
 # ERR_DEFINE_BAD_NUMBER
-fn DefineBadNumber(text1 String&, text2 String&) Msg { return Msg(Diag.DefineBadNumber, "B10", "-D " $text1 "=" $text2 ": not a number - '0x' and '0b' take digits of their own base") }
+fn DefineBadNumber(text1 String&, text2 String&) Msg { return Msg(Diag.DefineBadNumber, "B10", "-define " $text1 "=" $text2 ": not a number - '0x' and '0b' take digits of their own base") }
 
 # ERR_DEFINE_INT_RANGE
-fn DefineIntRange(text1 String&, text2 String&) Msg { return Msg(Diag.DefineIntRange, "B10", "-D " $text1 "=" $text2 ": beyond 64 bits") }
+fn DefineIntRange(text1 String&, text2 String&) Msg { return Msg(Diag.DefineIntRange, "B10", "-define " $text1 "=" $text2 ": beyond 64 bits") }
 
 # ERR_DEFINE_NEG_RANGE
-fn DefineNegRange(text1 String&, text2 String&) Msg { return Msg(Diag.DefineNegRange, "B10", "-D " $text1 "=" $text2 ": below I64's minimum") }
+fn DefineNegRange(text1 String&, text2 String&) Msg { return Msg(Diag.DefineNegRange, "B10", "-define " $text1 "=" $text2 ": below I64's minimum") }
 
 # ERR_DEFINE_FLOAT_RANGE
-fn DefineFloatRange(text1 String&, text2 String&) Msg { return Msg(Diag.DefineFloatRange, "B10", "-D " $text1 "=" $text2 ": beyond F64's range") }
+fn DefineFloatRange(text1 String&, text2 String&) Msg { return Msg(Diag.DefineFloatRange, "B10", "-define " $text1 "=" $text2 ": beyond F64's range") }
 
 # ERR_DEFINE_BUILTIN
-fn DefineBuiltin(text String&) Msg { return Msg(Diag.DefineBuiltin, "B10a", "-D cannot redefine the built-in constant " $text) }
+fn DefineBuiltin(text String&) Msg { return Msg(Diag.DefineBuiltin, "B10a", "-define cannot redefine the built-in constant " $text) }
 
 # ERR_CANNOT_OPEN
 fn CannotOpen() Msg { return Msg(Diag.CannotOpen, "", "cannot open this file") }
@@ -837,13 +881,13 @@ fn CondNotBool(tok String&) Msg { return Msg(Diag.CondNotBool, "B9", "the condit
 fn ImportRemoteBadName() Msg { return Msg(Diag.ImportRemoteBadName, "M23a", "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-'") }
 
 # ERR_IMPORT_LOCK_NOT_A_COMMIT
-fn ImportLockNotACommit(text String&) Msg { return Msg(Diag.ImportLockNotACommit, "M23b", "olang.lock names no commit for " $text " - delete its line, or build with -u") }
+fn ImportLockNotACommit(text String&) Msg { return Msg(Diag.ImportLockNotACommit, "M23b", "olang.lock names no commit for " $text " - delete its line, or build with -update") }
 
 # ERR_IMPORT_FETCH_FAILED
 fn ImportFetchFailed(text String&) Msg { return Msg(Diag.ImportFetchFailed, "M23a", "could not fetch " $text " with git - check the path and the connection") }
 
 # ERR_IMPORT_LOCKED_FETCH_FAILED
-fn ImportLockedFetchFailed(text String&) Msg { return Msg(Diag.ImportLockedFetchFailed, "M23b, M23c", "could not fetch the commit olang.lock names for " $text " - delete its line, or build with -u") }
+fn ImportLockedFetchFailed(text String&) Msg { return Msg(Diag.ImportLockedFetchFailed, "M23b, M23c", "could not fetch the commit olang.lock names for " $text " - delete its line, or build with -update") }
 
 # ERR_IMPORT_PATH_TOO_LONG
 fn ImportPathTooLong() Msg { return Msg(Diag.ImportPathTooLong, "M23", "this import path is too long to name a file") }
@@ -933,10 +977,10 @@ fn BuildDefaultMut(tok String&) Msg { return Msg(Diag.BuildDefaultMut, "B10c", $
 fn BuildDefaultType(tok String&, ty String&) Msg { return Msg(Diag.BuildDefaultType, "B10c", $tok " is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found " $ty) }
 
 # ERR_BUILD_DEFAULT_FIT
-fn BuildDefaultFit(text1 String&, text2 String&, tok String&, ty String&) Msg { return Msg(Diag.BuildDefaultFit, "B10c", "-D " $text1 "=" $text2 " does not fit " $tok ", which is " $ty) }
+fn BuildDefaultFit(text1 String&, text2 String&, tok String&, ty String&) Msg { return Msg(Diag.BuildDefaultFit, "B10c", "-define " $text1 "=" $text2 " does not fit " $tok ", which is " $ty) }
 
 # ERR_UNKNOWN_BUILD_NAME
-fn UnknownBuildName(tok String&, text String&) Msg { return Msg(Diag.UnknownBuildName, "B10", "unknown name " $tok " - if it is a build constant, define it with '-D " $text "=VALUE', or declare it with a default") }
+fn UnknownBuildName(tok String&, text String&) Msg { return Msg(Diag.UnknownBuildName, "B10", "unknown name " $tok " - if it is a build constant, define it with '-define " $text "=VALUE', or declare it with a default") }
 
 # ERR_NAME_IN_USE
 fn NameInUse(tok String&) Msg { return Msg(Diag.NameInUse, "D2", $tok " is already declared in this module") }

@@ -19062,3 +19062,82 @@ Left, measured and ranked in the review's README:
 - operands are 1,840 bytes, two embedded types, about 40% of what remains;
 - a statement embeds a whole `struct var`;
 - shared.olang's three discarded B9c attempts are never freed, about 1 GB before these fixes.
+
+### The command line in words, running a file, `-output`, and a formatter (B1, B3g, B3h, B13, 2026-10-17; the user's decisions, details mine)
+
+**What the user decided.** (1) `olang main.olang [args...]` with no mode builds the program as `build` does and runs it,
+its arguments after the file, its status its own - so `#!/usr/bin/env olang` scripts work, `#` being a comment. (2) A
+formatter, gofmt-style, no options: 4-space indentation, one space around binary operators and after commas, blank lines
+kept (at most one), comments kept and trailing ones aligned, no line wrapping - written in olang on the port's scanner
+and parser, never in C. (3) `-o PATH` naming the output, then, the same day, the whole command line in words, reversing
+B1's one-character flags of 2026-10-08: modes `build compile test interpret format explain help`, a bare file built and
+run, options `-output -debug -race -sanitize -target -define -update -check` checked against the modes they apply to, no
+aliases for the old flags. The formatter's check mode was first `-f -c`, then `-l` (gofmt's), then `format -check`.
+
+**The formatter (compiler/fmt.olang, compiler/tools/fmt.olang).** It works on the scanner's tokens, never on the tree:
+only what stands between two tokens changes, so a formatted file has the same tokens, the same line breaks - so the same
+statement ends (L18) - and the same comments, and its meaning cannot change. An AST printer (compiler/tools/unparse
+exists) was the other route; it would have had to re-attach comments and keep the author's line breaks, which a token
+layout keeps for free. What the tokens cannot say - which `<` and `>` are type brackets - the parser records as it reads
+them (`Parser.ArgAngles`, `VarAngles`, `CloseAngles`, three lists, nothing in the compiler reads them). Everything else
+is lexical: a `-` is a prefix one when the token before it ends no operand; `fn (` opens a receiver when its `)` is
+followed by a name and a `(`; `) (` follows a parameter list when its `(` came after `fn`, `fn NAME` or `fn (...) NAME`.
+**Tested**: every `.olang` file of the repository (1,546) formatted in memory reads back as the same tree (unparse of
+the port's parse, before and after, compared as text), keeps every comment (line comments' trailing spaces aside), and
+formatting it again changes nothing - `make fmtdiff` (the tool's own `-v`), in `make verify`: 1,314 already in the layout, 166 changed by it,
+66 that do not parse (checks cases that must fail, the scanner's lexical test data), none failing. The repository's files
+were not reformatted (other work is editing them). Formatted, std's tests pass under stage 0 as unformatted (a copy of
+std formatted and used through `OLANG_STD`).
+
+**Decisions (mine), the formatter's rules:**
+1. Indentation: a block's lines one level in from the line its statement began on (so a block a continued condition
+   opens is indented from the `if`, as gofmt does), a bracket's lines one level in from the line it opens on, a line
+   beginning with a closing bracket at the level of its opener's line, a continued line one level further - continued
+   meaning no statement end before it and the line before not ending in an opening bracket, `}`, a type's `>`, a marker
+   `&` or (inside a bracket) `,`. Visual alignment under an opening bracket or an operand is not kept: it is what makes
+   most of the 166 files change, and gofmt does the same.
+2. Spaces: none after `(`, `[`, a type-argument `<`; none before `)`, `]`, `>`, `,`, postfix `++`/`--`; none around `.`
+   and a slice's `:`; none after a prefix `-`, `~`, `$`, `++`/`--` (but `- -x` stays apart); none before a call's `(` or
+   an index's `[` (`fn(`, `struct(` and a keyword method name `w.spawn()` included); one in `fn (receiver)` and before
+   results after a parameter list `fn f() (I64, I64)`; one after a keyword (`assert (x)`, `return (x)`); one around
+   every other operator, `:=`, `=`, `=>`, `?`; one after `,`. A type variable's introduction is spaced like any type
+   (`a <T>`).
+3. A reference marker `&` and a scope after it keep the spacing they were written with: that spacing decides what they
+   are (T24, E25: `f&x(` is a scope argument, `a & b` a bitwise and), so changing it could change the meaning.
+4. `{` has a space before it; a block on one line a space inside each brace, `{ }` when empty; `}` likewise.
+5. Trailing comments: a run is consecutive lines each ending in a line comment; their comments start one space past the
+   run's longest code (gofmt's rule, a line without a comment ending the run). A comment-only line takes the level the
+   code after it would. Block comments are kept as written, on the line they are on.
+6. Blank lines: at most one in a row; none at the start or end of the file, after a line ending in an opening bracket,
+   or before one beginning with a closing bracket. The file ends in one newline; no line ends in a space.
+7. A `>=` or `>>=` the parser split into type brackets and `=` is written apart (`List<I64> = x`).
+8. A file that does not parse is left untouched, its diagnostics rendered as the compiler renders them, status 1. A
+   branch the build decides that does not parse (held by the parser, B9) is left as written, on every line it is on - it
+   may be right for another build; found because shared.olang has such branches and the tree check caught their text
+   changing.
+9. A file is rewritten in place (creat on an existing file keeps its mode, so an executable script stays executable).
+10. `olang format` finds the formatter's source at `<compiler>/../compiler/tools/fmt.olang` (as std is found), builds it
+    with the compiler itself (`build -output`, objects in the cache's own build/) into
+    `$OLANG_CACHE/fmt/<hash of the compiler's path>/olang-fmt` (default `~/.cache/olang`), again when the compiler or any
+    `.olang` under compiler/ or std/ is newer, under a lock, and runs it in its own place. First build ~36 s and 3.7 GB.
+
+**Decisions (mine), the command line:**
+11. Running a file: options before the file (`olang -debug f.olang x`), everything after it the program's; the
+    executable goes to `build/` beside the working directory, as `build` puts it (objects reused), and the build says
+    nothing on success. The program is run by `execv` in the compiler's place: its status, a signal's death included,
+    is the program's, and a shell reports a signal as 128 plus its number.
+12. `-output`: `build` links there; `compile` builds its object in `build/` as before (reused while current) and copies
+    it - a copy, not a link, so a later rebuild cannot change it; a missing directory is an error naming it (nothing is
+    created, as cc does); a directory as PATH is an error; no other mode takes it, running a file included.
+13. `-target` applies to running a file, build, compile, test and interpret, not only build and compile as first
+    proposed: tests and interpret already took `-a` (checks run `test -target x86-64-v3` and `interpret -target x86-64`),
+    and interpret reads the build constants a target decides. A foreign target still builds with `compile` only.
+14. Running a file needs a name ending in `.olang` (that is what tells it from a mode); a mode's own files are taken
+    as named, so `test` still reports a missing file or a directory and runs the rest (B3a, M1); a mode word written after options (`olang -debug build f.olang`) is an error
+    saying the mode comes first; an option's missing value is an error naming the value; `help run` lists the options of
+    running a file.
+15. `olang interpret`'s own stops are prefixed `olang interpret:` (was `olang -i:`).
+16. Migration: `tools/cli_words.olang` (an olang program, the user's rule that the repository holds no Python or shell
+    tools; first written in Python and ported, giving the same output on checks.olang) rewrites old command lines wherever the compiler is invoked (`"$OLANG"`, `$(OLANG)`,
+    `build/out`, `olang ...`) and the checks' `# flags:` headers; it migrated the makefile, checks, fuzz, bench, the
+    port's tools and docs, and is re-runnable for oann. HISTORY.md keeps the old spellings, being history.

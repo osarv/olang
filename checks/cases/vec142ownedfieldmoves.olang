@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # Vec phase 2a review R1: what may leave an owned object's region - a field moved into another field of the same object
 # read by the same path, a Vec that refers to nothing outside what it owns, and the whole object (its region with it)
 type Lexer struct() {

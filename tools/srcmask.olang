@@ -7,7 +7,7 @@
 # the end of the line, "##" to the next "##", and a literal to its closing quote or the end of its line, which is all
 # the migrations need to know about where code is.
 #
-# Test it with: build/out -t tools/srcmask.olang
+# Test it with: build/out test tools/srcmask.olang
 
 import "std/os"
 import "std/io"

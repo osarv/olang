@@ -80,14 +80,14 @@ atundeclared.olang:8:11: error[E31]: Bag& declares SetAt but not At, which readi
       |           ^
 compilation failed with 1 error
 === b10big.olang
-olang: error[B10]: -D X=99999999999999999999: beyond 64 bits
+olang: error[B10]: -define X=99999999999999999999: beyond 64 bits
 === b10cfit.olang
-b10cfit.olang:3:1: error[B10c]: -D Port=x does not fit 'Port', which is I64
+b10cfit.olang:3:1: error[B10c]: -define Port=x does not fit 'Port', which is I64
     3 | Port I64 = 8080
       | ^~~~
 compilation failed with 1 error
 === b10cfitinferred.olang
-b10cfitinferred.olang:4:1: error[B10c]: -D Small=10000000000000000000 does not fit 'Small', which is I64
+b10cfitinferred.olang:4:1: error[B10c]: -define Small=10000000000000000000 does not fit 'Small', which is I64
     4 | Small := 4
       | ^~~~~
 compilation failed with 1 error
@@ -102,16 +102,16 @@ b10ctype.olang:3:1: error[B10c]: 'Level' is a build constant, and a default for 
       | ^~~~~
 compilation failed with 1 error
 === b10hexnodigits.olang
-olang: error[B10]: -D X=0x: not a number - '0x' and '0b' take digits of their own base
+olang: error[B10]: -define X=0x: not a number - '0x' and '0b' take digits of their own base
 === b10inf.olang
-olang: error[B10]: -D X=1e400: beyond F64's range
+olang: error[B10]: -define X=1e400: beyond F64's range
 === b10negbig.olang
-olang: error[B10]: -D X=-9223372036854775809: below I64's minimum
+olang: error[B10]: -define X=-9223372036854775809: below I64's minimum
 === b10undefined.olang
-b10undefined.olang:5:4: error[B10]: unknown name 'Profile' - if it is a build constant, define it with '-D Profile=VALUE', or declare it with a default
+b10undefined.olang:5:4: error[B10]: unknown name 'Profile' - if it is a build constant, define it with '-define Profile=VALUE', or declare it with a default
     5 | if Profile == "prod" {
       |    ^~~~~~~
-b10undefined.olang:12:8: error[B10]: unknown name 'Mode' - if it is a build constant, define it with '-D Mode=VALUE', or declare it with a default
+b10undefined.olang:12:8: error[B10]: unknown name 'Mode' - if it is a build constant, define it with '-define Mode=VALUE', or declare it with a default
    12 |     if Mode == "fast" { }
       |        ^~~~
 compilation failed with 2 errors
@@ -2099,7 +2099,7 @@ localtypename.olang:8:5: error[D3a]: 'Shape' is a type's name - choose another
       |     ^~~~~
 compilation failed with 1 error
 === longflag.olang
-olang: error[B1]: unknown flag '-race' - the flags are -b -c -t -i -e -r -d -s -u -a -D
+olang: error[B1]: unknown option '-x' - 'olang help' lists the options of build
 === m10stdimport.olang
 m10stdimport.olang:5:10: error[M10]: 'math' is no import here - std has it: 'import "std/math"'
     5 |     m := math.Min(1, 2)
@@ -4345,7 +4345,7 @@ rangezero.olang:4:27: error[S9b]: a range only counts upward, so its step is pos
       |                           ^
 compilation failed with 1 error
 === redefbuiltin.olang
-olang: error[B10a]: -D cannot redefine the built-in constant TestBuild
+olang: error[B10a]: -define cannot redefine the built-in constant TestBuild
 === redefd.olang
 redefd.olang:6:4: error[B10]: 'Level' is a build constant - choose another name
     6 | fn Level() I32 { return 1 }

@@ -1232,7 +1232,7 @@ struct semaModule* semaLoadModule(struct str fileName) {
     char* buf = StrDupStr(fileName);
     if (pathIsDir(buf)) ErrFatal(fileName, ERR_IS_DIRECTORY);
     //M22a: a root takes its identity from where it really is - its path from the working directory, or its
-    //file name when outside it; a std module named directly ("olang -t std/list.olang") is the same module
+    //file name when outside it; a std module named directly ("olang test std/list.olang") is the same module
     //its importers call "std/list", so it gets the identity - and the symbols and object names - they give it
     char canon[PATH_MAX], cwd[PATH_MAX], stdCanon[PATH_MAX];
     char* named = realpath(buf, canon) ? canon : buf;
@@ -30444,7 +30444,7 @@ static bool decidePendingConditions(void) {
         if (ErrMsgGetNErrors() != before && condUnknownTok.str.len) { //B10: a build constant -D did not define, most likely
             struct str n = condUnknownTok.str;
             err = ERR_COND_UNKNOWN_BUILD;
-            reason = StrFmt("'%.*s' - if it is a build constant, define it with '-D %.*s=VALUE', or declare it with a default",
+            reason = StrFmt("'%.*s' - if it is a build constant, define it with '-define %.*s=VALUE', or declare it with a default",
                             n.len, n.ptr, n.len, n.ptr);
         } else if (ErrMsgGetNErrors() != before) {
             err = ERR_COND_UNSEEN;

@@ -1,6 +1,6 @@
 # Puts `try` before every call of std/io's Print/Println/PrintErr/PrintErrln in code (M19f: they fail with IoError).
 #
-#     build/out -b tools/io_try.olang && build/tools_io_try PATH...
+#     build/out build tools/io_try.olang && build/tools_io_try PATH...
 #
 # Calls inside string or character literals and in comments are left alone. Idempotent.
 #

@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # vec7 X1b (T29a): a conversion of a call giving a fixed-length array reference names the referent's storage, as one of
 # a run-time-length reference does - at run time, under -i and in a baked global alike (the run time used to copy it)
 fn view(a Array<Char, 4>&) Array<Char, 4>&a { return a }

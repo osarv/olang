@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # D8a: a default that is no plain literal is built again for each call, so where a temporary in it lands is that call's -
 # one operand shared by every call kept the first call's landing ("n Node&r = Node(7)" built in a scope variable of the
 # first caller's frame), and a call in another function crashed the code generator

@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # vec7 F2: a take through a call's reference result is refused only where the callee gives a borrowed own result (O37) -
 # one building a new object, its result held in a local, is taken from as any other reference
 type Lexer struct() {

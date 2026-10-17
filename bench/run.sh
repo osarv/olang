@@ -5,7 +5,7 @@
 #
 #   bench/run.sh [-r REPS] [-x] [-q] [NAME ...]
 #     -r REPS  timed repetitions of every program, interleaved (default 7); the table gives the median and the minimum
-#     -x       also build both for baseline x86-64 and time those (olang -a x86-64, C with no -march)
+#     -x       also build both for baseline x86-64 and time those (olang -target x86-64, C with no -march)
 #     -q       build and check the outputs only, no timing
 #     NAME     only the rows whose name contains NAME
 #   BENCH_LOCK=FILE  take this flock for the checking and timing runs - on a shared machine, the lock that other
@@ -20,7 +20,7 @@ case $OLANG in /*) ;; *) OLANG=$(cd .. && pwd)/$OLANG ;; esac
 # (B12c): clang's default would fuse a*b+c into one FMA wherever the target has one, which changes results (and so the
 # outputs would no longer agree)
 FLAGS="-O3 -flto -march=native -ffp-contract=off"
-# baseline x86-64: olang -a x86-64, and C with no -march
+# baseline x86-64: olang -target x86-64, and C with no -march
 BASE_FLAGS="-O3 -flto"
 
 REPS=7; BASE=0; QUICK=0
@@ -71,10 +71,10 @@ for row in "${selected[@]}"; do
     IFS='|' read -r name prog cprog args <<< "$row"
     if [ -z "${built[o.$prog]:-}" ]; then
         if [ $BASE = 1 ]; then
-            $OLANG -a x86-64 -b $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
+            $OLANG build -target x86-64 $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
             cp build/$prog build/$prog.base
         fi
-        $OLANG -b $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
+        $OLANG build $prog.olang >/dev/null || { echo "olang build of $prog failed" >&2; exit 1; }
         built[o.$prog]=1
     fi
     if [ -z "${built[c.$cprog]:-}" ]; then

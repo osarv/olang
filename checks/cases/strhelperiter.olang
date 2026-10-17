@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/O18c: a helper counting a List handed the receiver's list through 'xs.Iter().Count(f)' runs, as written in Str's body
 import "std/io"
 type Bag struct(l List<I64>) {
