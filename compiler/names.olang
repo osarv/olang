@@ -553,7 +553,7 @@ fn (r mut Resolver&) func(f ast.Func&) {
 # a signature, its parameters declared where a body follows (a parameter is a local of the body, D3a)
 fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     s := f.S
-    r.typeParams(f.TypeParams)
+    r.typeParams(f.TypeParams, f.Recv, s.Params, s.Results)
     if f.Recv != null and f.Recv.Ty != null {
         r.receiverVars(f.Recv.Ty, false)
         r.typeRef(f.Recv.Ty)
@@ -571,11 +571,12 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
 }
 
 # a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,
-# then the constraints and constants' types read, so an item's may name a later one
-fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
+# then the constraints and constants' types read, so an item's may name a later one. An item is a constant where it
+# has a constant's type, or where the signature writes it as a constant argument (G22)
+fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&, recv ast.Param&, ps Array<ast.Param&>&, rs Array<ast.TypeRef&>&) {
     if tps == null { return }
     for p in tps {
-        constant := p.Ty != null and r.constType(p.Ty)
+        constant := (p.Ty != null and r.constType(p.Ty)) or (p.Ty == null and r.constIn(p.Name, recv, ps, rs))
         nsp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
         if constant { r.noConstClash(p.Name, nsp) }
         r.bind(p.Name, nsp, What.TypeVar, constant)
@@ -584,6 +585,48 @@ fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
     for p in tps {
         if p.Ty != null { r.typeRef(p.Ty) }
     }
+}
+
+# whether a signature writes n as a constant argument somewhere (G20: Array's length, a parameter its type declares
+# a constant)
+fn (r mut Resolver&) constIn(n source.NameId, recv ast.Param&, ps Array<ast.Param&>&, rs Array<ast.TypeRef&>&) Bool {
+    if recv != null and r.constUse(n, recv.Ty) { return true }
+    for p in ps {
+        if r.constUse(n, p.Ty) { return true }
+    }
+    for t in rs {
+        if r.constUse(n, t) { return true }
+    }
+    return false
+}
+
+fn (r mut Resolver&) constUse(n source.NameId, t ast.TypeRef&) Bool {
+    if t == null { return false }
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            for i in range args.Len() {
+                match args[i] {
+                    case ast.TypeRef.Named(_, ap, aargs) {
+                        if ap.Len() == 1 and aargs.Len() == 0 and ap[0] == n and r.constArg(path, i) { return true }
+                    }
+                    nomatch { }
+                }
+                if r.constUse(n, args[i]) { return true }
+            }
+        }
+        case ast.TypeRef.Func(_, sg) {
+            for p in sg.Params {
+                if r.constUse(n, p.Ty) { return true }
+            }
+            for x in sg.Results {
+                if r.constUse(n, x) { return true }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _) { return r.constUse(n, of) }
+        case ast.TypeRef.Perm(_, of, _, _) { return r.constUse(n, of) }
+        nomatch { }
+    }
+    return false
 }
 
 # the type variables a method's receiver introduces (QW: "fn (l List<T>&) Push(x T)"): its type's arguments that name
@@ -644,7 +687,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
     match t.Body {
         case ast.TypeBody.Struct(s) {
             m0 := r.mark()
-            r.typeParams(s.TypeParams)
+            r.typeParams(s.TypeParams, null, s.Params, Array<ast.TypeRef&>(0))
             for p in s.Params {
                 if p.Ty != null { r.typeRef(p.Ty) }
             }

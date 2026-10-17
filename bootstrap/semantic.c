@@ -5596,7 +5596,8 @@ static void checkSigConstVars(struct semaModule* mod, struct type* ft, struct li
         if (bad) { ListAdd(reported, &u->name); continue; }
         if (strListHas(&named, u->name)) continue;
         ListAdd(&named, &u->name);
-        rejectConstVarClash(mod, u->name, u->tok);
+        struct token* intro = sigIntroOf(u->name); //QW: said at the list item that declares it
+        rejectConstVarClash(mod, u->name, intro ? *intro : u->tok);
         for (int j = 0; j < ft->vars.len; j++) {
             struct var* param = ListGetIdx(&ft->vars, j);
             if (StrCmp(param->name, u->name)) Err(param->tok, ERR_CONST_VAR_SHADOWED, param->tok);

@@ -88,9 +88,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 ### Syntax and statements
 
 - **Statements end at a line break (L18), never `;`** (a `;` is one error). A `}` ends the statement before it (L20),
-  so any block may be one line. Inside `(` or `[` a newline ends nothing (L18a); a trailing comma is allowed before a
-  bracket on its own line, an error on one line. Outside brackets a line starting with `if` starts a statement (L18b).
-  Braces kept over indentation (the user's call, 2026-10-17, QN).
+  so any block may be one line. Outside brackets a line starting with `if` starts a statement (L18b). Braces kept over
+  indentation (the user's call, 2026-10-17, QN).
+- **One listing rule (QY, L18a, the user's call 2026-10-17).** Everywhere a list appears - parameters, arguments,
+  results, error sets, error words, enum cases, constructor fields, type parameters and arguments, array literals,
+  indexes, case alternatives, catch items - items on one line are separated by `,`, items on different lines by the
+  line break. A line break separates where L18 would end a statement (so a line ending in an operator continues the
+  item), or after an item ending in `}`, `>` or a bare `&` when the next token starts a later line. A comma before a
+  line break is an error (reversing L18a's trailing comma and T17/T19/C2's comma-is-an-error), and so is one before the
+  closing bracket on its line. `+` is gone from error sets and catch items (`? IoError, ParseError`, `catch A, B.X`). A
+  function type's or a lambda's error set is one item or parenthesized (`fn(I64) ? (A, B)`) - always, so a `,` after
+  it separates the list it stands in (mine). A parenthesized expression and a comprehension are one item, not lists:
+  line breaks inside separate nothing (mine). `x, y I64` (D12b) is unchanged. `tools/syntax_migrate.olang` migrates.
 - **`fn` is the function keyword (D7, the user's call).** Retired spellings (`func`, `while`, `&&`, `||`, `!`,
   `choice`, `+` on arrays, lowercase primitives) are simply unknown - their diagnostics were removed at the user's
   request.
@@ -147,7 +156,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (fails with `WRONG_CASE` under `checked`, else aborts). `a is b`/`a is not b` is identity (E10c; `same` removed).
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
-- **Error words and enum cases are one per line; a separating comma is an error (T17/T19/C2, the user's call).**
+- **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
+  breaks between lines.
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
   keywords may name fields (typed, never punned). `_` discards and is never a name.
 - **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, beyond 64
@@ -282,9 +292,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Generics
 
-- **A type variable or constant is introduced once by `<T>` and written bare after (G8b, G22, the user's call).** A
-  function is generic when its signature introduces one (G3) and its arguments are inferred (G4: every variable must
-  be inferable); a struct or trait declares a list. A function type is never generic of its own (G3a).
+- **Type parameter lists (QW, G3, G8b, G22, the user's decision 2026-10-17, reversing G8b's `<T>` introductions and
+  G3's no-list rule).** A function's type variables are a list after its name, constraints and constants in it: `fn
+  max<T>(a T, b T) T`, `fn area<T Shape>(x T)`, `fn count<N I64>(a Array<I32, N>&) I64`; a method gets its type's
+  parameters from its receiver's type arguments, bare (`fn (l List<T>&) Push(x T)` - names there that are no type
+  introduce), plus a list for variables of its own (`fn (l List<T>&) Map<U>(f fn(x T) U) List<U>`). A constrained
+  receiver is listed after the method name, a listed name taking the list's constraint (`fn (it mut I&) Count<I
+  Iterator<T>, T>(...)` - mine: one place for lists, the receiver clause staying a parameter). A constructor's own
+  variables (G10d) are `struct<T>(...)`; a generic type's constructor may not have one. Type declarations are
+  unchanged; calls still infer their arguments (G4: every variable must be inferable); there is no `<<` opening a
+  list and `<T>` in a type is no type. A function type is never generic of its own (G3a).
 - **Monomorphized; the instantiation's name is its identity, spelled injectively (G16a).** Instantiations are defined
   by the root object only (B3d). Rules about what a type contains are re-checked per instantiation (G18); errors carry
   where the instantiation was asked for (G16b); G17 bounds depth.
@@ -308,7 +325,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Errors
 
-- **Error sets and `?` (R1-R8).** `fn f(params) Ret ? ErrA + ErrB`: result first, error set after `?` (the user's
+- **Error sets and `?` (R1-R8).** `fn f(params) Ret ? ErrA, ErrB`: result first, error set after `?` (the user's
   call). `error T.WORD` raises; a bare unhandled fallible call is a compile error; coverage is judged at the callee's
   set. Locally scoped codes: `{i32 code, T}`, the code packing (type ordinal << 16) | word ordinal from the function's
   own list, so no whole-program numbering exists and propagation re-encodes.
