@@ -8,11 +8,16 @@ metadata:
 The user, 2026-10-17: "One thing I don't like is how there are python scripts. Write everything in Olang", then "Unless it had to be written in C (the bootstrap compiler and the
 benchmarks)".
 
+**Clarified (the user, 2026-10-17):** "I want the python scripts migrated to Olang. All of them, python can be used by
+Claude to develop with short scripts that run once, but permanent scripts that end up in source should not be in
+Python ever." So: every committed script is ported (the one-off migrations too, not deleted); throwaway scripts in the
+scratchpad may be Python, never committed.
+
 **Exception:** C where it has to be C - the stage-0 compiler (bootstrap/), the benchmarks' C counterparts (bench/),
 and C programs that test the runtime from C (e.g. the scope-sanitizer check). Python and shell never.
 
 **How to apply:** new tools, migration scripts, test servers, benchmark drivers and generators are olang programs (on
 std/os, std/filepath, text, extern fn where needed). Tell every agent in its brief. Existing Python/shell (tools/*.py,
 compiler/tools/*.sh and genmsgs.py, bench/*.sh, checks/fixtures/http/server.py, the awk fixture) is rewritten in olang,
-each checked to give the same output; one-off migrations already applied are deleted once oann is migrated with them.
+each checked to give the same output; the one-off migrations are ported too.
 Whether the makefile also becomes olang (`olang build.olang`) was asked (QT).
