@@ -1644,6 +1644,12 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
     if pk == types.Kind.Var and p.T.A(pat) == b.Owner { return p.bind(b, p.T.B(pat), actual, literal, receiver) }
     if pk == types.Kind.ConstExpr { return true }   # computed once its variables are bound, never solved for (G21)
     ak := p.T.KindOf(actual)
+    # a declared type over an array or a number meets a pattern of its base (T29a: it flows into it), so a method of
+    # every array binds its element through a String receiver (T29e)
+    if ak == types.Kind.Named and (pk != ak or p.T.DeclOf(pat) != p.T.DeclOf(actual)) and p.Body(actual) and
+       p.T.DeclKindOf(p.T.DeclOf(actual)) == types.DeclKind.Over {
+        return p.Unify(pat, p.T.Base(actual), b, literal, receiver)
+    }
     if pk != ak { return false }
     match pk {
         case types.Kind.Named {
@@ -1713,6 +1719,50 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
     if p.T.KindOf(cur) == types.Kind.Ref and p.T.KindOf(v) == types.Kind.Ref and p.T.Referent(cur) == p.T.Referent(v) {
         if not b.Fixed[i] { b.Vals[i] = p.T.Ref(p.T.Referent(v), p.T.PermOf(cur) & p.T.PermOf(v)) }
         return true
+    }
+    return false
+}
+
+# G9c: a variable named only in a constraint inferred through it - the bound type's methods matched against the
+# trait's, so I bound to ListIter<I64> binds T in Iterator<T> through its Next. Repeated while it binds anything
+fn (p mut Program&) InferThroughBounds(b mut Binding&) {
+    for round in range b.N {
+        any := false
+        for i in range b.N {
+            row := p.VarAt(b.Owner, i)
+            if row.Bound == types.UnknownT or b.Vals[i] == types.UnknownT { continue }
+            if p.unifyBound(b.Vals[i], row.Bound, b) { any = true }
+        }
+        if not any { break }
+    }
+}
+
+fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&) Bool {
+    if p.T.KindOf(tr) != types.Kind.Named { return false }
+    d := p.T.DeclOf(tr)
+    td := p.typeDecl(d)
+    if td == null or td.Body == null { return false }
+    before := Array<types.TypeId>(b.N)
+    for i in range b.N { before[i] = b.Vals[i] }
+    match td.Body {
+        case ast.TypeBody.Trait(methods) {
+            for m in methods {
+                f := p.MethodOf(t, m.Name)
+                if f < 0 { continue }
+                have := p.MethodSig(f, t)
+                if have == types.UnknownT { continue }
+                want := p.Subst(p.sigType(p.declContext(d), m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), p.T.Args(tr))
+                hs := p.T.Items(p.T.Params(have))
+                ws := p.T.Items(p.T.Params(want))
+                if hs.Len() != ws.Len() + 1 { continue }
+                for k in range ws.Len() { p.UnifyArg(ws[k], hs[k + 1], b, false, false) }
+                p.UnifyArg(p.T.Result(want), p.T.Result(have), b, false, false)
+            }
+        }
+        nomatch { }
+    }
+    for i in range b.N {
+        if before[i] != b.Vals[i] { return true }
     }
     return false
 }

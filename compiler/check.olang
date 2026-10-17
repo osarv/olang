@@ -52,6 +52,11 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InCtor Bool = false
     Tries I64 = 0          # how many tries enclose: a fallible call needs one (R8)
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
+    Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
+    InferResult Bool = false   # a lambda's result taken from its first return (D16b)
+    InferErrors Bool = false   # a lambda's errors taken from its body (D16b)
+    leaks List<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
+    captures List<typed.Capture&>
 }
 
 # a construct met and not checked yet: where, and what (the acceptance's "gap")
@@ -403,6 +408,19 @@ fn (c mut Checker&) unwind(mark I64) {
     }
 }
 
+# a lambda's copy of a value is read-only (D16c): a write to it, or into it, is an error
+fn (c mut Checker&) notCapture(p typed.Place&, sp source.Span) {
+    match p {
+        case typed.Place.Local(_, _, id) {
+            if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
+                c.err(sp, msgs.CaptureReadOnly())
+            }
+        }
+        case typed.Place.Field(_, _, base, _) { c.notCapture(base, sp) }
+        nomatch { }
+    }
+}
+
 # a local declared in the current block, and bound to its name (none for a hidden one, or "_")
 fn (c mut Checker&) local(n source.NameId, sp source.Span, ty types.TypeId, kind typed.LocalKind, mark typed.Mark) I64 {
     fr := c.fr()
@@ -421,6 +439,39 @@ fn (c mut Checker&) hidden(sp source.Span, ty types.TypeId) I64 {
 fn (c mut Checker&) localNamed(n source.NameId) I64 { return try c.fr().bound.Get(n) catch default -1 }
 
 fn (c mut Checker&) localType(id I64) types.TypeId { return c.cur().Locals[id].Ty }
+
+# a name's local, or in a lambda the capture of a variable of a body around it (D16c), made the first time it is used
+fn (c mut Checker&) localOrCapture(n source.NameId, sp source.Span) I64 {
+    id := c.localNamed(n)
+    if id >= 0 { return id }
+    return c.captureIn(c.frames.Len() - 1, n, sp)
+}
+
+# n in frame fi: its local, or a capture of the body around it - a value copied, read-only; a reference copied; a value
+# array borrowed read-only (T7b); one holding references with a scope variable of the lambda's for them (D16c)
+fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
+    fr := c.frames[fi]
+    id := try fr.bound.Get(n) catch default -1
+    if id >= 0 or fr.Parent < 0 { return id }
+    outer := c.captureIn(fr.Parent, n, sp)
+    if outer < 0 { return -1 }
+    ot := c.Bodies[c.frames[fr.Parent].Body].Locals[outer].Ty
+    op typed.Place&c = typed.Place.Local(sp, ot, typed.LocalId(I32(outer)))
+    it := ot
+    ox typed.Expr&c = null
+    if not c.isRef(ot) and c.arrayOf(ot) != types.UnknownT {
+        it = c.P.T.Ref(ot, types.ReadOnly)
+        ox = typed.Expr.Borrow(sp, it, op)
+    } else {
+        ox = typed.Expr.Read(sp, ot, op, typed.SiteId(-1))
+    }
+    b := c.Bodies[fr.Body]
+    inner := I64(b.AddLocal(typed.Local(n, sp, it, typed.BlockId(0), typed.LocalKind.Capture, typed.Mark.Infer)))
+    fr.bound.Put(n, inner)
+    fr.captures.Push(typed.Capture(typed.LocalId(I32(inner)), ox))
+    if c.isRef(it) or c.P.T.HoldsRefs(it) { b.Vars.Push(typed.ScopeVar.Capture(typed.LocalId(I32(inner)))) }
+    return inner
+}
 
 fn gather(stack mut List<<T>>&, from I64) Array<T>&stack {
     a mut Array<T>&stack = Array<T>(stack.Len() - from)
@@ -1236,6 +1287,7 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.Chain(sp, ch) { return c.chain(sp, ch) }
         case ast.Expr.MatchE(sp, m) { return c.matchValue(sp, m, want) }
         case ast.Expr.Compr(sp, cm) { return c.comprehension(sp, cm) }
+        case ast.Expr.Lambda(sp, f) { return c.lambda(sp, f, want) }
         nomatch {
             c.gap(x.Span(), exprKindName(x))
             return c.unknown(x.Span())
@@ -1260,7 +1312,7 @@ fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) t
 fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     ref := c.P.R.Use(c.fr().File, sp.Start)
     if ref.Kind == names.What.Local {
-        id := c.localNamed(n)
+        id := c.localOrCapture(n, sp)
         if id < 0 {
             c.gap(sp, "a local the checker has not bound")
             return c.unknown(sp)
@@ -2201,6 +2253,8 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         k = 1
     }
     checked List<typed.Expr&>
+    lambdas List<I64>
+    k0w := k
     if pre == null and args.Len() == 1 and ps.Len() - k > 1 and callLike(args[0]) { pre = c.spread(args[0]) }
     n := pre.Len() if pre != null else args.Len()
     for i in range n {
@@ -2214,7 +2268,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
             } else {
                 match args[i] {
-                    case ast.Expr.Lambda(lsp, _) { c.gap(lsp, "a lambda (D16)") }
+                    case ast.Expr.Lambda(_, _) { lambdas.Push(i) }
                     case ast.Expr.Default(_) { }
                     nomatch { e = c.expr(args[i], types.UnknownT) }
                 }
@@ -2224,6 +2278,36 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         checked.Push(e)
         k++
     }
+    c.P.InferThroughBounds(b)
+    # G9a: a lambda's written types bind what only literals reached, or nothing did - never what an argument, the
+    # receiver or a constraint bound, which its parameter may be looser than (T22)
+    if pre == null and lambdas.Len() > 0 {
+        for i in lambdas {
+            lf := lambdaOf(args[i])
+            pk := i + k0w
+            if pk >= ps.Len() or c.P.T.KindOf(ps[pk]) != types.Kind.Func { continue }
+            lps := c.P.T.Items(c.P.T.Params(ps[pk]))
+            for j in range lf.S.Params.Len() {
+                if j < lps.Len() and lf.S.Params[j].Ty != null { c.unifySoft(lps[j], c.resolve(lf.S.Params[j].Ty), b) }
+            }
+            if lf.S.Results != null and lf.S.Results.Len() == 1 {
+                c.unifySoft(c.P.T.Result(ps[pk]), c.resolve(lf.S.Results[0]), b)
+            }
+        }
+        c.P.InferThroughBounds(b)
+    }
+    # D16a: a lambda checked against its parameter as far as the other arguments bound it; a variable reached only
+    # through its result is then inferred from it
+    for i in lambdas {
+        part := Array<types.TypeId>(nv)
+        for j in range nv { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(owner, j, types.ReadOnly) }
+        pk := i + k0w
+        if pk >= ps.Len() { continue }
+        e := c.lambda(args[i].Span(), lambdaOf(args[i]), c.P.Subst(ps[pk], owner, c.P.T.List(part)))
+        if typeOf(e) != types.UnknownT { c.unifySoft(ps[pk], typeOf(e), b) }
+        checked[i] = e
+        c.P.InferThroughBounds(b)
+    }
     for i in range nv {
         if b.Vals[i] == types.UnknownT {
             c.gap(nsp, "a generic call whose variables need more than its arguments' types (G9)")
@@ -2232,7 +2316,35 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     }
     inst := c.P.FnInstance(f, c.P.T.List(b.Vals))
     id := c.fnBody(inst)
-    return c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, checked.ToArray())
+    x := c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, checked.ToArray())
+    # T29f: an inherited array method whose result is its receiver's own type gives the declared type
+    if recv != null {
+        rt := c.P.T.Plain(c.deref(typeOf(recv)))
+        if c.P.Extends(rt) and c.arrayOf(rt) != types.UnknownT and c.P.T.Same(typeOf(x), c.P.T.Base(rt)) {
+            return c.convert(sp, x, rt)
+        }
+    }
+    return x
+}
+
+# a pattern unified with a type into what b leaves unbound, or bound by literals only: never moving what an argument
+# bound (a lambda's type may be looser than its parameter, T22)
+fn (c mut Checker&) unifySoft(pat types.TypeId, actual types.TypeId, b mut generic.Binding&) {
+    b2 := generic.Binding(b.Owner, b.N)
+    c.P.UnifyArg(pat, actual, b2, false, false)
+    for j in range b.N {
+        if b2.Vals[j] != types.UnknownT and (b.Vals[j] == types.UnknownT or b.LiteralOnly[j]) {
+            b.Vals[j] = b2.Vals[j]
+            b.LiteralOnly[j] = false
+        }
+    }
+}
+
+fn lambdaOf(x ast.Expr&) ast.Func&x {
+    return match x {
+        case ast.Expr.Lambda(_, f) => f
+        case _ => null
+    }
 }
 
 # G9: an argument's type unified with its parameter's, a reference taken for its referent where only one is one (E12c)
@@ -2240,7 +2352,8 @@ fn (c mut Checker&) unify(pat types.TypeId, actual types.TypeId, b mut generic.B
     p := pat
     a := actual
     if c.isRef(p) and not c.isRef(a) { p = c.P.T.Referent(p) }
-    if c.isRef(a) and not c.isRef(p) { a = c.P.T.Referent(a) }
+    # a reference reaching a bare variable binds the reference (G11); one reaching a value pattern its referent (E12)
+    if c.isRef(a) and not c.isRef(p) and c.P.T.KindOf(p) != types.Kind.Var { a = c.P.T.Referent(a) }
     c.P.UnifyArg(p, a, b, literal, receiver)
 }
 
@@ -2294,6 +2407,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         k++
     }
     if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.gap(nsp, "a fallible call outside a try (R8)") }
+    c.leak(c.P.T.Errors(sig))
     r := c.P.T.Result(sig)
     # a built result is new storage only the caller holds: writable (T25c)
     if c.isRef(r) and c.P.T.ResultFrom(sig, 0) == types.OwnScope {
@@ -2689,7 +2803,7 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
         case ast.Expr.Name(sp, n) {
             ref := c.P.R.Use(c.fr().File, sp.Start)
             if ref.Kind == names.What.Local {
-                id := c.localNamed(n)
+                id := c.localOrCapture(n, sp)
                 if id < 0 { return null }
                 return typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id)))
             }
@@ -2722,6 +2836,7 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
 
 fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch&>&, want types.TypeId) typed.Expr&c {
     fr := c.fr()
+    mark := fr.leaks.Len()
     fr.Tries++
     x := c.expr(y, want)
     fr.Tries--
@@ -2729,6 +2844,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     if clauses != null {
         for cl in clauses { cls.Push(c.clause(cl, typeOf(x))) }
     }
+    c.caught(mark, cls)
     return typed.Expr.Try(sp, typeOf(x), typed.Try(x, cls.ToArray()))
 }
 
@@ -2753,6 +2869,34 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId) typed.Clause&c {
     all := cl.Items == null or cl.Items.Len() == 0
     defaults := gather(c.exprs, from)
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
+}
+
+# what a lambda's errors are taken from (D16b): a call's errors, in order
+fn (c mut Checker&) leak(es types.ListId) {
+    fr := c.fr()
+    if not fr.InferErrors { return }
+    for e in c.P.T.Items(es) { fr.leaks.Push(e) }
+}
+
+# what a try's clauses take out of what its operand let out since mark: everything for an item-less one, a whole type
+# for an item naming it
+fn (c mut Checker&) caught(mark I64, cls List<typed.Clause&>&) {
+    fr := c.fr()
+    if not fr.InferErrors { return }
+    keep List<types.TypeId>
+    for i in range mark, fr.leaks.Len() {
+        e := fr.leaks[i]
+        taken := false
+        for cl in cls {
+            if cl.All { taken = true }
+            for it in cl.Items {
+                if it.Word < 0 and it.Err == e { taken = true }
+            }
+        }
+        if not taken { keep.Push(e) }
+    }
+    fr.leaks.Truncate(mark)
+    for e in keep { fr.leaks.Push(e) }
 }
 
 # a catch clause's item: an error type, or one of its words (R10)
@@ -3115,6 +3259,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         c.expr(value, types.UnknownT)
         return
     }
+    c.notCapture(p, target.Span())
     t := p.Type()
     if op == token.Tok.Assign {
         x := c.exprTo(value, t)
@@ -3347,6 +3492,139 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     }
     c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
     return null
+}
+
+# ---- lambdas (D16) ----
+
+# whether t mentions a type variable of owner - one a generic call has not bound yet
+fn (c mut Checker&) mentionsVar(t types.TypeId, owner I64) Bool {
+    if t == types.TypeId(0) or t == types.UnknownT { return false }
+    k := c.P.T.KindOf(t)
+    match k {
+        case types.Kind.Var { return owner < 0 or c.P.T.A(t) == owner }
+        case types.Kind.Named { return c.listMentions(c.P.T.Args(t), owner) }
+        case types.Kind.Array { return c.mentionsVar(c.P.T.Elem(t), owner) or c.mentionsVar(c.P.T.Length(t), owner) }
+        case types.Kind.Ref { return c.mentionsVar(c.P.T.Referent(t), owner) }
+        case types.Kind.Func {
+            return c.listMentions(c.P.T.Params(t), owner) or c.mentionsVar(c.P.T.Result(t), owner) or
+                   c.listMentions(c.P.T.Errors(t), owner)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return c.listMentions(c.P.T.Parts(t), owner) }
+        nomatch { return false }
+    }
+}
+
+fn (c mut Checker&) listMentions(l types.ListId, owner I64) Bool {
+    if l == types.ListId(0) { return false }
+    for x in c.P.T.Items(l) {
+        if c.mentionsVar(x, owner) { return true }
+    }
+    return false
+}
+
+# fn(params) [result] [? errors] { ... } (D16): a body of its own checked where it is written, its captures read from
+# the bodies around it (D16c). An expected function type supplies what it leaves out (D16a) - a part still naming a
+# generic call's unbound variable supplies nothing; otherwise the result is its first return's and its errors what its
+# body lets out (D16b)
+fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed.Expr&c {
+    w := want if want != types.UnknownT and c.P.T.KindOf(want) == types.Kind.Func else types.UnknownT
+    ps := f.S.Params
+    n := ps.Len()
+    wps := c.P.T.Items(c.P.T.Params(w)) if w != types.UnknownT else Array<types.TypeId>(0)
+    if w != types.UnknownT and wps.Len() != n {
+        c.err(sp, msgs.LambdaArity(c.ty(w), wps.Len(), "" if wps.Len() == 1 else "s", n))
+        return c.unknown(sp)
+    }
+    pts := Array<types.TypeId>(n)
+    for i in range n {
+        if ps[i].Ty != null {
+            pts[i] = c.resolve(ps[i].Ty)
+            if w != types.UnknownT and not c.mentionsVar(wps[i], -1) and not c.P.T.Same(pts[i], wps[i]) {
+                if c.isRef(pts[i]) != c.isRef(wps[i]) and c.P.T.Same(c.deref(pts[i]), c.deref(wps[i])) {
+                    c.gap(ps[i].Sp, "a lambda parameter written as a reference where a value is expected (D16a)")
+                    return c.unknown(sp)
+                }
+                # T22: a read-only parameter where a writable one is expected
+                ro := c.isRef(pts[i]) and c.isRef(wps[i]) and c.P.T.Same(c.deref(pts[i]), c.deref(wps[i])) and
+                      (c.P.T.PermOf(pts[i]) & types.Writable) == 0
+                if not ro {
+                    c.err(ps[i].Sp, msgs.LambdaSignature(c.ty(w)))
+                    return c.unknown(sp)
+                }
+            }
+        } else if w != types.UnknownT and not c.mentionsVar(wps[i], -1) {
+            pts[i] = wps[i]
+        } else {
+            c.err(ps[i].Sp, msgs.LambdaParamUntyped(c.tok(ps[i].Name)))
+            return c.unknown(sp)
+        }
+    }
+    infer := false
+    result := types.VoidT
+    if f.S.Results != null and f.S.Results.Len() > 0 {
+        rs := Array<types.TypeId>(f.S.Results.Len())
+        for i in range rs.Len() { rs[i] = c.resolve(f.S.Results[i]) }
+        result = rs[0] if rs.Len() == 1 else c.P.T.Tuple(c.P.T.List(rs))
+    } else if w != types.UnknownT and not c.mentionsVar(c.P.T.Result(w), -1) {
+        result = c.P.T.Result(w)
+    } else {
+        infer = true
+        result = types.UnknownT
+    }
+    errs := types.ListId(0)
+    inferErrs := false
+    if f.S.HasErrors {
+        es List<types.TypeId>
+        if f.S.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
+        for e in f.S.Errors { es.Push(c.P.ErrorType(c.fr().Ctx, e)) }
+        errs = c.P.T.List(es.ToArray())
+    } else if w != types.UnknownT {
+        errs = c.P.T.Errors(w)
+    } else {
+        inferErrs = true
+    }
+    # with nothing expected every parameter has a scope of its own and a result is built: the plain scopes (O4b, O13)
+    scopes := c.P.T.ScopesOf(w) if w != types.UnknownT else types.ScopesId(0)
+    pl := c.P.T.List(pts)
+    parent := c.fr()
+    pfi := c.frames.Len() - 1
+    id := c.newBody(typed.BodyOf.Lambda(typed.BodyId(I32(parent.Body))), c.P.T.Func(pl, result, errs, scopes), parent.Mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, parent.Mi, result, errs)
+    fr.Ctx = parent.Ctx
+    fr.Parent = pfi
+    fr.InferResult = infer
+    fr.InferErrors = inferErrs
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    for i in range n { c.param(ps[i].Name, ps[i].Sp, pts[i], i) }
+    c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
+    root := c.rootStmts(f.Body)
+    c.cur().Root = root
+    if fr.InferResult {
+        fr.InferResult = false
+        fr.Result = types.VoidT
+    }
+    result = fr.Result
+    if inferErrs {
+        es List<types.TypeId>
+        for e in fr.leaks {
+            dup := false
+            for x in es {
+                if x == e { dup = true }
+            }
+            if not dup { es.Push(e) }
+        }
+        errs = c.P.T.List(es.ToArray())
+    }
+    ty := c.P.T.Func(pl, result, errs, scopes)
+    c.cur().Ty = ty
+    if result != types.VoidT and not c.fr().Gapped and not leavesBlock(root) {
+        c.err(sp, msgs.MissingReturn(c.ty(result)))
+    }
+    caps := c.fr().captures.ToArray()
+    c.pop()
+    c.state[id] = 2
+    return typed.Expr.Fn(sp, ty, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
 }
 
 # T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
@@ -3635,6 +3913,10 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.gap(sp, "'return' in a test or constructor (S15, C2)")
         return
     }
+    if fr.InferResult {
+        c.inferReturn(sp, values)
+        return
+    }
     rt := fr.Result
     if values == null or values.Len() == 0 {
         if rt != types.VoidT { c.gap(sp, "a return with no value from a function with a result") }
@@ -3667,6 +3949,43 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
                                                                    typed.Check.None))))
 }
 
+# a lambda's first return (D16b): its values checked with nothing expected, the result their types - none for no
+# value, text a String, a literal its own type
+fn (c mut Checker&) inferReturn(sp source.Span, values Array<ast.Expr&>&) {
+    fr := c.fr()
+    fr.InferResult = false
+    if values == null or values.Len() == 0 {
+        fr.Result = types.VoidT
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    from := c.exprs.Len()
+    ts := Array<types.TypeId>(values.Len())
+    for i in range values.Len() {
+        e := c.value(c.expr(values[i], types.UnknownT), values[i].Span())
+        t := typeOf(e)
+        if t == types.NullT or t == types.VoidT {
+            c.err(values[i].Span(), msgs.LambdaResultUninferable())
+            t = types.UnknownT
+        } else if t != types.UnknownT {
+            t = c.inferred(values[i], e)
+        }
+        ts[i] = t
+        c.exprs.Push(c.fit(e, t, values[i].Span()))
+    }
+    xs := gather(c.exprs, from)
+    if ts.Len() == 1 {
+        fr.Result = ts[0]
+        x := xs[0]
+        if ts[0] == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, ts[0], x)) }
+        c.emit(typed.Stmt.Return(sp, x))
+        return
+    }
+    fr.Result = c.P.T.Tuple(c.P.T.List(ts))
+    c.emit(typed.Stmt.Return(sp, typed.Expr.Make(sp, fr.Result, typed.Make(typed.MakeKind.Tuple, 0, xs, null,
+                                                                          typed.SiteId(-1), typed.Check.None))))
+}
+
 fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
     if kind == token.Tok.Break or kind == token.Tok.Continue {
         fr := c.fr()
@@ -3689,6 +4008,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
 # error E.WORD, or error alone for the default error (R3, R15)
 fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
     if word == null {
+        if c.fr().InferErrors { c.fr().leaks.Push(types.DefaultErrT) }
         c.emit(typed.Stmt.Raise(sp, types.DefaultErrT, 0))
         return
     }
@@ -3697,6 +4017,7 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
         c.gap(sp, "an error word the checker cannot find")
         return
     }
+    if c.fr().InferErrors { c.fr().leaks.Push(et) }
     c.emit(typed.Stmt.Raise(sp, et, w))
 }
 
@@ -4165,4 +4486,38 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
     c.CheckProgram()
     assert rootRules(l) == "", rootRules(l)
     assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
+}
+
+test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16c, G9a, G9c)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }\n"
+                       "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n"
+                       "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n"
+                       "    xs := I64[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n"
+                       "    t := xs.Fold(0, fn(acc I32, x I64) I32 { return acc + I32(x) })\n"
+                       "    m := xs.Iter().Count(fn(x) { return x > k })\n"
+                       "    assert a + b + n + I64(t) + m > 0\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "", rootRules(l)
+    assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
+}
+
+test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n"
+                       "    h := fn() { k = 4 }\n    h()\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "D16a D16c ", rootRules(l)
 }
