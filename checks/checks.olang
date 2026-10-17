@@ -615,8 +615,9 @@ test "-i interprets a program as the built program runs" { assert passed("interp
 fn interp(r mut report&) ? Failed {
     dir := fresh("interp")
     os.Run("cp checks/fixtures/interp/* " $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" build prog.olang > out.txt 2>&1") == 0, "interp build", dir)
-    try r.expect(sh(dir, "./build/prog > want.txt 2>&1") == 1, "prog did not end in Oops.BAD", dir)     # main ends in Oops.BAD
+    # built -debug, so the error escaping main prints its trace as -i does (S18d)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug prog.olang > out.txt 2>&1") == 0, "interp build", dir)
+    try r.expect(sh(dir, "./build/prog.debug > want.txt 2>&1") == 1, "prog did not end in Oops.BAD", dir)   # main ends in Oops.BAD
     try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 1, "-i prog.olang did not end in Oops.BAD", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i printed what the built program did not", dir)
     try r.expect(outOf(dir).Contains("unhandled error: Oops.BAD") and outOf(dir).Contains("read written 10 -1"),
