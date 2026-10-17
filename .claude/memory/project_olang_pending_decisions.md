@@ -234,6 +234,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   constants `Pi Euler Sqrt2 Ln2 Ln10 Inf NaN` (no bare `E` - a common type-parameter/enum name), or (2) std/math kept
   with constants only (`math.Pi`, `math.E`). Recommended 1, with the E4a extension either way. Also offered: a method
   call on a number literal as a compile error (text literals keep methods). In effect: nothing built.
+  The user then proposed both: std/math's functions back, and methods on the types calling them. Answered: two
+  spellings per operation (against one-way) and the prelude importing std. ASKED: (1) std/math as today - free
+  functions + constants, nothing built (recommended); (2) methods only. In effect: std/math unchanged.
   Queued after
   wt-errors2 merges (std files).
 - QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
