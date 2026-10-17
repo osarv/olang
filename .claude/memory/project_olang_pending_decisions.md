@@ -94,6 +94,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   generic's parameter checked per instantiation - holds at most 128 bytes as laid out (padding included); a larger one
   is a compile-time error naming its size and `&`. Results are not capped. Part of the arrays batch; the corpus and std
   migrated by the compiler's own errors.
+- QQ1 ASKED 2026-10-17 (the user: "try (...) should cover all of ..."; "try f().g() should bind to both. Why did we
+  decide against that?" - answered: never decided, an artifact of the one-call allowance, E13b/E24 2026-10-07/09).
+  Proposed and confirmed in substance ("So try is for calls and checked for operators and calls?" - yes): `try` covers
+  every fallible call in its operand, a parenthesized expression or a chain included, and never turns on a check;
+  `checked (...)` / `checked a[i]` / `checked a[lo:hi]` / `checked x[i] = v` is try plus the E15a checks (built-in
+  operations, a type's Try forms), calls included; a type with only a Try form is usable only under `checked`.
+  `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
+  built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
