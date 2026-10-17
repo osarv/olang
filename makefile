@@ -69,9 +69,9 @@ build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compi
 	$(OLANG) build compiler/tools/fmt.olang
 
 # B13's acceptance: every file of the repository formatted reads back as the same tree, keeps its comments, and is its
-# own layout (compiler/tools/fmtdiff.sh)
+# own layout ("fmt -v", compiler/tools/fmt.olang): a line for each file that fails, then a count
 fmtdiff: build/compiler_tools_fmt
-	compiler/tools/fmtdiff.sh
+	OLANG_STD=std build/compiler_tools_fmt -v $$(git ls-files '*.olang')
 
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump

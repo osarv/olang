@@ -93,7 +93,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Comments: `#` to the line's end, `## ... ##` a block (L4/L4a, the user's call).**
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
   compile test interpret format explain help`; options `-output -debug -race -sanitize -target -define -update -check`,
-  each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.py`).
+  each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
   compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program

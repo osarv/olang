@@ -1,0 +1,177 @@
+# cli_words - rewrites olang command lines from the one-character flags to the words of SPEC.md B1 (2026-10-17):
+#
+#     olang -b f.olang         olang build f.olang
+#     olang -c f.olang         olang compile f.olang
+#     olang -t a.olang b.olang olang test a.olang b.olang
+#     olang -i f.olang x       olang interpret f.olang x
+#     olang -e B1              olang explain B1
+#     -d -r -s -u              -debug -race -sanitize -update
+#     -a NAME   -D N=V         -target NAME   -define N=V
+#
+# An invocation is the compiler named as "$OLANG", \"$OLANG\", $(OLANG), ${OLANG}, $OLANG, build/out, build/stage0 or
+# olang, followed by one-character flags: the flags are rewritten and the mode's word put first, everything from the
+# first word that is no such flag left as it was. A checks case's "# flags:" header is rewritten the same way (its flags
+# follow "build"). Re-runnable: text already in words is left alone.
+#
+#     olang build tools/cli_words.olang && build/tools_cli_words FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.OsError {
+            eprintln("cli_words: " $path ": cannot be read")
+            continue
+        }
+        b := StringBuilder()
+        start I64 = 0
+        for i in range text.Len() + 1 {
+            if i == text.Len() or text[i] == '\n' {
+                b.Push(migrateLine(text[start:i]))
+                if i < text.Len() { b.PushChar('\n') }
+                start = i + 1
+            }
+        }
+        out := b.ToString()
+        if out != text {
+            try os.WriteFile(path, out) catch os.OsError { eprintln("cli_words: " $path ": cannot be written") }
+            println(path)
+        }
+    }
+}
+
+fn isWord(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# the end of the invoker starting at i of line, or -1
+fn invoker(line String&, i I64) I64 {
+    for p in String&["\\\"$OLANG\\\"", "\"$OLANG\"", "$(OLANG)", "${OLANG}"] {
+        if line[i:].StartsWith(p) { return i + p.Len() }
+    }
+    if line[i:].StartsWith("$OLANG") {
+        e := i + 6
+        if e == line.Len() or not isWord(line[e]) { return e }
+    }
+    for p in String&["build/out", "build/stage0", "olang"] {
+        if not line[i:].StartsWith(p) { continue }
+        e := i + p.Len()
+        if i > 0 and (isWord(line[i - 1]) or line[i - 1] == '/' or line[i - 1] == '.' or line[i - 1] == '-') { continue }
+        if e < line.Len() and (isWord(line[e]) or line[e] == '.' or line[e] == '-' or line[e] == '/') { continue }
+        return e
+    }
+    return -1
+}
+
+fn migrateLine(line String&) String {
+    if line.StartsWith("# flags:") {
+        rest := line[8:]
+        at I64 = 0
+        for at < rest.Len() and rest[at] == ' ' { at++ }
+        conv := convert(" " $rest[at:])
+        if conv != "" { return "# flags:" $conv }
+        return $line
+    }
+    # right to left, so rewriting one invocation never moves another
+    out := $line
+    i := out.Len() - 1
+    for i >= 0 {
+        e := invoker(out, i)
+        if e >= 0 {
+            conv := convert(out[e:])
+            if conv != "" { out = $out[:e] $conv }
+        }
+        i--
+    }
+    return out
+}
+
+fn isFlagEnd(c Char) Bool { return c == ' ' or c == '\t' or c == '"' or c == '\\' or c == '`' }
+
+# the flag a word begins with, and how long it is: "-x" or "-x=..." up to a quote, a backslash or a backtick
+fn flagLen(w String&) I64 {
+    if w.Len() < 2 or w[0] != '-' or not w[1].IsLetter() { return 0 }
+    i I64 = 1
+    for i < w.Len() and w[i].IsLetter() { i++ }
+    if i < w.Len() and w[i] == '=' {
+        for i < w.Len() and not isFlagEnd(w[i]) { i++ }
+    }
+    return i
+}
+
+fn valueLen(w String&) I64 {
+    i I64 = 0
+    for i < w.Len() and not isFlagEnd(w[i]) { i++ }
+    return i
+}
+
+fn word(f String&) String& {
+    return match f {
+        case "-d" => "-debug"
+        case "-r" => "-race"
+        case "-s" => "-sanitize"
+        case "-u" => "-update"
+        case "-a" => "-target"
+        case "-D" => "-define"
+        case "-b" => "build"
+        case "-c" => "compile"
+        case "-t" => "test"
+        case "-i" => "interpret"
+        case "-e" => "explain"
+        nomatch => ""
+    }
+}
+
+# rest: the text after an invoker. The text rewritten, or "" when it begins with no old flag
+fn convert(rest String&) String {
+    mode := word("")
+    opts := StringBuilder()
+    trail := rest[0:0]
+    i I64 = 0              # where the flags read so far end in rest
+    any := false
+    for {
+        # the next word: spaces, then a run of non-spaces
+        j := i
+        for j < rest.Len() and (rest[j] == ' ' or rest[j] == '\t') { j++ }
+        if j == i or j == rest.Len() { break }
+        e := j
+        for e < rest.Len() and rest[e] != ' ' and rest[e] != '\t' { e++ }
+        w := rest[j:e]
+        n := flagLen(w)
+        if n == 0 { break }
+        f := w[:n]
+        tail := w[n:]
+        isMode := f == "-b" or f == "-c" or f == "-t" or f == "-i" or f == "-e"
+        if isMode and mode == "" {
+            mode = word(f)
+        } else if f == "-d" or f == "-r" or f == "-s" or f == "-u" {
+            opts.Push(" " $word(f))
+        } else if (f == "-a" or f == "-D") and tail == "" {
+            # a value follows, as the next word
+            k := e
+            for k < rest.Len() and (rest[k] == ' ' or rest[k] == '\t') { k++ }
+            if k == e or k == rest.Len() { break }
+            ve := k
+            for ve < rest.Len() and rest[ve] != ' ' and rest[ve] != '\t' { ve++ }
+            v := rest[k:ve]
+            vn := valueLen(v)
+            if vn == 0 { break }
+            opts.Push(" " $word(f) " " $v[:vn])
+            tail = v[vn:]
+            e = ve
+        } else if f.StartsWith("-D") and f.Len() > 2 and f.Contains("=") {
+            opts.Push(" -define " $f[2:])
+        } else {
+            break
+        }
+        any = true
+        i = e
+        if tail != "" {
+            trail = tail
+            break
+        }
+    }
+    if not any { return "" }
+    head := (" " $mode) if mode != "" else ""
+    return $head $opts.ToString() $trail $rest[i:]
+}

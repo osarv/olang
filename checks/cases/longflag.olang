@@ -1,4 +1,4 @@
-# check: fail unknown option '-r'
-# flags: -r
+# check: fail unknown option '-x'
+# flags: -x
 # B1: an option is a word - a one-character flag is an unknown option, never taken for a file name
 fn main() ? { }

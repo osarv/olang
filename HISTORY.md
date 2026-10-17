@@ -18992,7 +18992,7 @@ is lexical: a `-` is a prefix one when the token before it ends no operand; `fn 
 followed by a name and a `(`; `) (` follows a parameter list when its `(` came after `fn`, `fn NAME` or `fn (...) NAME`.
 **Tested**: every `.olang` file of the repository (1,546) formatted in memory reads back as the same tree (unparse of
 the port's parse, before and after, compared as text), keeps every comment (line comments' trailing spaces aside), and
-formatting it again changes nothing - `make fmtdiff`, in `make verify`: 1,314 already in the layout, 166 changed by it,
+formatting it again changes nothing - `make fmtdiff` (the tool's own `-v`), in `make verify`: 1,314 already in the layout, 166 changed by it,
 66 that do not parse (checks cases that must fail, the scanner's lexical test data), none failing. The repository's files
 were not reformatted (other work is editing them). Formatted, std's tests pass under stage 0 as unformatted (a copy of
 std formatted and used through `OLANG_STD`).
@@ -19044,6 +19044,7 @@ std formatted and used through `OLANG_STD`).
     saying the mode comes first; an option's missing value is an error naming the value; `help run` lists the options of
     running a file.
 15. `olang interpret`'s own stops are prefixed `olang interpret:` (was `olang -i:`).
-16. Migration: `tools/cli_words.py` rewrites old command lines wherever the compiler is invoked (`"$OLANG"`, `$(OLANG)`,
+16. Migration: `tools/cli_words.olang` (an olang program, the user's rule that the repository holds no Python or shell
+    tools; first written in Python and ported, giving the same output on checks.olang) rewrites old command lines wherever the compiler is invoked (`"$OLANG"`, `$(OLANG)`,
     `build/out`, `olang ...`) and the checks' `# flags:` headers; it migrated the makefile, checks, fuzz, bench, the
     port's tools and docs, and is re-runnable for oann. HISTORY.md keeps the old spellings, being history.
