@@ -133,13 +133,14 @@ fn (w mut writer&) func(f ast.Func&) {
         w.put(") ")
     }
     w.name(f.Name)
+    w.typeParams(f.TypeParams)
     w.sig(f.S)
     w.put(" ")
     w.block(f.Body)
 }
 
-# (params) results ? errors
-fn (w mut writer&) sig(s ast.Sig&) {
+# (params) results ? errors - a function type's or a lambda's errors (value) one or parenthesized (QY)
+fn (w mut writer&) sig(s ast.Sig&, value Bool = false) {
     w.put("(")
     w.params(s.Params)
     w.put(")")
@@ -152,16 +153,20 @@ fn (w mut writer&) sig(s ast.Sig&) {
         w.types(s.Results)
         w.put(")")
     }
-    w.errors(s)
+    w.errors(s, value)
 }
 
-fn (w mut writer&) errors(s ast.Sig&) {
+fn (w mut writer&) errors(s ast.Sig&, value Bool = false) {
     if not s.HasErrors { return }
     w.put(" ?")
+    if s.Errors.Len() == 0 { return }
+    paren := value and s.Errors.Len() > 1
+    w.put(" (" if paren else " ")
     for i, e in s.Errors {
-        w.put(" + " if i > 0 else " ")
+        if i > 0 { w.put(", ") }
         w.path(e)
     }
+    if paren { w.put(")") }
 }
 
 fn (w mut writer&) params(ps Array<ast.Param&>&) {
@@ -193,27 +198,33 @@ fn (w mut writer&) path(p ast.Path&) {
 fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
     w.put("type ")
     w.name(t.Name)
-    if t.Params.Len() > 0 {
-        w.put("<")
-        for i, x in t.Params {
-            if i > 0 { w.put(", ") }
-            w.name(x.Name)
-            if x.Ty != null {
-                w.put(" ")
-                w.ty(x.Ty)
-            }
-        }
-        w.put(">")
-    }
+    w.typeParams(t.Params)
     if t.Extends { w.put(" extends") }
     w.put(" ")
     w.typeBody(t.Body)
 }
 
+# "<T, U Shape, N I64>": a type's, a function's or a constructor's type parameters (G1, G3, G10d)
+fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
+    if tps == null or tps.Len() == 0 { return }
+    w.put("<")
+    for i, x in tps {
+        if i > 0 { w.put(", ") }
+        w.name(x.Name)
+        if x.Ty != null {
+            w.put(" ")
+            w.ty(x.Ty)
+        }
+    }
+    w.put(">")
+}
+
 fn (w mut writer&) typeBody(b ast.TypeBody&) {
     match b {
         case ast.TypeBody.Struct(s) {
-            w.put("struct(")
+            w.put("struct")
+            w.typeParams(s.TypeParams)
+            w.put("(")
             w.params(s.Params)
             w.put(")")
             w.errors(s.Errs)
@@ -289,18 +300,9 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
                 w.put(">")
             }
         }
-        case ast.TypeRef.Var(_, name, c) {
-            w.put("<")
-            w.name(name)
-            if c != null {
-                w.put(" ")
-                w.ty(c)
-            }
-            w.put(">")
-        }
         case ast.TypeRef.Func(_, s) {
             w.put("fn")
-            w.sig(s)
+            w.sig(s, true)
         }
         case ast.TypeRef.Const(_, x) { w.expr(x) }
         case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
@@ -366,9 +368,10 @@ fn (w mut writer&) clauses(cl Array<ast.Catch&>&) {
     for c in cl {
         w.put(" catch")
         for i, it in c.Items {
-            w.put(" + " if i > 0 else " ")
+            w.put(", " if i > 0 else " ")
             w.path(it)
         }
+
         if c.Body != null {
             w.put(" ")
             w.block(c.Body)
@@ -730,7 +733,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Lambda(_, f) {
             w.put("fn")
-            w.sig(f.S)
+            w.sig(f.S, true)
             w.put(" ")
             w.block(f.Body)
         }
@@ -740,11 +743,6 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.exprs(args)
         }
         case ast.Expr.Default(_) { w.put("default") }
-        case ast.Expr.TypeVar(_, n) {
-            w.put("<")
-            w.name(n)
-            w.put(">")
-        }
     }
 }
 

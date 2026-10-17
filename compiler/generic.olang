@@ -291,7 +291,6 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef&) types.TypeId {
     if t == null { return types.UnknownT }
     return match t {
         case ast.TypeRef.Named(sp, path, args) => p.named(c, sp, path, args)
-        case ast.TypeRef.Var(_, n, _) => try c.Vars.Get(n) catch default types.UnknownT
         case ast.TypeRef.Func(_, s) => p.sigType(c, s, types.UnknownT, source.NameId(0))
         case ast.TypeRef.Const(_, _) => types.UnknownT
         case ast.TypeRef.Shape(_, body) => p.shape(c, body)
@@ -514,7 +513,6 @@ fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) type
             f := p.foldPath(c, sp, path)
             return p.constOf(c, f, want, null)
         }
-        case ast.TypeRef.Var(_, n, _) { return try c.Vars.Get(n) catch default p.UnknownConst() }
         nomatch { return p.UnknownConst() }
     }
 }
@@ -1228,31 +1226,34 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
         if (try p.fnByName.Get(key) catch default -1) < 0 { p.fnByName.Put(key, i) }
         return
     }
-    k := p.recvKey(mi, f.Recv.Ty)
+    k := p.recvKey(mi, f.Recv.Ty, f.TypeParams)
     if k < 0 { return }
     mk := Pair(k, I64(f.Name))
     if (try p.methods.Get(mk) catch default -1) < 0 { p.methods.Put(mk, i) }
 }
 
-# a written receiver's key
-fn (p mut Program&) recvKey(mi I64, t ast.TypeRef&) I64 {
+# a written receiver's key: a type variable's by the trait its list item constrains it to (M19e)
+fn (p mut Program&) recvKey(mi I64, t ast.TypeRef&, tps Array<ast.TypeParam&>&) I64 {
     if t == null { return -1 }
     match t {
-        case ast.TypeRef.Perm(_, of, _, _) { return p.recvKey(mi, of) }
-        case ast.TypeRef.Ref(_, of, _) { return p.recvKey(mi, of) }
-        case ast.TypeRef.Var(_, _, k) {
-            if k == null { return -1 }
-            match k {
-                case ast.TypeRef.Named(sp, _, _) {
-                    ref := p.R.Use(p.file(mi), sp.Start)
-                    if ref.Kind == names.What.Type and ref.Index >= 0 { return keyTrait(p.DeclFor(ref.Module, ref.Index)) }
-                }
-                nomatch { }
-            }
-            return -1
-        }
+        case ast.TypeRef.Perm(_, of, _, _) { return p.recvKey(mi, of, tps) }
+        case ast.TypeRef.Ref(_, of, _) { return p.recvKey(mi, of, tps) }
         case ast.TypeRef.Named(sp, path, _) {
             ref := p.R.Use(p.file(mi), sp.Start)
+            if ref.Kind == names.What.TypeVar {
+                k := listed(tps, path[0])
+                if k == null { return -1 }
+                match k {
+                    case ast.TypeRef.Named(ksp, _, _) {
+                        kref := p.R.Use(p.file(mi), ksp.Start)
+                        if kref.Kind == names.What.Type and kref.Index >= 0 {
+                            return keyTrait(p.DeclFor(kref.Module, kref.Index))
+                        }
+                    }
+                    nomatch { }
+                }
+                return -1
+            }
             if ref.Kind == names.What.Type and ref.Index >= 0 { return keyDecl(p.DeclFor(ref.Module, ref.Index)) }
             if ref.Kind == names.What.Builtin {
                 name := p.text(path[path.Len() - 1])
@@ -1305,8 +1306,8 @@ fn (p mut Program&) FnNamed(mi I64, name source.NameId) I64 {
     return try p.fnByName.Get(Pair(mi, I64(name))) catch default -1
 }
 
-# a function's signature (D7, D8c, R15; M19: a method's receiver its first parameter), over its variables - each
-# introduced by its first "<T>", read left to right: receiver, parameters, results (G8b)
+# a function's signature (D7, D8c, R15; M19: a method's receiver its first parameter), over its variables: those its
+# receiver's type arguments introduce, in order, then its list's (G3, QW)
 fn (p mut Program&) Sig(f I64) types.TypeId {
     s := try p.fnSig.Get(f) catch default types.TypeId(-1)
     if s >= types.TypeId(0) { return s }
@@ -1314,14 +1315,17 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     owner := FnOwner(f)
     c := Context(row.Mi, owner)
     ns List<source.NameId>
-    if row.F.Recv != null { p.introductions(row.F.Recv.Ty, ns) }
-    for prm in row.F.S.Params { p.introductions(prm.Ty, ns) }
-    for r in row.F.S.Results { p.introductions(r, ns) }
+    if row.F.Recv != null { p.introductions(row.Mi, row.F.Recv.Ty, ns, false) }
+    if row.F.TypeParams != null {
+        for tp in row.F.TypeParams {
+            if not ns.Has(tp.Name) { ns.Push(tp.Name) }
+        }
+    }
     p.addVars(owner, ns.ToArray())
     for i in range ns.Len() { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
-    if row.F.Recv != null { p.constraints(c, row.F.Recv.Ty) }
-    for prm in row.F.S.Params { p.constraints(c, prm.Ty) }
-    for r in row.F.S.Results { p.constraints(c, r) }
+    if row.F.TypeParams != null {
+        for tp in row.F.TypeParams { p.constraint(c, tp.Name, tp.Ty) }
+    }
     recv := types.UnknownT
     recvName := source.NameId(0)
     if row.F.Recv != null {
@@ -1333,58 +1337,45 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     return sig
 }
 
-# the variables a written type introduces, "<T>" or "<T Constraint>", in order, each once; a constraint's own after it
-fn (p mut Program&) introductions(t ast.TypeRef&, ns mut List<source.NameId>&) {
+# the variables a receiver's type arguments introduce (QW: "fn (l List<T>&) Push(x T)"), in order, each once - the
+# names there that resolve to a type variable
+fn (p mut Program&) introductions(mi I64, t ast.TypeRef&, ns mut List<source.NameId>&, inArgs Bool) {
     if t == null { return }
     match t {
-        case ast.TypeRef.Var(_, n, k) {
-            if not ns.Has(n) { ns.Push(n) }
-            p.introductions(k, ns)
+        case ast.TypeRef.Named(sp, path, args) {
+            if inArgs and path.Len() == 1 and args.Len() == 0 {
+                if p.R.Use(p.file(mi), sp.Start).Kind == names.What.TypeVar and not ns.Has(path[0]) { ns.Push(path[0]) }
+                return
+            }
+            for a in args { p.introductions(mi, a, ns, true) }
         }
-        case ast.TypeRef.Named(_, _, args) {
-            for a in args { p.introductions(a, ns) }
-        }
-        case ast.TypeRef.Func(_, sg) {
-            for prm in sg.Params { p.introductions(prm.Ty, ns) }
-            for r in sg.Results { p.introductions(r, ns) }
-        }
-        case ast.TypeRef.Ref(_, of, _) { p.introductions(of, ns) }
-        case ast.TypeRef.Perm(_, of, _, _) { p.introductions(of, ns) }
+        case ast.TypeRef.Ref(_, of, _) { p.introductions(mi, of, ns, inArgs) }
+        case ast.TypeRef.Perm(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         nomatch { }
     }
 }
 
-# each introduction's type, read once every variable is known (a constraint may name a later one): a trait is its
-# variable's constraint (G19), any other type its constant's type (G20)
-fn (p mut Program&) constraints(c Context&, t ast.TypeRef&) {
-    if t == null { return }
-    match t {
-        case ast.TypeRef.Var(_, n, k) {
-            if k != null {
-                v := try c.Vars.Get(n) catch default types.UnknownT
-                if p.T.KindOf(v) == types.Kind.Var {
-                    i := (try p.varsAt.Get(c.Owner) catch default 0) + p.T.B(v)
-                    row := p.vars[i]
-                    if row.Const == types.UnknownT and row.Bound == types.UnknownT {
-                        ty := p.Resolve(c, k)
-                        isTrait := p.T.KindOf(ty) == types.Kind.Named and p.T.DeclKindOf(p.T.DeclOf(ty)) == types.DeclKind.Trait
-                        p.vars[i] = varRow(c.Owner, n, types.UnknownT if isTrait else ty, ty if isTrait else types.UnknownT)
-                    }
-                }
-            }
-            p.constraints(c, k)
-        }
-        case ast.TypeRef.Named(_, _, args) {
-            for a in args { p.constraints(c, a) }
-        }
-        case ast.TypeRef.Func(_, sg) {
-            for prm in sg.Params { p.constraints(c, prm.Ty) }
-            for r in sg.Results { p.constraints(c, r) }
-        }
-        case ast.TypeRef.Ref(_, of, _) { p.constraints(c, of) }
-        case ast.TypeRef.Perm(_, of, _, _) { p.constraints(c, of) }
-        nomatch { }
+# a list item's type, read once every variable is known (a constraint may name a later one): a trait is its variable's
+# constraint (G19), any other type its constant's type (G20)
+fn (p mut Program&) constraint(c Context&, n source.NameId, k ast.TypeRef&) {
+    if k == null { return }
+    v := try c.Vars.Get(n) catch default types.UnknownT
+    if p.T.KindOf(v) != types.Kind.Var { return }
+    i := (try p.varsAt.Get(c.Owner) catch default 0) + p.T.B(v)
+    row := p.vars[i]
+    if row.Const != types.UnknownT or row.Bound != types.UnknownT { return }
+    ty := p.Resolve(c, k)
+    isTrait := p.T.KindOf(ty) == types.Kind.Named and p.T.DeclKindOf(p.T.DeclOf(ty)) == types.DeclKind.Trait
+    p.vars[i] = varRow(c.Owner, n, types.UnknownT if isTrait else ty, ty if isTrait else types.UnknownT)
+}
+
+# the constraint or constant type a type-parameter list gives a name, or null
+fn listed(tps Array<ast.TypeParam&>&, n source.NameId) ast.TypeRef&tps {
+    if tps == null { return null }
+    for tp in tps {
+        if tp.Name == n { return tp.Ty }
     }
+    return null
 }
 
 # a method's signature for a receiver of type t: its receiver's variables bound by unifying the two (G9b), then
@@ -1917,7 +1908,7 @@ test "constant arguments fold as the program computes them (G21): typed, wrappin
 test "inference (G9): literals adapt, numbers widen unless a receiver bound them, permissions meet" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type P struct() { }\nfn pick(a <T>, b T) T { return a }\nfn main() ? { }\n")
+    l := testLoad(dir, "type P struct() { }\nfn pick<T>(a T, b T) T { return a }\nfn main() ? { }\n")
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
@@ -1957,8 +1948,8 @@ test "constraints (G19): a type satisfies a trait by its methods, checked where 
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
     l := testLoad(dir, "type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n"
-                       "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<<T>>&) Get(x T) T { return x }\n"
-                       "fn h(x <T Hashable<T>>) { }\nfn main() ? { }\n")
+                       "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<T>&) Get(x T) T { return x }\n"
+                       "fn h<T Hashable<T>>(x T) { }\nfn main() ? { }\n")
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
@@ -1985,7 +1976,7 @@ test "function types carry what their markers say; a call's scope variables come
     l := testLoad(dir, "type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
                        "fn link(a mut N&, b N&a) { }\nfn first(l N&) N&l { return l }\nfn make() N& { return N(1) }\n"
                        "fn (l mut N&) Put(x N&l) { }\nfn apply(f fn(a mut N&, b N&a), x mut N&, y N&) { }\n"
-                       "fn id(x <T>) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n")
+                       "fn id<T>(x T) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n")
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)

@@ -553,7 +553,11 @@ fn (r mut Resolver&) func(f ast.Func&) {
 # a signature, its parameters declared where a body follows (a parameter is a local of the body, D3a)
 fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     s := f.S
-    if f.Recv != null and f.Recv.Ty != null { r.typeRef(f.Recv.Ty) }
+    r.typeParams(f.TypeParams)
+    if f.Recv != null and f.Recv.Ty != null {
+        r.receiverVars(f.Recv.Ty, false)
+        r.typeRef(f.Recv.Ty)
+    }
     for p in s.Params {
         if p.Ty != null { r.typeRef(p.Ty) }
     }
@@ -564,6 +568,53 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     }
     if f.Recv != null and f.Recv.Name != source.NameId(0) { r.param(f.Recv, body) }
     for p in s.Params { r.param(p, body) }
+}
+
+# a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,
+# then the constraints and constants' types read, so an item's may name a later one
+fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
+    if tps == null { return }
+    for p in tps {
+        constant := p.Ty != null and r.constType(p.Ty)
+        nsp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
+        if constant { r.noConstClash(p.Name, nsp) }
+        r.bind(p.Name, nsp, What.TypeVar, constant)
+        r.record(nsp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
+    }
+    for p in tps {
+        if p.Ty != null { r.typeRef(p.Ty) }
+    }
+}
+
+# the type variables a method's receiver introduces (QW: "fn (l List<T>&) Push(x T)"): its type's arguments that name
+# no type and no variable already declared - each a constant where the type's parameter is one (G20)
+fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Named(sp, path, args) {
+            for i in range args.Len() {
+                a := args[i]
+                match a {
+                    case ast.TypeRef.Named(asp, ap, aargs) {
+                        if ap.Len() == 1 and aargs.Len() == 0 {
+                            n := ap[0]
+                            j := try r.scope.Get(n) catch default -1
+                            known := j >= 0 and r.locals[j].Kind == What.TypeVar
+                            if not known and r.typeIn(r.mi, n).Kind == What.None {
+                                r.introduce(asp, n, null, r.constArg(path, i))
+                            }
+                        } else {
+                            r.receiverVars(a, true)
+                        }
+                    }
+                    case _ { r.receiverVars(a, true) }
+                }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
+        case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
+        nomatch { }
+    }
 }
 
 fn (r mut Resolver&) param(p ast.Param&, body Bool) {
@@ -592,6 +643,8 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
     if t.Body == null { return }
     match t.Body {
         case ast.TypeBody.Struct(s) {
+            m0 := r.mark()
+            r.typeParams(s.TypeParams)
             for p in s.Params {
                 if p.Ty != null { r.typeRef(p.Ty) }
             }
@@ -605,7 +658,9 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             }
             if s.Body != null { r.block(s.Body) }
             r.popTo(m)
+            r.popTo(m0)
             if s.Dtor != null {
+
                 m2 := r.mark()
                 for f in fieldNames(s) { r.bind(f, source.Span(0, 0), What.Local, false) }
                 r.block(s.Dtor)
@@ -978,7 +1033,6 @@ fn (r mut Resolver&) expr(x ast.Expr&) {
             r.inCond = wasCond
         }
         case ast.Expr.MatchE(_, mt) { r.matchOf(mt) }
-        case ast.Expr.TypeVar(sp, n) { r.record(sp, r.lookup(n)) }
         nomatch { }
     }
 }
@@ -1128,18 +1182,8 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
     match t {
         case ast.TypeRef.Named(sp, path, args) {
             r.typePath(sp, path)
-            for i in range args.Len() {
-                a := args[i]
-                match a {
-                    case ast.TypeRef.Var(vsp, n, c) {
-                        constant := (c != null and r.constType(c)) or r.constArg(path, i)
-                        r.introduce(vsp, n, c, constant)
-                    }
-                    case _ { r.typeRef(a) }
-                }
-            }
+            for a in args { r.typeRef(a) }
         }
-        case ast.TypeRef.Var(sp, n, c) { r.introduce(sp, n, c, c != null and r.constType(c)) }
         case ast.TypeRef.Func(_, s) {
             for p in s.Params {
                 if p.Ty != null { r.typeRef(p.Ty) }
@@ -1175,7 +1219,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
     }
 }
 
-# a type variable's or a constant's introduction (G8b, G22): declared for the rest of its item, once
+# a type variable's or a constant's introduction by a receiver (QW, G22): declared for the rest of its item, once
 fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&, constant Bool) {
     if c != null { r.typeRef(c) }
     i := try r.scope.Get(n) catch default -1

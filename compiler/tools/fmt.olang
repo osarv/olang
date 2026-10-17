@@ -71,7 +71,7 @@ fn run(mode String&, args Array<String&>&) I32 {
             continue
         }
         held := unparse.HeldBranches(decls, names, src.Text, diags)
-        text := layout.Format(src.Text, ts, p.ArgAngles, p.VarAngles, p.CloseAngles, held)
+        text := layout.Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held)
         if mode == "-f" {
             if text != src.Text {
                 try os.WriteFile(path, text) catch os.OsError {
@@ -137,7 +137,7 @@ fn verify(src source.Source&, text String&, std String&, prelude String&) String
     }
     if comments(src.Text) != comments(text) { return "the comments differ" }
     held2 := unparse.HeldBranches(decls2, names, text, diags2)
-    again := layout.Format(text, ts2, p2.ArgAngles, p2.VarAngles, p2.CloseAngles, held2)
+    again := layout.Format(text, ts2, p2.ArgAngles, p2.CloseAngles, held2)
     if again != text { return "formatting it again changes it: " $firstDifference(text, again) }
     return ""
 }

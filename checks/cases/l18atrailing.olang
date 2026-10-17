@@ -1,5 +1,5 @@
-# check: fail error[L18a]: a comma before ']' ends a list only where ']' begins a line of its own - remove it
-# L18a: a list running over several lines may end with a comma before its closing bracket; on one line it may not
+# check: fail error[L18a]: a comma before ']' separates nothing - remove it
+# L18a: a comma before a list's closing bracket on its own line separates nothing
 fn main() ? {
     xs := I32[1, 2,]
     assert xs.Len() == 2

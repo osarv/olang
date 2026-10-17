@@ -5083,10 +5083,12 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
     struct list* prevIntros = currentSigIntros;
     struct list* prevTPN = currentTypeParamNames;
     if (!currentBindings) collectSigIntros(firstPartOfType(ctorNode, SNTX_FN_TYPE_PARAMS), &ctorIntros); //QW: "struct<T>(" 
-    if (t->typeParams.len == 0 && !currentBindings && !currentSigIntros) {
-        for (int i = 0; i < ctorIntros.len; i++) ListAdd(&ctorVarNames, &((struct token*)ListGetIdx(&ctorIntros, i))->str);
-        if (ctorIntros.len) {
-            currentSigIntros = &ctorIntros;
+    if (!currentBindings && !currentSigIntros && ctorIntros.len) {
+        //a generic type's constructor introduces none of its own (G10d): its list is still read, so a parameter naming
+        //one of it is the variable it is, and the error below says what is wrong rather than "unknown type"
+        currentSigIntros = &ctorIntros;
+        if (t->typeParams.len == 0) {
+            for (int i = 0; i < ctorIntros.len; i++) ListAdd(&ctorVarNames, &((struct token*)ListGetIdx(&ctorIntros, i))->str);
             currentTypeParamNames = &ctorVarNames;
         }
     }

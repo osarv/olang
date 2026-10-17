@@ -384,7 +384,7 @@ Prelude := (
     "}\n"
     "fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }\n"
     "fn applyR(n Node&, f fn(x Node&) I64) I64 { return f(n) }\n"
-    "fn idT(x <T>) T { return x }\n"
+    "fn idT<T>(x T) T { return x }\n"
     "fn cycA(n Node&, c I64) I64 {\n"
     "    if c > 0 { return cycB(n, c - 1) }\n"
     "    return n.v\n"
@@ -1930,12 +1930,12 @@ fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
         id := g.name("oid")
         w := g.name("obw")
         if k == 0 {
-            g.addHelper("fn " $id "(a <T>) T { return a }\nfn " $w "(a mut Array<I64>&) mut Array<I64>& { return " $id "(a) }\n")
+            g.addHelper("fn " $id "<T>(a T) T { return a }\nfn " $w "(a mut Array<I64>&) mut Array<I64>& { return " $id "(a) }\n")
         } else if k == 1 {
             g.addHelper("fn " $w "(a mut Array<I64>&) mut Array<I64>& {\n    l := List<mut Array<I64>&>()\n    l.Push(a)\n"
                         "    return l[0]\n}\n")
         } else {
-            g.addHelper("fn " $id "(c Bool, a <T>, b T) T { return a if c else b }\n"
+            g.addHelper("fn " $id "<T>(c Bool, a T, b T) T { return a if c else b }\n"
                         "fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return " $id "(a.Len() >= b.Len(), a, b) }\n")
         }
         call := $w "(" $vv ".ViewMut())" if k < 2 else $w "(" $vv ".ViewMut(), Array<I64>(1))"
@@ -1993,7 +1993,7 @@ fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
         pk := g.name("v4p")
         fl := g.name("v4g")
         w := g.name("v4w")
-        g.addHelper("fn " $pk "(c Bool, x <T>, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n"
+        g.addHelper("fn " $pk "<T>(c Bool, x T, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n"
                     "    return k\n}\n")
         back := $pk "(true, a, b)"
         body := ""

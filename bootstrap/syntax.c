@@ -4885,9 +4885,15 @@ static bool syntaxHint(struct token found, char* expected) {
         && (isOperandEndTok(found.type) || found.type == TOK_PAREN_O) && found.type != TOK_PAREN_C && found.type != TOK_SQUARE_C
         && joinPieceHint(found, operandEndAfter(found))) return true;
     if (textPieceCalled(found)) return true;
-    //"f(a, b,)" - a trailing comma ends a list only where its closing bracket begins a line (L18a)
+    //"f(a, b,)" - a comma before a list's closing bracket separates nothing (L18a); the list stops at the comma, so the
+    //parse fails there or, after one item that took it, at the bracket
     if ((found.type == TOK_PAREN_C || found.type == TOK_SQUARE_C) && prev.type == TOK_COMMA && prev.lineNr == found.lineNr) {
         ErrSyntax(prev, ERR_TRAILING_COMMA, found);
+        return true;
+    }
+    struct token next = TokenAfter(found);
+    if (found.type == TOK_COMMA && (next.type == TOK_PAREN_C || next.type == TOK_SQUARE_C) && next.lineNr == found.lineNr) {
+        ErrSyntax(found, ERR_TRAILING_COMMA, next);
         return true;
     }
     //G21: "Array<U8, 1 << 12>" - a comparison or shift in a constant argument reads across the list's own '>'
