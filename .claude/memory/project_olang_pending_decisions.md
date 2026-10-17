@@ -115,7 +115,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   The Try forms are renamed to match (the user: "So then tryAt etc becomes checkedAt?" - yes): CheckedAt, CheckedPlus,
   CheckedSetAt, CheckedSlice, ... (private checkedAt), reversing the user's own TryAt pick of 2026-10-07. `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
   built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
-- QR ASKED 2026-10-17 (the user: "We need two more modes. One 'build and run' mode and a formatter"). Proposed:
+- QR DECIDED 2026-10-17 (the user: "We need two more modes. One 'build and run' mode and a formatter"). Proposed:
   (1) `olang main.olang [args...]` with NO mode flag builds as -b (cached objects), runs the binary with the remaining
   arguments and exits with its status; modifiers apply; makes `#!/usr/bin/env olang` scripts work (`#` is a comment);
   alternative a flag like `-x`. (2) `olang -f files...` formats in place, gofmt-style with no options: 4-space indent,
@@ -123,7 +123,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   meaning-preserving and idempotent, tested over the corpus; `-f -c` to only check (CI) if wanted. Build-and-run goes
   into the C driver now (tiny) and the port's; the formatter is written in olang on the port's scanner/parser
   (compiler/), the C `-f` handing files to it until self-hosting. Asked: 1. no flag or a flag; 2. 4 spaces, no wrap.
-  In effect: nothing built.
+  DECIDED (the user: "1) and 2) are good. Is -f unused today?" - yes, free): no flag runs; `-f` formats, 4 spaces,
+  no wrapping. Being built (wt-runfmt).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
