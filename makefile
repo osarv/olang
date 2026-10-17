@@ -98,9 +98,11 @@ build/compiler_tools_checkdump: $(OLANG) $(wildcard compiler/*.olang) compiler/t
 	$(OLANG) build compiler/tools/checkdump.olang
 
 # M5b/M5c's acceptance, measured: refused checks cases give stage 0's first error, accepted programs check clean
-# (compiler/tools/checkdiff.sh; minutes, not in verify until it is required)
-checkdiff: build/compiler_tools_checkdump
-	compiler/tools/checkdiff.sh -v
+# (compiler/tools/checkdiff.olang; under a minute, not in verify until it is required)
+build/compiler_tools_checkdiff: $(OLANG) compiler/tools/checkdiff.olang
+	$(OLANG) build compiler/tools/checkdiff.olang
+checkdiff: build/compiler_tools_checkdump build/compiler_tools_checkdiff
+	build/compiler_tools_checkdiff -v
 
 # captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
 # (minutes: stage 0 checks each root program whole)

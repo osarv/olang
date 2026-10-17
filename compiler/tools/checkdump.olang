@@ -6,7 +6,7 @@
 #
 # For each file, "== FILE", then the program it is the root of loaded, its names resolved and every body checked: the
 # diagnostics said, rendered as the compiler renders them, then "gap PATH:LINE:COL WHAT" for each construct the checker
-# met and does not check yet, and "bodies N". compiler/tools/checkdiff.sh compares them with stage 0's goldens. -D
+# met and does not check yet, and "bodies N". compiler/tools/checkdiff.olang compares them with stage 0's goldens. -D
 # defines build constants; -t makes TestBuild true and checks the root module's test blocks.
 
 import "std/os"

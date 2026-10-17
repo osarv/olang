@@ -15,7 +15,7 @@
 # Jumps (S9).
 #
 # What the checker meets and does not check yet is recorded as a gap (Gaps), never said as a diagnostic: the acceptance
-# (compiler/tools/checkdiff.sh) counts a program as checked clean only when it has neither errors nor gaps.
+# (compiler/tools/checkdiff.olang) counts a program as checked clean only when it has neither errors nor gaps.
 
 import "std/os"
 import "source"
