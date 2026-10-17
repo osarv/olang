@@ -256,8 +256,8 @@ fn otherPass(r String&) Bool {
 # and their arrays' spelling (QP2: G20-G28), the introduction rule (QW: G8b), the default error (QO1: R15-R17),
 # done/fail/abort and a test's return (QU: S15, S16-S16b)
 fn decidedAway(r String&) Bool {
-    for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "S15", "S16",
-                     "S16a", "S16b"] {
+    for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "R18", "R19",
+                     "S16a", "S16b", "S16c"] {
         if r == x { return true }
     }
     return false

@@ -418,13 +418,9 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     } else if s.Results.Len() > 1 {
         result = p.T.Tuple(p.T.List(rs))
     }
-    es List<types.TypeId>
-    if s.HasErrors {
-        if s.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
-        for e in s.Errors { es.Push(p.errorType(c, e)) }
-    }
+    if s.NoReturn { result = types.NoreturnT }
     scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
-    return p.T.Func(p.T.List(ps.ToArray()), result, p.T.List(es.ToArray()), scopes)
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.errorList(c, s.HasErrors, s.Errors), scopes)
 }
 
 # the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
@@ -465,6 +461,82 @@ fn (p mut Program&) errorType(c Context&, e ast.Path&) types.TypeId {
     ei := p.TypeEntry(mi, e.Parts[n - 1])
     if ei < 0 { return types.UnknownT }
     return p.T.Named(p.DeclFor(mi, ei), types.ListId(0))
+}
+
+# an error set's item (R1, R1c): an error type, or one of its words - an entry holding that word alone, past the 64th
+# none; Unknown for neither
+fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
+    t := p.errorType(c, e)
+    n := e.Parts.Len()
+    if t != types.UnknownT or n < 2 { return t }
+    et := p.errorType(c, ast.Path(e.Sp, e.Parts[:n - 1]))
+    if et == types.UnknownT { return et }
+    ws := p.ErrorWords(p.T.DeclOf(et))
+    for i in range ws.Len() {
+        if ws[i] == e.Parts[n - 1] { return p.T.ErrWords(et, U64(1) << i) if i < 64 else types.UnknownT }
+    }
+    return types.UnknownT
+}
+
+# an error set as written (R1, R1c): its items in order, the words of one type one entry, a type named whole holding
+# every word of it; "?" alone the inferred set's mark (R1a)
+fn (p mut Program&) errorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId {
+    es List<types.TypeId>
+    if has and items.Len() == 0 { es.Push(types.DefaultErrT) }
+    if has {
+        for e in items {
+            t := p.errorSetItem(c, e)
+            k I64 = -1
+            for j in range es.Len() {
+                if t != types.UnknownT and p.T.ErrOf(es[j]) == p.T.ErrOf(t) { k = j }
+            }
+            if k < 0 {
+                es.Push(t)
+            } else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords {
+                es[k] = p.T.ErrOf(t)
+            } else {
+                es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
+            }
+        }
+    }
+    return p.T.List(es.ToArray())
+}
+
+# the words an error type declares (T19), in order - its declaration found among its module's, a top-level if's too
+fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
+    ds := p.L.Mods[p.T.DeclModule(d)].Decls
+    w := wordsIn(ds, p.T.DeclName(d))
+    return w if w != null else Array<source.NameId>(0)
+}
+
+fn wordsIn(ds Array<ast.Decl&>&, name source.NameId) Array<source.NameId>&ds {
+    if ds == null { return null }
+    for d in ds {
+        match d {
+            case ast.Decl.Errors(_, n, words) {
+                if n == name { return words }
+            }
+            case ast.Decl.If(_, ti) {
+                w := wordsInIf(ti, name)
+                if w != null { return w }
+            }
+            nomatch { }
+        }
+    }
+    return null
+}
+
+fn wordsInIf(ti ast.TopIf&, name source.NameId) Array<source.NameId>&ti {
+    if ti.Then != null {
+        w := wordsIn(ti.Then.Decls, name)
+        if w != null { return w }
+    }
+    if ti.ElseIf != null {
+        w := wordsInIf(ti.ElseIf, name)
+        if w != null { return w }
+    }
+    if ti.Else != null { return wordsIn(ti.Else.Decls, name) }
+    return null
 }
 
 # the module an alias of a module reaches, -1 for none
@@ -1626,13 +1698,9 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
             named.Push(prm.Name)
         }
     }
-    es List<types.TypeId>
-    if errs != null and errs.HasErrors {
-        if errs.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
-        for e in errs.Errors { es.Push(p.errorType(c, e)) }
-    }
     scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
-    return p.T.Func(p.T.List(ps.ToArray()), result, p.T.List(es.ToArray()), scopes)
+    el := p.errorList(c, errs.HasErrors, errs.Errors) if errs != null else types.ListId(0)
+    return p.T.Func(p.T.List(ps.ToArray()), result, el, scopes)
 }
 
 # a written type's error set item, read in a context: an error type (R1), Unknown for none
@@ -1954,6 +2022,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon + Undeclar
     if c.peek() != ':' {
         if word == "Bool" { return types.BoolT }
         if word == "default" { return types.DefaultErrT }
+        if word == "noreturn" { return types.NoreturnT }
         t := p.T.Prim(word)
         if t == types.UnknownT { error BadCanon.TEXT }
         return t

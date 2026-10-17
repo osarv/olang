@@ -55,7 +55,8 @@ type Kind enum {
     F32
     F64
     Null        # null's own type, before it adapts to a reference (T2a)
-    DefaultErr  # the default error, "?" alone (R15)
+    DefaultErr  # "?" alone in a signature: the set its body is found to fail with, inferred (R1a)
+    Noreturn    # "noreturn" where a function's result would stand (D8e): no value, and no way back to the caller
     Named       # a declared type: A its DeclId, B its arguments (a ListId)
     Array       # A its element; B its length - a Const, or a constant pattern - or 0 for a length known at run time (T7)
     Ref         # A what it refers to, B its permission (Perm): T24, T25b, T25e
@@ -67,6 +68,7 @@ type Kind enum {
     Var         # a type variable or a constant variable (G1, G20): A its owner, B its index, C its permission (T2)
     Const       # a constant argument's value (G20, G21): A its type, B its value (a U64's bits)
     ConstExpr   # a constant argument still to be computed from variables (G21): A its pattern
+    ErrWords    # an error set's entry holding some words of an error type (R1c): A the type, B the words (bit i word i)
 }
 
 # a reference's permission: read-only, writable ("mut"), owning ("own"), both (T25b, T25e)
@@ -174,13 +176,13 @@ type Table struct(Names mut source.Names&) {
 }
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
-# from I8 3 to F64 14, Null 15, the default error 16
+# from I8 3 to F64 14, Null 15, the inferred set's mark 16, noreturn 17
 fn NewTable(names mut source.Names&) Table {
     t := Table(names)
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
     for k in Kind[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32,
-                  Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr] {
+                  Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
         t.intern(data(k, 0, 0, 0), 1)
     }
     return t
@@ -191,6 +193,16 @@ VoidT TypeId = TypeId(1)
 BoolT TypeId = TypeId(2)
 NullT TypeId = TypeId(15)
 DefaultErrT TypeId = TypeId(16)
+NoreturnT TypeId = TypeId(17)
+
+# an error set's entry for some words of error type e (R1c): mask bit i is e's word i
+fn (t mut Table&) ErrWords(e TypeId, mask U64) TypeId { return t.intern(data(Kind.ErrWords, I64(e), I64(mask), 0), 1) }
+
+# the error type an error set's entry is of: itself, or the type a words entry holds words of (R1c)
+fn (t Table&) ErrOf(e TypeId) TypeId { return TypeId(I32(t.A(e))) if t.KindOf(e) == Kind.ErrWords else e }
+
+# the words an error set's entry holds (R1c): a words entry's, else every one (all bits)
+fn (t Table&) ErrMask(e TypeId) U64 { return U64(t.B(e)) if t.KindOf(e) == Kind.ErrWords else U64(0) - 1 }
 
 # a number type by its name (T4), or Unknown
 fn (t Table&) Prim(name String&) TypeId {
@@ -684,7 +696,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
     d := t.at(id)
     size, align I64 = 0, 1
     match d.K {
-        case Kind.Void { }
+        case Kind.Void, Kind.Noreturn { }
         case Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16, Kind.BF16,
              Kind.F32, Kind.F64 {
             size = primBits[I64(id)] / 8 if id != BoolT else 1
@@ -801,6 +813,7 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16,
              Kind.BF16, Kind.F32, Kind.F64 => $primLlvm[I64(id)]
         case Kind.DefaultErr => "i32"
+        case Kind.Noreturn => "void"
         case Kind.Func => "{ ptr, ptr }"
         case Kind.Ref => "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "ptr"
         case Kind.Array => t.arrayLlvm(id)
@@ -896,6 +909,11 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         case Kind.Unknown { b.Push("?") }
         case Kind.Null { b.Push("null") }
         case Kind.DefaultErr { b.Push("default") }
+        case Kind.Noreturn { b.Push("noreturn") }
+        case Kind.ErrWords {
+            t.canon(b, t.ErrOf(id))
+            b.Push(".#" $t.ErrMask(id))
+        }
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16,
              Kind.BF16, Kind.F32, Kind.F64 {
             b.Push("void" if id == VoidT else primNames[I64(id)])

@@ -96,6 +96,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
+    decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
@@ -129,20 +130,16 @@ fn (c mut Checker&) CheckProgram() {
     c.P.AllFns()
     for {
         c.Attempts++
-        g := c.P.L.Diags.Hold()
+        mark := c.P.L.Diags.Count()
         c.attempt()
-        c.P.L.Diags.EndHold()
         # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
         # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
         grew := false
         for r in c.errReads {
             if c.P.T.Items(try c.inferredErrs.Get(r.First) catch default types.ListId(0)).Len() != r.Second { grew = true }
         }
-        if not grew or c.Attempts >= 20 {
-            c.P.L.Diags.Choose(g)
-            return
-        }
-        c.P.L.Diags.Drop(g)
+        if not grew or c.Attempts >= 20 { return }
+        c.P.L.Diags.Forget(mark)
         c.errPresets = c.found
         c.reset()
     }
@@ -228,7 +225,9 @@ fn (c mut Checker&) operatorMethod(f I64) {
     c.push(-1, mi, types.VoidT, types.ListId(0))
     at := c.nameSpan(fd)
     res := c.P.T.Result(sig)
-    if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
+    if res == types.NoreturnT {
+        c.err(at, msgs.NoreturnHere("an operator's method"))
+    } else if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
         c.err(at, msgs.OperatorResult(sh.Name))
     } else if not sh.Result and res != types.VoidT {
         c.err(at, msgs.SetatResult())
@@ -300,11 +299,15 @@ fn (c mut Checker&) failForm(f I64, name String&, cap String&, k I64, sig types.
     if name[0].IsLower() { plainName = $plainName[0].ToLower() $plainName[1:] }
     rt := c.deref(c.P.T.Items(c.P.T.Params(sig))[0])
     p := c.P.MethodOf(rt, c.P.L.Names.Intern(plainName))
-    if p < 0 or p == f { return }
-    mine := c.P.T.Items(es)
+    if p == f { return }
+    if p < 0 {
+        c.err(at, msgs.CheckedWithoutPlain(name, plainName))
+        return
+    }
     for e in c.P.T.Items(c.fnErrors(p)) {
-        if not mine.Has(e) {
-            c.err(at, msgs.CheckedNotSuperset(name, plainName, plainName, c.ty(e)))
+        u := c.uncovered(es, e)
+        if u != types.UnknownT {
+            c.err(at, msgs.CheckedNotSuperset(name, plainName, plainName, c.ty(u)))
             return
         }
     }
@@ -491,15 +494,37 @@ fn (c mut Checker&) checkNow(id I64) {
 # an inferred body's set, as its body found it: each error type once, in the canonical order - by the module declaring
 # it, then its name (R1a)
 fn (c mut Checker&) settle(fr frame&) {
-    es List<types.TypeId>
-    for e in fr.leaks {
-        if e != types.DefaultErrT and not es.Has(e) { es.Push(e) }
-    }
-    sorted := c.canonicalErrs(es)
+    sorted := c.canonicalErrs(c.merged(fr.leaks))
     c.inferredErrs.Put(fr.Body, sorted)
     c.found.Put(c.bodyKey(fr.Body), sorted)
     b := c.Bodies[fr.Body]
     b.Ty = c.P.T.Func(c.P.T.Params(b.Ty), c.P.T.Result(b.Ty), sorted, c.P.T.ScopesOf(b.Ty))
+}
+
+# what an error set holds, each type once (R1c): words of one type in one entry, every word of it the type itself
+fn (c mut Checker&) merged(xs List<types.TypeId>&) List<types.TypeId> {
+    es List<types.TypeId>
+    for e in xs {
+        if e == types.DefaultErrT or e == types.UnknownT { continue }
+        et := c.P.T.ErrOf(e)
+        k I64 = -1
+        for j in range es.Len() {
+            if c.P.T.ErrOf(es[j]) == et { k = j }
+        }
+        if k < 0 {
+            es.Push(e)
+            continue
+        }
+        if es[k] == et or e == et {
+            es[k] = et
+            continue
+        }
+        n := c.wordCount(et)
+        full := U64(0) - 1 if n >= 64 else (U64(1) << n) - 1
+        mask := (c.P.T.ErrMask(es[k]) | c.P.T.ErrMask(e)) & full
+        es[k] = et if mask == full else c.P.T.ErrWords(et, mask)
+    }
+    return es
 }
 
 fn (c mut Checker&) canonicalErrs(es List<types.TypeId>&) types.ListId {
@@ -509,8 +534,8 @@ fn (c mut Checker&) canonicalErrs(es List<types.TypeId>&) types.ListId {
 }
 
 fn (c mut Checker&) errBefore(a types.TypeId, b types.TypeId) Bool {
-    da := c.P.T.DeclOf(a)
-    db := c.P.T.DeclOf(b)
+    da := c.P.T.DeclOf(c.P.T.ErrOf(a))
+    db := c.P.T.DeclOf(c.P.T.ErrOf(b))
     ma := c.P.L.Mods[c.P.T.DeclModule(da)].Identity
     mb := c.P.L.Mods[c.P.T.DeclModule(db)].Identity
     if ma != mb { return ma < mb }
@@ -556,7 +581,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
                 nomatch { e = c.expr(args[i], types.UnknownT) }
             }
         }
-        if e != null and i < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[i], c.bindType(e), b, false, false) }
+        if e != null and i < ps.Len() and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT { c.unify(ps[i], c.bindType(e), b, false, false) }
         argVals.Push(e)
     }
     c.P.InferThroughBounds(b)
@@ -669,12 +694,25 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
         k++
     }
     c.cur().SetVars(c.P.ScopeVarsOf(sig))
+    nr := c.P.T.Result(sig) == types.NoreturnT
+    # D8e: a noreturn function declares no errors - an error is a way back to its caller
+    if nr and fd.S.HasErrors { c.err(c.noreturnSpan(fd.Sp), msgs.NoreturnErrors()) }
     root := c.rootStmts(fd.Body)
     c.cur().Root = root
-    if c.P.T.Result(sig) != types.VoidT and not c.fr().Gapped and not leavesBlock(root) {
+    if nr {
+        if not c.fr().Gapped and not leavesBlock(root) { c.err(c.nameSpan(fd), msgs.NoreturnFallsOff()) }
+    } else if c.P.T.Result(sig) != types.VoidT and not c.fr().Gapped and not leavesBlock(root) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
     }
     c.pop()
+}
+
+# where a signature writes "noreturn" (D8e): the word in a declaration's text, after its parameters
+fn (c mut Checker&) noreturnSpan(sp source.Span) source.Span {
+    t := c.src(sp)
+    at := try t.Find(") noreturn") catch default -1
+    if at < 0 { return sp }
+    return source.Span(sp.Start + I32(at + 2), sp.Start + I32(at + 10))
 }
 
 # a parameter as written (D9, D9a): no "mut" before a value, an array held by reference - a bare type variable aside,
@@ -1080,14 +1118,10 @@ fn (c mut Checker&) opAfter(sp source.Span, n I64) source.Span {
 # where an index is written: its "[" (E16, E31)
 fn (c mut Checker&) bracketOf(base ast.Expr&) source.Span { return c.opAfter(base.Span(), 1) }
 
-# x[i] on a type with no At of i's shape (E31, E31a, E16): only its checked form, only SetAt, an At of another shape, or
+# x[i] on a type with no At of i's shape (E31, E16): only SetAt, an At of another shape, or
 # nothing - said at the index's "[" (sp the index's span; written the type of what is indexed, its reference included)
 fn (c mut Checker&) noIndex(sp source.Span, t types.TypeId, written types.TypeId, n I64) {
     bsp := c.bracketIn(sp)
-    if c.roleMethod(t, "CheckedAt", n) >= 0 {
-        c.err(bsp, msgs.OnlyTryForm(c.ty(t), "CheckedAt"))
-        return
-    }
     if c.notOperator(t, "At", bsp, "'x[i]'", 1, true) { return }
     if c.roleMethod(t, "SetAt", n + 1) >= 0 {
         c.err(bsp, msgs.AtUndeclared(c.ty(written)))
@@ -1201,7 +1235,23 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.Unknown { b.PushChar('?') }
         case types.Kind.Void { b.Push("nothing") }
         case types.Kind.Null { b.Push("null") }
-        case types.Kind.DefaultErr { b.Push("the default error") }
+        case types.Kind.DefaultErr { b.Push("what its body can fail with") }
+        case types.Kind.Noreturn { b.Push("noreturn") }
+        case types.Kind.ErrWords {
+            # R1c: "T.W + T.V", as a signature writes the words it names
+            et := c.P.T.ErrOf(t)
+            name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
+            ws := c.P.ErrorWords(c.P.T.DeclOf(et))
+            mask := c.P.T.ErrMask(t)
+            first := true
+            for i in range ws.Len() {
+                if i < 64 and (mask & (U64(1) << i)) != 0 {
+                    if not first { b.Push(" + ") }
+                    b.Push($name "." $c.text(ws[i]))
+                    first = false
+                }
+            }
+        }
         case types.Kind.Named {
             b.Push(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))))
             c.spellList(b, c.P.T.Args(t), "<", ">")
@@ -1417,13 +1467,22 @@ fn (c mut Checker&) readLocal(sp source.Span, id I64) typed.Expr&c {
     return c.read(sp, typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id))))
 }
 
+# BuiltinError's words (R20), as bits of an error set's entry (R1c): what each check can fail with
+Bounds U64 = 1
+DivideByZero U64 = 2
+Overflow U64 = 4
+Invalid U64 = 8
+WrongCase U64 = 16
+
 # an operation's check (E15a): under checked it fails into the checked's clauses, and the checked has something that
 # can fail; under a try alone it is what it is unchecked (off), noted so that a try only a checked would make fallible
 # says so
-fn (c mut Checker&) checkOp(off typed.Check) typed.Check {
+fn (c mut Checker&) checkOp(off typed.Check, words U64 = Bounds) typed.Check {
     fr := c.fr()
+    if words == 0 { return off }
     if fr.Checks > 0 {
         fr.Fallible++
+        c.leaks1(c.P.T.ErrWords(c.P.PreludeType("std/prelude/builtin", "BuiltinError"), words))
         return typed.Check.Try
     }
     if fr.Tries > 0 { fr.Checkable++ }
@@ -1444,14 +1503,35 @@ fn (c mut Checker&) checkedForm(t types.TypeId, name String&, n I64) I64 {
 # an arithmetic operation's check (E15a): under try the ones that can overflow, divide by zero or shift out - else none
 fn (c mut Checker&) arithCheck(op typed.PrimOp, t types.TypeId) typed.Check {
     if not c.isNumber(t) { return typed.Check.None }
-    # a float's result turning infinite or NaN (E15a)
-    if c.P.T.IsFloat(c.under(t)) and op != typed.PrimOp.Add and op != typed.PrimOp.Sub and op != typed.PrimOp.Mul and
-       op != typed.PrimOp.Div and op != typed.PrimOp.Rem { return typed.Check.None }
-    if op == typed.PrimOp.Add or op == typed.PrimOp.Sub or op == typed.PrimOp.Mul or op == typed.PrimOp.Div or
-       op == typed.PrimOp.Rem or op == typed.PrimOp.Shl or op == typed.PrimOp.Shr or op == typed.PrimOp.Neg {
-        return c.checkOp(typed.Check.None)
+    if c.P.T.IsFloat(c.under(t)) {
+        # a float's result turning infinite from finite operands, NaN from what is no NaN, a finite one divided by zero
+        if op == typed.PrimOp.Add or op == typed.PrimOp.Sub or op == typed.PrimOp.Mul {
+            return c.checkOp(typed.Check.None, Overflow | Invalid)
+        }
+        if op == typed.PrimOp.Div { return c.checkOp(typed.Check.None, DivideByZero | Overflow | Invalid) }
+        if op == typed.PrimOp.Rem { return c.checkOp(typed.Check.None, DivideByZero | Invalid) }
+        return typed.Check.None
     }
-    return typed.Check.None
+    signed := c.under(t) >= types.TypeId(3) and c.under(t) <= types.TypeId(6)
+    return match op {
+        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Neg => c.checkOp(typed.Check.None, Overflow)
+        case typed.PrimOp.Div, typed.PrimOp.Rem => c.checkOp(typed.Check.None, DivideByZero | (Overflow if signed else U64(0)))
+        case typed.PrimOp.Shl => c.checkOp(typed.Check.None, Overflow | Bounds)
+        case typed.PrimOp.Shr => c.checkOp(typed.Check.None, Bounds)
+        case _ => typed.Check.None
+    }
+}
+
+# what a checked conversion between numbers can fail with (E15a): a float to an integer NaN or out of range, a
+# narrowing float infinite, an integer changing value - nothing where every value fits
+fn (c mut Checker&) convWords(from types.TypeId, to types.TypeId) U64 {
+    f := c.under(from)
+    t := c.under(to)
+    if c.P.T.IsFloat(f) and not c.P.T.IsFloat(t) { return Invalid | Overflow }
+    if c.P.T.IsFloat(f) { return Overflow if c.P.T.Bits(t) < c.P.T.Bits(f) or t != f else U64(0) }
+    if c.P.T.IsFloat(t) { return Overflow if c.P.T.Bits(t) <= 16 else U64(0) }
+    if c.P.Meet(f, t) == t { return 0 }
+    return Overflow
 }
 
 fn (c mut Checker&) prim(sp source.Span, t types.TypeId, op typed.PrimOp, a typed.Expr&c, b typed.Expr&c) typed.Expr&c {
@@ -1720,6 +1800,8 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     have := typeOf(x)
     if want == types.UnknownT or have == types.UnknownT or want == types.VoidT { return x }
     if have == want or c.P.T.Same(have, want) { return x }
+    # D8e: a noreturn call fits where any value is wanted - control never arrives where it would be used
+    if have == types.NoreturnT { return x }
     hk := c.P.T.KindOf(have)
     wk := c.P.T.KindOf(want)
     # an array literal's elements fit the wanted element type each (T25b: a literal's elements take the target's
@@ -1771,7 +1853,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     }
     # a function value where one of looser permissions is wanted (T22): a read-only parameter for a writable one, a
     # writable result for a read-only one
-    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want) { return c.convert(sp, x, want) }
+    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) { return c.convert(sp, x, want) }
     # an instance whose type declares Call, where a function value is wanted (E31): an adapter holding it
     if wk == types.Kind.Func and hk != types.Kind.Func and have != types.NullT {
         a := c.adapter(sp, x, want)
@@ -1926,6 +2008,10 @@ fn (c mut Checker&) exprTo(x ast.Expr&, want types.TypeId) typed.Expr&c {
 # what ":=" declares from its initializer (D15): text a String value (T29c), a literal its own type (T6a)
 fn (c mut Checker&) inferred(x ast.Expr&, e typed.Expr&) types.TypeId {
     t := typeOf(e)
+    if t == types.NoreturnT {
+        c.err(c.calleeSpan(x), msgs.DeclFromNoreturn())
+        return types.UnknownT
+    }
     if t == types.NullT {
         c.err(x.Span(), msgs.DeclFromNull())
         return types.UnknownT
@@ -2096,7 +2182,10 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64) typed.Expr&c {
     c.P.Sig(f)
     inst := c.P.FnInstance(f, types.ListId(0))
     id := c.fnBody(inst)
-    return typed.Expr.Fn(sp, c.P.InstanceSig(inst), typed.FnVal.Named(typed.BodyId(I32(id))))
+    sig := c.P.InstanceSig(inst)
+    # an inferred set is what the value fails with (R1a)
+    if c.infersErrs(sig) { sig = c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.bodyErrors(id), c.P.T.ScopesOf(sig)) }
+    return typed.Expr.Fn(sp, sig, typed.FnVal.Named(typed.BodyId(I32(id))))
 }
 
 # an instance as a function value through its type's Call (E31): null where its Call is none, generic, or of another
@@ -2761,7 +2850,18 @@ fn isArrayMake(x typed.Expr&) Bool {
     }
 }
 
-fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId) Bool {
+# whether a value is a function named as one (T21): what may fit a type whose errors are a superset of its own (R1b)
+fn namedFn(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Fn(_, _, v) => match v {
+            case typed.FnVal.Named(_) => true
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     hp := c.P.T.Items(c.P.T.Params(h))
     wp := c.P.T.Items(c.P.T.Params(w))
     if hp.Len() != wp.Len() { return false }
@@ -2772,11 +2872,37 @@ fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId) Bool {
     }
     hr := c.P.T.Result(h)
     wr := c.P.T.Result(w)
+    # D8e: a noreturn function does all a type with no result and no errors promises, never returning
+    if hr == types.NoreturnT and wr == types.VoidT and c.P.T.Items(c.P.T.Errors(w)).Len() == 0 { return true }
     if not c.P.T.Same(hr, wr) {
         if not (c.isRef(hr) and c.isRef(wr) and c.P.T.Same(c.deref(hr), c.deref(wr))) { return false }
         if (c.P.T.PermOf(wr) & types.Writable) != 0 and (c.P.T.PermOf(hr) & types.Writable) == 0 { return false }
     }
-    return c.P.T.Errors(h) == c.P.T.Errors(w)
+    if c.P.T.Errors(h) == c.P.T.Errors(w) { return true }
+    # R1b, T22: a named function fits a type holding every error it can fail with, in any order
+    return named and c.errsCover(c.P.T.Errors(w), c.P.T.Errors(h))
+}
+
+# whether a set holds every error of another (R1b, E31a)
+fn (c mut Checker&) errsCover(big types.ListId, small types.ListId) Bool {
+    for e in c.P.T.Items(small) {
+        if c.uncovered(big, e) != types.UnknownT { return false }
+    }
+    return true
+}
+
+# what of error set entry e a set does not hold (R1c): Unknown for nothing, else e's type or the words left
+fn (c mut Checker&) uncovered(big types.ListId, e types.TypeId) types.TypeId {
+    et := c.P.T.ErrOf(e)
+    mask := c.P.T.ErrMask(e)
+    for b in c.P.T.Items(big) {
+        if c.P.T.ErrOf(b) == et { mask = mask & ~c.P.T.ErrMask(b) }
+    }
+    n := c.wordCount(et)
+    full := U64(0) - 1 if n >= 64 else (U64(1) << n) - 1
+    mask = mask & full
+    if mask == 0 { return types.UnknownT }
+    return et if mask == full else c.P.T.ErrWords(et, mask)
 }
 
 # x as Array<T, N>& (E32b): a view of an array of a run-time length as one of N, its length checked once - aborting,
@@ -2851,7 +2977,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     } else if base == null {
         base = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     }
-    chk := c.checkOp(typed.Check.Abort)
+    chk := c.checkOp(typed.Check.Abort, WrongCase)
     rec := c.P.T.Items(c.P.T.Cases(et))[k]
     ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
     pp := typed.Place.Payload(sp, rec, typed.Payload(base, k, chk))
@@ -2870,15 +2996,25 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
     if dk == 1 { return c.expr(a, want) }
     if dk == 0 { return c.expr(b, want) }
     t := c.cond1(k)
-    x := c.expr(a, want)
-    y := c.expr(b, want)
+    # E28: a literal value adapts to the other value's type (a number's) where nothing else is wanted
+    x typed.Expr&c = null
+    y typed.Expr&c = null
+    if want == types.UnknownT and c.litLike(a) and not c.litLike(b) {
+        y = c.expr(b, want)
+        x = c.expr(a, typeOf(y) if c.isNumber(typeOf(y)) else want)
+    } else {
+        x = c.expr(a, want)
+        y = c.expr(b, typeOf(x) if want == types.UnknownT and c.litLike(b) and not c.litLike(a) and c.isNumber(typeOf(x)) else want)
+    }
     ta := typeOf(x)
     tb := typeOf(y)
     rt := ta
     if want != types.UnknownT {
         rt = want
-    } else if ta == types.UnknownT {
+    } else if ta == types.UnknownT or ta == types.NoreturnT {
         rt = tb
+    } else if tb == types.NoreturnT {
+        rt = ta
     } else if ta != tb and tb != types.UnknownT {
         if c.P.T.Same(ta, tb) {
             rt = ta
@@ -3231,7 +3367,7 @@ fn (c mut Checker&) conversion(sp source.Span, t types.TypeId, args Array<ast.Ex
         c.err(args[0].Span(), msgs.TypeMismatch(c.ty(t), c.ty(xt)))
         return c.unknown(sp)
     }
-    k := c.checkOp(typed.Check.None)
+    k := c.checkOp(typed.Check.None, c.convWords(xt, t))
     if k != typed.Check.None {
         # a conversion checked under checked (E15a, E26): out of range, or of a NaN
         from := c.exprs.Len()
@@ -3274,7 +3410,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
                 nomatch { e = c.expr(args[i], types.UnknownT) }
             }
         }
-        if e != null and i < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[i], c.bindType(e), b, false, false) }
+        if e != null and i < ps.Len() and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT { c.unify(ps[i], c.bindType(e), b, false, false) }
         argVals.Push(e)
     }
     c.P.InferThroughBounds(b)
@@ -3323,6 +3459,9 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         sig := c.P.CtorSig(t)
         if sig != types.UnknownT {
             id := c.ctorBody(t)
+            # T29d: on a literal the constructor runs while compiling, so a failure is a compile-time error, never one
+            # the call can fail with
+            c.decided = args.Len() == 1 and c.litLike(args[0])
             return c.callBody(sp, nsp, sig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, null)
         }
         if args.Len() != 1 {
@@ -3409,7 +3548,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 }
             }
         }
-        if e != null and k < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[k], c.bindType(e), b, false, false) }
+        if e != null and k < ps.Len() and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT { c.unify(ps[k], c.bindType(e), b, false, false) }
         vals.Push(e)
         k++
     }
@@ -3515,6 +3654,8 @@ fn (c mut Checker&) unify(pat types.TypeId, actual types.TypeId, b mut generic.B
 fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, target typed.Callee&c, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c) typed.Expr&c {
     op := c.opCall
     c.opCall = ""
+    decided := c.decided
+    c.decided = false
     if sig == types.UnknownT { return c.unknown(sp) }
     ps := c.P.T.Items(c.P.T.Params(sig))
     sfrom := c.stmts.Len()
@@ -3577,7 +3718,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.exprs.Push(c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target)))
         k++
     }
-    errs := c.calleeErrors(target, sig)
+    errs := types.ListId(0) if decided else c.calleeErrors(target, sig)
     if c.P.T.Items(errs).Len() > 0 and c.fr().Tries == 0 {
         if op.Len() > 0 { c.err(nsp, msgs.OperatorCallFails(op)) } else { c.err(nsp, msgs.UnhandledFallibleCall()) }
     }
@@ -4126,11 +4267,14 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         c.nothingFails(sp, isChecked, fr.Checkable > checkable)
         return c.unknown(sp)
     }
+    end := fr.leaks.Len()
+    c.produced(clauses, mark, end)
     cls List<typed.Clause&>
     if clauses != null {
         for cl in clauses { cls.Push(c.clause(cl, typeOf(x))) }
     }
-    c.caught(mark, cls)
+    k := c.caught(mark, end, cls)
+    c.escapes(source.Span(sp.Start, sp.Start + (7 if isChecked else 3)), mark, k)
     return typed.Expr.Try(sp, typeOf(x), typed.Try(x, cls.ToArray()))
 }
 
@@ -4184,11 +4328,14 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     fr.Checks = checks
     if fr.Fallible == before and not c.inGeneric() { c.nothingFails(sp, isChecked, fr.Checkable > checkable) }
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
+    end := fr.leaks.Len()
+    c.produced(clauses, mark, end)
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
     if clauses != null {
         for cl in clauses { cls.Push(c.clause(cl, types.VoidT)) }
     }
-    c.caught(mark, cls)
+    k := c.caught(mark, end, cls)
+    c.escapes(source.Span(sp.Start, sp.Start + (7 if isChecked else 3)), mark, k)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
 }
 
@@ -4215,58 +4362,131 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId) typed.Clause&c {
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
 }
 
-# whether clauses take every word of error type e: an item-less clause, an item naming the type, or items naming each
-# of its words
-fn (c mut Checker&) taken(e types.TypeId, cls List<typed.Clause&>&) Bool {
-    words List<I64>
+# what of error set entry e clauses leave (R11, R1c): nothing (Unknown) where an item-less clause or an item naming its
+# type takes it, else the words no item names - the type itself where that is every word
+fn (c mut Checker&) left(e types.TypeId, cls List<typed.Clause&>&) types.TypeId {
+    et := c.P.T.ErrOf(e)
+    n := c.wordCount(et)
+    full := U64(0) - 1 if n >= 64 else (U64(1) << n) - 1
+    mask := c.P.T.ErrMask(e) & full
     for cl in cls {
-        if cl.All { return true }
+        if cl.All { return types.UnknownT }
         for it in cl.Items {
-            if it.Err == e {
-                if it.Word < 0 { return true }
-                if not words.Has(it.Word) { words.Push(it.Word) }
+            if it.Err == et {
+                if it.Word < 0 { return types.UnknownT }
+                if it.Word < 64 { mask = mask & ~(U64(1) << it.Word) }
             }
         }
     }
-    if words.Len() == 0 or e == types.DefaultErrT { return false }
-    return words.Len() >= c.wordCount(e)
+    if mask == 0 { return types.UnknownT }
+    return et if mask == full else c.P.T.ErrWords(et, mask)
 }
 
 # how many words an error type declares (T19)
-fn (c mut Checker&) wordCount(e types.TypeId) I64 {
-    d := c.P.T.DeclOf(e)
-    ds := c.P.L.Mods[c.P.T.DeclModule(d)].Decls
-    if ds == null { return 1 << 40 }
-    for x in ds {
-        match x {
-            case ast.Decl.Errors(_, n, words) {
-                if n == c.P.T.DeclName(d) { return words.Len() }
-            }
-            nomatch { }
-        }
-    }
-    return 1 << 40
-}
+fn (c mut Checker&) wordCount(e types.TypeId) I64 { return c.P.ErrorWords(c.P.T.DeclOf(c.P.T.ErrOf(e))).Len() }
 
-# what a lambda's errors are taken from (D16b): a call's errors, in order
+# what a body lets out, in order: a call's errors, what a check fails with, an error statement's word - taken by the
+# clauses of the try around (caught), the rest a lambda's errors (D16b) or an inferred set (R1a), or held to the set
+# written (R9)
 fn (c mut Checker&) leak(es types.ListId) {
     fr := c.fr()
-    if not fr.InferErrors { return }
     for e in c.P.T.Items(es) { fr.leaks.Push(e) }
+}
+
+fn (c mut Checker&) leaks1(e types.TypeId) { c.fr().leaks.Push(e) }
+
+# what a try's operand lets out past its clauses, held where it goes (R9, R13, S16): nowhere in a test, which fails, nor
+# in a set being inferred; else the function's written set must hold each - k entries from mark. Only the outermost
+# try of a nest says so: an inner one's go on to it
+fn (c mut Checker&) escapes(at source.Span, mark I64, k I64) {
+    fr := c.fr()
+    if fr.Tries > 0 or fr.InTest or fr.InferErrors { return }
+    for i in range mark, mark + k {
+        e := fr.leaks[i]
+        if fr.Body < 0 or c.isGlobalBody(fr.Body) {
+            c.err(at, msgs.TryNowhereToGo())
+            return
+        }
+        u := c.uncovered(fr.Errors, e)
+        if u != types.UnknownT {
+            c.err(at, msgs.TryErrorNotDeclared(c.ty(u)))
+            return
+        }
+    }
+}
+
+fn (c mut Checker&) isGlobalBody(id I64) Bool {
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Global(_, _) => true
+        case _ => false
+    }
+}
+
+# R14: each clause item names what the operand can fail with - an error type it can, a word it can - not in a generic's
+# body (R8), where instances differ
+fn (c mut Checker&) produced(clauses Array<ast.Catch&>&, mark I64, end I64) {
+    if clauses == null or c.inGeneric() { return }
+    fr := c.fr()
+    got List<types.TypeId>
+    for i in range mark, end { got.Push(fr.leaks[i]) }
+    have := c.merged(got)
+    for cl in clauses {
+        if cl.Items == null { continue }
+        for p in cl.Items {
+            et := c.P.ErrorType(fr.Ctx, p)
+            w I64 = -1
+            if et == types.UnknownT { w, et = c.errorWord(p) }
+            if et == types.UnknownT { continue }
+            entry := types.UnknownT
+            for h in have {
+                if c.P.T.ErrOf(h) == et { entry = h }
+            }
+            if entry == types.UnknownT {
+                c.err(c.pathPart(p, 1 if w >= 0 else 0), msgs.CatchNotProduced(c.ty(et)))
+            } else if w >= 0 and w < 64 and (c.P.T.ErrMask(entry) & (U64(1) << w)) == 0 {
+                c.err(c.pathPart(p, 0), msgs.CatchWordNotProduced(c.ty(c.P.T.ErrWords(et, U64(1) << w)), c.ty(entry)))
+            }
+        }
+    }
+}
+
+# where a dotted path's part is written: the last (back 0), the one before it (back 1)
+fn (c mut Checker&) pathPart(p ast.Path&, back I64) source.Span {
+    t := c.src(p.Sp)
+    end := t.Len()
+    for k in range back + 1 {
+        start := end
+        for start > 0 and t[start - 1] != '.' { start-- }
+        if k == back { return source.Span(p.Sp.Start + I32(start), p.Sp.Start + I32(end)) }
+        end = start - 1
+        if end < 0 { return p.Sp }
+    }
+    return p.Sp
 }
 
 # what a try's clauses take out of what its operand let out since mark: everything for an item-less one, a whole type
 # for an item naming it
-fn (c mut Checker&) caught(mark I64, cls List<typed.Clause&>&) {
+fn (c mut Checker&) caught(mark I64, end I64, cls List<typed.Clause&>&) I64 {
     fr := c.fr()
-    if not fr.InferErrors { return }
+    left I64 = 0
     keep List<types.TypeId>
     for i in range mark, fr.leaks.Len() {
         e := fr.leaks[i]
-        if not c.taken(e, cls) { keep.Push(e) }
+        # what the clauses' own code lets out (after end) is no error of the operand's
+        if i >= end {
+            keep.Push(e)
+        } else {
+            r := c.left(e, cls)
+            if r != types.UnknownT {
+                keep.Push(r)
+                left++
+            }
+        }
     }
     fr.leaks.Truncate(mark)
+    # the operand's leftovers first, then what the clauses' own code lets out
     for e in keep { fr.leaks.Push(e) }
+    return left
 }
 
 # a catch clause's item: an error type, or one of its words (R10)
@@ -4296,42 +4516,10 @@ fn (c mut Checker&) errorWord(p ast.Path&) (I64, types.TypeId) {
 
 # a word's position among an error type's (T19); -1 for none
 fn (c mut Checker&) wordIndex(d types.DeclId, w source.NameId) I64 {
-    ds := c.P.L.Mods[c.P.T.DeclModule(d)].Decls
-    if ds == null { return -1 }
-    return c.wordIn(ds, c.P.T.DeclName(d), w)
-}
-
-fn (c mut Checker&) wordIn(ds Array<ast.Decl&>&, name source.NameId, w source.NameId) I64 {
-    for d in ds {
-        match d {
-            case ast.Decl.Errors(_, n, words) {
-                if n == name {
-                    for i in range words.Len() {
-                        if words[i] == w { return i }
-                    }
-                    return -1
-                }
-            }
-            case ast.Decl.If(_, ti) {
-                k := c.wordInIf(ti, name, w)
-                if k >= 0 { return k }
-            }
-            nomatch { }
-        }
+    ws := c.P.ErrorWords(d)
+    for i in range ws.Len() {
+        if ws[i] == w { return i }
     }
-    return -1
-}
-
-fn (c mut Checker&) wordInIf(ti ast.TopIf&, name source.NameId, w source.NameId) I64 {
-    if ti.Then != null and ti.Then.Decls != null {
-        k := c.wordIn(ti.Then.Decls, name, w)
-        if k >= 0 { return k }
-    }
-    if ti.ElseIf != null {
-        k := c.wordInIf(ti.ElseIf, name, w)
-        if k >= 0 { return k }
-    }
-    if ti.Else != null and ti.Else.Decls != null { return c.wordIn(ti.Else.Decls, name, w) }
     return -1
 }
 
@@ -4389,6 +4577,10 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
 # S3: an expression standing alone is a call, "++" or "--"
 fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
     match x {
+        case ast.Expr.Paren(_, y) {
+            c.exprStmt(sp, y)
+            return
+        }
         case ast.Expr.Unary(_, op, y) {
             if op == token.Tok.Inc or op == token.Tok.Dec {
                 c.step(sp, y, op == token.Tok.Inc)
@@ -4468,13 +4660,15 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     if j.Tried {
         if errs.Len() == 0 { c.err(sp, msgs.JoinCannotFail()) }
         lm := fr.leaks.Len()
-        if fr.InferErrors {
-            for e in errs { fr.leaks.Push(e) }
-        }
+        for e in errs { fr.leaks.Push(e) }
+        jend := fr.leaks.Len()
+        c.produced(j.Clauses, lm, jend)
         if j.Clauses != null {
             for cl in j.Clauses { cls.Push(c.clause(cl, types.VoidT)) }
         }
-        c.caught(lm, cls)
+        k := c.caught(lm, jend, cls)
+        jat := try c.src(sp).Find("join") catch default 0
+        c.escapes(source.Span(sp.Start + I32(jat), sp.Start + I32(jat) + 4), lm, k)
     } else if errs.Len() > 0 {
         c.err(sp, msgs.JoinNotTried(c.ty(errs[0])))
     }
@@ -4632,7 +4826,8 @@ fn (c mut Checker&) dropTaken(errs mut List<types.TypeId>&, mark I64, cls List<t
     keep List<types.TypeId>
     for i in range mark, errs.Len() {
         e := errs[i]
-        if not c.taken(e, cls) { keep.Push(e) }
+        r := c.left(e, cls)
+        if r != types.UnknownT { keep.Push(r) }
     }
     errs.Truncate(mark)
     for e in keep { errs.Push(e) }
@@ -4651,7 +4846,11 @@ fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
     }
     old := c.read(sp, typed.Place.Target(sp, t))
     one := c.lit(sp, t, floatBits(c.under(t), 1.0) if c.P.T.IsFloat(c.under(t)) else 1)
-    c.emit(typed.Stmt.Assign(sp, p, c.prim(sp, t, typed.PrimOp.Add if inc else typed.PrimOp.Sub, old, one)))
+    op := typed.PrimOp.Add if inc else typed.PrimOp.Sub
+    from := c.exprs.Len()
+    c.exprs.Push(old)
+    c.exprs.Push(one)
+    c.emit(typed.Stmt.Assign(sp, p, typed.Expr.Prim(sp, t, op, c.arithCheck(op, t), gather(c.exprs, from))))
 }
 
 # x++ on a declared type (E31, S3a): its Inc (Dec), or where it declares none x = x + 1 through its Plus (Minus);
@@ -5312,6 +5511,7 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
     c.stmts.Push(typed.Stmt.Block(sp, b))
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
+    lend := fr.leaks.Len()
     if f.Clauses != null {
         # its clauses run once the loop has ended: no loop of theirs to break or continue (S9e) - a stand-in loop says so
         fr.loops.Push(-2)
@@ -5320,7 +5520,7 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
         try fr.loops.Pop() catch { }
         try fr.exits.Pop() catch { }
     }
-    c.caught(lmark, cls)
+    c.caught(lmark, lend, cls)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
 }
 
@@ -5455,6 +5655,11 @@ fn (c mut Checker&) listMentions(l types.ListId, owner I64) Bool {
 # generic call's unbound variable supplies nothing; otherwise the result is its first return's and its errors what its
 # body lets out (D16b)
 fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed.Expr&c {
+    # D8e: a lambda's type is inferred - it cannot be written noreturn
+    if f.S.NoReturn {
+        c.err(c.noreturnSpan(sp), msgs.NoreturnHere("a lambda"))
+        return c.unknown(sp)
+    }
     w := want if want != types.UnknownT and c.P.T.KindOf(want) == types.Kind.Func else types.UnknownT
     ps := f.S.Params
     n := ps.Len()
@@ -5536,17 +5741,8 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
         fr.Result = types.VoidT
     }
     result = fr.Result
-    if inferErrs {
-        es List<types.TypeId>
-        for e in fr.leaks {
-            dup := false
-            for x in es {
-                if x == e { dup = true }
-            }
-            if not dup { es.Push(e) }
-        }
-        errs = c.P.T.List(es.ToArray())
-    }
+    # in R1a's canonical order, as an inferred set (decision 52)
+    if inferErrs { errs = c.canonicalErrs(c.merged(fr.leaks)) }
     ty := c.P.T.Func(pl, result, errs, scopes)
     c.cur().Ty = ty
     if result != types.VoidT and not c.fr().Gapped and not leavesBlock(root) {
@@ -5609,12 +5805,21 @@ fn (c mut Checker&) exhaustedOrBreak(sp source.Span, call typed.Expr&c, loop I64
 fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Array<typed.Expr&>&c) typed.Expr&c {
     fr := c.fr()
     ex := c.P.PreludeType("std/prelude/iterator", "Exhausted")
-    for e in c.P.T.Items(c.P.T.Errors(c.P.Sig(f))) {
-        if not c.P.T.Same(e, ex) { fr.LoopFails++ }
-    }
+    mark := fr.leaks.Len()
     fr.Tries++
+    c.lastErrs = types.ListId(0)
     x := c.invoke(sp, sp, f, recv, null, args)
     fr.Tries--
+    for e in c.P.T.Items(c.lastErrs) {
+        if c.P.T.ErrOf(e) != ex { fr.LoopFails++ }
+    }
+    # Exhausted ends the loop: no error of the body's
+    keep List<types.TypeId>
+    for i in range mark, fr.leaks.Len() {
+        if c.P.T.ErrOf(fr.leaks[i]) != ex { keep.Push(fr.leaks[i]) }
+    }
+    fr.leaks.Truncate(mark)
+    for e in keep { fr.leaks.Push(e) }
     return x
 }
 
@@ -5852,8 +6057,22 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
 # return v (S12): the value made to fit the result; several a tuple (D8c)
 fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
     fr := c.fr()
-    if fr.InTest or fr.InCtor {
-        c.gap(sp, "'return' in a test or constructor (S15, C2)")
+    nv := values.Len() if values != null else 0
+    # S15: a test passes by a bare return; a constructor gives no value (C2b)
+    if fr.InTest {
+        if nv > 0 {
+            c.err(sp, msgs.ReturnInTest())
+            return
+        }
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    if fr.InCtor {
+        c.err(sp, msgs.ReturnInCtor())
+        return
+    }
+    if fr.Result == types.NoreturnT {
+        c.err(source.Span(sp.Start, sp.Start + 6), msgs.ReturnInNoreturn())
         return
     }
     if fr.InTaskClause {
@@ -5865,14 +6084,17 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         return
     }
     rt := fr.Result
-    if values == null or values.Len() == 0 {
-        if rt != types.VoidT { c.gap(sp, "a return with no value from a function with a result") }
+    if nv == 0 {
+        if rt != types.VoidT and rt != types.UnknownT {
+            c.err(sp, msgs.ReturnNeedsValue(c.ty(rt)))
+            return
+        }
         c.emit(typed.Stmt.Return(sp, null))
         return
     }
     if values.Len() == 1 {
         if rt == types.VoidT {
-            c.gap(sp, "a value returned from a function with no result")
+            c.err(sp, msgs.ReturnValueInVoid())
             return
         }
         x := c.exprTo(values[0], rt)
@@ -5957,23 +6179,36 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
     if kind == token.Tok.Unreachable { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable)) }
 }
 
-# error E.WORD, or error alone for the default error (R3, R15)
+# error E.WORD (R3)
 fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
     if c.fr().InTaskClause {
         c.err(sp, msgs.TaskClauseError())
         return
     }
-    if word == null {
-        if c.fr().InferErrors { c.fr().leaks.Push(types.DefaultErrT) }
-        c.emit(typed.Stmt.Raise(sp, types.DefaultErrT, 0))
-        return
-    }
+    if word == null { return }
     w, et := c.errorWord(word)
     if w < 0 {
         c.gap(sp, "an error word the checker cannot find")
         return
     }
-    if c.fr().InferErrors { c.fr().leaks.Push(et) }
+    raised := c.P.T.ErrWords(et, U64(1) << w) if w < 64 else et
+    fr := c.fr()
+    # R3, R1c: a written set holds the type, and the word where it names words
+    if not fr.InferErrors and not fr.InTest {
+        have := types.UnknownT
+        for h in c.P.T.Items(fr.Errors) {
+            if c.P.T.ErrOf(h) == et { have = h }
+        }
+        if have == types.UnknownT {
+            c.err(c.pathPart(word, 1), msgs.ErrorUndeclared(c.ty(et)))
+            return
+        }
+        if c.uncovered(fr.Errors, raised) != types.UnknownT {
+            c.err(c.pathPart(word, 0), msgs.ErrorWordNotInSet(c.ty(have)))
+            return
+        }
+    }
+    c.leaks1(raised)
     c.emit(typed.Stmt.Raise(sp, et, w))
 }
 
@@ -6510,6 +6745,8 @@ fn leaves(s typed.Stmt&) Bool {
         }
         case typed.Stmt.Loop(_, body, _) { return not breaks(body, body.Id) }
         case typed.Stmt.Eval(_, x) {
+            # a call of a noreturn function (D8e)
+            if typeOf(x) == types.NoreturnT { return true }
             match x {
                 case typed.Expr.Match(_, _, m) {
                     for a in m.Arms {
