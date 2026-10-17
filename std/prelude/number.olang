@@ -1,0 +1,49 @@
+# the numeric traits, part of the prelude: Float, Integer and Number name the built-in number types, so generic code
+# over numbers says which it takes - `fn Sqrt(x <T Float>) T` - and a call with any other type is an error at the call
+# naming the trait (G19), not a case missing inside the library.
+#
+# Each trait is sealed (T31): its one method is private, declared here on each built-in type that satisfies it, so no
+# other module's type can supply it. A declared type satisfies one only by extending a type that does (T29f inherits
+# the method): Char, `type Char extends U8`, is an Integer and a Number, while `type Meters I32` is neither.
+
+# F16, BF16, F32 and F64
+type Float trait {
+    floatType()
+}
+
+# I8, I16, I32, I64, U8, U16, U32 and U64
+type Integer trait {
+    integerType()
+}
+
+# every Float and every Integer
+type Number trait {
+    numberType()
+}
+
+fn (x F16) floatType() { }
+fn (x BF16) floatType() { }
+fn (x F32) floatType() { }
+fn (x F64) floatType() { }
+
+fn (x I8) integerType() { }
+fn (x I16) integerType() { }
+fn (x I32) integerType() { }
+fn (x I64) integerType() { }
+fn (x U8) integerType() { }
+fn (x U16) integerType() { }
+fn (x U32) integerType() { }
+fn (x U64) integerType() { }
+
+fn (x F16) numberType() { }
+fn (x BF16) numberType() { }
+fn (x F32) numberType() { }
+fn (x F64) numberType() { }
+fn (x I8) numberType() { }
+fn (x I16) numberType() { }
+fn (x I32) numberType() { }
+fn (x I64) numberType() { }
+fn (x U8) numberType() { }
+fn (x U16) numberType() { }
+fn (x U32) numberType() { }
+fn (x U64) numberType() { }
