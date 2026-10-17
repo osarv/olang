@@ -60,5 +60,5 @@ fn main() ? {
     f := v.Deep()
     v.Drop()
     churn()
-    io.Println($f.k)
+    try io.Println($f.k)
 }

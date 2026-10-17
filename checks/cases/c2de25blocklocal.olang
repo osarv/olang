@@ -27,5 +27,5 @@ fn depth(f Value&) I64 {
 fn main() ? {
     g mut Env& = Env(null)
     f Value& = Value.Fn(Closure(g))
-    io.Println($depth(f))
+    try io.Println($depth(f))
 }

@@ -8,5 +8,5 @@ type Lexer struct(n I64) {
 }
 fn main() ? {
     a := List<Lexer>()
-    io.Println($a.Len())
+    try io.Println($a.Len())
 }

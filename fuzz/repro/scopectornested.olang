@@ -20,5 +20,5 @@ fn main() ? {
     c := Countdown(20)
     s I64 = 0
     for v in c.left { s += v }
-    io.Println($s)
+    try io.Println($s)
 }

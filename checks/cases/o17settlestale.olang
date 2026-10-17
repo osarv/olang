@@ -44,5 +44,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next.v)
 }

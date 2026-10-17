@@ -25,5 +25,5 @@ fn main() ? {
     g.lx.toks = take m
     h.lx = null
     churn()
-    io.Println(g.lx.toks[0])
+    try io.Println(g.lx.toks[0])
 }

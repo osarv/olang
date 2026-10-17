@@ -35,6 +35,6 @@ fn main() ? {
     keep := List<Junk&>()
     for i in range 2000 { keep.Push(Junk(-7, -7)) }
     churn()
-    io.Println(s)
-    io.Println($b.head.next.v)
+    try io.Println(s)
+    try io.Println($b.head.next.v)
 }

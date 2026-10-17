@@ -13,5 +13,5 @@ fn main() ? {
   d := lib.Dir.Hold(4)
   u := lib.Other.Dir.Up
   holds Bool = d is lib.Dir.Hold and not (d is lib.Dir.North) and u is lib.Other.Dir.Up
-  io.Print($which(d) " " $which(lib.Dir.North) " " $which(lib.South()) " " $holds " " $(d as lib.Dir.Hold) "\n")
+  try io.Print($which(d) " " $which(lib.Dir.North) " " $which(lib.South()) " " $holds " " $(d as lib.Dir.Hold) "\n")
 }

@@ -23,5 +23,5 @@ fn main() ? {
     join {
         spawn r, n = two(b)
     }
-    io.Println($r.o.k " " $n)
+    try io.Println($r.o.k " " $n)
 }

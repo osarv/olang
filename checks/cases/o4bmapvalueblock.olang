@@ -14,5 +14,5 @@ fn main() ? {
         inner.Put("x", Value.Num(F64(i)))
         outer.Put("k" $i, Value.Obj(inner))
     }
-    io.Println($outer.Len())
+    try io.Println($outer.Len())
 }

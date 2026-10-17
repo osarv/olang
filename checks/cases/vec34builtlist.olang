@@ -19,5 +19,5 @@ fn main() ? {
     d := k(v.ViewMut())
     for i in range 1000 { v.Push('z') }
     churn()
-    io.Println($d[0] $d[1])
+    try io.Println($d[0] $d[1])
 }

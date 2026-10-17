@@ -17,5 +17,5 @@ fn main() ? {
     Index.alias = Docs.title
     Docs.title = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(Index.alias)
+    try io.Println(Index.alias)
 }

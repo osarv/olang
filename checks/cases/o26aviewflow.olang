@@ -20,5 +20,5 @@ fn churn() I64 {
 fn main() ? {
     v := mk(77)
     assert churn() > 0
-    io.Println($v.xs.Len() " " $v.xs[0] " " $v.xs[2])
+    try io.Println($v.xs.Len() " " $v.xs[0] " " $v.xs[2])
 }

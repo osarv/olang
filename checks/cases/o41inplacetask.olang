@@ -19,5 +19,5 @@ fn main() ? {
         spawn useP(h.cur.pl, out)
         h.cur = null
     }
-    io.Println($out[0])
+    try io.Println($out[0])
 }

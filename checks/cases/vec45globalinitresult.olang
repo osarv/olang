@@ -18,5 +18,5 @@ T := G.Text()                  # a global holding a borrowed own result of G's t
 fn main() ? {
     G.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"   # releases it
     churn()
-    io.Println(T)
+    try io.Println(T)
 }

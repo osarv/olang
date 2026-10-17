@@ -13,7 +13,7 @@ type Server struct() {
     cur own mut Conn&
     other own mut Conn&
 }
-fn show(c Conn&) { io.Println(c.name) }
+fn show(c Conn&) { try io.Println(c.name) catch io.IoError { } }
 fn main() ? {
     s := Server()
     s.cur = Conn(3)

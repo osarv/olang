@@ -28,5 +28,5 @@ fn main() ? {
     a.Put(1, 2)
     b := Lru<String&, I32>()
     b.Put("x", 3)
-    io.Println($a.nodes.Len() $b.nodes.Len())
+    try io.Println($a.nodes.Len() $b.nodes.Len())
 }

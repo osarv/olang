@@ -13,5 +13,5 @@ fn main() ? {
     w.lx.toks.Push(1)
     d := w.lx.toks.View()
     w = Wrap()
-    io.Println($d[0])
+    try io.Println($d[0])
 }

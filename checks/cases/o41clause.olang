@@ -9,13 +9,13 @@ type Holder struct() {
     cur own mut Node&
     other own mut Node&
 }
-fn look(n Node&) { io.Println(n.name) }
+fn look(n Node&) ? io.IoError { try io.Println(n.name) }
 fn fails(h Holder&) ? { if h.cur == null { error } }
 fn main() ? {
     s mut Holder& = Holder()
     s.cur = Node(1)
     join {
-        spawn try fails(s) catch { look(s.cur) }
+        spawn fails(s) catch { try look(s.cur) }
         s.cur = null
     }
 }

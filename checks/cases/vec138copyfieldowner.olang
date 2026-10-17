@@ -15,16 +15,16 @@ type Lexer struct(n I64) {
 type Two struct() {
     a Lexer = Lexer(1)
 }
-fn work() {
-    defer { io.Println("at work end: made " $Made " dropped " $Dropped) }
+fn work() ? io.IoError {
+    defer { try io.Println("at work end: made " $Made " dropped " $Dropped) catch io.IoError { } }
     t := Two()
     for i in range 3 {
         c := t
         c.a = Lexer(7 + i)
-        io.Println("turn: made " $Made " dropped " $Dropped)
+        try io.Println("turn: made " $Made " dropped " $Dropped)
     }
 }
 fn main() ? {
-    work()
-    io.Println("made " $Made " dropped " $Dropped)
+    try work()
+    try io.Println("made " $Made " dropped " $Dropped)
 }

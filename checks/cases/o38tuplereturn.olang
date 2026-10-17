@@ -19,5 +19,5 @@ fn mk() View {
     return a
 }
 fn main() ? {
-    io.Println($mk().x.o.k)
+    try io.Println($mk().x.o.k)
 }

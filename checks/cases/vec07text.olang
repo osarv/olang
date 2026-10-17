@@ -8,5 +8,5 @@ fn main() ? {
     v.Push('a')
     t := asText(v)
     v.Push('b')
-    io.Println(t)
+    try io.Println(t)
 }

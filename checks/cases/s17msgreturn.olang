@@ -11,5 +11,5 @@ fn f(k I64) I64 {
     return 3
 }
 fn main() ? {
-    io.Println($f(1))
+    try io.Println($f(1))
 }

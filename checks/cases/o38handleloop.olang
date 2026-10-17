@@ -23,5 +23,5 @@ fn main() ? {
         inner.Push(b)
     }
     v.o = null
-    io.Println($ls[0][0].o.k)
+    try io.Println($ls[0][0].o.k)
 }

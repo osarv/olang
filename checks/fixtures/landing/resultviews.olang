@@ -54,5 +54,5 @@ fn main() ? {
     for c in range 4000000 {
         total += window(a, c % 90)[0]
     }
-    io.Println($sum " " $total)
+    try io.Println($sum " " $total)
 }

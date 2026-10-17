@@ -9,5 +9,5 @@ fn main() ? {
     l := Lexer(3)
     m := Lexer(4)
     l.toks = m.toks
-    io.Println($l.toks.Len())
+    try io.Println($l.toks.Len())
 }

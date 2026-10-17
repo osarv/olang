@@ -15,5 +15,5 @@ fn mk2(x <T>) Array<T, <N I64>> {
 fn main() ? {
     a := mk()
     b := mk2(3)
-    io.Println($a.Len() " " $b.Len())
+    try io.Println($a.Len() " " $b.Len())
 }

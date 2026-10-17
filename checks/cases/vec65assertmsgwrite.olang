@@ -28,5 +28,5 @@ fn main() ? {
     d := longer(v.ViewMut(), other)
     for i in range 1000 { v.Push(i) }
     churn()
-    io.Println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }

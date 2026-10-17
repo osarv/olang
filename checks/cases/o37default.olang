@@ -22,5 +22,5 @@ fn mk(n I64) own mut Conn& ? E {
 }
 fn main() ? {
     x := try mk(3) catch default Conn(4)
-    io.Println($x.fd)
+    try io.Println($x.fd)
 }

@@ -11,5 +11,5 @@ fn main() ? {
     goneRef mut List<String&>&gone = gone
     c.onEvict = fn(k String&) { goneRef.Push(k) }
     c.onEvict("a")
-    io.Println($gone.Len())
+    try io.Println($gone.Len())
 }

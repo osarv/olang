@@ -20,5 +20,5 @@ fn main() ? {
     m := Map<I64, Outer&>()
     m.Put(1, b)
     v.o = null
-    for e in m { io.Println($e.Value.o.k) }
+    for e in m { try io.Println($e.Value.o.k) }
 }

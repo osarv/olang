@@ -6,5 +6,5 @@ fn main() ? {
     xs mut Array<S>& = Array<S>(1)
     s := S(xs)
     xs[0] = s
-    io.Println($(s == s))
+    try io.Println($(s == s))
 }

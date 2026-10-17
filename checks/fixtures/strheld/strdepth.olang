@@ -20,5 +20,5 @@ fn main() ? {
     l L& = L(0, null)
     for i in range d { l = L(i, l) }
     s := $l
-    io.Println($s.Len())
+    try io.Println($s.Len())
 }

@@ -2,5 +2,5 @@ import "vlib"
 import "std/io"
 fn main() ? {
     f := vlib.Eat
-    io.Println("x")
+    try io.Println("x")
 }

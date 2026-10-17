@@ -15,4 +15,4 @@ type Bag struct(c Ctr&) {
     c
 }
 fn (b Bag&) Str() String { return "b" $hh(b.c) }
-fn main() ? { io.Println($Bag(Ctr(5))) }
+fn main() ? { try io.Println($Bag(Ctr(5))) }

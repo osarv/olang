@@ -23,5 +23,5 @@ fn main() ? {
     for i in range 1000 { v.Push(i) }
     churn()
     assert d.Len() == 5 and d[0] == 2
-    io.Println($d[0])
+    try io.Println($d[0])
 }

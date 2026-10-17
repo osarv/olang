@@ -22,5 +22,5 @@ fn task(g G&) F64 {
 }
 fn main() ? {
     g := G(4)
-    io.Println($task(g))
+    try io.Println($task(g))
 }

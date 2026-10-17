@@ -16,6 +16,6 @@ fn count(l List<<T>>&, x T) I64 { return l.Len() }
 fn main() ? {
     l := List<Res&>()
     l.Push(Res(1))
-    io.Println($G.k " " $H.k " " $A.Len() " " $(A[0] is A[1]) " " $count(l, Res(2)))
+    try io.Println($G.k " " $H.k " " $A.Len() " " $(A[0] is A[1]) " " $count(l, Res(2)))
     assert id(Res(9)).k == 9
 }

@@ -11,5 +11,5 @@ fn main() ? {
     d := l.toks.View()
     f := fn() I64 { return d[0] }
     l.toks.Push(4)
-    io.Println($f())
+    try io.Println($f())
 }

@@ -31,5 +31,5 @@ fn main() ? {
     b := v
     g := Big2()
     keepFirst(g, withFirst(b))
-    io.Println($g.bx.x.o.k)
+    try io.Println($g.bx.x.o.k)
 }

@@ -85,5 +85,5 @@ fn main() ? {
     for k in range 20, 26 {
         if nodes[k].v != N - 1 { fail }
     }
-    io.Println("capscope: ok")
+    try io.Println("capscope: ok")
 }

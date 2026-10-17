@@ -123,13 +123,13 @@ fn nested() I64 {
     } catch E.NEG { return 5 } catch E { return 4 }
     return 6
 }
-fn main() ? E {
-    io.Println($earliest())
-    io.Println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
-    io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))
-    io.Println(defaulted(I64[3, -3, 3000, 4]))
-    io.Println(counted())
-    io.Println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
+fn main() ? E + io.IoError {
+    try io.Println($earliest())
+    try io.Println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
+    try io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))
+    try io.Println(defaulted(I64[3, -3, 3000, 4]))
+    try io.Println(counted())
+    try io.Println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
     a, b String
     p, q Node&
     l1, l2 List<I64>
@@ -145,12 +145,12 @@ fn main() ? E {
         spawn d3, d4 = try divmod(17, 0 * run) catch default -1, -2
     }
     churn()
-    io.Println($a " " $b " " $p.v " " $q.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
+    try io.Println($a " " $b " " $p.v " " $q.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
     #...and the earliest failure of a join no clause takes leaves main, reported as an unhandled error
     try join {
         spawn try sq(4 * run)
         spawn try sq(-4 * run)
         spawn try sq(4000 * run)
     }
-    io.Println("not reached")
+    try io.Println("not reached")
 }

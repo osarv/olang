@@ -6,5 +6,5 @@
 import "std/io"
 fn main() ? {
     nums := I64[1, 2, 3]
-    io.Println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
+    try io.Println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
 }

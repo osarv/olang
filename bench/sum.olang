@@ -40,5 +40,5 @@ fn main() ? {
     } else {
         error
     }
-    io.Print($total "\n")
+    try io.Print($total "\n")
 }

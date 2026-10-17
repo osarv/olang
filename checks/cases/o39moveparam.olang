@@ -10,17 +10,17 @@ type Holder struct() {
     cur own mut Node&
     sub own mut Holder&
 }
-fn f(p mut Holder&) {
+fn f(p mut Holder&) ? io.IoError {
     o own mut Holder& = take p.sub
     c := p.cur
     o.cur = take p.cur
     o.cur = null
-    io.Println(c.name)
+    try io.Println(c.name)
     p.sub = take o
 }
 fn main() ? {
     h := Holder()
     h.sub = Holder()
     h.cur = Node(7)
-    f(h)
+    try f(h)
 }

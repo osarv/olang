@@ -17,5 +17,5 @@ fn (p mut Plain&) Bump(h mut H3&) I64 {
 fn main() ? {
     h mut H3& = H3()
     h.cur = In3(7)
-    io.Println($h.cur.pl.Bump(h))
+    try io.Println($h.cur.pl.Bump(h))
 }

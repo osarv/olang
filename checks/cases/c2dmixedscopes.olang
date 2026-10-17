@@ -20,4 +20,4 @@ fn check() I64 {
     }
     return c.nums.Len()
 }
-fn main() ? { io.Println($check()) }
+fn main() ? { try io.Println($check()) }

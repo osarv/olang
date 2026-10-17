@@ -15,5 +15,5 @@ fn sl(h mut H3&) I64 {
 }
 fn main() ? {
     h mut H3& = H3()
-    io.Println($sl(h))
+    try io.Println($sl(h))
 }

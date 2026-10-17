@@ -13,14 +13,14 @@ fn churn() I64 {
 type CB struct() {
     text own mut String& = $1 "-ttttttttttttttt"
 }
-fn (c mut CB&) Rebuild(n I64) {
+fn (c mut CB&) Rebuild(n I64) ? io.IoError {
     x := c.text
     d mut String&x = $n "-new-text-in-the-field-region"
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(d)
+    try io.Println(d)
 }
 fn main() ? {
     c := CB()
-    c.Rebuild(5)
+    c.try Rebuild(5)
 }

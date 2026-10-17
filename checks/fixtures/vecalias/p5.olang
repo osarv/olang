@@ -5,5 +5,5 @@ fn main() ? {
     v.Push(1)
     f := (vlib.View2)
     d := f(v)
-    io.Println($d[0])
+    try io.Println($d[0])
 }

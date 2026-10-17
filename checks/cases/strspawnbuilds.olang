@@ -19,4 +19,4 @@ fn hjoin(n Node&) I64 {
     return x
 }
 fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
-fn main() ? { io.Println($Bag(Node(6, null))) }
+fn main() ? { try io.Println($Bag(Node(6, null))) }

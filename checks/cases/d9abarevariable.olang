@@ -6,5 +6,5 @@ type Fir<N I64> struct(taps Array<I16, N>) {
 }
 fn main() ? {
     f := Fir<3>(I16[1, 2, 3])
-    io.Println($f.taps.Len())
+    try io.Println($f.taps.Len())
 }

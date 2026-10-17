@@ -9,5 +9,5 @@ fn first(l List<Item&>&) Item& {
 fn main() ? {
     l := List<Item&>()
     l.Push(Item("a"))
-    io.Println(first(l).name)
+    try io.Println(first(l).name)
 }

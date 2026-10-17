@@ -10,5 +10,5 @@ fn main() ? {
     b := B()
     a := leak(b)
     b.buf = Array<String&>(3)
-    io.Println(a[0])
+    try io.Println(a[0])
 }

@@ -21,5 +21,5 @@ fn nested(j json.Json&) Bool {
     return false
 }
 fn main() ? {
-    io.Println($kind(json.Json.Null) " " $nested(json.Json.Null))
+    try io.Println($kind(json.Json.Null) " " $nested(json.Json.Null))
 }

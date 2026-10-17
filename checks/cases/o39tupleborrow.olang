@@ -14,5 +14,5 @@ fn main() ? {
     h.cur = Inner(1)
     c, k := two(h.cur)
     h.cur = null
-    io.Println($c.k " " $k)
+    try io.Println($c.k " " $k)
 }

@@ -17,5 +17,5 @@ fn (w mut World&) age(s I64) {
 fn main() ? {
     w := World()
     for s in range 3 { w.age(s) }
-    io.Println($w.alive.Len())
+    try io.Println($w.alive.Len())
 }

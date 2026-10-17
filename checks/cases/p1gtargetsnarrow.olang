@@ -14,5 +14,5 @@ fn main() ? {
         m.v = 42
         spawn x, k = pick(m)
     }
-    io.Println($x.v " " $k)
+    try io.Println($x.v " " $k)
 }

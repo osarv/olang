@@ -16,5 +16,5 @@ type Server struct() {
 fn consume(c own mut Conn&) I64 { return c.fd }
 fn main() ? {
     x own mut Conn& = Conn(3)
-    io.Println($consume(x))
+    try io.Println($consume(x))
 }

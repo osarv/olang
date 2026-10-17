@@ -17,7 +17,7 @@ fn main() ? {
     s := Server()
     s.cur = Conn(1)
     c := s.cur
-    f := fn() { io.Println(c.name) }
+    f := fn() { try io.Println(c.name) }
     s.cur = null
-    f()
+    try f()
 }

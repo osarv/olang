@@ -61,5 +61,5 @@ fn main() ? {
     m.Put(1, v.First())
     v.o = null
     churn()
-    io.Println($(try m.Get(1) catch default null).k)
+    try io.Println($(try m.Get(1) catch default null).k)
 }

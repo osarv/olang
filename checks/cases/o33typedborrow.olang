@@ -13,5 +13,5 @@ fn main() ? {
     s := Holder()
     s.cur = Node(1)
     best Node& = s.cur
-    io.Println(best.name)
+    try io.Println(best.name)
 }

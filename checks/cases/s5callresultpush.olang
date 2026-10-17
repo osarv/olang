@@ -11,5 +11,5 @@ fn main() ? {
         t := $k "-text"
         bs.Push(box(t))
     }
-    for b in bs { io.Println(b.s) }
+    for b in bs { try io.Println(b.s) }
 }

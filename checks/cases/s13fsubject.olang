@@ -7,4 +7,4 @@ fn sat(v F64) F64 {
         nomatch => v
     }
 }
-fn main() ? { io.Println($sat(40000.0)) }
+fn main() ? { try io.Println($sat(40000.0)) }

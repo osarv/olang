@@ -10,5 +10,5 @@ fn main() ? {
     setFirst(b.names, $5 "via-generic")
     f := b.names[0]
     b.names = Array<String&>(1)
-    io.Println(f)
+    try io.Println(f)
 }

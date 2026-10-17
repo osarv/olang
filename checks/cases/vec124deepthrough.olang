@@ -20,5 +20,5 @@ fn main() ? {
     v := Outer()
     d := deeper(v)
     v.o = Inner(4)
-    io.Println(d.text)
+    try io.Println(d.text)
 }

@@ -19,5 +19,5 @@ fn scan(n I64) Summary {
     return s
 }
 fn main() ? {
-    io.Println($scan(4000000).best)
+    try io.Println($scan(4000000).best)
 }

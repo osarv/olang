@@ -17,5 +17,5 @@ fn f(b Bag&, k I64) I64 {
 fn main() ? {
     t I64 = 0
     for i in range 500 { t += f(Bag(i), i) }
-    io.Println($t)
+    try io.Println($t)
 }

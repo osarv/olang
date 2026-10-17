@@ -16,5 +16,5 @@ fn main() ? {
     a := v.ToArray()
     for i in range 100 { v.Push("b") }
     churn()
-    io.Println($a[0] " " $a.Len() " " $v.Len())
+    try io.Println($a[0] " " $a.Len() " " $v.Len())
 }

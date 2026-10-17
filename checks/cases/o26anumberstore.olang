@@ -21,4 +21,4 @@ fn scan(n I64) S {
     }
     return s
 }
-fn main() ? { io.Println($scan(3).names.Len()) }
+fn main() ? { try io.Println($scan(3).names.Len()) }

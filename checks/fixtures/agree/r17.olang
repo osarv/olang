@@ -12,6 +12,6 @@ fn outer(n I64) ? {
     try inner(n)
 }
 fn main() ? {
-    io.Print("before\n")
+    try io.Print("before\n")
     try outer(run)
 }

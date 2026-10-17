@@ -10,7 +10,7 @@ fn main() ? {
     x := c.text
     for i in range 3 {
         d mut String&x = $i "-new-text-in-x's-region"
-        io.Println(d)
+        try io.Println(d)
         c.text = $i "-replaced-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
         churn()
     }

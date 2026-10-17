@@ -6,5 +6,5 @@ import "std/io"
 fn main() ? {
     cols := List<String&>()
     cols.Push("a")
-    io.Println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
+    try io.Println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
 }

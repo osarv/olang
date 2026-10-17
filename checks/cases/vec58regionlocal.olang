@@ -19,5 +19,5 @@ fn main() ? {
     d mut String&x = $5 "-new-text-in-the-region"
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(d)
+    try io.Println(d)
 }

@@ -4,5 +4,5 @@
 import "std/io"
 fn f(m <V Nope>&) I64 { return 1 }
 fn main() ? {
-    io.Println("x")
+    try io.Println("x")
 }

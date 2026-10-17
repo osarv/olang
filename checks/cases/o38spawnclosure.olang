@@ -22,5 +22,5 @@ fn main() ? {
     join {
         spawn g = mkf(b)
     }
-    io.Println($g())
+    try io.Println($g())
 }

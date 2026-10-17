@@ -15,5 +15,5 @@ fn asView(h mut H3&) I64 {
 }
 fn main() ? {
     h mut H3& = H3()
-    io.Println($asView(h))
+    try io.Println($asView(h))
 }

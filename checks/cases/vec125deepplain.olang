@@ -20,5 +20,5 @@ fn (x Outer&) Plain() Inner&x { return x.p }
 fn (x Outer&) Deep2() Leaf&x { return x.Plain().deep }
 fn main() ? {
     v := Outer()
-    io.Println($v.Deep2().n)
+    try io.Println($v.Deep2().n)
 }

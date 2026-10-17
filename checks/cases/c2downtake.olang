@@ -18,5 +18,5 @@ fn main() ? {
         w = W(h)
     }
     a := Array<I64>(64, 9)
-    io.Println($w.inner.t " " $a[0])
+    try io.Println($w.inner.t " " $a[0])
 }

@@ -7,5 +7,5 @@ C mut Bool = true
 fn main() ? {
     u U64 = 5
     v := u - (-1 if C else 1)
-    io.Println($v)
+    try io.Println($v)
 }

@@ -21,5 +21,5 @@ fn main() ? {
         r R& = R(1)
     }
     churn()
-    io.Println($d[0])
+    try io.Println($d[0])
 }

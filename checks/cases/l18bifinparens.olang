@@ -7,5 +7,5 @@ fn pick(n I64) I64 {
 }
 fn main() ? {
     f := fn() I64 { return 1 }
-    if f() == 1 { io.Println($pick(3)) }
+    if f() == 1 { try io.Println($pick(3)) }
 }

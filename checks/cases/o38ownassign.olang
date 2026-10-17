@@ -27,5 +27,5 @@ fn main() ? {
     b := v
     arr own mut Array<Box&>& = null
     arr = withFirst(b)
-    io.Println($arr[0].x.o.k)
+    try io.Println($arr[0].x.o.k)
 }

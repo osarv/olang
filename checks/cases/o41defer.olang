@@ -9,7 +9,7 @@ type Holder struct() {
     cur own mut Node&
     other own mut Node&
 }
-fn look(n Node&) { io.Println(n.name) }
+fn look(n Node&) { try io.Println(n.name) catch io.IoError { } }
 fn main() ? {
     s := Holder()
     s.cur = Node(3)

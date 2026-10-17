@@ -19,7 +19,7 @@ fn main() ? {
         s.cur = Hold(i)
         join { spawn setN(Node(9 + i), s.cur) }
         churn()
-        io.Println($s.cur.n.v)
+        try io.Println($s.cur.n.v)
     }
 }
 fn churn() I64 {

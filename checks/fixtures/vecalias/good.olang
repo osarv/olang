@@ -16,5 +16,5 @@ fn main() ? {
     n olib.Node& = olib.Node(7)
     olib.Stash(h, n)
     glib.Drop()
-    io.Println($s " " $f(v) " " $h.N.V " " $glib.G.Data[0])
+    try io.Println($s " " $f(v) " " $h.N.V " " $glib.G.Data[0])
 }

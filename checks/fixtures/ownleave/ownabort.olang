@@ -25,17 +25,17 @@ test "a slice out of range after an owner is made" {
     lo := 2
     hi := 1
     x := eat(Res(1), a[lo:hi])
-    io.Println($x)
+    try io.Println($x) catch io.IoError { }
 }
 test "an 'as' that does not hold after an owner is made" {
     e := E.B(3)
     x := eat3(Res(2), (e as E.A))
-    io.Println($x)
+    try io.Println($x) catch io.IoError { }
 }
 test "an array length out of range after an owner is made" {
     n := -1
     x := eat(Res(3), Array<I64>(n))
-    io.Println($x)
+    try io.Println($x) catch io.IoError { }
 }
 test "a constructor's region made before its argument fails a check" {
     b := Box()
@@ -48,9 +48,9 @@ test "an owner moved out of a slot before a later argument fails a check" {
     b.r = Res(4)
     e := E.B(5)
     x := eat3(take b.r, (e as E.A))
-    io.Println($x)
+    try io.Println($x) catch io.IoError { }
 }
 test "every owner made was released" {
-    io.Println("made " $Made " dropped " $Dropped)
+    try io.Println("made " $Made " dropped " $Dropped) catch io.IoError { }
     assert Made == Dropped
 }

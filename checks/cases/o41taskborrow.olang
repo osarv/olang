@@ -14,7 +14,7 @@ fn work(h Holder&, a mut chan.Chan<I64>&, b mut chan.Chan<I64>&) {
     c := h.cur
     chan.Send(a, 1)
     k := try chan.Recv(b) catch { return }
-    io.Println(c.name)
+    try io.Println(c.name) catch io.IoError { }
 }
 fn main() ? {
     s := Holder()

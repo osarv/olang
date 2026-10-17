@@ -30,5 +30,5 @@ fn post(n I64) I64 ? {
 fn main() ? {
     a := try run(4000000)
     b := try post(4000000)
-    io.Println($a " " $b " made " $Made " dropped " $Dropped)
+    try io.Println($a " " $b " made " $Made " dropped " $Dropped)
 }

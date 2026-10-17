@@ -1,4 +1,4 @@
 import "std/io"
 fn main() ? io.IoError {
-    io.Print("I am Y\n")
+    try io.Print("I am Y\n")
 }

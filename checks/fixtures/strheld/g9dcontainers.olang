@@ -22,5 +22,5 @@ fn main() ? {
         l := lst(Res(i))
         x := try m.Get(i) catch { unreachable }
     }
-    io.Println("made " $Made " gone " $Gone)
+    try io.Println("made " $Made " gone " $Gone)
 }

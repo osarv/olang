@@ -3,5 +3,5 @@
 import "std/io"
 fn f(a Array<I64, <println>>&) I64 { return println }
 fn main() ? {
-    io.Println($f(I64[1, 2]))
+    try io.Println($f(I64[1, 2]))
 }

@@ -30,5 +30,5 @@ fn main() ? {
     shift(a, b)
     b.lx = null
     churn()
-    io.Println(a.lx.more[0])
+    try io.Println(a.lx.more[0])
 }

@@ -11,7 +11,7 @@ type Holder struct() {
 }
 fn work(h Holder&) {
     c := h.cur
-    io.Println(c.name)
+    try io.Println(c.name) catch io.IoError { }
 }
 fn drop(h mut Holder&) { h.cur = null }
 fn main() ? {

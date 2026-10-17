@@ -14,5 +14,5 @@ fn main() ? {
         x := Reading(t, 1.5)
         fs.Push(fn() I64 { return x.Sensor.Len() })
     }
-    for f in fs { io.Println($f()) }
+    for f in fs { try io.Println($f()) }
 }

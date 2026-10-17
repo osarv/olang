@@ -9,5 +9,5 @@ fn grow(v mut Vec<Pt>&, p Pt&) I64 {
 fn main() ? {
     v := Vec<Pt>()
     v.Push(Pt(4))
-    io.Println($grow(v, v.View()[0]))
+    try io.Println($grow(v, v.View()[0]))
 }

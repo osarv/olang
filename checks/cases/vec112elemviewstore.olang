@@ -14,5 +14,5 @@ fn main() ? {
         m := v.ViewMut()
         m[0].text = t
     }
-    io.Println($v[0].text)
+    try io.Println($v[0].text)
 }

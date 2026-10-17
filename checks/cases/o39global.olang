@@ -19,5 +19,5 @@ fn main() ? {
     G.cur = Conn(1)
     c := G.cur
     dropG()
-    io.Println(c.name)
+    try io.Println(c.name)
 }

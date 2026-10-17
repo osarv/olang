@@ -5,5 +5,5 @@ fn main() ? {
     n := 5
     c := true
     x := $n "," ("stop" if c else $n)
-    io.Println(x)
+    try io.Println(x)
 }

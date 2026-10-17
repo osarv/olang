@@ -10,5 +10,5 @@ fn stored(a Array<BF16>&, b mut Array<BF16>&) Bool {
 fn main() ? {
     a := BF16[1.0, -2.0]
     b := Array<BF16>(2)
-    io.Println($math.SignBit(a[1]) " " $(F32(a[1]).Bits() >> 31 == 1) " " $stored(a, b))
+    try io.Println($math.SignBit(a[1]) " " $(F32(a[1]).Bits() >> 31 == 1) " " $stored(a, b))
 }

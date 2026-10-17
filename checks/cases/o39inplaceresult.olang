@@ -16,5 +16,5 @@ fn main() ? {
     h.cur = In3(5)
     x := same(h.cur.pl)
     h.cur = null
-    io.Println($x.k)
+    try io.Println($x.k)
 }

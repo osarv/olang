@@ -9,5 +9,5 @@ fn main() ? {
     b.data = Array<I64>(4)
     y := b.data
     b.data = Array<I64>(8)
-    io.Println($y[0])
+    try io.Println($y[0])
 }

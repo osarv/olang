@@ -22,5 +22,5 @@ fn c(n I32) I32 { return try f(n) catch default 1 }
 K I32 = c(3)
 v mut I32 = 3
 fn main() ? {
-    io.Println($K " | " $c(v))
+    try io.Println($K " | " $c(v))
 }

@@ -23,5 +23,5 @@ fn main() ? {
         s := $i "-new-text"
         b.s = s
     }
-    io.Println(b.s)
+    try io.Println(b.s)
 }

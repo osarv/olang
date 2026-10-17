@@ -24,6 +24,6 @@ fn (b Bag2&) Str() String {
     return "n" $n
 }
 fn main() ? {
-    io.Println($Bag(String&["ab", "c"]))
-    io.Println($Bag2(String&["ab", "c"]))
+    try io.Println($Bag(String&["ab", "c"]))
+    try io.Println($Bag2(String&["ab", "c"]))
 }

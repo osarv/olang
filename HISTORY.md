@@ -16330,10 +16330,12 @@ The fuzzer writes both shapes now; own seeds 1-300 found 18 use-after-frees on c
 
 ### One printing pathway, `std/io` (M19f, 2026-10-17)
 
-The user's decision: printing has one home. `std/io` gained `Print`, `Println(t = "")`, `PrintErr` and `PrintErrln`;
-none can fail to the caller - a write the system refuses prints a line naming the function on the standard error and
-ends the program as a failed check does (recoverable inside a test). Removed: `std/prelude/print.olang`, the lowercase
-words' special cases in the checker (the bare-name exception to M6, the D3a/G22 name bans) and the `m19fredeclared`
-check. The repository was migrated by `tools/io_print.py` (`try io.Print(...)` became `io.Print(...)`, bare `println(`
-became `io.Println(`, with `import "std/io"` added); the scope fuzzer's generated programs import `std/io` and write
-`io.Println`. SPEC M19f rewritten; D3a and G22 no longer mention the prelude's writing functions.
+The user's decision: printing has one home. `std/io` gained `Print`, `Println(t = "")`, `PrintErr` and `PrintErrln`,
+each failing with `IoError` (built on `Write`) and written with `try`; no function in std ends the program on its own.
+(A first version ended the program on a failed write, as a failed check does; the user's final call was an error.)
+Removed: `std/prelude/print.olang`, the lowercase words' special cases in the checker (the bare-name exception to M6,
+the D3a/G22 name bans) and the `m19fredeclared` check. The repository was migrated by `tools/io_print.py`, then
+`tools/io_try.py` (a `try` before every call) and `tools/io_fix.py` (drives a file to compile from the compiler's own
+errors: `? io.IoError` on a function whose try lets it escape, `try` on a call of a function that became fallible,
+`catch io.IoError { }` in a test block, a deferred block or a task). The scope fuzzer's generated programs import
+`std/io` and write `try io.Println`. SPEC M19f rewritten; D3a and G22 no longer mention the prelude's writing functions.

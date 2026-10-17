@@ -15,5 +15,5 @@ fn main() ? {
     b.data = Array<Q>(2)
     sl := b.data[0].arr[0:2]
     b.data = Array<Q>(1)
-    io.Println($sl[0])
+    try io.Println($sl[0])
 }

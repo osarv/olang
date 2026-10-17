@@ -28,5 +28,5 @@ fn main() ? {
     w := W(b)
     setBig(g, w)
     v.o = null
-    io.Println($g.x.o.k)
+    try io.Println($g.x.o.k)
 }

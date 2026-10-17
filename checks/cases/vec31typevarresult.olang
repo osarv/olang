@@ -17,5 +17,5 @@ fn main() ? {
     d := id(v.View())
     for i in range 100 { v.Push("b") }
     churn()
-    io.Println(d[0])
+    try io.Println(d[0])
 }

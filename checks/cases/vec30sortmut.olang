@@ -11,5 +11,5 @@ fn main() ? {
     s := Vec<mut Node&>()
     for i in range 5 { s.Push(Node(9 - i)) }
     s.Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })
-    io.Println($s[0].v)
+    try io.Println($s[0].v)
 }

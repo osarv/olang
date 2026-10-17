@@ -12,5 +12,5 @@ fn main() ? {
         t := "w" $i
         v[0] = Tok(t, 2)
     }
-    io.Println($v[0].text)
+    try io.Println($v[0].text)
 }

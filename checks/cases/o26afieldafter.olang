@@ -25,5 +25,5 @@ fn main() ? {
     h := make()
     assert churn() > 0
     assert h.name == "alpha3"
-    io.Println($h.name)
+    try io.Println($h.name)
 }

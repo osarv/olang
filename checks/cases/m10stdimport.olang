@@ -3,5 +3,5 @@
 import "std/io"
 fn main() ? {
     m := math.Min(1, 2)
-    io.Println($m)
+    try io.Println($m)
 }

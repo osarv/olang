@@ -24,6 +24,6 @@ fn main() ? {
     b := Bag(Node(1, null))
     s := $b
     churn()
-    io.Println(s)
-    io.Println($b.head.next.v)
+    try io.Println(s)
+    try io.Println($b.head.next.v)
 }

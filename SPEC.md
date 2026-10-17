@@ -1955,19 +1955,17 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 **M19f (writing text).** Writing text is `std/io`'s, with no words of the prelude's or of the compiler's own:
 
 ```
-fn Print(t String&)            # t, to the standard output
-fn Println(t String& = "")     # t and a line end, to the standard output
-fn PrintErr(t String&)         # t, to the standard error
-fn PrintErrln(t String& = "")  # t and a line end, to the standard error
+fn Print(t String&) ? IoError            # t, to the standard output
+fn Println(t String& = "") ? IoError     # t and a line end, to the standard output
+fn PrintErr(t String&) ? IoError         # t, to the standard error
+fn PrintErrln(t String& = "") ? IoError  # t and a line end, to the standard error
 ```
 
-Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `io.Println("n is " $n)`.
+Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.Println("n is " $n)`.
 `Println` and `PrintErrln` write the text and its line end as one write. Each call writes at once, with nothing held
-back - a buffered writer for much output is `std/io`'s `Writer`. None of them can fail: a write the system does
-not complete ends the program as a failed check does (S18) - aborting, or failing the test that is running - with a
-line on the standard error naming the function and the stream. So a program writing its output needs no `try` and no
-error set for it; `io.Write` is the form that hands the failure back. A write is an effect, so a call of one is never
-evaluated while compiling (K1) and is performed under `-i` (B3e).
+back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
+`IoError`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
+of one is never evaluated while compiling (K1) and is performed under `-i` (B3e).
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -6553,7 +6551,7 @@ introduced (G8b). A name is a type variable or a constant variable, never both; 
 parameter one constant variable fills has its type, and the type written at an introduction is never a trait (G19
 constrains types; what values a constant may take is G27's). Each is a compile-time error at the declaration. A
 constant variable's name may not be that of a value the declaration can see - a global, a function, a build constant,
-the prelude's `print`/`println`/`eprint`/`eprintln` (M19f), a parameter or a local (D3a) - so a bare `N` means one thing
+a parameter or a local (D3a) - so a bare `N` means one thing
 wherever it is written.
 
 **G23 (a constant variable is a value).** A constant variable is also a **primary expression** (E1), written bare,

@@ -10,5 +10,5 @@ type B struct(c mut Ctr&) { c }
 G B = B(Ctr())
 fn (a B) Str() String { return $peek(a.c) }
 fn main() ? {
-    io.Println($G)
+    try io.Println($G)
 }

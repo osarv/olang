@@ -18,5 +18,5 @@ T String& = Docs.title
 fn main() ? {
     Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println("x")
+    try io.Println("x")
 }

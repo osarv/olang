@@ -7,5 +7,5 @@ import "std/io"
 type Nest Array<Nest&>
 fn main() ? {
     n Nest& = Nest(Array<Nest&>(0))
-    io.Println($n.Len())
+    try io.Println($n.Len())
 }

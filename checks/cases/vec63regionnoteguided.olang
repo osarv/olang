@@ -27,5 +27,5 @@ fn main() ? {
     }
     c.box = Box()
     churn()
-    io.Println(last)
+    try io.Println(last)
 }

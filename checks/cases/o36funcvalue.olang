@@ -17,5 +17,5 @@ fn consume(c own mut Conn&) I64 { return c.fd }
 fn apply(f fn(c Conn&) I64) I64 { return 0 }
 fn main() ? {
     n := apply(consume)
-    io.Println($n)
+    try io.Println($n)
 }

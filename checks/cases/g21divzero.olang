@@ -8,5 +8,5 @@ type Box<N I64> struct() {
 }
 fn main() ? {
     b := Box<0>()
-    io.Println($b.a.Len())
+    try io.Println($b.a.Len())
 }

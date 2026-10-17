@@ -35,5 +35,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    io.Println($w.b.head.owner.tag)
+    try io.Println($w.b.head.owner.tag)
 }

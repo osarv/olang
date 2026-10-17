@@ -13,16 +13,16 @@ type CB struct() {
     text own mut String& = "bb"
 }
 fn (c CB&) Text() String&c { return c.text }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     d String&c = null
     join {
         spawn d = c.Text()            # a borrowed own result (O37) given by a task into d
     }
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"   # releases it
     churn()
-    io.Println(d)
+    try io.Println(d)
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
 }

@@ -28,30 +28,30 @@ fn main() ? {
         }
     }
     churn()
-    io.Println($h.f.v)
+    try io.Println($h.f.v)
     for i in range 1 {
         local P& = P(43)
         h.arr[0] = local if i == 0 else P(7)
     }
     churn()
-    io.Println($h.arr[0].v)
+    try io.Println($h.arr[0].v)
     for i in range 1 {
         local P& = P(44)
         put(h, local if i == 0 else P(7))
     }
     churn()
-    io.Println($h.f.v)
+    try io.Println($h.f.v)
     for i in range 1 {
         local P& = P(45)
         x := local if i == 0 else P(7)
         h.f = x
     }
     churn()
-    io.Println($h.f.v)
+    try io.Println($h.f.v)
     for i in range 1 {
         local P& = P(46)
         h.f = (local if i == 0 else P(7)) if i < 5 else P(8)
     }
     churn()
-    io.Println($h.f.v)
+    try io.Println($h.f.v)
 }

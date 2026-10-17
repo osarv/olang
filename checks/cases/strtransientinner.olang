@@ -18,5 +18,5 @@ fn (b Bag&) Str() String {
     return "b" $n
 }
 fn main() ? {
-    io.Println($Bag(Node(4)))
+    try io.Println($Bag(Node(4)))
 }

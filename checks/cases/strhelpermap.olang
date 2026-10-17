@@ -23,5 +23,5 @@ fn main() ? {
     r := Reg()
     r.m.Put("a", 1)
     r.m.Put("b", 2)
-    io.Println($r)
+    try io.Println($r)
 }

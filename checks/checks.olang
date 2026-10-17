@@ -90,7 +90,7 @@ fn passed(name String&) Bool {
 # whether an outcome is a pass, printing it when it is not
 fn reported(outcome String&) Bool {
     if outcome.Len() == 0 { return true }
-    io.PrintErr(outcome)
+    try io.PrintErr(outcome)
     return false
 }
 
@@ -675,9 +675,9 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
 }
 
-# M19f: print, println, eprint and eprintln write to the standard output and error with no try, built and interpreted
-# alike - and a write that fails ends the program as a failed check does, saying which function and stream
-test "print and println write without try, and abort when the write fails" { assert passed("print") }
+# M19f: io.Print, Println, PrintErr and PrintErrln write to the standard output and error, built and interpreted alike -
+# and a write that fails is an IoError like any other
+test "io.Print and io.Println write, and fail with IoError when the write fails" { assert passed("print") }
 
 fn printing(r mut report&) ? Failed {
     dir := fresh("print")
@@ -690,9 +690,8 @@ fn printing(r mut report&) ? Failed {
                  "print: the standard error", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
-    try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 134, "print to a closed output does not abort", dir)
-    try r.expect(outOf(dir).StartsWith("print could not write to the standard output\n"),
-                 "print to a closed output: the message", dir)
+    try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
+    try r.expect(outOf(dir).StartsWith("unhandled error: IoError.FAILED\n"), "print to a closed output: the error", dir)
 }
 
 # S18a: a failed assert, abort or unreachable says where it is - and an assert the message written after it - built,
@@ -1316,7 +1315,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
             end I64 = rules.Len() if comma < 0 else comma
             r := rules[:end]
             if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n")
+                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n")
                 bad++
             }
             rules = rules[end:] if comma < 0 else rules[end + 2:]
@@ -1345,7 +1344,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
                 id := src[s:e]
                 entry := try table.Find("    X(" $id ",") catch default -1
                 if entry < 0 {
-                    io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n")
+                    try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n")
                     bad++
                     continue
                 }
@@ -1353,7 +1352,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
                 fs, fe := literalAfter(table, re + 1)
                 want := directiveCount(table[fs:fe])
                 if want != after {
-                    io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n")
+                    try io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n")
                     bad++
                 }
                 calls++
@@ -1388,18 +1387,18 @@ test "every message of compiler/msgs.olang names rules the specification states,
         rules := rest[rs:re]
         for r in rules.Split(", ") {
             if r.Len() > 0 and not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                io.PrintErr("check FAIL: msgs.olang's " $id " names rule " $r ", which SPEC.md does not state\n")
+                try io.PrintErr("check FAIL: msgs.olang's " $id " names rule " $r ", which SPEC.md does not state\n")
                 bad++
             }
         }
         entry := try table.Find("    X(" $id ",") catch default -1
         if entry < 0 {
-            io.PrintErr("check FAIL: msgs.olang has " $id ", which errmsg.h does not declare\n")
+            try io.PrintErr("check FAIL: msgs.olang has " $id ", which errmsg.h does not declare\n")
             bad++
         } else {
             ts, te := literalAfter(table, entry)
             if table[ts:te] != rules {
-                io.PrintErr("check FAIL: " $id " applies " $rules " in msgs.olang, " $(table[ts:te]) " in errmsg.h\n")
+                try io.PrintErr("check FAIL: " $id " applies " $rules " in msgs.olang, " $(table[ts:te]) " in errmsg.h\n")
                 bad++
             }
         }
@@ -1410,7 +1409,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
         if line.StartsWith("    X(") { entries++ }
     }
     if twins != entries {
-        io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.py\n")
+        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.py\n")
         bad++
     }
     assert twins > 0

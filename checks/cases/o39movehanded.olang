@@ -17,5 +17,5 @@ fn main() ? {
     o2 own mut Holder& = Holder()
     o2.cur = take x
     o2.cur = null
-    io.Println(c.name)
+    try io.Println(c.name)
 }

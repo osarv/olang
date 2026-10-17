@@ -14,5 +14,5 @@ fn (b VBag) Str() String {
     return "vbag " $f()
 }
 fn main() ? {
-    io.Println($VBag(Node(3)))
+    try io.Println($VBag(Node(3)))
 }

@@ -23,6 +23,6 @@ fn cc(n I32) String {
 K String = cc(3)
 v mut I32 = 3
 fn main() ? {
-    io.Println($K)
-    io.Println($cc(v))
+    try io.Println($K)
+    try io.Println($cc(v))
 }

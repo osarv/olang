@@ -12,15 +12,15 @@ type CB struct() {
 }
 fn (c CB&) Text() String&c { return String(c.data) }
 fn (c mut CB&) Grow() { c.data = Array<Char>(c.data.Len() * 2) }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := c.Text()
     c.Grow()
     churn()
-    io.Println(t)
+    try io.Println(t)
 }
 fn main() ? {
     c := CB()
     c.data[0] = 'a'
     c.data[1] = 'b'
-    use(c)
+    try use(c)
 }

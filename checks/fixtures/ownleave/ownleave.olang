@@ -139,7 +139,7 @@ fn main() ? {
         x := take2(Leaf(20), try fails(i) catch { break })
     }
     r := viaReturn(s)
-    io.Println("made " $Made " dropped " $Dropped " return " $r)
+    try io.Println("made " $Made " dropped " $Dropped " return " $r)
     {
         head own mut Deep& = null
         for i in range 1000 {
@@ -149,7 +149,7 @@ fn main() ? {
         }
     }
     churn()
-    io.Println("made " $Made " dropped " $Dropped)
+    try io.Println("made " $Made " dropped " $Dropped)
     arr := I64[1, 2, 3]
     try viaIndex(arr, 9) catch { }
     try viaDiv(0) catch { }
@@ -165,5 +165,5 @@ fn main() ? {
     try mkFail(1) catch { }                 # FailMany fails after making its three
     s.a = null
     churn()
-    io.Println("made " $Made " dropped " $Dropped)
+    try io.Println("made " $Made " dropped " $Dropped)
 }

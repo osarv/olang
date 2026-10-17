@@ -18,5 +18,5 @@ fn main() ? {
     v.Push(Link("a", nd))
     h.l = v.View()[0]
     for i in range 40 { v.Push(Link("b", nd)) }
-    io.Println($h.l.name)
+    try io.Println($h.l.name)
 }

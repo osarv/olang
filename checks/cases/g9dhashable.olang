@@ -3,10 +3,10 @@
 import "std/io"
 type Res struct(k I64) {
     k
-} destruct { io.Println("d" $k) }
+} destruct { try io.Println("d" $k) catch io.IoError { } }
 fn same(a <T>, b T) Bool { return a == b }
 fn hashOf(x <T Hashable<T>>) I64 { return x.Hash() }
 fn main() ? {
-    io.Println($same(Res(1), Res(1)))
-    io.Println($(hashOf(Res(2)) != 0))
+    try io.Println($same(Res(1), Res(1)))
+    try io.Println($(hashOf(Res(2)) != 0))
 }

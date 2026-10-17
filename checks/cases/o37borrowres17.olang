@@ -63,5 +63,5 @@ fn main() ? {
         churn()
         t += x
     }
-    io.Println($t)
+    try io.Println($t)
 }

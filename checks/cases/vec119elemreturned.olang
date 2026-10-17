@@ -15,5 +15,5 @@ fn main() ? {
     b.data = Array<Q>(2)
     x := pick(b.data[0])
     b.data = Array<Q>(1)
-    io.Println($x.n)
+    try io.Println($x.n)
 }

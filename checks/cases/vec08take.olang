@@ -7,5 +7,5 @@ fn main() ? {
     w := take v
     d := w.View()
     w = Vec<I64>()
-    io.Println($d)
+    try io.Println($d)
 }

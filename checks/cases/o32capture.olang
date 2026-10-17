@@ -15,5 +15,5 @@ fn main() ? {
     f := fn() { o.cur = null }
     c := o.cur
     f()
-    io.Println(c.name)
+    try io.Println(c.name)
 }

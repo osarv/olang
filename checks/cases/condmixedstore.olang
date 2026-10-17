@@ -23,5 +23,5 @@ fn main() ? {
         h.f = local if i == 0 else Node(7)
     }
     churn()
-    io.Println($h.f.v)
+    try io.Println($h.f.v)
 }

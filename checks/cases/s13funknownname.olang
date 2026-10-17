@@ -10,4 +10,4 @@ fn classify(n I64) String {
         nomatch => "small"
     }
 }
-fn main() ? { io.Println(classify(500)) }
+fn main() ? { try io.Println(classify(500)) }

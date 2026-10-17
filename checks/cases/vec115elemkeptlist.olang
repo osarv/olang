@@ -20,5 +20,5 @@ fn main() ? {
     r Link& = m[0]
     keep.Push(r)
     for i in range 40 { v.Push(Link("b", nd)) }
-    io.Println($keep[0].name)
+    try io.Println($keep[0].name)
 }

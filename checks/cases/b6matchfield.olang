@@ -11,5 +11,5 @@ fn main() ? {
         x String& = "w" $i
         b.last = match i { case 1 => x case _ => "z" }
     }
-    io.Println(b.last)
+    try io.Println(b.last)
 }

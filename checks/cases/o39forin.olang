@@ -25,6 +25,6 @@ fn main() ? {
     t.bag.items.Push(1)
     for x in t.bag.items {
         t.bag = null
-        io.Println($x)
+        try io.Println($x)
     }
 }

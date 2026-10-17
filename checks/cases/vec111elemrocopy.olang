@@ -14,5 +14,5 @@ fn main() ? {
     v.Push(Link("a", b))
     c := v
     c[0].to.n = 5
-    io.Println($b.n)
+    try io.Println($b.n)
 }

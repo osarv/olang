@@ -10,15 +10,15 @@ fn churn() I64 {
     return t
 }
 fn asText(v Vec<Char>&) String&v { return String(v.View()) }
-fn grow(w mut Vec<Char>&) {
+fn grow(w mut Vec<Char>&) ? io.IoError {
     t := asText(w)                        # borrowed own result; type is String (nominal), not Array<Char>
     for i in range 1000 { w.Push('b') }   # grows/frees the buffer -- should be O39, is NOT refused
     churn()                               # reuse the freed buffer
-    io.Println(t)
+    try io.Println(t)
 }
 fn main() ? {
     v := Vec<Char>()
     v.Push('a')
     v.Push('a')
-    grow(v)
+    try grow(v)
 }

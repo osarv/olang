@@ -6,5 +6,5 @@ fn reinterp(x I32) String {
     return $hb " " $I32(hb) " " $bh " " $I32(bh)
 }
 fn main() ? io.IoError {
-    io.Print($reinterp(run) "\n")      # 2050 2048 2.312 2 - "5 5 2.312 5" from -b before the fix
+    try io.Print($reinterp(run) "\n")      # 2050 2048 2.312 2 - "5 5 2.312 5" from -b before the fix
 }

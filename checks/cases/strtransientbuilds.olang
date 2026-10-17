@@ -27,4 +27,4 @@ type Bag2 struct(head Node&) {
 fn (b Bag&) Str() String { return "b" $peek(b.head) }
 
 fn (b Bag2&) Str() String { return "b" $peek2(b.head) }
-fn main() ? { io.Println($Bag(Node(4)) $Bag2(Node(4))) }
+fn main() ? { try io.Println($Bag(Node(4)) $Bag2(Node(4))) }

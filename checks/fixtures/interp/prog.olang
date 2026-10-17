@@ -49,7 +49,7 @@ fn steps() String {
     return b.ToString()
 }
 fn main() ? Oops + io.IoError + os.OsError {
-    defer io.Print("main's deferred code ran\n")
+    defer try io.Print("main's deferred code ran\n") catch io.IoError { }
     Count++
     m := Map<String&, I32>()
     for i, n in Names { m.Put(n, I32(i) + Count) }
@@ -58,21 +58,21 @@ fn main() ? Oops + io.IoError + os.OsError {
     p := P(3, 4)
     l := List<I64>()
     for i in range 5 { l.Push(i * i) }
-    io.Print("count " $Count " total " $total " sum " $p.Sum() " squares " $l.ToArray() "\n")
-    io.Print("steps " $steps() "\n")
+    try io.Print("count " $Count " total " $total " sum " $p.Sum() " squares " $l.ToArray() "\n")
+    try io.Print("steps " $steps() "\n")
     tree Expr& = Expr.Add(Expr.Add(Expr.Lit(1), Expr.Lit(2)), Expr.Neg(Expr.Add(Expr.Lit(3), Expr.Neg(Expr.Lit(4)))))
-    io.Print("tree " $tree " folds to " $fold(tree) "\n")
-    io.Print("sqrt " $sqrt(2.0) " evens " $I32[x for x in range I32(10) if x % 2 == 0] "\n")
+    try io.Print("tree " $tree " folds to " $fold(tree) "\n")
+    try io.Print("sqrt " $sqrt(2.0) " evens " $I32[x for x in range I32(10) if x % 2 == 0] "\n")
     hits I64 = 0
     hits.AtomicAdd(5)
     found := hits.AtomicCompareSwap(5, 7)
     q P& = P(1, 2)
     r P& = q
     o P& = P(1, 2)
-    io.Print("atomics " $found " " $hits.AtomicLoad() " identity " $(q is r) " " $(q is not o) "\n")
+    try io.Print("atomics " $found " " $hits.AtomicLoad() " identity " $(q is r) " " $(q is not o) "\n")
     os.Run("echo written > prog.txt")
     t := try os.ReadFile("prog.txt")
-    io.Print("read " $t.Trim() " " $(try risky(1) catch default -1) " " $(try risky(5) catch default -1) "\n")
+    try io.Print("read " $t.Trim() " " $(try risky(1) catch default -1) " " $(try risky(5) catch default -1) "\n")
     y := try risky(3)
-    io.Print("not reached " $y "\n")
+    try io.Print("not reached " $y "\n")
 }

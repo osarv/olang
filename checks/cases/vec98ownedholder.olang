@@ -14,5 +14,5 @@ fn main() ? {
     h.lx.toks.Push(1)
     d := h.lx.toks.View()
     h.lx = null
-    io.Println($d[0])
+    try io.Println($d[0])
 }

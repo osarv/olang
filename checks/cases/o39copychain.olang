@@ -25,5 +25,5 @@ fn main() ? {
     b := a
     c := b
     a = Buf()
-    io.Println($c.n)
+    try io.Println($c.n)
 }

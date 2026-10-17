@@ -14,7 +14,7 @@ type Server struct() {
     other own mut Conn&
 }
 fn pass(c own mut Conn&) own mut Conn& {
-    defer { io.Println($c.fd) }
+    defer { try io.Println($c.fd) catch io.IoError { } }
     return c
 }
 fn main() ? { }

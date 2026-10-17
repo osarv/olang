@@ -19,5 +19,5 @@ fn main() ? {
     h.rows[0] = Array<I64>(n)                      # element: the same
     h.a[n - 1] = 7
     h.rows[0][0] = 5
-    io.Print($(h.a[n - 1] + h.rows[0][0]) "\n")
+    try io.Print($(h.a[n - 1] + h.rows[0][0]) "\n")
 }

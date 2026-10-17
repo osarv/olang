@@ -86,8 +86,8 @@ fn main() ? {
     for k in range 3 {
         for x in try g.Get(k) { t = $t $x }
     }
-    io.Println(t)
-    io.Println(try aliases())
-    io.Println(try builders())
-    io.Println($(try counters()))
+    try io.Println(t)
+    try io.Println(try aliases())
+    try io.Println(try builders())
+    try io.Println($(try counters()))
 }

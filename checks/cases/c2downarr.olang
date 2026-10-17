@@ -11,5 +11,5 @@ fn main() ? {
         x := $5 "abc"
         w = W(x)
     }
-    io.Println(w.names[0])
+    try io.Println(w.names[0])
 }

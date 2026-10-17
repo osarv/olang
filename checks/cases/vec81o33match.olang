@@ -21,7 +21,7 @@ fn main() ? {
         k := i % 2
         setN(Node(9 + i), match k { case 7 { unreachable } case _ => s.cur })
         churn()
-        io.Println($s.cur.n.v)
+        try io.Println($s.cur.n.v)
     }
 }
 fn churn() I64 {

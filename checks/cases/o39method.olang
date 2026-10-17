@@ -20,5 +20,5 @@ fn main() ? {
     s.cur.sock = Sock(1)
     k := s.cur.sock
     s.cur.close()
-    io.Println($k.n)
+    try io.Println($k.n)
 }

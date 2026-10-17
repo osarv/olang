@@ -3,7 +3,7 @@
 import "std/io"
 type Res struct(k I64) {
     k
-} destruct { io.Println("d") }
+} destruct { try io.Println("d") catch io.IoError { } }
 type Box<T> struct(x T) {
     x
 }
@@ -14,5 +14,5 @@ fn main() ? {
     b1 := Box(Res(1))
     b1.x.k = 5
     b2 := Box(Node(1))
-    io.Println($b1.x.k " " $b2.x.k)
+    try io.Println($b1.x.k " " $b2.x.k)
 }

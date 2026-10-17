@@ -18,5 +18,5 @@ fn main() ? {
     s.cur = Conn(3)
     c := s.cur
     s.cur = null
-    io.Println(c.name)
+    try io.Println(c.name)
 }

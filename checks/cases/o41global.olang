@@ -12,7 +12,7 @@ type Holder struct() {
 G := Holder()
 fn work() {
     c := G.cur
-    io.Println(c.name)
+    try io.Println(c.name) catch io.IoError { }
 }
 fn main() ? {
     G.cur = Node(1)

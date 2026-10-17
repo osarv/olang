@@ -9,5 +9,5 @@ fn main() ? {
         w.Push($i "x")
         keep = w.Clone()
     }
-    io.Println($keep)
+    try io.Println($keep)
 }

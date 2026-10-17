@@ -16,5 +16,5 @@ type Server struct() {
 fn both(a Conn&, c own mut Conn&) I64 { return a.fd + c.fd }
 fn main() ? {
     x own mut Conn& = Conn(1)
-    io.Println($both(x, take x))
+    try io.Println($both(x, take x))
 }

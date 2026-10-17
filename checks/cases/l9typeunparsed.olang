@@ -18,5 +18,5 @@ fn f(b Box<I64>&) I64 { return 1 }
 fn main() ? {
     x A& = A.Leaf(3)
     c := Box<I64>(3)
-    io.Println($x " " $f(c))
+    try io.Println($x " " $f(c))
 }

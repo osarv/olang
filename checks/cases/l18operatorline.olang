@@ -6,4 +6,4 @@ fn sum(a I64, b I64, c I64) I64 {
         + c
     return s
 }
-fn main() ? { io.Println($sum(1, 2, 3)) }
+fn main() ? { try io.Println($sum(1, 2, 3)) }

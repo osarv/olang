@@ -21,13 +21,13 @@ fn (c CB&) Raw(n I64) String&c ? {
 fn f(c CB&, n I64) String&c {
     return try c.Raw(n) catch default c.Text()   # the try is a source (Raw, Array<Char>); the default is not
 }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := f(c, 1)
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(t)
+    try io.Println(t)
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
 }

@@ -7,5 +7,5 @@ type N<T> struct() {
 }
 fn main() ? {
     x := N<I64>()
-    io.Println($x.n)
+    try io.Println($x.n)
 }

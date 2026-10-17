@@ -61,6 +61,6 @@ fn main() ? {
         for i in range 10 { run(c, a, b, ops[1]) }
         t2 := time.Now()
         for k in range 2, 6 { run(c, a, b, ops[k]) }
-        io.Println("captured " $(F64(t1 - t0) / 5242880.0).Fixed(2) " ns an element, declared " $(F64(t2 - t1) / 5242880.0).Fixed(2))
+        try io.Println("captured " $(F64(t1 - t0) / 5242880.0).Fixed(2) " ns an element, declared " $(F64(t2 - t1) / 5242880.0).Fixed(2))
     }
 }

@@ -19,5 +19,5 @@ type Holder struct(s mut Server&) {
 fn main() ? {
     s := Server()
     h := Holder(s)
-    io.Println($h.s.cur.fd)
+    try io.Println($h.s.cur.fd)
 }

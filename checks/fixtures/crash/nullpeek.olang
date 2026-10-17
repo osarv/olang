@@ -23,11 +23,11 @@ fn (s Stack&) Peek() I64 { return s.top.v }
 
 fn main() ? {
     os.OnCrash("nullpeek crashed\n")
-    io.Println("start")
+    try io.Println("start")
     s := Stack()
     s.Push(4)
-    io.Println("after a push: " $s.Peek())
+    try io.Println("after a push: " $s.Peek())
     t := Stack()
-    io.Println("peek of an empty stack: " $t.Peek())
-    io.Println("end")
+    try io.Println("peek of an empty stack: " $t.Peek())
+    try io.Println("end")
 }

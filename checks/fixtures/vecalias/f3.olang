@@ -9,18 +9,18 @@ fn churn() I64 {
     }
     return t
 }
-fn grow(w mut Vec<I64>&) {
+fn grow(w mut Vec<I64>&) ? io.IoError {
     d Array<I64>&w = null
     join {
         spawn d = mid.Vl.View2(w)
     }
     for i in range 1000 { w.Push(i + 100) }
     churn()
-    io.Println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }
 fn main() ? {
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
-    grow(v)
+    try grow(v)
 }

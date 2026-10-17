@@ -19,13 +19,13 @@ fn (c CB&) Pick(raw Bool) String&c {
     t := c.Text()                      # a local holding Text's borrowed own result (a String): not recorded
     return t                           # O38's return check skips its loan - rooted at c, a parameter Pick borrows from
 }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := c.Pick(false)                 # loan on Array<Char> below c only
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"   # releases the String: not refused
     churn()
-    io.Println(t)
+    try io.Println(t)
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
 }

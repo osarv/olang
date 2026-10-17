@@ -6,5 +6,5 @@ fn main() ? {
     c := true
     f := fn() I64 { return 1 }
     if c else fn() I64 { return 2 }
-    io.Println($f())
+    try io.Println($f())
 }

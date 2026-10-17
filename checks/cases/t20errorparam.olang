@@ -13,5 +13,5 @@ type Holder struct(e E) { e }
 fn final(e E) Bool { return e != E.A }
 fn main() ? {
     x E
-    io.Println($x)
+    try io.Println($x)
 }

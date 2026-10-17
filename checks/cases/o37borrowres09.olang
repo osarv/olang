@@ -61,5 +61,5 @@ fn main() ? {
     f := h.HFirst()
     h.HDrop()
     churn()
-    io.Println($f.k)
+    try io.Println($f.k)
 }

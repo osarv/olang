@@ -25,5 +25,5 @@ fn main() ? {
     w := W(b)
     w.into(l)
     v.o = null
-    io.Println($l[0].o.k)
+    try io.Println($l[0].o.k)
 }

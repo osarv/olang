@@ -25,5 +25,5 @@ fn main() ? {
     b := a
     f := fn() I64 { return b.n }
     a.add(3)
-    io.Println($f())
+    try io.Println($f())
 }

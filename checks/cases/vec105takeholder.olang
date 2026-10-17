@@ -11,5 +11,5 @@ fn main() ? {
     m := take l
     d := m.toks.View()
     l = take m
-    io.Println($d[0])
+    try io.Println($d[0])
 }

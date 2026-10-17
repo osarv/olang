@@ -29,6 +29,6 @@ fn main() ? {
     n := Node(1, null)
     k := f(n)
     churn()
-    io.Println($k)
-    io.Println($n.next.v)
+    try io.Println($k)
+    try io.Println($n.next.v)
 }

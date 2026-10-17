@@ -4,5 +4,5 @@ import "std/io"
 type B<print I64> struct() { x I64 = print }
 fn main() ? {
     b := B<3>()
-    io.Println($b.x)
+    try io.Println($b.x)
 }

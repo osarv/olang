@@ -4,7 +4,7 @@ import "std/os"
 import "std/io"
 
 fn main() ? io.IoError {
-    io.Print("before\n")
+    try io.Print("before\n")
     os.Exit(42)
-    io.Print("after\n")
+    try io.Print("after\n")
 }

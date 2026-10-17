@@ -17,5 +17,5 @@ fn main() ? {
     for w in t.Split(" ") {
         if w.Len() > 0 { total += try w.ParseInt() }
     }
-    io.Print($t.Len() " " $total "\n")
+    try io.Print($t.Len() " " $total "\n")
 }

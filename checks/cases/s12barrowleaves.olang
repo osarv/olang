@@ -8,4 +8,4 @@ fn sign(n I64) I64 {
         nomatch => unreachable
     }
 }
-fn main() ? { io.Println($sign(1)) }
+fn main() ? { try io.Println($sign(1)) }

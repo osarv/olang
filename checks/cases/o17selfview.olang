@@ -32,5 +32,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    io.Println($w.b.head.view[1])
+    try io.Println($w.b.head.view[1])
 }

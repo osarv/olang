@@ -20,5 +20,5 @@ fn main() ? {
     d := mk&x(5)
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(d)
+    try io.Println(d)
 }

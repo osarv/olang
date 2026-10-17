@@ -11,5 +11,5 @@ fn main() ? {
     l.toks.Push(1)
     d := view(l)
     l.toks.Push(2)
-    io.Println($d[0])
+    try io.Println($d[0])
 }

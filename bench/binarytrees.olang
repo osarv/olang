@@ -32,7 +32,7 @@ fn main() ? {
     if args.Len() > 1 { n = try args[1].ParseInt() }
     minDepth I64 = 4
     maxDepth I64 = n if n > minDepth + 2 else minDepth + 2
-    io.Print("stretch tree of depth " $(maxDepth + 1) "\t check: " $built(maxDepth + 1) "\n")
+    try io.Print("stretch tree of depth " $(maxDepth + 1) "\t check: " $built(maxDepth + 1) "\n")
     longLived := tree(maxDepth)
     for d in range minDepth, maxDepth + 1, 2 {
         iterations I64 = I64(1) << (maxDepth - d + minDepth)        # "1 << ..." alone shifts an I32 (E8a)
@@ -41,7 +41,7 @@ fn main() ? {
             t := tree(d)        # lives in the loop body's block: gone at the end of each iteration
             sum += check(t)
         }
-        io.Print($iterations "\t trees of depth " $d "\t check: " $sum "\n")
+        try io.Print($iterations "\t trees of depth " $d "\t check: " $sum "\n")
     }
-    io.Print("long lived tree of depth " $maxDepth "\t check: " $check(longLived) "\n")
+    try io.Print("long lived tree of depth " $maxDepth "\t check: " $check(longLived) "\n")
 }

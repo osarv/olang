@@ -19,5 +19,5 @@ fn load(dir String&, keep mut List<Module>&) {
 fn main() ? {
     keep := List<Module>()
     load("src", keep)
-    io.Println($keep.Len())
+    try io.Println($keep.Len())
 }

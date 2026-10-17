@@ -25,7 +25,7 @@ G H = H(Docs.title)
 fn main() ? {
     Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(G.y)
+    try io.Println(G.y)
 }
 fn churn() I64 {
     t := 0

@@ -44,5 +44,5 @@ fn main() ? {
     z := Vec<I64>()
     for i in range 5 { z.Push(777) }
     churn()
-    io.Println($c.x.x.x.x.x.x.x.x.toks[0] " " $z.Len())
+    try io.Println($c.x.x.x.x.x.x.x.x.toks[0] " " $z.Len())
 }

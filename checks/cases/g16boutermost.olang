@@ -8,5 +8,5 @@ fn Total(a Array<I64, <N>>&) I64 {
 }
 fn main() ? {
     x Array<I64, 3> = I64[1, 2, 3]
-    io.Println($Total(x))
+    try io.Println($Total(x))
 }

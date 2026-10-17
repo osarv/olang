@@ -17,21 +17,21 @@ fn va(v Vec<I64>&, n I64) Array<I64>&v {
     return v.View()
 }
 fn vb(v Vec<I64>&, n I64) Array<I64>&v { return va(v, n) }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := b(c, 2)
     u := b(c, 0)
-    io.Println($t $u)
+    try io.Println($t $u)
     c.text = "zz"
-    io.Println(b(c, 2))
+    try io.Println(b(c, 2))
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
     d := vb(v, 3)
-    io.Println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
     v.Push(30)
     assert va(v, 2)[2] == 30
 }

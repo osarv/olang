@@ -15,5 +15,5 @@ fn main() ? {
     Head = Buf[0:2]              # a slice of a global own array kept in a global
     Buf = Array<I64>(64, 9)      # releases the old buffer
     churn()
-    io.Println($Head[0] " " $Head[1])
+    try io.Println($Head[0] " " $Head[1])
 }

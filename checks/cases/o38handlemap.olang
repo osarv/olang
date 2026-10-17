@@ -24,5 +24,5 @@ fn main() ? {
     }
     v.o = null
     x := try m.Get(1) catch default null
-    io.Println($x.o.k)
+    try io.Println($x.o.k)
 }

@@ -18,5 +18,5 @@ fn main() ? {
     t := o.Text()
     o.data = Array<Char>(64)
     churn()
-    io.Println(t)
+    try io.Println(t)
 }

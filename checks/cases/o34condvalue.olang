@@ -18,5 +18,5 @@ fn pick(c Bool) I64 {
     return 0 if v.o == null else v.o.k
 }
 fn main() ? {
-    io.Println($pick(true))
+    try io.Println($pick(true))
 }

@@ -21,4 +21,4 @@ fn run(lines Array<String&>&) I64 {
     }
     return s.names.Len()
 }
-fn main() ? { io.Println($run(String&["ab", "cd"])) }
+fn main() ? { try io.Println($run(String&["ab", "cd"])) }

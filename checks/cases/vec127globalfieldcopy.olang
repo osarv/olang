@@ -8,5 +8,5 @@ GL mut Lexer = Lexer()
 fn main() ? {
     GL.toks.Push(4)
     c := GL.toks
-    io.Println($c.Len())
+    try io.Println($c.Len())
 }

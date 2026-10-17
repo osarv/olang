@@ -9,13 +9,13 @@ fn pick(a CB&, b CB&a, k Bool) String&a {
     if k { return b.text }
     return a.text
 }
-fn use(x mut CB&, y mut CB&x) {
+fn use(x mut CB&, y mut CB&x) ? io.IoError {
     t := pick(x, y, true)
     y.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-    io.Println(t)
+    try io.Println(t)
 }
 fn main() ? {
     x := CB()
     y := CB()
-    use(x, y)
+    try use(x, y)
 }

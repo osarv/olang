@@ -15,7 +15,7 @@ type Outer struct() {
 type Watch struct() {
     x Outer& = null
 } destruct {
-    if x != null { io.Println($x.o.k) }
+    if x != null { try io.Println($x.o.k) catch io.IoError { } }
 }
 fn put(dst mut Watch&, x Outer&) { dst.x = x }
 fn main() ? {

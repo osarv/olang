@@ -25,25 +25,25 @@ type Bomb struct() {
 }
 fn failing() ? { error }
 fn mkOwned(a Array<I64>&, lo I64) own mut Res& {
-    defer { io.Println($a[lo:1].Len()) }
+    defer { try io.Println($a[lo:1].Len()) catch io.IoError { } }
     return Res(1)
 }
 fn mkValue(a Array<I64>&, lo I64) Hold {
     h := Hold()
     h.r = Res(2)
-    defer { io.Println($a[lo:1].Len()) }
+    defer { try io.Println($a[lo:1].Len()) catch io.IoError { } }
     return h
 }
 fn mkBig(a Array<I64>&, lo I64) BigHold {
     h := BigHold()
     h.r = Res(3)
-    defer { io.Println($a[lo:1].Len()) }
+    defer { try io.Println($a[lo:1].Len()) catch io.IoError { } }
     return h
 }
 fn mkInner(a Array<I64>&, lo I64) own mut Res& {
     if lo > 0 {
         {
-            defer { io.Println($a[lo:1].Len()) }
+            defer { try io.Println($a[lo:1].Len()) catch io.IoError { } }
             return Res(4)
         }
     }
@@ -66,26 +66,26 @@ fn mkCaught(n I64) own mut Res& {
 test "deferred code fails after an owned result is made" {
     a := I64[1, 2, 3]
     x := mkOwned(a, 2)
-    io.Println($x.n)
+    try io.Println($x.n) catch io.IoError { }
 }
 test "deferred code fails after an owner value local is returned" {
     a := I64[1, 2, 3]
     y := mkValue(a, 2)
-    io.Println($y.r.n)
+    try io.Println($y.r.n) catch io.IoError { }
 }
 test "deferred code fails after an owner value is returned through memory" {
     a := I64[1, 2, 3]
     y := mkBig(a, 2)
-    io.Println($y.r.n)
+    try io.Println($y.r.n) catch io.IoError { }
 }
 test "deferred code of an inner block fails after an owned result is made" {
     a := I64[1, 2, 3]
     x := mkInner(a, 2)
-    io.Println($x.n)
+    try io.Println($x.n) catch io.IoError { }
 }
 test "a destructor fails as the returning frame's own scope closes" {
     x := mkFrameDies()
-    io.Println($x.n)
+    try io.Println($x.n) catch io.IoError { }
 }
 test "joins failing in the place of returns, caught, then a return that stands" {
     Boom = false
@@ -103,6 +103,6 @@ test "a join failing in deferred code replaces no return" {
     assert x.n == 20
 }
 test "every owner made was released" {
-    io.Println("made " $Made " dropped " $Dropped)
+    try io.Println("made " $Made " dropped " $Dropped) catch io.IoError { }
     assert Made == Dropped
 }

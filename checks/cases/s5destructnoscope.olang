@@ -13,6 +13,6 @@ fn main() ? {
     for k in range 3 {
         rec, next := mk2(k)
         rows.Push(rec)
-        io.Println($next)
+        try io.Println($next)
     }
 }

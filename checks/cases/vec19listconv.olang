@@ -8,5 +8,5 @@ fn main() ? {
     l := List<String&>()
     l.Push(String(v.View()))
     for i in range 100 { v.Push('b') }
-    io.Println(l[0])
+    try io.Println(l[0])
 }

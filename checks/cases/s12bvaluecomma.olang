@@ -10,5 +10,5 @@ fn power(op String&) (I32, I32) {
 }
 fn main() ? {
     l, r := power("+")
-    io.Println($l $r)
+    try io.Println($l $r)
 }

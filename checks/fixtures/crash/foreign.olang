@@ -7,5 +7,5 @@ extern fn strlen(s Array<U8>) I64
 fn main() ? {
     os.OnCrash("foreign.olang crashed\n")
     none Array<U8>& = null
-    io.Println($strlen(none))
+    try io.Println($strlen(none))
 }

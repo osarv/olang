@@ -15,5 +15,5 @@ fn main() ? {
         t := "w" $i
         keep(v, t)
     }
-    io.Println($v[0].text)
+    try io.Println($v[0].text)
 }

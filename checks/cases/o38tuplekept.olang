@@ -19,5 +19,5 @@ fn main() ? {
     l := List<View>()
     a, n := b.Two()
     l.Push(a)
-    io.Println($l.Len() " " $n)
+    try io.Println($l.Len() " " $n)
 }

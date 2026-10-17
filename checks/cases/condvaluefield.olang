@@ -33,6 +33,6 @@ fn main() ? {
         w((i if j < 0 else o).m.inner)
     }
     churn()
-    io.Println($o.m.inner.k " " $o.m.inner.l.Len() " " $o.m.inner.l[19])
-    io.Println($o.m.inner.l.ToArray()[:3])
+    try io.Println($o.m.inner.k " " $o.m.inner.l.Len() " " $o.m.inner.l[19])
+    try io.Println($o.m.inner.l.ToArray()[:3])
 }

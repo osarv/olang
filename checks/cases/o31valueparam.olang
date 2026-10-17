@@ -25,5 +25,5 @@ fn f(b Buf) I64 {
 }
 fn main() ? {
     a := Buf()
-    io.Println($f(a))
+    try io.Println($f(a))
 }

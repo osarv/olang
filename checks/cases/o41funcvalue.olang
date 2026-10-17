@@ -13,7 +13,7 @@ fn apply(f fn()) { f() }
 fn main() ? {
     s := Holder()
     s.cur = Node(1)
-    f := fn() { io.Println("x") }
+    f := fn() { try io.Println("x") catch io.IoError { } }
     join {
         spawn apply(f)
         s.cur = null

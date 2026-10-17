@@ -17,6 +17,6 @@ fn main() ? {
     s := Server()
     s.cur = Conn(1)
     c := s.cur
-    defer { io.Println(c.name) }
+    defer { try io.Println(c.name) catch io.IoError { } }
     s.cur = null
 }

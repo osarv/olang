@@ -61,5 +61,5 @@ fn main() ? {
     l.Push(v.First())
     v.o = null
     churn()
-    io.Println($l[0].k)
+    try io.Println($l[0].k)
 }

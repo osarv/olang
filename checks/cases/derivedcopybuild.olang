@@ -26,5 +26,5 @@ fn main() ? {
     a := Array<mut Node&>(1, Node(3))
     work(a)
     t := churn(100)
-    io.Println($a[0].next.v " " $t)
+    try io.Println($a[0].next.v " " $t)
 }

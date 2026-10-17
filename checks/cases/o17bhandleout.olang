@@ -35,5 +35,5 @@ fn main() ? {
     bump(w, 41)
     churn()
     assert w.b.head.next.v == 41
-    io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next.v)
 }

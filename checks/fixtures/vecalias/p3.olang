@@ -2,5 +2,5 @@ import "genlib"
 import "std/io"
 fn main() ? {
     f := genlib.Id
-    io.Println("x")
+    try io.Println("x")
 }

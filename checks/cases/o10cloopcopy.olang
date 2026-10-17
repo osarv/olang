@@ -27,4 +27,4 @@ fn total(words Array<String&>&) I64 {
     for p in parts { merge(sum, p) }
     return sum.Len()
 }
-fn main() ? { io.Println($total(String&["x", "y", "x"])) }
+fn main() ? { try io.Println($total(String&["x", "y", "x"])) }

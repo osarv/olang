@@ -15,5 +15,5 @@ fn apply(f fn(b Box) I64, b Box) I64 { return f(b) }
 GB Box = Box(Array<I64>(3))
 fn main() ? {
     s := Setter(3)
-    io.Println($apply(s, GB))
+    try io.Println($apply(s, GB))
 }

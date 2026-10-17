@@ -25,5 +25,5 @@ fn main() ? {
     join {
         spawn h = wrap(b)
     }
-    io.Println($h.x.o.k)
+    try io.Println($h.x.o.k)
 }

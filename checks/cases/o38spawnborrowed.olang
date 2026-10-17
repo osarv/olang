@@ -23,5 +23,5 @@ fn main() ? {
         spawn r = id(b)
     }
     v.o = null
-    io.Println($r.o.k)
+    try io.Println($r.o.k)
 }

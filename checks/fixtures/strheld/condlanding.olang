@@ -12,16 +12,16 @@ type Res struct(k I64) {
 }
 fn id(x <T>) T { return x }
 fn takeR(r Res&) I64 { return r.k }
-fn work() I64 {
+fn work() I64 ? io.IoError {
     c := true
     t I64 = 0
     for i in range 100000 {
         t += takeR(id(Res(i)) if c else Res(16))
     }
-    io.Println("in work: made " $Made " gone " $Gone)
+    try io.Println("in work: made " $Made " gone " $Gone)
     return t
 }
 fn main() ? {
-    t := work()
-    io.Println("after: made " $Made " gone " $Gone " " $t)
+    t := try work()
+    try io.Println("after: made " $Made " gone " $Gone " " $t)
 }

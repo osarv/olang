@@ -6,5 +6,5 @@ import "std/io"
 fn a(tried Bool, op String&) String { return "(" $op (" try" if tried else "") }
 fn b(negated Bool) String { return "(is" (" not " if negated else " ") }
 fn main() ? {
-    io.Println($a(true, "=") $b(false))
+    try io.Println($a(true, "=") $b(false))
 }

@@ -12,5 +12,5 @@ fn main() ? {
     join {
         for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
     }
-    io.Println($parts[0])
+    try io.Println($parts[0])
 }

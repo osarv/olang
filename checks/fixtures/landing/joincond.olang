@@ -15,5 +15,5 @@ fn main() ? {
     b := Big(1)
     i I64 = 0
     for ($b " " $i).Len() > 0 and i < 50000 { i++ }
-    io.Println($i)
+    try io.Println($i)
 }

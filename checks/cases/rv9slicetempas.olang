@@ -22,5 +22,5 @@ fn set(h mut H&, n I64) {
 fn main() ? {
     h mut H& = H(1)
     set(h, 7)
-    io.Println($h.r[1])
+    try io.Println($h.r[1])
 }

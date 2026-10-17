@@ -34,5 +34,5 @@ fn main() ? {
         grow(y)
     }
     churn()
-    io.Println($rd(k1))
+    try io.Println($rd(k1))
 }

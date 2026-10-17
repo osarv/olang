@@ -13,5 +13,5 @@ fn main() ? {
     b.data = Array<I64>(4)
     h.view = b.data
     b.data = null
-    io.Println($h.view[0])
+    try io.Println($h.view[0])
 }

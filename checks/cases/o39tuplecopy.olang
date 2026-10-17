@@ -17,5 +17,5 @@ fn main() ? {
     b := v
     a, n := b.Two()
     v.o = null
-    io.Println($a.x.o.k " " $n)
+    try io.Println($a.x.o.k " " $n)
 }

@@ -5,5 +5,5 @@ type K<N I8> struct() { x I32 }
 X U8 = 3
 fn main() ? {
     k := K<X + 1>()
-    io.Println($k.x)
+    try io.Println($k.x)
 }

@@ -61,5 +61,5 @@ fn main() ? {
     e := mkO(5)
     v = take e
     churn()
-    io.Println($d[0])
+    try io.Println($d[0])
 }

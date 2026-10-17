@@ -6,14 +6,14 @@ fn a(v Vec<I64>&, n I64) Array<I64>&v {
     return v.View()
 }
 fn b(v Vec<I64>&, n I64) Array<I64>&v { return a(v, n) }
-fn grow(w mut Vec<I64>&) {
+fn grow(w mut Vec<I64>&) ? io.IoError {
     d := b(w, 1)
     for i in range 1000 { w.Push(i + 100) }
-    io.Println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }
 fn main() ? {
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
-    grow(v)
+    try grow(v)
 }

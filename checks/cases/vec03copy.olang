@@ -6,5 +6,5 @@ fn main() ? {
     v.Push(1)
     b := v
     v.Push(2)
-    io.Println($b.Len())
+    try io.Println($b.Len())
 }

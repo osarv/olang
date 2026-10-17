@@ -2,5 +2,5 @@ import "std/io"
 import "a"
 import ab "a/b"
 fn main() ? io.IoError {
-    io.Print($a.Get() " " $ab.Get() "\n")
+    try io.Print($a.Get() " " $ab.Get() "\n")
 }

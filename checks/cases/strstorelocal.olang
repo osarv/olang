@@ -22,6 +22,6 @@ fn main() ? {
     s := $b
     keep := List<Node&>()
     for i in range 2000 { keep.Push(Node(-7, null)) }
-    io.Println(s)
-    io.Println($b.head.next.v)
+    try io.Println(s)
+    try io.Println($b.head.next.v)
 }

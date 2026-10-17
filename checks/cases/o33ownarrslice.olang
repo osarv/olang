@@ -14,5 +14,5 @@ fn main() ? {
     fill(s)
     e := h.c.names[1]
     h.c.names = Array<String&>(1)
-    io.Println(e)
+    try io.Println(e)
 }

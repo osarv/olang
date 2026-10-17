@@ -16,5 +16,5 @@ fn direct(x F16) (F16, BF16, U64) ? E {
 
 fn main() ? io.IoError + E {
     d, e, f := try direct(F16(0.25))
-    io.Print($d " " $e " " $f "\n")
+    try io.Print($d " " $e " " $f "\n")
 }

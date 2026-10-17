@@ -14,5 +14,5 @@ fn fill(b mut B&) {
 fn main() ? {
     b := B()
     fill(b)
-    io.Println(b.data[0])
+    try io.Println(b.data[0])
 }

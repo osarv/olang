@@ -63,5 +63,5 @@ fn main() ? {
         v.o = null
         churn()
     }
-    io.Println($out[0])
+    try io.Println($out[0])
 }

@@ -23,5 +23,5 @@ fn main() ? {
     p := Peer(s)
     c := s.cur
     viaPeer(p)
-    io.Println(c.name)
+    try io.Println(c.name)
 }

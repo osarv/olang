@@ -65,40 +65,22 @@ fn Read(fd I32, buf mut Array<U8>&) Array<U8>&buf ? IoError {
     return buf[:n]
 }
 
-# Printing: the one way a program writes text to its standard output and error (M19f). None of these takes "try": a
-# write the system does not complete ends the program as a failed check does (S18) - aborting, or failing the test that
-# is running - with a line on the standard error naming the function and the stream. Output a program has no way to
-# handle is not an error set for it to carry; one that must handle a failed write writes with Write, which hands it
-# back, and one writing a lot uses a Writer. Each call writes at once, nothing held back, and a line and its end go as
-# one write, so lines from tasks running at once are not cut into each other. A value is made text where it is
-# written: "io.Println("n is " $n)".
+# Printing: the one way a program writes text to its standard output and error (M19f). Each call writes at once, nothing
+# held back, and a line and its end go as one write, so lines from tasks running at once are not cut into each other. A
+# failed write is an error (IoError), written with "try" like any other; one writing a lot uses a Writer. A value is made
+# text where it is written: "try io.Println("n is " $n)".
 
 # t, then nothing - to the standard output
-fn Print(t String&) { writeOrStop(Stdout, t, "io.Print could not write to the standard output\n") }
+fn Print(t String&) ? IoError { try Write(Stdout, t) }
 
 # t and a line end - to the standard output; with no text, a line end alone
-fn Println(t String& = "") { writeOrStop(Stdout, $t "\n", "io.Println could not write to the standard output\n") }
+fn Println(t String& = "") ? IoError { try Write(Stdout, $t "\n") }
 
 # t, then nothing - to the standard error
-fn PrintErr(t String&) { writeOrStop(Stderr, t, "io.PrintErr could not write to the standard error\n") }
+fn PrintErr(t String&) ? IoError { try Write(Stderr, t) }
 
 # t and a line end - to the standard error
-fn PrintErrln(t String& = "") { writeOrStop(Stderr, $t "\n", "io.PrintErrln could not write to the standard error\n") }
-
-# every byte of t to fd, a short write retried with what is left; a write that fails or moves nothing ends the program,
-# with why on the standard error (which may itself be what failed - there is nowhere left to say so)
-fn writeOrStop(fd I32, t Array<U8>&, why String&) {
-    sent I64 = 0
-    for sent < t.Len() {
-        tail := t[sent:]
-        n := write(fd, tail, tail.Len())
-        if n <= 0 {
-            write(Stderr, why, why.Len())
-            abort
-        }
-        sent += n
-    }
-}
+fn PrintErrln(t String& = "") ? IoError { try Write(Stderr, $t "\n") }
 
 # writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
 # buffer because a function may not return a bare "&" reference (O13) and an I64 never needs more than
@@ -284,12 +266,12 @@ test "Write succeeds on a real descriptor" {
 }
 
 test "Print and Println write text, Println with its line end" {
-    Print("io.olang: Print ")
-    Println("and Println")
-    Println()
-    PrintErr("")
+    try Print("io.olang: Print ") catch IoError { }
+    try Println("and Println") catch IoError { }
+    try Println() catch IoError { }
+    try PrintErr("") catch IoError { }
     n := 42
-    Println("io.olang: n is " $n)
+    try Println("io.olang: n is " $n) catch IoError { }
 }
 
 # an ordinary zero-filled fixed-size buffer, no marker and no run-time length: passing it to a "Array<U8>&"

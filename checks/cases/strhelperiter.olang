@@ -13,5 +13,5 @@ fn (b Bag&) Str() String {
 fn main() ? {
     l := List<I64>()
     for i in range 10 { l.Push(i) }
-    io.Println($Bag(l))
+    try io.Println($Bag(l))
 }

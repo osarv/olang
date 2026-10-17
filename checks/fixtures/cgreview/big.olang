@@ -21,5 +21,5 @@ fn grown(m M) M {
 fn main() ? io.IoError {
     m := M()
     m.data[3] = 2.5
-    io.Print($sum(grown(m)) "\n")
+    try io.Print($sum(grown(m)) "\n")
 }

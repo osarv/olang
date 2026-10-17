@@ -187,13 +187,13 @@ DtorPrelude := (
     "}\n"
     "# own6 N3b: an owned result made, then deferred code failing a guaranteed check - which abandons a test\n"
     "fn oheldDefer(a Array<I64>&, lo I64) own mut OHeld& {\n"
-    "    defer { io.Println($a[lo:1].Len()) }\n"
+    "    defer { say($a[lo:1].Len()) }\n"
     "    return OHeld(5)\n"
     "}\n"
     "fn oheldDeferVal(a Array<I64>&, lo I64) OHeldBox {\n"
     "    h := OHeldBox()\n"
     "    h.r = OHeld(6)\n"
-    "    defer { io.Println($a[lo:1].Len()) }\n"
+    "    defer { say($a[lo:1].Len()) }\n"
     "    return h\n"
     "}\n"
 )
@@ -226,6 +226,7 @@ OwnLib := (
 Prelude := (
     "import \"std/time\"\nimport \"std/io\"\n"
     "extern fn getpid() I32\n"
+    "fn say(t String&) { try io.Println(t) catch io.IoError { } }\n"
     "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
     "type Node struct(v I64) {\n"
     "    v\n"
@@ -2288,9 +2289,9 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     }
     b.Push("fn main() ? {\n")
     for k in range n {
-        if keep.Len() == 0 or keep[k] { b.Push("    io.Println(\"" $k ": \" $s" $k "())\n") }
+        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" $k ": \" $s" $k "())\n") }
     }
-    if HasDtors(seed) { b.Push("    io.Println(\"dtors \" $(Made - Dropped))\n") }
+    if HasDtors(seed) { b.Push("    say(\"dtors \" $(Made - Dropped))\n") }
     b.Push("}\n")
     if HasDtors(seed) and OwnOnly { b.Push(HeldTests(seed)) }
     return b.ToString()
@@ -2303,20 +2304,20 @@ fn HeldTests(seed U64) String& {
     b := StringBuilder()
     pick := seed / 4
     shapes := String&[
-        "    a := I64[1, 2, 3]\n    lo := 1 + Run\n    x := oheldEat(OHeld(1), a[lo:1])\n    io.Println($x)\n",
-        "    e := OHeldE.B(Run)\n    x := oheldEat3(OHeld(2), (e as OHeldE.A))\n    io.Println($x)\n",
-        "    x := oheldEat(OHeld(3), Array<I64>(0 - Run))\n    io.Println($x)\n",
+        "    a := I64[1, 2, 3]\n    lo := 1 + Run\n    x := oheldEat(OHeld(1), a[lo:1])\n    say($x)\n",
+        "    e := OHeldE.B(Run)\n    x := oheldEat3(OHeld(2), (e as OHeldE.A))\n    say($x)\n",
+        "    x := oheldEat(OHeld(3), Array<I64>(0 - Run))\n    say($x)\n",
         "    h := OHeldBox()\n    a := I64[1, 2]\n    h.r = OHeld(a[1 + Run:1].Len())\n",
-        "    h := OHeldBox()\n    h.r = OHeld(4)\n    e := OHeldE.B(Run)\n    x := oheldEat3(take h.r, (e as OHeldE.A))\n    io.Println($x)\n",
-        "    a := I64[1, 2, 3]\n    x := oheldDefer(a, 1 + Run)\n    io.Println($x.n)\n",
-        "    a := I64[1, 2, 3]\n    y := oheldDeferVal(a, 1 + Run)\n    io.Println($y.r.n)\n"]
+        "    h := OHeldBox()\n    h.r = OHeld(4)\n    e := OHeldE.B(Run)\n    x := oheldEat3(take h.r, (e as OHeldE.A))\n    say($x)\n",
+        "    a := I64[1, 2, 3]\n    x := oheldDefer(a, 1 + Run)\n    say($x.n)\n",
+        "    a := I64[1, 2, 3]\n    y := oheldDeferVal(a, 1 + Run)\n    say($y.r.n)\n"]
     for i in range shapes.Len() {
         if ((pick >> U64(i)) & 1) == 0 and i != I64(pick % U64(shapes.Len())) { continue }
         b.Push("test \"held " $i "\" {\n")
         b.Push(shapes[i])
         b.Push("}\n")
     }
-    b.Push("test \"every held owner was released\" {\n    io.Println(\"held made \" $HeldMade \" dropped \" $HeldDropped)\n"
+    b.Push("test \"every held owner was released\" {\n    say(\"held made \" $HeldMade \" dropped \" $HeldDropped)\n"
            "    assert HeldMade == HeldDropped\n}\n")
     return b.ToString()
 }

@@ -18,6 +18,6 @@ fn main() ? {
     s.cur = Conn(3)
     c := s.cur
     d := take s.cur
-    io.Println(c.name)
-    io.Println(d.name)
+    try io.Println(c.name)
+    try io.Println(d.name)
 }

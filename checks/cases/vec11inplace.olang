@@ -9,5 +9,5 @@ fn main() ? {
     v.Push(Pt(4))
     p := el(v)
     for i in range 100 { v.Push(Pt(i)) }
-    io.Println($p.x)
+    try io.Println($p.x)
 }

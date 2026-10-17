@@ -29,5 +29,5 @@ fn main() ? {
     q.more = take p.lx.toks
     b.lx = null
     churn()
-    io.Println(a.lx.more[0])
+    try io.Println(a.lx.more[0])
 }

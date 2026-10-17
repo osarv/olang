@@ -35,5 +35,5 @@ fn main() ? io.IoError {
         sumC += c[i]
         sumD += d[i]
     }
-    io.Print($TargetCpu " " $TargetVectorBits " " $TargetHasFma "\n" $sumC " " $sumD " " $c[7] " " $d[7] "\n")
+    try io.Print($TargetCpu " " $TargetVectorBits " " $TargetHasFma "\n" $sumC " " $sumD " " $c[7] " " $d[7] "\n")
 }

@@ -16,5 +16,5 @@ fn main() ? {
     c := o1.cur
     o2.cur = take o1.cur
     o2.cur = null
-    io.Println(c.name)
+    try io.Println(c.name)
 }

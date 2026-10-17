@@ -18,5 +18,5 @@ fn f(h mut H3&, p mut Plain&) I64 {
 fn main() ? {
     h mut H3& = H3()
     h.cur = In3(5)
-    io.Println($f(h, h.cur.pl))
+    try io.Println($f(h, h.cur.pl))
 }

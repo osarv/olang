@@ -14,5 +14,5 @@ fn main() ? {
     b.data[0].back = b.data
     e := b.data[0]
     b.data = Array<Q>(1)
-    io.Println($e.back[1].n)
+    try io.Println($e.back[1].n)
 }

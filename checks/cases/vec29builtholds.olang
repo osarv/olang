@@ -13,5 +13,5 @@ fn main() ? {
     w.Push("a")
     h := wrap(w)
     for i in range 100 { w.Push("b") }
-    io.Println(h.a[0])
+    try io.Println(h.a[0])
 }

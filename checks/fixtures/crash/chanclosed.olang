@@ -8,7 +8,7 @@ fn main() ? {
     chan.Init(c)
     chan.Send(c, 1)
     chan.Close(c)
-    io.Println("got " $(try chan.Recv(c) catch default -1))
+    try io.Println("got " $(try chan.Recv(c) catch default -1))
     chan.Send(c, 2)
-    io.Println("not reached")
+    try io.Println("not reached")
 }

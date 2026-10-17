@@ -14,5 +14,5 @@ fn main() ? {
     n := w[0]
     for i in range 100 { w.Push(N(i)) }
     w = Vec<N&>()
-    io.Println($s " " $n.v)
+    try io.Println($s " " $n.v)
 }

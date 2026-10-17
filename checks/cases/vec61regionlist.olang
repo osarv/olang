@@ -20,5 +20,5 @@ fn main() ? {
     l.Push(s)
     c.items = List<String&>()
     churn()
-    io.Println(s)
+    try io.Println(s)
 }

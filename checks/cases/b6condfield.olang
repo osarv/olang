@@ -14,5 +14,5 @@ fn set(b mut Bag&, i I64) {
 fn main() ? {
     b mut Bag& = Bag()
     set(b, 1)
-    io.Println(b.last)
+    try io.Println(b.last)
 }

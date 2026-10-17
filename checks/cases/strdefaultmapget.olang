@@ -23,8 +23,8 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Node(1), Map<I64, mut Node&>())
-    io.Println($b)
+    try io.Println($b)
     t := churn(100)
     w := 0 if b.head.next == null else b.head.next.v
-    io.Println($w " " $t)
+    try io.Println($w " " $t)
 }

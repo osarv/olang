@@ -18,5 +18,5 @@ fn main() ? {
     for p in range passes {
         for x in l { total += x ^ p }
     }
-    io.Print($total "\n")
+    try io.Print($total "\n")
 }

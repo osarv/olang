@@ -11,5 +11,5 @@ fn main() ? {
     for i in range 3 { l.toks.Push(i) }
     G = l.toks.View()
     l.toks.Push(4)
-    io.Println($G[0])
+    try io.Println($G[0])
 }

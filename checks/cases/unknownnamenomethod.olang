@@ -6,5 +6,5 @@ type Ring struct() { n I64 }
 fn (r Ring&) At(i I64) I64 { return i }
 fn main() ? {
     u := t + 1
-    io.Println($u)
+    try io.Println($u)
 }

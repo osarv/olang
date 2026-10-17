@@ -11,5 +11,5 @@ fn r(n I64, name String&) I64 {
 }
 fn main() ? {
     d := Depth
-    io.Println($r(d, "x"))
+    try io.Println($r(d, "x"))
 }

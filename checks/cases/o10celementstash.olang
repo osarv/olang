@@ -14,5 +14,5 @@ fn main() ? {
         g.arr[0].n = i
         stash(g, h)
     }
-    io.Println($h.e.n)
+    try io.Println($h.e.n)
 }

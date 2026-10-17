@@ -6,5 +6,5 @@ fn main() ? {
     v.Push(1)
     it := v.Iter()
     v.Push(2)
-    io.Println($(try it.Next() catch default 0))
+    try io.Println($(try it.Next() catch default 0))
 }

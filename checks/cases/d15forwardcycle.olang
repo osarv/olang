@@ -4,4 +4,4 @@ import "std/io"
 A := B + 1
 B := C * 2
 C := A
-fn main() ? { io.Println($A) }
+fn main() ? { try io.Println($A) }

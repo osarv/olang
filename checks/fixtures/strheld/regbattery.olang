@@ -52,113 +52,113 @@ fn main() ? {
     {
         a := try mkR(1) catch default Res(2)
     }
-    io.Println("0: " $(Made - Gone))
+    try io.Println("0: " $(Made - Gone))
     {
         a2 := try mkR(-1) catch default Res(3)
     }
-    io.Println("1: " $(Made - Gone))
+    try io.Println("1: " $(Made - Gone))
     {
         b FRes& = try FRes(1) catch { unreachable }
     }
-    io.Println("2: " $(Made - Gone))
+    try io.Println("2: " $(Made - Gone))
     {
         b2 := try FRes(4) catch { unreachable }
     }
-    io.Println("3: " $(Made - Gone))
+    try io.Println("3: " $(Made - Gone))
     {
         b3 := id(try FRes(5) catch { unreachable })
     }
-    io.Println("4: " $(Made - Gone))
+    try io.Println("4: " $(Made - Gone))
     {
         d := id(id(Res(5)))
     }
-    io.Println("5: " $(Made - Gone))
+    try io.Println("5: " $(Made - Gone))
     {
         e := pick(Res(6), Res(7), c)
     }
-    io.Println("6: " $(Made - Gone))
+    try io.Println("6: " $(Made - Gone))
     {
         f := first(Res(8), Res(9))
     }
-    io.Println("7: " $(Made - Gone))
+    try io.Println("7: " $(Made - Gone))
     {
         g := Box(Res(10))
     }
-    io.Println("8: " $(Made - Gone))
+    try io.Println("8: " $(Made - Gone))
     {
         h := Pair(Res(11), 3)
     }
-    io.Println("9: " $(Made - Gone))
+    try io.Println("9: " $(Made - Gone))
     {
         i := Res(12) if c else (Res(13) if c else Res(14))
     }
-    io.Println("10: " $(Made - Gone))
+    try io.Println("10: " $(Made - Gone))
     {
         j := takeR(id(Res(15)) if c else Res(16))
     }
-    io.Println("11: " $(Made - Gone))
+    try io.Println("11: " $(Made - Gone))
     {
         k := retCond(c)
     }
-    io.Println("12: " $(Made - Gone))
+    try io.Println("12: " $(Made - Gone))
     {
         l := retMatch(1)
     }
-    io.Println("13: " $(Made - Gone))
+    try io.Println("13: " $(Made - Gone))
     {
         m := Map<I64, Res&>()
         m.Put(1, Res(17))
         m.Put(2, id(Res(18)))
     }
-    io.Println("14: " $(Made - Gone))
+    try io.Println("14: " $(Made - Gone))
     {
         n := Res&[Res(19), id(Res(20))]
     }
-    io.Println("15: " $(Made - Gone))
+    try io.Println("15: " $(Made - Gone))
     {
         o := Array<Res&>(3, Res(21))
     }
-    io.Println("16: " $(Made - Gone))
+    try io.Println("16: " $(Made - Gone))
     {
         r := List<Res&>()
         r.Push(Res(22) if c else Res(23))
     }
-    io.Println("17: " $(Made - Gone))
+    try io.Println("17: " $(Made - Gone))
     {
         join {
             spawn task(Res(24))
             spawn task(id(Res(25)))
         }
     }
-    io.Println("18: " $(Made - Gone))
+    try io.Println("18: " $(Made - Gone))
     {
         s Res& = Res(0)
         join { spawn s = mk(26) }
     }
-    io.Println("19: " $(Made - Gone))
+    try io.Println("19: " $(Made - Gone))
     {
         t := id(try mkR(-1) catch default Res(2))
     }
-    io.Println("20: " $(Made - Gone))
+    try io.Println("20: " $(Made - Gone))
     {
         u := (try mkR(-5) catch default Res(9)) if c else Res(10)
     }
-    io.Println("21: " $(Made - Gone))
+    try io.Println("21: " $(Made - Gone))
     {
         u2 := try mkV(-5) catch default Res(9)
     }
-    io.Println("22: " $(Made - Gone))
+    try io.Println("22: " $(Made - Gone))
     {
         v := $id(Res(30))
     }
-    io.Println("23: " $(Made - Gone))
+    try io.Println("23: " $(Made - Gone))
     {
         w := id(Res(31)).k
     }
-    io.Println("24: " $(Made - Gone))
+    try io.Println("24: " $(Made - Gone))
     {
         x := takeR(Pair(Res(32), 1).First)
     }
-    io.Println("25: " $(Made - Gone))
-    io.Println("made " $Made " gone " $Gone " twice " $Twice)
+    try io.Println("25: " $(Made - Gone))
+    try io.Println("made " $Made " gone " $Gone " twice " $Twice)
 }

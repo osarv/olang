@@ -13,5 +13,5 @@ type K struct(n I64) {
 }
 fn main() ? {
     k := K(7)
-    io.Println($k.r[1])
+    try io.Println($k.r[1])
 }

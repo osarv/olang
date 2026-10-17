@@ -60,5 +60,5 @@ fn main() ? {
     d := v.View()
     v.Grow()
     churn()
-    io.Println($d[0])
+    try io.Println($d[0])
 }

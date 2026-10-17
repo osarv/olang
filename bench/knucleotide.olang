@@ -49,17 +49,17 @@ fn counts(seq String&, k I64) Map<String&, I64>&seq {
 fn frequencies(seq String&, k I64) ? {
     m := counts(seq, k)
     if k == 1 {
-        for c in "acgt" { io.Print($c " " $(try m.Get(String(Char[c])) catch default 0) "\n") }
+        for c in "acgt" { try io.Print($c " " $(try m.Get(String(Char[c])) catch default 0) "\n") }
         return
     }
     for a in "acgt" {
-        for b in "acgt" { io.Print($a $b " " $(try m.Get(String(Char[a, b])) catch default 0) "\n") }
+        for b in "acgt" { try io.Print($a $b " " $(try m.Get(String(Char[a, b])) catch default 0) "\n") }
     }
 }
 
 fn occurrences(seq String&, run String&) ? {
     m := counts(seq, run.Len())
-    io.Print($(try m.Get(run) catch default 0) "\t" $run "\t(" $m.Len() " distinct)\n")
+    try io.Print($(try m.Get(run) catch default 0) "\t" $run "\t(" $m.Len() " distinct)\n")
 }
 
 fn main() ? {

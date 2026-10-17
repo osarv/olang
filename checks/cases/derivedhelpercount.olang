@@ -9,5 +9,5 @@ type Bag struct() {
 fn main() ? {
     bags := List<Bag&>()
     bags.Push(Bag())
-    io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
+    try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
 }

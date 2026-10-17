@@ -63,5 +63,5 @@ fn leak() mut Inner& {
 fn main() ? {
     x := leak()
     churn()
-    io.Println($x.k)
+    try io.Println($x.k)
 }

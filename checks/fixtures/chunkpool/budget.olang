@@ -52,7 +52,7 @@ fn main() ? {
     }
     afterTasks := rssKb()
     assert s == 1.0 + 32.0 + 2.0 + 200 * 2.0 and out[0] + out[1] + out[2] + out[3] == 24.0
-    io.Print($(afterPhase - before) " " $(afterBig - afterPhase) " " $(afterLoop - afterBig) " " $(afterTasks - afterLoop) "\n")
+    try io.Print($(afterPhase - before) " " $(afterBig - afterPhase) " " $(afterLoop - afterBig) " " $(afterTasks - afterLoop) "\n")
     assert afterPhase - before < 2048 and afterBig - afterPhase < 1024 and afterLoop - afterBig < 1024
     assert afterTasks - afterLoop < 2048
 }

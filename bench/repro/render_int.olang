@@ -15,5 +15,5 @@ fn main() ? {
         s := $(i * 7919 % 1000003)
         total += s.Len()
     }
-    io.Print($total "\n")
+    try io.Print($total "\n")
 }

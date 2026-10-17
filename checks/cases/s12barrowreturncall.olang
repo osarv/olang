@@ -15,4 +15,4 @@ fn b(t Tok) I32 {
     }
     return 0
 }
-fn main() ? { io.Println($b(Tok.Str)) }
+fn main() ? { try io.Println($b(Tok.Str)) }

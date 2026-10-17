@@ -9,5 +9,5 @@ fn main() ? {
     h := H()
     h.n = 3
     c := h
-    io.Println($c.n)
+    try io.Println($c.n)
 }

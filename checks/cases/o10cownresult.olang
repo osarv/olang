@@ -28,5 +28,5 @@ fn main() ? {
     h mut H& = H()
     h.bx = wrap(h.data)
     h.data = null
-    io.Println($h.bx.a[0])
+    try io.Println($h.bx.a[0])
 }

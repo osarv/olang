@@ -27,9 +27,9 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     b := Bag(Node(1))
-    io.Println($b)
+    try io.Println($b)
     t := churn(200)
     l := List<Node&>()
     for i in range 50 { l.Push(Node(i)) }
-    io.Println($b.head.next.v " " $t)
+    try io.Println($b.head.next.v " " $t)
 }

@@ -45,8 +45,8 @@ fn mkHold() Hold {
 fn first() I64 { return mk().x.x.x.x.x.x.x.x.toks[0] }
 Baked I64 = first()
 fn main() ? {
-    io.Println("baked " $Baked)
+    try io.Println("baked " $Baked)
     r := mk()
     h := mkHold()
-    io.Println($r.x.x.x.x.x.x.x.x.toks[0] " " $h.x.x.x.x.x.x.x.x.x.toks[0])
+    try io.Println($r.x.x.x.x.x.x.x.x.toks[0] " " $h.x.x.x.x.x.x.x.x.x.toks[0])
 }

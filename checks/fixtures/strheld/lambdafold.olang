@@ -14,5 +14,5 @@ fn (b Bag&) Str() String {
 fn main() ? {
     b := Bag(1)
     b.l.Push(4)
-    io.Println($b)
+    try io.Println($b)
 }

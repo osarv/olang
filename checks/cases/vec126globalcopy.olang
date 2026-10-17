@@ -10,5 +10,5 @@ fn main() ? {
     G.Push(3)
     GL.toks.Push(4)
     x := G
-    io.Println($x.Len() " " $G.View()[0] " " $GL.toks.Len())
+    try io.Println($x.Len() " " $G.View()[0] " " $GL.toks.Len())
 }

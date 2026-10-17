@@ -36,5 +36,5 @@ fn main() ? {
     try run(m)
     churn()
     b := try m.Get(1)
-    io.Println($b.c.kept.c.v)
+    try io.Println($b.c.kept.c.v)
 }

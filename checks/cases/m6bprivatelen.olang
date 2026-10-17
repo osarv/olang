@@ -9,5 +9,5 @@ type Node struct(v I32) {
 fn (n Node&) len() I32 { return 1 }
 fn main() ? {
     n := Node(1)
-    io.Println($n.len())
+    try io.Println($n.len())
 }

@@ -13,5 +13,5 @@ fn main() ? {
         q mut Nd& = n if i == 1 else Nd(7)
         q.next = Nd(100 + i)
     }
-    io.Println($n.next.v)
+    try io.Println($n.next.v)
 }

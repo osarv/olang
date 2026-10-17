@@ -20,5 +20,5 @@ fn main() ? {
     fs := List<fn() I64>()
     fs.Push(fn() I64 { return b.o.deep.text.Len() })
     v.o = null
-    io.Println($fs[0]())
+    try io.Println($fs[0]())
 }

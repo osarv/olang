@@ -20,13 +20,13 @@ fn f(c CB&, n I64) String&c {
     if n == 0 { return String(c.data) }
     return h(c).Trim()
 }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := f(c, 1)
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    io.Println(t)
+    try io.Println(t)
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
 }

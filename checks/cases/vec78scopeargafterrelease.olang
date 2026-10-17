@@ -11,7 +11,7 @@ fn main() ? {
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     d := mk&x(5)
     churn()
-    io.Println(d)
+    try io.Println(d)
 }
 fn churn() I64 {
     t := 0

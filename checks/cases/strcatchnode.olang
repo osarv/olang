@@ -17,5 +17,5 @@ fn (b Bag&) Str() String {
     return $x.v
 }
 fn main() ? {
-    io.Println($Bag(Node(1, Node(5, null))))
+    try io.Println($Bag(Node(1, Node(5, null))))
 }

@@ -27,5 +27,5 @@ fn main() ? {
     q.lx = Lexer()
     for i in range 3 { q.lx.toks.Push($(i + 7) "-another-lexer's-word-overwriting") }
     churn()
-    io.Println(w[0])
+    try io.Println(w[0])
 }

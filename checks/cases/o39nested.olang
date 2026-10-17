@@ -19,5 +19,5 @@ fn main() ? {
     s.cur.sock = Sock(5)
     k := s.cur.sock
     s.cur = null
-    io.Println($k.n)
+    try io.Println($k.n)
 }

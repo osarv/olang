@@ -10,5 +10,5 @@ fn validate(text String&) List<String&> ? Bad {
 fn main() ? {
     empty := List<String&>()
     n := (try validate("x") catch default empty).Len()
-    io.Println($n)
+    try io.Println($n)
 }

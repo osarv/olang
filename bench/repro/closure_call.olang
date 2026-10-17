@@ -20,5 +20,5 @@ fn main() ? {
     for p in range passes {
         total += a.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })        # captures p: indirect call
     }
-    io.Print($total "\n")
+    try io.Print($total "\n")
 }

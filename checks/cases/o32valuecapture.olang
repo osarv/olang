@@ -23,5 +23,5 @@ fn (b Buf&) copy() Buf {
 fn main() ? {
     a := Buf()
     f := fn() I64 { return a.n }
-    io.Println($f())
+    try io.Println($f())
 }

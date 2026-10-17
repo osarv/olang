@@ -9,18 +9,18 @@ fn main() ? {
     b := linalg.Matrix<F32>(3, 2)
     if which == "add" {
         c := a + b
-        io.Print($c.Rows)
+        try io.Print($c.Rows)
     } else if which == "matmul" {
         c := a @ a
-        io.Print($c.Rows)
+        try io.Print($c.Rows)
     } else if which == "gemm" {
         linalg.Gemm(a, a, false, b, false)
     } else if which == "caught" {
         c := try (a @ a) catch linalg.ShapeError.MISMATCH {
-            io.Print("caught\n")
+            try io.Print("caught\n")
             return
         }
-        io.Print($c.Rows)
+        try io.Print($c.Rows)
     }
-    io.Print("not reached\n")
+    try io.Print("not reached\n")
 }

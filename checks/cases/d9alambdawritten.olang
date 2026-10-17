@@ -4,5 +4,5 @@
 import "std/io"
 fn main() ? {
     a := Array<Array<I32, 2>>(3)
-    io.Println($a.Any(fn(x Array<I32, 2>) Bool { return x[0] == 5 }))
+    try io.Println($a.Any(fn(x Array<I32, 2>) Bool { return x[0] == 5 }))
 }

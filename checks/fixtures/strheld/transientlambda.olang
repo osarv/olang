@@ -9,4 +9,4 @@ type Bag struct(head Node&) {
 fn apply(f fn() I64) I64 { return f() }
 fn peek(n Node&) I64 { return apply(fn() I64 { return n.v }) }
 fn (b Bag&) Str() String { return "b" $peek(b.head) }
-fn main() ? { io.Println($Bag(Node(4))) }
+fn main() ? { try io.Println($Bag(Node(4))) }

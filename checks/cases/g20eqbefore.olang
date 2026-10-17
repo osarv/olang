@@ -7,5 +7,5 @@ fn (a K) Hash() I64 { return 0 }
 type Box<N K> struct() { x I32 }
 fn main() ? {
     a := Box<1>()
-    io.Println($a.x)
+    try io.Println($a.x)
 }

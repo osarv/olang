@@ -11,5 +11,5 @@ fn main() ? {
     r Lexer& = l
     d := r.toks.View()
     l.toks.Push(2)
-    io.Println($d[0])
+    try io.Println($d[0])
 }

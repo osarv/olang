@@ -62,5 +62,5 @@ fn rel(v mut Outer&, x Inner&) I64 {
 }
 fn main() ? {
     v := mkO(3)
-    io.Println($rel(v, v.First()))
+    try io.Println($rel(v, v.First()))
 }

@@ -13,5 +13,5 @@ fn main() ? {
     d := glib.G.Data
     f()
     churn()
-    io.Println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }

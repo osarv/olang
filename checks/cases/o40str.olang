@@ -23,5 +23,5 @@ fn (w W&) Str() String {
 fn main() ? {
     s := Server()
     w := W(s)
-    io.Println($w)
+    try io.Println($w)
 }

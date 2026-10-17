@@ -18,5 +18,5 @@ fn copyOut(src Box&) {
 fn main() ? {
     b := Box()
     copyOut(b)
-    io.Println($b.head.v)
+    try io.Println($b.head.v)
 }

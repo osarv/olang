@@ -9,7 +9,7 @@ fn main() ? {
     x := c.text
     defer {
         d mut String&x = $5 "-built-on-the-way-out"
-        io.Println(d)
+        try io.Println(d) catch io.IoError { }
     }
     c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
 }

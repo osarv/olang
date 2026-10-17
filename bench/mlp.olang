@@ -96,5 +96,5 @@ fn main() ? {
     for s in range steps { last = net.Step(x, labels, 0.05, threads) }
     per F64 = F64(time.Since(t0)) / F64(steps) / 1000.0
     perText := per.Fixed(1)
-    io.Print("loss " $first.Fixed(4) " -> " $last.Fixed(4) ", " $perText "us a step\n")
+    try io.Print("loss " $first.Fixed(4) " -> " $last.Fixed(4) ", " $perText "us a step\n")
 }

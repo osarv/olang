@@ -8,5 +8,5 @@ fn (a K) Eq(b K) Bool { return true }
 fn (a K) Hash() I64 { return 0 }
 fn main() ? {
     a := Box<1>()
-    io.Println($a.x)
+    try io.Println($a.x)
 }

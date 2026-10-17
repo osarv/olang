@@ -32,5 +32,5 @@ fn main() ? {
         c.text = $i "-replaced"
     }
     assert c.text == "2-replaced"
-    io.Println("ok")
+    try io.Println("ok")
 }

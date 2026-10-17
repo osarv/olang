@@ -45,5 +45,5 @@ fn main() ? {
     mode := args[1]
     depth := try args[2].ParseInt()
     times := try args[3].ParseInt()
-    io.Print($walk(depth, times, mode == "parentfirst") "\n")
+    try io.Print($walk(depth, times, mode == "parentfirst") "\n")
 }

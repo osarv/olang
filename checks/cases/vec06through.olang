@@ -7,5 +7,5 @@ fn main() ? {
     v.Push(4)
     d := firstPart(v)
     v.Push(5)
-    io.Println($d)
+    try io.Println($d)
 }

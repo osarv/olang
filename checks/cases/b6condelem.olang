@@ -8,5 +8,5 @@ fn main() ? {
         x String& = "w" $i
         keep = String&[x if i == 1 else outer]
     }
-    io.Println(keep[0])
+    try io.Println(keep[0])
 }

@@ -22,5 +22,5 @@ fn main() ? {
         c.a = Lexer(7)
         c.b = Lexer(8)
     }
-    io.Println(t.a.o.text)
+    try io.Println(t.a.o.text)
 }

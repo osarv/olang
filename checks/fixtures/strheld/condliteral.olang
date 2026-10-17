@@ -8,6 +8,6 @@ fn (b Bag&) Str() String {
     return $name
 }
 fn main() ? {
-    io.Println($Bag(""))
-    io.Println($Bag("x"))
+    try io.Println($Bag(""))
+    try io.Println($Bag("x"))
 }

@@ -30,5 +30,5 @@ fn main() ? {
     prev.more = take c.lx.toks
     c.lx = null
     churn()
-    io.Println(first.lx.more[0])
+    try io.Println(first.lx.more[0])
 }

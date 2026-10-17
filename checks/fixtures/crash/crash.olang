@@ -34,9 +34,9 @@ fn main() ? {
         case "deep" {
             n := try args[2].ParseInt() catch default 1000000 if args.Len() > 2 else 1000000
             os.RunOnStack(1 << 30, fn() { c.v = deep(n) + n })
-            io.Println("deep " $c.v)
+            try io.Println("deep " $c.v)
         }
         case "shallow" { c.v = deep(1000000) }
-        nomatch { io.Println("nothing") }
+        nomatch { try io.Println("nothing") }
     }
 }

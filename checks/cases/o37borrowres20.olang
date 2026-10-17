@@ -60,5 +60,5 @@ fn main() ? {
     e := v.First().deep
     v.o = null
     churn()
-    io.Println($e.n)
+    try io.Println($e.n)
 }

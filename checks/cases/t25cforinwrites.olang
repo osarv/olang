@@ -22,5 +22,5 @@ fn walk(hs List<Holder>&) I64 {
 fn main() ? {
     hs := List<Holder>()
     hs.Push(Holder())
-    io.Println($walk(hs))
+    try io.Println($walk(hs))
 }

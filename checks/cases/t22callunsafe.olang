@@ -17,5 +17,5 @@ fn (r R&) Call(n mut P&) I64 {
 }
 fn main() ? {
     p P& = P(4)
-    io.Println($applyRo(w, p) " " $applyRo(R(3), p))
+    try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
 }

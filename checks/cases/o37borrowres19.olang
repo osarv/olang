@@ -62,5 +62,5 @@ fn main() ? {
     f := get(v)
     x := take v.o
     churn()
-    io.Println($f.k)
+    try io.Println($f.k)
 }

@@ -15,5 +15,5 @@ fn f(h mut HB&, p mut Plain&) I64 {
 fn main() ? {
     h mut HB& = HB()
     h.buf = Array<Plain>(300, Plain(9))
-    io.Println($f(h, h.buf[3]))
+    try io.Println($f(h, h.buf[3]))
 }

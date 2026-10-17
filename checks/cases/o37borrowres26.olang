@@ -61,5 +61,5 @@ fn main() ? {
     g := fn() I64 { return f.k }
     v.o = null
     churn()
-    io.Println($g())
+    try io.Println($g())
 }

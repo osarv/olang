@@ -10,5 +10,5 @@ fn main() ? {
     x := c.text
     rel(c)
     d mut String&x = $5 "-new-text"
-    io.Println(d)
+    try io.Println(d)
 }

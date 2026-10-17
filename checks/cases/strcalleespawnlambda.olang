@@ -19,7 +19,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn peek(n Node&) I64 {
-    join { spawn fn() { io.Println($n.v) } }
+    join { spawn fn() { try io.Println($n.v) catch io.IoError { } } }
     return n.v
 }
 fn (b Bag&) Str() String {
@@ -29,5 +29,5 @@ fn main() ? {
     b := Bag(Node(4, null))
     s := $b
     churn()
-    io.Println(s)
+    try io.Println(s)
 }

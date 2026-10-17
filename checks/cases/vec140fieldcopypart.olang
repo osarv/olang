@@ -14,5 +14,5 @@ fn main() ? {
     e := t.a
     e.toks = Vec<I64>()
     e.n = 5
-    io.Println($t.a.toks[0] " " $e.n)
+    try io.Println($t.a.toks[0] " " $e.n)
 }

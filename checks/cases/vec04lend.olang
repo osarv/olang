@@ -8,5 +8,5 @@ fn grow(v mut Vec<I64>&, d Array<I64>&) I64 {
 fn main() ? {
     v := Vec<I64>()
     v.Push(4)
-    io.Println($grow(v, v.View()))
+    try io.Println($grow(v, v.View()))
 }

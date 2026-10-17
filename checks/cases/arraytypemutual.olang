@@ -8,5 +8,5 @@ type B Array<A&>
 fn main() ? {
     b B& = B(Array<A&>(0))
     a := A(Array<B&>(1, b))
-    io.Println($a.Len())
+    try io.Println($a.Len())
 }

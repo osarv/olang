@@ -9,5 +9,5 @@ type S struct(flag Bool = false) {
 
 fn main() ? {
     s := S()
-    if s.flag { io.Println("yes") }
+    if s.flag { try io.Println("yes") }
 }

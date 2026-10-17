@@ -12,6 +12,6 @@ fn main() ? {
     r I32 = 0
     try join {
         spawn r = try sq(-1)
-    } catch E { io.Println("failed") }
-    io.Println($r)
+    } catch E { try io.Println("failed") }
+    try io.Println($r)
 }

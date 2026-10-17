@@ -9,5 +9,5 @@ GB Box = Box(Array<I64>(3))
 G List<I64> = List<I64>()
 fn main() ? {
     y List<I64> = G
-    io.Println($y.Len())
+    try io.Println($y.Len())
 }

@@ -7,5 +7,5 @@ fn main() ? {
     z Array<I32, 2> = I32[1, 2]
     a := try z[7] catch default 0
     b := z[5]
-    io.Println($a $b)
+    try io.Println($a $b)
 }

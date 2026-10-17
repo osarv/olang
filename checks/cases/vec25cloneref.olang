@@ -19,11 +19,11 @@ fn main() ? {
     c.Push("x")
     for i in range 100 { w.Push("y") }
     churn()
-    io.Println($c)
+    try io.Println($c)
     ns := Vec<N&>()
     ns.Push(N(4))
     m := ns.Clone()
     ns.Push(N(5))
     churn()
-    io.Println($m.Len() " " $m[0].k " " $ns.Len())
+    try io.Println($m.Len() " " $m[0].k " " $ns.Len())
 }

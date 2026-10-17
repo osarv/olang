@@ -16,5 +16,5 @@ type Server struct() {
 fn mk(n I64) own mut Conn& { return Conn(n) }
 fn fdOf(c Conn&) I64 { return c.fd }
 fn main() ? {
-    io.Println($fdOf(mk(3)))
+    try io.Println($fdOf(mk(3)))
 }

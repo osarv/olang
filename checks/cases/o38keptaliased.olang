@@ -25,5 +25,5 @@ fn main() ? {
     gr mut Big& = g
     g.x = b
     v.o = null
-    io.Println($gr.x.o.k)
+    try io.Println($gr.x.o.k)
 }

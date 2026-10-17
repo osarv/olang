@@ -10,5 +10,5 @@ fn main() ? {
     join { spawn fill(b.names) }
     e := b.names[0]
     b.names = Array<String&>(1)
-    io.Println(e)
+    try io.Println(e)
 }

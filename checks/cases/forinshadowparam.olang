@@ -6,4 +6,4 @@ fn count(s I64, options Array<I64>&) I64 {
     for s in options { n += s }
     return n
 }
-fn main() ? { io.Println($count(1, I64[1, 2])) }
+fn main() ? { try io.Println($count(1, I64[1, 2])) }

@@ -23,5 +23,5 @@ type H struct(e E) {
 fn main() ? {
     h := H(E.A(P(42)))
     deep(50)
-    io.Println($h.keep.v)
+    try io.Println($h.keep.v)
 }

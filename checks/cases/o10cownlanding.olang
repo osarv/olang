@@ -30,5 +30,5 @@ fn main() ? {
         x := $i
         keep(h, mk(x))
     }
-    io.Println(h.k.t)
+    try io.Println(h.k.t)
 }
