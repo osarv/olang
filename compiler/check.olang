@@ -628,7 +628,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
         e typed.Expr&c = null
         v := c.fold(args[i])
         if v.Ok or c.litLike(args[i]) {
-            fl := v.Float if v.Ok else c.litFloat(args[i])
+            fl := v.IsFloat if v.Ok else c.litFloat(args[i])
             if i < ps.Len() { c.unify(ps[i], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
         } else {
             match args[i] {
@@ -1617,9 +1617,9 @@ fn (c mut Checker&) callOf(sp source.Span, t types.TypeId, target typed.Callee&c
 # ---- literals (L10-L14, T6, T6a, E4a) ----
 
 # a literal-only expression's value (E4a): an integer exactly, a float in F64; Ok false where it is no such expression
-type litv struct(Ok Bool, Float Bool, Big Bool, I I64, F F64) {
+type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
     Ok
-    Float
+    IsFloat
     Big        # an integer above I64's maximum: I holds a U64's bits (L10)
     I
     F
@@ -1662,11 +1662,11 @@ fn (c mut Checker&) fold(x ast.Expr&) litv {
             v := c.fold(y)
             if not v.Ok { return noLit() }
             if op == token.Tok.Minus {
-                if v.Float { return floatLit(-v.F) }
+                if v.IsFloat { return floatLit(-v.F) }
                 n, m := magOf(v)
                 return ofMag(not n, m) if m != U64(0) else intLit(0)
             }
-            if op == token.Tok.Tilde and not v.Float and not v.Big {
+            if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
                 r := intLit(~v.I)
                 r.Hex = v.Hex
                 return r
@@ -1677,10 +1677,10 @@ fn (c mut Checker&) fold(x ast.Expr&) litv {
             va := c.fold(a)
             vb := c.fold(b)
             if not va.Ok or not vb.Ok { return noLit() }
-            if va.Float or vb.Float {
+            if va.IsFloat or vb.IsFloat {
                 if va.Big or vb.Big { return noLit() }
-                fa := va.F if va.Float else F64(va.I)
-                fb := vb.F if vb.Float else F64(vb.I)
+                fa := va.F if va.IsFloat else F64(va.I)
+                fb := vb.F if vb.IsFloat else F64(vb.I)
                 if op == token.Tok.Plus { return floatLit(fa + fb) }
                 if op == token.Tok.Minus { return floatLit(fa - fb) }
                 if op == token.Tok.Star { return floatLit(fa * fb) }
@@ -1754,10 +1754,10 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     sp := x.Span()
     target := c.under(want)
     if not c.P.T.IsNumber(target) {
-        want = c.P.T.Prim("F64") if v.Float else c.P.T.Prim("U64") if v.Big else c.i64()
+        want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big else c.i64()
         target = want
     }
-    if v.Float {
+    if v.IsFloat {
         if not c.P.T.IsFloat(target) {
             c.err(sp, msgs.TypeMismatch(c.ty(want), "F64"))
             return c.unknown(sp)
@@ -1800,7 +1800,7 @@ fn intFits(tt types.Table&, v litv, t types.TypeId) Bool {
 fn (c mut Checker&) litFits(v litv, t types.TypeId) Bool {
     u := c.under(t)
     if not c.P.T.IsNumber(u) { return false }
-    if v.Float { return c.P.T.IsFloat(u) }
+    if v.IsFloat { return c.P.T.IsFloat(u) }
     if c.P.T.IsFloat(u) { return true }
     return intFits(c.P.T, v, u)
 }
@@ -2393,7 +2393,7 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     la := c.fold(a)
     lb := c.fold(b)
     # E4a, E6a: an integer division by a literal-only zero is an error wherever it is written
-    if (op == token.Tok.Slash or op == token.Tok.Percent) and lb.Ok and not lb.Float and not lb.Big and lb.I == 0 and not (la.Ok and la.Float) {
+    if (op == token.Tok.Slash or op == token.Tok.Percent) and lb.Ok and not lb.IsFloat and not lb.Big and lb.I == 0 and not (la.Ok and la.IsFloat) {
         c.err(c.opOf(b), msgs.DivideByZero())
         return c.unknown(sp)
     }
@@ -2629,7 +2629,7 @@ fn (c mut Checker&) litLike(x ast.Expr&) Bool {
 # whether a literal-like expression gives a float
 fn (c mut Checker&) litFloat(x ast.Expr&) Bool {
     v := c.fold(x)
-    if v.Ok { return v.Float }
+    if v.Ok { return v.IsFloat }
     match x {
         case ast.Expr.Paren(_, y) { return c.litFloat(y) }
         case ast.Expr.Cond(_, a, _, b) { return c.litFloat(a) or c.litFloat(b) }
@@ -3476,7 +3476,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
         e typed.Expr&c = null
         v := c.fold(args[i])
         if v.Ok or c.litLike(args[i]) {
-            fl := v.Float if v.Ok else c.litFloat(args[i])
+            fl := v.IsFloat if v.Ok else c.litFloat(args[i])
             if i < ps.Len() { c.unify(ps[i], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
         } else {
             match args[i] {
@@ -3612,7 +3612,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         } else {
             v := c.fold(args[i])
             if v.Ok or c.litLike(args[i]) {
-                fl := v.Float if v.Ok else c.litFloat(args[i])
+                fl := v.IsFloat if v.Ok else c.litFloat(args[i])
                 if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
             } else {
                 match args[i] {
@@ -6279,7 +6279,7 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     vfrom := c.exprs.Len()
     for a in rargs {
         fa := c.fold(a)
-        if fa.Ok and fa.Float {
+        if fa.Ok and fa.IsFloat {
             c.err(a.Span(), msgs.RangeNotInt("F64"))
             return null
         }
