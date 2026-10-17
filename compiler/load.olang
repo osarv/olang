@@ -76,7 +76,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
 # repositories; Names and Diags the compilation's
-type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&,
+type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&
                    Diags mut diag.Diagnostics&) {
     Std
     Consts
@@ -790,7 +790,7 @@ fn (l Loader&) Graph() String {
 fn testLoader(lock String&) Loader {
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names(),
+    return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names()
                   diag.Diagnostics(false))
 }
 
@@ -889,7 +889,7 @@ test "a remote import is fetched, locked, and its relative imports stay inside i
     write(repo, "part/inner.olang", "import \"../lib\"\n")
     ok := git(repo, String&["git", "init", "-q"]) and
           git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
-          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit",
+          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit"
                             "-q", "-m", "x"])
     if not ok { return }   # no git here: nothing to fetch with
     write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")

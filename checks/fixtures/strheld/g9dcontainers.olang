@@ -6,12 +6,12 @@ type Res struct(k I64) {
     k
     Made++
 } destruct { Gone++ }
-fn mk(k <K>, v <V>) Map<K, V> {
+fn mk<K, V>(k K, v V) Map<K, V> {
     m := Map<K, V>()
     m.Put(k, v)
     return m
 }
-fn lst(v <V>) List<V> {
+fn lst<V>(v V) List<V> {
     l := List<V>()
     l.Push(v)
     return l

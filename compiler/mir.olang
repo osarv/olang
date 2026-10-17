@@ -309,7 +309,7 @@ type Callee enum {
 # (HasDest false: dropped), the block it continues at, and for a fallible callee the local its error code is put in -
 # under the callee's own error list (R6) - and the block that dispatches it (Err NoBlock for an infallible one).
 # Arguments are evaluated before the terminator, left to right (S4): an operand here is already a value
-type Call struct(Target Callee, Args Range, Scopes Range, Dest Place, HasDest Bool, Ok BlockId, Code LocalId,
+type Call struct(Target Callee, Args Range, Scopes Range, Dest Place, HasDest Bool, Ok BlockId, Code LocalId
                  Err BlockId) {
     Target
     Args
@@ -409,7 +409,7 @@ fn (f mut Fn&) AddTemp(ty types.TypeId, sp source.Span) LocalId {
     return f.AddLocal(Local(source.NameId(0), sp, ty, LocalKind.Temp, ScopeRef.Frame))
 }
 
-fn (f mut Fn&) AddScope(kind ScopeKind, parent ScopeId, block typed.BlockId, sp source.Span,
+fn (f mut Fn&) AddScope(kind ScopeKind, parent ScopeId, block typed.BlockId, sp source.Span
                         errors types.ListId = types.ListId(0)) ScopeId {
     f.Scopes.Push(ScopeInfo(kind, parent, block, sp, errors))
     return ScopeId(I32(f.Scopes.Len() - 1))
@@ -1226,7 +1226,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
     if a == types.UnknownT { return types.UnknownT }
     ra := t.Repr(a)
     match op {
-        case typed.PrimOp.Neg, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div,
+        case typed.PrimOp.Neg, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div
              typed.PrimOp.Rem {
             if not t.IsNumber(ra) { v.bad($short($op) " of a " $v.canon(a)) }
             v.sameArgs(op, r, ty)
@@ -2122,7 +2122,7 @@ fn addFn(t mut types.Table&) Fn {
     f.Locals[1] = Local(t.Names.Intern("b"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
     s := f.AddLocal(Local(t.Names.Intern("s"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
     b0 := BlockId(0)
-    f.Add(b0, Stmt.Assign(Sp0, L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Operand[Operand.Copy(L(LocalId(0))),
+    f.Add(b0, Stmt.Assign(Sp0, L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Operand[Operand.Copy(L(LocalId(0)))
                                                                                         Operand.Copy(L(LocalId(1)))]))))
     f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
     f.End(b0, Term.Return(Sp0, Operand.Copy(L(s))))
@@ -2157,14 +2157,14 @@ fn loopFn(t mut types.Table&) Fn {
     head, turn, next, exit, failed := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
     f.Add(BlockId(0), Stmt.Assign(Sp0, L(i), Rvalue.Use(Operand.Const(i64, 0))))
     f.End(BlockId(0), Term.Goto(head))
-    f.Add(head, Stmt.Assign(Sp0, L(c), Rvalue.Prim(typed.PrimOp.Lt, types.BoolT,
+    f.Add(head, Stmt.Assign(Sp0, L(c), Rvalue.Prim(typed.PrimOp.Lt, types.BoolT
                                                    f.Args(Operand[Operand.Copy(L(i)), Operand.Copy(L(n))]))))
     f.End(head, Term.Branch(Operand.Copy(L(c)), turn, exit))
     f.Add(turn, Stmt.Open(Sp0, body))
-    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Operand[Operand.Copy(L(i))]), Empty,
+    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Operand[Operand.Copy(L(i))]), Empty
                            L(r), true, next, code, failed))
     f.End(turn, Term.Call(Sp0, call))
-    f.Add(next, Stmt.Assign(Sp0, L(i), Rvalue.Prim(typed.PrimOp.Add, i64,
+    f.Add(next, Stmt.Assign(Sp0, L(i), Rvalue.Prim(typed.PrimOp.Add, i64
                                                    f.Args(Operand[Operand.Copy(L(i)), Operand.Const(i64, 1)]))))
     f.Add(next, Stmt.Close(Sp0, body))
     f.End(next, Term.Goto(head))
@@ -2283,8 +2283,8 @@ test "a malformed function: every malformation is caught" {
     expect(t, f17, "bb0[1]: an own slot given a borrow, not an owner")
     # a check written as an operation; a switch with a value twice
     f18 := addFn(t)
-    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.InRange, i32,
-                                         f18.Args(Operand[Operand.Copy(L(LocalId(0))), Operand.Const(i32, 0),
+    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.InRange, i32
+                                         f18.Args(Operand[Operand.Copy(L(LocalId(0))), Operand.Const(i32, 0)
                                                           Operand.Const(i32, 4)])))
     expect(t, f18, "InRange is a check: a test and a branch in MIR")
     f19 := addFn(t)
@@ -2295,13 +2295,13 @@ test "a malformed function: every malformation is caught" {
     f20 := addFn(t)
     b20 := f20.NewBlock()
     f20.Blocks[0].Stmts.Truncate(2)
-    k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Operand[Operand.Const(i64, 1)]), Empty,
+    k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Operand[Operand.Const(i64, 1)]), Empty
                             L(LocalId(2)), true, b20, NoLocal, NoBlock))
     f20.End(b0, Term.Call(Sp0, k20))
     f20.Add(b20, Stmt.Close(Sp0, ScopeId(0)))
     f20.End(b20, Term.Raise(Sp0, Operand.Const(i32, 65536)))
     got20 := f20.Verify(t)
-    for w in String&["argument 0 is a I64, where a I32 is wanted", "a call that can fail with no error edge",
+    for w in String&["argument 0 is a I64, where a I32 is wanted", "a call that can fail with no error edge"
                      "a raise in a function that cannot fail"] {
         assert (try got20.Find(w) catch default -1) >= 0, got20
     }
@@ -2310,8 +2310,8 @@ test "a malformed function: every malformation is caught" {
     b24, e24 := f24.NewBlock(), f24.NewBlock()
     f24.Blocks[0].Stmts.Truncate(2)
     c24 := f24.AddTemp(I32T, Sp0)
-    k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Operand[Operand.Const(i32, 1),
-                                                                                       Operand.Const(i32, 2)]),
+    k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Operand[Operand.Const(i32, 1)
+                                                                                       Operand.Const(i32, 2)])
                             Empty, L(LocalId(2)), true, b24, c24, e24))
     f24.End(b0, Term.Call(Sp0, k24))
     f24.Add(b24, Stmt.Close(Sp0, ScopeId(0)))

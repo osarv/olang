@@ -612,34 +612,34 @@ Prelude := (
 # the targets: what a scenario declares, and what it returns (the last, a Str scenario, declares its own - strScenario)
 Targets I64 = 13
 Decls := String&[
-    "x := Node(1)",
-    "w := W(Box())",
-    "l := List<mut Node&>()\n    l.Push(Node(1))",
-    "m := Map<I64, mut Node&>()",
-    "a := Array<mut Node&>(4)\n    a[0] = Node(1)",
-    "bag := Bag()\n    bag.boxes.Push(Box())\n    bag.cells.Push(Cell())\n    bag.grid.Push(List<Cell>())\n    bag.grid[0].Push(Cell())",
-    "e := E.A(Box())",
-    "l := mkList2(1)",
-    "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)",
-    "",                                    # a global, declared before the function
-    "",                                    # a node a callee built and returned
-    "h := OHold()",                        # a holder of owned objects (§8.8)
-    "",                                    # a Str scenario
+    "x := Node(1)"
+    "w := W(Box())"
+    "l := List<mut Node&>()\n    l.Push(Node(1))"
+    "m := Map<I64, mut Node&>()"
+    "a := Array<mut Node&>(4)\n    a[0] = Node(1)"
+    "bag := Bag()\n    bag.boxes.Push(Box())\n    bag.cells.Push(Cell())\n    bag.grid.Push(List<Cell>())\n    bag.grid[0].Push(Cell())"
+    "e := E.A(Box())"
+    "l := mkList2(1)"
+    "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)"
+    ""                                    # a global, declared before the function
+    ""                                    # a node a callee built and returned
+    "h := OHold()"                        # a holder of owned objects (§8.8)
+    ""                                    # a Str scenario
 ]
 Checks := String&[
-    "chain(x)",
-    "chain(w.b.head)",
-    "sumList(l)",
-    "sumMap(m)",
-    "sumArr(a)",
-    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0])",
-    "sumE(e)",
-    "sumList(l)",
-    "chain(t.items[0]) * 7 + chain(t.items[1])",
-    "",
-    "chain(x)",
-    "ohash(h)",
-    "",
+    "chain(x)"
+    "chain(w.b.head)"
+    "sumList(l)"
+    "sumMap(m)"
+    "sumArr(a)"
+    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0])"
+    "sumE(e)"
+    "sumList(l)"
+    "chain(t.items[0]) * 7 + chain(t.items[1])"
+    ""
+    "chain(x)"
+    "ohash(h)"
+    ""
 ]
 
 type SG struct(seed U64) {
@@ -1093,8 +1093,8 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     field := "    y String&p = $n \"-new-text-in-p\"\n"
     if k == 2 { field = "    y := " $mkt "&p(n)\n" }
     if k == 4 { field = "    y String& = $n \"-new-text-in-the-instance\"\n" }
-    g.addHelper("fn " $mkt "(n I64) String& { return $n \"-made-in-p\" }\ntype " $ty " struct(p String&, n I64) {\n" $field
-                "}\nfn " $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n")
+    g.addHelper(("fn " $mkt "(n I64) String& { return $n \"-made-in-p\" }\ntype " $ty " struct(p String&, n I64) {\n" $field
+                "}\nfn " $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n"))
     make := $ty "(" $tt ", " $v " + i)" if k != 1 else $mkh "(" $tt ", " $v " + i)"
     use := $ind $a ".next = Node(" $hh ".y.Len() + I64(" $hh ".y[0]))\n"
     if k == 3 {    # the legal side: read where the argument lives
@@ -1119,8 +1119,8 @@ fn (g mut SG&) vec5Op(h String&, ind String&, v I64, k I64) String& {
     if k <= 2 {
         ty := g.name("v5h")
         mkh := g.name("v5m")
-        g.addHelper("type " $ty " struct(p String&, n I64) {\n    y String&p = $n \"-new-text-in-the-region\"\n}\nfn " $mkh "(p String&, n I64) "
-                    $ty " { return " $ty "(p, n) }\n")
+        g.addHelper(("type " $ty " struct(p String&, n I64) {\n    y String&p = $n \"-new-text-in-the-region\"\n}\nfn " $mkh "(p String&, n I64) "
+                    $ty " { return " $ty "(p, n) }\n"))
         read := $ind $x " := " $d ".y.Len() + I64(" $d ".y[0])\n"
         if k == 0 { return $ind "{\n" $ind $d " := " $ty "(" $h ".text, " $v ")\n" $rel $read $use $ind "}\n" }      # refused
         if k == 1 { return $ind "{\n" $ind $d " := " $mkh "(" $h ".text, " $v ")\n" $rel $read $use $ind "}\n" }     # refused
@@ -1170,9 +1170,9 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
         ty := g.name("V2L")
         gr := g.name("v2g")
         rs := g.name("v2r")
-        g.addHelper("type " $ty " struct(n I64) {\n    n\n    toks Vec<I64> = Vec<I64>()\n}\n" "fn (l mut " $ty "&) " $gr
+        g.addHelper(("type " $ty " struct(n I64) {\n    n\n    toks Vec<I64> = Vec<I64>()\n}\n" "fn (l mut " $ty "&) " $gr
                     "(k I64) { for i in range k { l.toks.Push(i * 3 + l.n) } }\n" "fn (l mut " $ty "&) " $rs
-                    "() { l.toks = Vec<I64>() }\n")
+                    "() { l.toks = Vec<I64>() }\n"))
         mk := $ind $l " := " $ty "(" $v ")\n" $ind $l "." $gr "(3)\n"
         if k == 0 {    # a view kept across a push through a method (refused: O39)
             return ($ind "{\n" $mk $ind $d " := " $l ".toks.View()\n" $ind $l "." $gr "(40)\n" $ind "churn()\n" $ind $x " := " $d
@@ -1197,8 +1197,8 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
     if k <= 7 {
         tk := g.name("V2T")
         ty := g.name("V2W")
-        g.addHelper("type " $tk " struct(text String&, n I64) {\n    text\n    n\n}\n" "type " $ty " struct() {\n    words Vec<" $tk
-                    "> = Vec<" $tk ">()\n}\n")
+        g.addHelper(("type " $tk " struct(text String&, n I64) {\n    text\n    n\n}\n" "type " $ty " struct() {\n    words Vec<" $tk
+                    "> = Vec<" $tk ">()\n}\n"))
         sum := ($ind $x " := 0\n" $ind "for " $e " in " $l ".words { " $x " = " $x " * 31 + " $e ".text.Len() + I64(" $e ".text[0]) + "
                 $e ".n }\n")
         if k == 5 {    # given a loop turn's text (refused: C2d)
@@ -1233,9 +1233,9 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
         lf := g.name("V2F")
         inn := g.name("V2I")
         ot := g.name("V2U")
-        g.addHelper("type " $lf " struct(n I64) {\n    n\n    text String& = \"leaf\" $n\n}\n" "type " $inn " struct(k I64) {\n    k\n"
+        g.addHelper(("type " $lf " struct(n I64) {\n    n\n    text String& = \"leaf\" $n\n}\n" "type " $inn " struct(k I64) {\n    k\n"
                     "    deep own mut " $lf "& = " $lf "(k * 10)\n}\n" "type " $ot " struct() {\n    o own mut " $inn "& = " $inn "(1)\n}\n"
-                    "fn (x " $ot "&) First() " $inn "&x { return x.o }\n" "fn (x " $ot "&) Deep() " $lf "&x { return x.First().deep }\n")
+                    "fn (x " $ot "&) First() " $inn "&x { return x.o }\n" "fn (x " $ot "&) Deep() " $lf "&x { return x.First().deep }\n"))
         if k == 10 {    # used after its holder's release (refused: O39)
             return ($ind "{\n" $ind $l " := " $ot "()\n" $ind $d " := " $l ".Deep()\n" $ind $l ".o = " $inn "(" $v ")\n" $ind "churn()\n"
                     $ind $x " := " $d ".text.Len() + " $d ".n\n" $use $ind "}\n")
@@ -1246,8 +1246,8 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
     if k <= 13 {
         q := g.name("V2Q")
         b := g.name("V2B")
-        g.addHelper("type " $q " struct(s String&, n I64) {\n    s\n    n\n    arr Array<I64, 4> = Array<I64, 4>()\n}\n" "type " $b
-                    " struct() {\n    data own mut Array<" $q ">& = null\n}\n")
+        g.addHelper(("type " $q " struct(s String&, n I64) {\n    s\n    n\n    arr Array<I64, 4> = Array<I64, 4>()\n}\n" "type " $b
+                    " struct() {\n    data own mut Array<" $q ">& = null\n}\n"))
         mk := ($ind $l " := " $b "()\n" $ind $l ".data = Array<" $q ">(3)\n" $ind "for i in range 3 { " $l ".data[i] = " $q "(\"q\" $(i + "
                $v "), i) }\n")
         if k == 12 {    # an element copied out, kept across the buffer's replacement (accepted)
@@ -1262,8 +1262,8 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
         # vec6 R1: a Vec field of an OWNED object keeps its words in that object's region
         lx := g.name("V6L")
         hp := g.name("V6P")
-        g.addHelper("type " $lx " struct() {\n    toks Vec<String&> = Vec<String&>()\n    more Vec<String&> = Vec<String&>()\n}\n" "type "
-                    $hp " struct() {\n    lx own mut " $lx "& = null\n}\n")
+        g.addHelper(("type " $lx " struct() {\n    toks Vec<String&> = Vec<String&>()\n    more Vec<String&> = Vec<String&>()\n}\n" "type "
+                    $hp " struct() {\n    lx own mut " $lx "& = null\n}\n"))
         p := g.name("p")
         q := g.name("q")
         mk := ($ind $p " := " $hp "()\n" $ind $p ".lx = " $lx "()\n" $ind "for i in range 3 { " $p ".lx.toks.Push($(i + " $v
@@ -1291,9 +1291,9 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
         lx := g.name("V7L")
         hp := g.name("V7P")
         gt := g.name("v7lx")
-        g.addHelper("type " $lx " struct() {\n    toks Vec<String&> = Vec<String&>()\n    more Vec<String&> = Vec<String&>()\n}\n"
+        g.addHelper(("type " $lx " struct() {\n    toks Vec<String&> = Vec<String&>()\n    more Vec<String&> = Vec<String&>()\n}\n"
                     "type " $hp " struct() {\n    lx own mut " $lx "& = null\n    next mut " $hp "& = null\n}\n" "fn (p mut " $hp "&) "
-                    $gt "() mut " $lx "&p { return p.lx }\n")
+                    $gt "() mut " $lx "&p { return p.lx }\n"))
         a := g.name("a")
         c := g.name("c")
         mk := ($ind $a " mut " $hp "& = " $hp "()\n" $ind $a ".lx = " $lx "()\n" $ind $a ".next = " $hp "()\n" $ind $a ".next.lx = "
@@ -1346,8 +1346,8 @@ fn (g mut SG&) vec2aOp(h String&, ind String&, v I64, k I64) String& {
         # vec6 L1: a borrowed copy's owning field given an owner (refused: O32)
         ty := g.name("V6C")
         two := g.name("V6T")
-        g.addHelper("type " $ty " struct(n I64) {\n    n\n    toks Vec<I64> = Vec<I64>()\n}\n" "type " $two " struct() {\n    a " $ty
-                    " = " $ty "(1)\n}\n")
+        g.addHelper(("type " $ty " struct(n I64) {\n    n\n    toks Vec<I64> = Vec<I64>()\n}\n" "type " $two " struct() {\n    a " $ty
+                    " = " $ty "(1)\n}\n"))
         return ($ind "{\n" $ind $l " := " $two "()\n" $ind "for i in range 3 {\n" $ind "    " $d " := " $l "\n" $ind "    " $d ".a = " $ty
                 "(" $v " + i)\n" $ind "}\n" $ind "churn()\n" $ind $x " := " $l ".a.n\n" $use $ind "}\n")
     }
@@ -1429,9 +1429,9 @@ fn (g mut SG&) ownOp(h String&, ind String&) String& {
     }
     if k == 23 {    # ...from below a parameter into an owner local of its reach, in a helper (O39: refused)
         f := g.name("ocross")
-        g.addHelper("fn " $f "(p mut OHold&) I64 {\n    if p.cur == null or p.other == null { return 0 }\n    o own mut ONode& = take p.other\n"
+        g.addHelper(("fn " $f "(p mut OHold&) I64 {\n    if p.cur == null or p.other == null { return 0 }\n    o own mut ONode& = take p.other\n"
                     "    b := p.cur\n    o.sub = take p.cur\n    o.sub = null\n    churn()\n    t := onode(b)\n    p.other = take o\n"
-                    "    return t\n}\n")
+                    "    return t\n}\n"))
         return $ind $c " = ONode(" $f "(" $h ") % 997 + " $v ")\n"
     }
     if k == 24 {    # a task borrowing through the holder, synchronised, while the spawner releases (O41: refused)
@@ -1775,8 +1775,8 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
         ix := g.name("OIx")
         vw := g.name("oix")
         vv := g.name("oivw")
-        g.addHelper("type " $ix " Array<I64>\n" "fn " $vw "(h OHold&) " $ix "&h { return " $ix "(h.buf) }\n"
-                    "fn " $vv "(v Vec<I64>&) " $ix "&v { return " $ix "(v.View()) }\n")
+        g.addHelper(("type " $ix " Array<I64>\n" "fn " $vw "(h OHold&) " $ix "&h { return " $ix "(h.buf) }\n"
+                    "fn " $vv "(v Vec<I64>&) " $ix "&v { return " $ix "(v.View()) }\n"))
         mk := $ind $h ".buf = Array<I64>(4, " $v ")\n" $ind $h ".buf[2] = " $v " + 5\n"
         if k == 12 {
             return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $h ".buf = null\n" $ind "churn()\n" $ind $x " := " $s
@@ -1786,8 +1786,8 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
         w := g.name("w")
         if k == 13 {    # (through a Vec parameter: the review's f1b, where the owner's own structure does not catch it)
             gr := g.name("oigr")
-            g.addHelper("fn " $gr "(w mut Vec<I64>&) I64 {\n    d := " $vv "(w)\n    for i in range 40 { w.Push(i) }\n"
-                        "    churn()\n    return d[0]\n}\n")
+            g.addHelper(("fn " $gr "(w mut Vec<I64>&) I64 {\n    d := " $vv "(w)\n    for i in range 40 { w.Push(i) }\n"
+                        "    churn()\n    return d[0]\n}\n"))
             return ($ind "{\n" $ind $w " := Vec<I64>()\n" $ind $w ".Push(" $v ")\n" $ind $x " := " $gr "(" $w ")\n" $use $ind
                     "}\n")
         }
@@ -1804,8 +1804,8 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
         vw := g.name("ovw")
         sl := g.name("osl")
         ps := g.name("ops")
-        g.addHelper("fn " $vw "(h OHold&) Array<I64>&h { return h.buf }\n" "fn " $sl "(h OHold&) Array<I64>&h { return h.buf[1:3] }\n"
-                    "fn " $ps "(h OHold&) Array<I64>&h { return " $vw "(h) }\n")
+        g.addHelper(("fn " $vw "(h OHold&) Array<I64>&h { return h.buf }\n" "fn " $sl "(h OHold&) Array<I64>&h { return h.buf[1:3] }\n"
+                    "fn " $ps "(h OHold&) Array<I64>&h { return " $vw "(h) }\n"))
         f := $vw if k == 0 else ($sl if k == 1 else $ps)
         mk := $ind $h ".buf = Array<I64>(4, " $v ")\n" $ind $h ".buf[2] = " $v " + 5\n"
         if k == 3 {    # used after the buffer is released (refused: O39)
@@ -1830,10 +1830,10 @@ fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
         ht := g.name("OHT")
         pm := g.name("opm")
         st := "    a[0] = $k\n" if k == 7 else ""
-        g.addHelper("type " $ht " struct() {\n    names own mut Array<String&>&\n}\n" "fn " $pm "(a mut Array<String&>&, k I64) {\n"
+        g.addHelper(("type " $ht " struct() {\n    names own mut Array<String&>&\n}\n" "fn " $pm "(a mut Array<String&>&, k I64) {\n"
                     "    t := a[0]\n    a[0] = a[a.Len() - 1]\n    a[a.Len() - 1] = t\n    a.Reverse()\n"
                     "    a.Sort(fn(p String&, q String&) Bool { return p < q })\n"
-                    $st "}\n")
+                    $st "}\n"))
         t := g.name("t")
         y := g.name("y")
         return ($ind "{\n" $ind $t " mut " $ht "& = " $ht "()\n" $ind $t ".names = Array<String&>(5)\n" $ind "for i in range 5 { " $t
@@ -1876,18 +1876,18 @@ fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
         rc := g.name("ORC")
         ra := g.name("ora")
         rb := g.name("orb")
-        g.addHelper("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
+        g.addHelper(("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
                     "fn " $ra "(c " $rc "&, n I64) String&c {\n    if n == 0 { return String(c.data) }\n"
                     "    if n == 1 { return " $rb "(c, n - 1) }\n    return c.text\n}\n"
-                    "fn " $rb "(c " $rc "&, n I64) String&c { return " $ra "(c, n) }\n")
+                    "fn " $rb "(c " $rc "&, n I64) String&c { return " $ra "(c, n) }\n"))
         c := g.name("c")
         t := g.name("t")
         mk := $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n"
         if k == 0 {    # used after the String it borrows is released, through a reference parameter - where nothing but the
                        # loan's type meets the release (refused: O39)
             us := g.name("ous")
-            g.addHelper("fn " $us "(c mut " $rc "&) I64 {\n    t := " $rb "(c, 2)\n    c.text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n"
-                        "    churn()\n    return t.Len() + I64(t[0])\n}\n")
+            g.addHelper(("fn " $us "(c mut " $rc "&) I64 {\n    t := " $rb "(c, 2)\n    c.text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n"
+                        "    churn()\n    return t.Len() + I64(t[0])\n}\n"))
             return $ind "{\n" $mk $ind $x " := " $us "(" $c ")\n" $use $ind "}\n"
         }
         return ($ind "{\n" $mk $ind $t " := " $rb "(" $c ", 2)\n" $ind $x " := " $t ".Len() + I64(" $t "[0]) + " $rb "(" $c
@@ -1900,8 +1900,8 @@ fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
     mk := $ind $b " := oalib.LBox()\n" $ind $b ".Buf[2] = " $v "\n"
     if k == 2 {    # through the value, in a function given the box by reference, its buffer released after (refused: O37)
         vw := g.name("oavw")
-        g.addHelper("fn " $vw "(b mut oalib.LBox&) I64 {\n    f := oalib.View\n    s := f(b)\n    b.Buf = Array<I64>(4, 1)\n"
-                    "    churn()\n    return s[2]\n}\n")
+        g.addHelper(("fn " $vw "(b mut oalib.LBox&) I64 {\n    f := oalib.View\n    s := f(b)\n    b.Buf = Array<I64>(4, 1)\n"
+                    "    churn()\n    return s[2]\n}\n"))
         return $ind "{\n" $mk $ind $x " := " $vw "(" $b ")\n" $use $ind "}\n"
     }
     if g.chance(50) {    # a releasing function through the value, the global's buffer borrowed (refused: O40)
@@ -1932,11 +1932,11 @@ fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
         if k == 0 {
             g.addHelper("fn " $id "<T>(a T) T { return a }\nfn " $w "(a mut Array<I64>&) mut Array<I64>& { return " $id "(a) }\n")
         } else if k == 1 {
-            g.addHelper("fn " $w "(a mut Array<I64>&) mut Array<I64>& {\n    l := List<mut Array<I64>&>()\n    l.Push(a)\n"
-                        "    return l[0]\n}\n")
+            g.addHelper(("fn " $w "(a mut Array<I64>&) mut Array<I64>& {\n    l := List<mut Array<I64>&>()\n    l.Push(a)\n"
+                        "    return l[0]\n}\n"))
         } else {
-            g.addHelper("fn " $id "<T>(c Bool, a T, b T) T { return a if c else b }\n"
-                        "fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return " $id "(a.Len() >= b.Len(), a, b) }\n")
+            g.addHelper(("fn " $id "<T>(c Bool, a T, b T) T { return a if c else b }\n"
+                        "fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return " $id "(a.Len() >= b.Len(), a, b) }\n"))
         }
         call := $w "(" $vv ".ViewMut())" if k < 2 else $w "(" $vv ".ViewMut(), Array<I64>(1))"
         return $ind "{\n" $mkv $ind $d " := " $call "\n" $grow $ind $x " := " $d "[0] + " $d "[1]\n" $use $ind "}\n"
@@ -1952,10 +1952,10 @@ fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
         pk := g.name("ormp")
         c := g.name("c")
         t := g.name("t")
-        g.addHelper("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
+        g.addHelper(("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
                     "fn " $tx "(c " $rc "&) String&c { return c.text }\n"
                     "fn " $pk "(c " $rc "&, n I64) String&c {\n    if n == 0 { return String(c.data) }\n    t := " $tx "(c)\n"
-                    "    return t\n}\n")
+                    "    return t\n}\n"))
         return ($ind "{\n" $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n" $ind $t " := " $pk "(" $c ", 1)\n" $ind
                 $c ".text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n" $ind $x " := " $t ".Len() + I64(" $t "[0])\n"
                 $use $ind "}\n")
@@ -1967,8 +1967,8 @@ fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
     gd := g.name("OGD")
     gg := g.name("OGd")
     gc := g.name("OGc")
-    g.addHelper("type " $gd " struct() { title own mut String& = \"bb\" }\n" $gg " own mut " $gd "& = " $gd "()\n" $gc
-                " mut String& = \"none\"\n")
+    g.addHelper(("type " $gd " struct() { title own mut String& = \"bb\" }\n" $gg " own mut " $gd "& = " $gd "()\n" $gc
+                " mut String& = \"none\"\n"))
     rename := $ind $gg ".title = \"zz" $v "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n"
     if k == 6 {    # F4: a borrow of a global's own object kept in a global (refused: O1b)
         return ($ind "{\n" $ind $gc " = " $gg ".title\n" $rename $ind $x " := " $gc ".Len() + I64(" $gc "[0])\n" $use $ind "}\n")
@@ -1993,8 +1993,8 @@ fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
         pk := g.name("v4p")
         fl := g.name("v4g")
         w := g.name("v4w")
-        g.addHelper("fn " $pk "<T>(c Bool, x T, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n"
-                    "    return k\n}\n")
+        g.addHelper(("fn " $pk "<T>(c Bool, x T, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n"
+                    "    return k\n}\n"))
         back := $pk "(true, a, b)"
         body := ""
         if k == 0 {
@@ -2026,8 +2026,8 @@ fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
     if k == 10 {    # X: a return in an assert's message (refused: S17)
         fl := g.name("v4g")
         w := g.name("v4x")
-        g.addHelper("fn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n    return k\n}\nfn " $w "(k I64) I64 {\n    assert k > 100, (try "
-                    $fl "(k) catch { return 7 }).Format()\n    return 3\n}\n")
+        g.addHelper(("fn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n    return k\n}\nfn " $w "(k I64) I64 {\n    assert k > 100, (try "
+                    $fl "(k) catch { return 7 }).Format()\n    return 3\n}\n"))
         return $ind $x " := " $w "(" $v ")\n" $use
     }
     t := g.name("t")
@@ -2090,8 +2090,8 @@ fn (g mut SG&) ownValOp(h String&, ind String&, k I64, v I64) String& {
     if k == 2 { return $ind "{\n" $ind "    " $x " := take " $h "\n" $ind "    churn()\n" $ind "    " $h " = take " $x "\n" $ind "}\n" }
     if k == 3 or k == 4 or k == 5 {
         mk := g.name("omkHold")
-        g.addHelper("fn " $mk "(v I64) OHold {\n    x := OHold()\n    x.cur = ONode(v)\n    x.cur.n.next = Node(v + 1)\n"
-                    "    x.buf = Array<I64>(2, v)\n    churn()\n    return x\n}\n")
+        g.addHelper(("fn " $mk "(v I64) OHold {\n    x := OHold()\n    x.cur = ONode(v)\n    x.cur.n.next = Node(v + 1)\n"
+                    "    x.buf = Array<I64>(2, v)\n    churn()\n    return x\n}\n"))
         if k == 3 { return $ind $h " = " $mk "(" $v ")\n" }
         if k == 4 { return $ind $mk "(" $v ")\n" }
         return ($ind "{\n" $ind "    " $x " := " $mk "(" $v ")\n" $ind "    churn()\n" $ind "    " $c " = take " $x ".cur\n" $ind
@@ -2099,8 +2099,8 @@ fn (g mut SG&) ownValOp(h String&, ind String&, k I64, v I64) String& {
     }
     if k == 6 {    # an owner value a copying helper made, its part moved into h
         cp := g.name("ocopyHold")
-        g.addHelper("fn " $cp "(h OHold&) OHold {\n    c := OHold()\n    if h.cur != null { c.cur = ONode(h.cur.v + 1) }\n"
-                    "    churn()\n    return c\n}\n")
+        g.addHelper(("fn " $cp "(h OHold&) OHold {\n    c := OHold()\n    if h.cur != null { c.cur = ONode(h.cur.v + 1) }\n"
+                    "    churn()\n    return c\n}\n"))
         return $ind "{\n" $ind "    " $x " := " $cp "(" $h ")\n" $ind "    churn()\n" $ind "    " $o " = take " $x ".cur\n" $ind "}\n"
     }
     if k == 7 {    # a borrowed copy kept across h given another (O39: refused)
@@ -2363,12 +2363,12 @@ fn HeldTests(seed U64) String& {
     b := StringBuilder()
     pick := seed / 4
     shapes := String&[
-        "    a := I64[1, 2, 3]\n    lo := 1 + Run\n    x := oheldEat(OHeld(1), a[lo:1])\n    say($x)\n",
-        "    e := OHeldE.B(Run)\n    x := oheldEat3(OHeld(2), (e as OHeldE.A))\n    say($x)\n",
-        "    x := oheldEat(OHeld(3), Array<I64>(0 - Run))\n    say($x)\n",
-        "    h := OHeldBox()\n    a := I64[1, 2]\n    h.r = OHeld(a[1 + Run:1].Len())\n",
-        "    h := OHeldBox()\n    h.r = OHeld(4)\n    e := OHeldE.B(Run)\n    x := oheldEat3(take h.r, (e as OHeldE.A))\n    say($x)\n",
-        "    a := I64[1, 2, 3]\n    x := oheldDefer(a, 1 + Run)\n    say($x.n)\n",
+        "    a := I64[1, 2, 3]\n    lo := 1 + Run\n    x := oheldEat(OHeld(1), a[lo:1])\n    say($x)\n"
+        "    e := OHeldE.B(Run)\n    x := oheldEat3(OHeld(2), (e as OHeldE.A))\n    say($x)\n"
+        "    x := oheldEat(OHeld(3), Array<I64>(0 - Run))\n    say($x)\n"
+        "    h := OHeldBox()\n    a := I64[1, 2]\n    h.r = OHeld(a[1 + Run:1].Len())\n"
+        "    h := OHeldBox()\n    h.r = OHeld(4)\n    e := OHeldE.B(Run)\n    x := oheldEat3(take h.r, (e as OHeldE.A))\n    say($x)\n"
+        "    a := I64[1, 2, 3]\n    x := oheldDefer(a, 1 + Run)\n    say($x.n)\n"
         "    a := I64[1, 2, 3]\n    y := oheldDeferVal(a, 1 + Run)\n    say($y.r.n)\n"]
     for i in range shapes.Len() {
         if ((pick >> U64(i)) & 1) == 0 and i != I64(pick % U64(shapes.Len())) { continue }
@@ -2376,7 +2376,7 @@ fn HeldTests(seed U64) String& {
         b.Push(shapes[i])
         b.Push("}\n")
     }
-    b.Push("test \"every held owner was released\" {\n    say(\"held made \" $HeldMade \" dropped \" $HeldDropped)\n"
-           "    assert HeldMade == HeldDropped\n}\n")
+    b.Push(("test \"every held owner was released\" {\n    say(\"held made \" $HeldMade \" dropped \" $HeldDropped)\n"
+           "    assert HeldMade == HeldDropped\n}\n"))
     return b.ToString()
 }

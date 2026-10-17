@@ -212,44 +212,44 @@ fn churn() I64 {
 
 # Go's own table for Clean: each path, then what it cleans to
 cleanCases := String&[
-    "", ".",
-    "abc", "abc",
-    "abc/def", "abc/def",
-    "a/b/c", "a/b/c",
-    ".", ".",
-    "..", "..",
-    "../..", "../..",
-    "../../abc", "../../abc",
-    "/abc", "/abc",
-    "/", "/",
-    "abc/", "abc",
-    "abc/def/", "abc/def",
-    "a/b/c/", "a/b/c",
-    "./", ".",
-    "../", "..",
-    "../../", "../..",
-    "/abc/", "/abc",
-    "abc//def//ghi", "abc/def/ghi",
-    "//abc", "/abc",
-    "///abc", "/abc",
-    "//abc//", "/abc",
-    "abc//", "abc",
-    "abc/./def", "abc/def",
-    "/./abc/def", "/abc/def",
-    "abc/.", "abc",
-    "abc/def/ghi/../jkl", "abc/def/jkl",
-    "abc/def/../ghi/../jkl", "abc/jkl",
-    "abc/def/..", "abc",
-    "abc/def/../..", ".",
-    "/abc/def/../..", "/",
-    "abc/def/../../..", "..",
-    "/abc/def/../../..", "/",
-    "abc/def/../../../ghi/jkl/../../../mno", "../../mno",
-    "/../abc", "/abc",
-    "a/../b:/../../c", "../c",
-    "abc/./../def", "def",
-    "abc//./../def", "def",
-    "abc/../../././../def", "../../def",
+    "", "."
+    "abc", "abc"
+    "abc/def", "abc/def"
+    "a/b/c", "a/b/c"
+    ".", "."
+    "..", ".."
+    "../..", "../.."
+    "../../abc", "../../abc"
+    "/abc", "/abc"
+    "/", "/"
+    "abc/", "abc"
+    "abc/def/", "abc/def"
+    "a/b/c/", "a/b/c"
+    "./", "."
+    "../", ".."
+    "../../", "../.."
+    "/abc/", "/abc"
+    "abc//def//ghi", "abc/def/ghi"
+    "//abc", "/abc"
+    "///abc", "/abc"
+    "//abc//", "/abc"
+    "abc//", "abc"
+    "abc/./def", "abc/def"
+    "/./abc/def", "/abc/def"
+    "abc/.", "abc"
+    "abc/def/ghi/../jkl", "abc/def/jkl"
+    "abc/def/../ghi/../jkl", "abc/jkl"
+    "abc/def/..", "abc"
+    "abc/def/../..", "."
+    "/abc/def/../..", "/"
+    "abc/def/../../..", ".."
+    "/abc/def/../../..", "/"
+    "abc/def/../../../ghi/jkl/../../../mno", "../../mno"
+    "/../abc", "/abc"
+    "a/../b:/../../c", "../c"
+    "abc/./../def", "def"
+    "abc//./../def", "def"
+    "abc/../../././../def", "../../def"
 ]
 
 # every case of a table, as "path -> got" for each that is not what it should be: "" when all are
@@ -283,25 +283,25 @@ test "Clean borrows the path where its clean form is the path's own beginning, a
 
 # each path, then its Base, then its Dir
 partCases := String&[
-    "", ".", ".",
-    ".", ".", ".",
-    "/.", ".", "/",
-    "/", "/", "/",
-    "////", "/", "/",
-    "x/", "x", "x",
-    "abc", "abc", ".",
-    "abc/def", "def", "abc",
-    "a/b/.x", ".x", "a/b",
-    "a/b/c.", "c.", "a/b",
-    "a/b/c.x", "c.x", "a/b",
-    "/abc", "abc", "/",
-    "/abc/def", "def", "/abc",
-    "a//b", "b", "a",
-    "a/./b", "b", "a",
-    "a/b/c/", "c", "a/b/c",
-    "../a", "a", "..",
-    "a/..", "..", "a",
-    "/../x", "x", "/",
+    "", ".", "."
+    ".", ".", "."
+    "/.", ".", "/"
+    "/", "/", "/"
+    "////", "/", "/"
+    "x/", "x", "x"
+    "abc", "abc", "."
+    "abc/def", "def", "abc"
+    "a/b/.x", ".x", "a/b"
+    "a/b/c.", "c.", "a/b"
+    "a/b/c.x", "c.x", "a/b"
+    "/abc", "abc", "/"
+    "/abc/def", "def", "/abc"
+    "a//b", "b", "a"
+    "a/./b", "b", "a"
+    "a/b/c/", "c", "a/b/c"
+    "../a", "a", ".."
+    "a/..", "..", "a"
+    "/../x", "x", "/"
 ]
 
 # every Base and Dir that is not what it should be, as "Base(path) = got; ": "" when all are
@@ -340,45 +340,45 @@ test "Join makes one clean path of its parts, leaving empty ones out" {
 
 # Go's table for Rel: base, target, then what Rel gives - "!" where it fails
 relCases := String&[
-    "a/b", "a/b", ".",
-    "a/b/.", "a/b", ".",
-    "a/b", "a/b/.", ".",
-    "./a/b", "a/b", ".",
-    "a/b", "./a/b", ".",
-    "ab/cd", "ab/cde", "../cde",
-    "ab/cd", "ab/c", "../c",
-    "a/b", "a/b/c/d", "c/d",
-    "a/b", "a/b/../c", "../c",
-    "a/b/../c", "a/b", "../b",
-    "a/b/c", "a/c/d", "../../c/d",
-    "a/b", "c/d", "../../c/d",
-    "a/b/c/d", "a/b", "../..",
-    "a/b/c/d", "a/b/", "../..",
-    "a/b/c/d/", "a/b", "../..",
-    "a/b/c/d/", "a/b/", "../..",
-    "../../a/b", "../../a/b/c/d", "c/d",
-    "/a/b", "/a/b", ".",
-    "/a/b/.", "/a/b", ".",
-    "/a/b", "/a/b/.", ".",
-    "/ab/cd", "/ab/cde", "../cde",
-    "/ab/cd", "/ab/c", "../c",
-    "/a/b", "/a/b/c/d", "c/d",
-    "/a/b", "/a/b/../c", "../c",
-    "/a/b/../c", "/a/b", "../b",
-    "/a/b/c", "/a/c/d", "../../c/d",
-    "/a/b", "/c/d", "../../c/d",
-    "/a/b/c/d", "/a/b", "../..",
-    "/a/b/c/d", "/a/b/", "../..",
-    "/a/b/c/d/", "/a/b", "../..",
-    "/a/b/c/d/", "/a/b/", "../..",
-    "/../../a/b", "/../../a/b/c/d", "c/d",
-    ".", "a/b", "a/b",
-    ".", "..", "..",
-    "..", ".", "!",
-    "..", "a", "!",
-    "../..", "..", "!",
-    "a", "/a", "!",
-    "/a", "a", "!",
+    "a/b", "a/b", "."
+    "a/b/.", "a/b", "."
+    "a/b", "a/b/.", "."
+    "./a/b", "a/b", "."
+    "a/b", "./a/b", "."
+    "ab/cd", "ab/cde", "../cde"
+    "ab/cd", "ab/c", "../c"
+    "a/b", "a/b/c/d", "c/d"
+    "a/b", "a/b/../c", "../c"
+    "a/b/../c", "a/b", "../b"
+    "a/b/c", "a/c/d", "../../c/d"
+    "a/b", "c/d", "../../c/d"
+    "a/b/c/d", "a/b", "../.."
+    "a/b/c/d", "a/b/", "../.."
+    "a/b/c/d/", "a/b", "../.."
+    "a/b/c/d/", "a/b/", "../.."
+    "../../a/b", "../../a/b/c/d", "c/d"
+    "/a/b", "/a/b", "."
+    "/a/b/.", "/a/b", "."
+    "/a/b", "/a/b/.", "."
+    "/ab/cd", "/ab/cde", "../cde"
+    "/ab/cd", "/ab/c", "../c"
+    "/a/b", "/a/b/c/d", "c/d"
+    "/a/b", "/a/b/../c", "../c"
+    "/a/b/../c", "/a/b", "../b"
+    "/a/b/c", "/a/c/d", "../../c/d"
+    "/a/b", "/c/d", "../../c/d"
+    "/a/b/c/d", "/a/b", "../.."
+    "/a/b/c/d", "/a/b/", "../.."
+    "/a/b/c/d/", "/a/b", "../.."
+    "/a/b/c/d/", "/a/b/", "../.."
+    "/../../a/b", "/../../a/b/c/d", "c/d"
+    ".", "a/b", "a/b"
+    ".", "..", ".."
+    "..", ".", "!"
+    "..", "a", "!"
+    "../..", "..", "!"
+    "a", "/a", "!"
+    "/a", "a", "!"
 ]
 
 # every Rel that is not what it should be: "" when all are

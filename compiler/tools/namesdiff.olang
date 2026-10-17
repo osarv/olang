@@ -97,7 +97,7 @@ fn flagArgs(flags String&) Array<String&>& {
 
 # the rules whose errors this tool compares: loading's and names'
 fn ownRule(rule String&) Bool {
-    for r in String&["M1", "M4", "M5", "M10", "M14", "M16", "M17", "M20", "M22", "M22a", "M23", "M23a", "M23b", "D2", "D3a",
+    for r in String&["M1", "M4", "M5", "M10", "M14", "M16", "M17", "M20", "M22", "M22a", "M23", "M23a", "M23b", "D2", "D3a"
                      "D3a, E29", "B9a", "B10", "B10a", "B10c"] {
         if rule == r { return true }
     }

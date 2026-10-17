@@ -54,7 +54,7 @@ type Rows struct(of String&, sep Char = ',') {
 
 # the next record's fields - failing with Exhausted when the text has no more, and with CsvError when the next one is
 # not CSV, the reader then staying where it was
-fn (r mut Rows&) Next() Array<String&> ? CsvError + Exhausted {
+fn (r mut Rows&) Next() Array<String&> ? CsvError, Exhausted {
     if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error CsvError.BAD_SEPARATOR }
     t := r.text
     n I64 = t.Len()
@@ -271,7 +271,7 @@ test "Record quotes what must be, and Rows reads it back" {
 }
 
 # a table read while compiling (K2): rows counted and a field summed
-fn csvTotal(text String&) I64 ? CsvError + ParseError {
+fn csvTotal(text String&) I64 ? CsvError, ParseError {
     total I64 = 0
     for row in try Rows(text) {
         total = total * 10 + (try row[1].ParseInt())

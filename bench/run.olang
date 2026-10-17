@@ -30,20 +30,20 @@ fn baseFlags() Array<String&>& { return String&["-O3", "-flto"] }
 # name | olang program | C program | arguments (the same for both)
 fn table() Array<String&>& {
     return String&[
-        "nbody|nbody|nbody|10000000",
-        "spectral-norm|spectral|spectral|3000",
-        "mandelbrot|mandelbrot|mandelbrot|3000",
-        "fannkuch-redux|fannkuch|fannkuch|10 4",
-        "binary-trees|binarytrees|binarytrees|18",
-        "binary-trees, C arena|binarytrees|binarytrees_arena|18",
-        "k-nucleotide|knucleotide|knucleotide|2000000",
-        "matmul F32|matmul|matmul|1536",
-        "List push|sum|sum|push 20000000 0",
-        "sum: for x in List|sum|sum|list 100000 8000",
-        "sum: List.Iter().Fold|sum|sum|listfold 100000 8000",
-        "sum: for x in Array|sum|sum|array 100000 8000",
-        "sum: Array.Iter().Fold|sum|sum|arrayfold 100000 8000",
-        "parallel, 4 tasks|parallel|parallel|10000000 4",
+        "nbody|nbody|nbody|10000000"
+        "spectral-norm|spectral|spectral|3000"
+        "mandelbrot|mandelbrot|mandelbrot|3000"
+        "fannkuch-redux|fannkuch|fannkuch|10 4"
+        "binary-trees|binarytrees|binarytrees|18"
+        "binary-trees, C arena|binarytrees|binarytrees_arena|18"
+        "k-nucleotide|knucleotide|knucleotide|2000000"
+        "matmul F32|matmul|matmul|1536"
+        "List push|sum|sum|push 20000000 0"
+        "sum: for x in List|sum|sum|list 100000 8000"
+        "sum: List.Iter().Fold|sum|sum|listfold 100000 8000"
+        "sum: for x in Array|sum|sum|array 100000 8000"
+        "sum: Array.Iter().Fold|sum|sum|arrayfold 100000 8000"
+        "parallel, 4 tasks|parallel|parallel|10000000 4"
         "text|text|text|5000000"
     ]
 }

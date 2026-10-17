@@ -10,14 +10,14 @@ import "std/rand"
 import "std/time"
 import "std/io"
 
-fn gelu(x <A>) A { return 0.5 * x * (1.0 + linalg.FastTanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) }
+fn gelu<A>(x A) A { return 0.5 * x * (1.0 + linalg.FastTanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) }
 
-fn captured(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) ? {
+fn captured<T, A>(y mut linalg.Matrix<T>&, x linalg.Matrix<T>&, z A) ? {
     like T
     try y.Map(x, fn(s) { return linalg.Cast(gelu(linalg.Cast(s, z)), like) })
 }
 
-fn declared(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) ? {
+fn declared<T, A>(y mut linalg.Matrix<T>&, x linalg.Matrix<T>&, z A) ? {
     try y.Map(x, fn(s) {
         w A
         like T

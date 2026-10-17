@@ -338,10 +338,10 @@ fn spells(t String&, at I64, word String&) Bool {
 }
 
 test "Keyword finds every reserved word and nothing else" {
-    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Checked, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break,
-                 Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do,
-                 Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum,
-                 Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Own, Tok.Take, Tok.Import, Tok.Test, Tok.Destruct,
+    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Checked, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break
+                 Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
+                 Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
+                 Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Own, Tok.Take, Tok.Import, Tok.Test, Tok.Destruct
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.NullLit] {
         w := k.Text()
         assert Keyword(w, 0, w.Len()) == k, "keyword " $w

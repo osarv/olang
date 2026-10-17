@@ -6,7 +6,7 @@ error E {
 type It struct() {
     i I32 = 0
 }
-fn (t mut It&) Next() I32 ? E + Exhausted {
+fn (t mut It&) Next() I32 ? E, Exhausted {
     if t.i > 2 { error Exhausted.END }
     t.i++
     return t.i

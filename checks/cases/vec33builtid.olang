@@ -9,7 +9,7 @@ fn churn() I64 {
     }
     return t
 }
-fn id(x <T>) T { return x }
+fn id<T>(x T) T { return x }
 # a written built result - but it hands back its argument through id (O14b obligation: a outlives the result scope)
 fn k(a mut Array<Char>&) mut Array<Char>& { return id(a) }
 fn main() ? {

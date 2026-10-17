@@ -94,7 +94,7 @@ fn spanOf(rows I64, cols I64, stride I64) I64 {
 # defaults to cols) - the way to lay matrices out in an arena the caller owns. It allocates nothing; writing it writes
 # data. A shape that does not fit data - a negative size, a stride narrower than a row, more than data holds - fails
 # with ShapeError.MISMATCH
-fn View(data mut Array<<T>>&, offset I64, rows I64, cols I64, stride I64 = 0) Matrix<T> ? ShapeError {
+fn View<T>(data mut Array<T>&, offset I64, rows I64, cols I64, stride I64 = 0) Matrix<T> ? ShapeError {
     s I64 = stride if stride > 0 else cols
     n I64 = spanOf(rows, cols, s)
     if n < 0 or offset < 0 or offset + n > data.Len() { error ShapeError.MISMATCH }
@@ -102,14 +102,14 @@ fn View(data mut Array<<T>>&, offset I64, rows I64, cols I64, stride I64 = 0) Ma
 }
 
 # a rows x cols matrix with every element v
-fn Full(rows I64, cols I64, v <T>) Matrix<T> {
+fn Full<T>(rows I64, cols I64, v T) Matrix<T> {
     m mut Matrix<T>&return = Matrix<T>(rows, cols, null)
     m.Fill(v)
     return m
 }
 
 # a matrix holding the given rows, which must all have one length: linalg.FromRows(Array<F64>&[F64[1, 2], F64[3, 4]])
-fn FromRows(rows Array<Array<<T>>&>&) Matrix<T> ? ShapeError {
+fn FromRows<T>(rows Array<Array<T>&>&) Matrix<T> ? ShapeError {
     cols I64 = rows[0].Len() if rows.Len() > 0 else 0
     m mut Matrix<T>&return = Matrix<T>(rows.Len(), cols, null)
     for r, row in rows {
@@ -120,26 +120,26 @@ fn FromRows(rows Array<Array<<T>>&>&) Matrix<T> ? ShapeError {
 }
 
 # the element at row r, column c - unchecked, as an array index is (E16)
-fn (m Matrix<<T>>&) Get(r I64, c I64) T { return m.Data[r * m.Stride + c] }
+fn (m Matrix<T>&) Get(r I64, c I64) T { return m.Data[r * m.Stride + c] }
 
 # sets the element at row r, column c - unchecked
-fn (m mut Matrix<<T>>&) Set(r I64, c I64, v T) { m.Data[r * m.Stride + c] = v }
+fn (m mut Matrix<T>&) Set(r I64, c I64, v T) { m.Data[r * m.Stride + c] = v }
 
 # row i as an array view of its Cols elements: writing it writes the matrix. Out of range aborts (E16b)
-fn (m Matrix<<T>>&) Row(i I64) mut Array<T>&m { return m.Data[i * m.Stride:i * m.Stride + m.Cols] }
+fn (m Matrix<T>&) Row(i I64) mut Array<T>&m { return m.Data[i * m.Stride:i * m.Stride + m.Cols] }
 
 # whether the rows follow one another with no gap, so the elements are one run of Rows * Cols in Data
-fn (m Matrix<<T>>&) Contiguous() Bool { return m.Stride == m.Cols or m.Rows <= 1 }
+fn (m Matrix<T>&) Contiguous() Bool { return m.Stride == m.Cols or m.Rows <= 1 }
 
 # ---- shapes: every check an operation makes, in one place ----
 
-fn sameShape(a Matrix<<T>>&, b Matrix<<U>>&) Bool { return a.Rows == b.Rows and a.Cols == b.Cols }
+fn sameShape<T, U>(a Matrix<T>&, b Matrix<U>&) Bool { return a.Rows == b.Rows and a.Cols == b.Cols }
 
 # whether r is a row of m's width: a 1 x m.Cols matrix
-fn rowShape(m Matrix<<T>>&, r Matrix<T>&) Bool { return r.Rows == 1 and r.Cols == m.Cols }
+fn rowShape<T>(m Matrix<T>&, r Matrix<T>&) Bool { return r.Rows == 1 and r.Cols == m.Cols }
 
 # whether c (m x n) can hold op(a) op(b): op(a) is m x k and op(b) k x n
-fn productShape(c Matrix<<T>>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool) Bool {
+fn productShape<T>(c Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool) Bool {
     am I64 = a.Cols if transA else a.Rows
     ak I64 = a.Rows if transA else a.Cols
     bk I64 = b.Cols if transB else b.Rows
@@ -153,26 +153,26 @@ fn rangeShape(lo I64, hi I64, n I64) Bool { return 0 <= lo and lo <= hi and hi <
 # ---- views: none of these allocates ----
 
 # rows lo .. hi (hi not included), sharing m's storage
-fn (m Matrix<<T>>&) RowRange(lo I64, hi I64) Matrix<T> ? ShapeError {
+fn (m Matrix<T>&) RowRange(lo I64, hi I64) Matrix<T> ? ShapeError {
     if not (rangeShape(lo, hi, m.Rows)) { error ShapeError.MISMATCH }
     return try View(m.Data, lo * m.Stride, hi - lo, m.Cols, m.Stride)
 }
 
 # columns lo .. hi, sharing m's storage: a view whose stride is wider than its rows
-fn (m Matrix<<T>>&) ColRange(lo I64, hi I64) Matrix<T> ? ShapeError {
+fn (m Matrix<T>&) ColRange(lo I64, hi I64) Matrix<T> ? ShapeError {
     if not (rangeShape(lo, hi, m.Cols)) { error ShapeError.MISMATCH }
     return try View(m.Data, lo, m.Rows, hi - lo, m.Stride)
 }
 
 # the rows x cols block whose first element is (r, c), sharing m's storage
-fn (m Matrix<<T>>&) Block(r I64, c I64, rows I64, cols I64) Matrix<T> ? ShapeError {
+fn (m Matrix<T>&) Block(r I64, c I64, rows I64, cols I64) Matrix<T> ? ShapeError {
     if not (rangeShape(r, r + rows, m.Rows) and rangeShape(c, c + cols, m.Cols)) { error ShapeError.MISMATCH }
     return try View(m.Data, r * m.Stride + c, rows, cols, m.Stride)
 }
 
 # the same elements in row-major order as a rows x cols matrix, sharing m's storage - so m must be contiguous, and
 # rows * cols its size
-fn (m Matrix<<T>>&) Reshape(rows I64, cols I64) Matrix<T> ? ShapeError {
+fn (m Matrix<T>&) Reshape(rows I64, cols I64) Matrix<T> ? ShapeError {
     if not (m.Contiguous() and rows * cols == m.Rows * m.Cols) { error ShapeError.MISMATCH }
     return try View(m.Data, 0, rows, cols, cols)
 }
@@ -183,10 +183,10 @@ type Transposed<T> struct(of Matrix<T>&) {
     M Matrix<T>&of = of
 }
 
-fn (m Matrix<<T>>&) T() Transposed<T> { return Transposed<T>(m) }
+fn (m Matrix<T>&) T() Transposed<T> { return Transposed<T>(m) }
 
 # the transpose as a matrix of its own: Cols x Rows, new storage
-fn (t Transposed<<T>>&) Clone() Matrix<T> {
+fn (t Transposed<T>&) Clone() Matrix<T> {
     out mut Matrix<T>&return = Matrix<T>(t.M.Cols, t.M.Rows, null)
     try out.Copy(t) catch { unreachable }
     return out
@@ -200,13 +200,13 @@ fn (t Transposed<<T>>&) Clone() Matrix<T> {
 # before it is written - but not another view overlapping one.
 
 # dst = f(a), element by element
-fn (dst mut Matrix<<T>>&) Map(a Matrix<T>&, f fn(x T) T) ? ShapeError {
+fn (dst mut Matrix<T>&) Map(a Matrix<T>&, f fn(x T) T) ? ShapeError {
     if not (sameShape(dst, a)) { error ShapeError.MISMATCH }
     dst.mapInto(a, f)
 }
 
 # Map with the shapes known to agree - what the operations building their own destination call
-fn (dst mut Matrix<<T>>&) mapInto(a Matrix<T>&, f fn(x T) T) {
+fn (dst mut Matrix<T>&) mapInto(a Matrix<T>&, f fn(x T) T) {
     if dst.Contiguous() and a.Contiguous() {
         for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i]) }
         return
@@ -219,12 +219,12 @@ fn (dst mut Matrix<<T>>&) mapInto(a Matrix<T>&, f fn(x T) T) {
 }
 
 # dst = f(a, b), element by element
-fn (dst mut Matrix<<T>>&) Map2(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T) ? ShapeError {
+fn (dst mut Matrix<T>&) Map2(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T) ? ShapeError {
     if not (sameShape(dst, a) and sameShape(dst, b)) { error ShapeError.MISMATCH }
     dst.map2Into(a, b, f)
 }
 
-fn (dst mut Matrix<<T>>&) map2Into(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T) {
+fn (dst mut Matrix<T>&) map2Into(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T) {
     if dst.Contiguous() and a.Contiguous() and b.Contiguous() {
         for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i], b.Data[i]) }
         return
@@ -238,12 +238,12 @@ fn (dst mut Matrix<<T>>&) map2Into(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T)
 }
 
 # dst = f(a, b, c), element by element - a fused update of three operands, an optimizer's step say
-fn (dst mut Matrix<<T>>&) Map3(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T) ? ShapeError {
+fn (dst mut Matrix<T>&) Map3(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T) ? ShapeError {
     if not (sameShape(dst, a) and sameShape(dst, b) and sameShape(dst, c)) { error ShapeError.MISMATCH }
     dst.map3Into(a, b, c, f)
 }
 
-fn (dst mut Matrix<<T>>&) map3Into(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T) {
+fn (dst mut Matrix<T>&) map3Into(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T) {
     if dst.Contiguous() and a.Contiguous() and b.Contiguous() and c.Contiguous() {
         for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i], b.Data[i], c.Data[i]) }
         return
@@ -258,17 +258,17 @@ fn (dst mut Matrix<<T>>&) map3Into(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f f
 }
 
 # every element v
-fn (m mut Matrix<<T>>&) Fill(v T) { m.mapInto(m, fn(x) { return v }) }
+fn (m mut Matrix<T>&) Fill(v T) { m.mapInto(m, fn(x) { return v }) }
 
 # the identity: ones on the diagonal, zeros elsewhere
-fn (m mut Matrix<<T>>&) SetIdentity() {
+fn (m mut Matrix<T>&) SetIdentity() {
     z T
     m.Fill(z)
     for i in range lesser(m.Rows, m.Cols) { m.Data[i * m.Stride + i] = 1 }
 }
 
 # m = src, element by element - src a matrix of m's shape, or a transposed one (src.T())
-fn (m mut Matrix<<T>>&) Copy(src <U>) ? ShapeError {
+fn (m mut Matrix<T>&) Copy<U>(src U) ? ShapeError {
     match U {
         case Matrix<T>, Matrix<T>& { try m.Map(src, fn(x) { return x }) }
         case Transposed<T>, Transposed<T>& {
@@ -287,19 +287,19 @@ fn (m mut Matrix<<T>>&) Copy(src <U>) ? ShapeError {
 }
 
 # m += x
-fn (m mut Matrix<<T>>&) Add(x Matrix<T>&) ? ShapeError { try m.Map2(m, x, fn(a, b) { return a + b }) }
+fn (m mut Matrix<T>&) Add(x Matrix<T>&) ? ShapeError { try m.Map2(m, x, fn(a, b) { return a + b }) }
 
 # m -= x
-fn (m mut Matrix<<T>>&) Sub(x Matrix<T>&) ? ShapeError { try m.Map2(m, x, fn(a, b) { return a - b }) }
+fn (m mut Matrix<T>&) Sub(x Matrix<T>&) ? ShapeError { try m.Map2(m, x, fn(a, b) { return a - b }) }
 
 # m *= k
-fn (m mut Matrix<<T>>&) Scale(k T) { m.mapInto(m, fn(a) { return a * k }) }
+fn (m mut Matrix<T>&) Scale(k T) { m.mapInto(m, fn(a) { return a * k }) }
 
 # m += alpha * x - BLAS's axpy
-fn (m mut Matrix<<T>>&) AddScaled(x Matrix<T>&, alpha T) ? ShapeError { try m.Map2(m, x, fn(a, b) { return a + alpha * b }) }
+fn (m mut Matrix<T>&) AddScaled(x Matrix<T>&, alpha T) ? ShapeError { try m.Map2(m, x, fn(a, b) { return a + alpha * b }) }
 
 # every row += bias, a 1 x Cols matrix: a layer's bias added to a batch, read where it is
-fn (m mut Matrix<<T>>&) AddRow(bias Matrix<T>&) ? ShapeError {
+fn (m mut Matrix<T>&) AddRow(bias Matrix<T>&) ? ShapeError {
     if not (rowShape(m, bias)) { error ShapeError.MISMATCH }
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -310,7 +310,7 @@ fn (m mut Matrix<<T>>&) AddRow(bias Matrix<T>&) ? ShapeError {
 # m += alpha (a b^T - c d^T) in one pass - the contrastive update of two phases (a learning rule comparing a free
 # state with a nudged one), with neither outer product made. It is computed factored, as a (b - d)^T + (a - c) d^T,
 # so that two nearly equal phases do not cancel: the differences are taken first, element by element
-fn (m mut Matrix<<T>>&) AddOuterDifference(a Array<T>&, b Array<T>&, c Array<T>&, d Array<T>&, alpha T) ? ShapeError {
+fn (m mut Matrix<T>&) AddOuterDifference(a Array<T>&, b Array<T>&, c Array<T>&, d Array<T>&, alpha T) ? ShapeError {
     if not (a.Len() == m.Rows and c.Len() == m.Rows and b.Len() == m.Cols and d.Len() == m.Cols) { error ShapeError.MISMATCH }
     for r in range m.Rows {
         o I64 = r * m.Stride
@@ -321,10 +321,10 @@ fn (m mut Matrix<<T>>&) AddOuterDifference(a Array<T>&, b Array<T>&, c Array<T>&
 }
 
 # m = min(max(m, lo), hi), element by element - a cap on every weight
-fn (m mut Matrix<<T>>&) Clamp(lo T, hi T) { m.mapInto(m, fn(x) { return lo if x < lo else (hi if x > hi else x) }) }
+fn (m mut Matrix<T>&) Clamp(lo T, hi T) { m.mapInto(m, fn(x) { return lo if x < lo else (hi if x > hi else x) }) }
 
 # m += alpha g where mask is not zero, element by element: sparse connectivity, frozen weights
-fn (m mut Matrix<<T>>&) AddScaledMasked(g Matrix<T>&, alpha T, mask Matrix<U8>&) ? ShapeError {
+fn (m mut Matrix<T>&) AddScaledMasked(g Matrix<T>&, alpha T, mask Matrix<U8>&) ? ShapeError {
     if not (sameShape(m, g) and sameShape(m, mask)) { error ShapeError.MISMATCH }
     z T
     for r in range m.Rows {
@@ -341,7 +341,7 @@ fn (m mut Matrix<<T>>&) AddScaledMasked(g Matrix<T>&, alpha T, mask Matrix<U8>&)
 # of the element type exactly - a literal does not adapt through the operator's generic operand, so an F32 matrix is
 # scaled by m * F32(0.5), or in place by m.Scale(0.5)
 
-fn (a Matrix<<T>>&) Plus(b <U>) Matrix<T> ? {
+fn (a Matrix<T>&) Plus<U>(b U) Matrix<T> ? {
     out mut Matrix<T>&return = Matrix<T>(a.Rows, a.Cols, null)
     match U {
         case Matrix<T>, Matrix<T>& { try out.Map2(a, b, fn(x, y) { return x + y }) }
@@ -350,7 +350,7 @@ fn (a Matrix<<T>>&) Plus(b <U>) Matrix<T> ? {
     return out
 }
 
-fn (a Matrix<<T>>&) Minus(b <U>) Matrix<T> ? {
+fn (a Matrix<T>&) Minus<U>(b U) Matrix<T> ? {
     out mut Matrix<T>&return = Matrix<T>(a.Rows, a.Cols, null)
     match U {
         case Matrix<T>, Matrix<T>& { try out.Map2(a, b, fn(x, y) { return x - y }) }
@@ -360,7 +360,7 @@ fn (a Matrix<<T>>&) Minus(b <U>) Matrix<T> ? {
 }
 
 # element by element (the Hadamard product) - the matrix product is "@"
-fn (a Matrix<<T>>&) Mul(b <U>) Matrix<T> ? {
+fn (a Matrix<T>&) Mul<U>(b U) Matrix<T> ? {
     out mut Matrix<T>&return = Matrix<T>(a.Rows, a.Cols, null)
     match U {
         case Matrix<T>, Matrix<T>& { try out.Map2(a, b, fn(x, y) { return x * y }) }
@@ -369,7 +369,7 @@ fn (a Matrix<<T>>&) Mul(b <U>) Matrix<T> ? {
     return out
 }
 
-fn (a Matrix<<T>>&) Div(b <U>) Matrix<T> ? {
+fn (a Matrix<T>&) Div<U>(b U) Matrix<T> ? {
     out mut Matrix<T>&return = Matrix<T>(a.Rows, a.Cols, null)
     match U {
         case Matrix<T>, Matrix<T>& { try out.Map2(a, b, fn(x, y) { return x / y }) }
@@ -378,32 +378,32 @@ fn (a Matrix<<T>>&) Div(b <U>) Matrix<T> ? {
     return out
 }
 
-fn (a Matrix<<T>>&) Neg() Matrix<T> {
+fn (a Matrix<T>&) Neg() Matrix<T> {
     out mut Matrix<T>&return = Matrix<T>(a.Rows, a.Cols, null)
     out.mapInto(a, fn(x) { return -x })
     return out
 }
 
 # a copy with storage of its own, contiguous
-fn (m Matrix<<T>>&) Clone() Matrix<T> {
+fn (m Matrix<T>&) Clone() Matrix<T> {
     out mut Matrix<T>&return = Matrix<T>(m.Rows, m.Cols, null)
     try out.Copy(m) catch { unreachable }
     return out
 }
 
 # f applied to every element, into a new matrix
-fn (m Matrix<<T>>&) Mapped(f fn(x T) T) Matrix<T> {
+fn (m Matrix<T>&) Mapped(f fn(x T) T) Matrix<T> {
     out mut Matrix<T>&return = Matrix<T>(m.Rows, m.Cols, null)
     out.mapInto(m, f)
     return out
 }
 
 # the floating-point functions of std/math, element by element, into a new matrix
-fn (m Matrix<<T>>&) Exp() Matrix<T> { return m.Mapped(fn(x) { return math.Exp(x) }) }
-fn (m Matrix<<T>>&) Log() Matrix<T> { return m.Mapped(fn(x) { return math.Log(x) }) }
-fn (m Matrix<<T>>&) Tanh() Matrix<T> { return m.Mapped(fn(x) { return math.Tanh(x) }) }
-fn (m Matrix<<T>>&) Sqrt() Matrix<T> { return m.Mapped(fn(x) { return math.Sqrt(x) }) }
-fn (m Matrix<<T>>&) Abs() Matrix<T> { return m.Mapped(fn(x) { return math.Abs(x) }) }
+fn (m Matrix<T>&) Exp() Matrix<T> { return m.Mapped(fn(x) { return math.Exp(x) }) }
+fn (m Matrix<T>&) Log() Matrix<T> { return m.Mapped(fn(x) { return math.Log(x) }) }
+fn (m Matrix<T>&) Tanh() Matrix<T> { return m.Mapped(fn(x) { return math.Tanh(x) }) }
+fn (m Matrix<T>&) Sqrt() Matrix<T> { return m.Mapped(fn(x) { return math.Sqrt(x) }) }
+fn (m Matrix<T>&) Abs() Matrix<T> { return m.Mapped(fn(x) { return math.Abs(x) }) }
 
 fn lesser(a I64, b I64) I64 { return a if a < b else b }
 # ---- matrix multiplication ----
@@ -445,7 +445,7 @@ fn Cores() I64 {
 
 # x as a D, rounded or wrapped as a conversion D(x) does (T4) - from or to an F8 type through F64, the F8 types' own
 # way in and out
-fn Cast(x <S>, like <D>) D {
+fn Cast<S, D>(x S, like D) D {
     match S {
         case F8E4M3, F8E5M2 { return Cast(x.F64(), like) }
         nomatch {
@@ -495,7 +495,7 @@ type operand<T> struct(d Array<T>&, ld I64) {
 type aPanel struct() { }
 type bPanel struct() { }
 
-fn panelWidth(z <A>, role <R>, sh <S>) I64 {
+fn panelWidth<A, R, S>(z A, role R, sh S) I64 {
     return match R {
         case aPanel => tileRows(z)
         case bPanel => tileColsOf(z, sh)
@@ -503,11 +503,11 @@ fn panelWidth(z <A>, role <R>, sh <S>) I64 {
 }
 
 # whether an operand is a matrix - a convolution's patches are only ever the left operand, never exchanged
-fn (x operand<<T>>&) isMatrix() Bool { return true }
-fn (x Patches<<T>>&) isMatrix() Bool { return false }
+fn (x operand<T>&) isMatrix() Bool { return true }
+fn (x Patches<T>&) isMatrix() Bool { return false }
 
 # lower: x is lower-triangular - x[r, s] is zero for s > r + diag and never read (Triangular.Left)
-fn (x operand<<T>>&) pack(trans Bool, w0 I64, p0 I64, width I64, depth I64, role <R>, sh <S>, lower Bool, diag I64, dst mut Array<<A>>&) {
+fn (x operand<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I64, role R, sh S, lower Bool, diag I64, dst mut Array<A>&) {
     z A
     wr := panelWidth(z, role, sh)
     if trans {
@@ -588,7 +588,7 @@ fn (x operand<<T>>&) pack(trans Bool, w0 I64, p0 I64, width I64, depth I64, role
 # test per element where every window lies inside the image, as most do. Positions follow one another, so each is
 # found from the last by a step, not by dividing; the geometry is held in locals, read through x it would be read
 # again at every store
-fn (x Patches<<T>>&) pack(trans Bool, w0 I64, p0 I64, width I64, depth I64, role <R>, sh <S>, lower Bool, diag I64, dst mut Array<<A>>&) {
+fn (x Patches<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I64, role R, sh S, lower Bool, diag I64, dst mut Array<A>&) {
     assert not trans and not lower
     z A
     wr := panelWidth(z, role, sh)
@@ -678,7 +678,7 @@ fn clampI(x I64, lo I64, hi I64) I64 { return lo if x < lo else (hi if x > hi el
 type wideTile struct() { }
 type thinTile struct() { }
 
-fn tileColsOf(z <A>, sh <S>) I64 {
+fn tileColsOf<A, S>(z A, sh S) I64 {
     return match S {
         case wideTile => tileCols(z)
         case thinTile => vectorLanes(z)
@@ -686,7 +686,7 @@ fn tileColsOf(z <A>, sh <S>) I64 {
 }
 
 # the elements of accumulation type A in one vector register of the target
-fn vectorLanes(z <A>) I64 {
+fn vectorLanes<A>(z A) I64 {
     return match A {
         case F64, I64, U64 => TargetVectorBits / 64
         nomatch => TargetVectorBits / 32
@@ -699,7 +699,7 @@ type packedA struct() { }
 type rowsA struct() { }
 
 # the steps between the elements of one step's rows, and between one step's and the next's
-fn aSteps(z <A>, lay <L>, ld I64) (I64, I64) {
+fn aSteps<A, L>(z A, lay L, ld I64) (I64, I64) {
     match L {
         case packedA { return 1, tileRows(z) }
         case rowsA { return ld, 1 }
@@ -714,7 +714,7 @@ fn aSteps(z <A>, lay <L>, ld I64) (I64, I64) {
 # once the tile's columns are (inlined) - with the rows as a loop too, a tile this large is too big for LLVM to unroll
 # whole, and its accumulators would live in memory. The accumulators never leave the kernel but to be stored, so only
 # the tile's own are kept, in registers
-fn micro4(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh <S>, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+fn micro4<A, L, S, T>(d1 I64, a1 Array<A>&, o1 I64, ld1 I64, lay L, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh S, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
     z A
     nr := tileColsOf(z, sh)
     si, sk := aSteps(z, lay, ld1)
@@ -750,7 +750,7 @@ fn micro4(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&
     if exchanged { storeTileT(t, nr, alpha, beta, c, co, ldc, rows, cols) } else { storeTile(t, nr, alpha, beta, c, co, ldc, rows, cols, lim) }
 }
 
-fn micro6(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh <S>, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+fn micro6<A, L, S, T>(d1 I64, a1 Array<A>&, o1 I64, ld1 I64, lay L, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh S, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
     z A
     nr := tileColsOf(z, sh)
     si, sk := aSteps(z, lay, ld1)
@@ -790,7 +790,7 @@ fn micro6(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&
     if exchanged { storeTileT(t, nr, alpha, beta, c, co, ldc, rows, cols) } else { storeTile(t, nr, alpha, beta, c, co, ldc, rows, cols, lim) }
 }
 
-fn micro12(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh <S>, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+fn micro12<A, L, S, T>(d1 I64, a1 Array<A>&, o1 I64, ld1 I64, lay L, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh S, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
     z A
     nr := tileColsOf(z, sh)
     si, sk := aSteps(z, lay, ld1)
@@ -843,7 +843,7 @@ fn micro12(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>
 }
 
 # the target's micro-kernel
-fn micro(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh <S>, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+fn micro<A, L, S, T>(d1 I64, a1 Array<A>&, o1 I64, ld1 I64, lay L, d2 I64, a2 Array<A>&, o2 I64, bp Array<A>&, bo I64, sh S, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
     if TargetVectorBits >= 512 {
         micro12(d1, a1, o1, ld1, lay, d2, a2, o2, bp, bo, sh, alpha, beta, c, co, ldc, rows, cols, lim, exchanged)
     } else if TargetVectorBits >= 256 {
@@ -856,7 +856,7 @@ fn micro(d1 I64, a1 Array<<A>>&, o1 I64, ld1 I64, lay <L>, d2 I64, a2 Array<A>&,
 # whether a left operand can be read where it is rather than packed: a matrix whose elements are already of the
 # accumulation type, read by rows (op(a) = a - read by columns, a transposed one strides across its rows a step at a
 # time, which the caches do not prefetch: packing it was measured 1.5x as fast)
-fn readsInPlace(sa <SA>, ta Bool, z <A>) Bool {
+fn readsInPlace<SA, A>(sa SA, ta Bool, z A) Bool {
     return match SA {
         case operand<A> => not ta
         nomatch => false
@@ -867,7 +867,7 @@ fn readsInPlace(sa <SA>, ta Bool, z <A>) Bool {
 # last rows, fewer than the tile's, packed into ap with zeros below them - and stored. A lower-triangular x (lower) is
 # read in place up to the depth where its triangle begins, every row of the tile reaching that far (p <= ti + diag), and
 # the triangle's part, where the rows end at different places, is packed with its zeros
-fn tileInPlace(x operand<<A>>&, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bool, diag I64, ap mut Array<A>&, bp Array<A>&, bo I64, sh <S>, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+fn tileInPlace<A, S, T>(x operand<A>&, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bool, diag I64, ap mut Array<A>&, bp Array<A>&, bo I64, sh S, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
     z A
     mr := tileRows(z)
     nr := tileColsOf(z, sh)
@@ -883,7 +883,7 @@ fn tileInPlace(x operand<<A>>&, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bo
 
 # a tile computed and stored: by tileInPlace where the left operand is read in place, from the packed panel otherwise -
 # its rows from ao, the depth from ks (the panel's depth ks - from its start)
-fn computeTile(sa <SA>, inPlace Bool, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bool, diag I64, ap mut Array<<A>>&, ao I64, bp Array<A>&, bo I64, sh <S>, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
+fn computeTile<SA, A, S, T>(sa SA, inPlace Bool, ti I64, tr I64, p0 I64, ks I64, ke I64, lower Bool, diag I64, ap mut Array<A>&, ao I64, bp Array<A>&, bo I64, sh S, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64, exchanged Bool) {
     if inPlace {
         match SA {
             case operand<A> {
@@ -898,13 +898,13 @@ fn computeTile(sa <SA>, inPlace Bool, ti I64, tr I64, p0 I64, ks I64, ke I64, lo
 }
 
 # one row of the tile for one step of k: acc[base + j] += x * bp[b + j] for the tile's nr columns
-fn rowStep(acc mut tile<<A>>&, base I64, x A, bp Array<A>&, b I64, nr I64) {
+fn rowStep<A>(acc mut tile<A>&, base I64, x A, bp Array<A>&, b I64, nr I64) {
     for j in range nr { acc.v[base + j] = mulAdd(x, bp[b + j], acc.v[base + j]) }
 }
 
 # a * b + c - rounded once, by the target's fused multiply-add instruction, where it has one and A is a float. Every
 # product here accumulates through it: the micro-kernels, the small and matrix-vector products and the dot products
-fn mulAdd(a <A>, b A, c A) A {
+fn mulAdd<A>(a A, b A, c A) A {
     match A {
         case F32, F64 {
             if TargetHasFma { return math.Fma(a, b, c) }
@@ -919,7 +919,7 @@ fn mulAdd(a <A>, b A, c A) A {
 # C[i, j] = alpha acc[i, j] + beta C[i, j] for the rows x cols part of the tile inside the product, C's element (i, j)
 # at c[co + i ldc + j] - of row i only its first lim + i columns (a triangular result's diagonal: lim >= cols where the
 # whole tile is wanted). beta == 0 never reads C, so C may hold anything (BLAS's rule)
-fn storeTile(acc tile<<A>>&, nr I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64, lim I64) {
+fn storeTile<A, T>(acc tile<A>&, nr I64, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64) {
     like T
     if beta == 0 {
         for i in range rows {
@@ -936,7 +936,7 @@ fn storeTile(acc tile<<A>>&, nr I64, alpha A, beta A, c mut Array<<T>>&, co I64,
 
 # the tile of C^T computed where a product is exchanged (tileChoice): C[j, i] = alpha acc[i, j] + beta C[j, i], at
 # c[co + j ldc + i]
-fn storeTileT(acc tile<<A>>&, nr I64, alpha A, beta A, c mut Array<<T>>&, co I64, ldc I64, rows I64, cols I64) {
+fn storeTileT<A, T>(acc tile<A>&, nr I64, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64) {
     like T
     for j in range cols {
         o I64 = co + j * ldc
@@ -953,13 +953,13 @@ fn storeTileT(acc tile<<A>>&, nr I64, alpha A, beta A, c mut Array<<T>>&, co I64
 # broadcast fill the vector registers the target has: AVX-512's 32 registers of 512 bits take 12 x 32 four-byte elements
 # (24 accumulators), AVX's 16 of 256 bits 6 x 16 (12), SSE's 16 of 128 bits 4 x 12 (12); an eight-byte element type
 # has half the columns. A thin tile has the same rows and one vector of columns
-fn tileRows(z <A>) I64 {
+fn tileRows<A>(z A) I64 {
     if TargetVectorBits >= 512 { return 12 }
     if TargetVectorBits >= 256 { return 6 }
     return 4
 }
 
-fn tileCols(z <A>) I64 {
+fn tileCols<A>(z A) I64 {
     wide I64 = match A {
         case F64, I64, U64 => 2
         nomatch => 1
@@ -974,12 +974,12 @@ fn tileCols(z <A>) I64 {
 # columns, wide or thin; its panel stays in L3)
 kc I64 = 256
 
-fn blockRows(z <A>) I64 {
+fn blockRows<A>(z A) I64 {
     mr := tileRows(z)
     return 128 / mr * mr
 }
 
-fn blockCols(z <A>) I64 {
+fn blockCols<A>(z A) I64 {
     nr := tileCols(z)
     return 2048 / nr * nr
 }
@@ -1017,13 +1017,13 @@ fn tileChoice(m I64, n I64, mr I64, wideCols I64, thinCols I64, mayExchange Bool
 # ever came out ahead
 smallProduct I64 = 1024
 
-fn computedDirectly(m I64, n I64, k I64, z <T>) Bool {
+fn computedDirectly<T>(m I64, n I64, k I64, z T) Bool {
     return m * n * k <= smallProduct or (m < 12 and n >= 4 * vectorLanes(z) and k * n <= 65536)
 }
 
 # a small product, in the element type and without packing: each row of C updated from rows of B (the i-k-j loop,
 # vectorized along the rows) - B not transposed
-fn gemmDirect(transA Bool, m I64, n I64, k I64, alpha <T>, a Array<T>&, lda I64, b Array<T>&, ldb I64, beta T, c mut Array<T>&, ldc I64) {
+fn gemmDirect<T>(transA Bool, m I64, n I64, k I64, alpha T, a Array<T>&, lda I64, b Array<T>&, ldb I64, beta T, c mut Array<T>&, ldc I64) {
     z T
     for i in range m {
         ci I64 = i * ldc
@@ -1044,7 +1044,7 @@ fn gemmDirect(transA Bool, m I64, n I64, k I64, alpha <T>, a Array<T>&, lda I64,
 # mat[i * rs + p * cs] and v[p] is vec[p * vs]: a matrix-vector product in either orientation. Rows of M that are
 # contiguous (cs = 1) with a contiguous v are dot products in lanes; columns of M that are contiguous (rs = 1) are
 # added in, scaled, one after another
-fn gemv(rows I64, len I64, alpha <T>, mat Array<T>&, rs I64, cs I64, vec Array<T>&, vs I64, beta T, out mut Array<T>&, os I64) {
+fn gemv<T>(rows I64, len I64, alpha T, mat Array<T>&, rs I64, cs I64, vec Array<T>&, vs I64, beta T, out mut Array<T>&, os I64) {
     z T
     if cs == 1 and vs == 1 {
         for i in range rows {
@@ -1078,7 +1078,7 @@ fn gemv(rows I64, len I64, alpha <T>, mat Array<T>&, rs I64, cs I64, vec Array<T
 # computed by the micro-kernel and stored - transposed into c where exchanged, C^T being what is computed then. A
 # triangular product (tri) skips what it can: a triangular result the tiles past the diagonal, a triangular left
 # operand the part of the depth a tile's rows read as its zeros
-fn gemmRows(sa <SA>, ta Bool, i0 I64, i1 I64, p0 I64, depth I64, k I64, cols I64, j0 I64, al <A>, ap mut Array<A>&, bp Array<A>&, bt A, c mut Array<<T>>&, ldc I64, sh <S>, exchanged Bool, tri Triangular, diag I64, ep epilogue<T>&) {
+fn gemmRows<SA, A, T, S>(sa SA, ta Bool, i0 I64, i1 I64, p0 I64, depth I64, k I64, cols I64, j0 I64, al A, ap mut Array<A>&, bp Array<A>&, bt A, c mut Array<T>&, ldc I64, sh S, exchanged Bool, tri Triangular, diag I64, ep epilogue<T>&) {
     mr := tileRows(al)
     nr := tileColsOf(al, sh)
     mc := blockRows(al)
@@ -1129,7 +1129,7 @@ fn gemmRows(sa <SA>, ta Bool, i0 I64, i1 I64, p0 I64, depth I64, k I64, cols I64
 
 # the epilogue on rows r0 .. r1, columns c0 .. c1 of C (row stride ldc): z = C + bias, kept in pre, then C = act(z),
 # computed in the accumulation type A - one loop per activation, its function inlined (epilogueAs)
-fn epilogueRegion(c mut Array<<T>>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, ep epilogue<T>&, z <A>) {
+fn epilogueRegion<T, A>(c mut Array<T>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, ep epilogue<T>&, z A) {
     match ep.act {
         case Activation.Identity { epilogueAs(c, ldc, r0, r1, c0, c1, ep, z, identityAct()) }
         case Activation.Relu { epilogueAs(c, ldc, r0, r1, c0, c1, ep, z, reluAct()) }
@@ -1146,7 +1146,7 @@ type geluAct struct() { }
 type tanhAct struct() { }
 type sigmoidAct struct() { }
 
-fn activateAs(x <A>, kind <K>) A {
+fn activateAs<A, K>(x A, kind K) A {
     return match K {
         case identityAct => x
         case reluAct => relu(x)
@@ -1156,7 +1156,7 @@ fn activateAs(x <A>, kind <K>) A {
     }
 }
 
-fn epilogueAs(c mut Array<<T>>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, ep epilogue<T>&, z <A>, kind <K>) {
+fn epilogueAs<T, A, K>(c mut Array<T>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64, ep epilogue<T>&, z A, kind K) {
     like T
     pre := ep.pre
     ldp := ep.ldp
@@ -1198,7 +1198,7 @@ fn triangleDepth(lower Bool, ta Bool, ti I64, tr I64, p0 I64, depth I64, diag I6
 # the m x n x k product C = alpha op(A) op(B) + beta C from sa and sb (as packing reads them: ta and tb its trans), one
 # packed block of B at a time into bp, rows in runs of share over tasks (one task: the calling thread), each task
 # packing its rows of A into its own panel of ap (panel elements)
-fn gemmBlocks(m I64, n I64, k I64, sa <SA>, ta Bool, sb <SB>, tb Bool, al <A>, be A, c mut Array<<T>>&, ldc I64, share I64, ap mut Array<A>&, panel I64, bp mut Array<A>&, sh <S>, exchanged Bool, tri Triangular, diag I64, ep epilogue<T>&) {
+fn gemmBlocks<SA, SB, A, T, S>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bool, al A, be A, c mut Array<T>&, ldc I64, share I64, ap mut Array<A>&, panel I64, bp mut Array<A>&, sh S, exchanged Bool, tri Triangular, diag I64, ep epilogue<T>&) {
     nr := tileColsOf(al, sh)
     nc := blockCols(al)
     tasks I64 = (m + share - 1) / share
@@ -1225,7 +1225,7 @@ fn gemmBlocks(m I64, n I64, k I64, sa <SA>, ta Bool, sb <SB>, tb Bool, al <A>, b
 }
 
 # C = act(beta C + bias) where there is nothing to sum (k = 0) - of a triangular result its lower triangle only
-fn emptyProduct(m I64, n I64, be <A>, c mut Array<<T>>&, ldc I64, ep epilogue<T>&, tri Triangular, diag I64) {
+fn emptyProduct<A, T>(m I64, n I64, be A, c mut Array<T>&, ldc I64, ep epilogue<T>&, tri Triangular, diag I64) {
     like T
     z A
     for i in range m {
@@ -1242,7 +1242,7 @@ fn emptyProduct(m I64, n I64, be <A>, c mut Array<<T>>&, ldc I64, ep epilogue<T>
 
 # C = alpha op(A) op(B) + beta C, then the epilogue, for an m x n x k product of a and b (an operand or Patches, as
 # packing reads them) into c, row stride ldc, in accumulation type A (the type of z)
-fn productIn(m I64, n I64, k I64, a <SA>, transA Bool, b <SB>, transB Bool, alpha <T>, beta T, c mut Array<T>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, ep epilogue<T>&, z <A>) {
+fn productIn<SA, SB, T, A>(m I64, n I64, k I64, a SA, transA Bool, b SB, transB Bool, alpha T, beta T, c mut Array<T>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, ep epilogue<T>&, z A) {
     al := Cast(alpha, z)
     be := Cast(beta, z)
     if k == 0 {
@@ -1296,7 +1296,7 @@ fn productIn(m I64, n I64, k I64, a <SA>, transA Bool, b <SB>, transB Bool, alph
 
 # the packed product, its panels from ws: B's one panel, A's one per task - a product large enough is split over up to
 # threads tasks by rows of the result, a multiple of the tile's rows each
-fn packedProduct(m I64, n I64, k I64, sa <SA>, ta Bool, sb <SB>, tb Bool, al <A>, be A, c mut Array<<T>>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, thin Bool, exchanged Bool, ep epilogue<T>&) {
+fn packedProduct<SA, SB, A, T>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bool, al A, be A, c mut Array<T>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, thin Bool, exchanged Bool, ep epilogue<T>&) {
     mr := tileRows(al)
     nr I64 = vectorLanes(al) if thin else tileCols(al)
     depthMax I64 = lesser(k, kc)
@@ -1315,7 +1315,7 @@ fn packedProduct(m I64, n I64, k I64, sa <SA>, ta Bool, sb <SB>, tb Bool, al <A>
 }
 
 # a product through the core: C (m x n, row stride ldc, in c) = alpha * op(a) op(b) + beta * C, then the epilogue
-fn product(m I64, n I64, k I64, a <SA>, transA Bool, b <SB>, transB Bool, alpha F64, beta F64, c mut Array<<T>>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, ep epilogue<T>&) {
+fn product<SA, SB, T>(m I64, n I64, k I64, a SA, transA Bool, b SB, transB Bool, alpha F64, beta F64, c mut Array<T>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, ep epilogue<T>&) {
     if m == 0 or n == 0 { return }
     like T
     al := Cast(alpha, like)
@@ -1343,7 +1343,7 @@ type GemmWorkspace<T> struct() {
 
 # B's panel, with room for at least n elements of accumulation type A - made larger, where ws lives, when it has less:
 # n elements, or twice what it had when that is more
-fn (ws mut GemmWorkspace<<T>>&) panelB(n I64, z <A>) mut Array<A>&ws {
+fn (ws mut GemmWorkspace<T>&) panelB<A>(n I64, z A) mut Array<A>&ws {
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
             if ws.wideB == null { ws.wideB = Array<F32>(n) } else if ws.wideB.Len() < n { ws.wideB = Array<F32>(grown(ws.wideB.Len(), n)) }
@@ -1357,7 +1357,7 @@ fn (ws mut GemmWorkspace<<T>>&) panelB(n I64, z <A>) mut Array<A>&ws {
 }
 
 # A's panels, the same way
-fn (ws mut GemmWorkspace<<T>>&) panelsA(n I64, z <A>) mut Array<A>&ws {
+fn (ws mut GemmWorkspace<T>&) panelsA<A>(n I64, z A) mut Array<A>&ws {
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
             if ws.wideA == null { ws.wideA = Array<F32>(n) } else if ws.wideA.Len() < n { ws.wideA = Array<F32>(grown(ws.wideA.Len(), n)) }
@@ -1382,13 +1382,13 @@ fn grown(have I64, n I64) I64 { return n if n > have * 2 else have * 2 }
 # its own scope (ws.Gemm, below, packs into a workspace the caller keeps instead); a large product is split over up to
 # threads tasks. alpha and beta are F64, so a literal is written as it is whatever the element type; each is converted
 # to it once
-fn Gemm(c mut Matrix<<T>>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) ? ShapeError {
+fn Gemm<T>(c mut Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) ? ShapeError {
     ws := GemmWorkspace<T>()
     try ws.Gemm(c, a, transA, b, transB, alpha, beta, threads)
 }
 
 # Gemm, packing into ws: allocates nothing once ws has room for this product's panels
-fn (ws mut GemmWorkspace<<T>>&) Gemm(c mut Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) ? ShapeError {
+fn (ws mut GemmWorkspace<T>&) Gemm(c mut Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, threads I64 = 1) ? ShapeError {
     if not (productShape(c, a, transA, b, transB)) { error ShapeError.MISMATCH }
     k I64 = a.Rows if transA else a.Cols
     ep := epilogue<T>(null, Activation.Identity, null, 0)
@@ -1398,7 +1398,7 @@ fn (ws mut GemmWorkspace<<T>>&) Gemm(c mut Matrix<T>&, a Matrix<T>&, transA Bool
 # y = alpha * op(a) x + beta * y, for vectors x and y: a matrix-vector product, a's rows dotted with x (trans false)
 # or a's columns (trans true) - no packing, no threads, nothing allocated; beta = 0 never reads y. A batch of up to
 # four rows through Gemm takes the same path
-fn Gemv(y mut Array<<T>>&, a Matrix<T>&, trans Bool, x Array<T>&, alpha F64 = 1, beta F64 = 0) ? ShapeError {
+fn Gemv<T>(y mut Array<T>&, a Matrix<T>&, trans Bool, x Array<T>&, alpha F64 = 1, beta F64 = 0) ? ShapeError {
     m I64 = a.Cols if trans else a.Rows
     k I64 = a.Rows if trans else a.Cols
     if not (y.Len() == m and x.Len() == k) { error ShapeError.MISMATCH }
@@ -1429,14 +1429,14 @@ type epilogue<T> struct(bias Array<T>&, act Activation, pre mut Array<T>&, ldp I
     ldp
 }
 
-fn (e epilogue<<T>>&) on() Bool { return e.bias != null or e.pre != null or e.act != Activation.Identity }
+fn (e epilogue<T>&) on() Bool { return e.bias != null or e.pre != null or e.act != Activation.Identity }
 
 # act(x), one element: Identity x; Relu max(x, 0), a NaN staying a NaN; Gelu GELU in its tanh form,
 # 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))) - Hendrycks and Gimpel's approximation, GPT-2's activation,
 # PyTorch's approximate="tanh" - through FastTanh: within 7e-7 (F32) and 3e-16 (F64) of that formula computed with the
 # C library's tanh in F64, measured at 20,001 points over [-10, 10] (beyond them it is x or 0 to the type's precision),
 # and the formula itself within 5e-4 of GELU's exact x Phi(x); Tanh FastTanh(x); Sigmoid FastSigmoid(x)
-fn Activate(x <T>, act Activation) T ? {
+fn Activate<T>(x T, act Activation) T ? {
     try checkActivation(x, act)
     return match act {
         case Activation.Identity => x
@@ -1449,7 +1449,7 @@ fn Activate(x <T>, act Activation) T ? {
 
 # each activation of one element, for every element type: a float computed in its own type, F16, BF16 and the F8 types
 # in F32 and rounded once; an integer has only the identity and ReLU
-fn relu(x <T>) T {
+fn relu<T>(x T) T {
     match T {
         case F8E4M3, F8E5M2 { return Cast(relu(Cast(x, F32(0))), x) }
         nomatch {
@@ -1459,7 +1459,7 @@ fn relu(x <T>) T {
     }
 }
 
-fn gelu(x <T>) T {
+fn gelu<T>(x T) T {
     return match T {
         case F32, F64 => 0.5 * x * (1.0 + FastTanh(0.7978845608028654 * (x + 0.044715 * x * x * x)))
         case F16, BF16, F8E4M3, F8E5M2 => Cast(gelu(Cast(x, F32(0))), x)
@@ -1467,7 +1467,7 @@ fn gelu(x <T>) T {
     }
 }
 
-fn tanhOf(x <T>) T {
+fn tanhOf<T>(x T) T {
     return match T {
         case F32, F64 => FastTanh(x)
         case F16, BF16, F8E4M3, F8E5M2 => Cast(FastTanh(Cast(x, F32(0))), x)
@@ -1475,7 +1475,7 @@ fn tanhOf(x <T>) T {
     }
 }
 
-fn sigmoidOf(x <T>) T {
+fn sigmoidOf<T>(x T) T {
     return match T {
         case F32, F64 => FastSigmoid(x)
         case F16, BF16, F8E4M3, F8E5M2 => Cast(FastSigmoid(Cast(x, F32(0))), x)
@@ -1484,13 +1484,13 @@ fn sigmoidOf(x <T>) T {
 }
 
 # GELU, tanh or the sigmoid of an integer: there is none, and checkActivation has said so before one is asked for
-fn integerActivation(x <T>) T {
+fn integerActivation<T>(x T) T {
     unreachable
 }
 
 # fails with ActivationError.NOT_FOR_INTEGERS where T is an integer type and act needs a fraction - each operation
 # applying act asks before it starts, so a float type's instantiation cannot fail
-fn checkActivation(like <T>, act Activation) ? {
+fn checkActivation<T>(like T, act Activation) ? {
     match T {
         case F32, F64, F16, BF16, F8E4M3, F8E5M2 { }
         nomatch { if act != Activation.Identity and act != Activation.Relu { error ActivationError.NOT_FOR_INTEGERS } }
@@ -1500,7 +1500,7 @@ fn checkActivation(like <T>, act Activation) ? {
 # act'(x), the slope of act at x - what an activation's backward multiplies a gradient by: Relu's 1 where x > 0 and 0
 # elsewhere (at 0 too, as PyTorch has it); Gelu's 0.5 (1 + t) + 0.5 x (1 - t^2) sqrt(2 / pi) (1 + 3 0.044715 x^2),
 # t = tanh(sqrt(2 / pi) (x + 0.044715 x^3)); Tanh's 1 - tanh(x)^2; Sigmoid's s (1 - s), s = sigmoid(x)
-fn ActivationSlope(x <T>, act Activation) T ? {
+fn ActivationSlope<T>(x T, act Activation) T ? {
     try checkActivation(x, act)
     match T {
         case F32, F64 {
@@ -1521,13 +1521,13 @@ fn ActivationSlope(x <T>, act Activation) T ? {
     }
 }
 
-fn geluSlope(x <T>) T {
+fn geluSlope<T>(x T) T {
     t T = FastTanh(0.7978845608028654 * (x + 0.044715 * x * x * x))
     return 0.5 * (1.0 + t) + 0.5 * x * (1.0 - t * t) * 0.7978845608028654 * (1.0 + 0.134145 * x * x)
 }
 
 # y = act(z), element by element - y may be z
-fn (y mut Matrix<<T>>&) Activate(z Matrix<T>&, act Activation) ? {
+fn (y mut Matrix<T>&) Activate(z Matrix<T>&, act Activation) ? {
     like T
     try checkActivation(like, act)
     match act {
@@ -1541,7 +1541,7 @@ fn (y mut Matrix<<T>>&) Activate(z Matrix<T>&, act Activation) ? {
 
 # dz = dy act'(z) + beta dz, element by element: an activation's backward, z being what act was applied to (pre, from
 # GemmAct) - for Relu its output serves as well, having z's sign. dz may be dy
-fn (dz mut Matrix<<T>>&) ActivationBackward(dy Matrix<T>&, z Matrix<T>&, act Activation, beta F64 = 0) ? {
+fn (dz mut Matrix<T>&) ActivationBackward(dy Matrix<T>&, z Matrix<T>&, act Activation, beta F64 = 0) ? {
     like T
     try checkActivation(like, act)
     b := Cast(beta, like)
@@ -1569,19 +1569,19 @@ fn (dz mut Matrix<<T>>&) ActivationBackward(dy Matrix<T>&, z Matrix<T>&, act Act
 # summed, while it is still in the cache, a row at a time, so c is never read again from memory: the result is what
 # Gemm, AddRow and Activate give, rounding as they do, in one pass over c. Where pre is given (c's shape, not
 # overlapping it) it gets what act was applied to, which act's backward needs (ActivationBackward). Otherwise Gemm
-fn GemmAct(c mut Matrix<<T>>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
+fn GemmAct<T>(c mut Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
     ws := GemmWorkspace<T>()
     try ws.GemmAct(c, a, transA, b, transB, bias, act, alpha, beta, threads, pre)
 }
 
-fn (ws mut GemmWorkspace<<T>>&) GemmAct(c mut Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
+fn (ws mut GemmWorkspace<T>&) GemmAct(c mut Matrix<T>&, a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
     if not (productShape(c, a, transA, b, transB)) { error ShapeError.MISMATCH }
     k I64 = a.Rows if transA else a.Cols
     ep := try epilogueOf(c, bias, act, pre)
     product(c.Rows, c.Cols, k, operand<T>(a.Data, a.Stride), transA, operand<T>(b.Data, b.Stride), transB, alpha, beta, c.Data, c.Stride, threads, ws, ep)
 }
 
-fn epilogueOf(c Matrix<<T>>&, bias Matrix<T>&, act Activation, pre mut Matrix<T>&) epilogue<T> ? {
+fn epilogueOf<T>(c Matrix<T>&, bias Matrix<T>&, act Activation, pre mut Matrix<T>&) epilogue<T> ? {
     like T
     try checkActivation(like, act)
     if not (bias == null or rowShape(c, bias)) { error ShapeError.MISMATCH }
@@ -1612,13 +1612,13 @@ type Batch<T> struct(Rows I64, Cols I64, Stride I64, Groups I64, GroupStride I64
 }
 
 # matrix (g, m), a view
-fn (b Batch<<T>>&) At(g I64, m I64) Matrix<T> {
+fn (b Batch<T>&) At(g I64, m I64) Matrix<T> {
     return Matrix<T>(b.Rows, b.Cols, b.Data[g * b.GroupStride + m * b.MemberStride:], b.Stride)
 }
 
 # m's rows in runs of rows (the groups: sequences of T positions) and its columns in heads equal blocks (the
 # members): matrix (s, h) is rows s rows ... s rows + rows - 1 and columns h w ... h w + w - 1, w = Cols / heads
-fn (m Matrix<<T>>&) Heads(rows I64, heads I64) Batch<T> ? ShapeError {
+fn (m Matrix<T>&) Heads(rows I64, heads I64) Batch<T> ? ShapeError {
     if not (rows > 0 and heads > 0 and m.Rows % rows == 0 and m.Cols % heads == 0) { error ShapeError.MISMATCH }
     w I64 = m.Cols / heads
     return try Batch<T>(rows, w, m.Stride, m.Rows / rows, rows * m.Stride, heads, w, m.Data)
@@ -1626,7 +1626,7 @@ fn (m Matrix<<T>>&) Heads(rows I64, heads I64) Batch<T> ? ShapeError {
 
 # m's rows in runs of rows, run r being matrix (r / members, r % members): attention's T x T matrices of every sequence and
 # head, stacked. m.Stacked(m.Rows) is m alone, as a batch of one
-fn (m Matrix<<T>>&) Stacked(rows I64, members I64 = 1) Batch<T> ? ShapeError {
+fn (m Matrix<T>&) Stacked(rows I64, members I64 = 1) Batch<T> ? ShapeError {
     if not (rows > 0 and members > 0 and m.Rows % (rows * members) == 0) { error ShapeError.MISMATCH }
     return try Batch<T>(rows, m.Cols, m.Stride, m.Rows / (rows * members), rows * members * m.Stride, members, rows * m.Stride, m.Data)
 }
@@ -1653,12 +1653,12 @@ type Triangular enum {
 #     ws.GemmBatch(p.Stacked(T, heads), q.Heads(T, heads), false, k.Heads(T, heads), true, scale, 0, Triangular.Result)
 #     (the softmax of each row over its first i + 1 columns, then)
 #     ws.GemmBatch(y.Heads(T, heads), p.Stacked(T, heads), false, v.Heads(T, heads), false, 1, 0, Triangular.Left)
-fn GemmBatch(c mut Batch<<T>>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, triangular Triangular = Triangular.None, diagonal I64 = 0, threads I64 = 1) ? ShapeError {
+fn GemmBatch<T>(c mut Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, triangular Triangular = Triangular.None, diagonal I64 = 0, threads I64 = 1) ? ShapeError {
     ws := GemmWorkspace<T>()
     try ws.GemmBatch(c, a, transA, b, transB, alpha, beta, triangular, diagonal, threads)
 }
 
-fn (ws mut GemmWorkspace<<T>>&) GemmBatch(c mut Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, triangular Triangular = Triangular.None, diagonal I64 = 0, threads I64 = 1) ? ShapeError {
+fn (ws mut GemmWorkspace<T>&) GemmBatch(c mut Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, alpha F64 = 1, beta F64 = 0, triangular Triangular = Triangular.None, diagonal I64 = 0, threads I64 = 1) ? ShapeError {
     if not (batchShape(c, a, transA, b, transB)) { error ShapeError.MISMATCH }
     like T
     al := Cast(alpha, like)
@@ -1669,7 +1669,7 @@ fn (ws mut GemmWorkspace<<T>>&) GemmBatch(c mut Batch<T>&, a Batch<T>&, transA B
     }
 }
 
-fn batchShape(c Batch<<T>>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool) Bool {
+fn batchShape<T>(c Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool) Bool {
     am I64 = a.Cols if transA else a.Rows
     ak I64 = a.Rows if transA else a.Cols
     bk I64 = b.Cols if transB else b.Rows
@@ -1678,7 +1678,7 @@ fn batchShape(c Batch<<T>>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool)
         c.Rows == am and c.Cols == bn
 }
 
-fn batchIn(c mut Batch<<T>>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, alpha T, beta T, tri Triangular, diag I64, threads I64, ws mut GemmWorkspace<T>&, z <A>) {
+fn batchIn<T, A>(c mut Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, alpha T, beta T, tri Triangular, diag I64, threads I64, ws mut GemmWorkspace<T>&, z A) {
     m I64 = c.Rows
     n I64 = c.Cols
     k I64 = a.Rows if transA else a.Cols
@@ -1720,7 +1720,7 @@ fn batchIn(c mut Batch<<T>>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool
 }
 
 # products lo .. hi of the batches, in order, each on its own as gemmBlocks computes it on one thread
-fn batchRun(lo I64, hi I64, c mut Batch<<T>>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, m I64, n I64, k I64, al <A>, be A, ap mut Array<A>&, bp mut Array<A>&, thin Bool, tri Triangular, diag I64, ep epilogue<T>&) {
+fn batchRun<T, A>(lo I64, hi I64, c mut Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB Bool, m I64, n I64, k I64, al A, be A, ap mut Array<A>&, bp mut Array<A>&, thin Bool, tri Triangular, diag I64, ep epilogue<T>&) {
     for e in range lo, hi {
         g I64 = e / c.Members
         h I64 = e - g * c.Members
@@ -1763,7 +1763,7 @@ type Patches<T> struct(images Matrix<T>&, C I64, H I64, W I64, K I64, Stride I64
 # over threads tasks. A window inside the image is copied with no test per element: a kernel row's pixels at a time
 # where the image has fewer channels than the kernel is wide (an image's first layer), a pixel's channels at a time
 # otherwise
-fn (x Patches<<T>>&) Im2col(cols mut Matrix<T>&, threads I64 = 1) ? ShapeError {
+fn (x Patches<T>&) Im2col(cols mut Matrix<T>&, threads I64 = 1) ? ShapeError {
     if not (cols.Rows == x.Rows and cols.Cols == x.Cols) { error ShapeError.MISMATCH }
     ParallelRows(x.Rows, 256, threads, fn(lo, hi) { x.im2colRows(cols, lo, hi) })
 }
@@ -1771,7 +1771,7 @@ fn (x Patches<<T>>&) Im2col(cols mut Matrix<T>&, threads I64 = 1) ? ShapeError {
 # rows lo .. hi of the patch matrix into cols: with fewer channels than the kernel is wide, each row's inputs in order,
 # their offset in the window kept as they go rather than as loops of the kernel's width - which LLVM would test for
 # overlapping arrays each time round, for three elements - and a pixel's channels at a time otherwise
-fn (x Patches<<T>>&) im2colRows(cols mut Matrix<T>&, lo I64, hi I64) {
+fn (x Patches<T>&) im2colRows(cols mut Matrix<T>&, lo I64, hi I64) {
     z T
     data := x.Images.Data
     out := cols.Data
@@ -1840,12 +1840,12 @@ fn (x Patches<<T>>&) im2colRows(cols mut Matrix<T>&, lo I64, hi I64) {
 # weights b (OutC x C K K, transB) - c's rows being the images' output pixels, OutC wide, channels last again - with its
 # bias and activation, the patches packed from the images as the product needs them and never made. bias, act and
 # pre as GemmAct's
-fn GemmPatches(c mut Matrix<<T>>&, p Patches<T>&, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
+fn GemmPatches<T>(c mut Matrix<T>&, p Patches<T>&, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
     ws := GemmWorkspace<T>()
     try ws.GemmPatches(c, p, b, transB, bias, act, alpha, beta, threads, pre)
 }
 
-fn (ws mut GemmWorkspace<<T>>&) GemmPatches(c mut Matrix<T>&, p Patches<T>&, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
+fn (ws mut GemmWorkspace<T>&) GemmPatches(c mut Matrix<T>&, p Patches<T>&, b Matrix<T>&, transB Bool, bias Matrix<T>&, act Activation, alpha F64 = 1, beta F64 = 0, threads I64 = 1, pre mut Matrix<T>& = null) ? {
     bk I64 = b.Cols if transB else b.Rows
     bn I64 = b.Rows if transB else b.Cols
     if not (c.Rows == p.Rows and bk == p.Cols and c.Cols == bn) { error ShapeError.MISMATCH }
@@ -1856,7 +1856,7 @@ fn (ws mut GemmWorkspace<<T>>&) GemmPatches(c mut Matrix<T>&, p Patches<T>&, b M
 # a = alpha * x y^T + beta * a, for vectors x (a.Rows elements) and y (a.Cols): a rank-1 update (BLAS's ger, which
 # accumulates - beta 1 - as these do unless told otherwise) - a local learning rule's outer product, in one pass with
 # no temporary; beta = 0 never reads a, and beta below 1 decays what is there
-fn Ger(a mut Matrix<<T>>&, x Array<T>&, y Array<T>&, alpha F64 = 1, beta F64 = 1) ? ShapeError {
+fn Ger<T>(a mut Matrix<T>&, x Array<T>&, y Array<T>&, alpha F64 = 1, beta F64 = 1) ? ShapeError {
     if not (x.Len() == a.Rows and y.Len() == a.Cols) { error ShapeError.MISMATCH }
     like T
     al := Cast(alpha, like)
@@ -1875,7 +1875,7 @@ fn Ger(a mut Matrix<<T>>&, x Array<T>&, y Array<T>&, alpha F64 = 1, beta F64 = 1
 }
 
 # a = alpha * (x1 y1^T + x2 y2^T) + beta * a: a decayed rank-2 update in one pass - an eligibility trace, say
-fn Ger2(a mut Matrix<<T>>&, x1 Array<T>&, y1 Array<T>&, x2 Array<T>&, y2 Array<T>&, alpha F64 = 1, beta F64 = 1) ? ShapeError {
+fn Ger2<T>(a mut Matrix<T>&, x1 Array<T>&, y1 Array<T>&, x2 Array<T>&, y2 Array<T>&, alpha F64 = 1, beta F64 = 1) ? ShapeError {
     if not (x1.Len() == a.Rows and x2.Len() == a.Rows and y1.Len() == a.Cols and y2.Len() == a.Cols) { error ShapeError.MISMATCH }
     like T
     al := Cast(alpha, like)
@@ -1889,7 +1889,7 @@ fn Ger2(a mut Matrix<<T>>&, x1 Array<T>&, y1 Array<T>&, x2 Array<T>&, y2 Array<T
 }
 
 # a @ b, the matrix product - b a matrix, or a transposed one (a @ b.T() is A B^T)
-fn (a Matrix<<T>>&) MatMul(b <U>) Matrix<T> ? ShapeError {
+fn (a Matrix<T>&) MatMul<U>(b U) Matrix<T> ? ShapeError {
     match U {
         case Matrix<T>, Matrix<T>& {
             out mut Matrix<T>&return = Matrix<T>(a.Rows, b.Cols, null)
@@ -1905,7 +1905,7 @@ fn (a Matrix<<T>>&) MatMul(b <U>) Matrix<T> ? ShapeError {
 }
 
 # a.T() @ b, A^T B, and a.T() @ b.T()
-fn (a Transposed<<T>>&) MatMul(b <U>) Matrix<T> ? ShapeError {
+fn (a Transposed<T>&) MatMul<U>(b U) Matrix<T> ? ShapeError {
     match U {
         case Matrix<T>, Matrix<T>& {
             out mut Matrix<T>&return = Matrix<T>(a.M.Cols, b.Cols, null)
@@ -1921,7 +1921,7 @@ fn (a Transposed<<T>>&) MatMul(b <U>) Matrix<T> ? ShapeError {
 }
 
 # x y^T for two vectors: an x.Len() x y.Len() matrix
-fn Outer(x Array<<T>>&, y Array<T>&) Matrix<T> {
+fn Outer<T>(x Array<T>&, y Array<T>&) Matrix<T> {
     out mut Matrix<T>&return = Matrix<T>(x.Len(), y.Len(), null)
     for r in range x.Len() {
         xr := x[r]
@@ -1946,13 +1946,13 @@ type lanes<A> struct() {
 # lets them live in vector registers; here they are first copied out in order into a second set, kept in memory, which
 # is what makes the vectorizer group them four or eight to a register by position (with no copy it pairs them two to
 # a register)
-fn (l lanes<<A>>&) total() A {
+fn (l lanes<A>&) total() A {
     out := lanes<A>()
     for i in range 8 { out.v[i] = l.v[i] }
     return out.sum(8)
 }
 
-fn (l mut lanes<<A>>&) sum(n I64) A {
+fn (l mut lanes<A>&) sum(n I64) A {
     h I64 = n / 2
     for h >= 1 {
         for i in range h { l.v[i] = l.v[i] + l.v[i + h] }
@@ -1962,7 +1962,7 @@ fn (l mut lanes<<A>>&) sum(n I64) A {
 }
 
 # the sum of x[from .. from + n] - the one loop every sum is: lane j takes elements j, j + 8, ...
-fn sumRun(x Array<<T>>&, from I64, n I64, z <A>) A {
+fn sumRun<T, A>(x Array<T>&, from I64, n I64, z A) A {
     acc := lanes<A>()
     whole I64 = n - n % 8
     for i in range 0, whole, 8 {
@@ -1974,7 +1974,7 @@ fn sumRun(x Array<<T>>&, from I64, n I64, z <A>) A {
 }
 
 # the sum of x[i] * y[i] over a run, in the same lanes
-fn dotRun(x Array<<T>>&, xf I64, y Array<T>&, yf I64, n I64, z <A>) A {
+fn dotRun<T, A>(x Array<T>&, xf I64, y Array<T>&, yf I64, n I64, z A) A {
     acc := lanes<A>()
     whole I64 = n - n % 8
     for i in range 0, whole, 8 {
@@ -1985,14 +1985,14 @@ fn dotRun(x Array<<T>>&, xf I64, y Array<T>&, yf I64, n I64, z <A>) A {
     return acc.total() + rest
 }
 
-fn sumIn(m Matrix<<T>>&, z <A>) A {
+fn sumIn<T, A>(m Matrix<T>&, z A) A {
     if m.Contiguous() { return sumRun(m.Data, 0, m.Rows * m.Cols, z) }
     s A = z
     for r in range m.Rows { s = s + sumRun(m.Data, r * m.Stride, m.Cols, z) }
     return s
 }
 
-fn dotIn(a Matrix<<T>>&, b Matrix<T>&, z <A>) A {
+fn dotIn<T, A>(a Matrix<T>&, b Matrix<T>&, z A) A {
     if a.Contiguous() and b.Contiguous() { return dotRun(a.Data, 0, b.Data, 0, a.Rows * a.Cols, z) }
     s A = z
     for r in range a.Rows { s = s + dotRun(a.Data, r * a.Stride, b.Data, r * b.Stride, a.Cols, z) }
@@ -2000,7 +2000,7 @@ fn dotIn(a Matrix<<T>>&, b Matrix<T>&, z <A>) A {
 }
 
 # the sum of every element
-fn (m Matrix<<T>>&) Sum() T {
+fn (m Matrix<T>&) Sum() T {
     like T
     return match T {
         case F16, BF16, F8E4M3, F8E5M2 => Cast(sumIn(m, F32(0)), like)
@@ -2009,7 +2009,7 @@ fn (m Matrix<<T>>&) Sum() T {
 }
 
 # the mean of every element - for a float matrix
-fn (m Matrix<<T>>&) Mean() T {
+fn (m Matrix<T>&) Mean() T {
     like T
     return match T {
         case F16, BF16, F8E4M3, F8E5M2 => Cast(sumIn(m, F32(0)) / F32(m.Rows * m.Cols), like)
@@ -2019,7 +2019,7 @@ fn (m Matrix<<T>>&) Mean() T {
 
 # the sum of the products of corresponding elements - the Frobenius inner product; two vectors' dot product when
 # both are one row
-fn (a Matrix<<T>>&) Dot(b Matrix<T>&) T ? ShapeError {
+fn (a Matrix<T>&) Dot(b Matrix<T>&) T ? ShapeError {
     if not (sameShape(a, b)) { error ShapeError.MISMATCH }
     like T
     return match T {
@@ -2029,7 +2029,7 @@ fn (a Matrix<<T>>&) Dot(b Matrix<T>&) T ? ShapeError {
 }
 
 # the Frobenius norm: the square root of the sum of the squares - for a float matrix
-fn (m Matrix<<T>>&) Norm() T {
+fn (m Matrix<T>&) Norm() T {
     like T
     return match T {
         case F16, BF16, F8E4M3, F8E5M2 => Cast(math.Sqrt(dotIn(m, m, F32(0))), like)
@@ -2038,7 +2038,7 @@ fn (m Matrix<<T>>&) Norm() T {
 }
 
 # the Euclidean distance between a and b - the norm of a - b, with no difference made: a residual's size
-fn (a Matrix<<T>>&) Distance(b Matrix<T>&) T ? ShapeError {
+fn (a Matrix<T>&) Distance(b Matrix<T>&) T ? ShapeError {
     if not (sameShape(a, b)) { error ShapeError.MISMATCH }
     like T
     return match T {
@@ -2047,7 +2047,7 @@ fn (a Matrix<<T>>&) Distance(b Matrix<T>&) T ? ShapeError {
     }
 }
 
-fn distanceIn(a Matrix<<T>>&, b Matrix<T>&, z <A>) A {
+fn distanceIn<T, A>(a Matrix<T>&, b Matrix<T>&, z A) A {
     s A = z
     for r in range a.Rows {
         acc := lanes<A>()
@@ -2072,7 +2072,7 @@ fn distanceIn(a Matrix<<T>>&, b Matrix<T>&, z <A>) A {
 
 # the largest absolute difference between corresponding elements - a residual's size in the max norm, with no
 # difference made; a NaN if either holds one
-fn (a Matrix<<T>>&) MaxAbsDifference(b Matrix<T>&) T ? ShapeError {
+fn (a Matrix<T>&) MaxAbsDifference(b Matrix<T>&) T ? ShapeError {
     if not (sameShape(a, b)) { error ShapeError.MISMATCH }
     z T
     best T = z
@@ -2085,7 +2085,7 @@ fn (a Matrix<<T>>&) MaxAbsDifference(b Matrix<T>&) T ? ShapeError {
 }
 
 # the largest absolute value of an element - the max norm; 0 for an empty matrix
-fn (m Matrix<<T>>&) MaxAbs() T {
+fn (m Matrix<T>&) MaxAbs() T {
     z T
     best T = z
     for r in range m.Rows {
@@ -2097,7 +2097,7 @@ fn (m Matrix<<T>>&) MaxAbs() T {
 
 # the largest element, and the smallest - a NaN if any element is one (std/math's Max and Min); for a matrix with
 # at least one element
-fn (m Matrix<<T>>&) Max() T {
+fn (m Matrix<T>&) Max() T {
     best T = m.Data[0]
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -2106,7 +2106,7 @@ fn (m Matrix<<T>>&) Max() T {
     return best
 }
 
-fn (m Matrix<<T>>&) Min() T {
+fn (m Matrix<T>&) Min() T {
     best T = m.Data[0]
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -2116,7 +2116,7 @@ fn (m Matrix<<T>>&) Min() T {
 }
 
 # out[r] = the sum of row r, for every row: out has Rows elements
-fn (m Matrix<<T>>&) RowSums(out mut Array<T>&) ? ShapeError {
+fn (m Matrix<T>&) RowSums(out mut Array<T>&) ? ShapeError {
     if not (out.Len() == m.Rows) { error ShapeError.MISMATCH }
     match T {
         case F16, BF16, F8E4M3, F8E5M2 { rowSumsIn(m, out, F32(0)) }
@@ -2127,13 +2127,13 @@ fn (m Matrix<<T>>&) RowSums(out mut Array<T>&) ? ShapeError {
     }
 }
 
-fn rowSumsIn(m Matrix<<T>>&, out mut Array<T>&, z <A>) {
+fn rowSumsIn<T, A>(m Matrix<T>&, out mut Array<T>&, z A) {
     like T
     for r in range m.Rows { out[r] = Cast(sumRun(m.Data, r * m.Stride, m.Cols, z), like) }
 }
 
 # out[r] = the largest absolute value in row r - each row's max norm (a residual's, per row)
-fn (m Matrix<<T>>&) RowMaxAbs(out mut Array<T>&) ? ShapeError {
+fn (m Matrix<T>&) RowMaxAbs(out mut Array<T>&) ? ShapeError {
     if not (out.Len() == m.Rows) { error ShapeError.MISMATCH }
     z T
     for r in range m.Rows {
@@ -2145,7 +2145,7 @@ fn (m Matrix<<T>>&) RowMaxAbs(out mut Array<T>&) ? ShapeError {
 }
 
 # out[r] = the sum of the absolute values in row r
-fn (m Matrix<<T>>&) RowAbsSums(out mut Array<T>&) ? ShapeError {
+fn (m Matrix<T>&) RowAbsSums(out mut Array<T>&) ? ShapeError {
     if not (out.Len() == m.Rows) { error ShapeError.MISMATCH }
     match T {
         case F16, BF16, F8E4M3, F8E5M2 { rowAbsSumsIn(m, out, F32(0)) }
@@ -2156,7 +2156,7 @@ fn (m Matrix<<T>>&) RowAbsSums(out mut Array<T>&) ? ShapeError {
     }
 }
 
-fn rowAbsSumsIn(m Matrix<<T>>&, out mut Array<T>&, z <A>) {
+fn rowAbsSumsIn<T, A>(m Matrix<T>&, out mut Array<T>&, z A) {
     like T
     for r in range m.Rows {
         acc := lanes<A>()
@@ -2172,7 +2172,7 @@ fn rowAbsSumsIn(m Matrix<<T>>&, out mut Array<T>&, z <A>) {
 }
 
 # out[r] = the Euclidean norm of row r
-fn (m Matrix<<T>>&) RowNorms(out mut Array<T>&) ? ShapeError {
+fn (m Matrix<T>&) RowNorms(out mut Array<T>&) ? ShapeError {
     if not (out.Len() == m.Rows) { error ShapeError.MISMATCH }
     like T
     match T {
@@ -2186,7 +2186,7 @@ fn (m Matrix<<T>>&) RowNorms(out mut Array<T>&) ? ShapeError {
 }
 
 # every row divided by its Euclidean norm, in place; a row of zeros stays zeros
-fn (m mut Matrix<<T>>&) NormalizeRows() {
+fn (m mut Matrix<T>&) NormalizeRows() {
     like T
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -2200,7 +2200,7 @@ fn (m mut Matrix<<T>>&) NormalizeRows() {
 # dst's row r = the softmax of src's row r over temperature: exp((x - max) / t) normalised to sum 1, row by row - the
 # policy over a block of columns (src a ColRange view), one pass to the maximum and one to the exponentials. dst may
 # be src
-fn (dst mut Matrix<<T>>&) RowSoftmax(src Matrix<T>&, temperature T) ? ShapeError {
+fn (dst mut Matrix<T>&) RowSoftmax(src Matrix<T>&, temperature T) ? ShapeError {
     if not (sameShape(dst, src)) { error ShapeError.MISMATCH }
     like T
     inv T = 1.0 / temperature
@@ -2221,7 +2221,7 @@ fn (dst mut Matrix<<T>>&) RowSoftmax(src Matrix<T>&, temperature T) ? ShapeError
 }
 
 # out[r] = the largest element of row r - a NaN if the row holds one
-fn (m Matrix<<T>>&) RowMax(out mut Array<T>&) ? ShapeError {
+fn (m Matrix<T>&) RowMax(out mut Array<T>&) ? ShapeError {
     if not (out.Len() == m.Rows) { error ShapeError.MISMATCH }
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -2233,7 +2233,7 @@ fn (m Matrix<<T>>&) RowMax(out mut Array<T>&) ? ShapeError {
 
 # out[r] = the column of row r's largest element, the first one where several are equal, and the first NaN where
 # the row holds one - each row's class, for a matrix of scores
-fn (m Matrix<<T>>&) ArgMaxRows(out mut Array<I32>&) ? ShapeError {
+fn (m Matrix<T>&) ArgMaxRows(out mut Array<I32>&) ? ShapeError {
     if not (out.Len() == m.Rows) { error ShapeError.MISMATCH }
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -2253,7 +2253,7 @@ fn (m Matrix<<T>>&) ArgMaxRows(out mut Array<I32>&) ? ShapeError {
 
 # out (1 x Cols) = the sums of m's columns + beta * out: a bias's gradient, summed over the batch. Sixty-four columns
 # at a time, every row added into lanes held on the stack, so nothing is allocated and the adds are vector adds
-fn (m Matrix<<T>>&) ColumnSums(out mut Matrix<T>&, beta F64 = 0) ? ShapeError {
+fn (m Matrix<T>&) ColumnSums(out mut Matrix<T>&, beta F64 = 0) ? ShapeError {
     if not (rowShape(m, out)) { error ShapeError.MISMATCH }
     match T {
         case F16, BF16, F8E4M3, F8E5M2 { columnSumsIn(m, out, beta, F32(0)) }
@@ -2268,7 +2268,7 @@ type colLanes<A> struct(z A) {
     v Array<A, 64>
 }
 
-fn columnSumsIn(m Matrix<<T>>&, out mut Matrix<T>&, beta F64, z <A>) {
+fn columnSumsIn<T, A>(m Matrix<T>&, out mut Matrix<T>&, beta F64, z A) {
     like T
     b := Cast(beta, z)
     acc := colLanes<A>(z)
@@ -2301,7 +2301,7 @@ fn columnSumsIn(m Matrix<<T>>&, out mut Matrix<T>&, beta F64, z <A>) {
 
 # e to the power x: x = k ln 2 + r with |r| <= ln 2 / 2, e^r by its Taylor series (to r^6 in F32, r^12 in F64), and
 # 2^k made from its bits
-fn FastExp(x <T>) T {
+fn FastExp<T>(x T) T {
     return match T {
         case F32 => fastExp32(x)
         case F64 => fastExp64(x)
@@ -2349,7 +2349,7 @@ infinity32 F32 = F32(math.Inf)
 
 # the hyperbolic tangent: 1 - 2 / (e^(2|x|) + 1), with x's sign. |x| is held below the point past which tanh rounds
 # to 1 in the type (10 in F32, 20 in F64), so that e^(2|x|) stays finite; a NaN is not held and gives a NaN
-fn FastTanh(x <T>) T {
+fn FastTanh<T>(x T) T {
     a T = math.Abs(x)
     limit T = match T {
         case F32 => 10.0
@@ -2361,14 +2361,14 @@ fn FastTanh(x <T>) T {
 }
 
 # the logistic function 1 / (1 + e^-x)
-fn FastSigmoid(x <T>) T {
+fn FastSigmoid<T>(x T) T {
     return 1.0 / (1.0 + FastExp(-x))
 }
 
 # ---- conversions between element types ----
 
 # dst = src with every element converted to dst's element type, rounded or wrapped as a conversion does (T4)
-fn (dst mut Matrix<<T>>&) Convert(src Matrix<<S>>&) ? ShapeError {
+fn (dst mut Matrix<T>&) Convert<S>(src Matrix<S>&) ? ShapeError {
     if not (sameShape(dst, src)) { error ShapeError.MISMATCH }
     like T
     for r in range dst.Rows {
@@ -2379,25 +2379,25 @@ fn (dst mut Matrix<<T>>&) Convert(src Matrix<<S>>&) ? ShapeError {
 }
 
 # the matrix with its elements converted, into a new matrix
-fn (m Matrix<<T>>&) ToF64() Matrix<F64> {
+fn (m Matrix<T>&) ToF64() Matrix<F64> {
     out mut Matrix<F64>&return = Matrix<F64>(m.Rows, m.Cols, null)
     try out.Convert(m) catch { unreachable }
     return out
 }
 
-fn (m Matrix<<T>>&) ToF32() Matrix<F32> {
+fn (m Matrix<T>&) ToF32() Matrix<F32> {
     out mut Matrix<F32>&return = Matrix<F32>(m.Rows, m.Cols, null)
     try out.Convert(m) catch { unreachable }
     return out
 }
 
-fn (m Matrix<<T>>&) ToF16() Matrix<F16> {
+fn (m Matrix<T>&) ToF16() Matrix<F16> {
     out mut Matrix<F16>&return = Matrix<F16>(m.Rows, m.Cols, null)
     try out.Convert(m) catch { unreachable }
     return out
 }
 
-fn (m Matrix<<T>>&) ToBF16() Matrix<BF16> {
+fn (m Matrix<T>&) ToBF16() Matrix<BF16> {
     out mut Matrix<BF16>&return = Matrix<BF16>(m.Rows, m.Cols, null)
     try out.Convert(m) catch { unreachable }
     return out
@@ -2406,7 +2406,7 @@ fn (m Matrix<<T>>&) ToBF16() Matrix<BF16> {
 # ---- random fills, from the caller's generator (std/rand), so that one seed decides a whole run ----
 
 # every element drawn uniformly from [lo, hi), in row order
-fn (m mut Matrix<<T>>&) FillUniform(r mut rand.Rand&, lo F64, hi F64) {
+fn (m mut Matrix<T>&) FillUniform(r mut rand.Rand&, lo F64, hi F64) {
     like T
     for i in range m.Rows {
         d I64 = i * m.Stride
@@ -2415,7 +2415,7 @@ fn (m mut Matrix<<T>>&) FillUniform(r mut rand.Rand&, lo F64, hi F64) {
 }
 
 # every element drawn from the normal distribution with this mean and standard deviation, in row order
-fn (m mut Matrix<<T>>&) FillNormal(r mut rand.Rand&, mean F64, sd F64) {
+fn (m mut Matrix<T>&) FillNormal(r mut rand.Rand&, mean F64, sd F64) {
     like T
     for i in range m.Rows {
         d I64 = i * m.Stride
@@ -2424,7 +2424,7 @@ fn (m mut Matrix<<T>>&) FillNormal(r mut rand.Rand&, mean F64, sd F64) {
 }
 
 # out (1 x Cols) = the sums of the absolute values of m's columns
-fn (m Matrix<<T>>&) ColumnAbsSums(out mut Matrix<T>&) ? ShapeError {
+fn (m Matrix<T>&) ColumnAbsSums(out mut Matrix<T>&) ? ShapeError {
     if not (rowShape(m, out)) { error ShapeError.MISMATCH }
     z T
     out.Fill(z)
@@ -2435,7 +2435,7 @@ fn (m Matrix<<T>>&) ColumnAbsSums(out mut Matrix<T>&) ? ShapeError {
 }
 
 # every element 1 with probability p and 0 otherwise: a connectivity mask, or dropout's
-fn (m mut Matrix<<T>>&) FillBernoulli(r mut rand.Rand&, p F64) {
+fn (m mut Matrix<T>&) FillBernoulli(r mut rand.Rand&, p F64) {
     like T
     one := Cast(1.0, like)
     for i in range m.Rows {
@@ -2445,7 +2445,7 @@ fn (m mut Matrix<<T>>&) FillBernoulli(r mut rand.Rand&, p F64) {
 }
 
 # every element +scale or -scale with equal probability: random signs, for a random projection or a feedback matrix
-fn (m mut Matrix<<T>>&) FillSigns(r mut rand.Rand&, scale F64 = 1) {
+fn (m mut Matrix<T>&) FillSigns(r mut rand.Rand&, scale F64 = 1) {
     like T
     up := Cast(scale, like)
     down := Cast(-scale, like)
@@ -2483,7 +2483,7 @@ fn ParallelRows(rows I64, grain I64, threads I64, body fn(lo I64, hi I64)) {
 #   [[1, 2, 3],
 #    [4, 5, 6]]
 # with only the first and last three rows, and columns, of a dimension longer than ten (the rest as "...")
-fn (m Matrix<<T>>&) Str() String {
+fn (m Matrix<T>&) Str() String {
     b := StringBuilder()
     b.PushChar('[')
     for r in range m.Rows {
@@ -2506,7 +2506,7 @@ fn (m Matrix<<T>>&) Str() String {
 }
 
 # the same shape and equal elements, compared as "==" compares them - so a matrix holding a NaN is equal to nothing
-fn (a Matrix<<T>>&) Eq(b Matrix<T>&) Bool {
+fn (a Matrix<T>&) Eq(b Matrix<T>&) Bool {
     if not sameShape(a, b) { return false }
     for r in range a.Rows {
         x I64 = r * a.Stride
@@ -2519,7 +2519,7 @@ fn (a Matrix<<T>>&) Eq(b Matrix<T>&) Bool {
 }
 
 # agrees with Eq: the shape and every element - a float by its bits, with -0 taken as 0, since the two are equal
-fn (m Matrix<<T>>&) Hash() I64 {
+fn (m Matrix<T>&) Hash() I64 {
     h I64 = m.Rows * 1099511628211 + m.Cols
     for r in range m.Rows {
         d I64 = r * m.Stride
@@ -2528,7 +2528,7 @@ fn (m Matrix<<T>>&) Hash() I64 {
     return h
 }
 
-fn elementHash(x <T>) I64 {
+fn elementHash<T>(x T) I64 {
     return match T {
         case F64 => 0 if x == 0 else I64(x.Bits())
         case F32, F16, BF16 => 0 if x == 0 else I64(x.Bits())
@@ -2542,7 +2542,7 @@ fn elementHash(x <T>) I64 {
 # the x with a x = b, for a square a and any number of right-hand sides (b's columns), by LU decomposition with
 # partial pivoting (Gaussian elimination choosing the largest pivot in each column) - for a float matrix. A pivot of
 # zero means a has no inverse: SolveError.SINGULAR. a and b are not changed
-fn Solve(a Matrix<<T>>&, b Matrix<T>&) Matrix<T> ? SolveError + ShapeError {
+fn Solve<T>(a Matrix<T>&, b Matrix<T>&) Matrix<T> ? SolveError, ShapeError {
     if not (a.Rows == a.Cols and b.Rows == a.Rows) { error ShapeError.MISMATCH }
     x mut Matrix<T>&return = Matrix<T>(b.Rows, b.Cols, null)
     try x.Copy(b)
@@ -2552,7 +2552,7 @@ fn Solve(a Matrix<<T>>&, b Matrix<T>&) Matrix<T> ? SolveError + ShapeError {
 }
 
 # the inverse of a square float matrix: Solve with the identity
-fn (a Matrix<<T>>&) Inverse() Matrix<T> ? SolveError + ShapeError {
+fn (a Matrix<T>&) Inverse() Matrix<T> ? SolveError, ShapeError {
     if not (a.Rows == a.Cols) { error ShapeError.MISMATCH }
     x mut Matrix<T>&return = Matrix<T>(a.Rows, a.Rows, null)
     x.SetIdentity()
@@ -2562,7 +2562,7 @@ fn (a Matrix<<T>>&) Inverse() Matrix<T> ? SolveError + ShapeError {
 }
 
 # x = lu^-1 x, overwriting lu with its LU factors and x with the solution
-fn solveInPlace(lu mut Matrix<<T>>&, x mut Matrix<T>&) ? SolveError {
+fn solveInPlace<T>(lu mut Matrix<T>&, x mut Matrix<T>&) ? SolveError {
     n I64 = lu.Rows
     for k in range n {
         p I64 = k
@@ -2600,7 +2600,7 @@ fn solveInPlace(lu mut Matrix<<T>>&, x mut Matrix<T>&) ? SolveError {
     }
 }
 
-fn swapRows(m mut Matrix<<T>>&, p I64, q I64) {
+fn swapRows<T>(m mut Matrix<T>&, p I64, q I64) {
     rp := m.Row(p)
     rq := m.Row(q)
     for j in range m.Cols { rp[j], rq[j] = rq[j], rp[j] }
@@ -2619,7 +2619,7 @@ if TestBuild {
     }
 
     # op(a) op(b) the plain way, for checking Gemm: element (i, j) a sum in order over p
-    fn referenceProduct(a Matrix<<T>>&, transA Bool, b Matrix<T>&, transB Bool) Matrix<F64> {
+    fn referenceProduct<T>(a Matrix<T>&, transA Bool, b Matrix<T>&, transB Bool) Matrix<F64> {
         m I64 = a.Cols if transA else a.Rows
         k I64 = a.Rows if transA else a.Cols
         n I64 = b.Rows if transB else b.Cols
@@ -2816,7 +2816,7 @@ if TestBuild {
     # computedDirectly: the shapes either side of each of its bounds, every element a small integer so that both paths'
     # sums are exact and so equal
     test "products either side of the direct path's bounds are the plain sum" {
-        shapes := I64[8, 8, 8, 10, 10, 10, 11, 11, 11, 5, 64, 64, 11, 64, 64, 12, 64, 64, 8, 32, 32, 64, 32, 64, 5, 1024, 64,
+        shapes := I64[8, 8, 8, 10, 10, 10, 11, 11, 11, 5, 64, 64, 11, 64, 64, 12, 64, 64, 8, 32, 32, 64, 32, 64, 5, 1024, 64
                       5, 1025, 64, 7, 64, 3]
         for s in range shapes.Len() / 3 {
             m I64 = shapes[3 * s]
@@ -3207,7 +3207,7 @@ if TestBuild {
 
     # the largest errors of FastExp (relative, where e^x is a normal number), FastTanh and FastSigmoid (absolute) against
     # the C library's, at n points spread over [-100, 100]
-    fn fastErrors(like <T>, n I64) (F64, F64, F64) {
+    fn fastErrors<T>(like T, n I64) (F64, F64, F64) {
         tiny F64 = match T {
             case F32 => 1.1754943508222875e-38
             case F64 => 2.2250738585072014e-308
@@ -3331,7 +3331,7 @@ if TestBuild {
     }
 
     # m with every element above its diagonal (j > i + diag) set to v
-    fn aboveDiagonal(m mut Matrix<<T>>&, diag I64, v T) {
+    fn aboveDiagonal<T>(m mut Matrix<T>&, diag I64, v T) {
         for i in range m.Rows {
             for j in range m.Cols {
                 if j > i + diag { m.Set(i, j, v) }

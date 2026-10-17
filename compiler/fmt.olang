@@ -28,7 +28,7 @@ import "source"
 
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
 # spans of the branches to leave as written
-fn Format(text String&, ts scan.Tokens&, argAngles List<I64>&, closeAngles List<I64>&,
+fn Format(text String&, ts scan.Tokens&, argAngles List<I64>&, closeAngles List<I64>&
           held Array<source.Span>&) String {
     f := formatter(text, ts.Toks)
     for i in argAngles { f.argOpen[i] = f.argOpen[i] + 1 }

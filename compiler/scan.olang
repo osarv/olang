@@ -704,11 +704,11 @@ test "bytes that begin no token are reported once a run and passed over" {
 }
 
 test "literals are checked as they are read" {
-    cases := String&["\"a\\qb\"", "\"abc", "\"ab\ncd", "'", "''", "'ab'", "'\\q'", "'a\n", "0x", "0b12", "1__0",
+    cases := String&["\"a\\qb\"", "\"abc", "\"ab\ncd", "'", "''", "'ab'", "'\\q'", "'a\n", "0x", "0b12", "1__0"
                      "0x_FF", "1.)", "1.2.3", "1_", "## open"]
-    want := LexError[LexError.BadEscape, LexError.UnclosedString, LexError.StringNewline, LexError.UnclosedChar,
-                     LexError.EmptyChar, LexError.LongChar, LexError.BadEscape, LexError.CharNewline,
-                     LexError.HexNoDigits, LexError.BinDigit, LexError.DigitSeparator, LexError.DigitSeparator,
+    want := LexError[LexError.BadEscape, LexError.UnclosedString, LexError.StringNewline, LexError.UnclosedChar
+                     LexError.EmptyChar, LexError.LongChar, LexError.BadEscape, LexError.CharNewline
+                     LexError.HexNoDigits, LexError.BinDigit, LexError.DigitSeparator, LexError.DigitSeparator
                      LexError.PointNoDigit, LexError.TwoPoints, LexError.DigitSeparator, LexError.UnclosedComment]
     for k, c in cases {
         ts := Scan(c)

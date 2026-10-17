@@ -3,5 +3,5 @@
 type Ring<T, N I32> struct() {
     items Array<T, 4>
 }
-fn twoTypes(a Array<I32, <N>>&, b Ring<I32, N>&) { }
+fn twoTypes<N>(a Array<I32, N>&, b Ring<I32, N>&) { }
 fn main() ? { }

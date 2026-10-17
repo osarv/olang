@@ -5,7 +5,7 @@
 type G<T> struct() {
     n I64 = 0
 }
-type D struct(g G<<T>>&) {
+type D struct<T>(g G<T>&) {
     g
 }
 fn main() ? { d := D(G<I64>()) }

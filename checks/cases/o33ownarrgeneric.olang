@@ -4,7 +4,7 @@ import "std/io"
 type B struct() {
     names own mut Array<String&>& = Array<String&>(3)
 }
-fn setFirst(a mut Array<<T>>&, v T) { a[0] = v }
+fn setFirst<T>(a mut Array<T>&, v T) { a[0] = v }
 fn main() ? {
     b := B()
     setFirst(b.names, $5 "via-generic")

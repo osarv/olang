@@ -3,7 +3,7 @@
 type Box<T> struct(v T) {
     v
 }
-fn first(a Box<<T>>&, b Box<T>&) I32 { return 1 }
+fn first<T>(a Box<T>&, b Box<T>&) I32 { return 1 }
 fn main() ? {
   n := first(null, null)
 }

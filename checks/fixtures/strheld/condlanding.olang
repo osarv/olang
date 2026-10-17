@@ -10,7 +10,7 @@ type Res struct(k I64) {
 } destruct {
     Gone++
 }
-fn id(x <T>) T { return x }
+fn id<T>(x T) T { return x }
 fn takeR(r Res&) I64 { return r.k }
 fn work() I64 ? io.IoError {
     c := true

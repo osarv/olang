@@ -115,7 +115,7 @@ type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>
 }
 
 # one case: its alternatives (patterns, or types for "match T"), its guard, and a block or a value ("=> v")
-type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr&, Body Array<Stmt&>&,
+type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr&, Body Array<Stmt&>&
                  Value Expr&) {
     Sp
     Alts
@@ -136,7 +136,7 @@ type Pattern enum {
 
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
 # "x, y"), which have no type and no value. NameSps gives each name's span, Values one value per name or none
-type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef&, Values Array<Expr&>&,
+type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef&, Values Array<Expr&>&
                     Infer Bool, Field Bool) {
     Names
     NameSps
@@ -168,7 +168,7 @@ type For3 struct(Init Stmt&, Cond Expr&, Post Stmt&, Body Array<Stmt&>&) {
 }
 
 # for [key,] name in [try] source { body } [catch ...] (S9a, S9e)
-type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&,
+type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&
                   Clauses Array<Catch&>&) {
     Key
     Name
@@ -219,7 +219,7 @@ type Stmt enum {
 # no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
 # function whose body did not parse - declared by its signature alone), and the type variables its list after the name
 # introduces (G3, QW: "fn max<T>(...)"; null for none)
-type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body Array<Stmt&>&,
+type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body Array<Stmt&>&
                  TypeParams Array<TypeParam&>& = null) {
     Sp
     Recv
@@ -247,7 +247,7 @@ type TypeBody enum {
 
 # struct[<T, ...>](params) ? errors { body } [destruct { ... }] - the destructor's span DtorSp, its body null for none;
 # the constructor's own type variables (G10d) null for none
-type StructBody struct(Params Array<Param&>&, Errs Sig&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&,
+type StructBody struct(Params Array<Param&>&, Errs Sig&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&
                        TypeParams Array<TypeParam&>& = null) {
     Params
     Errs

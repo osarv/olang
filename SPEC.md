@@ -6739,14 +6739,14 @@ value and may be used wherever a function value is expected.
 
 ### 12.5 Dispatching on a type parameter
 
-**G13.** `match` (S12) accepts a type variable as its own operand - written bare, `match T`, the signature or the
-type's parameter list having introduced it (G8b) - with each `case` naming one or more
+**G13.** `match` (S12) accepts a type variable as its own operand - written bare, `match T`, its function's list, its receiver or its
+type's parameter list having introduced it (G3) - with each `case` naming one or more
 `type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
 `match N` over a constant variable takes values in its cases instead, decided per instantiation (G26).
 
 ```
-fn writeVal<T>(fd I32, v T) I64 ? error {
+fn writeVal<T>(fd I32, v T) I64 ? IoError {
     match T {
         case I32  { return write(fd, i32Bytes(v)) }
         case Array<U8> { return write(fd, v) }

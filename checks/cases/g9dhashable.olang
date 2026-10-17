@@ -4,8 +4,8 @@ import "std/io"
 type Res struct(k I64) {
     k
 } destruct { try io.Println("d" $k) catch io.IoError { } }
-fn same(a <T>, b T) Bool { return a == b }
-fn hashOf(x <T Hashable<T>>) I64 { return x.Hash() }
+fn same<T>(a T, b T) Bool { return a == b }
+fn hashOf<T Hashable<T>>(x T) I64 { return x.Hash() }
 fn main() ? {
     try io.Println($same(Res(1), Res(1)))
     try io.Println($(hashOf(Res(2)) != 0))

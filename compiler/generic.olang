@@ -850,7 +850,7 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Array { return p.T.Array(p.Subst(p.T.Elem(t), owner, args), p.Subst(p.T.Length(t), owner, args)) }
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
-            return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args),
+            return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
                             p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t))
         }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
@@ -1273,7 +1273,7 @@ fn (p mut Program&) typeKey(t types.TypeId) I64 {
     return match p.T.KindOf(x) {
         case types.Kind.Named => keyDecl(p.T.DeclOf(x))
         case types.Kind.Array => ArrayKey
-        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16,
+        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
              types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64 => keyPrim(x)
         case _ => -1
     }
@@ -1652,7 +1652,7 @@ fn (c mut cursor&) eat(s String&) Bool {
 
 fn (c cursor&) peek() Char { return c.Text[c.At] if c.At < c.Text.Len() else Char(0) }
 
-fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon + Undeclared {
+fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon, Undeclared {
     perm := types.ReadOnly
     if c.eat("own ") { perm = perm | types.Owning }
     if c.eat("mut ") { perm = perm | types.Writable }
@@ -1662,7 +1662,7 @@ fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon + Undeclare
     return t
 }
 
-fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon + Undeclared {
+fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclared {
     if c.eat("fn(") { return try p.canonFunc(c) }
     if c.eat("struct(") { return p.T.Record(try p.canonList(c, ")")) }
     if c.eat("enum{") { return try p.canonEnum(c) }
@@ -1803,7 +1803,7 @@ fn testLoad(dir String&, text String&) load.Loader {
     try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true),
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
                      source.Names(), diag.Diagnostics(false))
     l.Load($dir "/main.olang")
     return l
@@ -1827,9 +1827,9 @@ fn (p mut Program&) roundTrip(text String&) Bool {
 test "declared types and instances: laid out as C lays them out, their canonical texts read back" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
+    l := testLoad(dir, ("type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
                        "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\nerror E { BAD }\n"
-                       "type Meters extends I32\ntype Buf<N I64> struct() { a Array<U8, N> }\nfn main() ? { }\n")
+                       "type Meters extends I32\ntype Buf<N I64> struct() { a Array<U8, N> }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
@@ -1851,8 +1851,8 @@ test "declared types and instances: laid out as C lays them out, their canonical
     assert p.Layout(mt) and p.T.Size(mt) == 4
     bf := try p.ParseCanon($m ":Buf<5>") catch { unreachable }
     assert p.Layout(bf) and p.T.Size(bf) == 5 and p.T.Align(bf) == 1
-    for text in String&["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E",
-                        "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}",
+    for text in String&["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E"
+                        "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}"
                         "own mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
         assert p.roundTrip(text), text
     }
@@ -1864,8 +1864,8 @@ test "declared types and instances: laid out as C lays them out, their canonical
 test "T16 and G17: a type holding itself, and instances nesting without end" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type A struct() { b B }\ntype B struct() { a A }\ntype D<T> struct() { n D<Array<T>> }\n"
-                       "type L struct() { next L& }\ntype C<N I64> struct() { n C<N + 1> }\nfn main() ? { }\n")
+    l := testLoad(dir, ("type A struct() { b B }\ntype B struct() { a A }\ntype D<T> struct() { n D<Array<T>> }\n"
+                       "type L struct() { next L& }\ntype C<N I64> struct() { n C<N + 1> }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
@@ -1888,8 +1888,8 @@ test "T16 and G17: a type holding itself, and instances nesting without end" {
 test "constant arguments fold as the program computes them (G21): typed, wrapping, from globals" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type Buf<N I64> struct() { a Array<U8, N> }\nB U8 = 255\nW I64 = 3\nK := W * 4 + 1\n"
-                       "fn f(x Buf<B + 1>&, y Buf<K - W>&, z Buf<(2 << 3) | 1>&, q Buf<I64(B) + 1>&) { }\nfn main() ? { }\n")
+    l := testLoad(dir, ("type Buf<N I64> struct() { a Array<U8, N> }\nB U8 = 255\nW I64 = 3\nK := W * 4 + 1\n"
+                       "fn f(x Buf<B + 1>&, y Buf<K - W>&, z Buf<(2 << 3) | 1>&, q Buf<I64(B) + 1>&) { }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
@@ -1947,9 +1947,9 @@ test "inference (G9): literals adapt, numbers widen unless a receiver bound them
 test "constraints (G19): a type satisfies a trait by its methods, checked where a variable is bound" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n"
+    l := testLoad(dir, ("type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n"
                        "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<T>&) Get(x T) T { return x }\n"
-                       "fn h<T Hashable<T>>(x T) { }\nfn main() ? { }\n")
+                       "fn h<T Hashable<T>>(x T) { }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
@@ -1966,17 +1966,16 @@ test "constraints (G19): a type satisfies a trait by its methods, checked where 
     # a method over a generic type, its receiver's variable bound by the receiver (G9b)
     bx := try p.ParseCanon($m ":Box<I16>") catch { unreachable }
     g := p.MethodOf(bx, l.Names.Intern("Get"))
-    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]",
-           p.T.Canon(p.MethodSig(g, bx))
+    assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]", p.T.Canon(p.MethodSig(g, bx))
 }
 
 test "function types carry what their markers say; a call's scope variables come from the type; instances remember where" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
+    l := testLoad(dir, ("type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
                        "fn link(a mut N&, b N&a) { }\nfn first(l N&) N&l { return l }\nfn make() N& { return N(1) }\n"
                        "fn (l mut N&) Put(x N&l) { }\nfn apply(f fn(a mut N&, b N&a), x mut N&, y N&) { }\n"
-                       "fn id<T>(x T) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n")
+                       "fn id<T>(x T) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)

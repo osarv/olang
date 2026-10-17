@@ -6,7 +6,7 @@ type Cell struct() {
 type Bx<T> struct() {
     l mut List<T>& = List<T>()
 }
-fn (c Bx<<T>>&) At(i I64) T {
+fn (c Bx<T>&) At(i I64) T {
     return c.l[i]
 }
 fn main() ? {

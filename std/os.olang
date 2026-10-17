@@ -173,7 +173,7 @@ fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir St
 
 # Exec, with the program killed once tok fires - its deadline passes (cancel.After) or it is cancelled - when it has not
 # ended by then: ExecUntil then fails with the token's reason, once the program has ended
-fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? OsError + cancel.Stopped {
+fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? OsError, cancel.Stopped {
     p := try Start(args, input, capture, dir)
     return try p.WaitUntil(tok)
 }
@@ -266,7 +266,7 @@ fn (p mut Process&) lost(code I32) ? OsError {
 # Wait, killing the program once tok fires and it has not ended: then it fails with the token's reason, once the
 # program has ended. Asks every few milliseconds at most - sooner while the program is young, so a short one is not
 # kept waiting - as nothing can wait for a child and a token at once
-fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? OsError + cancel.Stopped {
+fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? OsError, cancel.Stopped {
     if p.waited { error OsError.FAILED }
     waited Array<I32, 1>
     nap Array<I64, 2>

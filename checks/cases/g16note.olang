@@ -1,7 +1,7 @@
 # check: fail error[G15]: no case covers Bool, which this generic is instantiated with
 # G15/G16: an error in a generic's body names the instantiation it was found in, and where it was asked for
 # also: instantiated here, with T = Bool
-fn describe(v <T>) I32 {
+fn describe<T>(v T) I32 {
   match T {
     case I32 { return 1 }
     case F64 { return 2 }

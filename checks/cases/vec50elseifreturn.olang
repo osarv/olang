@@ -12,7 +12,7 @@ fn churn() I64 {
 # F1 residue (the natural-looking form): "if parsing fails, fall back to the caller's buffer" written as an
 # else-if whose condition's catch block returns. ownFreshReturns never walks an else-if's condition, so the
 # function is "proven fresh", the loan on the Vec's buffer is spared, and the Push below frees what d points at.
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn bufFor(spec String&, a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {
     if spec == "new" { return Array<I64>(4) }
     else if (try spec.ParseInt() catch { return pick(a.Len() >= b.Len(), a, b) }) > 0 { return Array<I64>(2) }

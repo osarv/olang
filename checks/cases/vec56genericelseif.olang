@@ -13,12 +13,12 @@ fn churn() I64 {
     return t
 }
 # a generic version of h1: per instantiation
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
     if k < 5 { error Stop.HERE }
     return k
 }
-fn longerG(a mut Array<<T>>&, b mut Array<T>&) mut Array<T>& {
+fn longerG<T>(a mut Array<T>&, b mut Array<T>&) mut Array<T>& {
     if a.Len() == 0 { return Array<T>(1) }
     else if (try g(a.Len()) catch { return pick(true, a, b) }) > 0 { return Array<T>(2) }
     return Array<T>(3)

@@ -10,7 +10,7 @@ fn pop(n I64) I64 ? LE.EMPTY {
     if n == 0 { error LE.EMPTY }
     return n
 }
-fn two(n I64) I64 ? LE.EMPTY + LE.GONE {
+fn two(n I64) I64 ? LE.EMPTY, LE.GONE {
     if n == 1 { error LE.GONE }
     return try pop(n)
 }

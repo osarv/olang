@@ -100,8 +100,8 @@ fn run(mode String&, args Array<String&>&) I32 {
         }
     }
     if mode == "-v" {
-        out.Write($(same + changed + skipped + failed) " files: " $same " already formatted, " $changed " formatted, "
-                  $skipped " skipped (they do not parse), " $failed " failed\n")
+        out.Write(($(same + changed + skipped + failed) " files: " $same " already formatted, " $changed " formatted, "
+                  $skipped " skipped (they do not parse), " $failed " failed\n"))
     }
     try out.Flush() catch io.IoError { return 1 }
     try errs.Flush() catch io.IoError { return 1 }

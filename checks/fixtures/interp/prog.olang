@@ -48,7 +48,7 @@ fn steps() String {
     }
     return b.ToString()
 }
-fn main() ? Oops + io.IoError + os.OsError {
+fn main() ? Oops, io.IoError, os.OsError {
     defer try io.Print("main's deferred code ran\n") catch io.IoError { }
     Count++
     m := Map<String&, I32>()

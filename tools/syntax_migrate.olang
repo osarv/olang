@@ -818,7 +818,7 @@ test "a function's type variables are listed after its name" {
 }
 
 test "running it again changes nothing" {
-    for s in String&["fn max<T>(a T, b T) T { return a }\n", "f(a\n  b\n)\n", "fn f() ? A, B {\n}\n",
+    for s in String&["fn max<T>(a T, b T) T { return a }\n", "f(a\n  b\n)\n", "fn f() ? A, B {\n}\n"
                      "g fn(x I64) I64 ? (A, B) = h\n", "fn (it mut I&) Count<I Iterator<T>, T>() I64 { }\n"] {
         assert run(s, false) == s, s
     }

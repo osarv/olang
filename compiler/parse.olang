@@ -36,7 +36,7 @@ fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
     }
 }
 
-type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&, oracle Oracle&, diags mut diag.Diagnostics&,
+type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&, oracle Oracle&, diags mut diag.Diagnostics&
                    file I64) {
     src
     ts
@@ -263,7 +263,7 @@ fn (p mut Parser&) tooDeepAt(i I64) {
 
 # ---- lists, gathered on the parser's stacks ----
 
-fn gather(stack mut List<<T>>&, from I64) Array<T>&stack {
+fn gather<T>(stack mut List<T>&, from I64) Array<T>&stack {
     a mut Array<T>&stack = Array<T>(stack.Len() - from)
     for i in range a.Len() { a[i] = stack[from + i] }
     stack.Truncate(from)
@@ -1285,7 +1285,7 @@ fn (p mut Parser&) idenStmt() ast.Stmt&p ? Fail {
         name := try p.name()
         sp := p.from(at)
         try p.endStmt()
-        v := ast.VarDecl(Array<source.NameId>(1, name), Array<source.Span>(1, source.Span(nt.Start, nt.End)),
+        v := ast.VarDecl(Array<source.NameId>(1, name), Array<source.Span>(1, source.Span(nt.Start, nt.End))
                          null, Array<ast.Expr&>(0), false, true)
         return ast.Stmt.Var(sp, v)
     }
@@ -1311,7 +1311,7 @@ fn (p mut Parser&) varDecl(at I32, names NameList&) ast.Stmt&p ? Fail {
             # after it a separator, and the last takes the type
             for i in range n - 1 {
                 ns := names.Sps[i]
-                pun := ast.VarDecl(Array<source.NameId>(1, names.Names[i]), Array<source.Span>(1, ns), null,
+                pun := ast.VarDecl(Array<source.NameId>(1, names.Names[i]), Array<source.Span>(1, ns), null
                                    Array<ast.Expr&>(0), false, true)
                 p.stmts.Push(ast.Stmt.Var(ns, pun))
             }
@@ -2222,7 +2222,7 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
     at := p.here()
     k := p.peek()
     match k {
-        case token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit,
+        case token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit
              token.Tok.StrLit {
             p.advance()
             return ast.Expr.Lit(p.from(at), k)

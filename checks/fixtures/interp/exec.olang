@@ -5,7 +5,7 @@ import "std/io"
 import "std/json"
 import "std/cancel"
 
-fn main() ? os.OsError + io.IoError + json.JsonError {
+fn main() ? os.OsError, io.IoError, json.JsonError {
     r := try os.Exec(String&["printf", "{\"a\": [1, 2.5e-3, true], \"b\": \"%s\"}", "it's ok \\u00e9"])
     doc := try json.Parse(r.Stdout)
     try io.Print($r.Status " " $json.Encode(doc) "\n")
@@ -19,7 +19,7 @@ fn main() ? os.OsError + io.IoError + json.JsonError {
 }
 
 # X6: a directory to run in, a deadline that kills, and programs started and waited for - the same either way
-fn processes() ? os.OsError + io.IoError {
+fn processes() ? os.OsError, io.IoError {
     w := try os.Exec(String&["pwd"], default, default, "/")
     try io.Print("in " $w.Stdout)
     late := "no"

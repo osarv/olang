@@ -6,7 +6,7 @@ type Quitter trait {
 }
 type Q struct() { }
 fn (q Q&) Quit() { os.Exit(1) }
-fn stop(q <T Quitter>&) I64 { q.Quit() }
+fn stop<T Quitter>(q T&) I64 { q.Quit() }
 fn main() {
     q := Q()
     x := stop(q)

@@ -223,7 +223,7 @@ fn RepoRoot() String {
 # what the program args[0] writes to its standard output and then its standard error when run with args in the directory
 # dir, killed when it has run for timeoutMs milliseconds - fails with the OsError when it cannot be started and with
 # cancel.Stopped when the time ran out
-fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.OsError + cancel.Stopped {
+fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.OsError, cancel.Stopped {
     out := try os.ExecUntil(args, cancel.After(timeoutMs), "", true, dir)
     return $out.Stdout $out.Stderr
 }

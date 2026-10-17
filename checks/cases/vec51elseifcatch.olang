@@ -13,7 +13,7 @@ fn churn() I64 {
     return t
 }
 # F1 evasion: a return hidden in an else-if condition's catch block (ownFreshStmtReturns never walks elseStmnt->op)
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
     if k < 5 { error Stop.HERE }
     return k

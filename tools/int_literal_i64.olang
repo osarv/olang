@@ -99,7 +99,7 @@ fn rangeType(msg String&) String ? {
 
 # the edits the compiler's output asks for in the allowed paths, and the errors mentioning I64 that no note answers (as
 # requests with an empty kind, the error's row in Why)
-fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Request>&,
+fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Request>&
              unanswered mut List<diagedit.Request>&) {
     currentPath := ""
     current := ""

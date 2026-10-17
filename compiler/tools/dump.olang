@@ -658,7 +658,7 @@ fn (w mut walker&) exprs(xs Array<ast.Expr&>&) {
 fn (w mut walker&) expr(x ast.Expr&) {
     if x == null { return }
     match x {
-        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _),
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _)
              ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Member(_, a, _) {
             w.expr(a)
         }
@@ -818,8 +818,8 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     n := a.Len() if a.Len() < b.Len() else b.Len()
     for i in range n {
         if a[i].Text != b[i].Text {
-            out.Write("tokens differ: " $lineCol(src, a[i].Start) " " $a[i].Text " in the file, "
-                      $lineCol(written, b[i].Start) " " $b[i].Text " written\n")
+            out.Write(("tokens differ: " $lineCol(src, a[i].Start) " " $a[i].Text " in the file, "
+                      $lineCol(written, b[i].Start) " " $b[i].Text " written\n"))
             return
         }
     }

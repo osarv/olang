@@ -10,7 +10,7 @@ fn churn() I64 {
     }
     return t
 }
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 # a helper with a written built result that hands back one of its arguments through a generic (O14b): natural code
 fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return pick(a.Len() >= b.Len(), a, b) }
 fn main() ? {
