@@ -1496,10 +1496,6 @@ g22param.olang:6:25: note: instantiated here, with T = I32, K = 3
     6 | fn main() ? { r := Ring<I32, 3>(1) }
       |                         ^~~
 compilation failed with 1 error
-=== g22preludeword.olang
-built ./build/g22preludeword
-=== g22preludewordfn.olang
-built ./build/g22preludewordfn
 === g22twotypes.olang
 g22twotypes.olang:6:45: error[G22]: N fills constant parameters of two types, I64 and I32
     6 | fn twoTypes(a Array<I32, <N>>&, b Ring<I32, N>&) { }
