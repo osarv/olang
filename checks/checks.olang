@@ -1083,7 +1083,7 @@ fn vechandle(r mut report&) ? Failed {
     for flags in String&["-sanitize", "-debug -sanitize"] {
         bin := "./build/stale" $(".debug" if flags == "-debug -sanitize" else "") ".san"
         try r.expect(sh(dir, "\"$OLANG\" build " $flags " stale.olang > out.txt 2>&1") == 0, "stale " $flags, dir)
-        try r.expect(sh(dir, bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced"),
+        try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced"),
                      "stale " $flags " was not reported", dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" interpret stale.olang > out.txt 2>&1") == 1
