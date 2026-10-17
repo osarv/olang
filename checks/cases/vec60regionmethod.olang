@@ -22,5 +22,5 @@ fn (c mut CB&) Rebuild(n I64) ? io.IoError {
 }
 fn main() ? {
     c := CB()
-    c.try Rebuild(5)
+    try c.Rebuild(5)
 }

@@ -55,9 +55,9 @@ fn IsCommit(c String&) Bool {
     return true
 }
 
-fn (f mut Fetcher&) say(line String&) ? io.IoError {
+fn (f mut Fetcher&) say(line String&) {
     f.Said.Push($line)
-    if not f.Quiet { try io.PrintErrln(line) }
+    if not f.Quiet { try io.PrintErrln(line) catch io.IoError { } }
 }
 
 fn (f mut Fetcher&) load() {
@@ -187,7 +187,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     try os.MkDirAll(parent) catch os.OsError { error FetchError.FAILED }
     tmp := try os.MkTemp(parent, ".fetch-") catch os.OsError { error FetchError.FAILED }
     if hasLine {
-        f.try say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
+        f.say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
         dir := $parent "/" $locked
         # a shallow fetch of the one commit where the server allows it, else the whole history and a checkout
         shallow := git(String&["git", "init", "-q", tmp]) and
