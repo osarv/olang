@@ -4,7 +4,7 @@ This is the reference manual for olang: a precise, current-state description of 
 
 ## Structure
 
-The specification is organized into eleven numbered sections below, ordered so that each section
+The specification is organized into thirteen numbered sections below, ordered so that each section
 only depends on concepts already introduced by earlier ones:
 
 | § | Covers |
@@ -21,6 +21,7 @@ only depends on concepts already introduced by earlier ones:
 | 10 Compilation Model | Compilation units, the `compile`/`build`/`test`/`interpret` modes, `main`, the command line, test blocks, process exit, targets |
 | 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
 | 12 Generics | Type and constant parameters on functions and struct types, inference, `match` over a type, monomorphization |
+| 13 Compile-time evaluation | What the compiler computes while compiling, what it refuses, constant contexts |
 
 Each rule is named by a letter for its area and a number, `T7`, sometimes with a lowercase letter for a later rule
 that refines it, `O25h`. Numbers are given in the order rules are written and are never reused, so a removed rule leaves
@@ -35,7 +36,7 @@ the rule. The letters:
 | M | modules (§4) | B | the build: compilation model and command line (§10) |
 | E | expressions (§5) | X | external functions (§11) |
 | S | statements (§6) | G | generics (§12) |
-| P | concurrency (§6.8) | K | compile-time evaluation |
+| P | concurrency (§6.8) | K | compile-time evaluation (§13) |
 
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
 and always name the target section and rule, never an internal implementation detail (a function
