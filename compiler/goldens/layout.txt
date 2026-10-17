@@ -45,12 +45,16 @@ fn() std/prelude/text:StringBuilder	16 8	{ ptr, ptr }	-	ret %"std/prelude/text:S
 fn() std/prelude/text:decimal	16 8	{ ptr, ptr }	-	ret %"std/prelude/text:decimal" pass 
 fn() tests/Base:BaseDir	16 8	{ ptr, ptr }	-	ret i32 pass 
 fn(Array<std/prelude/text:String&>&, std/prelude/text:String&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(BF16)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(BF16, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(Bool) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(F16)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(F16, F16) std/prelude/complex:C16	16 8	{ ptr, ptr }	-	ret %"std/prelude/complex:C16" pass vv
 fn(F16, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(F32)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(F32, F32) std/prelude/complex:C32	16 8	{ ptr, ptr }	-	ret %"std/prelude/complex:C32" pass vv
 fn(F32, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(F64)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(F64) (U64, I64)	16 8	{ ptr, ptr }	-	ret { i64, i64 } pass v
 fn(F64) (U64, I64) ? std/prelude/text:TextError	16 8	{ ptr, ptr }	-	ret { i32, { i64, i64 } } pass v
 fn(F64) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
@@ -60,9 +64,11 @@ fn(F64) std/prelude/f8:F8E5M2	16 8	{ ptr, ptr }	-	ret %"std/prelude/f8:F8E5M2" p
 fn(F64, F64) std/prelude/complex:C64	16 8	{ ptr, ptr }	-	ret %"std/prelude/complex:C64" pass vv
 fn(F64, I32, I32, I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
 fn(F64, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(I16)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I16) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(I16, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(I16, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(I32)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I32) F64	16 8	{ ptr, ptr }	-	ret double pass v
 fn(I32) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(I32) tests/Base:BaseBox	16 8	{ ptr, ptr }	-	ret %"tests/Base:BaseBox" pass v
@@ -71,21 +77,26 @@ fn(I32, I32) tests/Base:BaseThing	16 8	{ ptr, ptr }	-	ret %"tests/Base:BaseThing
 fn(I32, I32, I32) F64	16 8	{ ptr, ptr }	-	ret double pass vvv
 fn(I32, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(I32, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(I64)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(I64) std/prelude/text:Radix ? std/prelude/text:TextError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(I64) std/prelude/vec:Vec<std/prelude/text:String&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<std/prelude/text:String&>" pass v
 fn(I64, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(I64, U64, I64) (U64, I64)	16 8	{ ptr, ptr }	-	ret { i64, i64 } pass vvv
 fn(I64, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(I8)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I8) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(I8, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(I8, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(U16)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(U16) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(U16, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(U16, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(U32)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(U32) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(U32, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(U32, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(U64)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(U64) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(U64, Bool, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(U64, I64) U64 ? std/prelude/text:undecided	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
@@ -94,6 +105,7 @@ fn(U64, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	
 fn(U64, U64) (U64, U64)	16 8	{ ptr, ptr }	-	ret { i64, i64 } pass vv
 fn(U64, U64, U64) U64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
 fn(U64, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(U8)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(U8) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(U8) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(U8, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
@@ -1093,6 +1105,7 @@ fn(Array<tests/shared:sbWC>&) tests/shared:sbWC	16 8	{ ptr, ptr }	-	ret %"tests/
 fn(Array<tests/shared:strOnceKey>&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(Array<tests/shared:strOnceTick>&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(BF16) BF16	16 8	{ ptr, ptr }	-	ret bfloat pass v
+fn(BF16) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(BF16) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(Bool) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
@@ -1104,19 +1117,21 @@ fn(Bool, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(Bool, U8) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(Bool, fn(I32) I32, fn(I32) I32) (fn(I32) I32)	16 8	{ ptr, ptr }	-	ret { ptr, ptr } pass vss
 fn(F16) F16	16 8	{ ptr, ptr }	-	ret half pass v
+fn(F16) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(F16, BF16, F32, F64) tests/shared:BtHold	16 8	{ ptr, ptr }	-	ret %"tests/shared:BtHold" pass vvvv
 fn(F16, Bool) F64	16 8	{ ptr, ptr }	-	ret double pass vv
 fn(F32) F32	16 8	{ ptr, ptr }	-	ret float pass v
 fn(F32) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
+fn(F32) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(F32) U32	16 8	{ ptr, ptr }	-	ret i32 pass v
 fn(F32, F32) F32	16 8	{ ptr, ptr }	-	ret float pass vv
 fn(F64) F64	16 8	{ ptr, ptr }	-	ret double pass v
+fn(F64) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(F64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(F64) tests/shared:G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>	16 8	{ ptr, ptr }	-	ret %"tests/shared:G16AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<F64>" pass v
 fn(F64) tests/shared:Tracked<F64>	16 8	{ ptr, ptr }	-	ret %"tests/shared:Tracked<F64>" pass v
 fn(F64, F64) F64	16 8	{ ptr, ptr }	-	ret double pass vv
 fn(F64, F64) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(I32)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I32) (fn(I32) I32 ? tests/shared:DivError)	16 8	{ ptr, ptr }	-	ret { ptr, ptr } pass v
 fn(I32) (fn(I32) I32)	16 8	{ ptr, ptr }	-	ret { ptr, ptr } pass v
 fn(I32) (mut tests/shared:Link&, I32)	16 8	{ ptr, ptr }	-	ret { ptr, i32 } pass v
@@ -1293,7 +1308,6 @@ fn(I32, std/prelude/text:String&, mut std/prelude/map:mapSlot<I32, std/prelude/t
 fn(I32, tests/shared:LandE&) tests/shared:LandE	16 8	{ ptr, ptr }	-	ret %"tests/shared:LandE" pass vv
 fn(I32, tests/shared:StrMoney, tests/shared:StrMoney&, Array<tests/shared:StrMoney>&) tests/shared:StrOrder	16 8	{ ptr, ptr }	-	ret %"tests/shared:StrOrder" pass vvvv
 fn(I32, tests/shared:sc3Box&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(I64)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I64) (I64, Bool)	16 8	{ ptr, ptr }	-	ret { i64, i1 } pass v
 fn(I64) (fn(I64) I64 ? tests/shared:fzTryErr)	16 8	{ ptr, ptr }	-	ret { ptr, ptr } pass v
 fn(I64) (mut tests/shared:SfNode&, mut tests/shared:SfNode&)	16 8	{ ptr, ptr }	-	ret { ptr, ptr } pass v
@@ -5307,6 +5321,7 @@ Array<std/prelude/text:String&, 11>	176 8	[11 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 14>	224 8	[14 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 15>	240 8	[15 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 16>	256 8	[16 x { i64, ptr }]	-	-
+Array<std/prelude/text:String&, 8>	128 8	[8 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 9>	144 8	[9 x { i64, ptr }]	-	-
 compiler/check:Checker	232 8	%"compiler/check:Checker"	{ ptr, i1, i1, %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/check:Gap>", %"std/prelude/list:List<mut compiler/check:frame&>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/map:Map<std/prelude/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, I64>", i32, %"std/prelude/map:Map<std/prelude/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/prelude/pair:Pair<I64, I64>, compiler/types:TypeId>", %"std/prelude/list:List<compiler/typed:Expr&>", %"std/prelude/list:List<compiler/typed:Stmt&>", %"std/prelude/list:List<compiler/check:atRec>", i32, i1, i1, %"compiler/source:Span", { i64, ptr }, i32, i32, %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<I64, compiler/types:ListId>", %"std/prelude/list:List<std/prelude/pair:Pair<I64, I64>>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<std/prelude/pair:Pair<I64, I64>, compiler/types:ListId>", %"std/prelude/map:Map<std/prelude/pair:Pair<I64, I64>, compiler/types:ListId>", i64 }	fields 0,8,9,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,140,141,144,152,168,172,176,184,192,200,208,216,224
 compiler/check:Checker&	8 8	ptr	-	-
@@ -6287,6 +6302,7 @@ fn(mut compiler/generic:Program&, compiler/types:TypeId, Bool, Bool) compiler/ty
 fn(mut compiler/generic:Program&, compiler/types:TypeId, I64) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vvv
 fn(mut compiler/generic:Program&, compiler/types:TypeId, I64, compiler/types:ListId) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
 fn(mut compiler/generic:Program&, compiler/types:TypeId, compiler/source:NameId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/generic:Program&, compiler/types:TypeId, compiler/types:DeclId, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
 fn(mut compiler/generic:Program&, compiler/types:TypeId, compiler/types:DeclId, compiler/types:ListId, compiler/ast:Func&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
 fn(mut compiler/generic:Program&, compiler/types:TypeId, compiler/types:ListId) compiler/generic:Context	16 8	{ ptr, ptr }	-	ret %"compiler/generic:Context" pass vvv
 fn(mut compiler/generic:Program&, compiler/types:TypeId, compiler/types:ListId) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vvv
@@ -8772,7 +8788,6 @@ fn(Array<F32>&, I64, Array<F32>&, I64, I64, F32) F32	16 8	{ ptr, ptr }	-	ret flo
 fn(Array<F32>&, I64, I64, I64, I64, I64, I64, I64, mut Array<F32>&)	16 8	{ ptr, ptr }	-	ret void pass vvvvvvvvv
 fn(Array<F32>&, std/linalg:Activation, mut Array<F32>&, I64) std/linalg:epilogue<F32>	16 8	{ ptr, ptr }	-	ret %"std/linalg:epilogue<F32>" pass vvvv
 fn(Bool, I64, I64, I64, F32, Array<F32>&, I64, Array<F32>&, I64, F32, mut Array<F32>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvvvvvvvvv
-fn(F32) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(F32) std/linalg:colLanes<F32>	16 8	{ ptr, ptr }	-	ret void pass v
 fn(F32, std/linalg:Activation)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(F32, std/linalg:Activation) F32	16 8	{ ptr, ptr }	-	ret float pass vv
@@ -8907,7 +8922,6 @@ fn(Array<F64>&, I64, Array<F64>&, I64, I64, F64) F64	16 8	{ ptr, ptr }	-	ret dou
 fn(Array<F64>&, I64, I64, F64) F64	16 8	{ ptr, ptr }	-	ret double pass vvvv
 fn(Array<F64>&, std/linalg:Activation, mut Array<F64>&, I64) std/linalg:epilogue<F64>	16 8	{ ptr, ptr }	-	ret %"std/linalg:epilogue<F64>" pass vvvv
 fn(Bool, I64, I64, I64, F64, Array<F64>&, I64, Array<F64>&, I64, F64, mut Array<F64>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvvvvvvvvv
-fn(F64) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(F64) std/linalg:colLanes<F64>	16 8	{ ptr, ptr }	-	ret void pass v
 fn(F64, std/linalg:Activation)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(F64, std/linalg:Activation) F64	16 8	{ ptr, ptr }	-	ret double pass vv

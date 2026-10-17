@@ -2487,6 +2487,7 @@ bool TypeSatisfiesConstraint(struct type concrete, struct type iface, struct var
 static const char* protocolOf(struct str name, bool* priv);
 static char* protocolPrivateName(const char* cap);
 static struct var* methodNamedOn(struct type t, const char* name);
+static bool receiverIsBuiltin(struct type r);
 static bool checkTypeConstraints(struct list* constraints, struct list* bindings, struct token tok) {
     for (int i = 0; i < constraints->len; i++) {
         struct type* c = ListGetIdx(constraints, i);
@@ -2503,6 +2504,9 @@ static bool checkTypeConstraints(struct list* constraints, struct list* bindings
         struct var* missing = NULL;
         if (TypeSatisfiesConstraint(*bound, want, &missing)) continue;
         struct type wantNamed = want.genericOrigin ? *want.genericOrigin : want;
+        //T31: a sealed trait (a private method) is met only by the types its own module declares that method for
+        bool sealed = missing && !isPublic(missing->name) && (receiverIsBuiltin(*bound) || bound->owner != missing->owner);
+        if (sealed) { Err(tok, ERR_CONSTRAINT_SEALED, bound, wantNamed.name, c->name, wantNamed.name, missing->name); ok = false; continue; }
         if (!missing) Err(tok, ERR_CONSTRAINT_UNMET, bound, wantNamed.name, c->name);
         else if (StrCmp(missing->name, StrFromCStr("Hash"))) Err(tok, ERR_CONSTRAINT_UNMET_HASH, bound, wantNamed.name, c->name);
         else Err(tok, ERR_CONSTRAINT_UNMET_METHOD, bound, wantNamed.name, c->name, missing->name);
@@ -7971,6 +7975,7 @@ static bool isDeclaredArray(struct type t);
 static struct type underlyingArray(struct type t);
 struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     if (concrete.bType == BASETYPE_INTERFACE) return NULL;
+    struct type declared = concrete; //the type as written, before an inherited method reads it as its base
     struct var* f = VarGetMethod(concrete.owner, m->name, concrete);
     if (!f || f->type.bType != BASETYPE_FUNC || f->type.isExtern) return NULL;
     //T29e/T29f: a method an "extends" type inherits counts here as it does at a direct call - its receiver is the base,
@@ -8031,7 +8036,9 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
         if (errSetMissing(&m->type.errors, **(struct type**)ListGetIdx(&f->type.errors, i))) return NULL;
     //M6: a private method name belongs to the module that wrote it, so only a type in THAT module can supply it - which
     //makes a trait with a private method a sealed one: no outside module's type can satisfy it
-    if (!isPublic(m->name) && m->owner != f->owner) return NULL;
+    //- the type's own declaration too: an "extends" type declared elsewhere inherits the base's private method (T29f) but
+    //cannot supply it, so a sealed trait over built-in types (Float, Integer, Number) is met by those types alone
+    if (!isPublic(m->name) && (m->owner != f->owner || (!receiverIsBuiltin(declared) && declared.owner != m->owner))) return NULL;
     return f;
 }
 

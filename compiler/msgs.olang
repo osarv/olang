@@ -171,6 +171,7 @@ type Diag enum {
     ConstraintDisagrees
     ConstraintUnmet
     ConstraintUnmetMethod
+    ConstraintSealed
     ConstraintUnmetHash
     UnboundedInstantiation
     TypeHoldsItself
@@ -1008,6 +1009,9 @@ fn ConstraintUnmet(ty String&, text1 String&, text2 String&) Msg { return Msg(Di
 
 # ERR_CONSTRAINT_UNMET_METHOD
 fn ConstraintUnmetMethod(ty String&, text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ConstraintUnmetMethod, "G19", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no method " $text3 " that fits") }
+
+# ERR_CONSTRAINT_SEALED
+fn ConstraintSealed(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.ConstraintSealed, "G19, T31", $ty " does not satisfy the constraint " $text1 " on " $text2 ": " $text3 " is sealed - only the types its own module gives '" $text4 "' satisfy it") }
 
 # ERR_CONSTRAINT_UNMET_HASH
 fn ConstraintUnmetHash(ty String&, text1 String&, text2 String&) Msg { return Msg(Diag.ConstraintUnmetHash, "G19, E10b", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no Hash - declare 'Hash() I64', agreeing with '=='") }

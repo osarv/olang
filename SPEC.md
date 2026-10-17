@@ -1216,8 +1216,10 @@ of that name whose
   as leaving (D10a) - and a `noreturn` method meets a signature with no result and no errors, which it does all of by
   never returning (T22).
 
-A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
-supply it. A trait with a private method is therefore **sealed**: no other module's type can satisfy it.
+A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module, or a
+built-in type it gives the method, can supply it - a type declared elsewhere that inherits the method through
+`extends` (T29f) supplies nothing. A trait with a private method is therefore **sealed**: no other module's type can
+satisfy it.
 
 Satisfaction is **structural and implicit**: a type declares no intent to satisfy a trait, a trait names no
 satisfying types, and satisfaction is decided from the two declarations alone, where a type variable is bound
@@ -1251,6 +1253,15 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Any`, `All`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
 left - `m.Keys().ToList()`.
+
+**T35c (the numeric traits).** The prelude declares three sealed traits (T31) naming the built-in numbers (T4):
+`Float`, satisfied by `F16`, `BF16`, `F32` and `F64`; `Integer`, by `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32` and
+`U64`; and `Number`, by all twelve. `Bool` satisfies none of them. Each trait's one method is private to the prelude
+module declaring the three, which gives it to those types and no others, so no type a program declares satisfies one
+- not by declaring a method of that name, and not by `extends` (T29f): `Char`, `type Meters extends I32` and
+`type Dist extends F64` inherit the method but satisfy nothing, so code constrained by a numeric trait may pick its
+behaviour with `match T` over the built-in types alone. Generic numeric code says which numbers it takes -
+`fn Sqrt<T Float>(x T) T` - so a call with any other type is an error at the call naming the trait (G19).
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
@@ -1844,7 +1855,8 @@ one to a foreign type and no two modules can disagree about what `x.f` means. No
 `prelude` directory, each an ordinary module, loaded before any other module. Their exported types are
 visible in every module by their bare names, with no import, and no module may declare a type of the same
 name (D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
-types get their methods; those methods are visible in every module. A program wanting methods over a built-in type declares a type of its own over it
+types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
+(T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
 
 Among the prelude's types is `type Pair<A, B> struct(First A, Second B)`, two values of any types held as

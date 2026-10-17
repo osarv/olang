@@ -2210,6 +2210,31 @@ nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - 
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
+=== numtraitbool.olang
+numtraitbool.olang:5:10: error[G19, T31]: Bool does not satisfy the constraint Number on T: Number is sealed - only the types its own module gives 'numberType' satisfy it
+    5 |     r := nbTwice(true)
+      |          ^~~~~~~
+compilation failed with 1 error
+=== numtraitchar.olang
+numtraitchar.olang:5:10: error[G19, T31]: Char does not satisfy the constraint Integer on T: Integer is sealed - only the types its own module gives 'integerType' satisfy it
+    5 |     c := ncNext('a')
+      |          ^~~~~~
+compilation failed with 1 error
+=== numtraitclaim.olang
+numtraitclaim.olang:9:10: error[G19, T31]: nfFake does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    9 |     h := nfHalf(nfFake(1.0))
+      |          ^~~~~~
+compilation failed with 1 error
+=== numtraitextends.olang
+numtraitextends.olang:7:10: error[G19, T31]: ntDist does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    7 |     h := ntHalf(ntDist(4.0))
+      |          ^~~~~~
+compilation failed with 1 error
+=== numtraitsqrtint.olang
+numtraitsqrtint.olang:6:15: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    6 |     r := math.Sqrt(4)
+      |               ^~~~
+compilation failed with 1 error
 === o10ccycle.olang
 o10ccycle.olang:21:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    21 |         g(h, it, 2)

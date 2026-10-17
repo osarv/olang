@@ -154,6 +154,7 @@ struct type;
     X(ERR_CONSTRAINT_DISAGREES,         "G19",   "%n is constrained differently elsewhere in this declaration - one constraint per variable") \
     X(ERR_CONSTRAINT_UNMET,             "G19",   "%t does not satisfy the constraint %S on %S") \
     X(ERR_CONSTRAINT_UNMET_METHOD,      "G19",   "%t does not satisfy the constraint %S on %S: it has no method %S that fits") \
+    X(ERR_CONSTRAINT_SEALED,            "G19, T31", "%t does not satisfy the constraint %S on %S: %S is sealed - only the types its own module gives '%S' satisfy it") \
     X(ERR_CONSTRAINT_UNMET_HASH,        "G19, E10b", "%t does not satisfy the constraint %S on %S: it has no Hash - declare 'Hash() I64', agreeing with '=='") \
     X(ERR_UNBOUNDED_INSTANTIATION,      "G17",   "this generic's instantiations never end - each one requires a larger one") \
     X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%t cannot hold itself by value - hold it through a reference ('&')") \

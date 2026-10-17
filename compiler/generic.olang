@@ -1939,6 +1939,7 @@ fn (p mut Program&) Satisfies(t types.TypeId, tr types.TypeId) Bool {
 fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m ast.Func&) Bool {
     f := p.MethodOf(t, m.Name)
     if f < 0 { return false }
+    if not load.Public(p.text(m.Name)) and not p.sealedBy(t, d, f) { return false }
     c := p.declContext(d)
     want := p.Subst(p.sigType(c, m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), args)
     have := p.MethodSig(f, t)
@@ -1951,6 +1952,15 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
         if not p.sameUpToShape(hs[i + 1], ws[i]) { return false }
     }
     return p.T.Same(p.T.Result(have), p.T.Result(want)) and p.T.Errors(have) == p.T.Errors(want)
+}
+
+# a private method seals its trait (T31): it is met by a method the trait's own module declares, on a type that module
+# declares or a built-in one - so a type declared elsewhere that extends one (T29f) inherits the method but not the trait
+fn (p mut Program&) sealedBy(t types.TypeId, d types.DeclId, f I64) Bool {
+    tm := p.DeclModule(d)
+    if p.fns[f].Mi != tm { return false }
+    x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    return p.T.KindOf(x) != types.Kind.Named or p.DeclModule(p.T.DeclOf(x)) == tm
 }
 
 fn (p mut Program&) writableRecv(r types.TypeId) Bool {
@@ -2325,6 +2335,35 @@ test "constraints (G19): a type satisfies a trait by its methods, checked where 
     bx := try p.ParseCanon($m ":Box<I16>") catch { unreachable }
     g := p.MethodOf(bx, l.Names.Intern("Get"))
     assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]", p.T.Canon(p.MethodSig(g, bx))
+}
+
+test "a sealed trait (T31): the prelude's Float, Integer and Number are met by the built-in numbers alone" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, ("type D extends F64\ntype M I32\ntype Fake struct() { }\nfn (f Fake&) floatType() { }\n"
+                       "fn main() ? { }\n"))
+    r := names.Resolver(l)
+    r.Resolve()
+    p := Program(l, r)
+    m := l.Mods[l.Root].Identity
+    fl := try p.ParseCanon("std/prelude/number:Float") catch { unreachable }
+    it := try p.ParseCanon("std/prelude/number:Integer") catch { unreachable }
+    nu := try p.ParseCanon("std/prelude/number:Number") catch { unreachable }
+    for x in String&["F16", "BF16", "F32", "F64"] {
+        t := try p.ParseCanon(x) catch { unreachable }
+        assert p.Satisfies(t, fl) and p.Satisfies(t, nu) and not p.Satisfies(t, it), x
+    }
+    for x in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64"] {
+        t := try p.ParseCanon(x) catch { unreachable }
+        assert p.Satisfies(t, it) and p.Satisfies(t, nu) and not p.Satisfies(t, fl), x
+    }
+    bo := try p.ParseCanon("Bool") catch { unreachable }
+    ch := try p.ParseCanon("std/prelude/text:Char") catch { unreachable }
+    assert not p.Satisfies(bo, nu) and not p.Satisfies(ch, it) and not p.Satisfies(ch, nu)
+    for x in String&[":D", ":M", ":Fake"] {
+        t := try p.ParseCanon($m $x) catch { unreachable }
+        assert not p.Satisfies(t, fl) and not p.Satisfies(t, nu), x
+    }
 }
 
 test "function types carry what their markers say; a call's scope variables come from the type; instances remember where" {

@@ -1,0 +1,7 @@
+# check: fail I64 does not satisfy the constraint Float on T: Float is sealed
+# T35c/G19: std/math's float functions take a Float, so an integer is refused at the call, naming the trait - not inside
+# std at a "match T" missing its case
+import "std/math"
+fn main() ? {
+    r := math.Sqrt(4)
+}
