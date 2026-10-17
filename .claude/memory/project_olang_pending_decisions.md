@@ -199,6 +199,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   olang tool; folded into arrays phase 2 (it drops constant generics). In effect: G8b.
   DECIDED (the user: "I don't really understand what would change if we do this. I think I want the change tho" -
   explained with std's own lines; signatures only, bodies/calls/type declarations unchanged). In arrays phase 2.
+- QX ASKED 2026-10-17 (the user: "Any other really cool language features from other languages I should consider?"):
+  offered generators (`yield`, lowered to an iterator struct), compile-time reflection (unlocks serialization), units
+  of measure (F#), portable SIMD vectors, arbitrary-width ints and fixed point (FPGA), embed a file, errdefer,
+  contracts (requires/ensures), doc tests; declined async, exceptions, macros, |>, ?. chaining. Recommended top 3:
+  generators, reflection, units. Ideas only - nothing built until the user picks.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
