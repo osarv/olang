@@ -42,7 +42,7 @@ overrated".
 - 2026-10-17 ~11:55 CEST (the user: "that's all the language changes I had in mind for now. Build them and migrate
   the corpus"): wt-errors started (/home/user/wt/errors: QO1, QO4, QO6, QQ1; corpus migration after wt-ioprint lands);
   wt-arrays phase 1 started (/home/user/wt/arrays: docs/arrays.md, SPEC, inventory, plan - no bootstrap/ edits until
-  wt-errors merges; phase 2 builds it). oann migrates after both.
+  wt-errors merges; phase 2 builds it). oann waits until the self-hosted compiler is done (the user, 2026-10-17).
 - 2026-10-17 ~14:35 CEST, the user away (errands): "work through what you have been given ... I want the background tasks
   to finish before we really start talking about the new features" (docs/ideas.md). Merge order: wt-memfix (stage-0
   memory, unblocks every verify) -> wt-tests (corpus into tests/) -> wt-runfmt (formatter + word CLI, in C too) ->

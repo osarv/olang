@@ -27,3 +27,4 @@
 - [README per folder](feedback_folder_readmes.md) — every top-level folder that is its own thing has a README.md; add it when the folder appears, keep it current
 - [Everything in olang](feedback_olang_only.md) — no Python/shell scripts in the repos; tools, migrations, test servers, drivers are olang
 - [What goes into the C compiler](feedback_c_only_for_port.md) — core language, fundamentals (CLI) and all bug fixes in both compilers; extra domain features (arbitrary precision, FPGA...) only in the self-hosted one
+- [oann waits for the compiler](feedback_oann_after_compiler.md) — no oann work until the self-hosted compiler is done and mostly settled; catch it up in one go then

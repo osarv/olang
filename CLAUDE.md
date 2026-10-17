@@ -37,6 +37,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 @.claude/memory/feedback_folder_readmes.md
 @.claude/memory/feedback_olang_only.md
 @.claude/memory/feedback_keep_evaluator_current.md
+@.claude/memory/feedback_oann_after_compiler.md
 @.claude/memory/feedback_keep_old_tests.md
 @.claude/memory/feedback_maintain_claude_md.md
 @.claude/memory/feedback_no_askuserquestion_for_design.md
