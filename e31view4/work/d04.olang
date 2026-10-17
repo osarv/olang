@@ -1,0 +1,29 @@
+# the escape is a borrowed-result return of b itself (not a lambda)
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(0)
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn leakRef(b Box&) Node&b { return b.head }
+fn main() ? {
+    seed := Box()
+    seed.head.v = 5
+    ns := List<Node&>()
+    for i in range 3 {
+        ns.Push(leakRef(idBox(seed)))
+        churn()
+    }
+    churn()
+    t := 0
+    for n in ns { t = t + n.v }
+    assert t == 15, $t
+}

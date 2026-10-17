@@ -1,0 +1,26 @@
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64) {
+    v
+}
+type Holder struct() {
+    n own mut Node& = Node(5)
+}
+fn (h Holder&) View() Node&h { return h.n }
+fn leak(n Node&) fn() I64 { return fn() I64 { return n.v } }
+fn main() ? {
+    h := Holder()
+    fs := List<fn() I64>()
+    for i in range 3 {
+        fs.Push(leak(h.View()))
+        churn()
+    }
+    churn()
+    t := 0
+    for f in fs { t = t + f() }
+    assert t == 15, $t
+}

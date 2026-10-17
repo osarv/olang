@@ -1,0 +1,27 @@
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(7)
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }
+fn main() ? {
+    seed := Box()
+    fs := List<fn() I64>()
+    for i in range 3 {
+        fs.Push(leak(Box()))
+        churn()
+    }
+    churn()
+    t := 0
+    for f in fs { t = t + f() }
+    assert t == 21, $t
+}
