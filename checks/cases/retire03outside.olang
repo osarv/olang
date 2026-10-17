@@ -1,0 +1,6 @@
+# check: fail error[M19]: Array<I64> has no method 'retire'
+# round 1 of docs/memory.md (M19d): retire() is the prelude's own - outside it no array has such a method
+fn main() {
+    a := Array<I64>(3)
+    a.retire()
+}
