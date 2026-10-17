@@ -19019,3 +19019,25 @@ the D3a/G22 name bans) and the `m19fredeclared` check. The repository was migrat
 errors: `? io.IoError` on a function whose try lets it escape, `try` on a call of a function that became fallible,
 `catch io.IoError { }` in a test block, a deferred block or a task). The scope fuzzer's generated programs import
 `std/io` and write `try io.Println`. SPEC M19f rewritten; D3a and G22 no longer mention the prelude's writing functions.
+
+## The view lend's fourth review: a lent copy captured in an escaping lambda (O17, 2026-10-12)
+
+The fourth review (`/home/user/review/e31view4`, 906e292) found one regression of round 4, HIGH: a split value
+(`idBox(seed)`, `b1 if c else b2`) or a handle a call gives (`idList(base)`) lent to a callee that captures the
+parameter in a lambda it returns - `fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }`. Round 4 binds the
+parameter's scope variable where the value's references live and builds its copy in the block, and the escaping-lambda
+check (D16d, `landReturnedLambda`) reads that variable, so the closure kept the block's copy past the block (139 at -b;
+before round 4 the copy was built where it survived). Also through a call cycle (`even`/`odd`).
+- **Fix (the coordinator's: refuse rather than relocate).** A reference capture of the parameter itself, made where the
+  capture's scope variable is bound to the parameter's region, is recorded (`lambdaKeeps`) and, as regions settle,
+  counts as a store into that region (`settleLambdaKeeps`, so it propagates through call edges and cycles like any
+  store) - unless the closure never leaves the frame: a local every use of which is a call (`frameLambdas`, D16c) or a
+  lambda made as an argument of a named callee keeping nothing of it (`lambdaArgs` + `SemanticParamTransient`).
+  Lending a split value or handle copy to such a parameter is then `ERR_BORROW_SPLIT_SCOPES`.
+- **Found on the way.** Counting every capture as a keep refused `Vec.Sort` on an own array of values (`vec12elemvalue`):
+  the prelude's `sortByPositions` makes `fn(i, j) Bool { return less(a[i], a[j]) }` for `sortMergeBuffered`, which keeps
+  nothing of it - hence the transient-argument exception. A lambda's argument recorded while still pending (its type
+  decided by the call) is matched by its operand.
+- Fuzzer: `boxOp` keeps a box's copy in a returned lambda read after a churn (`keepBox`), and lends one to a callee
+  calling its own local lambda (`useBox`). Seeds 1-120: 906e292 one finding (this shape), this branch none; own 1-40 none.
+- Checks: must-fail `o17templambda{keep,cond,cycle}`, `o17blambdakeep`; run under `-d -s` `o17templambda{local,arg}`.

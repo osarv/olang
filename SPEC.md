@@ -4930,7 +4930,10 @@ O25h; the element a `try` reads): the call binds the variable where those refere
 through them is built there, while its own copy is a temporary of the block the call is written in. Where something can
 be stored through the parameter and the callee keeps something in the value (its body, as above), the same error is
 reported - `addRef(idBox(seed), v)` building through `b.head` is `b Box&seed = idBox(seed)` written out; a callee that
-only reads may be given it. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.
+only reads may be given it. A callee **capturing the parameter itself** in a lambda that can outlive the call - returned,
+stored, handed to a callee that may keep it - keeps the lent value's own storage in the closure, which counts as keeping
+something in it (through a call cycle too); a lambda only called in the callee's frame (held in a local every use of
+which is a call), or made for a callee keeping nothing of it (D16c), keeps nothing. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).
