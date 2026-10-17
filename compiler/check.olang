@@ -51,6 +51,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InTest Bool = false
     InCtor Bool = false
     Tries I64 = 0          # how many tries enclose: a fallible call needs one (R8)
+    Fallible I64 = 0       # how many fallible calls and checked operations were met under one (R20)
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
@@ -1040,6 +1041,25 @@ fn (c mut Checker&) readLocal(sp source.Span, id I64) typed.Expr&c {
     return c.read(sp, typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id))))
 }
 
+# a check under try (E15a): the operation fails into the try's clauses, and the try has something that can fail (R20)
+fn (c mut Checker&) tryCheck() typed.Check {
+    c.fr().Fallible++
+    return typed.Check.Try
+}
+
+# an arithmetic operation's check (E15a): under try the ones that can overflow, divide by zero or shift out - else none
+fn (c mut Checker&) arithCheck(op typed.PrimOp, t types.TypeId) typed.Check {
+    if c.fr().Tries == 0 or not c.isNumber(t) { return typed.Check.None }
+    # a float's result turning infinite or NaN (E15a)
+    if c.P.T.IsFloat(c.under(t)) and op != typed.PrimOp.Add and op != typed.PrimOp.Sub and op != typed.PrimOp.Mul and
+       op != typed.PrimOp.Div and op != typed.PrimOp.Rem { return typed.Check.None }
+    if op == typed.PrimOp.Add or op == typed.PrimOp.Sub or op == typed.PrimOp.Mul or op == typed.PrimOp.Div or
+       op == typed.PrimOp.Rem or op == typed.PrimOp.Shl or op == typed.PrimOp.Shr or op == typed.PrimOp.Neg {
+        return c.tryCheck()
+    }
+    return typed.Check.None
+}
+
 fn (c mut Checker&) prim(sp source.Span, t types.TypeId, op typed.PrimOp, a typed.Expr&c, b typed.Expr&c) typed.Expr&c {
     from := c.exprs.Len()
     c.exprs.Push(a)
@@ -1746,7 +1766,9 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
                 c.err(sp, msgs.OperandNotNumber("'-'", c.ty(t)))
                 return c.unknown(sp)
             }
-            return c.prim(sp, t, typed.PrimOp.Neg, x, null)
+            from := c.exprs.Len()
+            c.exprs.Push(x)
+            return typed.Expr.Prim(sp, t, typed.PrimOp.Neg, c.arithCheck(typed.PrimOp.Neg, t), gather(c.exprs, from))
         }
         if not c.isInt(t) {
             c.err(sp, msgs.OperandNotInt("'~'", c.ty(t)))
@@ -1923,6 +1945,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
     }
     if not c.isNumber(ta) or not c.isNumber(tb) {
         if op == token.Tok.EqEq or op == token.Tok.NotEq { return c.equality(sp, op, x, y) }
+        if operatorName(op) != "" and c.notOperator(c.deref(ta), operatorName(op), opSp, msgs.Tok(op.Text()), 1, false) { return c.unknown(sp) }
         if c.isNumber(ta) or c.isNumber(tb) {
             c.err(opSp, msgs.OperandsDiffer(msgs.Tok(op.Text()), c.ty(ta), c.ty(tb)))
         } else {
@@ -1937,7 +1960,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
             c.err(opSp, msgs.NotExtendedOp(c.ty(ta), msgs.Tok(op.Text()), "'" $operatorName(op) "'"))
             return c.unknown(sp)
         }
-        return c.prim(sp, ta, binaryOp(op), x, y)
+        return c.checkedPrim(sp, ta, binaryOp(op), x, y)
     }
     m := ta
     if ta != tb {
@@ -1957,7 +1980,16 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         c.err(opSp, msgs.NotExtendedOp(c.ty(m), msgs.Tok(op.Text()), "'" $operatorName(op) "'"))
         return c.unknown(sp)
     }
-    return c.prim(sp, types.BoolT if compares(op) else m, binaryOp(op), x, y)
+    if compares(op) { return c.prim(sp, types.BoolT, binaryOp(op), x, y) }
+    return c.checkedPrim(sp, m, binaryOp(op), x, y)
+}
+
+# a binary operation, checked under try where it can fail (E15a)
+fn (c mut Checker&) checkedPrim(sp source.Span, t types.TypeId, op typed.PrimOp, a typed.Expr&c, b typed.Expr&c) typed.Expr&c {
+    from := c.exprs.Len()
+    c.exprs.Push(a)
+    c.exprs.Push(b)
+    return typed.Expr.Prim(sp, t, op, c.arithCheck(op, t), gather(c.exprs, from))
 }
 
 # the method an operator calls on a declared type's values (E31)
@@ -1986,7 +2018,9 @@ fn (c mut Checker&) operatorCall(sp source.Span, opSp source.Span, op token.Tok,
     if name == "" { return null }
     ta := c.deref(typeOf(x))
     if not c.isNamed(ta) { return null }
-    m := c.roleMethod(ta, name, 1)
+    # under try the operation's checked form, where the type declares one (E31a)
+    m := c.roleMethod(ta, "Try" $name, 1) if c.fr().Tries > 0 else -1
+    if m < 0 { m = c.roleMethod(ta, name, 1) }
     if m < 0 { return null }
     if op == token.Tok.Gt or op == token.Tok.Le {
         r := c.invoke(sp, opSp, m, y, null, c.one(x))
@@ -2354,7 +2388,7 @@ fn (c mut Checker&) asView(sp source.Span, x typed.Expr&c, tr ast.TypeRef&) type
     } else if p == null {
         p = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     }
-    chk := typed.Check.Try if c.fr().Tries > 0 else typed.Check.Abort
+    chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
     hi := c.prim(sp, c.i64(), typed.PrimOp.Len, c.read(sp, p), null)
     v := typed.Expr.Slice(sp, c.P.T.Ref(at, perm), typed.Slice(p, c.lit(sp, c.i64(), 0), hi, chk, true))
     return c.fit(v, c.P.T.Ref(at, c.P.T.PermOf(want) & perm), sp)
@@ -2408,7 +2442,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     } else if base == null {
         base = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     }
-    chk := typed.Check.Try if c.fr().Tries > 0 else typed.Check.Abort
+    chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
     rec := c.P.T.Items(c.P.T.Cases(et))[k]
     ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
     pp := typed.Place.Payload(sp, rec, typed.Payload(base, k, chk))
@@ -2561,7 +2595,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
     } else {
         h = c.exprTo(hi, c.i64())
     }
-    check := typed.Check.Try if c.fr().Tries > 0 else typed.Check.Abort
+    check := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
     return typed.Expr.Slice(sp, c.P.T.Ref(rt, perm), typed.Slice(base, l, h, check, false))
 }
 
@@ -2713,8 +2747,10 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     from := c.exprs.Len()
     if args.Len() == 2 { c.exprs.Push(c.exprTo(args[1], elem)) }
     items := gather(c.exprs, from)
+    # its length checked once (D14b), under try failing into the try (E15a)
+    lchk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0,
-                                              c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
+                                              c.site(typed.SiteKind.Make, sp), lchk))
 }
 
 # Name<args>(...) an instance's constructor
@@ -2785,6 +2821,12 @@ fn (c mut Checker&) conversion(sp source.Span, t types.TypeId, args Array<ast.Ex
     if not (c.isNumber(xt) and c.isNumber(t)) {
         c.err(args[0].Span(), msgs.TypeMismatch(c.ty(t), c.ty(xt)))
         return c.unknown(sp)
+    }
+    if c.fr().Tries > 0 {
+        # a conversion checked under try (E15a, E26): out of range, or of a NaN
+        from := c.exprs.Len()
+        c.exprs.Push(x)
+        return typed.Expr.Prim(sp, t, typed.PrimOp.Convert, c.tryCheck(), gather(c.exprs, from))
     }
     return c.convert(sp, x, t)
 }
@@ -2894,7 +2936,7 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
             } else if p == null {
                 p = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
             }
-            chk := typed.Check.Try if c.fr().Tries > 0 else typed.Check.Abort
+            chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
             hi := c.prim(sp, c.i64(), typed.PrimOp.Len, c.read(sp, p), null)
             v := typed.Expr.Slice(sp, c.P.T.Ref(base, perm), typed.Slice(p, c.lit(sp, c.i64(), 0), hi, chk, true))
             return c.convert(sp, v, c.P.T.Ref(t, perm))
@@ -3124,6 +3166,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         k++
     }
     if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.gap(nsp, "a fallible call outside a try (R8)") }
+    if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 { c.fr().Fallible++ }
     c.leak(c.P.T.Errors(sig))
     c.lastErrs = c.P.T.Errors(sig)
     r := c.P.T.Result(sig)
@@ -3512,7 +3555,10 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
             if tm >= 0 { return c.invoke(sp, sp, tm, c.read(sp, base), items, null) }
         }
         m := c.roleMethod(dt, "At", items.Len())
-        if m >= 0 { return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, dt, items)) }
+        if m >= 0 {
+            if c.fr().Tries > 0 { c.fr().Fallible++ }
+            return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, dt, items))
+        }
         c.noIndex(sp, dt, base.Type(), items.Len())
         return c.unknown(sp)
     }
@@ -3536,7 +3582,7 @@ fn (c mut Checker&) prim3(sp source.Span, op typed.PrimOp, v typed.Expr&c, lo ty
     c.exprs.Push(v)
     c.exprs.Push(lo)
     c.exprs.Push(hi)
-    return typed.Expr.Prim(sp, typeOf(v), op, typed.Check.Try, gather(c.exprs, from))
+    return typed.Expr.Prim(sp, typeOf(v), op, c.tryCheck(), gather(c.exprs, from))
 }
 
 fn (c mut Checker&) inRange(sp source.Span, base typed.Place&c, t types.TypeId, ix ast.Expr&) Array<typed.Expr&>&c {
@@ -3551,7 +3597,7 @@ fn (c mut Checker&) inRange(sp source.Span, base typed.Place&c, t types.TypeId, 
     c.exprs.Push(i)
     c.exprs.Push(c.lit(sp, c.i64(), 0))
     c.exprs.Push(n)
-    chk := typed.Expr.Prim(ix.Span(), typeOf(i), typed.PrimOp.InRange, typed.Check.Try, gather(c.exprs, from))
+    chk := typed.Expr.Prim(ix.Span(), typeOf(i), typed.PrimOp.InRange, c.tryCheck(), gather(c.exprs, from))
     return Array<typed.Expr&>(1, chk)
 }
 
@@ -3582,6 +3628,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
             c.noIndex(sp, t, b.Type(), items.Len())
             return null
         }
+        if c.fr().Tries > 0 { c.fr().Fallible++ }
         call := c.invoke(sp, sp, tm, c.read(sp, base), items, null) if tm >= 0 else c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, t, items))
         if typeOf(call) == types.UnknownT { return null }
         site := c.site(typed.SiteKind.Temp, sp)
@@ -3596,7 +3643,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
     if not c.isInt(typeOf(i)) and typeOf(i) != types.UnknownT {
         c.err(items[0].Span(), msgs.IndexNotInt(c.ty(typeOf(i))))
     }
-    chk := typed.Check.Try if c.fr().Tries > 0 else typed.Check.None
+    chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.None
     return typed.Place.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, chk))
 }
 
@@ -3654,9 +3701,15 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
 fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch&>&, want types.TypeId) typed.Expr&c {
     fr := c.fr()
     mark := fr.leaks.Len()
+    before := fr.Fallible
     fr.Tries++
     x := c.expr(y, want)
     fr.Tries--
+    if fr.Fallible == before and typeOf(x) != types.UnknownT {
+        # R20: something in the operand can fail - a fallible call, or an operation it checks
+        c.err(source.Span(sp.Start, sp.Start + 3), msgs.TryNothingFails())
+        return c.unknown(sp)
+    }
     cls List<typed.Clause&>
     if clauses != null {
         for cl in clauses { cls.Push(c.clause(cl, typeOf(x))) }
