@@ -239,12 +239,13 @@ fn ownedElsewhere(what String&) Bool {
     return false
 }
 
-# a rule another pass owns: section 8's scope pass (M6: the O rules, C2d, C2g, T17c, D16d, P2, T22a, E12c), the
+# a rule another pass owns: section 8's scope pass (M6: the O rules, C2d, C2g, T17c, D16d, P2, T22a, E12c, and E31b's
+# lends, judged by what the callee writes - a handle's or a view's exemption, G2), the
 # evaluator (M8: K, S8a-S8c, S18c, B5a, B9c, D13c, G21, T29d's literals run while compiling), the driver and conditional
 # compilation (B), a code generator's or the race detector's
 fn otherPass(r String&) Bool {
     if r.StartsWith("O") or r.StartsWith("K") or r.StartsWith("B") { return true }
-    for x in String&["C2d", "C2g", "T17c", "D16d", "P2", "T22a", "E12c", "S8a", "S8b", "S8c", "S18c", "D13c", "G21",
+    for x in String&["C2d", "C2g", "T17c", "D16d", "P2", "T22a", "E12c", "E31b", "S8a", "S8b", "S8c", "S18c", "D13c", "G21",
                      "T29d", "P7", "P1c"] {
         if r == x { return true }
     }

@@ -524,8 +524,10 @@ body); T29d's literal constructors by the call (`BodyId`, `SiteId`); D13c's zero
 - **Errors only, after checking, in `check`'s last step:** T25c/QC's by-value need; `roByArg`/`roToResult`.
 - **Errors or placement only, after checking, in `scope`:** O17/O17b's regions and handles; `MayBuild`/`MayBuildInto`
   and `Str`'s noBuild; own effects (O39-O41's release and borrow effects); borrowed own results (O37); freshness (O38);
-  C2d's may-hold; O26a/O18c's "may keep"; O10b's obligations, O23a's derived scopes and O13c's result bindings. The E31b
-  handle exemption (G2) is `scope`'s error: `check` elaborates every E31b case the same way.
+  C2d's may-hold; O26a/O18c's "may keep"; O10b's obligations, O23a's derived scopes and O13c's result bindings. E31b's
+  lend error - `x[i]`'s copy where the callee may write it - is `scope`'s, with its handle and view exemptions (G2):
+  whether a callee writes the copy's own storage is a summary of its body. `check` elaborates every E31b case the same
+  way.
 
 **What the contract leaves to each pass.** `check`: types, elaboration, permissions (T25b, T25c), D10a, S3, S4d by
 types, every rule but §8's and K's. `scope`: §8 (O-rules, P2, C2d), confinement (O38), own regions and reach (O33,
