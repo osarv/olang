@@ -206,6 +206,18 @@ fn Walk(dir String&, out mut List<String&>&) {
     for sub in subs { Walk(sub, out) }
 }
 
+# the repository this program is in: the directory above the one it sits in (build/ once built, tools/ when run with -i),
+# found from the program's own path
+fn RepoRoot() String {
+    arg0 := os.Args()[0]
+    exe := $arg0
+    if not ("/" in arg0) {
+        real := try os.RealPath("/proc/self/exe") catch default ""
+        if real.Len() > 0 { exe = $real }
+    }
+    return $filepath.Dir(filepath.Dir(AbsPath(exe)))
+}
+
 # ---- running the compiler ----
 
 # what the program args[0] writes to its standard output and then its standard error when run with args in the directory

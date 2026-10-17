@@ -7,13 +7,15 @@ They are olang programs (they were Python scripts; the ports give the same edits
 `build/out -b tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
 arguments below. `build/out -i tools/NAME.olang ARGS` runs one without building, which is fine for a few files.
 `srcmask.olang` is the module they share: telling code from comments and literals, reading files as Python's text mode
-did, walking a directory for `.olang` files; `build/out -t tools/srcmask.olang` runs its tests. Tools not yet ported are
+did, walking a directory for `.olang` files; `diagedit.olang` is what the two driven by the compiler's diagnostics share
+(reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/out -t
+tools/srcmask.olang` and `build/out -t tools/diagedit.olang` run their tests. Tools not yet ported are
 still the Python scripts, run as `python3 tools/NAME.py`.
 
 | script | the change | run |
 |---|---|---|
 | `bare_typevars.olang` | G8b: a type variable is written `<T>` once and `T` after | `build/tools_bare_typevars [--check] [-v] FILE\|DIR...` |
-| `perm_mut.py` | T25b: `mut` speaks only about what a reference reaches | `tools/perm_mut.py [--olang PATH] [-j N] FILE\|DIR...` |
+| `perm_mut.olang` | T25b: `mut` speaks only about what a reference reaches | `build/tools_perm_mut [--olang PATH] [-j N] FILE\|DIR...` |
 | `int_literal_i64.py` | T6a: an integer literal's own type is `I64` | `tools/int_literal_i64.py [--olang PATH] [-j N] FILE\|DIR...` |
 | `io_print.olang` | M19f: the prelude's `print` words became `io.Print` and friends | `build/tools_io_print [--dry] PATH...` |
 | `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `build/tools_io_try PATH...` |
@@ -21,7 +23,7 @@ still the Python scripts, run as `python3 tools/NAME.py`.
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in). `--check` writes nothing and the exit status says whether anything
   would change.
-- `perm_mut.py` and `int_literal_i64.py` are driven by the compiler's own diagnostics: they compile each file with
+- `perm_mut` and `int_literal_i64` are driven by the compiler's own diagnostics: they compile each file with
   `--olang` (default `build/out`) and apply what it reports, repeating until nothing changes.
 - `io_fix` needs the compiler path as its first argument (an absolute path; a relative one is made absolute).
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
