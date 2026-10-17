@@ -136,6 +136,8 @@ struct type {
 
     //BASETYPE_CHOICE, BASETYPE_ERROR
     struct list words; //list of struct token: choice or error member names
+    unsigned long long errWords; //R1c: BASETYPE_ERROR in an error set - the words of it the set holds (bit = ordinal);
+                                 //0, every word. Not part of the type's identity: TypeIsSame ignores it
 
     //BASETYPE_FUNC
     bool hasRetType;
@@ -821,6 +823,10 @@ struct operand {
                      //(args[2]); its type is the fixed-length reference
     bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    //E15a/E35: a "checked" with no clauses written as (or in) the operand of a try or "!" hands what it checks to that
+    //one - its errors and BuiltinError words, which the enclosing one takes on as its own
+    struct list* absorbErrs; //struct type*, NULL unless this is such a checked
+    unsigned absorbWords;
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
     bool isWriteBack;           //E31b: an OPERATION_SEQ standing for a call on a handle element - "users[i].Push(x)":
                                 //the handle's copy held in a hidden local, then the call lending it as its reference
@@ -985,7 +991,10 @@ void VarListAddSetOrigin(struct list* l, struct var v);
 
 void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
+unsigned long long ErrSetWords(struct type e); //R1c: the words of e an error set holds
+void ErrSpellItems(struct type e, char* buf, size_t n); //R1c: "T", or "T.W + T.V" where the set names words
 bool OperandIsNoReturnCall(struct operand* op); //D8e
+bool operandLeaves(struct operand* op); //D8e: a noreturn call, or a conditional or match giving only such
 
 //requireMain: only "-b" (§10 B3) needs a "main" - "-c" compiles a plain module and "-t" runs tests,
 //neither of which has or wants one

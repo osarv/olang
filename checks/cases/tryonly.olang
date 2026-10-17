@@ -1,5 +1,5 @@
-# check: fail has only the checked form of this operation
-# E31: a type with only CheckedAt is indexed under "checked"
+# check: fail CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
+# E31a: a checked form needs its plain one - "try" never turns a check on, so no operation is reachable only under one
 error E {
     X
 }

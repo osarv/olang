@@ -1,0 +1,22 @@
+# check: fail CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
+# E31a/S9e: a checked form needs its plain one, and 'for x in try c' never calls a checked form
+import "std/io"
+error E {
+    A
+}
+type C struct(n I64) {
+    n
+}
+fn (c C&) Len() I64 { return c.n }
+fn (c C&) CheckedAt(i I64) I64 ? E + BuiltinError {
+    if i == 7 { error E.A }
+    return i * 10
+}
+fn main() {
+    c := C(3)
+    for x in try c {
+        io.Println($x)!
+    } catch { }
+    v := checked c[1] catch default 0
+    io.Println($v)!
+}

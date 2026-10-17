@@ -1061,7 +1061,9 @@ value enters the type. A **literal** entering the type - an initializer, an assi
 value - goes through it too: `p Percent = 150` is `Percent(150)`, the constructor run on the literal **while
 compiling** (K1) and the literal standing for the value it gave, so nothing runs when the program does. A
 constructor that fails on the literal, or that cannot be evaluated at compile time at all (it writes a global, say),
-makes that a compile-time error at the literal - there is no `try` to write on a literal. And where the type **extends** its base (T29f), the base's arithmetic produces it
+makes that a compile-time error at the literal - there is no `try` to write on a literal. The constructor written out
+on a literal, where it can fail - `Radix(10)` - is the same: run while compiling, no `try` written, a failure a
+compile-time error there; one that cannot fail is an ordinary call. And where the type **extends** its base (T29f), the base's arithmetic produces it
 **without** running the constructor: the constructor checks how a value enters, not what arithmetic later makes of
 it.
 
@@ -1194,7 +1196,10 @@ of that name whose
   permission (T25b), so a method never writes through what its trait only lets it read,
 - return type agrees — both absent, or both present and the same type, a reference's permission included,
 - error set (§7.1) is held by the signature's: every error the method can fail with - written or inferred (R1a) -
-  is one the signature lists (R1b).
+  is one the signature lists (R1b),
+- `noreturn` agrees (D8e): a `noreturn` signature is met only by a `noreturn` method - generic code counts a call to it
+  as leaving (D10a) - and a `noreturn` method meets a signature with no result and no errors, which it does all of by
+  never returning (T22).
 
 A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
 supply it. A trait with a private method is therefore **sealed**: no other module's type can satisfy it.
@@ -1329,7 +1334,7 @@ param-list      ::= [ param { "," param } [ "," ] ]   (a trailing "," only as L1
 param           ::= IDEN type-expr [ "=" expr ]
 ret-type        ::= type-expr | "(" type-expr "," type-expr { "," type-expr } ")"
 error-list      ::= error-list-item { "+" error-list-item }
-error-list-item ::= alias-chain IDEN
+error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
 
 The return value comes first (`ret-type`, bare - no marker of its own), and the error set (if any)
@@ -1340,8 +1345,8 @@ value) are both unambiguous with nothing but an optional bare type-expr ever app
 value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-`error-list-item` must name a declared error type (§2.6). `?` with nothing after it declares an **inferred** error
-set (§7.1 R1a); a list of types declares those types and nothing else.
+`error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
+nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means.
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
@@ -1351,11 +1356,17 @@ to a `noreturn` function or through a `noreturn` function value, by `unreachable
 `break` of its own. It declares no error set (an error is a way back to its caller), so whatever can fail inside it is
 handled there. A call to a `noreturn` function, written as a statement, leaves for D10a; and as an expression it fits
 wherever a value of any type is expected - `catch default os.Exit(2)`, `x I64 = Fatal("no x") if bad else 3`, an
-argument - since control never arrives where the value would be used. `noreturn` is not a type: no variable,
+argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used. Beside
+other values (E28, S12b) it gives way to theirs, and a conditional or `match` all of whose values are such calls fits
+wherever a value is expected too; as a generic argument it takes no part in inference (G9a), as `null` takes none. A
+`noreturn` call written in a value position has no type of its own, so no diagnostic names one: where it does not fit
+(`:=`, below) it is said that it gives no value. `noreturn` is not a type: no variable,
 parameter, field, element or type argument is `noreturn`, and `:=` from such a call is a compile-time error (D15). A
 function type may write it too (`fn(I32) noreturn`, T21); a `noreturn` function fits such a type, and also one with the
 same parameters, no result and no error set, which it satisfies by never returning (T22). A method and an `extern fn`
-may be `noreturn`; a constructor, a destructor, an operator method (E31), a lambda and `main` may not.
+may be `noreturn`, and so may a trait's method signature (T31); a constructor, a destructor, an operator method (E31), a
+lambda (`fn() noreturn { ... }` is a compile-time error - a lambda's type is inferred, D16b, and a function type
+expected of one says no more than its parameters and result) and `main` may not.
 
 **D8c (several results).** A `ret-type` written as a parenthesized list of two or more types declares that
 the function returns **several values**, one per type, in that order. They are not one value: there is no
@@ -1462,7 +1473,9 @@ lambda's result is then inferred from it, as from any argument (G9).
 none - every parameter's type must be written, and the result and errors not
 written are taken from the body: the result is the type of the first `return`'s value - text is a `String`
 (T29c) and a numeric literal its own type - or none when the body returns no value; the errors are those its
-`error` statements and uncaught `try`s produce, in the order they first appear.
+`error` statements and uncaught `try`s produce - inferred as a function written `?` alone infers its set (R1a), with
+nothing written: a lambda's type is taken from its body as its parameters' and result's may be, and its set is in R1a's
+canonical order, whatever order its errors appear in.
 
 **D16c (captures).** A lambda's body may use the variables - locals and parameters - of the body it is
 written in. Each one it uses is **captured** when the lambda is made, as though passed to a parameter of its
@@ -1945,15 +1958,15 @@ the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no 
 `x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NOT_FINITE` for a NaN or an infinity. Both
 are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.
 
-Text has `t.ParseInt(base = 10) I64 ? ParseError` and `t.ParseUint(base = 10) U64 ? ParseError`: the integer `t`
+Text has `t.ParseInt(base Radix = 10) I64 ? ParseError` and `t.ParseUint(base Radix = 10) U64 ? ParseError`: the integer `t`
 writes - an optional sign (`ParseUint` takes `+` only), then digits of `base`, `2` to `36`, the digits past `9` being
 the letters in either case, and nothing else: no surrounding space, no prefix, no `_`. Base `0` reads the digits as an
 integer literal is written (L10): `0x`/`0X` before hexadecimal digits, `0b`/`0B` before binary ones, decimal otherwise,
 with a `_` between two digits as L10b allows it; a hexadecimal or binary literal is a bit pattern, read by `ParseInt`
 as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
 E6c) and by `ParseUint` as the `U64` it is. Each fails with `EMPTY` for no text, `INVALID` for text that is not such a
-number (a sign alone included) and `OVERFLOW` for a number beyond its type's range, and `BAD_BASE` for a base other than `0` or `2` to
-`36`. Text has `PadStart(width, fill = ' ')` and
+number (a sign alone included) and `OVERFLOW` for a number beyond its type's range; the base is a `Radix`, below, refused
+where it is made, so a literal base cannot fail. Text has `PadStart(width, fill = ' ')` and
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
 never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
 with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
@@ -1964,9 +1977,11 @@ lowercase letters, with a `-` before a negative number's digits and nothing else
 `ParseInt` and `ParseUint` read back in the same base, and in base `10` it is `$n`; an unsigned value's text is its
 bits read unsigned (`U64(-1).Format(16)` is sixteen `f`s), and a `Char`'s is its code (`'A'.Format(16)` is `"41"`, the
 method a `Char` inherits from `U8`). The base is a `Radix`, the prelude's `type Radix I64` whose constructor fails with
-`TextError.BAD_BASE` outside `2` to `36` - `0` included, which `ParseInt` reads as any of a literal's three forms: a
-literal base is checked while compiling (T29d), so `(255).Format(16)` cannot fail and `Format(40)` is a compile-time
-error, and a base computed while the program runs is made one with `Radix(b)`, which can fail.
+`TextError.BAD_BASE` (`? TextError.BAD_BASE`, R1c) for a number outside `2` to `36` other than `0` - the base the text
+says, which `ParseInt` and `ParseUint` read as any of a literal's three forms and `Format` writes in decimal: a literal
+base is checked while compiling (T29d), so `(255).Format(16)` and `t.ParseInt(16)` cannot fail for it and `Format(40)`
+is a compile-time error, and a base computed while the program runs is made one with `Radix(b)`, which can fail - one
+error, for every function taking a base.
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`
@@ -2262,7 +2277,7 @@ signed type (`I32`, `I64`) is two's complement, so `I32` 2147483647 + 1 is -2147
 negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
 out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
-rely on it. A program wanting overflow detected checks for it itself, or writes `try` (E15a), which checks it there.
+rely on it. A program wanting overflow detected checks for it itself, or writes `checked` (E15a), which checks it there.
 Wrapping is deliberate, not a gap: it is the one defined result that costs nothing, where a check on every operation
 would be a cost the code does not show. Division is the exception, by E6a.
 
@@ -2644,8 +2659,9 @@ compile-time error.
 
 **E15a (checked operations).** `checked` is `try` (R8) **plus every check** the language can make on what it
 covers: `checked (a * b / c)`, `checked a[i]`, `checked a[lo:hi]`, `checked Array<T>(n)`, `checked (x as Shape.Circle)`
-- a call, a chain and a parenthesized expression as `try` covers them, with every operation in them checked too,
-other than inside a call (which has its own signature), a nested `try`, a lambda, or a `match` used as a value
+- a call, a chain and a parenthesized expression as `try` covers them, with every operation in them checked too - a
+call's arguments included - other than in the called function's body (which has its own signature), a nested `try`, a
+lambda, or a `match` used as a value
 (S12b), whose clauses are statements' bodies. An operation a type declares (E31) is checked by calling its checked
 form (E31a), whose own errors the expression then can produce too; with no checked form it calls the plain method, as
 `try` would. Each check fails with a word of `BuiltinError` (§7.6) instead of doing what the unchecked operation
@@ -2655,22 +2671,27 @@ does:
 |---|---|
 | integer `+ - *`, unary `-` | `OVERFLOW` when the true result does not fit (instead of wrapping, E6c) |
 | integer `/ %` | `DIVIDE_BY_ZERO` for a zero divisor; `OVERFLOW` for the most negative value by `-1` (E6a) |
-| float `+ - * /` | `DIVIDE_BY_ZERO` for a zero divisor; `OVERFLOW` for an infinite result from finite operands; `INVALID` for a NaN result from operands that are not NaN |
-| `<<` | `OVERFLOW` when a set bit is shifted out - the true value `x * 2^n` does not fit; `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
+| float `+ - * /` | `DIVIDE_BY_ZERO` for a finite nonzero dividend divided by zero (whose result is an infinity); `INVALID` for a NaN result from operands that are not NaN (`0.0 / 0.0`, an infinity divided by one, an infinity minus itself); `OVERFLOW` for any other infinite result from finite operands |
+| `<<` | `OVERFLOW` when the true value `x * 2^n` does not fit the type; `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
 | `>>` | `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
 | integer conversion `T(x)` | `OVERFLOW` when the value changes - it does not fit `T`, a sign change between types of one width included (instead of wrapping, T6) |
-| float to integer `T(f)` | `INVALID` for a NaN, `OVERFLOW` for an infinity or a value out of range (E26a) |
+| float to integer `T(f)` | `INVALID` for a NaN or an infinity; `OVERFLOW` for a finite value out of `T`'s range (E26a) |
+| integer to float `T(x)` | `OVERFLOW` when the value becomes infinite (an integer above 65504 to `F16`) |
 | float narrowing `F32(f)`, `F16(f)`, `BF16(f)` | `OVERFLOW` when a finite value becomes infinite |
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
 | `x as E.Case` | `WRONG_CASE` when `x` is another case (E32) |
 | `x as Array<T, N>&` | `OUT_OF_BOUNDS` for a length other than `N` (E32b) |
 | `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
 
-`INVALID` means what IEEE 754 means by an invalid operation: a NaN made from what is not one. `checked` binds as
+`INVALID` means what IEEE 754 means by an invalid operation: a NaN made from operands that are not NaN, or a NaN or an
+infinity converted to an integer. `DIVIDE_BY_ZERO` is IEEE's division by zero for a float and an integer `/` or `%` by
+zero; a finite value that becomes infinite or does not fit an integer type is `OVERFLOW`. `checked` binds as
 tightly as a unary operator, as `try` does, so a checked computation is parenthesized: `checked a + b` is
 `(checked a) + b`. A `checked` covering nothing that can fail or be checked is a compile-time error, and so is a `try`
 whose operand only `checked` would make fallible - it names `checked`. The words a checked expression can produce are
-exactly those of the operations in it, and catching those is complete (R13). Written without `checked`, every
+exactly those of the operations in it, and catching those is complete (R13). A `checked` with no clauses, written in
+what a `try` or a `!` covers, hands its errors to that one (E35): `(checked a[i])!` ends the program on an index out of
+range, and `try (checked e) + 1` propagates what `e`'s checks find with the rest. Written without `checked`, every
 operation behaves as the rules above state - wrapping, IEEE results, or undefined.
 
 ### 5.5 Indexing and member access
@@ -2682,7 +2703,7 @@ the same reading C gives it, and one of exactly two places in this language wher
 storage it does not own (the other is `extern fn`, §11 X1a).
 
 Where the index and the length are **both known at compile time** — a constant index into a
-compile-time-length array — an out-of-range index written without `try` is a **compile-time error**. That check
+compile-time-length array — an out-of-range index written without `checked` is a **compile-time error**. That check
 costs nothing at run time and is not affected by the above. Under `checked` (E16d) the index is the checked form,
 whose failure is defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a generic over the length
 (`fn third(a Array<I32, <N>>&) I32 { return checked a[2] catch default -1 }`) one instantiation may have the element
@@ -3071,8 +3092,13 @@ naming the error to add. Where a type declares no checked form:
   j]`) that does not declare `CheckedAt` (or `CheckedSetAt`) itself, since `Len` checks one position.
 - every other operation is its plain form, which `checked` then calls as `try` would.
 
-A type declaring only the checked form of an operation (`CheckedAt` and no `At`) has that operation only under
-`checked`: `x[i]` without it is an error. A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
+A checked form **requires its plain form**: a type declaring `CheckedX` and no `X` - `CheckedAt` with no `At` - is a
+compile-time error at the checked form, naming `X` (`CheckedInc` and `CheckedDec` are satisfied by the `Plus` and
+`Minus` an increment is derived from, E31). `checked` only adds checks, and `try` never turns one on (R8), so no
+operation is reachable under one keyword and not under the other. The superset rule above is judged for a generic type
+per instantiation, since a plain form written `?` alone may fail with what its type argument's operation fails with -
+an instantiation whose checked form leaves out one of those errors is the error, with a note at the use that
+instantiated it (G16b). A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
@@ -3209,6 +3235,13 @@ operator, tighter than any prefix one: `-f(x)!` is `-(f(x)!)`; the chain may go 
 covered). A `!` directly followed by `=` is the `!=` token (L16), which a postfix `!` never needs to stand before.
 While compiling, an error reaching `!` is in K1's abort class: where a value is required it is a compile-time error,
 and elsewhere evaluation stops there.
+
+A `checked` with no clauses written in what `!` or a `try` covers (E15a) hands what it checks to them: `(checked a[i])!`
+is the bounds-checked index that ends the program when `i` is out of range, and `try (checked a[i]) + 1` propagates
+its `OUT_OF_BOUNDS` with whatever else the `try` covers - the inner `checked` neither propagates on its own nor needs
+the enclosing function to name `BuiltinError` for it. A `checked` with clauses handles its errors itself, as a nested
+`try` does. On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
+call fails, as a failed `assert` there does (P6); no error reaches the join.
 
 ## 6. Statements
 
@@ -3400,7 +3433,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
   and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
-  borrowed (E12c), never copied. A type with `CheckedAt` and `Len` but no `At` is walked through `CheckedAt`, under `checked` (S9e).
+  borrowed (E12c), never copied. The loop calls `At` - never a checked form, `for x in try c` included (S9e).
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
@@ -3410,7 +3443,8 @@ a loop in its own module calls (M6b). Anything else after `in` is a compile-time
 apply as in every loop; `continue` moves to the next value.
 
 **S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
-a call, `Iter()`, `Next()`, `At()` - and any of them may declare errors. Such a loop is written with `try` after
+a call, `Iter()`, `Next()`, `At()` - and any of them may declare errors. `try` here, as anywhere (R8), turns no check
+on: the loop calls a type's plain `At`, never its `CheckedAt`. Such a loop is written with `try` after
 `in`, which covers exactly those calls (a call written in the body takes its own `try`); one whose own calls cannot
 fail may not be written with it, and one whose own calls can fail must be. `Exhausted` from `Next()` is not such a
 failure: it ends the loop, as in S9a, and is never a clause's to name. `Next()` may declare other errors beside it -
@@ -3674,7 +3708,7 @@ the program (K1), and a true one needs, and gets, no run-time check. This holds 
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
-**S18d (the error return trace).** A test build (`-t`) and a debug build (`-d`, §10) keep, for each thread, a trace of
+**S18d (the error return trace).** A test build (`test`) and a debug build (`-debug`, §10) keep, for each thread, a trace of
 where the error being returned went - its last 32 places: an `error` statement (R3) or a check failing under `checked`
 (E15a) **raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
 on a task's error (P4b), adds its place; a clause that takes an error clears it. Nothing is recorded where nothing fails,
@@ -3686,7 +3720,7 @@ place - `raised here`, `try passed it on`, `a task failed, and its join passed i
 - when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
 
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead. A program run
-with `-i` (B3e) prints the trace as a debug build does.
+with `interpret` (B3e) prints the trace as a debug build does.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
 error leaving the test (S16) — runs the
@@ -3942,7 +3976,7 @@ its signal. And ThreadSanitizer records each thread's calls on a stack of fixed 
 chain deeper than roughly 200,000 frames (possible on `os.RunOnStack`'s stacks) corrupts its state: such a run may
 crash, abort, or hang inside the detector, and only a build without `-race` runs it as written.
 
-**P4.** A spawned call **may fail**. A task whose call can fail - a function declaring errors (§7 R1), or a spawned
+**P4.** A spawned call **may fail**. A task whose call can fail - a function that can fail (§7 R1, R1a), or a spawned
 lambda (D16e) whose body lets one out - is written `spawn try CALL`, optionally with catch clauses (§7.5) after it:
 
 ```
@@ -3953,7 +3987,8 @@ join {
 ```
 
 `try` there is required, as before a fallible call anywhere (R8): a fallible spawned call without it is a compile-time
-error, and so is `try` before one that cannot fail. Without targets a spawn is never an expression; its call's result,
+error, and so is `try` before one that cannot fail. `spawn f(x)!` handles the call as `!` does (E35): a failure ends
+the program from the task's thread, as a failed `assert` there does (P6), and reaches no join. Without targets a spawn is never an expression; its call's result,
 if any, is discarded (P1).
 
 **P4a.** A task's **clauses run on the task's thread**. Each clause written after a spawned `try` is part of the task:
@@ -4139,10 +4174,23 @@ signature declares it may produce; propagation and handling are both explicit.
 **R1.** A function or constructor's own signature (§3.4,
 §9) may declare zero or more
 error types via its `error-list` (D8): `? ErrA + ErrB + ...`. This is the function's own **error
-union** — the complete set of error types (not individual words — an entire declared error type at
-a time) it may produce, to `try` callers (§7.4) and to a coverage-checking `catch` (§7.5). A written list is a
+union** — the complete set of errors it may produce, to `try` callers (§7.4) and to a coverage-checking `catch`
+(§7.5): every word of a type the list names, or the words it names of one (R1c). A written list is a
 **promise** the body is held to: an error the body can produce that the list does not name is a compile-time error
 naming it (R9).
+
+**R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
+`? ListError.EMPTY + IoError`, `? TextError.NOT_FOUND + TextError.BAD_BASE` - and the set then holds that word of the
+type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
+ListError.EMPTY` fails only with `EMPTY`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
+type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
+beside it. An `error` statement (R3) raising a word a written set does not hold is a compile-time error, and so is a
+`try` letting one through (R9), word by word. An inferred set (R1a) holds words too: the words of its `error`
+statements, and what its tried calls let through - each callee's words, less those its clauses take (R11) - so a
+function written `?` calling only `Pop` fails with `ListError.EMPTY`. A function type (R1b) may name words, and a
+function value fits a type whose set holds every word it can fail with (T22); a set's words are part of a function
+type's identity (T27). Codes (R6) do not change: a word's ordinal is its position in its type's declaration, and a
+type's the position of its one entry in the set. Words beyond a type's 64th cannot be named one at a time.
 
 **R1a (inferred error sets).** A signature writing **`?` alone**, with no error types after it, fails with **what its
 body can produce**: the error types of its own `error` statements (R3) and of what its tried calls let through
@@ -4170,7 +4218,8 @@ type.
 possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
 and the final `IDEN` is one of that type's own declared words (T19): every error is of a type, and names its word.
 Valid inside an ordinary function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's
-error union (R1) includes the named error type - or is inferred (R1a), and so takes it on. Not valid in a `test { }` block or a `destruct { }` body
+error union (R1) includes the named error type, and the word if the set names words (R1c) - or is inferred (R1a), and
+so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
 
 **R4.** Executing an `error` statement immediately ends the enclosing function, producing that
@@ -4180,7 +4229,7 @@ the statement is ever evaluated (§9.3 C6).
 
 ### 7.3 Return convention
 
-**R5.** A function that declares one or more errors (R1) returns, conceptually, either its success
+**R5.** A function that can fail (R1, R1a) returns, conceptually, either its success
 value (if it has a `ret-type`, §3 D8) or one specific word of
 one specific declared error type — never both, and a function with no `ret-type` and a nonempty
 error union returns either nothing (success) or an error.
@@ -4188,14 +4237,15 @@ error union returns either nothing (success) or an error.
 **R6.** Concretely, such a function's result is a `(code, payload)` pair: `code = 0` means success,
 and `payload` (present only if the function declares a `ret-type`) holds the success value. A
 nonzero `code` identifies an error as `(typeOrdinal << 16) | wordOrdinal`, where `typeOrdinal` is
-the 1-based position of the produced error's type within *this function's own* `error-list` (R1,
-left to right), and `wordOrdinal` is the 0-based position of the specific word within *that error
+the 1-based position of the produced error's type within *this function's own* `error-list` (R1:
+a written list left to right, an inferred set in R1a's canonical order; several words of one type are one entry, R1c),
+and `wordOrdinal` is the 0-based position of the specific word within *that error
 type's own* declaration (T19, left to right). These ordinals are local to one function's own
 signature and one error type's own declaration; the same error type/word pair may have a different
 `code` at a different call site with a different declared `error-list`.
 
-**R7.** A function with no declared errors at all has no `code`; its result is simply its success
-value, or nothing.
+**R7.** A function with no declared errors at all - none written, or an inferred set (R1a) that turned out
+empty - has no `code`; its result is simply its success value, or nothing.
 
 ### 7.4 `try`
 
@@ -4210,7 +4260,7 @@ nothing. `try` never turns a check on:
 an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; `checked` (E15a) is
 `try` plus every check the language can make. A spawned call (§6.8 P4) and a `join` block (P4c) are tried on the same
 terms: whatever can fail is written with `try`, and nothing else is. Where nothing names what a `try` lets
-through - a function with no `?`, a lambda whose type writes no errors - its clauses must take all of it, except in a `test`
+through - a function with no `?`, a lambda whose expected type (D16a) writes no errors - its clauses must take all of it, except in a `test`
 body, where what is let through fails the test (S16).
 
 **R9.** As an **expression** (`try-expr`, §5.1 E24, only where a value is expected): evaluates the
@@ -4313,10 +4363,11 @@ fully handled and does not need to appear in the enclosing signature at all — 
 block, a `destruct { }` body, or a function or constructor that declares no errors), as long as
 nothing actually escapes uncaught.
 
-**R14.** Coverage (R9, R13) is judged at the level of the called function's own declared
-`error-list` (R1): if a callee declares a whole error type, the caller must treat every one of that
-type's words as possible, even if the callee happens to only ever actually produce a subset of them
-internally.
+**R14.** Coverage (R9, R13) is judged at the level of the called function's own
+`error-list` (R1) - the words it names, or, where it names a type whole, every one of that type's words, even if the
+callee happens to only ever produce a subset of them internally. A callee written `? ListError.EMPTY` is covered by
+`catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
+type it does not name is (R13).
 
 ### 7.6 Built-in errors
 
@@ -6287,11 +6338,13 @@ builds it, once.
 
 ## 11. External Functions
 
-**X1.** `extern-func-decl ::= "extern" "fn" IDEN "(" extern-param-list ")" [ extern-ret-type ]
+**X1.** `extern-func-decl ::= "extern" "fn" IDEN "(" extern-param-list ")" [ extern-ret-type | "noreturn" ]
 STMNT_END` is a top-level declaration (D1) naming a function defined outside this compilation and
 resolved by the platform's linker at build time. Unlike an ordinary `func-decl` (D7), it declares no
 `error-list` and has no `block` body of any kind — `STMNT_END` ends the declaration directly where an
-ordinary function's body would otherwise begin.
+ordinary function's body would otherwise begin. One written `noreturn` (`extern fn exit(status I32) noreturn`) is a
+`noreturn` function (D8e), taken at its word as the rest of the prototype is (X1a): a foreign function that returns
+after declaring `noreturn` is undefined behaviour.
 
 **X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a data race
 (§6.8 P8b), one of the places in the language where memory safety rests on something the compiler does not
@@ -6399,7 +6452,7 @@ must state exactly the prototype below (X1a).
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
 | `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `interpret` as the call `f()`, the evaluator's own limits on depth standing for the stack |
-| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `-i` the message is written first when the interpreter's process crashes |
+| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `interpret` the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
 
@@ -6539,7 +6592,8 @@ that matching while any other argument binds the same variable: the variable is 
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
 literal operands (§5.4). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
-`Pick(1, 2.5)` at `F64`. Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
+`Pick(1, 2.5)` at `F64`. `null` and a `noreturn` call (D8e) take no part in that matching at all - each fits whatever
+the other arguments bind (`pick(3, os.Exit(1))` is `pick` at `I64`). Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
 such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
 at `I64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
 

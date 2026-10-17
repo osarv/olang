@@ -91,7 +91,7 @@ fn float(text String&) F64 {
 # the word ParseFloat fails with, or "ok"
 fn floatProblem(text String&) String& {
     try text.ParseFloat() catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" } catch ParseError.BAD_BASE { return "BAD_BASE" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
     return "ok"
 }
 
@@ -191,15 +191,15 @@ test "ParseFloat and ShortestDecimal, evaluated while compiling as at run time" 
 
 # what ParseInt makes of t in base, or the word it fails with
 fn intIn(t String&, base I64) String {
-    v := try t.ParseInt(base) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" } catch ParseError.BAD_BASE { return "BAD_BASE" }
+    v := try t.ParseInt(Radix(base)!) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
     return $v
 }
 
 # what ParseUint makes of t in base, or the word it fails with
 fn uintIn(t String&, base I64) String {
-    v := try t.ParseUint(base) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" } catch ParseError.BAD_BASE { return "BAD_BASE" }
+    v := try t.ParseUint(Radix(base)!) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
     return $v
 }
 
@@ -308,10 +308,10 @@ test "Format writes an integer in any base from 2 to 36, read back by ParseInt a
     assert m.Format(16) == "8000000000000000" # an I64's bits, read unsigned
     for base in range 2, 37 {
         for v in I64[0, 1, -1, 35, -36, 1000003, -987654321, big, least] {
-            assert (try v.Format(Radix(base)).ParseInt(base) catch default 0) == v
+            assert (try v.Format(Radix(base)).ParseInt(Radix(base)) catch default 0) == v
         }
         for v in U64[0, 7, 18446744073709551615, 12345678901234567890] {
-            assert (try v.Format(Radix(base)).ParseUint(base) catch default 1) == v
+            assert (try v.Format(Radix(base)).ParseUint(Radix(base)) catch default 1) == v
         }
     }
 }

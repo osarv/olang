@@ -3328,8 +3328,13 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
                                      a->type, av, bv);
         if (op->opType == OPERATION_DIV || op->opType == OPERATION_MOD) {
             char* z;
-            if (isF) z = cgFcmp(ctx, "oeq", aty, bv, "0.0");
-            else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
+            if (isF) { //IEEE's division by zero: a finite nonzero dividend - 0/0 and NaN/0 are INVALID or NaN, inf/0 exact
+                char* bz = cgFcmp(ctx, "oeq", aty, bv, "0.0");
+                char* aFin = cgIsFinite(ctx, aty, av);
+                char* aNz = cgFcmp(ctx, "one", aty, av, "0.0");
+                char* an = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", an, aFin, aNz);
+                z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", z, bz, an);
+            } else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
             cgFailIf(ctx, op, z, "DIVIDE_BY_ZERO");
             if (!isF && !isU) { //the most negative value by -1: the true quotient is one past the maximum
                 char minv[32];
@@ -5049,7 +5054,9 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
     if (f.errors.len) cgBufAdd(b, " ?");
     for (int i = 0; i < f.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&f.errors, i);
-        cgBufAdd(b, "%s%.*s", i ? " + " : " ", e->name.len, e->name.ptr);
+        char item[2048];
+        ErrSpellItems(*e, item, sizeof(item)); //R1c: "T", or the words it names
+        cgBufAdd(b, "%s%s", i ? " + " : " ", item);
     }
     rdSigDepth--;
 }
@@ -5165,6 +5172,8 @@ char* RdSpelled(struct type t) { //the same, in storage of its own (freed by the
 void RdSpellSig(struct type f, char* buf, size_t n) { rdSpellSig(f, buf, n); }
 //a type as a diagnostic names it (errmsg.c's "%t")
 void DiagSpellType(struct type t, char* buf, size_t n) {
+    if (t.bType == BASETYPE_VOID) { snprintf(buf, n, "no value"); return; } //a call returning nothing, never a type
+    if (t.bType == BASETYPE_ERROR && t.errWords) { ErrSpellItems(t, buf, n); return; } //R1c: the words an error set names
     rdForDiag = true;
     t.refMut = false; //a reference's own permission is T25c's to report, in words - inner levels' are part of the type
     rdSpellType(t, buf, n);
@@ -6583,6 +6592,23 @@ void cgSpawnTask(struct cgCtx* ctx, struct statement* s, struct list* merges) {
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", oldHead, nslot);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", node, ctx->joinTaskHead);
 
+    //E35/P6: "spawn f(x)!" - what the call lets through ends the program from the task's thread, by a function of its own
+    //made here, before the trampoline: what it names is written as module constants, which no function body may hold
+    bool bangTask = false;
+    for (int c = 0; c < nClauses; c++) if (((struct catchClause*)ListGetIdx(&s->catchClauses, c))->ends) bangTask = true;
+    if (bangTask) {
+        char* body = NULL;
+        size_t bodyLen = 0;
+        FILE* prevOut = ctx->fnOut;
+        bool prevTerm = ctx->terminated;
+        ctx->fnOut = open_memstream(&body, &bodyLen);
+        cgBangEnd(ctx, op, "%code", &func->type);
+        fclose(ctx->fnOut);
+        ctx->fnOut = prevOut;
+        ctx->terminated = prevTerm;
+        fprintf(ctx->out, "define internal void @olang.taskbang.%d(i32 %%code) {\nentry:\n%s}\n\n", id, body);
+        free(body);
+    }
     //the trampoline, written straight to the module stream: pthread hands it one void* and wants one back
     fprintf(ctx->out, "define internal ptr @olang.task.%d(ptr %%env) {\nentry:\n", id);
     fprintf(ctx->out, "  %%fnslot = getelementptr %s, ptr %%env, i32 0, i32 0\n", envTy);
@@ -6669,9 +6695,12 @@ void cgSpawnTask(struct cgCtx* ctx, struct statement* s, struct list* merges) {
                 fprintf(ctx->out, "  br i1 %%m%d.%d, label %%clause.%d, label %%next.%d\n", c, k, c, c);
             }
             fprintf(ctx->out, "clause.%d:\n", c);
-            if (clauseIdx[c] >= 0) cgTaskCallClause(ctx->out, cc, argVal[clauseIdx[c]], argVal[clauseIdx[c] + 1],
-                                                    op->cgTaskResultArg ? argVal[op->cgTaskResultArg - 1] : NULL, nDst, dstIdx, c);
-            fputs("  ret ptr null\n", ctx->out);
+            if (cc->ends) fprintf(ctx->out, "  call void @olang.taskbang.%d(i32 %%code)\n  unreachable\n", id);
+            else {
+                if (clauseIdx[c] >= 0) cgTaskCallClause(ctx->out, cc, argVal[clauseIdx[c]], argVal[clauseIdx[c] + 1],
+                                                        op->cgTaskResultArg ? argVal[op->cgTaskResultArg - 1] : NULL, nDst, dstIdx, c);
+                fputs("  ret ptr null\n", ctx->out);
+            }
             if (!cc->catchAll) fprintf(ctx->out, "next.%d:\n", c);
         }
         if (!all) {
