@@ -298,6 +298,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   where contiguity is needed; early freeing stays as the compiler's optimization for long-lived structures. Costs:
   List random indexing ~5-6x an array's instructions; Vec phase 1 removed. The doc compares it with the handle design.
   ANSWERED: "No don't drop vec yet" - Vec stays (the handle design is the doc's main design; drop-Vec only a note).
+  The user then: "Vec is basically a normal array hidden behind an access gate. The error we get when vec moves is a
+  correctness bug not a memory bug. This is kinda inevitable and what makes Vec problematic is how hidden it is".
+  Decided (in the doc): make it visible, not analysed - no implicit Vec -> Array<T>& conversion; `v.View()` explicit
+  ("a window on the current buffer, valid until v grows"); a view used after a growth of the same Vec in the same
+  function is a compile error; no cross-call may-grow analysis (a documented hazard, memory-safe).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
