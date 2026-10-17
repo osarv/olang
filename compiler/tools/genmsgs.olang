@@ -15,7 +15,7 @@
 # generated part until the port's checker (M5) makes %n and %t typed; from then on msgs.olang is edited by hand and
 # checks/checks.olang holds it to errmsg.h's rules (bootstrap/ takes fixes only).
 #
-# A port of the Python script genmsgs.py (the same file written, byte for byte).
+# A port of the Python script this replaced (the same file written, byte for byte).
 
 import "std/os"
 import "std/io"

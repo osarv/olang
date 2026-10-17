@@ -380,7 +380,7 @@ it can be ported as a pass.
     and out of, so `Array.Sort` moves with `take` too.
 - `Map`: `Take`; `Remove` and `Clear` release; `Iter` hands out borrowed copies by its body as written.
 - Migrate uses of `RemoveAt`'s and `SwapRemove`'s result to `TakeAt`/`SwapTake` with a re-runnable script
-  (`tools/takeat.py`, from the compiler's errors as `perm_mut.py` does) over std, the corpus, checks, fuzz, bench and
+  (`tools/takeat.olang`, from the compiler's errors as `perm_mut.olang` does) over std, the corpus, checks, fuzz, bench and
   oann.
 
 **Step 11 - `Vec<T>`** (`std/prelude/vec.olang`), after steps 1-10 have merged.
