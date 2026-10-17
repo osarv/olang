@@ -1,0 +1,29 @@
+# findings 1, 2, 3, 4: checked conversions, shifts and 0/0 (compare with the E15a table)
+import "std/io"
+fn sh(x I8, n I64) I8 ? {
+    return checked (x << n)
+}
+fn conv(x I64) U64 ? { return checked U64(x) }
+fn fl(x I64) F16 ? { return checked F16(x) }
+fn fi(x F64) I32 ? { return checked I32(x) }
+fn dz(a F64, b F64) F64 ? { return checked (a / b) }
+fn main() {
+    r1 := try sh(64, 1) catch default 99
+    io.Println("64<<1 " $r1)!
+    r2 := try sh(-1, 1) catch default 99
+    io.Println("-1<<1 " $r2)!
+    r3 := try sh(-64, 1) catch default 99
+    io.Println("-64<<1 " $r3)!
+    r3b := try sh(-65, 1) catch default 99
+    io.Println("-65<<1 " $r3b)!
+    r4 := try conv(-1) catch default 7
+    io.Println("U64(-1) " $r4)!
+    r5 := try fl(70000) catch BuiltinError.OVERFLOW default 1.0 catch default 2.0
+    io.Println("F16(70000) " $r5)!
+    big := 1e308
+    inf := big * 10.0
+    r6 := try fi(inf) catch BuiltinError.OVERFLOW default 1 catch BuiltinError.INVALID default 2 catch default 3
+    io.Println("I32(inf) " $r6)!
+    r7 := try dz(0.0, 0.0) catch BuiltinError.DIVIDE_BY_ZERO default 1.0 catch BuiltinError.INVALID default 2.0 catch default 3.0
+    io.Println("0/0 " $r7)!
+}

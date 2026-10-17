@@ -1,0 +1,8 @@
+# finding 10: '!' and 'try' do not take what a nested 'checked' lets through
+import "std/io"
+A mut I64 = 3
+fn main() {
+    arr := I64[1, 2, 3]
+    w := (checked arr[A])!
+    io.Println($w)!
+}

@@ -1,0 +1,8 @@
+import "std/os"
+import "std/io"
+fn h1(f fn(c I32) noreturn) I64 { f(1) }
+fn h2(f fn(c I32) noreturn, b Bool) I64 { return f(1) if b else 2 }
+fn h3(f fn(c I32) noreturn) I64 { return f(1) }
+fn main() {
+    io.Println($h2(os.Exit, false))!
+}

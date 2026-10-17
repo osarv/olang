@@ -1,0 +1,6 @@
+# finding 6: a noreturn call as a generic argument binds T to the stand-in '?'
+import "std/os"
+fn pick(a <T>, b T) T { return a }
+fn main() {
+    z := pick(3, os.Exit(1))
+}

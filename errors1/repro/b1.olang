@@ -1,0 +1,26 @@
+import "std/io"
+error Zed {
+    Z
+}
+error Alpha {
+    A
+}
+fn even(n I64) Bool ? {
+    if n == 0 { return true }
+    if n == 1000 { error Zed.Z }
+    return try odd(n - 1)
+}
+fn odd(n I64) Bool ? {
+    if n == 0 { return false }
+    if n == 2000 { error Alpha.A }
+    return try even(n - 1)
+}
+fn nofail(x I64) I64 ? { return x + 1 }
+fn apply(f fn(n I64) Bool ? Alpha + Zed, x I64) Bool ? { return try f(x) }
+fn main() {
+    a := even(10)!
+    b := try even(1001) catch Zed { io.Println("zed")! } default false catch Alpha default true
+    c := nofail(3)
+    d := try apply(even, 2003) catch Alpha default true catch Zed default false
+    io.Println($a " " $b " " $c " " $d)!
+}

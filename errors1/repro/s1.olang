@@ -1,0 +1,18 @@
+# finding 11: the ! after a spawned call is ignored (P4 error asks for spawn try)
+import "std/io"
+error E {
+    A
+}
+One mut I64 = 1
+fn f(n I64) I64 ? {
+    if n == 0 { error E.A }
+    return n
+}
+fn main() {
+    r := Array<I64>(2)
+    join {
+        spawn r[0] = f(One)!
+        spawn f(One)!
+    }
+    io.Println($r[0])!
+}

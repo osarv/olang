@@ -1,0 +1,13 @@
+# finding 16: catch ListError.EMPTY on Pop is incomplete (R14); Radix(10) needs try; ParseInt BAD_BASE is ParseError
+import "std/io"
+B mut I64 = 40
+fn main() {
+    l := List<I64>()
+    x := try l.Pop() catch ListError.EMPTY default -1
+    try l.RemoveAt(3) catch ListError.OUT_OF_RANGE { io.Println("oor")! }
+    s := (255).Format(16)
+    r := try Radix(B) catch TextError.BAD_BASE default Radix(10)
+    t := (255).Format(r)
+    p := try "12".ParseInt(B) catch TextError.BAD_BASE default 0
+    io.Println($x " " $s " " $t " " $p)!
+}

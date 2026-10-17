@@ -1,0 +1,8 @@
+import "zz"
+error Lerr {
+    L
+}
+fn Work(n I64) I64 ? {
+    if n == 1 { error Lerr.L }
+    return try zz.Z(n)
+}

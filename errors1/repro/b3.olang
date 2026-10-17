@@ -1,0 +1,13 @@
+import "std/io"
+error Zed {
+    Z
+}
+fn f(n I64) I64 ? {
+    if n == 0 { error Zed.Z }
+    return n
+}
+fn main() {
+    g := fn(n I64) I64 ? { return try f(n) }
+    x := try g(3) catch default 0
+    io.Println($x)!
+}
