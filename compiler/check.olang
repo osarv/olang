@@ -423,16 +423,41 @@ fn (c mut Checker&) unwind(mark I64) {
     }
 }
 
-# a lambda's copy of a value is read-only (D16c): a write to it, or into it, is an error
-fn (c mut Checker&) notCapture(p typed.Place&, sp source.Span) {
+# a store into p, or a writable borrow of it (store false): a local or parameter may be written, a global only when
+# "mut" (S6), what a reference names only when it is writable (T25b), a lambda's copy of a value never (D16c), and a
+# value a call gave back only where it is lent (E31)
+fn (c mut Checker&) notCapture(p typed.Place&, sp source.Span) { c.mustWrite(p, sp, true) }
+
+fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
     match p {
         case typed.Place.Local(_, _, id) {
             if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
                 c.err(sp, msgs.CaptureReadOnly())
             }
         }
-        case typed.Place.Field(_, _, base, _) { c.notCapture(base, sp) }
+        case typed.Place.Global(_, _, mi, n) {
+            v := c.P.GlobalDecl(mi, n)
+            if v != null and not writtenMut(v.Ty) { c.err(sp, msgs.Immutable(c.tok(n))) }
+        }
+        case typed.Place.Deref(_, _, ref) {
+            rt := typeOf(ref)
+            if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 { c.err(sp, msgs.ReadOnlyRefWrite()) }
+        }
+        case typed.Place.Field(_, _, base, _) { c.mustWrite(base, sp, store) }
+        case typed.Place.Elem(_, _, e) { c.mustWrite(e.Base, sp, store) }
+        case typed.Place.Payload(_, _, pl) { c.mustWrite(pl.Base, sp, store) }
+        case typed.Place.Temp(_, _, _, _) {
+            if store { c.err(sp, msgs.WriteIntoCallValue()) }
+        }
         nomatch { }
+    }
+}
+
+fn writtenMut(t ast.TypeRef&) Bool {
+    if t == null { return false }
+    return match t {
+        case ast.TypeRef.Perm(_, _, w, _) => w
+        case _ => false
     }
 }
 
@@ -1110,7 +1135,10 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         r := c.P.T.Referent(want)
         if c.P.T.Same(r, have) {
             p := readPlace(x)
-            if p != null { return typed.Expr.Borrow(sp, want, p) }
+            if p != null {
+                if (c.P.T.PermOf(want) & types.Writable) != 0 { c.mustWrite(p, sp, false) }
+                return typed.Expr.Borrow(sp, want, p)
+            }
             return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp)))
         }
         if c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r)) {
@@ -1439,6 +1467,7 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
         ps.Push(typed.Piece.Render(c.expr(y, types.UnknownT)))
         return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
     }
+    if op == token.Tok.Take { return c.takeExpr(sp, y) }
     c.gap(sp, "this prefix operator")
     return c.unknown(sp)
 }
@@ -2289,7 +2318,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 }
             }
         }
-        if e != null and k < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[k], typeOf(e), b, false, false) }
+        if e != null and k < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[k], c.bindType(e), b, false, false) }
         checked.Push(e)
         k++
     }
@@ -2353,6 +2382,17 @@ fn (c mut Checker&) unifySoft(pat types.TypeId, actual types.TypeId, b mut gener
             b.LiteralOnly[j] = false
         }
     }
+}
+
+# what an argument binds a type variable to (G9a): written text a String value, else its type
+fn (c mut Checker&) bindType(e typed.Expr&) types.TypeId {
+    match e {
+        case typed.Expr.Data(_, ty, _, _) {
+            if c.isRef(ty) and c.P.T.Referent(ty) == c.textType() { return c.textType() }
+        }
+        nomatch { }
+    }
+    return typeOf(e)
 }
 
 fn lambdaOf(x ast.Expr&) ast.Func&x {
@@ -3067,6 +3107,11 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
                 c.step(sp, y, op == token.Tok.Inc)
                 return
             }
+            if op == token.Tok.Take {
+                # "take p" standing alone releases what p held (E34, O30)
+                c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
+                return
+            }
         }
         case ast.Expr.Postfix(_, op, y) {
             c.step(sp, y, op == token.Tok.Inc)
@@ -3307,6 +3352,8 @@ fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
     p := c.place(y)
     if p == null { return }
     if c.writeBack(sp, token.Tok.PlusEq if inc else token.Tok.MinusEq, p, null) { return }
+    c.notCapture(p, y.Span())
+    if c.writeBack(sp, token.Tok.PlusEq if inc else token.Tok.MinusEq, p, null) { return }
     t := p.Type()
     if not c.isNumber(t) or (c.isNamed(t) and not c.P.Extends(t)) {
         if t != types.UnknownT { c.gap(sp, "'++' on a declared type (E31 Inc)") }
@@ -3459,7 +3506,9 @@ fn (c mut Checker&) discardOr(x ast.Expr&) typed.Place&c {
         }
         nomatch { }
     }
-    return c.place(x)
+    p := c.place(x)
+    if p != null { c.notCapture(p, x.Span()) }
+    return p
 }
 
 # a destructured part given to its target: a new local (":="), a place ("="), or nothing ("_")
@@ -3520,8 +3569,8 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         c.expr(value, types.UnknownT)
         return
     }
-    c.notCapture(p, target.Span())
     if c.writeBack(sp, op, p, value) { return }
+    c.notCapture(p, target.Span())
     t := p.Type()
     if op == token.Tok.Assign {
         x := c.exprTo(value, t)
@@ -3643,6 +3692,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     t := c.hidden(sp, typeOf(el))
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(t)), el))
     p2 := c.replaceTemp(p, t)
+    c.notCapture(p2, sp)
     v := c.readLocal(sp, hv)
     if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Place.Target(sp, pt)), v) }
     c.emit(typed.Stmt.Assign(sp, p2, v))
@@ -3873,6 +3923,44 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     }
     c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
     return null
+}
+
+# ---- take (E34) ----
+
+# whether a value of type t owns: an own reference, or a value holding one by value (O30, O31)
+fn (c mut Checker&) owning(t types.TypeId) Bool { return c.owningIn(t, 0) }
+
+fn (c mut Checker&) owningIn(t types.TypeId, depth I64) Bool {
+    if depth > 16 or t == types.UnknownT { return false }
+    k := c.P.T.KindOf(t)
+    if k == types.Kind.Ref { return (c.P.T.PermOf(t) & types.Owning) != 0 }
+    if k == types.Kind.Tuple or k == types.Kind.Record {
+        for x in c.P.T.Items(c.P.T.Parts(t)) {
+            if c.owningIn(x, depth + 1) { return true }
+        }
+        return false
+    }
+    if k == types.Kind.Array and c.P.T.Length(t) != types.TypeId(0) { return c.owningIn(c.P.T.Elem(t), depth + 1) }
+    if k == types.Kind.Named and c.P.Body(t) and c.P.T.DeclKindOf(c.P.T.DeclOf(t)) == types.DeclKind.Struct {
+        for x in c.P.T.Items(c.P.T.Fields(t)) {
+            if c.owningIn(x, depth + 1) { return true }
+        }
+    }
+    return false
+}
+
+# take p (E34): the owner a writable place holds, moved out, its zero value left
+fn (c mut Checker&) takeExpr(sp source.Span, y ast.Expr&) typed.Expr&c {
+    p := c.place(y)
+    if p == null { return c.unknown(sp) }
+    t := p.Type()
+    if t == types.UnknownT { return c.unknown(sp) }
+    if not c.owning(t) {
+        c.err(y.Span(), msgs.TakeNotOwn(c.ty(t)))
+        return c.unknown(sp)
+    }
+    c.notCapture(p, y.Span())
+    return typed.Expr.Take(sp, t, p)
 }
 
 # ---- lambdas (D16) ----
@@ -4970,4 +5058,19 @@ test "join and spawn errors (P1, P1a, P4, P4c)" {
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "P1 P1a P4 P4c ", rootRules(l)
+}
+
+test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn mk() P { return P(1) }\n"
+                       "fn f(p P&, q mut P&) {\n    q.x = 2\n    p.x = 3\n}\n"
+                       "fn main() ? {\n    M = 5\n    G = 6\n    mk().x = 4\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "T25b S6 E31 ", rootRules(l)
 }
