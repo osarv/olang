@@ -93,3 +93,9 @@ fn main() ? {
     }
     srcmask.Say("added try to " $total " calls")
 }
+
+test "try goes before a print call in code only" {
+    out, n := migrate("io.Print(\"a\")\ntry io.Println(\"b\")\nx := \"io.Print(1)\"\n# io.Print(2)\nmy.io.Print(3)\n", "io")
+    assert n == 1
+    assert out == "try io.Print(\"a\")\ntry io.Println(\"b\")\nx := \"io.Print(1)\"\n# io.Print(2)\nmy.io.Print(3)\n"
+}

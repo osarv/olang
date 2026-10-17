@@ -342,3 +342,9 @@ fn main() ? {
     }
     srcmask.Say("total: " $puns " pun 'mut' removed, " $totalDrop " other 'mut' removed, " $totalAdd " 'mut' added to locals")
 }
+
+test "a pun loses its mut, a keyword list does not" {
+    out, n := dropPunMut("type P struct(x mut I64) {\n    x mut\n    return y mut\n    a, b mut   # c\n}\n")
+    assert n == 2
+    assert out == "type P struct(x mut I64) {\n    x\n    return y mut\n    a, b       # c\n}\n"
+}

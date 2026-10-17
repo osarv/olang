@@ -530,3 +530,19 @@ fn main() ? {
                 " files")
     if check and totalEdits > 0 { os.Exit(1) }
 }
+
+test "a function's later <T> and a type's whole item become T" {
+    known Map<String&, Bool>
+    report List<String&>
+    out, n := migrate("fn max(a <T>, b <T>) <T> { return a }\ntype Box<T> struct(x <T>) { x }\n", "x.olang", known, report)
+    assert n == 3
+    assert out == "fn max(a <T>, b T) T { return a }\ntype Box<T> struct(x T) { x }\n"
+}
+
+test "a constraint written later moves to the introduction" {
+    known Map<String&, Bool>
+    report List<String&>
+    out, n := migrate("fn pick(a <T>, b <T Ord>) { }\n", "x.olang", known, report)
+    assert n == 2 and out == "fn pick(a <T Ord>, b T) { }\n"
+    assert report.Len() == 1
+}

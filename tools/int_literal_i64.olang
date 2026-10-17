@@ -343,3 +343,12 @@ fn main() ? {
         }
     }
 }
+
+test "a note names the type to write, a range its end" {
+    assert (try localType("'n' is I64, its literal's own type - declare the type it should have, 'n I32 = ...'") catch default "") == "I32"
+    assert (try rangeType("the range's literals make 'i' I64 - write 'U8(' here for U8 values") catch default "") == "U8"
+    assert (try rangeType("the range's literals make 'i' I64 - convert its end, 'I16(...)', for I16 values") catch default "") == "I16"
+    text := "for i in range 1, 10 { }"
+    s, e := try rangeEnd(text, 15, srcmask.Mask(text, true)) catch { unreachable }
+    assert text[s:e] == "10"
+}

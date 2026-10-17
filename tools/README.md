@@ -9,7 +9,8 @@ arguments below. `build/out -i tools/NAME.olang ARGS` runs one without building,
 `srcmask.olang` is the module they share: telling code from comments and literals, reading files as Python's text mode
 did, walking a directory for `.olang` files; `diagedit.olang` is what the two driven by the compiler's diagnostics share
 (reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/out -t
-tools/srcmask.olang` and `build/out -t tools/diagedit.olang` run their tests.
+tools/srcmask.olang` and `build/out -t tools/diagedit.olang` run their tests. Every tool has a few tests of its own
+(`build/out -t tools/NAME.olang`), and `make test` runs them with the rest.
 
 | tool | the change | run |
 |---|---|---|

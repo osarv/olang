@@ -252,3 +252,21 @@ fn main() ? {
     }
     srcmask.Say($changed " files " $("would change" if dry else "changed"))
 }
+
+test "print words become io's, except in headers, declarations and strings" {
+    out, n := migrateBare("fn print(x String&) { }\nprint(\"a\")\n# check: fail println(x)\n# println(x) here\nx := \"print(1)\"\ny.print(2)\n", "io")
+    assert n == 1
+    assert out == "fn print(x String&) { }\nio.Print(\"a\")\n# check: fail println(x)\n# io.Println(x) here\nx := \"print(1)\"\ny.print(2)\n"
+}
+
+test "try io.Print loses its try unless a clause handles the error" {
+    text := "try io.Print(\"a\") catch io.IoError { fail }\ntry io.PrintErr(\"b\") catch { x++ }\ntry io.Println(\"c\")\n"
+    out := StringBuilder()
+    migrateTries(text, srcmask.Mask(text, false), "io", 0, text.Len(), out)
+    assert out.ToString() == "io.Print(\"a\")\ntry io.Write(io.Stderr, \"b\") catch { x++ }\ntry io.Println(\"c\")\n"
+}
+
+test "the import goes after the last import, else after the leading comments" {
+    assert addImport("import \"std/os\"\nfn f() { }\n") == "import \"std/os\"\nimport \"std/io\"\nfn f() { }\n"
+    assert addImport("# c\n# d\nfn f() { }\n") == "# c\n# d\nimport \"std/io\"\nfn f() { }\n"
+}

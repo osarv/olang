@@ -351,3 +351,13 @@ fn main() ? {
     }
     try io.Println("genmsgs: " $ids.Len() " diagnostics written to compiler/msgs.olang") catch io.IoError { fail }
 }
+
+test "names, literals and functions are written as the Python script wrote them" {
+    assert funcName("ERR_UNKNOWN_CHAR") == "UnknownChar" and funcName("NOTE_IN_LIBRARY") == "NoteInLibrary"
+    assert olangLit("a\"b\\c\n") == "\"a\\\"b\\\\c\\n\""
+    name, decl := function("ERR_X", "R1", "expected %t, found %n and %n, 100%%")
+    assert name == "X"
+    assert decl == "fn X(ty String&, tok1 String&, tok2 String&) Msg { return Msg(Diag.X, \"R1\", \"expected \" $ty \", found \" $tok1 \" and \" $tok2 \", 100%\") }"
+    id, rule, format := try readEntry("    X(ERR_A, \"R1\", \"one \" \"two\\n\") \\") catch { unreachable }
+    assert id == "ERR_A" and rule == "R1" and format == "one two\n"
+}
