@@ -2,6 +2,7 @@
 # in the frame (28,000 deep in an 8MB stack, about 30,000 the limit since the scope close every frame inlines grew - C9a's
 # fold after each destructor; a header in every frame would cost another 48 bytes a level)
 import "std/os"
+import "std/io"
 type L struct(v I64, next L&) {
     v
     next
@@ -19,5 +20,5 @@ fn main() ? {
     l L& = L(0, null)
     for i in range d { l = L(i, l) }
     s := $l
-    println($s.Len())
+    try io.Println($s.Len())
 }

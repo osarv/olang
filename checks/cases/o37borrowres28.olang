@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'rel' may release the Inner borrowed
 # O37/O38 (Vec phase 1): a borrowed own result - ...an argument of a call that releases the object
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -61,5 +62,5 @@ fn rel(v mut Outer&, x Inner&) I64 {
 }
 fn main() ? {
     v := mkO(3)
-    println($rel(v, v.First()))
+    try io.Println($rel(v, v.First()))
 }

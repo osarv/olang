@@ -1,5 +1,6 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/O12: a catch default for a call borrowing from the receiver, built where the call's result lives (R9a): refused
+import "std/io"
 type Node struct(v I64, next Node&) {
     v
     next
@@ -16,5 +17,5 @@ fn (b Bag&) Str() String {
     return $x.v
 }
 fn main() ? {
-    println($Bag(Node(1, Node(5, null))))
+    try io.Println($Bag(Node(1, Node(5, null))))
 }

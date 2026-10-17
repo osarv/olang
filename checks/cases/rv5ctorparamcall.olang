@@ -1,5 +1,6 @@
 # check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
 # C2g (review of rv3fix, #6): nor a borrowed result of a call given it
+import "std/io"
 type P struct(v I64) { v }
 fn borrow(b P&) P&b { return b }
 fn deep(n I64) I64 {
@@ -14,5 +15,5 @@ type H struct(p P) {
 fn main() ? {
     h := H(P(42))
     deep(50)
-    println($h.keep.v)
+    try io.Println($h.keep.v)
 }

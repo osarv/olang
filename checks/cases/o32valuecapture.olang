@@ -1,5 +1,6 @@
 # check: fail error[O32]: a lambda does not capture the owner local 'a'
 # a lambda capturing an owner value would be a second owner
+import "std/io"
 type Buf struct() {
     data own mut Array<I64>& = Array<I64>(2)
     n I64 = 0
@@ -22,5 +23,5 @@ fn (b Buf&) copy() Buf {
 fn main() ? {
     a := Buf()
     f := fn() I64 { return a.n }
-    println($f())
+    try io.Println($f())
 }

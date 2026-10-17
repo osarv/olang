@@ -1,11 +1,12 @@
-# check: fail error[O39]: calling 'Push' may release the Array<Char> borrowed on line 8
+# check: fail error[O39]: calling 'Push' may release the Array<Char> borrowed on line 9
 # Vec phase 1: a callee's text naming a Vec<Char>'s buffer (a conversion of its view) still borrows the buffer - only a
 # result that cannot refer to the buffer is spared
+import "std/io"
 fn asText(v Vec<Char>&) String&v { return String(v.View()) }
 fn main() ? {
     v := Vec<Char>()
     v.Push('a')
     t := asText(v)
     v.Push('b')
-    println(t)
+    try io.Println(t)
 }

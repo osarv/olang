@@ -1,4 +1,5 @@
 # T25d: constant text as a read-only conditional's value is the constant itself
+import "std/io"
 type Bag struct(name String&) {
     name
 }
@@ -7,6 +8,6 @@ fn (b Bag&) Str() String {
     return $name
 }
 fn main() ? {
-    println($Bag(""))
-    println($Bag("x"))
+    try io.Println($Bag(""))
+    try io.Println($Bag("x"))
 }

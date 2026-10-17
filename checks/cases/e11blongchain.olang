@@ -2,8 +2,9 @@
 # never: write '$cols'
 # E11b: a long piece - a chain holding a lambda - is rendered whole by parenthesizing it, never by its first name
 # (study 4's r17)
+import "std/io"
 fn main() ? {
     cols := List<String&>()
     cols.Push("a")
-    println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
+    try io.Println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
 }

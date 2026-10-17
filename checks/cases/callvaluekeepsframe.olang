@@ -1,5 +1,6 @@
 # check: fail error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check
 # T22a/E31: a Call adapter keeping a function value it is handed, reached through a helper (C8)
+import "std/io"
 type Node struct(v I64) {
     v
 }
@@ -25,5 +26,5 @@ fn main() ? {
     kp := Keeper()
     fill(c, kp)
     t := churn(300)
-    println($kp.kept() " " $t)
+    try io.Println($kp.kept() " " $t)
 }

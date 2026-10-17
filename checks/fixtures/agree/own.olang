@@ -1,5 +1,6 @@
 # O30-O42: owned objects - built into own slots, moved with take, released, borrowed - the same built, built -d -s (a use
 # after a release would be reported) and interpreted. No destructors: -i does not run them yet (B3e)
+import "std/io"
 type Item struct(v I64) {
     v
     label String& = "i" $v
@@ -83,26 +84,26 @@ Bufs I64 = bufs(3)
 fn main() ? {
     s := Shelf()
     for i in range 50 { s.push(i) }
-    println($sumOf(s.top) " " $s.top.label)
+    try io.Println($sumOf(s.top) " " $s.top.label)
     for i in range 10 { s.pop() }
     churn()
-    println($sumOf(s.top) " " $s.top.label " " $s.top.next.label)
+    try io.Println($sumOf(s.top) " " $s.top.label " " $s.top.next.label)
     s.spare = take s.top.next
     c := s.top
     s.top.next = take s.spare.next
-    println($c.v " " $sumOf(s.top) " " $s.spare.v)
+    try io.Println($c.v " " $sumOf(s.top) " " $s.spare.v)
     take s.spare
     churn()
-    println($Built " " $build(5) " " $(s.spare == null) " " $s.top.label)
+    try io.Println($Built " " $build(5) " " $(s.spare == null) " " $s.top.label)
     a := Buf()
     for i in range 30 { a.add(i) }
     v := a
-    println($v.total() " " $v.n " " $v.data.Len())
+    try io.Println($v.total() " " $v.n " " $v.data.Len())
     churn()
     w := a.copy()
     w.add(7)
     x := take w
     a = take x
     churn()
-    println($a.total() " " $a.n " " $w.n " " $x.n " " $Bufs " " $bufs(2))
+    try io.Println($a.total() " " $a.n " " $w.n " " $x.n " " $Bufs " " $bufs(2))
 }

@@ -1,6 +1,7 @@
 # check: fail error[O32]: 'c.b' belongs to what 't' was copied from - assign it there
 # also: error[O32]: 'c.a' belongs to what 't' was copied from
 # L1: in a loop it grew without bound
+import "std/io"
 type X struct(k I64) {
     k
     text String& = "x" $k "-text-of-x-object"
@@ -21,5 +22,5 @@ fn main() ? {
         c.a = Lexer(7)
         c.b = Lexer(8)
     }
-    println(t.a.o.text)
+    try io.Println(t.a.o.text)
 }

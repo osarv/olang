@@ -1,5 +1,6 @@
 # check: fail error[O39]: taking 'v.o' moves the Inner borrowed
 # O37/O38 (Vec phase 1): a borrowed own result - ...given by a plain function, the object moved out with take
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -61,5 +62,5 @@ fn main() ? {
     f := get(v)
     x := take v.o
     churn()
-    println($f.k)
+    try io.Println($f.k)
 }

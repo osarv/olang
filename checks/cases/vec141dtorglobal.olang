@@ -1,6 +1,7 @@
-# check: fail vec141dtorglobal.olang:15:37: error[O40]: a destructor may not release owned objects
+# check: fail vec141dtorglobal.olang:16:37: error[O40]: a destructor may not release owned objects
 # also: note: 'Push' releases here
 # Vec phase 2a review (B11): a destructor pushing to a global Vec is reported at its own call, not inside Push
+import "std/io"
 G mut Vec<I64> = Vec<I64>()
 fn churn() I64 {
     t := 0
@@ -20,5 +21,5 @@ fn main() ? {
         r R& = R(1)
     }
     churn()
-    println($d[0])
+    try io.Println($d[0])
 }

@@ -1,6 +1,7 @@
 # check: run
 # O17b: a handle (Box holds one reference) copied out of a struct and lent to a method using it only through its
 # reference - the node built through the borrowed result is built where the box's state lives, read back after a churn
+import "std/io"
 type Node struct() {
     next mut Node& = null
     v I64 = 0
@@ -34,5 +35,5 @@ fn main() ? {
     bump(w, 41)
     churn()
     assert w.b.head.next.v == 41
-    println($w.b.head.next.v)
+    try io.Println($w.b.head.next.v)
 }

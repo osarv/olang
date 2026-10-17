@@ -1,5 +1,6 @@
-# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 12, which is used after it
 # Vec phase 2a (O39): a view taken through a reference to the struct, the Vec grown through the struct
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
@@ -10,5 +11,5 @@ fn main() ? {
     r Lexer& = l
     d := r.toks.View()
     l.toks.Push(2)
-    println($d[0])
+    try io.Println($d[0])
 }

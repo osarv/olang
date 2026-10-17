@@ -1,5 +1,6 @@
 # check: fail error[O34]: moving out of 's.cur' would leave it empty - write 'take s.cur'
 # a borrow passed for an owning parameter
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -16,5 +17,5 @@ fn consume(c own mut Conn&) I64 { return c.fd }
 fn main() ? {
     s := Server()
     s.cur = Conn(1)
-    println($consume(s.cur))
+    try io.Println($consume(s.cur))
 }

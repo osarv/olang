@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'add' may release the Array<I64> borrowed on line
 # a lambda capturing a borrowed copy holds its loan for as long as the lambda is used
+import "std/io"
 type Buf struct() {
     data own mut Array<I64>& = Array<I64>(2)
     n I64 = 0
@@ -24,5 +25,5 @@ fn main() ? {
     b := a
     f := fn() I64 { return b.n }
     a.add(3)
-    println($f())
+    try io.Println($f())
 }

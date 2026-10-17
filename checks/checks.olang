@@ -90,7 +90,7 @@ fn passed(name String&) Bool {
 # whether an outcome is a pass, printing it when it is not
 fn reported(outcome String&) Bool {
     if outcome.Len() == 0 { return true }
-    try io.PrintErr(outcome) catch { }
+    try io.PrintErr(outcome) catch io.IoError { }
     return false
 }
 
@@ -619,7 +619,7 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -i ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
-    try r.expect(outOf(dir).Contains("cyclic.olang:8: the comparison recurses deeper than -i allows"),
+    try r.expect(outOf(dir).Contains("cyclic.olang:9: the comparison recurses deeper than -i allows"),
                  "-i cyclic.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b tasks.olang > out.txt 2>&1 && ./build/tasks > want.txt 2>&1") == 0, "tasks build", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 0, "-i tasks.olang failed", dir)
@@ -627,7 +627,7 @@ fn interp(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "squares I64[1, 4, 9, 16]\nsum 10\ncleanup ran\n", "-i tasks.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
     try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang -i: ") and outOf(dir).Contains(": it waits for another task")
-                 and outOf(dir).Contains("in the task spawned at tasks.olang:38"), "-i tasks.olang x output", dir)
+                 and outOf(dir).Contains("in the task spawned at tasks.olang:39"), "-i tasks.olang x output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134,
                  "ends did not abort", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i ends.olang > out.txt 2>&1") == 134, "-i ends.olang did not abort", dir)
@@ -676,9 +676,9 @@ fn osexit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "before\n", "osexit -i output", dir)
 }
 
-# M19f: print, println, eprint and eprintln write to the standard output and error with no try, built and interpreted
-# alike - and a write that fails ends the program as a failed check does, saying which function and stream
-test "print and println write without try, and abort when the write fails" { assert passed("print") }
+# M19f: io.Print, Println, PrintErr and PrintErrln write to the standard output and error, built and interpreted alike -
+# and a write that fails is an IoError like any other
+test "io.Print and io.Println write, and fail with IoError when the write fails" { assert passed("print") }
 
 fn printing(r mut report&) ? Failed {
     dir := fresh("print")
@@ -691,9 +691,8 @@ fn printing(r mut report&) ? Failed {
                  "print: the standard error", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
-    try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 134, "print to a closed output does not abort", dir)
-    try r.expect(outOf(dir).StartsWith("print could not write to the standard output\n"),
-                 "print to a closed output: the message", dir)
+    try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
+    try r.expect(outOf(dir).StartsWith("unhandled error: IoError.FAILED\n"), "print to a closed output: the error", dir)
 }
 
 # S18a: a failed assert, abort or unreachable says where it is - and an assert the message written after it - built,
@@ -717,9 +716,9 @@ fn assertloc(r mut report&) ? Failed {
                  and outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "-i: an unreachable's location", dir)
     # and a check the language guarantees - a slice, an array length, an 'as', a copy into fixed storage
     try r.expect(sh(dir, "\"$OLANG\" -b guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
-    wants := String&["guaranteed.olang:12: slice bounds out of range\n", "guaranteed.olang:13: array length out of range\n",
-                     "guaranteed.olang:15: 'as' named what the value is not\n",
-                     "guaranteed.olang:17: array length does not match its fixed storage\n"]
+    wants := String&["guaranteed.olang:13: slice bounds out of range\n", "guaranteed.olang:14: array length out of range\n",
+                     "guaranteed.olang:16: 'as' named what the value is not\n",
+                     "guaranteed.olang:18: array length does not match its fixed storage\n"]
     args := String&["", " a", " a b", " a b c"]
     for i, w in wants {
         try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)
@@ -1335,7 +1334,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
             end I64 = rules.Len() if comma < 0 else comma
             r := rules[:end]
             if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n") catch { }
+                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
                 bad++
             }
             rules = rules[end:] if comma < 0 else rules[end + 2:]
@@ -1364,7 +1363,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
                 id := src[s:e]
                 entry := try table.Find("    X(" $id ",") catch default -1
                 if entry < 0 {
-                    try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n") catch { }
+                    try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n") catch io.IoError { }
                     bad++
                     continue
                 }
@@ -1372,7 +1371,7 @@ test "every diagnostic's call fits its message, and every rule it names is in th
                 fs, fe := literalAfter(table, re + 1)
                 want := directiveCount(table[fs:fe])
                 if want != after {
-                    try io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n") catch { }
+                    try io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n") catch io.IoError { }
                     bad++
                 }
                 calls++
@@ -1407,18 +1406,18 @@ test "every message of compiler/msgs.olang names rules the specification states,
         rules := rest[rs:re]
         for r in rules.Split(", ") {
             if r.Len() > 0 and not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: msgs.olang's " $id " names rule " $r ", which SPEC.md does not state\n") catch { }
+                try io.PrintErr("check FAIL: msgs.olang's " $id " names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
                 bad++
             }
         }
         entry := try table.Find("    X(" $id ",") catch default -1
         if entry < 0 {
-            try io.PrintErr("check FAIL: msgs.olang has " $id ", which errmsg.h does not declare\n") catch { }
+            try io.PrintErr("check FAIL: msgs.olang has " $id ", which errmsg.h does not declare\n") catch io.IoError { }
             bad++
         } else {
             ts, te := literalAfter(table, entry)
             if table[ts:te] != rules {
-                try io.PrintErr("check FAIL: " $id " applies " $rules " in msgs.olang, " $(table[ts:te]) " in errmsg.h\n") catch { }
+                try io.PrintErr("check FAIL: " $id " applies " $rules " in msgs.olang, " $(table[ts:te]) " in errmsg.h\n") catch io.IoError { }
                 bad++
             }
         }
@@ -1429,7 +1428,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
         if line.StartsWith("    X(") { entries++ }
     }
     if twins != entries {
-        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.py\n") catch { }
+        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.py\n") catch io.IoError { }
         bad++
     }
     assert twins > 0

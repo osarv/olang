@@ -1,5 +1,6 @@
-# check: fail error[O39]: assigning 'v.o' may release the Leaf borrowed on line 20, which is used after it
+# check: fail error[O39]: assigning 'v.o' may release the Leaf borrowed on line 21, which is used after it
 # Vec phase 2a (O37): a function handing on another's deep borrowed own result
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -19,5 +20,5 @@ fn main() ? {
     v := Outer()
     d := deeper(v)
     v.o = Inner(4)
-    println(d.text)
+    try io.Println(d.text)
 }

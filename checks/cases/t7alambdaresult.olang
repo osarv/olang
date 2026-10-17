@@ -3,7 +3,8 @@
 # never: has no method 'Join'
 # T7a: a lambda's written result binding a type variable the generic holds in an array is said at the lambda's result,
 # where the fix is ("String&"), and the call is not instantiated - one error, none inside the prelude (study 4's r19)
+import "std/io"
 fn main() ? {
     nums := I64[1, 2, 3]
-    println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
+    try io.Println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
 }
