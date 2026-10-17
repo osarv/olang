@@ -288,6 +288,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   own checker does today), else it keeps it until the scope closes (always safe, never an error). Unobservable except
   in memory, so stage 0 just drops `own` and never frees early; the port does the analysis in its scope pass. A report
   (`olang build -memory`) lists where replaced storage is kept and why. ASKED: write docs/memory.md for review?
+  ANSWERED ("I think this is a good idea yes, as long as we can make it effective at actually finding the places
+  where memory can be freed and the rules to trigger it somewhat explicit so a programmer can make it happen at will";
+  then on Vec: two loads per access are fine if hoisted, loops are why Vec exists). Being written: docs/memory.md
+  (wt-memory) - the one-sentence rule, Vec as a handle and its hoisting, the report, removal of own from both
+  compilers, migration. Nothing removed before the user reviews it.
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
