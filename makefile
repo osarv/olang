@@ -64,6 +64,14 @@ build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
 	$(OLANG) -b compiler/tools/dump.olang
 
+# the self-hosted compiler's driver (compiler/olang.olang), built by the compiler under test
+build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
+	$(OLANG) -b compiler/olang.olang
+
+# M10's acceptance so far: the driver says what stage 0 says for every command line decided before code generation
+drvdiff: build/out build/compiler_olang
+	compiler/tools/drvdiff.sh
+
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump
 	compiler/tools/tokdiff.sh
@@ -154,6 +162,7 @@ verify:
 	$(MAKE) astdiff
 	$(MAKE) namesdiff
 	$(MAKE) layoutdiff
+	$(MAKE) drvdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
@@ -207,7 +216,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff layoutdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff namesdiff layoutdiff drvdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
