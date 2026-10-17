@@ -254,6 +254,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   keep all three; (b) minimal prelude - helpers return `Array<T>`, List/Map/Vec move to std/list, std/map, std/vec,
   `a.ToList()` becomes `List(a)`; (c) keep Vec and Map, move List out once Vec can be a type argument (Vec phase 2b) so
   the helpers return Vec. Recommended (c). In effect: (a).
+  The user then: "do we run into a lot of problems if we remove them from the prelude and only have array? I don't
+  want the stdlib quality to drop". Answered (measured): no compiler knows the names; ~250/110/70/45 files use
+  List/Vec/Map/StringBuilder (an import line each, by a tool); the real cost is the prelude needing a growable buffer
+  (iterator Map/Filter/ToList and StringBuilder grow as they go) - with Array only it would be a hidden second Vec.
+  Recommended: keep Vec in the prelude, rebuild the helpers and StringBuilder on it (`a.ToVec()`), move List and Map
+  to std/list and std/map; after Vec phase 2b (Vec as a type argument, in tasks/lambdas), benchmarks before/after.
+  ASKED: plan it that way? In effect: (a).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
