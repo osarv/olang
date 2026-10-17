@@ -64,6 +64,9 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     captures List<typed.Capture&>
     Inst I64 = -1              # a destructor's: its instance parameter, whose fields it reads bare (C10)
     InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
+    TargetFails I64 = 0        # tasks binding targets that can fail into their join (P4d)
+    DeferLoops I64 = -1        # in deferred code: the loops around it then - none of them a jump may leave (S19b)
+    MsgLoops I64 = -1          # in an assert's message: the same (S17)
     joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
     joinMarks List<I64>        # where each one's errors start in joinErrs
     joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
@@ -4341,7 +4344,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     fr.Tries--
     fr.Checks = checks
     if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
-        c.nothingFails(sp, isChecked, fr.Checkable > checkable)
+        c.nothingFails(sp, isChecked, fr.Checkable > checkable or checkableAst(y))
         return c.unknown(sp)
     }
     end := fr.leaks.Len()
@@ -4365,6 +4368,19 @@ fn (c mut Checker&) nothingFails(sp source.Span, isChecked Bool, onlyChecks Bool
         c.err(at, msgs.TryOnlyChecks())
     } else {
         c.err(at, msgs.TryNothingFails(word))
+    }
+}
+
+# whether an expression holds an operation a checked would check (E15a) - arithmetic folded while compiling included
+fn checkableAst(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Paren(_, y) => checkableAst(y)
+        case ast.Expr.Binary(_, op, a, b) => op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star or
+            op == token.Tok.Slash or op == token.Tok.Percent or op == token.Tok.Shl or op == token.Tok.Shr or
+            checkableAst(a) or checkableAst(b)
+        case ast.Expr.Unary(_, op, y) => op == token.Tok.Minus or checkableAst(y)
+        case ast.Expr.Index(_, _, _), ast.Expr.Slice(_, _, _, _), ast.Expr.As(_, _, _) => true
+        case _ => false
     }
 }
 
@@ -4596,7 +4612,21 @@ fn (c mut Checker&) leaks1(e types.TypeId) { c.fr().leaks.Push(e) }
 # try of a nest says so: an inner one's go on to it
 fn (c mut Checker&) escapes(at source.Span, mark I64, k I64) {
     fr := c.fr()
-    if fr.Tries > 0 or fr.InTest or fr.InferErrors { return }
+    if fr.Tries > 0 or k == 0 { return }
+    # nothing may leave deferred code, an assert's message or a task's clause (S19b, S17, P4a)
+    if fr.DeferLoops >= 0 {
+        c.err(at, msgs.DeferErrorEscapes())
+        return
+    }
+    if fr.MsgLoops >= 0 {
+        c.err(at, msgs.AssertMsgError())
+        return
+    }
+    if fr.InTaskClause {
+        c.err(at, msgs.TaskClauseError())
+        return
+    }
+    if fr.InTest or fr.InferErrors { return }
     for i in range mark, mark + k {
         e := fr.leaks[i]
         if fr.Body < 0 or c.isGlobalBody(fr.Body) {
@@ -4744,8 +4774,12 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
             x := c.cond1(k)
             m typed.Expr&c = null
             if msg != null {
-                # S18a: its message is text
+                # S18a: its message is text, evaluated only when the assert fails - nothing may leave it (S17)
+                fr := c.fr()
+                was := fr.MsgLoops
+                fr.MsgLoops = fr.loops.Len()
                 me := c.expr(msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+                c.fr().MsgLoops = was
                 mt := c.deref(typeOf(me))
                 if mt != types.UnknownT and not c.sameRepr(mt, c.textType()) {
                     c.err(msg.Span(), msgs.AssertMessageNotText(c.ty(typeOf(me))))
@@ -4759,7 +4793,11 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
         case ast.Stmt.Defer(sp, inner) {
             from := c.stmts.Len()
             id, outer, mark := c.open(typed.BlockKind.Defer, sp)
+            # S19b: deferred code runs while its block is left - nothing may leave it
+            was := c.fr().DeferLoops
+            c.fr().DeferLoops = c.fr().loops.Len()
             c.stmt(inner)
+            c.fr().DeferLoops = was
             b := c.close(id, outer, mark, from)
             c.emit(typed.Stmt.Defer(sp, b))
         }
@@ -4828,6 +4866,7 @@ fn (c mut Checker&) notStmtSpan(x ast.Expr&) source.Span {
 # what they let out, its clauses taking some of it as a try statement's do
 fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     fr := c.fr()
+    targetFails := fr.TargetFails
     fr.joins.Push(0)
     fr.joinMarks.Push(fr.joinErrs.Len())
     from := c.stmts.Len()
@@ -4854,7 +4893,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     fr.joinErrs.Truncate(em)
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
     if j.Clauses != null and j.Clauses.Len() > 0 and not j.Tried {
-        if errs.Len() == 0 { c.err(sp, msgs.JoinCatchNeedsTry()) }
+        if errs.Len() == 0 { c.err(c.catchSpan(j.Clauses[0]), msgs.JoinCatchNeedsTry()) }
     }
     if j.Tried {
         if errs.Len() == 0 { c.err(sp, msgs.JoinCannotFail()) }
@@ -4864,6 +4903,15 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
         c.produced(j.Clauses, lm, jend)
         if j.Clauses != null {
             for cl in j.Clauses { cls.Push(c.clause(cl, types.VoidT)) }
+            # P4d: code after the join reads targets a failed task left unwritten - a clause taking that failure leaves
+            if fr.TargetFails > targetFails {
+                for i in range cls.Len() {
+                    if cls[i].Code == null or not leavesValue(cls[i].Code) {
+                        c.err(c.catchSpan(j.Clauses[i]), msgs.JoinClauseMustLeave())
+                        break
+                    }
+                }
+            }
         }
         k := c.caught(lm, jend, cls)
         jat := try c.src(sp).Find("join") catch default 0
@@ -4871,6 +4919,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     } else if errs.Len() > 0 {
         c.err(sp, msgs.JoinNotTried(c.ty(errs[0])))
     }
+    fr.TargetFails = targetFails
     c.emit(typed.Stmt.Join(sp, typed.Join(b, j.Tried, cls.ToArray())))
 }
 
@@ -4917,6 +4966,8 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     }
     fr = c.fr()
     fr.Tries--
+    # R14: a task's clauses name what its call can fail with, as any clause does
+    if tried and task != null { c.produced(clauses, lm, fr.leaks.Len()) }
     fr.leaks.Truncate(lm)
     if task == null { return }
     errs := c.P.T.Items(c.lastErrs)
@@ -4942,6 +4993,8 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
         for e in errs { fr.joinErrs.Push(e) }
     }
     c.dropTaken(fr.joinErrs, em, taken)
+    # P4d: a task binding targets that can fail into its join leaves them unwritten
+    if places.Len() > 0 and fr.joinErrs.Len() > em { fr.TargetFails++ }
     # the targets: exactly the call's result (P1g)
     rt := typeOf(task)
     if places.Len() > 0 {
@@ -4975,7 +5028,7 @@ fn (c mut Checker&) clauseHandler(cl ast.Catch&, rt types.TypeId, nt I64) typed.
     hasDef := cl.Defaults != null and cl.Defaults.Len() > 0
     if not hasBody and not hasDef and nt == 0 { return null }
     if hasDef and nt == 0 {
-        c.err(cl.Defaults[0].Span(), msgs.TaskDefaultInStatement())
+        c.err(c.defaultSpan(cl), msgs.TaskDefaultInStatement())
         return null
     }
     result := rt if nt > 0 else types.VoidT
@@ -6287,6 +6340,16 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.err(sp, msgs.TaskClauseReturns())
         return
     }
+    if fr.MsgLoops >= 0 {
+        c.err(source.Span(sp.Start, sp.Start + 6), msgs.AssertMsgReturns())
+        c.emit(typed.Stmt.Return(sp, null))   # said: the path still leaves, for R11 and D10a
+        return
+    }
+    if fr.DeferLoops >= 0 {
+        c.err(source.Span(sp.Start, sp.Start + 6), msgs.DeferReturns())
+        c.emit(typed.Stmt.Return(sp, null))   # said: the path still leaves, for R11 and D10a
+        return
+    }
     if fr.InferResult {
         c.inferReturn(sp, values)
         return
@@ -6370,6 +6433,14 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
             c.err(sp, msgs.TaskClauseLoopJump(msgs.Tok(kind.Text())))
             return
         }
+        if fr.MsgLoops >= 0 and fr.loops.Len() <= fr.MsgLoops {
+            c.err(sp, msgs.AssertMsgLoopJump(msgs.Tok(kind.Text())))
+            return
+        }
+        if fr.DeferLoops >= 0 and fr.loops.Len() <= fr.DeferLoops {
+            c.err(sp, msgs.DeferLoopJump(msgs.Tok(kind.Text())))
+            return
+        }
         if fr.loops.Len() == 0 {
             c.err(sp, msgs.BreakOutsideLoop(msgs.Tok(kind.Text())))
             return
@@ -6393,6 +6464,14 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
         c.err(sp, msgs.TaskClauseError())
         return
     }
+    if c.fr().DeferLoops >= 0 {
+        c.err(source.Span(sp.Start, sp.Start + 5), msgs.DeferErrorEscapes())
+        return
+    }
+    if c.fr().MsgLoops >= 0 {
+        c.err(source.Span(sp.Start, sp.Start + 5), msgs.AssertMsgError())
+        return
+    }
     if word == null { return }
     w, et := c.errorWord(word)
     if w < 0 {
@@ -6407,13 +6486,11 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
         for h in c.P.T.Items(fr.Errors) {
             if c.P.T.ErrOf(h) == et { have = h }
         }
+        # said, the path still leaves (D10a)
         if have == types.UnknownT {
             c.err(c.pathPart(word, 1), msgs.ErrorUndeclared(c.ty(et)))
-            return
-        }
-        if c.uncovered(fr.Errors, raised) != types.UnknownT {
+        } else if c.uncovered(fr.Errors, raised) != types.UnknownT {
             c.err(c.pathPart(word, 0), msgs.ErrorWordNotInSet(c.ty(have)))
-            return
         }
     }
     c.leaks1(raised)
@@ -7159,6 +7236,44 @@ test "join and spawn errors (P1, P1a, P4, P4c)" {
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "P1 P1a P4 P4c ", rootRules(l)
+}
+
+test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a, R1c, E15a, D8e, E35)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
+                       "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
+                       "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
+                       "fn half(a I32, b I32) I32 ? E.B { return checked (a / b) catch BuiltinError default 0 }\n"
+                       "fn never() ? { }\n"
+                       "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n"
+                       "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n"
+                       "    y := odd(3)!\n    z := try half(1, 0) catch E.B default die()\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "", rootRules(l)
+    assert c.Attempts == 2, $c.Attempts
+}
+
+test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "error E {\n    A\n    B\n}\nerror F {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
+                       "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n"
+                       "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n"
+                       "fn n() I32 { return try (1 + 2) catch default 0 }\nfn q() I32 { return 3! }\n"
+                       "fn s() noreturn { }\nfn main() { }\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "R3 R9 R14 R11a E15a E35 D8e ", rootRules(l)
 }
 
 test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {
