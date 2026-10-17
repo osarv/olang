@@ -379,6 +379,7 @@ struct type;
     X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_VEC_GREW_HERE,               "",      "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") \
     X(NOTE_OWN_ELEM_BY_REF,             "",      "its elements, %t, are values holding references - hold them by reference, '%t&'") \
     X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
     X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
@@ -615,6 +616,8 @@ struct type;
     X(ERR_ASSERT_MESSAGE_NOT_TEXT,      "S18a",  "an assertion's message is text, found %t - write it as text: \"x is \" $x") \
     X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
+    X(ERR_ASSERT_STALE,                 "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: %s") \
+    X(ERR_GLOBAL_STALE,                 "K2, K1", "evaluated while compiling, this global's initializer stops on a stale view: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
     /* ---- the program as a whole ---- */ \
     X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters and returns no value: 'fn main() { }', or 'fn main() ? { }'") \

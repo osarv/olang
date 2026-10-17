@@ -4135,6 +4135,23 @@ char* cgAtomic(struct cgCtx* ctx, struct operand* op) {
 //"a.Len()" (T10) - see OperandLen in semantic.c. arg is always evaluated (cgValue has real side effects for
 //anything more than a bare variable read, e.g. a function call producing the array) even when the
 //length turns out to be compile-time-known and the loaded value itself goes unused.
+//M19d: "a.retire()" - nothing at all, but under -sanitize (B2f): the array's storage poisoned and, where it has a chunk
+//of its own (cgSizedArrayAlloc), made unreadable until its scope closes, so a view kept across a Vec's growth is reported
+//where it is next used (__olang_san_retire)
+static char* cgRetire(struct cgCtx* ctx, struct operand* op) {
+    struct operand* arg = *(struct operand**)ListGetIdx(&op->args, 0);
+    if (!cgScopeSan || !arg->type.arrMalloc || !arg->type.arrElem) return "0";
+    char* v = cgValue(ctx, arg);
+    char* n = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 0\n", n, v);
+    char* p = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = extractvalue { i64, ptr } %s, 1\n", p, v);
+    char* bytes = cgNewTmp(ctx);
+    fprintf(ctx->fnOut, "  %s = mul i64 %s, %lld\n", bytes, n, TypeGetSize(*arg->type.arrElem));
+    fprintf(ctx->fnOut, "  call void @__olang_san_retire(ptr %s, i64 %s)\n", p, bytes);
+    return "0";
+}
+
 char* cgLen(struct cgCtx* ctx, struct operand* op) {
     struct operand* arg = *(struct operand**)ListGetIdx(&op->args, 0);
     char* argVal = cgValue(ctx, arg);
@@ -4434,8 +4451,14 @@ char* cgSizedArrayAlloc(struct cgCtx* ctx, struct operand* op) {
         scopeVal = cgWhereBuilt(ctx, op);
         bytes = cgNewTmp(ctx);
         cgNoteBuildInto(ctx, scopeVal);
-        fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "",
-                scopeVal, byteSize);
+        //B2f: under -sanitize, an array made in a module that retires arrays (M19d) has a chunk of its own, so that
+        //retiring it can make it unreadable (__olang_san_alloc_own, zero-filled)
+        struct semaModule* in = ctx->curFunc && ctx->curFunc->owner ? ctx->curFunc->owner : ctx->curMod;
+        if (cgScopeSan && in && in->retires)
+            fprintf(ctx->fnOut, "  %s = call ptr @__olang_san_alloc_own(ptr %s, i64 %s)\n", bytes, scopeVal, byteSize);
+        else
+            fprintf(ctx->fnOut, "  %s = call ptr @__olang_scope_alloc%s(ptr %s, i64 %s)\n", bytes, zeroed ? "_zeroed" : "",
+                    scopeVal, byteSize);
     }
     //D15b: a local "Array<T>(n)" is left as the arena hands it over - chunk memory is recycled, so that is
     //genuinely whatever was there before. A D14a constructor field still zero-fills (noZeroFill is set
@@ -6294,6 +6317,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
         case OPERATION_ATOMIC_SWAP:
         case OPERATION_ATOMIC_CAS: return cgAtomic(ctx, op);
         case OPERATION_LEN: return cgLen(ctx, op);
+        case OPERATION_RETIRE: return cgRetire(ctx, op);
         //T29: a nominal conversion changes the NAME, never the bytes - so there is nothing to emit for it
         //beyond whatever E12 would already do to get the value to the underlying type. In practice that is
         //the one widening case: a compile-time-length literal reaching a run-time-length named type keeps
