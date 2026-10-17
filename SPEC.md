@@ -798,7 +798,9 @@ same error types **in the same order**, since a fallible call reports an error b
 callee's own list (§7). A function value **fits** a function type that differs only in permission where reading for
 writing is safe: a parameter may be read-only where the type passes a writable reference (it reads what it may write), and
 the result writable where the type gives a read-only one - so `fn(acc I32, b Box&) I32` is accepted for
-`fn(acc I32, b mut Box&) I32`. Every other part must be the same.
+`fn(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
+the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
+type's list. Every other part must be the same.
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
@@ -1174,7 +1176,8 @@ of that name whose
   included, since the call is a direct one and E12 borrows - and in each parameter's `mut` and a reference's
   permission (T25b), so a method never writes through what its trait only lets it read,
 - return type agrees — both absent, or both present and the same type, a reference's permission included,
-- declared error list (§7.1) agrees exactly, in the same order.
+- error set (§7.1) is held by the signature's: every error the method can fail with - written or inferred (R1a) -
+  is one the signature lists (R1b).
 
 A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
 supply it. A trait with a private method is therefore **sealed**: no other module's type can satisfy it.
