@@ -225,7 +225,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   become methods on the numbers (`x.Sqrt()`, `a.Min(b)`, integer `x.Abs()`); the constants stay `math.Pi`/`math.E` in
   std/math (a bare prelude `E` would be reserved everywhere - a common type-parameter and enum name). The user then:
   "don't move math as much as move the math stuff onto the types themselves" - same plan, and the free functions
-  `math.Sqrt(x)` go (one way to write it); std/math keeps only its constants. Queued after
+  `math.Sqrt(x)` go (one way to write it). The user then: "a bunch of repeated code? a module with just math constants
+  is kinda lame". Plan given (in effect unless they object): one generic method per operation over a sealed prelude
+  trait only the four floats satisfy (`fn (x T) Sqrt() T`, the match T inside as today); std/math removed; `Pi`, `Inf`,
+  `NaN` prelude constants; the rest computed in place and folded while compiling (`1.0.Exp()`, `2.0.Sqrt()`,
+  `2.0.Log()`); E4a extended: an immutable global whose value is literal-only adapts like that literal (so `f F32 = Pi`).
+  Queued after
   wt-errors2 merges (std files).
 - QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
   Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
