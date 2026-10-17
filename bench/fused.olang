@@ -44,7 +44,7 @@ fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, 
     try io.Println()
 }
 
-fn attention(T I64, threads I64) {
+fn attention(T I64, threads I64) ? io.IoError {
     r := rand.Rand(1)
     B I64 = 16
     D I64 = 128
@@ -103,7 +103,7 @@ fn attention(T I64, threads I64) {
     })
 }
 
-fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) {
+fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) ? io.IoError {
     r := rand.Rand(2)
     x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, inner)
     w mut linalg.Matrix<F32>& = linalg.Matrix<F32>(outer, inner)
@@ -170,7 +170,7 @@ fn oannIm2col(x Array<F32>&, n I64, C I64, H I64, W I64, K I64, S I64, P I64, co
     }
 }
 
-fn conv(C I64, H I64, W I64, K I64, outC I64) {
+fn conv(C I64, H I64, W I64, K I64, outC I64) ? io.IoError {
     r := rand.Rand(3)
     n I64 = 128
     x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, H * W * C)
@@ -216,18 +216,18 @@ fn main() ? {
     what String& = args[1] if args.Len() > 1 else "all"
     if args.Len() > 2 { reps = try args[2].ParseInt() }
     if what == "attention" or what == "all" {
-        attention(64, 1)
-        attention(256, 1)
-        attention(64, 4)
-        attention(256, 4)
+        try attention(64, 1)
+        try attention(256, 1)
+        try attention(64, 4)
+        try attention(256, 4)
     }
     if what == "epilogue" or what == "all" {
-        epilogue(1024, 128, 512, linalg.Activation.Gelu)
-        epilogue(1024, 512, 128, linalg.Activation.Identity)
-        epilogue(128, 784, 128, linalg.Activation.Relu)
+        try epilogue(1024, 128, 512, linalg.Activation.Gelu)
+        try epilogue(1024, 512, 128, linalg.Activation.Identity)
+        try epilogue(128, 784, 128, linalg.Activation.Relu)
     }
     if what == "conv" or what == "all" {
-        conv(1, 28, 28, 3, 16)
-        conv(16, 14, 14, 3, 32)
+        try conv(1, 28, 28, 3, 16)
+        try conv(16, 14, 14, 3, 32)
     }
 }

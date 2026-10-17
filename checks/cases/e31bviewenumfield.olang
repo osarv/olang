@@ -2,6 +2,7 @@
 # also: the callee is no view of the element because of this statement
 # E31b (r3, a recorded over-rejection; D3): a "match" on an enum value field makes the callee no view - and the note
 # points at the statement in the callee that did
+import "std/io"
 type K enum {
     A
     B
@@ -29,5 +30,5 @@ fn f(c mut V&) {
 fn main() ? {
     s := Vs(Array<I64>(4))
     f(s[1])
-    println($s.d)
+    try io.Println($s.d)
 }
