@@ -269,6 +269,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   (move), `a.Clone()` (copy) or a reference (`b Vec<T>& = a`, parameter `v Vec<T>&`, as D9a for arrays). Removes
   borrowed copies (QJ1's asymmetry, and the source of own4-own6's findings). List (a handle) unchanged. ASKED: agreed?
   Then it goes into the Vec phase 2b design. In effect: borrowed copies.
+  MOOT 2026-10-17: owned values themselves go with `own` (QAB).
 - QAB ASKED 2026-10-17 (the user, on ownership: "I am just worried we are introducing a lot of complexity now that
   doesn't feel very smooth", "Can we hide reallocating away from the user completely?", "it's always the growing,
   lessening part that is the problem", then "I want it gone completely somehow and the memory model more
@@ -308,6 +309,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   v; or v a mutable global the callee may grow, by name) - in the compile-time checks; reading taken: also the
   compile-time evaluator and `interpret` report a stale view read exactly (they know each view's Vec), and
   `-sanitize` poisons old buffers on growth. In the doc.
+- QAC OPEN 2026-10-17: the static race-safety idea (next steps, recorded the same day) was built on `own`/`take` (a
+  task's writable arguments moved in); with own removed (QAB) it needs a version without ownership, or dropping in
+  favour of `-race`. Mine to bring back once docs/memory.md is settled.
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
