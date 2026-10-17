@@ -16286,6 +16286,64 @@ which is the twin's identity, rather than a separate index. A type argument writ
 so a sharing function cannot be stored in a generic container of functions of that shape - T22a's refusal, sound, and
 nothing in the repository writes one.
 
+## Port M5b/M5c: the checker, `compiler/check.olang` (2026-10-17, in progress)
+
+`check.olang` elaborates the resolved AST (`names`) into the typed core (`typed.olang`, DESIGN.md 1.6.1),
+demand-driven: a function's body is checked when first needed, instances of generics per binding through
+`generic.Program.FnInstance`/`Instance`. Built in phases, each committed with its targeted tests (5d28b9d through
+9e1e93f): the skeleton, expressions and statements; operators, methods, conversions, slices, destructuring and
+`match`; built results writable, D8d, E32 on enums, `Call` adapters, exact literal folding; for-in over iterators,
+runs, iterables and indexables and comprehensions as `Collect`/`Yield`; lambdas (D16a-D16c: expected types, inferred
+results and errors, captures; G9a/G9c through lambdas and constraints); `x[i]` through `At` as a place with stores
+written back by `SetAt` (E31b, the held element a `Temp`); join and spawn (P1, P1g, P4-P4c) with task clauses as
+lambdas and D10a through joins; `take` (E34) and every write checked (S6, T25b, D16c); destructor bodies reading
+fields bare (C9, C10).
+
+**Decided (mine).** Error sets are computed in one place - a frame's leaks, the clauses that catch, what a `try`
+takes - so QO1's inferred sets (a bare `?` is the set the body lets out, a fixed point; no default error, no R17) grow
+from it rather than from a second analysis; the default error and R17 are not built into the port. `Array<T>(n)` and
+`Array<T>(n, fill)` are typed in one function (`arrayMake`): a fixed length where `n` folds (`generic.FoldConst`,
+G21's exact fold), a run-time `Array<T>` otherwise, a written target type winning (QP1); `Array<T, N>()` is reported as
+a gap, the written `Array<T, N>` and constant generics being dropped (QP2) - a fixed length stays an internal
+property of an array type, never parsed. S13a's coverage is Maranget's usefulness over the clauses' rows
+(`coversRows`): Bool and enum cases specialized, payload columns expanded, the default matrix where column 0 names
+not every constructor. The derived Try forms (`TryAt`, `TrySetAt`) are `PrimOp.InRange` checks against `Len()` under
+`Check.Try`, so `try c[i]` on a user type checks as on an array. A compound assignment or `++` on a declared type
+goes through its operator method (`Inc`/`Dec`, else `Plus`/`Minus` with a literal 1 of the parameter's type). A
+generic constructor's arguments are inferred against the wanted type first (G10c), a reference binding read-only.
+
+**Ownership is not checked here** (section 8, M6): every move is a `Take`, every owner and destructor-bearing
+temporary a site, and S4d is decided by types, so the scope pass has what it needs.
+
+**Where it stopped.** The last commit (9e1e93f) is untested: it built once before its last two edits (a G17 bound of
+1,000 instances per function, and a default-matrix shortcut in `coversRows`), which were never compiled. Stage 0
+cannot compile `check.olang` within the ~6GB a compile may take on the shared machine: `-c compiler/check.olang` fails
+with "out of memory" under a 7GB virtual-memory cap (peak resident 3.6GB), and the checkdump tool importing it
+reached 13.6GB and got other agents' verifies OOM-killed. So the targeted tests, `checkdiff` and `make verify` were
+not run on it. The last acceptance measured, before this batch: 12 of 511 checker-rule cases give stage 0's first
+error (11 exactly its errors), 133 of 227 roots check clean. The checkdump binary built before the last two edits ran
+out of memory checking a 5-line constant-generic recursion (`kTotal(a[1:] as Array<I64, N - 1>&)`) and reached 9.5GB on
+`shared.olang` inside `FnInstance` - a chain of instances that never ends, which the uncompiled G17 bound is meant to
+stop. **Gaps**: QP3's by-value array parameters and inferred array results; E10a on arrays and enums; a derived
+`TrySlice`; the inferred error sets themselves.
+
+**The errors batch in the checker (2026-10-17, night; checkdiff 174/391 refused cases giving stage 0's first error and
+251/255 accepted programs clean before, 216/415 and 269/273 after).** Built on the leaks the first round kept, as decided:
+every frame now tracks what it lets out, so one mechanism serves R1a's inference, R9/R13 (what a try lets past its
+clauses is held to the written set, at the outermost try of a nest, nowhere in a test), R14 (a clause naming what its
+operand cannot fail with, words included) and R3 (an `error` statement against the written set). **Decided (mine):**
+(1) R1a's fixed point is stage 0's: a callee's set is read after checking its body where it can be (a nested check), a
+set read while its own body is being checked (a cycle) reads what the attempt before found, and an attempt whose early
+reads grew is done again from the start, every set preset - the diagnostics of the dropped attempt forgotten by a new
+`diag.Forget` (holding them in a group was tried first: diagnostics reported inside a build-decided branch's own group
+outlived the dropped attempt and made the branch look as though it held a syntax error). (2) Words in a set (R1c) are a
+type-table entry of their own (`Kind.ErrWords`: the error type and a word mask), so lists, identity and interning need
+nothing new; a check's `BuiltinError` entry holds exactly its words. (3) `noreturn` is a result type (`Kind.Noreturn`)
+rather than a flag beside the result: it fits any value, leaves for D10a and takes no part in inference by being a type
+the rules can test, and a function type carries it with no new field. (4) `x!` is a `typed.Try` with no clauses and
+`Ends` set - the lowering is a try whose escape ends the program. (5) Checked forms' superset and `Len`/`Eq`/`Str` not
+failing are judged once every set is known, a generic's checked forms per instance. (6) A declared number's constructor
+on a literal is no fallible call (T29d runs it while compiling). Root tests are checked in every build, as stage 0 does.
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
@@ -19456,3 +19514,25 @@ the integers as well, which no trait names. No prelude method was limited by an 
 T35c) bakes globals through constrained calls and decides asserts on literals while compiling, beside the same calls
 on mutable globals at run time. checks/cases/numtrait*.olang hold the five refusals: an integer to math.Sqrt, a Bool
 as a Number, a program type declaring `floatType`, an `extends F64` type, and a Char as an Integer.
+
+## The shell and awk scripts are olang programs (2026-10-17, the user's rule: nothing in the repository but C for stage 0 and the benchmarks)
+
+Ported after the Python scripts: `compiler/tools/{tokdiff,astdiff,namesdiff,layoutdiff,layoutgold,modgraph,diaggold_capture}`
+(sharing `compiler/tools/toolkit.olang`: `os.Exec` without a shell, a program's output as rows, a scratch directory,
+`diff`), `bench/{run,ir}` and `bench/repro/opt` (sharing `bench/benchlib.olang`: the compiler to build with, running in
+`bench/`, the `BENCH_LOCK` flock through an `extern fn`), and `checks/fixtures/frameenv/envcheck`. `gemm.sh` and
+`fused.sh` became `bench/rungemm.olang` and `bench/runfused.olang`, since `gemm.olang` and `fused.olang` are the
+programs they run. The makefile targets build the tool with the compiler under test (`build/compiler_tools_NAME`, one
+pattern rule) and run it; `build/compiler_tools_dump` and `_fmt` no longer depend on every file in `compiler/tools/`.
+
+How each was held to its script: the diff tools gave the same text and status on the whole repository (astdiff's
+current difference included: the same three `L21` rows, status 1; tokdiff, namesdiff, layoutdiff and modgraph the same
+verdict lines), `diaggold_capture` and `layoutgold` wrote byte-identical goldens, the bench drivers ran the same
+commands in the same order in the same directories (a logging `clang` and compiler on PATH) and printed the same text
+over stand-in benchmark binaries, and `ir`/`opt` left identical files. **Decided (mine)**: the tools run from the
+repository root, as their scripts' headers said; `diaggold_capture` builds four cases at a time with `join`/`spawn` (the
+script used `xargs -P 4`); a timed benchmark's output is gathered in a memory file and dropped (the script sent it to
+/dev/null); `layoutgold` takes `LAYOUTGOLD_OUT` to write somewhere else, to compare a capture without replacing the golden.
+**Found on the way**: `catch default a - b` reads as `(... catch default a) - b` (a default is a unary), which made a
+first `Rows` slice out of range. Not ported: the inline `awk` in the makefile's `checkir` and in two commands of
+`checks/checks.olang` (one-liners in a recipe and a test, no script file).

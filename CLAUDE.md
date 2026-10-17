@@ -574,7 +574,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
   loading and names, M5a types and the typed contract, M7's MIR contract; the compiler under test is `OLANG ?=
-  build/out`.
+  build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
+  elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c").
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
