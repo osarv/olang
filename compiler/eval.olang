@@ -606,6 +606,7 @@ fn (m mut Machine&) release(slot I64) {
     a.Gen = (a.Gen + 1) & ((1 << 38) - 1)
     a.Scope, a.Prev, a.Next = 0, 0, 0
     m.allocs[slot] = a
+    m.freeAllocs.Push(slot)
 }
 
 # the heap address of n bytes at p, checked: the allocation live, the bytes within it, a write allowed. -1, stopped,
@@ -3271,4 +3272,88 @@ test "conversions between every pair of numeric types agree with the run time: o
     convsAgree(t, "F64", F64[0.0, 1.5, -2.75, 0.1, 65519.0, 65520.0, 9223372036854775807.0, -9223372036854775808.0,
                               18446744073709549568.0, 18446744073709551616.0, -0.9, -1.0, 1.0 / z64, z64 / z64,
                               9007199254740993.0, 1.0e300], fn(x F64) I64 { return I64(x.Bits()) })
+}
+
+fn tconst(t mut types.Table&, name String&, v I64) mir.Operand { return mir.Operand.Const(t.Prim(name), v) }
+
+fn tprim(f mut mir.Fn&, b mir.BlockId, dst I64, op typed.PrimOp, ty types.TypeId, x mir.Operand, y mir.Operand) {
+    f.Add(b, mir.Stmt.Assign(Sp0, tl(dst), mir.Rvalue.Prim(op, ty, f.Args(mir.Operand[x, y]))))
+}
+
+# "fn sum(n I64) I64 { i, s := 0, 0; for i < n { [x := Array<I64>(4)]; s += i; i++ }; return s }": a loop whose body
+# is a scope of its own every turn, allocating there where alloc is true
+fn sumFn(t mut types.Table&, id I64, allocating Bool) mir.Fn {
+    i64 := t.Prim("I64")
+    arr := t.Array(i64, types.TypeId(0))
+    f := tfn(t, id, t.Func(t.List1(i64), i64, types.ListId(0)))
+    i, s, c := f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(types.BoolT, Sp0)
+    x := f.AddTemp(arr, Sp0)
+    body := f.AddScope(mir.ScopeKind.Loop, S0, typed.BlockId(1), Sp0)
+    head, turn, exit := f.NewBlock(), f.NewBlock(), f.NewBlock()
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(i), mir.Rvalue.Use(mir.Operand.Const(i64, 0))))
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(s), mir.Rvalue.Use(mir.Operand.Const(i64, 0))))
+    f.End(B0, mir.Term.Goto(head))
+    tprim(f, head, I64(c), typed.PrimOp.Lt, types.BoolT, mir.Operand.Copy(mir.L(i)), tcopy(0))
+    f.End(head, mir.Term.Branch(mir.Operand.Copy(mir.L(c)), turn, exit))
+    f.Add(turn, mir.Stmt.Open(Sp0, body))
+    if allocating {
+        f.Add(turn, mir.Stmt.Assign(Sp0, mir.L(x), mir.Rvalue.NewArray(mir.ScopeRef.Scope(body), arr,
+                                                                       mir.Operand.Const(i64, 4), mir.Operand.Const(i64, 7))))
+    }
+    tprim(f, turn, I64(s), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(s)), mir.Operand.Copy(mir.L(i)))
+    tprim(f, turn, I64(i), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(i)), mir.Operand.Const(i64, 1))
+    f.Add(turn, mir.Stmt.Close(Sp0, body))
+    f.End(turn, mir.Term.Goto(head))
+    f.Add(exit, mir.Stmt.Close(Sp0, S0))
+    f.End(exit, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(s))))
+    return f
+}
+
+# "fn fib(n I64) I64 { return n if n < 2 else fib(n - 1) + fib(n - 2) }", keyed Body(id)
+fn fibFn(t mut types.Table&, id I64) mir.Fn {
+    i64 := t.Prim("I64")
+    ty := t.Func(t.List1(i64), i64, types.ListId(0))
+    f := tfn(t, id, ty)
+    c, a, b, r1, r2, r := f.AddTemp(types.BoolT, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0),
+                          f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0)
+    small, big, second, sum := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
+    tprim(f, B0, I64(c), typed.PrimOp.Lt, types.BoolT, tcopy(0), mir.Operand.Const(i64, 2))
+    f.End(B0, mir.Term.Branch(mir.Operand.Copy(mir.L(c)), small, big))
+    f.Add(small, mir.Stmt.Close(Sp0, S0))
+    f.End(small, mir.Term.Return(Sp0, tcopy(0)))
+    tprim(f, big, I64(a), typed.PrimOp.Sub, i64, tcopy(0), mir.Operand.Const(i64, 1))
+    k1 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.L(a))]), mir.Empty,
+                             mir.L(r1), true, second, mir.NoLocal, mir.NoBlock))
+    f.End(big, mir.Term.Call(Sp0, k1))
+    tprim(f, second, I64(b), typed.PrimOp.Sub, i64, tcopy(0), mir.Operand.Const(i64, 2))
+    k2 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.L(b))]), mir.Empty,
+                             mir.L(r2), true, sum, mir.NoLocal, mir.NoBlock))
+    f.End(second, mir.Term.Call(Sp0, k2))
+    tprim(f, sum, I64(r), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(r1)), mir.Operand.Copy(mir.L(r2)))
+    f.Add(sum, mir.Stmt.Close(Sp0, S0))
+    f.End(sum, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(r))))
+    return f
+}
+
+fn fibHost(n I64) I64 { return n if n < 2 else fibHost(n - 1) + fibHost(n - 2) }
+
+test "loops and recursion: a loop's scope every turn, calls to depth, a loop that allocates nothing never grows" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    tdefine(t, m, sumFn(t, 1, false))
+    tdefine(t, m, sumFn(t, 2, true))
+    tdefine(t, m, fibFn(t, 3))
+    i64 := t.Prim("I64")
+    assert m.Eval(tkey(1), I64[1000]) == Stop.None and m.Int(m.Result, i64) == 499500
+    assert m.Eval(tkey(3), I64[20]) == Stop.None and m.Int(m.Result, i64) == fibHost(20)
+    # memory: the same after 10 turns and 100,000, with and without an allocation every turn
+    for k in I64[1, 2] {
+        assert m.Eval(tkey(k), I64[10]) == Stop.None
+        heap, allocs, scopes := m.HeapBytes(), m.Allocations(), m.ScopeSlots()
+        assert m.Eval(tkey(k), I64[100000]) == Stop.None and m.Int(m.Result, i64) == 4999950000
+        assert m.HeapBytes() == heap and m.Allocations() == allocs and m.ScopeSlots() == scopes,
+               ("fn " $k ": heap " $heap " -> " $m.HeapBytes() ", allocations " $allocs " -> " $m.Allocations()
+                ", scopes " $scopes " -> " $m.ScopeSlots())
+    }
 }
