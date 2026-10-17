@@ -73,6 +73,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stack); `Array<T, N>` is written only as a type (parameters, results, elements, constructor parameters, generic
   shapes); a written target type wins. QUEUED with the error batch; the port's checker told. The user next wants to
   discuss how relevant `Array<T, N>` as a type is at all (QP2).
+- QP2 (asked 2026-10-17): drop `Array<T, N>` as a written type and constant generics (G20-G28) with it - measured: no
+  type declares a constant parameter (linalg is Matrix<T> with run-time dims, oann has none), and of 57 written
+  `Array<T, N>` in std (12 in oann) nearly all are locals QP1 turns into `Array<T>(n)`. Fixed storage stays, inferred at
+  construction (QP1; internally the fixed type remains). Restrictions in functions become ordinary asserts/ifs; my
+  addition: a function's leading asserts on its parameters are also decided at each call whose arguments the
+  evaluator knows (S18c at the call), so a shape mismatch is still a compile-time error there, and LLVM folds the check
+  after inlining otherwise. Cost: small fixed data crossing a signature by value becomes a struct (Vec3, RandState).
+  Recommended yes; the user leaning yes.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
