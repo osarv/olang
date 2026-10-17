@@ -248,6 +248,9 @@ fn (d mut Diagnostics&) Hold() I64 {
 # closes the group opened last
 fn (d mut Diagnostics&) EndHold() { try d.held.Pop() catch { } }
 
+# how many diagnostics have been reported, held ones included - whether a step reported one
+fn (d Diagnostics&) Count() I64 { return d.records.Len() }
+
 # opens group g again: what is reported until EndHold belongs to it, as what the parser met in a branch does - a later
 # pass reporting inside a branch the build decides
 fn (d mut Diagnostics&) Reopen(g I64) { d.held.Push(g) }

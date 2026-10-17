@@ -1443,6 +1443,30 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     return x
 }
 
+# a value made to fit a type, as fit does, with nothing said: the value, and whether it fits - for a caller saying
+# what is wrong in its own words (S12b, S13, E28)
+fn (c mut Checker&) fitQuiet(x typed.Expr&c, want types.TypeId, sp source.Span) (typed.Expr&c, Bool) {
+    n := c.P.L.Diags.Count()
+    g := c.P.L.Diags.Hold()
+    y := c.fit(x, want, sp)
+    c.P.L.Diags.EndHold()
+    ok := c.P.L.Diags.Count() == n
+    if ok { c.P.L.Diags.Choose(g) } else { c.P.L.Diags.Drop(g) }
+    return y, ok
+}
+
+# whether values of two types can be compared or chosen between: one flows into the other, numbers meet, null beside a
+# reference (E10, E28, S13)
+fn (c mut Checker&) meets(a types.TypeId, b types.TypeId) Bool {
+    if a == types.UnknownT or b == types.UnknownT or c.P.T.Same(a, b) { return true }
+    if c.flowsInto(a, b) or c.flowsInto(b, a) { return true }
+    if c.isNumber(a) and c.isNumber(b) { return c.P.Meet(a, b) >= types.TypeId(0) }
+    if a == types.NullT { return c.isRef(b) or c.P.T.KindOf(b) == types.Kind.Func }
+    if b == types.NullT { return c.isRef(a) or c.P.T.KindOf(a) == types.Kind.Func }
+    if c.isRef(a) or c.isRef(b) { return c.meets(c.deref(a), c.deref(b)) and (c.isRef(a) == c.isRef(b) or c.flowsInto(c.deref(a), c.deref(b)) or c.flowsInto(c.deref(b), c.deref(a))) }
+    return false
+}
+
 # whether a value of one type is a value of another by representation, nothing lost: a declared type into its base
 # (T29a), an array of a fixed length into one of a run-time length (T7c), an array of a declared number into one of
 # its base (T29h)
@@ -3826,7 +3850,16 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
         case ast.Stmt.Assert(sp, k, msg) {
             x := c.cond1(k)
             m typed.Expr&c = null
-            if msg != null { m = c.exprTo(msg, c.P.T.Ref(c.textType(), types.ReadOnly)) }
+            if msg != null {
+                # S18a: its message is text
+                me := c.expr(msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+                mt := c.deref(typeOf(me))
+                if mt != types.UnknownT and not c.sameRepr(mt, c.textType()) {
+                    c.err(msg.Span(), msgs.AssertMessageNotText(c.ty(typeOf(me))))
+                } else {
+                    m = c.fit(me, c.P.T.Ref(c.textType(), types.ReadOnly), msg.Span())
+                }
+            }
             c.emit(typed.Stmt.Assert(sp, x, m))
         }
         case ast.Stmt.Raise(sp, word) { c.raise(sp, word) }
@@ -5178,11 +5211,20 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     t types.TypeId = types.UnknownT
     vfrom := c.exprs.Len()
     for a in rargs {
-        if c.fold(a).Ok {
+        fa := c.fold(a)
+        if fa.Ok and fa.Float {
+            c.err(a.Span(), msgs.RangeNotInt("F64"))
+            return null
+        }
+        if fa.Ok {
             c.exprs.Push(null)
             continue
         }
         v := c.value(c.expr(a, types.UnknownT), a.Span())
+        if typeOf(v) != types.UnknownT and not c.isInt(typeOf(v)) {
+            c.err(a.Span(), msgs.RangeNotInt(c.ty(typeOf(v))))
+            return null
+        }
         if t == types.UnknownT and c.isInt(typeOf(v)) { t = typeOf(v) }
         c.exprs.Push(v)
     }
@@ -5507,7 +5549,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
                         rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
                     }
                 }
-                v = c.fit(v, rt, cs.Value.Span())
+                ok := false
+                v, ok = c.fitQuiet(v, rt, cs.Value.Span())
+                if not ok { c.err(cs.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.ty(typeOf(v)))) }
             }
         }
         code := c.close(id, outer, mark, bfrom)
@@ -5536,7 +5580,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         }
         v typed.Expr&c = null
         if nm.Value != null and isValue {
-            v = c.fit(c.expr(nm.Value, rt), rt, nm.Value.Span())
+            ok := false
+            v, ok = c.fitQuiet(c.expr(nm.Value, rt), rt, nm.Value.Span())
+            if not ok { c.err(nm.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.ty(typeOf(v)))) }
         }
         code := c.close(id, outer, mark, bfrom)
         noMatch = typed.Arm(nm.Sp, Array<typed.Alt&>(0), null, code, v)
@@ -5765,12 +5811,17 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
             et := c.deref(t)
             k := c.caseTag(x, et)
             if k >= 0 { return c.isCase(sp, place, k) }
-            if c.isEnum(et) and c.typeNamed(x) < types.TypeId(0) {
+            if c.typeNamed(x) < types.TypeId(0) {
                 match x {
                     case ast.Expr.Member(_, prefix, n) {
                         pt := c.typeNamed(prefix)
-                        if pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
+                        if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
                             c.err(memberSpan(sp, c.text(n).Len()), msgs.NoSuchCase(c.ty(et), c.tok(n)))
+                            return c.lit(sp, types.BoolT, 0)
+                        }
+                        if pt >= types.TypeId(0) and c.isEnum(pt) and not (c.isEnum(et) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et)) {
+                            # S13b: a case of another enum where the payload holds something else
+                            c.err(prefix.Span(), msgs.PatternType(c.ty(et), msgs.Tok(c.src(prefix.Span()))))
                             return c.lit(sp, types.BoolT, 0)
                         }
                     }
@@ -5876,6 +5927,10 @@ fn (c mut Checker&) isCase(sp source.Span, place typed.Place&c, tag I64) typed.E
 # a value alternative: the place's value "==" it (S13d), a literal adapting to the subject's type
 fn (c mut Checker&) valueTest(sp source.Span, place typed.Place&c, x ast.Expr&, t types.TypeId) typed.Expr&c {
     v := c.expr(x, c.literalBeside(t) if c.isNumber(t) else t)
+    if not c.meets(c.deref(t), c.deref(typeOf(v))) {
+        c.err(x.Span(), msgs.CaseValueType(c.ty(c.deref(t)), c.ty(typeOf(v))))
+        return c.lit(sp, types.BoolT, 0)
+    }
     return c.opValues(sp, sp, token.Tok.EqEq, c.value(c.read(sp, place), sp), v, sp, x.Span())
 }
 
