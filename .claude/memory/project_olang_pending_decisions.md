@@ -269,6 +269,18 @@ design. Do what you want") - nothing to decide until a GUI is written.
   (move), `a.Clone()` (copy) or a reference (`b Vec<T>& = a`, parameter `v Vec<T>&`, as D9a for arrays). Removes
   borrowed copies (QJ1's asymmetry, and the source of own4-own6's findings). List (a handle) unchanged. ASKED: agreed?
   Then it goes into the Vec phase 2b design. In effect: borrowed copies.
+- QAB ASKED 2026-10-17 (the user, on ownership: "I am just worried we are introducing a lot of complexity now that
+  doesn't feel very smooth", "Can we hide reallocating away from the user completely?", "it's always the growing,
+  lessening part that is the problem", then "I want it gone completely somehow and the memory model more
+  streamlined"). Proposed: remove `own`/`take`/borrows from the language; one memory model - everything lives in a
+  scope: (1) blocks and the program, as today; (2) Vec as a handle (header + buffer, like List): growth keeps old
+  buffers until the scope closes (bounded ~2x peak), shrinking keeps capacity, a view held across a growth goes stale
+  (Go's append footgun; the local case refused); (3) a resettable scope as a std value `Slot<T>` (name open):
+  `s.Set(...)` builds into its own arena and frees the old one, `s.With(fn(c mut T&) {...})` gives access - the existing
+  scope rules keep references from escaping (a lambda parameter's scope cannot be named outside); `Set` inside its own
+  `With` aborts (one compare per Set). Reverses the user's own design (QG-QI, 2026-10-10); a large removal in both
+  compilers. ASKED: write it up first in docs/memory.md (server and interpreter worked through) for review? In effect:
+  own stays; ownership work frozen (no Vec phase 2b) until answered.
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
