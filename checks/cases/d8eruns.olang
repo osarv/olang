@@ -1,0 +1,25 @@
+# check: run
+# D8e: a noreturn call leaves for D10a, fits where any value is expected, and a noreturn function fits a function type
+# with no result
+import "std/os"
+error E {
+    NO
+}
+fn die(code I32) noreturn { os.Exit(code) }
+fn pick(n I64) I64 {
+    if n > 0 { return n }
+    die(3)
+}
+fn g(n I64) I64 ? {
+    if n < 0 { error E.NO }
+    return n
+}
+fn call(f fn(c I32)) { f(0) }
+fn main() {
+    x := try g(5) catch default die(4)
+    assert pick(x) == 5
+    h fn(c I32) noreturn = die
+    v I64 = x if x > 0 else die(5)
+    assert v == 5
+    call(die)
+}

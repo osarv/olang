@@ -33,7 +33,7 @@ fn main() ? RunnerError {
     try sh.SafeDiv(10, 2) catch sh.MathError {
         error RunnerError.STARTUP_FAILED
     }
-    done
+    return
 }
 
 test "calling back across the cycle from runner" {

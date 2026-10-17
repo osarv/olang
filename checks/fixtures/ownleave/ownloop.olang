@@ -4,13 +4,16 @@
 import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
+error Stop {
+    HERE
+}
 type Leaf struct(n I64) {
     n
     Made = Made + 1
 } destruct { Dropped = Dropped + 1 }
 fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
 fn ok(k I64) I64 ? {
-    if k > 5000000000 { error }
+    if k > 5000000000 { error Stop.HERE }
     return 0
 }
 fn run(n I64) I64 ? {

@@ -16,6 +16,11 @@
 # A key or value that is a reference ("Map<String&, I32>") is stored as the reference - it must outlive the
 # map, which every call checks (O10b).
 
+# what a Map's Get fails with: no value for the key
+error MapError {
+    MISSING
+}
+
 # one key and its value, as a "for ... in" over a Map gives them
 type MapEntry<K, V> struct(key K, value V) {
     Key K = key
@@ -103,14 +108,14 @@ fn (m mut Map<<K>, <V>>&) Update(key K, init V, f fn(v V) V) {
     s.add(i, key, f(init))
 }
 
-# the value for key - failing with the default error when there is none, so a miss is never read as a value:
+# the value for key - failing with MISSING when there is none, so a miss is never read as a value:
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
-fn (m Map<<K>, <V>>&) Get(key K) V ? {
+fn (m Map<<K>, <V>>&) Get(key K) V ? MapError {
     s := m.s
     for f mut mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f != null, f = f.next {
         if f.entry.Key == key { return f.entry.Value }
     }
-    error
+    error MapError.MISSING
 }
 
 # whether key has a value - what "key in m" asks (E29)

@@ -1,0 +1,4 @@
+# check: fail nothing here fails as written - write 'checked' to check it
+# E15a/R8: try handles what fails as written and never turns a check on - checking arithmetic is "checked"
+fn add(a I32, b I32) I32 ? { return try (a + b) }
+fn main() { }

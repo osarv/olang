@@ -50,13 +50,16 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     exits List<I64>        # beside each, the loop break leaves: a run-wise walk's outer loop for its inner (S9f)
     InTest Bool = false
     InCtor Bool = false
-    Tries I64 = 0          # how many tries enclose: a fallible call needs one (R8)
-    Fallible I64 = 0       # how many fallible calls and checked operations were met under one (R20)
+    Tries I64 = 0          # how many tries, checkeds and !s enclose: a fallible call needs one (R8, E15a, E35)
+    Checks I64 = 0         # how many of them are checkeds, no nested try between: what turns a check on (E15a)
+    Fallible I64 = 0       # how many fallible calls and checked operations were met under one (R8, E15a)
+    Checkable I64 = 0      # how many operations a checked would check were met under a try (E15a's 'only checks')
     LoopFails I64 = 0      # how many of a for-in's own calls can fail with more than Exhausted (S9e)
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
-    InferErrors Bool = false   # a lambda's errors taken from its body (D16b)
+    InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
+    Settles Bool = false       # a function's or constructor's body whose set is inferred (R1a)
     leaks List<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
     captures List<typed.Capture&>
     Inst I64 = -1              # a destructor's: its instance parameter, whose fields it reads bare (C10)
@@ -93,8 +96,19 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
+    opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
+    # R1a: the bodies whose error set is inferred, each one's set once checked, what was read of one not final yet (a
+    # cycle) - its body and the set's length then - and the bodies whose set rests on such a read
+    inferring Map<I64, Bool>
+    inferredErrs Map<I64, types.ListId>
+    errReads List<Pair<I64, I64>>
+    unsettled Map<I64, Bool>
+    # what each inferred set came to, by body (bodyKey) - kept from one attempt to the next, where checking starts
+    errPresets Map<Pair<I64, I64>, types.ListId>
+    found Map<Pair<I64, I64>, types.ListId>
+    Attempts I64 = 0
 }
 
 # an element read through At where a place is wanted (E31, E31b): its body and site, the collection's place, and the
@@ -113,6 +127,53 @@ type atRec struct(Body I64, Site I64, Base typed.Place&, Of types.TypeId) {
 # they ask for in turn
 fn (c mut Checker&) CheckProgram() {
     c.P.AllFns()
+    for {
+        c.Attempts++
+        g := c.P.L.Diags.Hold()
+        c.attempt()
+        c.P.L.Diags.EndHold()
+        # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
+        # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
+        grew := false
+        for r in c.errReads {
+            if c.P.T.Items(try c.inferredErrs.Get(r.First) catch default types.ListId(0)).Len() != r.Second { grew = true }
+        }
+        if not grew or c.Attempts >= 20 {
+            c.P.L.Diags.Choose(g)
+            return
+        }
+        c.P.L.Diags.Drop(g)
+        c.errPresets = c.found
+        c.reset()
+    }
+}
+
+# every collection a check of the program fills, empty again for another attempt (R1a)
+fn (c mut Checker&) reset() {
+    c.Bodies = List<mut typed.Body&>()
+    c.Gaps = List<Gap>()
+    c.frames = List<mut frame&>()
+    c.queue = List<I64>()
+    c.queued = 0
+    c.state = List<I64>()
+    c.fnBodies = Map<I64, I64>()
+    c.ctorBodies = Map<Pair<I64, I64>, I64>()
+    c.instsOf = Map<I64, I64>()
+    c.ctorCalled = types.UnknownT
+    c.globalBodies = Map<Pair<I64, I64>, I64>()
+    c.globalTypes = Map<Pair<I64, I64>, types.TypeId>()
+    c.exprs = List<typed.Expr&>()
+    c.stmts = List<typed.Stmt&>()
+    c.atRecs = List<atRec>()
+    c.lastErrs = types.ListId(0)
+    c.inferring = Map<I64, Bool>()
+    c.inferredErrs = Map<I64, types.ListId>()
+    c.errReads = List<Pair<I64, I64>>()
+    c.unsettled = Map<I64, Bool>()
+    c.found = Map<Pair<I64, I64>, types.ListId>()
+}
+
+fn (c mut Checker&) attempt() {
     for f in range c.P.FnCount() {
         if c.P.FnIsExtern(f) or c.P.FnDecl(f).Body == null { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
@@ -127,31 +188,26 @@ fn (c mut Checker&) CheckProgram() {
         if ds != null { c.decls(mi, ds) }
     }
     c.drain()
+    c.failForms()
 }
 
 # the operator methods by name (E31, E31a, E10a, E11c): their operands besides the receiver, whether they give a result,
-# may fail and must fail - the checked forms, which "try" calls
-type opShape struct(Name String&, Operands I64, Result Bool, MayFail Bool, MustFail Bool) {
+# and whether they may fail (all but Len, Eq and Str, QQ1); a checked form (CheckedPlus...) has its plain form's shape
+type opShape struct(Name String&, Operands I64, Result Bool, MayFail Bool) {
     Name
     Operands
     Result
     MayFail
-    MustFail
 }
 
-OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, false, false), opShape("Minus", 1, true, false, false),
-    opShape("Mul", 1, true, false, false), opShape("Div", 1, true, false, false), opShape("Rem", 1, true, false, false),
-    opShape("MatMul", 1, true, false, false), opShape("Neg", 0, true, false, false), opShape("Less", 1, true, false, false),
-    opShape("At", 1, true, false, false), opShape("SetAt", 2, false, false, false), opShape("Slice", 2, true, false, false),
-    opShape("BitAnd", 1, true, false, false), opShape("BitOr", 1, true, false, false), opShape("BitXor", 1, true, false, false),
-    opShape("ShiftLeft", 1, true, false, false), opShape("ShiftRight", 1, true, false, false),
-    opShape("BitNot", 0, true, false, false), opShape("Inc", 0, true, false, false), opShape("Dec", 0, true, false, false),
-    opShape("Len", 0, true, false, false), opShape("Eq", 1, true, false, false), opShape("Str", 0, true, false, false),
-    opShape("TryPlus", 1, true, true, true), opShape("TryMinus", 1, true, true, true), opShape("TryMul", 1, true, true, true),
-    opShape("TryDiv", 1, true, true, true), opShape("TryRem", 1, true, true, true), opShape("TryMatMul", 1, true, true, true),
-    opShape("TryNeg", 0, true, true, true), opShape("TryAt", 1, true, true, true), opShape("TrySetAt", 2, false, true, true),
-    opShape("TrySlice", 2, true, true, true), opShape("TryShiftLeft", 1, true, true, true),
-    opShape("TryShiftRight", 1, true, true, true), opShape("TryInc", 0, true, true, true), opShape("TryDec", 0, true, true, true)]
+OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus", 1, true, true),
+    opShape("Mul", 1, true, true), opShape("Div", 1, true, true), opShape("Rem", 1, true, true),
+    opShape("MatMul", 1, true, true), opShape("Neg", 0, true, true), opShape("Less", 1, true, true),
+    opShape("At", 1, true, true), opShape("SetAt", 2, false, true), opShape("Slice", 2, true, true),
+    opShape("BitAnd", 1, true, true), opShape("BitOr", 1, true, true), opShape("BitXor", 1, true, true),
+    opShape("ShiftLeft", 1, true, true), opShape("ShiftRight", 1, true, true), opShape("BitNot", 0, true, true),
+    opShape("Inc", 0, true, true), opShape("Dec", 0, true, true), opShape("Len", 0, true, false),
+    opShape("Eq", 1, true, false), opShape("Str", 0, true, false)]
 
 # a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
 # E10a, E11c); its private spelling is held to the same (M6b)
@@ -159,36 +215,26 @@ fn (c mut Checker&) operatorMethod(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
     if name.Len() == 0 { return }
-    priv := name[0].IsLower()
-    cap := $name[0].ToUpper() $name[1:] if priv else name
-    k I64 = -1
-    for i in range OpShapes.Len() {
-        if OpShapes[i].Name == cap { k = i }
-    }
+    cap := c.operatorRole(name)
+    k := opShapeOf(cap)
     if k < 0 { return }
     sh := OpShapes[k]
     sig := c.P.Sig(f)
     ps := c.P.T.Items(c.P.T.Params(sig))
     got := ps.Len() - 1
-    atLeast := cap == "At" or cap == "SetAt" or cap == "TryAt" or cap == "TrySetAt"
+    atLeast := cap == "At" or cap == "SetAt"
     if not (got >= sh.Operands if atLeast else got == sh.Operands) { return }
     mi := c.P.FnModule(f)
     c.push(-1, mi, types.VoidT, types.ListId(0))
     at := c.nameSpan(fd)
     res := c.P.T.Result(sig)
-    nerr := c.P.T.Items(c.P.T.Errors(sig)).Len()
     if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
         c.err(at, msgs.OperatorResult(sh.Name))
     } else if not sh.Result and res != types.VoidT {
         c.err(at, msgs.SetatResult())
-    } else if nerr > 0 and not sh.MayFail {
-        hasTry := false
-        for o in OpShapes {
-            if o.Name == "Try" $sh.Name { hasTry = true }
-        }
-        if hasTry { c.err(at, msgs.OperatorFallible(sh.Name, sh.Name)) } else { c.err(at, msgs.MethodCannotFail(sh.Name)) }
-    } else if nerr == 0 and sh.MustFail {
-        c.err(at, msgs.TryFormMustFail(sh.Name))
+    } else if not sh.MayFail and c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and not c.infersErrs(sig) {
+        # an inferred set is judged once it is known (failForms)
+        c.err(at, msgs.MethodCannotFail(sh.Name))
     } else if sh.Name == "Less" and res != types.BoolT {
         c.err(at, msgs.LessNotBool())
     } else if sh.Name == "Len" and res != c.i64() {
@@ -204,6 +250,64 @@ fn (c mut Checker&) operatorMethod(f I64) {
         if writes { c.err(at, msgs.EqStrWrites(sh.Name)) }
     }
     c.pop()
+}
+
+# the operator role a method's name claims (E31, E31a, M6b): its capitalized spelling, a checked form's (CheckedPlus,
+# checkedPlus) its plain one's
+fn (c mut Checker&) operatorRole(name String&) String {
+    cap := $name[0].ToUpper() $name[1:]
+    if cap.Len() > 7 and cap[0:7] == "Checked" and cap[7].IsUpper() { return $cap[7:] }
+    return cap
+}
+
+fn opShapeOf(cap String&) I64 {
+    for i in range OpShapes.Len() {
+        if OpShapes[i].Name == cap { return i }
+    }
+    return -1
+}
+
+# what can fail of the methods claiming operators, once every set is known (R1a): Len, Eq and Str never (E31), and a
+# checked form with every error of its plain form on the same receiver (E31a)
+fn (c mut Checker&) failForms() {
+    for f in range c.P.FnCount() {
+        fd := c.P.FnDecl(f)
+        if fd.Recv == null or c.P.FnIsExtern(f) or c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
+        if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
+        name := c.text(fd.Name)
+        if name.Len() == 0 { continue }
+        cap := c.operatorRole(name)
+        k := opShapeOf(cap)
+        if k < 0 { continue }
+        sig := c.P.Sig(f)
+        es := c.fnErrors(f)
+        c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+        c.failForm(f, name, cap, k, sig, es)
+        c.pop()
+    }
+}
+
+fn (c mut Checker&) failForm(f I64, name String&, cap String&, k I64, sig types.TypeId, es types.ListId) {
+    at := c.nameSpan(c.P.FnDecl(f))
+    isChecked := cap.Len() < name.Len()
+    if not isChecked {
+        if not OpShapes[k].MayFail and c.infersErrs(sig) and c.P.T.Items(es).Len() > 0 {
+            c.err(at, msgs.MethodCannotFail(cap))
+        }
+        return
+    }
+    plainName := $name[7:]
+    if name[0].IsLower() { plainName = $plainName[0].ToLower() $plainName[1:] }
+    rt := c.deref(c.P.T.Items(c.P.T.Params(sig))[0])
+    p := c.P.MethodOf(rt, c.P.L.Names.Intern(plainName))
+    if p < 0 or p == f { return }
+    mine := c.P.T.Items(es)
+    for e in c.P.T.Items(c.fnErrors(p)) {
+        if not mine.Has(e) {
+            c.err(at, msgs.CheckedNotSuperset(name, plainName, plainName, c.ty(e)))
+            return
+        }
+    }
 }
 
 # whether a parameter's type lets the body write what it is given: a writable reference
@@ -302,9 +406,115 @@ fn (c mut Checker&) fnBody(inst I64) I64 {
     id := try c.fnBodies.Get(inst) catch default -1
     if id >= 0 { return id }
     f := c.P.InstanceFn(inst)
-    id = c.newBody(typed.BodyOf.Fn(inst), c.P.InstanceSig(inst), c.P.FnModule(f), c.P.FnDecl(f).Sp)
+    sig := c.P.InstanceSig(inst)
+    id = c.newBody(typed.BodyOf.Fn(inst), sig, c.P.FnModule(f), c.P.FnDecl(f).Sp)
     c.fnBodies.Put(inst, id)
+    if c.infersErrs(sig) { c.inferring.Put(id, true) }
     return id
+}
+
+# ---- inferred error sets (R1a) ----
+
+# whether a signature's error set is "?" alone: what its body can fail with, inferred
+fn (c mut Checker&) infersErrs(sig types.TypeId) Bool {
+    es := c.P.T.Items(c.P.T.Errors(sig))
+    return es.Len() == 1 and es[0] == types.DefaultErrT
+}
+
+# a body's identity across attempts: what it is the body of
+fn (c mut Checker&) bodyKey(id I64) Pair<I64, I64> {
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst) => Pair(inst, -1)
+        case typed.BodyOf.Ctor(t, twin) => Pair(-2 - I64(t), I64(twin))
+        case _ => Pair(-1, -1)
+    }
+}
+
+# what the body numbered id can fail with: its signature's set, or the one inferred from it - checked first where it
+# has not been, a set not final yet (a cycle being checked) read as it stands and noted, as is reading one that rests
+# on such a read
+fn (c mut Checker&) bodyErrors(id I64) types.ListId {
+    sig := c.Bodies[id].Ty
+    if not (try c.inferring.Get(id) catch default false) { return c.P.T.Errors(sig) }
+    if c.state[id] == 0 { c.checkNow(id) }
+    if c.state[id] == 2 {
+        es := try c.inferredErrs.Get(id) catch default types.ListId(0)
+        if try c.unsettled.Get(id) catch default false {
+            c.errReads.Push(Pair(id, c.P.T.Items(es).Len()))
+            c.unsettle()
+        }
+        return es
+    }
+    es := try c.errPresets.Get(c.bodyKey(id)) catch default types.ListId(0)
+    c.errReads.Push(Pair(id, c.P.T.Items(es).Len()))
+    c.unsettle()
+    return es
+}
+
+# the body being checked rests on a set not final yet: so does its own, where it is inferred
+fn (c mut Checker&) unsettle() {
+    for i in range c.frames.Len() {
+        fr := c.frames[c.frames.Len() - 1 - i]
+        if fr.Settles {
+            c.unsettled.Put(fr.Body, true)
+            return
+        }
+    }
+}
+
+# what a function can fail with (R1a): its signature's set, its body's inferred one where the set is "?" alone
+fn (c mut Checker&) fnErrors(f I64) types.ListId {
+    sig := c.P.Sig(f)
+    if not c.infersErrs(sig) { return c.P.T.Errors(sig) }
+    return c.bodyErrors(c.fnBody(c.P.FnInstance(f, types.ListId(0))))
+}
+
+# what a call of target can fail with: its body's set where it calls one, else its signature's
+fn (c mut Checker&) calleeErrors(target typed.Callee&c, sig types.TypeId) types.ListId {
+    return match target {
+        case typed.Callee.Body(b) => c.bodyErrors(I64(b))
+        case _ => c.P.T.Errors(sig)
+    }
+}
+
+# a body checked where it is asked for, inside another's check: what the one being checked holds kept
+fn (c mut Checker&) checkNow(id I64) {
+    asking := c.P.Asking
+    called := c.ctorCalled
+    last := c.lastErrs
+    c.check(id)
+    c.P.Asking = asking
+    c.ctorCalled = called
+    c.lastErrs = last
+}
+
+# an inferred body's set, as its body found it: each error type once, in the canonical order - by the module declaring
+# it, then its name (R1a)
+fn (c mut Checker&) settle(fr frame&) {
+    es List<types.TypeId>
+    for e in fr.leaks {
+        if e != types.DefaultErrT and not es.Has(e) { es.Push(e) }
+    }
+    sorted := c.canonicalErrs(es)
+    c.inferredErrs.Put(fr.Body, sorted)
+    c.found.Put(c.bodyKey(fr.Body), sorted)
+    b := c.Bodies[fr.Body]
+    b.Ty = c.P.T.Func(c.P.T.Params(b.Ty), c.P.T.Result(b.Ty), sorted, c.P.T.ScopesOf(b.Ty))
+}
+
+fn (c mut Checker&) canonicalErrs(es List<types.TypeId>&) types.ListId {
+    xs := es.ToArray()
+    xs.Sort(fn(a types.TypeId, b types.TypeId) Bool { return c.errBefore(a, b) })
+    return c.P.T.List(xs)
+}
+
+fn (c mut Checker&) errBefore(a types.TypeId, b types.TypeId) Bool {
+    da := c.P.T.DeclOf(a)
+    db := c.P.T.DeclOf(b)
+    ma := c.P.L.Mods[c.P.T.DeclModule(da)].Identity
+    mb := c.P.L.Mods[c.P.T.DeclModule(db)].Identity
+    if ma != mb { return ma < mb }
+    return c.text(c.P.T.DeclName(da)) < c.text(c.P.T.DeclName(db))
 }
 
 # a struct's constructor's body (C2), made and queued the first time a call asks for it
@@ -316,8 +526,10 @@ fn (c mut Checker&) twinBody(t types.TypeId, args types.ListId) I64 {
     id := try c.ctorBodies.Get(key) catch default -1
     if id >= 0 { return id }
     d := c.P.T.DeclOf(t)
-    id = c.newBody(typed.BodyOf.Ctor(t, args), c.P.CtorSigAt(t, args), c.P.T.DeclModule(d), source.Span(0, 0))
+    sig := c.P.CtorSigAt(t, args)
+    id = c.newBody(typed.BodyOf.Ctor(t, args), sig, c.P.T.DeclModule(d), source.Span(0, 0))
     c.ctorBodies.Put(key, id)
+    if c.infersErrs(sig) { c.inferring.Put(id, true) }
     return id
 }
 
@@ -331,7 +543,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
     nv := c.P.CtorVars(d)
     ps := c.P.T.Items(c.P.T.Params(sig))
     b := generic.Binding(owner, nv)
-    checked List<typed.Expr&>
+    argVals List<typed.Expr&>
     for i in range args.Len() {
         e typed.Expr&c = null
         v := c.fold(args[i])
@@ -345,7 +557,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
             }
         }
         if e != null and i < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[i], c.bindType(e), b, false, false) }
-        checked.Push(e)
+        argVals.Push(e)
     }
     c.P.InferThroughBounds(b)
     for i in range nv {
@@ -360,7 +572,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
     id := c.twinBody(t, vals)
     was := c.ctorCalled
     c.ctorCalled = t
-    r := c.callBody(sp, nsp, isig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, checked.ToArray())
+    r := c.callBody(sp, nsp, isig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, argVals.ToArray())
     c.ctorCalled = was
     return r
 }
@@ -657,10 +869,20 @@ fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block&c {
 
 fn (c mut Checker&) push(id I64, mi I64, result types.TypeId, errors types.ListId) mut frame&c {
     c.frames.Push(frame(id, mi, c.P.L.Mods[mi].File, result, errors))
-    return c.fr()
+    fr := c.fr()
+    # a function's or constructor's body whose set is inferred (R1a): what it lets out is its set, settled as it ends
+    if id >= 0 and (try c.inferring.Get(id) catch default false) {
+        fr.InferErrors = true
+        fr.Settles = true
+    }
+    return fr
 }
 
-fn (c mut Checker&) pop() { try c.frames.Pop() catch { } }
+fn (c mut Checker&) pop() {
+    fr := c.fr()
+    if fr.Settles { c.settle(fr) }
+    try c.frames.Pop() catch { }
+}
 
 fn (c mut Checker&) fr() mut frame&c { return c.frames[c.frames.Len() - 1] }
 
@@ -862,8 +1084,8 @@ fn (c mut Checker&) bracketOf(base ast.Expr&) source.Span { return c.opAfter(bas
 # nothing - said at the index's "[" (sp the index's span; written the type of what is indexed, its reference included)
 fn (c mut Checker&) noIndex(sp source.Span, t types.TypeId, written types.TypeId, n I64) {
     bsp := c.bracketIn(sp)
-    if c.roleMethod(t, "TryAt", n) >= 0 {
-        c.err(bsp, msgs.OnlyTryForm(c.ty(t), "TryAt"))
+    if c.roleMethod(t, "CheckedAt", n) >= 0 {
+        c.err(bsp, msgs.OnlyTryForm(c.ty(t), "CheckedAt"))
         return
     }
     if c.notOperator(t, "At", bsp, "'x[i]'", 1, true) { return }
@@ -1195,21 +1417,39 @@ fn (c mut Checker&) readLocal(sp source.Span, id I64) typed.Expr&c {
     return c.read(sp, typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id))))
 }
 
-# a check under try (E15a): the operation fails into the try's clauses, and the try has something that can fail (R20)
-fn (c mut Checker&) tryCheck() typed.Check {
-    c.fr().Fallible++
-    return typed.Check.Try
+# an operation's check (E15a): under checked it fails into the checked's clauses, and the checked has something that
+# can fail; under a try alone it is what it is unchecked (off), noted so that a try only a checked would make fallible
+# says so
+fn (c mut Checker&) checkOp(off typed.Check) typed.Check {
+    fr := c.fr()
+    if fr.Checks > 0 {
+        fr.Fallible++
+        return typed.Check.Try
+    }
+    if fr.Tries > 0 { fr.Checkable++ }
+    return off
+}
+
+# an operation's checked form (E31a): under checked the type's CheckedName, where it declares one - else -1, noted
+# under a try alone as checkOp is
+fn (c mut Checker&) checkedForm(t types.TypeId, name String&, n I64) I64 {
+    m := c.roleMethod(t, "Checked" $name, n)
+    if m < 0 { return -1 }
+    fr := c.fr()
+    if fr.Checks > 0 { return m }
+    if fr.Tries > 0 { fr.Checkable++ }
+    return -1
 }
 
 # an arithmetic operation's check (E15a): under try the ones that can overflow, divide by zero or shift out - else none
 fn (c mut Checker&) arithCheck(op typed.PrimOp, t types.TypeId) typed.Check {
-    if c.fr().Tries == 0 or not c.isNumber(t) { return typed.Check.None }
+    if not c.isNumber(t) { return typed.Check.None }
     # a float's result turning infinite or NaN (E15a)
     if c.P.T.IsFloat(c.under(t)) and op != typed.PrimOp.Add and op != typed.PrimOp.Sub and op != typed.PrimOp.Mul and
        op != typed.PrimOp.Div and op != typed.PrimOp.Rem { return typed.Check.None }
     if op == typed.PrimOp.Add or op == typed.PrimOp.Sub or op == typed.PrimOp.Mul or op == typed.PrimOp.Div or
        op == typed.PrimOp.Rem or op == typed.PrimOp.Shl or op == typed.PrimOp.Shr or op == typed.PrimOp.Neg {
-        return c.tryCheck()
+        return c.checkOp(typed.Check.None)
     }
     return typed.Check.None
 }
@@ -1780,7 +2020,8 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
         case ast.Expr.ArrayLit(sp, elem, items) { return c.arrayLit(sp, c.resolve(elem), items) }
         case ast.Expr.Join(sp, parts) { return c.join(sp, parts) }
-        case ast.Expr.Try(sp, y, clauses) { return c.tryExpr(sp, y, clauses, want) }
+        case ast.Expr.Try(sp, y, clauses, isChecked) { return c.tryExpr(sp, y, clauses, isChecked, want) }
+        case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
         case ast.Expr.Is(sp, a, b, negated) { return c.identity(sp, a, b, negated) }
         case ast.Expr.As(sp, a, tr) { return c.asCase(sp, a, tr) }
         case ast.Expr.Slice(sp, y, lo, hi) { return c.slice(sp, y, lo, hi) }
@@ -1911,9 +2152,13 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
         if t == types.UnknownT { return x }
         if c.isNamed(c.deref(t)) and not (c.isNumber(t) and c.P.Extends(t)) {
             mname := "Neg" if op == token.Tok.Minus else "BitNot"
-            m := c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(mname))
+            m := c.checkedForm(c.deref(t), mname, 0) if op == token.Tok.Minus else -1
+            if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(mname)) }
             if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(lowerFirst(mname))) }
-            if m >= 0 { return c.invoke(sp, sp, m, x, null, Array<typed.Expr&>(0)) }
+            if m >= 0 {
+                c.opCall = c.text(c.P.FnDecl(m).Name)
+                return c.invoke(sp, sp, m, x, null, Array<typed.Expr&>(0))
+            }
             if c.isNumber(t) {
                 c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $mname "'"))
                 return c.unknown(sp)
@@ -2176,10 +2421,11 @@ fn (c mut Checker&) operatorCall(sp source.Span, opSp source.Span, op token.Tok,
     if name == "" { return null }
     ta := c.deref(typeOf(x))
     if not c.isNamed(ta) { return null }
-    # under try the operation's checked form, where the type declares one (E31a)
-    m := c.roleMethod(ta, "Try" $name, 1) if c.fr().Tries > 0 else -1
+    # under checked the operation's checked form, where the type declares one (E31a)
+    m := c.checkedForm(ta, name, 1)
     if m < 0 { m = c.roleMethod(ta, name, 1) }
     if m < 0 { return null }
+    c.opCall = c.text(c.P.FnDecl(m).Name)
     if op == token.Tok.Gt or op == token.Tok.Le {
         r := c.invoke(sp, opSp, m, y, null, c.one(x))
         return c.negate(sp, r) if op == token.Tok.Le else r
@@ -2551,7 +2797,7 @@ fn (c mut Checker&) asView(sp source.Span, x typed.Expr&c, tr ast.TypeRef&) type
     } else if p == null {
         p = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     }
-    chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
+    chk := c.checkOp(typed.Check.Abort)
     hi := c.prim(sp, c.i64(), typed.PrimOp.Len, c.read(sp, p), null)
     v := typed.Expr.Slice(sp, c.P.T.Ref(at, perm), typed.Slice(p, c.lit(sp, c.i64(), 0), hi, chk, true))
     return c.fit(v, c.P.T.Ref(at, c.P.T.PermOf(want) & perm), sp)
@@ -2605,7 +2851,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     } else if base == null {
         base = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     }
-    chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
+    chk := c.checkOp(typed.Check.Abort)
     rec := c.P.T.Items(c.P.T.Cases(et))[k]
     ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
     pp := typed.Place.Payload(sp, rec, typed.Payload(base, k, chk))
@@ -2710,12 +2956,12 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
     at := c.arrayOf(t)
     if at == types.UnknownT {
         if t == types.UnknownT or not c.isNamed(t) { return c.unknown(sp) }
-        # x[lo:hi] on a declared type (E31): its Slice, under try its TrySlice (E31a); an absent end its Len()
-        m := c.roleMethod(t, "TrySlice", 2) if c.fr().Tries > 0 else -1
+        # x[lo:hi] on a declared type (E31): its Slice, under checked its CheckedSlice (E31a); an absent end its Len()
+        m := c.checkedForm(t, "Slice", 2)
         derived := false
         if m < 0 {
             m = c.roleMethod(t, "Slice", 2)
-            derived = m >= 0 and c.fr().Tries > 0
+            derived = m >= 0 and c.checkOp(typed.Check.None) == typed.Check.Try
         }
         if m < 0 {
             c.err(sp, msgs.NotIndexable(c.ty(t)))
@@ -2723,7 +2969,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
         }
         lm := c.roleMethod(t, "Len", 0)
         if (hi == null or derived) and lm < 0 {
-            c.gap(sp, "a slice with no end, or a derived TrySlice, of a type with no Len (E31, E31a)")
+            c.gap(sp, "a slice with no end, or a derived CheckedSlice, of a type with no Len (E31, E31a)")
             return c.unknown(sp)
         }
         l := c.lit(sp, c.i64(), 0) if lo == null else c.value(c.exprTo(lo, c.i64()), lo.Span())
@@ -2734,7 +2980,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
             h = c.value(c.exprTo(hi, c.i64()), hi.Span())
         }
         if derived {
-            # E31a's derived TrySlice: 0 <= lo <= hi <= Len(), failing with BuiltinError.OUT_OF_BOUNDS before Slice is
+            # E31a's derived CheckedSlice: 0 <= lo <= hi <= Len(), failing with BuiltinError.OUT_OF_BOUNDS before Slice is
             # called - both bounds held once, in order
             hl := c.hidden(sp, c.i64())
             c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(hl)), l))
@@ -2758,7 +3004,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
     } else {
         h = c.exprTo(hi, c.i64())
     }
-    check := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
+    check := c.checkOp(typed.Check.Abort)
     return typed.Expr.Slice(sp, c.P.T.Ref(rt, perm), typed.Slice(base, l, h, check, false))
 }
 
@@ -2911,7 +3157,7 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     if args.Len() == 2 { c.exprs.Push(c.exprTo(args[1], elem)) }
     items := gather(c.exprs, from)
     # its length checked once (D14b), under try failing into the try (E15a)
-    lchk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
+    lchk := c.checkOp(typed.Check.Abort)
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0,
                                               c.site(typed.SiteKind.Make, sp), lchk))
 }
@@ -2985,11 +3231,12 @@ fn (c mut Checker&) conversion(sp source.Span, t types.TypeId, args Array<ast.Ex
         c.err(args[0].Span(), msgs.TypeMismatch(c.ty(t), c.ty(xt)))
         return c.unknown(sp)
     }
-    if c.fr().Tries > 0 {
-        # a conversion checked under try (E15a, E26): out of range, or of a NaN
+    k := c.checkOp(typed.Check.None)
+    if k != typed.Check.None {
+        # a conversion checked under checked (E15a, E26): out of range, or of a NaN
         from := c.exprs.Len()
         c.exprs.Push(x)
-        return typed.Expr.Prim(sp, t, typed.PrimOp.Convert, c.tryCheck(), gather(c.exprs, from))
+        return typed.Expr.Prim(sp, t, typed.PrimOp.Convert, k, gather(c.exprs, from))
     }
     return c.convert(sp, x, t)
 }
@@ -3014,7 +3261,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
     nv := c.P.T.DeclParams(d)
     ps := c.P.T.Items(c.P.T.Params(sig))
     b := generic.Binding(owner, nv)
-    checked List<typed.Expr&>
+    argVals List<typed.Expr&>
     for i in range args.Len() {
         e typed.Expr&c = null
         v := c.fold(args[i])
@@ -3028,7 +3275,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
             }
         }
         if e != null and i < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[i], c.bindType(e), b, false, false) }
-        checked.Push(e)
+        argVals.Push(e)
     }
     c.P.InferThroughBounds(b)
     for i in range nv {
@@ -3050,7 +3297,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
     id := c.ctorBody(t)
     was := c.ctorCalled
     c.ctorCalled = t
-    r := c.callBody(sp, nsp, isig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, checked.ToArray())
+    r := c.callBody(sp, nsp, isig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, argVals.ToArray())
     c.ctorCalled = was
     return r
 }
@@ -3099,7 +3346,7 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
             } else if p == null {
                 p = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
             }
-            chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.Abort
+            chk := c.checkOp(typed.Check.Abort)
             hi := c.prim(sp, c.i64(), typed.PrimOp.Len, c.read(sp, p), null)
             v := typed.Expr.Slice(sp, c.P.T.Ref(base, perm), typed.Slice(p, c.lit(sp, c.i64(), 0), hi, chk, true))
             return c.convert(sp, v, c.P.T.Ref(t, perm))
@@ -3140,7 +3387,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         if ps.Len() > 0 { c.unify(ps[0], typeOf(recv), b, false, true) }
         k = 1
     }
-    checked List<typed.Expr&>
+    vals List<typed.Expr&>
     lambdas List<I64>
     k0w := k
     if pre == null and args.Len() == 1 and ps.Len() - k > 1 and callLike(args[0]) { pre = c.spread(args[0]) }
@@ -3163,7 +3410,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
             }
         }
         if e != null and k < ps.Len() and typeOf(e) != types.UnknownT { c.unify(ps[k], c.bindType(e), b, false, false) }
-        checked.Push(e)
+        vals.Push(e)
         k++
     }
     c.P.InferThroughBounds(b)
@@ -3193,7 +3440,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         if pk >= ps.Len() { continue }
         e := c.lambda(args[i].Span(), lambdaOf(args[i]), c.P.Subst(ps[pk], owner, c.P.T.List(part)))
         if typeOf(e) != types.UnknownT { c.unifySoft(ps[pk], typeOf(e), b) }
-        checked[i] = e
+        vals[i] = e
         c.P.InferThroughBounds(b)
     }
     for i in range nv {
@@ -3211,7 +3458,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     inst := c.P.FnInstance(f, c.P.T.List(b.Vals))
     if not c.fnBodies.Has(inst) { c.instsOf.Put(f, made + 1) }
     id := c.fnBody(inst)
-    x := c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, checked.ToArray())
+    x := c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, vals.ToArray())
     # T29f: an inherited array method whose result is its receiver's own type gives the declared type
     if recv != null {
         rt := c.P.T.Plain(c.deref(typeOf(recv)))
@@ -3266,6 +3513,8 @@ fn (c mut Checker&) unify(pat types.TypeId, actual types.TypeId, b mut generic.B
 # a call of a body of type sig: its arguments checked against its parameters in order, the receiver first, defaults
 # filled in (D8a, E14). f is the function whose defaults fill the rest, -1 for a constructor
 fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, target typed.Callee&c, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c) typed.Expr&c {
+    op := c.opCall
+    c.opCall = ""
     if sig == types.UnknownT { return c.unknown(sp) }
     ps := c.P.T.Items(c.P.T.Params(sig))
     sfrom := c.stmts.Len()
@@ -3328,10 +3577,13 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.exprs.Push(c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target)))
         k++
     }
-    if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.err(nsp, msgs.UnhandledFallibleCall()) }
-    if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 { c.fr().Fallible++ }
-    c.leak(c.P.T.Errors(sig))
-    c.lastErrs = c.P.T.Errors(sig)
+    errs := c.calleeErrors(target, sig)
+    if c.P.T.Items(errs).Len() > 0 and c.fr().Tries == 0 {
+        if op.Len() > 0 { c.err(nsp, msgs.OperatorCallFails(op)) } else { c.err(nsp, msgs.UnhandledFallibleCall()) }
+    }
+    if c.P.T.Items(errs).Len() > 0 { c.fr().Fallible++ }
+    c.leak(errs)
+    c.lastErrs = errs
     r := c.P.T.Result(sig)
     # a built result is new storage only the caller holds: writable (T25c)
     if c.isRef(r) and c.P.T.ResultFrom(sig, 0) == types.OwnScope {
@@ -3360,7 +3612,7 @@ fn callLike(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Call(_, _, _), ast.Expr.ScopeCall(_, _, _, _) { return true }
         case ast.Expr.Paren(_, y) { return callLike(y) }
-        case ast.Expr.Try(_, y, _) { return callLike(y) }
+        case ast.Expr.Try(_, y, _, _) { return callLike(y) }
         nomatch { return false }
     }
 }
@@ -3712,15 +3964,12 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
     }
     dt := c.deref(base.Type())
     if c.arrayOf(dt) == types.UnknownT and dt != types.UnknownT {
-        # under try the checked form (E31a): TryAt where the type declares one
-        if c.fr().Tries > 0 {
-            tm := c.roleMethod(dt, "TryAt", items.Len())
-            if tm >= 0 { return c.invoke(sp, sp, tm, c.read(sp, base), items, null) }
-        }
+        # under checked the checked form (E31a): CheckedAt where the type declares one
+        tm := c.checkedForm(dt, "At", items.Len())
+        if tm >= 0 { return c.invoke(sp, sp, tm, c.read(sp, base), items, null) }
         m := c.roleMethod(dt, "At", items.Len())
         if m >= 0 {
-            if c.fr().Tries > 0 { c.fr().Fallible++ }
-            return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, dt, items))
+            return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedCheckedAt(sp, base, dt, items))
         }
         c.noIndex(sp, dt, base.Type(), items.Len())
         return c.unknown(sp)
@@ -3730,11 +3979,11 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
     return c.read(sp, p)
 }
 
-# under try, x[i] on a type with At and Len but no TryAt (E31a): the index checked against Len() before At is called,
+# under checked, x[i] on a type with At and Len but no CheckedAt (E31a): the index checked against Len() before At is called,
 # failing with BuiltinError.OUT_OF_BOUNDS - the At call's checked arguments; null where no such check is derived
-fn (c mut Checker&) derivedTryAt(sp source.Span, base typed.Place&c, t types.TypeId, items Array<ast.Expr&>&) Array<typed.Expr&>&c {
-    if c.fr().Tries == 0 or items.Len() != 1 { return null }
-    if c.roleMethod(t, "TryAt", 1) >= 0 { return null }
+fn (c mut Checker&) derivedCheckedAt(sp source.Span, base typed.Place&c, t types.TypeId, items Array<ast.Expr&>&) Array<typed.Expr&>&c {
+    if items.Len() != 1 or c.roleMethod(t, "CheckedAt", 1) >= 0 { return null }
+    if c.checkOp(typed.Check.None) != typed.Check.Try { return null }
     return c.inRange(sp, base, t, items[0])
 }
 
@@ -3745,13 +3994,13 @@ fn (c mut Checker&) prim3(sp source.Span, op typed.PrimOp, v typed.Expr&c, lo ty
     c.exprs.Push(v)
     c.exprs.Push(lo)
     c.exprs.Push(hi)
-    return typed.Expr.Prim(sp, typeOf(v), op, c.tryCheck(), gather(c.exprs, from))
+    return typed.Expr.Prim(sp, typeOf(v), op, typed.Check.Try, gather(c.exprs, from))
 }
 
 fn (c mut Checker&) inRange(sp source.Span, base typed.Place&c, t types.TypeId, ix ast.Expr&) Array<typed.Expr&>&c {
     lm := c.roleMethod(t, "Len", 0)
     if lm < 0 {
-        c.gap(sp, "a derived TryAt with no Len (E31a)")
+        c.gap(sp, "a derived CheckedAt with no Len (E31a)")
         return null
     }
     i := c.value(c.exprTo(ix, c.i64()), ix.Span())
@@ -3760,7 +4009,7 @@ fn (c mut Checker&) inRange(sp source.Span, base typed.Place&c, t types.TypeId, 
     c.exprs.Push(i)
     c.exprs.Push(c.lit(sp, c.i64(), 0))
     c.exprs.Push(n)
-    chk := typed.Expr.Prim(ix.Span(), typeOf(i), typed.PrimOp.InRange, c.tryCheck(), gather(c.exprs, from))
+    chk := typed.Expr.Prim(ix.Span(), typeOf(i), typed.PrimOp.InRange, typed.Check.Try, gather(c.exprs, from))
     return Array<typed.Expr&>(1, chk)
 }
 
@@ -3785,14 +4034,13 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         # x[i] on a type with At (E31): the element read, a value with no storage - written through, it is written
         # back by SetAt (E31b, writeBack)
         m := c.roleMethod(t, "At", items.Len())
-        # under try the checked form (E31a): TryAt where the type declares one - a chain's every link (E24)
-        tm := c.roleMethod(t, "TryAt", items.Len()) if c.fr().Tries > 0 else -1
+        # under checked the checked form (E31a): CheckedAt where the type declares one - a chain's every link (E24)
+        tm := c.checkedForm(t, "At", items.Len())
         if m < 0 and tm < 0 {
             c.noIndex(sp, t, b.Type(), items.Len())
             return null
         }
-        if c.fr().Tries > 0 { c.fr().Fallible++ }
-        call := c.invoke(sp, sp, tm, c.read(sp, base), items, null) if tm >= 0 else c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, t, items))
+        call := c.invoke(sp, sp, tm, c.read(sp, base), items, null) if tm >= 0 else c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedCheckedAt(sp, base, t, items))
         if typeOf(call) == types.UnknownT { return null }
         site := c.site(typed.SiteKind.Temp, sp)
         c.atRecs.Push(atRec(c.fr().Body, I64(site), base, t))
@@ -3806,7 +4054,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
     if not c.isInt(typeOf(i)) and typeOf(i) != types.UnknownT {
         c.err(items[0].Span(), msgs.IndexNotInt(c.ty(typeOf(i))))
     }
-    chk := c.tryCheck() if c.fr().Tries > 0 else typed.Check.None
+    chk := c.checkOp(typed.Check.None)
     return typed.Place.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, chk))
 }
 
@@ -3861,16 +4109,21 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
 
 # ---- try (R8-R14) ----
 
-fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch&>&, want types.TypeId) typed.Expr&c {
+# try e (R8), checked e (E15a): e's fallible calls and operators handled by the clauses - and under checked every
+# check made too, a nested try's operand aside
+fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch&>&, isChecked Bool, want types.TypeId) typed.Expr&c {
     fr := c.fr()
     mark := fr.leaks.Len()
     before := fr.Fallible
+    checkable := fr.Checkable
+    checks := fr.Checks
     fr.Tries++
+    fr.Checks = checks + 1 if isChecked else 0
     x := c.expr(y, want)
     fr.Tries--
-    if fr.Fallible == before and typeOf(x) != types.UnknownT {
-        # R20: something in the operand can fail - a fallible call, or an operation it checks
-        c.err(source.Span(sp.Start, sp.Start + 3), msgs.TryNothingFails())
+    fr.Checks = checks
+    if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
+        c.nothingFails(sp, isChecked, fr.Checkable > checkable)
         return c.unknown(sp)
     }
     cls List<typed.Clause&>
@@ -3881,15 +4134,55 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     return typed.Expr.Try(sp, typeOf(x), typed.Try(x, cls.ToArray()))
 }
 
-# try x[i] = v, try x[i] += v, try x++ (R21): the store's statements checked under try - TryAt, TrySetAt and the
+# a try or checked covering nothing that can fail (R8, E15a): a try whose operand only checked would make fallible says
+# so; in a generic's body what can fail differs between instances, and nothing is said
+fn (c mut Checker&) nothingFails(sp source.Span, isChecked Bool, onlyChecks Bool) {
+    word := "checked" if isChecked else "try"
+    at := source.Span(sp.Start, sp.Start + I32(word.Len()))
+    if not isChecked and onlyChecks {
+        c.err(at, msgs.TryOnlyChecks())
+    } else {
+        c.err(at, msgs.TryNothingFails(word))
+    }
+}
+
+# whether the body being checked is a generic's instance, or a lambda in one (R8)
+fn (c mut Checker&) inGeneric() Bool { return c.fr().Ctx.Vars.Len() > 0 }
+
+# x! (E35): what can fail in x as written ends the program - x's calls and operators handled, no check turned on
+fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.Expr&c {
+    fr := c.fr()
+    mark := fr.leaks.Len()
+    before := fr.Fallible
+    checks := fr.Checks
+    fr.Tries++
+    fr.Checks = 0
+    x := c.expr(y, want)
+    fr.Tries--
+    fr.Checks = checks
+    if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
+        c.err(source.Span(sp.End - 1, sp.End), msgs.BangNothingFails())
+        return c.unknown(sp)
+    }
+    fr.leaks.Truncate(mark)
+    return typed.Expr.Try(sp, typeOf(x), typed.Try(x, Array<typed.Clause&>(0), true))
+}
+
+# try x[i] = v, checked x[i] += v, try x++ (R21): the store's statements under try - under checked CheckedAt, CheckedSetAt and the
 # built-in checks - and run as a try statement's operand, a Seq with no value
-fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Catch&>&) {
+fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Catch&>&, isChecked Bool) {
     fr := c.fr()
     mark := fr.leaks.Len()
     from := c.stmts.Len()
+    before := fr.Fallible
+    checkable := fr.Checkable
+    checks := fr.Checks
     fr.Tries++
+    fr.Checks = checks + 1 if isChecked else 0
     c.stmt(st)
     fr.Tries--
+    fr.Checks = checks
+    if fr.Fallible == before and not c.inGeneric() { c.nothingFails(sp, isChecked, fr.Checkable > checkable) }
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
     if clauses != null {
@@ -4053,7 +4346,7 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
         case ast.Stmt.Var(sp, v) { c.varDecl(sp, v) }
         case ast.Stmt.Multi(sp, m) { c.multi(sp, m) }
         case ast.Stmt.Assign(sp, op, target, value) { c.assign(sp, op, target, value) }
-        case ast.Stmt.TryStore(sp, st, clauses) { c.tryStore(sp, st, clauses) }
+        case ast.Stmt.TryStore(sp, st, clauses, isChecked) { c.tryStore(sp, st, clauses, isChecked) }
         case ast.Stmt.If(sp, i) { c.ifStmt(sp, i) }
         case ast.Stmt.Forever(sp, body) { c.loop(sp, null, body, null) }
         case ast.Stmt.While(sp, k, body) { c.loop(sp, k, body, null) }
@@ -4108,6 +4401,10 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             }
         }
         case ast.Expr.Postfix(_, op, y) {
+            if op == token.Tok.Bang {
+                c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
+                return
+            }
             c.step(sp, y, op == token.Tok.Inc)
             return
         }
@@ -4115,7 +4412,7 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
             return
         }
-        case ast.Expr.Try(_, _, _) {
+        case ast.Expr.Try(_, _, _, _) {
             c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
             return
         }
@@ -4200,7 +4497,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     inner := call
     clauses Array<ast.Catch&>&call = null
     match call {
-        case ast.Expr.Try(_, y, cl) {
+        case ast.Expr.Try(_, y, cl, _) {
             tried = true
             inner = y
             clauses = cl
@@ -4361,8 +4658,8 @@ fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
 # false where it has neither
 fn (c mut Checker&) stepMethod(sp source.Span, p typed.Place&c, t types.TypeId, inc Bool) Bool {
     if not c.isNamed(t) { return false }
-    # x = x.Inc() (E31); under try its TryInc where declared (E31a, R21)
-    m := c.roleMethod(t, "TryInc" if inc else "TryDec", 0) if c.fr().Tries > 0 else -1
+    # x = x.Inc() (E31); under checked its CheckedInc where declared (E31a, R21)
+    m := c.checkedForm(t, "Inc" if inc else "Dec", 0)
     if m < 0 { m = c.roleMethod(t, "Inc" if inc else "Dec", 0) }
     if m >= 0 {
         v := c.invoke(sp, sp, m, c.read(sp, typed.Place.Target(sp, t)), Array<ast.Expr&>(0), null)
@@ -4464,17 +4761,15 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
                 return true
             }
             pre mut Array<typed.Expr&>&c = null
-            # under try the checked form (R21, E31a): TrySetAt where declared, else the index checked against Len()
-            if c.fr().Tries > 0 {
-                tm := c.roleMethod(dt, "TrySetAt", items.Len() + 1)
-                if tm >= 0 {
-                    m = tm
-                } else if items.Len() == 1 {
-                    ck := c.inRange(isp, base, dt, items[0])
-                    if ck != null {
-                        pre = Array<typed.Expr&>(2)
-                        pre[0] = ck[0]
-                    }
+            # under checked the checked form (R21, E31a): CheckedSetAt where declared, else the index checked against Len()
+            tm := c.checkedForm(dt, "SetAt", items.Len() + 1)
+            if tm >= 0 {
+                m = tm
+            } else if items.Len() == 1 and c.checkOp(typed.Check.None) == typed.Check.Try {
+                ck := c.inRange(isp, base, dt, items[0])
+                if ck != null {
+                    pre = Array<typed.Expr&>(2)
+                    pre[0] = ck[0]
                 }
             }
             all mut List<ast.Expr&>&c = List<ast.Expr&>()
@@ -4719,10 +5014,8 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         of := c.atRecs[recs[l]].Of
         n := calls[l].Len() - 1
         sm := c.roleMethod(of, "SetAt", n + 1)
-        if c.fr().Tries > 0 {
-            tm := c.roleMethod(of, "TrySetAt", n + 1)
-            if tm >= 0 { sm = tm }
-        }
+        tm := c.checkedForm(of, "SetAt", n + 1)
+        if tm >= 0 { sm = tm }
         if sm < 0 {
             if not c.notOperator(of, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.WriteThroughAtNoSetat(c.ty(of))) }
             if value != null { c.expr(value, types.UnknownT) }
@@ -5082,10 +5375,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     }
     atm := c.roleMethod(dt, "At", 1)
     lm := c.roleMethod(dt, "Len", 0)
-    if f.Tried and c.roleMethod(dt, "TryAt", 1) >= 0 {
-        atm = c.roleMethod(dt, "TryAt", 1)
-        c.fr().LoopFails++
-    }
+    if atm >= 0 and c.P.T.Items(c.P.T.Errors(c.P.Sig(atm))).Len() > 0 { c.fr().LoopFails++ }
     if atm >= 0 and lm >= 0 {
         c.walkIndexed(sp, f, src, atm, lm, cm, ce)
         return null
@@ -5442,7 +5732,7 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
     c.fr().exits.Push(id)
-    # under try (S9e) the element is read by TryAt where declared - walk chose it - else At, checked against Len
+    # under try (S9e) the element is read by At, its errors the loop's (S9e)
     if f.Tried { c.fr().Tries++ }
     n := c.invoke(sp, sp, lm, c.readLocal(sp, coll), null, Array<typed.Expr&>(0))
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), n), id))
@@ -5664,9 +5954,6 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
         c.emit(typed.Stmt.Jump(sp, jk, typed.BlockId(I32(l))))
         return
     }
-    if kind == token.Tok.Done { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Done)) }
-    if kind == token.Tok.Fail { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Fail)) }
-    if kind == token.Tok.Abort { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Abort)) }
     if kind == token.Tok.Unreachable { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable)) }
 }
 

@@ -144,11 +144,11 @@ DtorPrelude := (
     "WatchSeen mut I64 = 0\n"
     "fn oputW(w mut OWatch&, x OPlain&) { w.x = x }\n"
     "# own4 N3: an owner held while a checked operation under try leaves, propagated to the caller\n"
-    "fn on3idx(a Array<I64>&, i I64, v I64) I64 ? { return otake2(ORes(v), try a[i]) }\n"
-    "fn on3div(z I64, v I64) I64 ? { return otake2(ORes(v), try (10 / z)) }\n"
-    "fn on3slice(a Array<I64>&, i I64, v I64) I64 ? { return otake2(ORes(v), (try a[1:i]).Len()) }\n"
-    "fn on3conv(big I64, v I64) I64 ? { return otake2(ORes(v), I64(try I32(big))) }\n"
-    "fn on3region(h mut ORHold&, a Array<I64>&, i I64) ? { h.res = ORes(try a[i]) }\n"
+    "fn on3idx(a Array<I64>&, i I64, v I64) I64 ? { return otake2(ORes(v), checked a[i]) }\n"
+    "fn on3div(z I64, v I64) I64 ? { return otake2(ORes(v), checked (10 / z)) }\n"
+    "fn on3slice(a Array<I64>&, i I64, v I64) I64 ? { return otake2(ORes(v), (checked a[1:i]).Len()) }\n"
+    "fn on3conv(big I64, v I64) I64 ? { return otake2(ORes(v), I64(checked I32(big))) }\n"
+    "fn on3region(h mut ORHold&, a Array<I64>&, i I64) ? { h.res = ORes(checked a[i]) }\n"
     "type OFail struct(n I64) ? {\n"
     "    n\n"
     "    a own mut ORes& = ORes(n)\n"
@@ -158,16 +158,16 @@ DtorPrelude := (
     "    n\n"
     "    a own mut ORes& = ORes(n)\n"
     "    b own mut ORes& = ORes(n + 1)\n"
-    "    if n > -1000000000 { error }\n"
+    "    if n > -1000000000 { error SgErr.E }\n"
     "}\n"
     "fn ofail(k I64) I64 ? {\n"
-    "    if k > -1000000000 { error }\n"
+    "    if k > -1000000000 { error SgErr.E }\n"
     "    return k\n"
     "}\n"
     "# own6 N3: an owned result, or an owner value local moved into the result, then given to nobody - a join failing in\n"
     "# the return's place (P4b) - which must release it\n"
     "fn ofailUnit(k I64) ? {\n"
-    "    if k > -1000000000 { error }\n"
+    "    if k > -1000000000 { error SgErr.E }\n"
     "}\n"
     "fn ojoinOwned(v I64) own mut ORes& ? {\n"
     "    try join {\n"
@@ -225,6 +225,7 @@ OwnLib := (
 # the types and helpers every program has
 Prelude := (
     "import \"std/time\"\nimport \"std/io\"\n"
+    "error SgErr {\n    E\n}\n"
     "extern fn getpid() I32\n"
     "fn say(t String&) { try io.Println(t) catch io.IoError { } }\n"
     "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
@@ -351,28 +352,34 @@ Prelude := (
     "}\n"
     "fn mkList2(v I64) List<mut Node&> { return mkList(v) }\n"
     "fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
+    "fn idBox(b mut Box&) Box { return b }\n"
+    "fn addVia(b Box&, v I64) { b.head.next = Node(v) }\n"
+    "fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }\n"
+    "fn readBox(b Box&) I64 { return chain(b.head) }\n"
+    "fn keepBox(b Box&) fn() I64 { return fn() I64 { return chain(b.head) } }\n"
+    "fn useBox(b Box&) I64 {\n    f := fn() I64 { return chain(b.head) }\n    return f() + f()\n}\n"
     "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
     "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
     "# fallible: growF and mkF succeed, failF fails after building, mkFail fails\n"
     "fn growF(a mut Node&, v I64) ? {\n"
-    "    if Run < 0 { error }\n"
+    "    if Run < 0 { error SgErr.E }\n"
     "    a.next = Node(v)\n"
     "}\n"
     "fn failF(a mut Node&, v I64) ? {\n"
     "    a.next = Node(v)\n"
-    "    if Run > 0 { error }\n"
+    "    if Run > 0 { error SgErr.E }\n"
     "}\n"
     "fn mkF(v I64) mut Node& ? {\n"
-    "    if Run < 0 { error }\n"
+    "    if Run < 0 { error SgErr.E }\n"
     "    return Node(v)\n"
     "}\n"
     "fn mkFail(v I64) mut Node& ? {\n"
-    "    if Run > 0 { error }\n"
+    "    if Run > 0 { error SgErr.E }\n"
     "    return Node(v)\n"
     "}\n"
     "# for Str scenarios: a borrowed result that fails, callbacks, a generic, call cycles, a local moved into a borrowed result's home\n"
     "fn borrowF(n mut Node&) mut Node&n ? {\n"
-    "    if Run > 0 { error }\n"
+    "    if Run > 0 { error SgErr.E }\n"
     "    return n\n"
     "}\n"
     "fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }\n"
@@ -806,7 +813,7 @@ fn (g mut SG&) dtorOp(a String&, ind String&) String& {
 
 # a statement storing a new node through the box b (a writable Box place)
 fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
-    k := g.r(13)
+    k := g.r(14)
     if AvoidKnown {
         if g.boxKind == 2 or k == 3 or k == 7 { k = 0 }
         if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11) { k = 0 }
@@ -840,6 +847,22 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
         return $ind $x " := E.A(" $b ") as E.A\n" $ind $x ".head.next = " $g.newNode() "\n"
     }
     if k == 9 { return g.nodeOp($b ".head", ind, d) }
+    if k == 12 {    # a copy with no storage of its own - a call's result, a conditional of the box - lent to a reference
+        v := g.val() # parameter that builds through its shallow "mut" field, in a loop (O17: refused), or only reads it
+        i := g.name("i")
+        m := g.r(6)
+        if m == 0 { return $ind "for " $i " in range 3 { addVia(idBox(" $b "), " $v " + " $i ") }\n" }
+        if m == 1 { return $ind "for " $i " in range 3 { addVia(" $b " if Run > 0 else " $b ", " $v " + " $i ") }\n" }
+        if m == 2 { return $ind "for " $i " in range 3 { addViaMut(idBox(" $b "), " $v " + " $i ") }\n" }
+        if m == 4 {    # the callee keeps the copy in a lambda it returns, read after a churn (O17: refused)
+            ks := g.name("ks")
+            kk := g.name("k")
+            return ($ind "{\n" $ind "    " $ks " := List<fn() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
+                    $b "))) }\n" $ind "    churn()\n" $ind "    for " $kk " in " $ks " { if " $kk "() == -7 { abort } }\n" $ind "}\n")
+        }
+        if m == 5 { return $ind "for " $i " in range 3 { useBox(idBox(" $b ")) }\n" }    # a lambda only called in the callee
+        return $ind "for " $i " in range 3 { readBox(idBox(" $b ")) }\n"
+    }
     if k == 10 and d > 0 {    # a helper taking the box by reference
         f := g.name("opBox")
         was := g.boxKind
@@ -1590,7 +1613,7 @@ fn (g mut SG&) own4Op(h String&, ind String&, v I64) String& {
     loop := $ind "for i in range 1 {\n"
     if k == 11 {    # N3: the check propagated out of a helper, or caught by a clause that breaks
         if g.chance(50) { return $arr $loop $ind "    " $x " := try on3idx(" $ai ", 5 + i, " $v ") catch { break }\n" $ind "}\n" }
-        return $arr $loop $ind "    " $x " := otake2(ORes(" $v "), try " $ai "[5 + i] catch { break })\n" $ind "}\n"
+        return $arr $loop $ind "    " $x " := otake2(ORes(" $v "), checked " $ai "[5 + i] catch { break })\n" $ind "}\n"
     }
     if k == 12 {
         if g.chance(50) { return $loop $ind "    " $x " := try on3div(i - i, " $v ") catch { break }\n" $ind "}\n" }
@@ -1970,7 +1993,7 @@ fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
         pk := g.name("v4p")
         fl := g.name("v4g")
         w := g.name("v4w")
-        g.addHelper("fn " $pk "(c Bool, x <T>, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error }\n"
+        g.addHelper("fn " $pk "(c Bool, x <T>, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n"
                     "    return k\n}\n")
         back := $pk "(true, a, b)"
         body := ""
@@ -2003,7 +2026,7 @@ fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
     if k == 10 {    # X: a return in an assert's message (refused: S17)
         fl := g.name("v4g")
         w := g.name("v4x")
-        g.addHelper("fn " $fl "(k I64) I64 ? {\n    if k < 5 { error }\n    return k\n}\nfn " $w "(k I64) I64 {\n    assert k > 100, (try "
+        g.addHelper("fn " $fl "(k I64) I64 ? {\n    if k < 5 { error SgErr.E }\n    return k\n}\nfn " $w "(k I64) I64 {\n    assert k > 100, (try "
                     $fl "(k) catch { return 7 }).Format()\n    return 3\n}\n")
         return $ind $x " := " $w "(" $v ")\n" $use
     }
@@ -2171,7 +2194,7 @@ fn (g mut SG&) strOp(ind String&) String& {
         if k == 11 {    # a catch default that is existing storage, read
             return $ind $q " := try r.m.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n"
         }
-        if k == 12 { return $ind $q " := try r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
+        if k == 12 { return $ind $q " := checked r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
         if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n.next\n" $ind "if " $q " != null { acc += " $q ".v }\n" }
         if k == 14 {    # walks
             y := g.name("y")
@@ -2186,7 +2209,7 @@ fn (g mut SG&) strOp(ind String&) String& {
     if k == 1 { return $ind "r.n.next = match Run { case 1 => mkNode(" $v ") case _ => r.n.next }\n" }
     if k == 2 { return $ind "r.n.next = try borrowF(r.n) catch default mkNode(" $v ")\n" }
     if k == 3 { return $ind "r.n.next = try r.m.Get(3) catch default mkNode(" $v ")\n" }
-    if k == 4 { return $ind "r.n.next = try r.a[Run * 9] catch default mkNode(" $v ")\n" }
+    if k == 4 { return $ind "r.n.next = checked r.a[Run * 9] catch default mkNode(" $v ")\n" }
     if k == 5 { return $ind "applyN(r.n, fn(x mut Node&) { x.next = Node(" $v ") })\n" }
     if k == 6 { return $ind "acc += applyR(r.n, fn(x Node&) I64 { return x.v })\n" }
     if k == 7 {

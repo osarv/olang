@@ -1,4 +1,4 @@
-# std/linalg's shapes: a mismatch aborts as a failed assert does, and under try it is ShapeError.MISMATCH
+# std/linalg's shapes: a mismatch fails with ShapeError.MISMATCH, which escapes main or is caught
 import "std/os"
 import "std/io"
 import "std/linalg"
@@ -8,13 +8,13 @@ fn main() ? {
     a := linalg.Matrix<F32>(2, 3)
     b := linalg.Matrix<F32>(3, 2)
     if which == "add" {
-        c := a + b
+        c := try (a + b)
         try io.Print($c.Rows)
     } else if which == "matmul" {
-        c := a @ a
+        c := try (a @ a)
         try io.Print($c.Rows)
     } else if which == "gemm" {
-        linalg.Gemm(a, a, false, b, false)
+        try linalg.Gemm(a, a, false, b, false)
     } else if which == "caught" {
         c := try (a @ a) catch linalg.ShapeError.MISMATCH {
             try io.Print("caught\n")

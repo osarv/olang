@@ -8,6 +8,9 @@
 import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
+error Stop {
+    HERE
+}
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -21,7 +24,7 @@ type Buf struct() {
 }
 fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
 fn fails(k I64) I64 ? {
-    if k >= 0 { error }
+    if k >= 0 { error Stop.HERE }
     return k
 }
 fn mkl(k I64) own mut Leaf& { return Leaf(k) }
@@ -61,35 +64,35 @@ type Pick enum {
     Two(n I64)
 }
 fn viaIndex(arr Array<I64>&, i I64) ? {
-    x := take2(Leaf(30), try arr[i])
+    x := take2(Leaf(30), checked arr[i])
 }
 fn viaDiv(z I64) ? {
-    x := take2(Leaf(31), try (10 / z))
+    x := take2(Leaf(31), checked (10 / z))
 }
 fn viaConv(big I64) ? {
-    x := take2(Leaf(32), I64(try I32(big)))
+    x := take2(Leaf(32), I64(checked I32(big)))
 }
 fn viaSlice(arr Array<I64>&) ? {
-    x := take2(Leaf(33), (try arr[3:9]).Len())
+    x := take2(Leaf(33), (checked arr[3:9]).Len())
 }
 fn viaAs(p Pick) ? {
-    x := take2(Leaf(34), try (p as Pick.Two))
+    x := take2(Leaf(34), checked (p as Pick.Two))
 }
 fn viaCheckedRegion(s mut H&, arr Array<I64>&) ? {
-    s.a = Leaf(try arr[9])
+    s.a = Leaf(checked arr[9])
 }
 fn viaCheckedFill(b mut Buf&, z I64) ? {
-    b.nums = Array<I64>(8, try (5 / z))
+    b.nums = Array<I64>(8, checked (5 / z))
 }
 fn viaCatchBreak(arr Array<I64>&) I64 {
     for i in range 3 {
-        x := take2(Leaf(35), try arr[i + 7] catch { break })
+        x := take2(Leaf(35), checked arr[i + 7] catch { break })
     }
     return 0
 }
 # N6: a constructor failing after making its own fields - one, or two and an own array
 fn check(n I64) I64 ? {
-    if n > 2 { error }
+    if n > 2 { error Stop.HERE }
     return n
 }
 type FailTry struct(n I64) ? {
@@ -100,7 +103,7 @@ type FailTry struct(n I64) ? {
 type FailOwn struct(n I64) ? {
     n
     a own mut Leaf& = Leaf(n)
-    if n > 2 { error }
+    if n > 2 { error Stop.HERE }
 }
 type FailMany struct(n I64) ? {
     n

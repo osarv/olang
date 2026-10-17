@@ -1,0 +1,4 @@
+# check: fail error[D8e]: a 'noreturn' function never returns to its caller, so it fails with nothing - drop the '?'
+# D8e: an error is a way back to the caller, so a noreturn function declares none
+fn stop() noreturn ? { unreachable }
+fn main() { stop() }

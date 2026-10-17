@@ -315,8 +315,8 @@ type PrimOp enum {
     Bitcast    # a value's bits as ty, of its width (E33)
     Len        # an array's length (E23)
     IsCase     # args [x, tag]: whether an enum value holds the case (E32, S13)
-    InRange    # args [v, lo, hi]: v, once lo <= v < hi - a derived TryAt's check (E31)
-    InRangeIncl     # the same, hi itself allowed - a derived TrySlice's
+    InRange    # args [v, lo, hi]: v, once lo <= v < hi - a derived CheckedAt's check (E31)
+    InRangeIncl     # the same, hi itself allowed - a derived CheckedSlice's
     AtomicLoad      # args[0] a Borrow of the integer place (P9)
     AtomicStore
     AtomicAdd
@@ -379,9 +379,10 @@ type Bind struct(To LocalId, From Expr&) {
 # a try: X is evaluated, and an error any call or checked operation in it fails with - none nested in an inner Try -
 # goes to the first clause naming it; one no clause names leaves the body, re-encoded under its own errors (R17).
 # Eval'd as a statement, a clause falls through to after it; in value position it leaves or gives its Defaults (R9b)
-type Try struct(X Expr&, Clauses Array<Clause&>&) {
+type Try struct(X Expr&, Clauses Array<Clause&>&, Ends Bool = false) {
     X
     Clauses
+    Ends       # "x!" (E35): no clauses, and an error reaching it ends the program as a failed assert does
 }
 
 type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block&, Defaults Array<Expr&>&) {
@@ -392,7 +393,7 @@ type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block&, De
     Defaults   # one per result, or none
 }
 
-# what a clause takes: one word of an error type, or every word (-1); DefaultErrT is the default error (R15)
+# what a clause takes: one word of an error type, or every word (-1)
 type Item struct(Err types.TypeId, Word I64) {
     Err
     Word
@@ -442,7 +443,7 @@ type Stmt enum {
     Jump(sp source.Span, kind JumpKind, loop BlockId)    # break or continue, of the loop whose body block is named
     # null for none; several results a Make of a tuple; an owner local returned is a Take of it (O36, O42)
     Return(sp source.Span, value Expr&)
-    Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD"; the default error (R15) is DefaultErrT, word 0
+    Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD" (R3)
     Exit(sp source.Span, kind ExitKind)
     Assert(sp source.Span, cond Expr&, msg Expr&)   # msg null for none; read only when it fails (S17)
     Block(sp source.Span, b Block&)
@@ -464,9 +465,6 @@ type JumpKind enum {
 }
 
 type ExitKind enum {
-    Done           # S16
-    Fail           # S16a
-    Abort          # S16c
     Unreachable    # S16d
 }
 

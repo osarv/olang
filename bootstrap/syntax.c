@@ -280,14 +280,13 @@ static struct token acceptFnKeyword(SyntaxCtx sc) {
 //"fn (p mut Parser&) fail(t Token)". A field is no method: its name is a constructor's local, and stays a name. A
 //keyword after "." is taken only when "(" follows it (wantCall), so "x.done" is still read as it always was
 static bool isKeywordTok(struct token t);
-//L9a: a keyword a field may be named by - one that is a whole statement by itself ("done", "fail", "break", "continue",
-//"abort", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
-//"is", "range", "type", "test", ...): a field's declaration ("done I64 = 0", "type := Kind.A") can be told from a
-//statement, and the field is reached after "." ("s.done"). A keyword beginning a statement with more after it ("if",
+//L9a: a keyword a field may be named by - one that is a whole statement by itself ("break", "continue", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
+//"is", "range", "type", "test", ...): a field's declaration ("range I64 = 0", "type := Kind.A") can be told from a
+//statement, and the field is reached after "." ("s.range"). A keyword beginning a statement with more after it ("if",
 //"return", "spawn"), or a value ("fn", "not", "try"), or written inside one ("else", "mut", "destruct") is not one
 static bool keywordMayNameField(enum tokenType t) {
     switch (t) {
-        case TOK_DONE: case TOK_FAIL: case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:
+        case TOK_BREAK: case TOK_CONTINUE: case TOK_UNREACHABLE:
         case TOK_IN: case TOK_IS: case TOK_AS: case TOK_AND: case TOK_OR: case TOK_XOR: case TOK_RANGE: case TOK_CASE:
         case TOK_NOMATCH: case TOK_TYPE: case TOK_STRUCT: case TOK_CHOICE: case TOK_INTERFACE: case TOK_EXTENDS:
         case TOK_IMPORT: case TOK_TEST: case TOK_EXTERN: case TOK_DEFAULT:
@@ -789,8 +788,8 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     return s;
 }
 
-//one "error-list-item": a declared error type's name, possibly through an alias chain - "?" alone already stands for
-//the default error (R15), which no name spells
+//one "error-list-item": a declared error type's name, possibly through an alias chain - "?" alone is an inferred set
+//(R1a)
 struct syntax* parseErrorListItem(SyntaxCtx sc) {
     return parseName(sc);
 }
@@ -821,7 +820,7 @@ struct syntax* parseFuncErrorList(SyntaxCtx sc) {
     (void)cur;
     struct syntax* s = newNode(SNTX_ERROR_LIST);
     addTok(s, q);
-    //R16: "?" alone is the default error; any types named after it are added to it
+    //R1a: "?" alone is the set the body can fail with; a list after it is a written promise
     struct syntax* first = parseErrorListItem(sc);
     if (!first) return s;
     addSntx(s, first);
@@ -919,8 +918,13 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* ret = parseRetType(sc);
-    if (ret) addSntx(s, ret);
+    //D8e: "noreturn" stands where a result would
+    struct token nr = acceptTok(sc, TOK_NORETURN);
+    if (nr.type != TOK_NONE) addTok(s, nr);
+    else {
+        struct syntax* ret = parseRetType(sc);
+        if (ret) addSntx(s, ret);
+    }
     struct syntax* errs = parseFuncErrorList(sc);
     if (errs) addSntx(s, errs);
     return s;
@@ -1229,8 +1233,12 @@ struct syntax* parseExternFuncDecl(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* retType = parseRetType(sc);
-    if (retType) addSntx(s, retType);
+    struct token nr = acceptTok(sc, TOK_NORETURN); //D8e
+    if (nr.type != TOK_NONE) addTok(s, nr);
+    else {
+        struct syntax* retType = parseRetType(sc);
+        if (retType) addSntx(s, retType);
+    }
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     return s;
 }
@@ -2083,7 +2091,7 @@ struct syntax* parseStmntDefer(SyntaxCtx sc) {
     return s;
 }
 
-//S11: bare statements, the same shape as done/fail. Whether they sit inside a loop is a semantic
+//S11: bare statements, the same shape as unreachable. Whether they sit inside a loop is a semantic
 //question (buildBreakStmnt), not a grammatical one.
 struct syntax* parseStmntBreak(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
@@ -2105,43 +2113,12 @@ struct syntax* parseStmntContinue(SyntaxCtx sc) {
     return s;
 }
 
-//S16c/S16d: bare statements, the same shape as done/fail
-struct syntax* parseStmntAbort(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_ABORT);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_ABORT);
-    addTok(s, kw);
-    return s;
-}
-
 struct syntax* parseStmntUnreachable(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_UNREACHABLE);
     if (kw.type == TOK_NONE) return NULL;
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_STMNT_UNREACHABLE);
-    addTok(s, kw);
-    return s;
-}
-
-struct syntax* parseStmntDone(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_DONE);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_DONE);
-    addTok(s, kw);
-    return s;
-}
-
-struct syntax* parseStmntFail(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_FAIL);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_FAIL);
     addTok(s, kw);
     return s;
 }
@@ -2172,19 +2149,13 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
 //"error TYPE.word" (same-module) or "error alias...TYPE.word" (cross-module, through an alias chain of
 //any length, originating a foreign module's own error type directly - see the report) - always ends in
 //exactly "TYPE.word" (never a bare type alone), so every identifier before the last two is unambiguously
-//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity. A bare "error", with no
-//operand at all, raises the default error (R16) - a separate, simpler shape entirely, so it's tried first.
+//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity (R3: every error names its type).
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
     if (kw.type == TOK_NONE) return NULL;
     struct token first = acceptTok(sc, TOK_IDEN);
-    if (first.type == TOK_NONE) {
-        struct syntax* bare = newNode(SNTX_STMNT_ERROR);
-        addTok(bare, kw);
-        if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-        return bare;
-    }
+    if (first.type == TOK_NONE) return parseFail(sc, cur);
     struct token dot1 = acceptTok(sc, TOK_DOT);
     if (dot1.type == TOK_NONE) return parseFail(sc, cur);
     struct token second = acceptTok(sc, TOK_IDEN);
@@ -2283,11 +2254,17 @@ struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk) {
     return s;
 }
 
+//E15a/QQ1: "try", or "checked" - try with every optional check inside turned on - before an operand or a statement
+static struct token acceptTryKw(SyntaxCtx sc) {
+    struct token kw = acceptTok(sc, TOK_TRY);
+    return kw.type != TOK_NONE ? kw : acceptTok(sc, TOK_CHECKED);
+}
+
 //"try f()" alone propagates (see parseExprTry, a general expression); this is the catch-handling
 //statement form - control flow only, the caught error is never exposed as a value
 struct syntax* parseStmntTryCatch(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     //postfix, for the same reason parseExprTry takes one: a slice is a postfix on a primary (E16c)
     struct syntax* primary = parseExprPostfix(sc);
@@ -2321,7 +2298,7 @@ static bool syntaxIsIncDec(struct syntax* n) {
 //store, the value and the operator it implies - with catch clauses, as a try-catch statement has, after it
 struct syntax* parseStmntTryStore(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     struct syntax* inner = NULL;
     int at = TokenGetCursor(sc->tc);
@@ -2405,7 +2382,7 @@ static struct syntax* parseMultiDeclStmnt(SyntaxCtx sc) {
 static struct syntax* (*const stmntForms[])(SyntaxCtx) = {
     parseStmntDestruct, parseMultiDeclStmnt, parseVarDecl, parseStmntTryStore, parseStmntAssign, parseStmntIf,
     parseStmntFor, parseStmntDo, parseStmntMatch, parseStmntRet, parseStmntJoin, parseStmntBlock, parseStmntSpawn, parseStmntDefer,
-    parseStmntBreak, parseStmntContinue, parseStmntAbort, parseStmntUnreachable, parseStmntDone, parseStmntFail,
+    parseStmntBreak, parseStmntContinue, parseStmntUnreachable,
     parseStmntAssert, parseStmntError, parseStmntTryCatch, parseStmntExpr,
 };
 
@@ -2541,7 +2518,7 @@ struct syntax* parseExprUnary(SyntaxCtx sc);
 struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk);
 struct syntax* parseExprTry(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     //R9a: decided before the operand is read - a return statement inside it (in a lambda) resets defaultListAt
     bool listOk = cur == sc->defaultListAt;
@@ -2753,7 +2730,7 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             addSntx(s, m);
             return s;
         }
-        case TOK_TRY: {
+        case TOK_TRY: case TOK_CHECKED: {
             struct syntax* tryExpr = parseExprTry(sc);
             if (!tryExpr) return NULL;
             struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
@@ -3079,6 +3056,15 @@ static struct syntax* parseExprPostfixUncached(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token t = TokenFeed(sc->tc);
         if (t.type == TOK_INC || t.type == TOK_DEC) { addTok(s, t); continue; }
+        //E35: "x!" - what fails in the chain so far ends the program; the chain may go on after it
+        if (t.type == TOK_BANG) {
+            struct syntax* b = newNode(SNTX_EXPR_BANG);
+            addSntx(b, s);
+            addTok(b, t);
+            s = newNode(SNTX_EXPR_POSTFIX);
+            addSntx(s, b);
+            continue;
+        }
         TokenSetCursor(sc->tc, before);
         break;
     }
@@ -4508,9 +4494,9 @@ static void scanRegion(TokenCtx tc, struct scanResult* r, bool inBranch) {
                 ListAdd(&r->typeNames, &n);
             }
         } else if (t.type == TOK_ERROR) {
-            //a real error-decl ("error IDEN { ... }") registers a type name. "error" alone - the statement raising
-            //the default error - is followed by no name, and what does follow it is left for the main loop, which
-            //tracks brace depth: consuming it unread once desynced the depth for the rest of the scan
+            //a real error-decl ("error IDEN { ... }") registers a type name. "error" followed by no name (a statement
+            //written wrongly) leaves what follows it for the main loop, which tracks brace depth: consuming it unread
+            //once desynced the depth for the rest of the scan
             int before = TokenGetCursor(tc);
             struct token name = TokenFeed(tc);
             if (name.type == TOK_IDEN) {
@@ -4737,7 +4723,7 @@ static bool caseValueComma(struct token found) {
 
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
-    //L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
+    //L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
     if (keywordMayNameField(found.type) && expected && !strcmp(expected, "an expression") && prev.type != TOK_ARROW) {
         ErrSyntax(found, ERR_KEYWORD_FIELD_READ, found);
         return true;
@@ -4746,19 +4732,19 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_MATCH_VALUE_ONE);
         return true;
     }
-    //"done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
+    //"range mut Bool = false" - a keyword beginning a line as a name would ("range" ended the statement there)
     if (isKeywordTok(prev) && prev.lineNr == found.lineNr && TokenBefore(prev).lineNr < prev.lineNr
         && (found.type == TOK_MUT || found.type == TOK_ASS_INFER || found.type == TOK_ASS || found.type == TOK_COMMA
-            || (found.type == TOK_IDEN && (prev.type == TOK_DONE || prev.type == TOK_FAIL || prev.type == TOK_BREAK
-                                           || prev.type == TOK_CONTINUE || prev.type == TOK_ABORT || prev.type == TOK_UNREACHABLE
+            || (found.type == TOK_IDEN && (prev.type == TOK_BREAK
+                                           || prev.type == TOK_CONTINUE || prev.type == TOK_UNREACHABLE
                                            || prev.type == TOK_JOIN)))) {
         ErrSyntax(prev, ERR_KEYWORD_AS_NAME, prev);
         return true;
     }
     //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block (before L9's keyword-as-name:
     //"case X => return f(x)" is the same mistake as "=> return 1", not a name)
-    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_ABORT || found.type == TOK_RET
-            || found.type == TOK_FAIL || found.type == TOK_DONE || found.type == TOK_BREAK || found.type == TOK_CONTINUE
+    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_RET
+            || found.type == TOK_BREAK || found.type == TOK_CONTINUE
             || found.type == TOK_ERROR)) {
         TokenCtx tc = found.owner;
         int from = TokenGetStrStart(found);
@@ -4814,7 +4800,7 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_CONST_ARG_PAREN, found);
         return true;
     }
-    //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
+    //"fn f() ?error {" - '?' alone is the inferred set (R1a), and 'error' names no error type
     if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
         ErrSyntax(found, ERR_ERROR_AFTER_QUESTION);
         return true;

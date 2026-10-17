@@ -2,6 +2,9 @@
 # E11c/O12: a helper handed the receiver's node gives a new node as a catch default for a call borrowing from it, built where
 # the call's result lives (R9a): refused
 import "std/io"
+error Stop {
+    HERE
+}
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -20,7 +23,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn find(n Node&, k I64) Node&n ? {
-    if k > 0 { error }
+    if k > 0 { error Stop.HERE }
     return n
 }
 fn pick(n Node&) I64 {

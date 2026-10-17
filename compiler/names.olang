@@ -703,7 +703,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt&) {
             r.expr(target)
             r.expr(value)
         }
-        case ast.Stmt.TryStore(_, inner, clauses) {
+        case ast.Stmt.TryStore(_, inner, clauses, _) {
             r.stmt(inner)
             r.clauses(clauses)
         }
@@ -967,7 +967,7 @@ fn (r mut Resolver&) expr(x ast.Expr&) {
             r.expr(c.Filter)
             r.popTo(m)
         }
-        case ast.Expr.Try(_, a, clauses) {
+        case ast.Expr.Try(_, a, clauses, _) {
             r.expr(a)
             r.clauses(clauses)
         }

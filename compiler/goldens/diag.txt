@@ -119,8 +119,8 @@ compilation failed with 2 errors
 b11notehandle.olang:14:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         l.Push(t)
       |           ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 b11notehandle.olang:13:9: note: 't' is declared here, in a block that closes first - declare it where 'm' lives: 't mut String&m = ...'
    13 |         t := "x" $i
@@ -133,8 +133,8 @@ compilation failed with 1 error
 b11notevalue.olang:10:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         out.Push(p)
       |             ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 b11notevalue.olang:9:9: note: 'p' is declared here, in a block that closes first - declare it where 'out' lives: 'p mut String&out = ...'
     9 |         p := filepath.Join&out(dir, name)
@@ -306,7 +306,7 @@ compilation failed with 1 error
 c2dblock.olang:9:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
     9 |         nb = NB(q)
       |                 ^
-c2dblock.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+c2dblock.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c2dbuildarg.olang
 c2dbuildarg.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
@@ -418,13 +418,13 @@ compilation failed with 1 error
 c2dreturn.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
    10 |     return NB(p)
       |            ^~
-c2dreturn.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+c2dreturn.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c2dunnamed.olang
 c2dunnamed.olang:12:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
    12 |     return wrap(q)
       |            ^~~~
-c2dunnamed.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+c2dunnamed.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c3fieldthroughreadonly.olang
 c3fieldthroughreadonly.olang:4:18: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
@@ -453,7 +453,7 @@ compilation failed with 1 error
 c7aempty.olang:3:39: error[C7a]: this destructor does nothing - remove it
     3 | type Big struct(n I32) { n } destruct { }
       |                                       ^
-c7aempty.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+c7aempty.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c7destructinbody.olang
 c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'
@@ -489,8 +489,8 @@ callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call relates its arg
       |             ^~
 compilation failed with 1 error
 === cascadee14.olang
-cascadee14.olang:23:14: error[E14]: expected 1 argument, found 2
-   23 |     r := try make("u", 3) catch { return "none" }
+cascadee14.olang:27:14: error[E14]: expected 1 argument, found 2
+   27 |     r := try make("u", 3) catch { return "none" }
       |              ^~~~
 compilation failed with 1 error
 === cascademember.olang
@@ -499,8 +499,8 @@ cascademember.olang:12:10: error: S has no member 'flag'
       |          ^~~~
 compilation failed with 1 error
 === cascadetryat.olang
-cascadetryat.olang:10:11: error[E31a]: Box has only the checked form of this operation, TryAt - write it under 'try'
-   10 |     c := b[0][1][2]
+cascadetryat.olang:16:11: error[E31a]: Box has only the checked form of this operation, CheckedAt - write it under 'checked'
+   16 |     c := b[0][1][2]
       |           ^
 compilation failed with 1 error
 === compoundnarrow.olang
@@ -631,8 +631,8 @@ d13czeroref.olang:18:20: note: 'Chan<Ticket&>' holds it by reference, whose zero
 d13czeroref.olang:20:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
    20 |     b := a.Repeat(2)
       |            ^~~~~~
-$ROOT/std/prelude/array.olang:169:12: note: in the standard library's code, here
-  169 |     out := Array<T>(a.Len() * k)
+$ROOT/std/prelude/array.olang:174:12: note: in the standard library's code, here
+  174 |     out := Array<T>(a.Len() * k)
       |            ^~~~~
 d13czeroref.olang:13:5: note: here
    13 |     Counter++
@@ -746,7 +746,7 @@ d3adflag.olang:5:5: error[D3a]: 'Level' is a build constant - choose another nam
     5 |     Level := 1
       |     ^~~~~
 d3adflag.olang:6:14: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
-    6 |     if Level > 3 { fail }
+    6 |     if Level > 3 { return }
       |              ^
 compilation failed with 2 errors
 === d3afunctionparam.olang
@@ -777,7 +777,7 @@ compilation failed with 1 error
 d8adefault.olang:5:14: error[D8a]: a default is computed while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's
     5 | fn f(n I32 = counter) I32 { return n }
       |              ^~~~~~~
-d8adefault.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+d8adefault.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === d8cdestructinner.olang
 d8cdestructinner.olang:16:14: error[O10]: this reference lives in a scope that may not outlive where it is put
@@ -801,6 +801,34 @@ compilation failed with 2 errors
 d8dtype.olang:6:14: error[E12]: expected I32, found String&
     6 |     n := sum(named())
       |              ^~~~~
+compilation failed with 1 error
+=== d8edecl.olang
+d8edecl.olang:5:13: error[D8e]: a 'noreturn' call gives no value, so ':=' has no type to take
+    5 |     x := os.Exit(2)
+      |             ^~~~
+compilation failed with 1 error
+=== d8eerrors.olang
+d8eerrors.olang:3:11: error[D8e]: a 'noreturn' function never returns to its caller, so it fails with nothing - drop the '?'
+    3 | fn stop() noreturn ? { unreachable }
+      |           ^~~~~~~~
+compilation failed with 1 error
+=== d8efallsoff.olang
+d8efallsoff.olang:3:4: error[D8e]: a 'noreturn' function may not reach its end - end every path with a noreturn call, 'unreachable' or 'for { }'
+    3 | fn stop(n I64) noreturn {
+      |    ^~~~
+compilation failed with 1 error
+=== d8emain.olang
+d8emain.olang: error[B4]: main takes no parameters and returns no value: 'fn main() { }', or 'fn main() ? { }'
+compilation failed with 1 error
+=== d8eoperator.olang
+d8eoperator.olang:6:10: error[D8e]: an operator's method cannot be 'noreturn'
+    6 | fn (a V) Plus(b V) noreturn { unreachable }
+      |          ^~~~
+compilation failed with 1 error
+=== d8ereturn.olang
+d8ereturn.olang:4:16: error[D8e]: a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'
+    4 |     if n > 0 { return }
+      |                ^~~~~~
 compilation failed with 1 error
 === d9abarevariable.olang
 d9abarevariable.olang:4:24: error[D9a]: array parameter 'taps' is passed by reference - write Array<I16, N>&
@@ -839,8 +867,8 @@ compilation failed with 2 errors
 derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
-$ROOT/std/prelude/list.olang:443:21: note: in the standard library's code, here
-  443 |             if keep(x) { c++ }
+$ROOT/std/prelude/list.olang:450:21: note: in the standard library's code, here
+  450 |             if keep(x) { c++ }
       |                     ^
 derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
@@ -850,8 +878,8 @@ compilation failed with 1 error
 e10aprivateeq.olang:12:5: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    12 |   m.Put(K(1), 5)
       |     ^~~
-$ROOT/std/prelude/map.olang:68:24: note: in the standard library's code, here
-   68 |         if f.entry.Key == key {
+$ROOT/std/prelude/map.olang:73:24: note: in the standard library's code, here
+   73 |         if f.entry.Key == key {
       |                        ^~
 e10aprivateeq.olang:12:5: note: instantiated here, with K = K, V = I32
    12 |   m.Put(K(1), 5)
@@ -913,6 +941,16 @@ e13btry.olang:6:16: error[E15]: this call can fail - write 'try', and catch or p
     6 |     n := pick()()
       |                ^
 compilation failed with 1 error
+=== e15atryonlychecks.olang
+e15atryonlychecks.olang:3:37: error[E15a]: nothing here fails as written - write 'checked' to check it
+    3 | fn add(a I32, b I32) I32 ? { return try (a + b) }
+      |                                     ^~~
+compilation failed with 1 error
+=== e16atrydefaultslice.olang
+e16atrydefaultslice.olang:11:100: error[O10d]: this value lives in this function's own scope, which closes first
+   11 | fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (checked a[0] catch default Array<I64, 2>())[0:2] }
+      |                                                                                                    ^
+compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
     9 |     b := z[5]
@@ -922,11 +960,6 @@ compilation failed with 1 error
 e23lenclash.olang:4:14: error[E23, E33, P9]: the compiler supplies Len for Nums& - choose another name
     4 | fn (n Nums&) Len() I64 { return 7 }
       |              ^~~
-compilation failed with 1 error
-=== e24chaininner.olang
-e24chaininner.olang:5:14: error[E15]: this call can fail - write 'try', and catch or pass on its errors
-    5 |     a := try g().ParseInt() catch default 0
-      |              ^
 compilation failed with 1 error
 === e25global.olang
 e25global.olang:8:14: error[E25, O1b]: 'G' lives in the program's scope, which a result reaches by being stored there, not by a scope argument
@@ -960,10 +993,15 @@ e28condlocallent.olang:25:11: error[E28]: a conditional or a match gives a copy 
    25 |     (l[0] if k > 0 else x).Bump()
       |           ^~
 compilation failed with 5 errors
+=== e31anotsuperset.olang
+e31anotsuperset.olang:13:15: error[E31a]: CheckedMinus is Minus's checked form, so it fails with every error Minus can - add MoneyError after its '?'
+   13 | fn (a Money&) CheckedMinus(b Money&) Money ? BuiltinError { return Money(checked (a.c - b.c)) }
+      |               ^~~~~~~~~~~~
+compilation failed with 1 error
 === e31atrymulti.olang
-e31atrymulti.olang:13:15: error[E31a]: 'try' on several indices needs Grid to declare TryAt - a check derived from Len checks one position
-   13 |     a := try g[0, 1] catch default -1
-      |               ^
+e31atrymulti.olang:13:19: error[E31a]: 'checked' on several indices needs Grid to declare CheckedAt - a check derived from Len checks one position
+   13 |     a := checked g[0, 1] catch default -1
+      |                   ^
 compilation failed with 1 error
 === e31bfieldviewbuild.olang
 e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
@@ -1001,29 +1039,35 @@ e31bfnresult.olang:10:15: error[E31b]: x[i] gives a copy of the element, which t
       |               ^
 compilation failed with 1 error
 === e31btryat.olang
+e31btryat.olang:13:10: error[E15a]: nothing here fails as written - write 'checked' to check it
+   13 |     bump(try l[0])
+      |          ^~~
 e31btryat.olang:13:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    13 |     bump(try l[0])
       |               ^
-compilation failed with 1 error
+e31btryat.olang:8:23: note: the callee is no view of the element because of this statement
+    8 | fn bump(a mut Acc&) { a.N++ }
+      |                       ^
+compilation failed with 2 errors
 === e31btrydefault.olang
-e31btrydefault.olang:10:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   10 |     bump(try a[1] catch default Acc())
-      |               ^
+e31btrydefault.olang:10:19: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   10 |     bump(checked a[1] catch default Acc())
+      |                   ^
 compilation failed with 1 error
 === e31btrydefaultbaked.olang
-e31btrydefaultbaked.olang:15:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   15 |     bumpPt((try a[1] catch default Acc()).P)
-      |                                           ^
+e31btrydefaultbaked.olang:15:47: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     bumpPt((checked a[1] catch default Acc()).P)
+      |                                               ^
 compilation failed with 1 error
 === e31btrydefaultfield.olang
-e31btrydefaultfield.olang:16:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   16 |     bumpPt((try a[1] catch default Acc()).P)
-      |                                           ^
+e31btrydefaultfield.olang:16:47: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   16 |     bumpPt((checked a[1] catch default Acc()).P)
+      |                                               ^
 compilation failed with 1 error
 === e31btrydefaultrecv.olang
-e31btrydefaultrecv.olang:17:36: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   17 |     (try a[1] catch default Acc()).P.Bump()
-      |                                    ^
+e31btrydefaultrecv.olang:17:40: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   17 |     (checked a[1] catch default Acc()).P.Bump()
+      |                                        ^
 compilation failed with 1 error
 === e31bviewalias.olang
 e31bviewalias.olang:18:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1140,9 +1184,9 @@ e31bviewrepoint.olang:11:18: note: the callee is no view of the element because 
       |                  ^
 compilation failed with 1 error
 === e31bviewtrydefault.olang
-e31bviewtrydefault.olang:17:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   17 |     put(try s[2] catch default V(Array<I64>(1), 0), 9)
-      |              ^
+e31bviewtrydefault.olang:17:18: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   17 |     put(checked s[2] catch default V(Array<I64>(1), 0), 9)
+      |                  ^
 compilation failed with 1 error
 === e31bviewvalue.olang
 e31bviewvalue.olang:19:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1156,6 +1200,11 @@ compilation failed with 1 error
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
    13 |     return c
       |            ^
+compilation failed with 1 error
+=== e31operatorfails.olang
+e31operatorfails.olang:14:19: error[E31]: this operator calls Minus, which can fail - write 'try' before the expression
+   14 |     m := Money(3) - Money(1)
+      |                   ^
 compilation failed with 1 error
 === e31opshapeuse.olang
 e31opshapeuse.olang:29:12: error[E31]: Graph's MatMul takes 4 parameters besides its receiver - an ordinary method, not the one '@' calls, which takes one
@@ -1266,6 +1315,11 @@ compilation failed with 1 error
 e34readonly.olang:16:10: error[E34]: 'take' writes the slot it moves out of, and it is read-only here
    16 |     x := take s.cur
       |          ^~~~
+compilation failed with 1 error
+=== e35bangnothing.olang
+e35bangnothing.olang:4:24: error[E35]: nothing here can fail - write it without '!'
+    4 | fn main() { x := inc(1)! }
+      |                        ^
 compilation failed with 1 error
 === e4aexact.olang
 e4aexact.olang:5:24: error[E4a]: this literal expression's value does not fit I32
@@ -1438,7 +1492,7 @@ g11named.olang:6:11: error[G11]: a type argument's reference marker is bare, as 
 g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 'List<String&>' - its references live in the container
     6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
       |                                ^~~~~
-g11named.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+g11named.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 3 errors
 === g12value.olang
 g12value.olang:7:21: error[G12]: generic function 'id' is not a value - call it
@@ -1460,8 +1514,8 @@ g16bgenericonce.olang:23:13: error[O10c]: the callee needs one argument's scope 
 g16bgenericonce.olang:30:7: note: instantiated here, with K = String&, V = I32
    30 |     b.Put("x", 3)
       |       ^~~
-$ROOT/std/prelude/map.olang:69:13: note: the callee requires it because of this statement
-   69 |             f.entry.Value = value
+$ROOT/std/prelude/map.olang:74:13: note: the callee requires it because of this statement
+   74 |             f.entry.Value = value
       |             ^
 g16bgenericonce.olang:22:5: note: 'n' is declared here, in a block that closes first - declare it where 'c' lives: 'n mut Node<K, V>&c = ...'
    22 |     n := Node(key, value)
@@ -1553,8 +1607,8 @@ g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the cons
 g19arrayspell.olang:4:12: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<F64>&, or a length, Array<T, N>, to hold it in place
     4 |   m := Map<Array<F64>, I32>()
       |            ^~~~~
-$ROOT/std/prelude/map.olang:21:5: note: in the standard library's code, here
-   21 |     Key K = key
+$ROOT/std/prelude/map.olang:26:5: note: in the standard library's code, here
+   26 |     Key K = key
       |     ^~~
 g19arrayspell.olang:4:12: note: instantiated here, with K = Array<F64>, V = I32
     4 |   m := Map<Array<F64>, I32>()
@@ -2005,8 +2059,8 @@ l14newline.olang:7:10: error[L14]: string literal not closed on its line - write
       |          ^~~~
 compilation failed with 1 error
 === l16unknown.olang
-l16unknown.olang:6:8: error[L16]: unexpected character '!'
-    6 |     if !(x == 1) {
+l16unknown.olang:6:8: error[L16]: unexpected character '`'
+    6 |     if `(x == 1) {
       |        ^
 compilation failed with 1 error
 === l18atrailing.olang
@@ -2058,9 +2112,9 @@ l3crlf.olang:4:14: error[L3]: carriage return - save the file with LF line endin
       |              ^
 compilation failed with 1 error
 === l9keywordfield.olang
-l9keywordfield.olang:6:13: error[L9a]: 'done' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
-    6 |     left := done
-      |             ^~~~
+l9keywordfield.olang:6:13: error[L9a]: 'break' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
+    6 |     left := break
+      |             ^~~~~
 compilation failed with 1 error
 === l9keywordname.olang
 l9keywordname.olang:3:4: error[L9]: 'join' is a keyword, not a name - choose another
@@ -2134,8 +2188,8 @@ compilation failed with 1 error
 m6bonce.olang:14:7: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    14 |     m.Put(P(K(1), K(2)), 5)
       |       ^~~
-$ROOT/std/prelude/map.olang:68:24: note: in the standard library's code, here
-   68 |         if f.entry.Key == key {
+$ROOT/std/prelude/map.olang:73:24: note: in the standard library's code, here
+   73 |         if f.entry.Key == key {
       |                        ^~
 m6bonce.olang:14:7: note: instantiated here, with K = P, V = I32
    14 |     m.Put(P(K(1), K(2)), 5)
@@ -2160,9 +2214,9 @@ multiindexarray.olang:5:15: error[E31]: Array<I64> takes one index - several are
       |               ^
 compilation failed with 1 error
 === multiindextry.olang
-multiindextry.olang:11:15: error[E31a]: 'try' on several indices needs Grid to declare TryAt - a check derived from Len checks one position
-   11 |     v := try g[1, 1] catch default 0
-      |               ^
+multiindextry.olang:11:19: error[E31a]: 'checked' on several indices needs Grid to declare CheckedAt - a check derived from Len checks one position
+   11 |     v := checked g[1, 1] catch default 0
+      |                   ^
 compilation failed with 1 error
 === narrowimplicit.olang
 narrowimplicit.olang:5:13: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
@@ -2190,7 +2244,7 @@ noextendsop.olang:6:18: error[T29f]: Meters does not extend its base, so it take
       |                  ^
 compilation failed with 1 error
 === nomainhidden.olang
-nomainhidden.olang:3:12: error[R15]: '?' alone is the default error - write '?', or name the types: '? IoError'
+nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? IoError'
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
@@ -2249,7 +2303,7 @@ o10cnote.olang:27:9: note: 'k' is declared here, in a block that closes first - 
 o10cnote.olang:28:15: note: this text lives in a block that closes first - pass a copy, which is made where 'm' lives: write '$' before it
    28 |         m.Put(k, 1)
       |               ^
-o10cnote.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+o10cnote.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 5 errors
 === o10cnotedecl.olang
 o10cnotedecl.olang:18:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -2277,8 +2331,8 @@ compilation failed with 1 error
 o10cnotethroughcall.olang:16:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         keep.Push(m)
       |              ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 o10cnotethroughcall.olang:12:5: note: 'base' is declared here, in a block that closes first - declare it where 'keep' lives: 'base mut String&keep = ...'
    12 |     base := $dir "/"
@@ -2320,8 +2374,8 @@ compilation failed with 1 error
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/list.olang:463:5: note: the callee requires it because of this statement
-  463 |     return acc
+$ROOT/std/prelude/list.olang:470:5: note: the callee requires it because of this statement
+  470 |     return acc
       |     ^~~~~~
 compilation failed with 1 error
 === o14btypevar.olang
@@ -2356,6 +2410,11 @@ compilation failed with 1 error
 o17bkeepsother.olang:13:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    13 |         r := c.me()
       |              ^
+compilation failed with 1 error
+=== o17blambdakeep.olang
+o17blambdakeep.olang:18:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   18 |         fs.Push(leak(idList(base)))
+      |                      ^~~~~~
 compilation failed with 1 error
 === o17bnoand.olang
 o17bnoand.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2489,6 +2548,41 @@ o17spawntargets.olang:26:10: error[O17]: this value's references live where its 
    26 |     grow(b)
       |          ^
 compilation failed with 1 error
+=== o17tempcallresult.olang
+o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   25 |         addRef(idBox(seed), i + 1)
+      |                ^~~~~
+compilation failed with 1 error
+=== o17tempcond.olang
+o17tempcond.olang:28:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   28 |         addVia(b1 if i >= 0 else b2, i + 1)
+      |                   ^~
+compilation failed with 1 error
+=== o17tempcondarray.olang
+o17tempcondarray.olang:28:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   28 |         addVia(a[0] if i >= 0 else a[1], i + 1)
+      |                     ^~
+compilation failed with 1 error
+=== o17templambdacond.olang
+o17templambdacond.olang:22:25: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   22 |         fs.Push(leak(b1 if i >= 0 else b2))
+      |                         ^~
+compilation failed with 1 error
+=== o17templambdacycle.olang
+o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   26 |         even(idBox(seed), 2, fs)
+      |              ^~~~~
+compilation failed with 1 error
+=== o17templambdakeep.olang
+o17templambdakeep.olang:24:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   24 |         fs.Push(leak(idBox(seed)))
+      |                      ^~~~~
+compilation failed with 1 error
+=== o17tempreadonly.olang
+o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   28 |         addVia(mkBox(seed), i + 1)
+      |                ^~~~~
+compilation failed with 1 error
 === o18cprojectionborrow.olang
 o18cprojectionborrow.olang:17:14: error[O10]: this reference lives in a scope that may not outlive where it is put
    17 |         held = x
@@ -2498,8 +2592,8 @@ compilation failed with 1 error
 o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         keep.Push(t)
       |              ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives: 't String&keep = ...'
    14 |         t := p.mk().text
@@ -2648,8 +2742,8 @@ compilation failed with 1 error
 o25hpairpush.olang:13:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |         fields.Push(p)
       |                ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 o25hpairpush.olang:12:9: note: 'p' is declared here, in a block that closes first - declare it where 'fields' lives: 'p mut Pair<String&, Node&>&fields = ...'
    12 |         p := Pair<String&, Node&>("k", value)
@@ -2913,8 +3007,8 @@ o34valuecopied.olang:24:13: error[O34]: moving out of 'a' would leave it empty -
       |             ^
 compilation failed with 1 error
 === o34valuedefault.olang
-o34valuedefault.olang:27:34: error[O34]: Buf owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves
-   27 |     a := try mk(1) catch default Buf()
+o34valuedefault.olang:30:34: error[O34]: Buf owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves
+   30 |     a := try mk(1) catch default Buf()
       |                                  ^~~
 compilation failed with 1 error
 === o34valuenotowner.olang
@@ -3857,11 +3951,11 @@ o41call.olang:16:28: note: 'drop' releases here
       |                            ^~~
 compilation failed with 1 error
 === o41clause.olang
-o41clause.olang:19:11: error[O41]: assigning 's.cur' may release the Node the task spawned on line 18 may be using until the join - release it after the join
-   19 |         s.cur = null
+o41clause.olang:22:11: error[O41]: assigning 's.cur' may release the Node the task spawned on line 21 may be using until the join - release it after the join
+   22 |         s.cur = null
       |           ^~~
-o41clause.olang:13:30: note: the task borrows it here
-   13 | fn fails(h Holder&) ? { if h.cur == null { error } }
+o41clause.olang:16:30: note: the task borrows it here
+   16 | fn fails(h Holder&) ? { if h.cur == null { error Stop.HERE } }
       |                              ^~~
 compilation failed with 1 error
 === o41defer.olang
@@ -3963,7 +4057,7 @@ o4bblock.olang:28:9: note: 'k' is declared here, in a block that closes first - 
 o4bblock.olang:29:15: note: this text lives in a block that closes first - pass a copy, which is made where 'm' lives: write '$' before it
    29 |         m.Put(k, 1)
       |               ^
-o4bblock.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+o4bblock.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 5 errors
 === o4bbyvaluebuild.olang
 o4bbyvaluebuild.olang:13:24: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
@@ -4008,11 +4102,6 @@ compilation failed with 1 error
 opbothcases.olang:6:10: error[M6b]: V declares Plus twice, public and private - keep one: Plus, or plus for its own module only
     6 | fn (a V) Plus(b V) V { return a }
       |          ^~~~
-compilation failed with 1 error
-=== opfallible.olang
-opfallible.olang:6:10: error[E31a]: Mul cannot fail - its checked form is a method of its own, TryMul, which 'try' calls
-    6 | fn (a V) Mul(b V) V ? { return a }
-      |          ^~~
 compilation failed with 1 error
 === opltbool.olang
 opltbool.olang:6:10: error[E31]: Less, which '<' calls, gives a Bool
@@ -4246,16 +4335,16 @@ protoprivshape.olang:7:10: note: 'str' is Str's private spelling with Str's para
       |          ^~~
 compilation failed with 2 errors
 === qerror.olang
-qerror.olang:3:12: error[R15]: '?' alone is the default error - write '?', or name the types: '? IoError'
+qerror.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? IoError'
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
 === r11clausevalue.olang
-r11clausevalue.olang:15:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
-   15 |         -1
+r11clausevalue.olang:18:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
+   18 |         -1
       |         ^
-r11clausevalue.olang:17:30: error[R11]: a block's last value is not the clause's value - write '} default 0' after the block
-   17 |     b := try half(5) catch { 0 }
+r11clausevalue.olang:20:30: error[R11]: a block's last value is not the clause's value - write '} default 0' after the block
+   20 |     b := try half(5) catch { 0 }
       |                              ^
 compilation failed with 2 errors
 === r11defaultexisting.olang
@@ -4263,46 +4352,69 @@ r11defaultexisting.olang:12:43: error[R11]: a default for a value holding refere
    12 |     n := (try validate("x") catch default empty).Len()
       |                                           ^~~~~
 compilation failed with 1 error
-=== r11exit.olang
-r11exit.olang:9:12: error[R11, B5b]: a call that ends the program is not a leave - write 'unreachable' after it
-    9 |         os.Exit(2)
-      |            ^~~~
+=== r1apromise.olang
+r1apromise.olang:14:5: error[R9]: B can escape here, and this function does not declare it - add it after '?', or catch it
+   14 |     try g(n)
+      |     ^~~
+compilation failed with 1 error
+=== r1bfunctype.olang
+r1bfunctype.olang:3:12: error[R1b]: a function type writes its error set - '? IoError' - since no body says what it is
+    3 | fn apply(f fn(x I64) I64 ?, x I64) I64 ? { return try f(x) }
+      |            ^~
+r1bfunctype.olang:3:51: error[R8]: nothing here can fail - write it without 'try'
+    3 | fn apply(f fn(x I64) I64 ?, x I64) I64 ? { return try f(x) }
+      |                                                   ^~~
+compilation failed with 2 errors
+=== r1btrait.olang
+r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? IoError' - since no body says what it is
+    4 |     Read() I64 ?
+      |     ^~~~
 compilation failed with 1 error
 === r20nothing.olang
-r20nothing.olang:4:13: error[R20]: 'try' needs something that can fail - a fallible call, or an operation it can check
-    4 |     r I32 = try (a == 1) catch default 0
-      |             ^~~
-r20nothing.olang:4:20: error[E12]: expected I32, found Bool
-    4 |     r I32 = try (a == 1) catch default 0
-      |                    ^~
+r20nothing.olang:4:13: error[R8]: nothing here can fail - write it without 'checked'
+    4 |     r I32 = checked (a == 1) catch default 0
+      |             ^~~~~~~
+r20nothing.olang:4:24: error[E12]: expected I32, found Bool
+    4 |     r I32 = checked (a == 1) catch default 0
+      |                        ^~
 compilation failed with 2 errors
 === r20partial.olang
 r20partial.olang:4:13: error[R9]: BuiltinError can escape here, and this function does not declare it - add it after '?', or catch it
-    4 |     r I32 = try (a / b) catch BuiltinError.OVERFLOW default 0
-      |             ^~~
+    4 |     r I32 = checked (a / b) catch BuiltinError.OVERFLOW default 0
+      |             ^~~~~~~
 compilation failed with 1 error
 === r20undeclared.olang
 r20undeclared.olang:7:13: error[R9]: BuiltinError can escape here, and this function does not declare it - add it after '?', or catch it
-    7 |     r I32 = try (a + b)
-      |             ^~~
+    7 |     r I32 = checked (a + b)
+      |             ^~~~~~~
+compilation failed with 1 error
+=== r3bareerror.olang
+r3bareerror.olang:4:22: error: expected a name, found '}'
+    4 |     if n < 0 { error }
+      |                      ^
+compilation failed with 1 error
+=== r8trynothing.olang
+r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'try'
+    4 | fn main() ? { x := try inc(1) }
+      |                    ^~~
 compilation failed with 1 error
 === r9adefaultinner.olang
-r9adefaultinner.olang:16:40: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-   16 |         keep = try mk(i) catch default inner
+r9adefaultinner.olang:19:40: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
+   19 |         keep = try mk(i) catch default inner
       |                                        ^~~~~
 compilation failed with 1 error
 === r9adefaultlocal.olang
-r9adefaultlocal.olang:12:36: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-   12 |     return try mk(1) catch default seed
+r9adefaultlocal.olang:15:36: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
+   15 |     return try mk(1) catch default seed
       |                                    ^~~~
 compilation failed with 1 error
 === r9atrydefaultassign.olang
-r9atrydefaultassign.olang:15:38: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
-   15 |     (try a[1] catch default Acc()).P.X = 5
-      |                                      ^
-r9atrydefaultassign.olang:16:37: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
-   16 |     (try a[1] catch default Acc()).N++
-      |                                     ^~
+r9atrydefaultassign.olang:15:42: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store
+   15 |     (checked a[1] catch default Acc()).P.X = 5
+      |                                          ^
+r9atrydefaultassign.olang:16:41: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store
+   16 |     (checked a[1] catch default Acc()).N++
+      |                                         ^~
 compilation failed with 2 errors
 === r9bafterall.olang
 r9bafterall.olang:10:23: error[R11a]: a catch with no error types takes every error left, so no clause can follow it
@@ -4356,11 +4468,6 @@ rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an arg
    25 |     s := $Wrap(x)
       |                ^
 compilation failed with 1 error
-=== returnintest.olang
-returnintest.olang:6:5: error[S15]: a test has nothing to return to - end it with 'done' or 'fail'
-    6 |     return
-      |     ^~~~~~
-compilation failed with 1 error
 === rv3assigncopy.olang
 rv3assigncopy.olang:13:7: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    13 |     d = pick(r)
@@ -4395,16 +4502,16 @@ compilation failed with 1 error
 rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
     6 |     c := ro.Clone()
       |          ^~
-$ROOT/std/prelude/list.olang:338:5: note: 'l' is declared here
-  338 | fn (l List<<T>>&) Clone() List<T> {
+$ROOT/std/prelude/list.olang:345:5: note: 'l' is declared here
+  345 | fn (l List<<T>>&) Clone() List<T> {
       |     ^
 compilation failed with 1 error
 === rv3rofilter.olang
 rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
     4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
       |            ^~
-$ROOT/std/prelude/array.olang:90:5: note: 'a' is declared here
-   90 | fn (a Array<<T>>&) Filter(keep fn(x T) Bool) Array<T> {
+$ROOT/std/prelude/array.olang:95:5: note: 'a' is declared here
+   95 | fn (a Array<<T>>&) Filter(keep fn(x T) Bool) Array<T> {
       |     ^
 compilation failed with 1 error
 === rv3roforin.olang
@@ -4649,6 +4756,11 @@ s13fwildcardalone.olang:6:17: error[S13f]: '_' matches every value, so it is its
     6 |         case 1, _ => 1
       |                 ^
 compilation failed with 1 error
+=== s15returnvalue.olang
+s15returnvalue.olang:4:5: error[S15]: a test has no result - a bare 'return' ends it as passed
+    4 |     return 1
+      |     ^~~~~~
+compilation failed with 1 error
 === s17msgbreak.olang
 s17msgbreak.olang:11:44: error[S17]: 'break' may not leave an assert's message - it is evaluated only when the assert fails
    11 |         assert i > 100, $(try h(i) catch { break } default 0)
@@ -4663,8 +4775,8 @@ s17msgerror.olang:10:23: error[S17]: an error may not leave an assert's message 
       |                       ^~~
 compilation failed with 1 error
 === s17msgreturn.olang
-s17msgreturn.olang:10:39: error[S17]: an assert's message may not return - it is evaluated only when the assert fails, and gives text
-   10 |     assert k > 100, (try h(k) catch { return 7 })
+s17msgreturn.olang:13:39: error[S17]: an assert's message may not return - it is evaluated only when the assert fails, and gives text
+   13 |     assert k > 100, (try h(k) catch { return 7 })
       |                                       ^~~~~~
 compilation failed with 1 error
 === s18cfalse.olang
@@ -4724,8 +4836,8 @@ compilation failed with 1 error
 s5callresultfield.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         ss.Push(box(t).s)
       |            ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5callresultfield.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'ss' lives: 't mut String&ss = ...'
    11 |         t := $k "-text"
@@ -4738,8 +4850,8 @@ compilation failed with 1 error
 s5callresultpush.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         bs.Push(box(t))
       |            ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5callresultpush.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
    11 |         t := $k "-text"
@@ -4749,16 +4861,16 @@ compilation failed with 1 error
 s5capturestruct.olang:15:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         fs.Push(fn() I64 { return x.Sensor.Len() })
       |            ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 compilation failed with 1 error
 === s5clonepush.olang
 s5clonepush.olang:10:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         rows.Push(rec.Clone())
       |              ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5clonepush.olang:8:9: note: 'rec' is declared here, in a block that closes first - declare it where 'rows' lives: 'rec mut List<String&>&rows = ...'
     8 |         rec := List<String&>()
@@ -4768,8 +4880,8 @@ compilation failed with 1 error
 s5destructnoscope.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         rows.Push(rec)
       |              ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5destructnoscope.olang:14:9: note: 'rec' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here
    14 |         rec, next := mk2(k)
@@ -4806,8 +4918,8 @@ compilation failed with 2 errors
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
-$ROOT/std/prelude/list.olang:163:9: note: the callee requires it because of this statement
-  163 |         l.s.first[i] = x
+$ROOT/std/prelude/list.olang:171:9: note: the callee requires it because of this statement
+  171 |         l.s.first[i] = x
       |         ^
 s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
     9 |         t := $k "-loop-text-of-moderate-length"
@@ -4841,8 +4953,8 @@ compilation failed with 1 error
 s5helperlist.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         rows.Push(one(t))
       |              ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5helperlist.olang:13:9: note: 't' is declared here, in a block that closes first - declare it where 'rows' lives: 't mut String&rows = ...'
    13 |         t := $k "-text"
@@ -4861,8 +4973,8 @@ s5keepcall.olang:11:9: note: 't' is declared here, in a block that closes first 
 s5keepcall.olang:13:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |         m.Put(k, box(t))
       |           ^~~
-$ROOT/std/prelude/map.olang:69:13: note: the callee requires it because of this statement
-   69 |             f.entry.Value = value
+$ROOT/std/prelude/map.olang:74:13: note: the callee requires it because of this statement
+   74 |             f.entry.Value = value
       |             ^
 s5keepcall.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'm' lives: 't mut String&m = ...'
    11 |         t := $k "-text"
@@ -4872,16 +4984,16 @@ compilation failed with 2 errors
 s5mapgetreturn.olang:7:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
     7 |     l := try m.Get(1)
       |                ^~~
-$ROOT/std/prelude/map.olang:111:33: note: the callee requires it because of this statement
-  111 |         if f.entry.Key == key { return f.entry.Value }
+$ROOT/std/prelude/map.olang:116:33: note: the callee requires it because of this statement
+  116 |         if f.entry.Key == key { return f.entry.Value }
       |                                 ^~~~~~
 compilation failed with 1 error
 === s5nestedhandle.olang
 s5nestedhandle.olang:11:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         users[0][0].Push(t)
       |                     ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5nestedhandle.olang:11:26: note: this text lives in a block that closes first - pass a copy, which is made where 'users' lives: write '$' before it
    11 |         users[0][0].Push(t)
@@ -4891,8 +5003,8 @@ compilation failed with 1 error
 s5nestedhandlemap.olang:11:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         (try mm.Get(0))[0].Push(t)
       |                            ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5nestedhandlemap.olang:11:33: note: this text lives in a block that closes first - pass a copy, which is made where 'mm' lives: write '$' before it
    11 |         (try mm.Get(0))[0].Push(t)
@@ -4911,8 +5023,8 @@ compilation failed with 2 errors
 s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         bs.Push(pairish(t).a)
       |            ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
    15 |         t := $k "-text"
@@ -4922,8 +5034,8 @@ compilation failed with 1 error
 s5projectionelem.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         bs.Push(boxes(t)[0])
       |            ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 s5projectionelem.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
     9 |         t := $k "-text"
@@ -4938,8 +5050,8 @@ compilation failed with 1 error
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
-$ROOT/std/prelude/list.olang:163:9: note: the callee requires it because of this statement
-  163 |         l.s.first[i] = x
+$ROOT/std/prelude/list.olang:171:9: note: the callee requires it because of this statement
+  171 |         l.s.first[i] = x
       |         ^
 s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
    11 |         t := $i "-loop-text"
@@ -4955,17 +5067,17 @@ s6immutableglobalfield.olang:6:7: error[S6]: G cannot be written - only a local,
 compilation failed with 1 error
 === s8acall.olang
 s8acall.olang:9:18: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
-    9 |     if helper3() > 2 { fail }
+    9 |     if helper3() > 2 { return }
       |                  ^
 compilation failed with 1 error
 === s8afalse.olang
 s8afalse.olang:9:8: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
-    9 |     if false { fail }
+    9 |     if false { return }
       |        ^~~~~
 compilation failed with 1 error
 === s8afixedlocal.olang
 s8afixedlocal.olang:10:10: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
-   10 |     if x > Level { fail }
+   10 |     if x > Level { return }
       |          ^
 compilation failed with 1 error
 === s8alevel.olang
@@ -4975,7 +5087,7 @@ s8alevel.olang:10:18: error[S8a]: this condition is the same on every build, so 
 compilation failed with 1 error
 === s8averbose.olang
 s8averbose.olang:10:16: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
-   10 |     if Verbose == 1 { fail }
+   10 |     if Verbose == 1 { return }
       |                ^~
 compilation failed with 1 error
 === s8bother.olang
@@ -5045,8 +5157,8 @@ compilation failed with 1 error
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
     9 |     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
       |                     ^~~~~
-$ROOT/std/prelude/array.olang:73:12: note: built here, where the receiver's part it was handed lives
-   73 |         if keep(x) { n++ }
+$ROOT/std/prelude/array.olang:78:12: note: built here, where the receiver's part it was handed lives
+   78 |         if keep(x) { n++ }
       |            ^~~~
 compilation failed with 1 error
 === strayfnbody.olang
@@ -5061,8 +5173,8 @@ compilation failed with 2 errors
 strcallbackbuilds.olang:10:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    10 |     n := b.words.Count(fn(s String&) Bool {
       |                  ^~~~~
-$ROOT/std/prelude/array.olang:73:12: note: built here, where the receiver's part it was handed lives
-   73 |         if keep(x) { n++ }
+$ROOT/std/prelude/array.olang:78:12: note: built here, where the receiver's part it was handed lives
+   78 |         if keep(x) { n++ }
       |            ^~~~
 strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    20 |     n := via(b.words, fn(s String&) Bool {
@@ -5080,11 +5192,11 @@ strcalleeadapter.olang:24:40: note: built here, where the receiver's part it was
       |                                        ^
 compilation failed with 1 error
 === strcalleecatch.olang
-strcalleecatch.olang:31:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   31 |     return $pick(b.head)
+strcalleecatch.olang:34:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   34 |     return $pick(b.head)
       |             ^~~~
-strcalleecatch.olang:27:39: note: built here, where the receiver's part it was handed lives
-   27 |     x := try find(n, 1) catch default Node(1, null)
+strcalleecatch.olang:30:39: note: built here, where the receiver's part it was handed lives
+   30 |     x := try find(n, 1) catch default Node(1, null)
       |                                       ^~~~
 compilation failed with 1 error
 === strcalleecond.olang
@@ -5112,8 +5224,8 @@ strcalleespawnlambda.olang:22:18: note: built here, where the receiver's part it
       |                  ^~
 compilation failed with 1 error
 === strcatchnode.olang
-strcatchnode.olang:16:44: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   16 |     x := try find(b.head, 9) catch default Node(0, null)
+strcatchnode.olang:19:44: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   19 |     x := try find(b.head, 9) catch default Node(0, null)
       |                                            ^~~~
 compilation failed with 1 error
 === strcondnode.olang
@@ -5135,32 +5247,32 @@ strcycledeps.olang:14:5: note: built here, where the receiver's part it was hand
       |     ^
 compilation failed with 1 error
 === strdefaultfnvalue.olang
-strdefaultfnvalue.olang:32:38: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   32 |     x := try f(b.head) catch default h()
+strdefaultfnvalue.olang:35:38: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   35 |     x := try f(b.head) catch default h()
       |                                      ^
 compilation failed with 1 error
 === strdefaulthelper.olang
-strdefaulthelper.olang:32:19: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   32 |     b.head.next = pick(b.head)
+strdefaulthelper.olang:35:19: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   35 |     b.head.next = pick(b.head)
       |                   ^~~~
-strdefaulthelper.olang:29:32: note: built here, where the receiver's part it was handed lives
-   29 | fn g(v I64) mut Node& { return Node(v) }
+strdefaulthelper.olang:32:32: note: built here, where the receiver's part it was handed lives
+   32 | fn g(v I64) mut Node& { return Node(v) }
       |                                ^~~~
 compilation failed with 1 error
 === strdefaultindex.olang
-strdefaultindex.olang:21:50: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   21 |     b.arr[0].next = try b.arr[b.k] catch default g(5)
-      |                                                  ^
+strdefaultindex.olang:21:54: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   21 |     b.arr[0].next = checked b.arr[b.k] catch default g(5)
+      |                                                      ^
 strdefaultindex.olang:19:32: note: built here, where the receiver's part it was handed lives
    19 | fn g(v I64) mut Node& { return Node(v) }
       |                                ^~~~
 compilation failed with 1 error
 === strdefaultlanding.olang
-strdefaultlanding.olang:31:47: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   31 |     b.head.next = try f(b.head) catch default g(5)
+strdefaultlanding.olang:34:47: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   34 |     b.head.next = try f(b.head) catch default g(5)
       |                                               ^
-strdefaultlanding.olang:29:32: note: built here, where the receiver's part it was handed lives
-   29 | fn g(v I64) mut Node& { return Node(v) }
+strdefaultlanding.olang:32:32: note: built here, where the receiver's part it was handed lives
+   32 | fn g(v I64) mut Node& { return Node(v) }
       |                                ^~~~
 compilation failed with 1 error
 === strdefaultmapget.olang
@@ -5172,11 +5284,11 @@ strdefaultmapget.olang:19:32: note: built here, where the receiver's part it was
       |                                ^~~~
 compilation failed with 1 error
 === strdefaultspawned.olang
-strdefaultspawned.olang:30:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   30 |     join { spawn fn() {
+strdefaultspawned.olang:33:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   33 |     join { spawn fn() {
       |                  ^~
-strdefaultspawned.olang:28:32: note: built here, where the receiver's part it was handed lives
-   28 | fn g(v I64) mut Node& { return Node(v) }
+strdefaultspawned.olang:31:32: note: built here, where the receiver's part it was handed lives
+   31 | fn g(v I64) mut Node& { return Node(v) }
       |                                ^~~~
 compilation failed with 1 error
 === strderivedcallback.olang
@@ -5212,8 +5324,8 @@ compilation failed with 1 error
 strnotecopies.olang:14:48: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |     for n := b.head, n != null, n = n.next { l.Push(n) }
       |                                                ^~~~
-$ROOT/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
-   59 |     if s.used == s.room { s.grow(x) }
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 strnotecopies.olang:13:5: note: 'l' cannot be made where 'n' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references
    13 |     l := List<mut Node&>()
@@ -5367,7 +5479,7 @@ compilation failed with 1 error
 t10len.olang:5:15: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
     5 |     n I32 = a.Len()
       |               ^~~
-t10len.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+t10len.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t13holdsitself.olang
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
@@ -5564,10 +5676,13 @@ compilation failed with 1 error
 t25caswrite.olang:15:18: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
    15 |     (b as Box.R).v = 81
       |                  ^
+t25caswrite.olang:18:6: error[E15a]: nothing here fails as written - write 'checked' to check it
+   18 |     (try w.items[0]).v = 82
+      |      ^~~
 t25caswrite.olang:18:22: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
    18 |     (try w.items[0]).v = 82
       |                      ^
-compilation failed with 2 errors
+compilation failed with 3 errors
 === t25cbuiltresult.olang
 t25cbuiltresult.olang:7:13: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - borrow it: 'Item&l'
     7 |     return l[0]
@@ -5752,7 +5867,7 @@ compilation failed with 1 error
 t29cbytes.olang:5:16: error[M19]: Array<U8> has no method 'Eq'
     5 |     assert raw.Eq("zz")
       |                ^~
-t29cbytes.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+t29cbytes.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t29dliteral.olang
 t29dliteral.olang:10:17: error[T29d]: this literal enters Checked through its constructor, which does not run on it while compiling: it fails with an error no clause handles
@@ -5870,7 +5985,7 @@ compilation failed with 1 error
 t7aelem.olang:3:14: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<I32>&, or a length, Array<T, N>, to hold it in place
     3 | fn f(m Array<Array<I32>>&) I32 { return 0 }
       |              ^~~~~
-t7aelem.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+t7aelem.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t7alambdaresult.olang
 t7alambdaresult.olang:9:39: error[T7a]: this result binds U to String, which the call holds in an array, where an array is held by reference - write the result as String&
@@ -5881,7 +5996,7 @@ compilation failed with 1 error
 t7anested.olang:4:24: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<I32>&, or a length, Array<T, N>, to hold it in place
     4 | type W struct(n I32) { a Array<I32> = Array<I32>(n) }
       |                        ^
-t7anested.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+t7anested.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t7cnegative.olang
 t7cnegative.olang:4:18: error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1
@@ -5892,7 +6007,7 @@ compilation failed with 1 error
 t7dsize.olang:6:9: error[T7d]: Array<I32, 2> does not fit Array<I32, 3> - a fixed length is part of the type
     6 |     m.a = I32[1, 2]
       |         ^
-t7dsize.olang: error[B4]: no main function - a program starts at 'fn main() ? { }'
+t7dsize.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t7elemnamed.olang
 t7elemnamed.olang:5:24: error[T24]: a nested reference lives in its container's scope - write a bare '&' here
@@ -5946,27 +6061,27 @@ traitnottype.olang:6:8: error[T30]: S& is a trait - a constraint on a type varia
       |        ^
 compilation failed with 1 error
 === tryatnolen.olang
-tryatnolen.olang:9:15: error[E31a]: 'try c[i]' checks against Len, and Bag& has neither TryAt nor Len
-    9 |     x := try b[0] catch default 0
-      |               ^
+tryatnolen.olang:9:19: error[E31a]: 'checked c[i]' checks against Len, and Bag& has neither CheckedAt nor Len
+    9 |     x := checked b[0] catch default 0
+      |                   ^
 compilation failed with 1 error
 === trymustfail.olang
-trymustfail.olang:6:13: error[E31a]: TryAt is a checked form, so it declares the errors it fails with
-    6 | fn (b Bag&) TryAt(i I64) I32 { return 1 }
-      |             ^~~~~
+trymustfail.olang:10:13: error[E31a]: CheckedAt is At's checked form, so it fails with every error At can - add E after its '?'
+   10 | fn (b Bag&) CheckedAt(i I64) I32 { return 1 }
+      |             ^~~~~~~~~
 compilation failed with 1 error
 === tryonly.olang
-tryonly.olang:12:11: error[E31a]: Bag& has only the checked form of this operation, TryAt - write it under 'try'
+tryonly.olang:12:11: error[E31a]: Bag& has only the checked form of this operation, CheckedAt - write it under 'checked'
    12 |     x := b[0]
       |           ^
 compilation failed with 1 error
 === trysetatnolen.olang
-trysetatnolen.olang:9:14: error[E31a]: 'try c[i] = v' checks against Len, and Bag& has neither TrySetAt nor Len
-    9 |     try b[0] = 1 catch { }
-      |              ^
-trysetatnolen.olang:9:5: error[R20]: 'try' needs something that can fail - a fallible call, or an operation it can check
-    9 |     try b[0] = 1 catch { }
-      |     ^~~
+trysetatnolen.olang:9:18: error[E31a]: 'checked c[i] = v' checks against Len, and Bag& has neither CheckedSetAt nor Len
+    9 |     checked b[0] = 1 catch { }
+      |                  ^
+trysetatnolen.olang:9:5: error[R8]: nothing here can fail - write it without 'checked'
+    9 |     checked b[0] = 1 catch { }
+      |     ^~~~~~~
 compilation failed with 2 errors
 === typenoctor.olang
 typenoctor.olang:8:8: error: type 'Color' has no constructor - an enum's values are its cases
@@ -6056,8 +6171,8 @@ vec01view.olang:8:12: note: borrowed here
 vec01view.olang:10:21: note: used here, after it
    10 |     try io.Println($d[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec02forpush.olang
@@ -6070,8 +6185,8 @@ vec02forpush.olang:6:14: note: borrowed here
 vec02forpush.olang:6:5: note: used here, after it
     6 |     for x in v {
       |     ^~~
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec03copy.olang
@@ -6084,8 +6199,8 @@ vec03copy.olang:7:10: note: borrowed here
 vec03copy.olang:9:21: note: used here, after it
     9 |     try io.Println($b.Len())
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec04lend.olang
@@ -6095,8 +6210,8 @@ vec04lend.olang:11:21: error[O39]: calling 'grow' may release the Array<I64> bor
 vec04lend.olang:11:31: note: borrowed here
    11 |     try io.Println($grow(v, v.View()))
       |                               ^~~~
-$ROOT/std/prelude/vec.olang:31:32: note: 'grow' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'grow' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec05elem.olang
@@ -6106,8 +6221,8 @@ vec05elem.olang:12:21: error[O39]: calling 'grow' may release the Array<Pt> borr
 vec05elem.olang:12:31: note: borrowed here
    12 |     try io.Println($grow(v, v.View()[0]))
       |                               ^~~~
-$ROOT/std/prelude/vec.olang:31:32: note: 'grow' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'grow' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec06through.olang
@@ -6120,8 +6235,8 @@ vec06through.olang:8:10: note: borrowed here
 vec06through.olang:10:21: note: used here, after it
    10 |     try io.Println($d)
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec07text.olang
@@ -6134,8 +6249,8 @@ vec07text.olang:9:10: note: borrowed here
 vec07text.olang:11:20: note: used here, after it
    11 |     try io.Println(t)
       |                    ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec08take.olang
@@ -6159,8 +6274,8 @@ vec09iter.olang:7:11: note: borrowed here
 vec09iter.olang:9:26: note: used here, after it
     9 |     try io.Println($(try it.Next() catch default 0))
       |                          ^~
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec100wrapreplaced.olang
@@ -6195,8 +6310,8 @@ vec102walkpush.olang:10:16: note: borrowed here
 vec102walkpush.olang:10:5: note: used here, after it
    10 |     for x in l.toks { l.toks.Push(x) }
       |     ^~~
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec103refview.olang
@@ -6209,8 +6324,8 @@ vec103refview.olang:12:17: note: borrowed here
 vec103refview.olang:14:21: note: used here, after it
    14 |     try io.Println($d[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec104viewfn.olang
@@ -6223,8 +6338,8 @@ vec104viewfn.olang:12:10: note: borrowed here
 vec104viewfn.olang:14:21: note: used here, after it
    14 |     try io.Println($d[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec105takeholder.olang
@@ -6307,8 +6422,8 @@ vec116elemkeptfield.olang:19:12: note: borrowed here
 vec116elemkeptfield.olang:22:21: note: used here, after it
    22 |     try io.Println($h.l.name)
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec117elemviewkept.olang
@@ -6321,8 +6436,8 @@ vec117elemviewkept.olang:19:13: note: borrowed here
 vec117elemviewkept.olang:21:21: note: used here, after it
    21 |     try io.Println($h.l.name)
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec118elemslice.olang
@@ -6360,8 +6475,8 @@ vec11inplace.olang:10:13: note: borrowed here
 vec11inplace.olang:12:21: note: used here, after it
    12 |     try io.Println($p.x)
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 2 errors
 === vec120elemselfref.olang
@@ -6481,8 +6596,8 @@ vec136deepcopy.olang:42:10: note: borrowed here
 vec136deepcopy.olang:47:21: note: used here, after it
    47 |     try io.Println($c.x.x.x.x.x.x.x.x.toks[0] " " $z.Len())
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec137deepreturn.olang
@@ -6516,8 +6631,8 @@ vec13nominal.olang:14:10: note: borrowed here
 vec13nominal.olang:17:20: note: used here, after it
    17 |     try io.Println(t)
       |                    ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec140fieldcopypart.olang
@@ -6529,8 +6644,8 @@ compilation failed with 1 error
 vec141dtorglobal.olang:16:37: error[O40]: a destructor may not release owned objects - its instance's own fields are released after it runs
    16 | } destruct { for i in range 100 { G.Push(i) } }
       |                                     ^~~~
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec145deeploan.olang
@@ -6543,8 +6658,8 @@ vec145deeploan.olang:221:10: note: borrowed here
 vec145deeploan.olang:223:21: note: used here, after it
   223 |     try io.Println($c.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x...
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec147samepathlocal.olang
@@ -6572,8 +6687,8 @@ vec14nominalconv.olang:14:10: note: borrowed here
 vec14nominalconv.olang:17:21: note: used here, after it
    17 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec150samepathglobal.olang
@@ -6684,8 +6799,8 @@ vec23recpush.olang:10:10: note: borrowed here
 vec23recpush.olang:12:21: note: used here, after it
    12 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec24twoparams.olang
@@ -6703,8 +6818,8 @@ compilation failed with 1 error
 vec27cloneshort.olang:10:18: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         keep = w.Clone()
       |                  ^~~~~
-$ROOT/std/prelude/vec.olang:187:26: note: the callee requires it because of this statement
-  187 |     for i in range v.n { c.data[i] = v.data[i] }
+$ROOT/std/prelude/vec.olang:193:26: note: the callee requires it because of this statement
+  193 |     for i in range v.n { c.data[i] = v.data[i] }
       |                          ^
 compilation failed with 1 error
 === vec28builtleak.olang
@@ -6725,16 +6840,16 @@ vec29builtholds.olang:14:15: note: borrowed here
 vec29builtholds.olang:16:20: note: used here, after it
    16 |     try io.Println(h.a[0])
       |                    ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 2 errors
 === vec30sortmut.olang
 vec30sortmut.olang:13:7: error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is - lend it what holds the array, or hand it the array as an owner ('b.names = f(take b.names)')
    13 |     s.Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })
       |       ^~~~
-$ROOT/std/prelude/vec.olang:155:59: note: in the standard library's code, here
-  155 | fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.data[:v.n].Sort(less) }
+$ROOT/std/prelude/vec.olang:161:59: note: in the standard library's code, here
+  161 | fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.data[:v.n].Sort(less) }
       |                                                           ^
 vec30sortmut.olang:13:7: note: instantiated here, with T = Node&
    13 |     s.Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })
@@ -6750,8 +6865,8 @@ vec31typevarresult.olang:17:15: note: borrowed here
 vec31typevarresult.olang:20:20: note: used here, after it
    20 |     try io.Println(d[0])
       |                    ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec32builtpick.olang
@@ -6764,8 +6879,8 @@ vec32builtpick.olang:21:19: note: borrowed here
 vec32builtpick.olang:24:21: note: used here, after it
    24 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec33builtid.olang
@@ -6778,8 +6893,8 @@ vec33builtid.olang:19:14: note: borrowed here
 vec33builtid.olang:22:21: note: used here, after it
    22 |     try io.Println($d[0] $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec34builtlist.olang
@@ -6792,8 +6907,8 @@ vec34builtlist.olang:19:14: note: borrowed here
 vec34builtlist.olang:22:21: note: used here, after it
    22 |     try io.Println($d[0] $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec35builtmap.olang
@@ -6806,8 +6921,8 @@ vec35builtmap.olang:19:14: note: borrowed here
 vec35builtmap.olang:22:21: note: used here, after it
    22 |     try io.Println($d[0] $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec36mixedtrim.olang
@@ -6831,8 +6946,8 @@ vec39mixedid.olang:20:12: error[O38]: this value borrows an own object, and is k
       |            ^~
 compilation failed with 1 error
 === vec40mixedcatch.olang
-vec40mixedcatch.olang:22:18: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
-   22 |     return try c.Raw(n) catch default c.Text()   # the try is a source (Raw, Array<Char>); the default is not
+vec40mixedcatch.olang:25:18: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   25 |     return try c.Raw(n) catch default c.Text()   # the try is a source (Raw, Array<Char>); the default is not
       |                  ^~~
 compilation failed with 1 error
 === vec41spawnview.olang
@@ -6880,97 +6995,97 @@ vec50elseifreturn.olang:26:24: note: borrowed here
 vec50elseifreturn.olang:29:21: note: used here, after it
    29 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec51elseifcatch.olang
-vec51elseifcatch.olang:29:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 28, which is used after it
-   29 |     for i in range 1000 { v.Push(i) } # frees the buffer
+vec51elseifcatch.olang:32:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 31, which is used after it
+   32 |     for i in range 1000 { v.Push(i) } # frees the buffer
       |                             ^~~~
-vec51elseifcatch.olang:28:19: note: borrowed here
-   28 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+vec51elseifcatch.olang:31:19: note: borrowed here
+   31 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
       |                   ^~~~~~~
-vec51elseifcatch.olang:31:21: note: used here, after it
-   31 |     try io.Println($d[0] " " $d[1])
+vec51elseifcatch.olang:34:21: note: used here, after it
+   34 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec52elseifmatch.olang
-vec52elseifmatch.olang:29:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 28, which is used after it
-   29 |     for i in range 1000 { v.Push(i) } # frees the buffer
+vec52elseifmatch.olang:32:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 31, which is used after it
+   32 |     for i in range 1000 { v.Push(i) } # frees the buffer
       |                             ^~~~
-vec52elseifmatch.olang:28:19: note: borrowed here
-   28 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+vec52elseifmatch.olang:31:19: note: borrowed here
+   31 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
       |                   ^~~~~~~
-vec52elseifmatch.olang:31:21: note: used here, after it
-   31 |     try io.Println($d[0] " " $d[1])
+vec52elseifmatch.olang:34:21: note: used here, after it
+   34 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec53caseguard.olang
-vec53caseguard.olang:31:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 30, which is used after it
-   31 |     for i in range 1000 { v.Push(i) } # frees the buffer
+vec53caseguard.olang:34:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 33, which is used after it
+   34 |     for i in range 1000 { v.Push(i) } # frees the buffer
       |                             ^~~~
-vec53caseguard.olang:30:19: note: borrowed here
-   30 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+vec53caseguard.olang:33:19: note: borrowed here
+   33 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
       |                   ^~~~~~~
-vec53caseguard.olang:33:21: note: used here, after it
-   33 |     try io.Println($d[0] " " $d[1])
+vec53caseguard.olang:36:21: note: used here, after it
+   36 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec54assertmsgreturn.olang
-vec54assertmsgreturn.olang:23:51: error[S17]: an assert's message may not return - it is evaluated only when the assert fails, and gives text
-   23 |     assert a.Len() > 100, (try h(a.Len()) catch { return pick(true, a, b) })
+vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only when the assert fails, and gives text
+   26 |     assert a.Len() > 100, (try h(a.Len()) catch { return pick(true, a, b) })
       |                                                   ^~~~~~
 compilation failed with 1 error
 === vec55forpost.olang
-vec55forpost.olang:28:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 27, which is used after it
-   28 |     for i in range 1000 { v.Push(i) } # frees the buffer
+vec55forpost.olang:31:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 30, which is used after it
+   31 |     for i in range 1000 { v.Push(i) } # frees the buffer
       |                             ^~~~
-vec55forpost.olang:27:19: note: borrowed here
-   27 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+vec55forpost.olang:30:19: note: borrowed here
+   30 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
       |                   ^~~~~~~
-vec55forpost.olang:30:21: note: used here, after it
-   30 |     try io.Println($d[0] " " $d[1])
+vec55forpost.olang:33:21: note: used here, after it
+   33 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec56genericelseif.olang
-vec56genericelseif.olang:30:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 29, which is used after it
-   30 |     for i in range 1000 { v.Push(i) } # frees the buffer
+vec56genericelseif.olang:33:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 32, which is used after it
+   33 |     for i in range 1000 { v.Push(i) } # frees the buffer
       |                             ^~~~
-vec56genericelseif.olang:29:19: note: borrowed here
-   29 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+vec56genericelseif.olang:32:19: note: borrowed here
+   32 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
       |                   ^~~~~~~
-vec56genericelseif.olang:32:21: note: used here, after it
-   32 |     try io.Println($d[0] " " $d[1])
+vec56genericelseif.olang:35:21: note: used here, after it
+   35 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec57spawntarget.olang
-vec57spawntarget.olang:31:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 30, which is used after it
-   31 |     for i in range 1000 { v.Push(i) } # frees the buffer
+vec57spawntarget.olang:34:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 33, which is used after it
+   34 |     for i in range 1000 { v.Push(i) } # frees the buffer
       |                             ^~~~
-vec57spawntarget.olang:30:19: note: borrowed here
-   30 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+vec57spawntarget.olang:33:19: note: borrowed here
+   33 |     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
       |                   ^~~~~~~
-vec57spawntarget.olang:33:21: note: used here, after it
-   33 |     try io.Println($d[0] " " $d[1])
+vec57spawntarget.olang:36:21: note: used here, after it
+   36 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec58regionlocal.olang
@@ -7034,17 +7149,17 @@ vec63regionnoteguided.olang:30:20: note: used here, after it
       |                    ^~~~
 compilation failed with 1 error
 === vec65assertmsgwrite.olang
-vec65assertmsgwrite.olang:29:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 28, which is used after it
-   29 |     for i in range 1000 { v.Push(i) }
+vec65assertmsgwrite.olang:32:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 31, which is used after it
+   32 |     for i in range 1000 { v.Push(i) }
       |                             ^~~~
-vec65assertmsgwrite.olang:28:19: note: borrowed here
-   28 |     d := longer(v.ViewMut(), other)
+vec65assertmsgwrite.olang:31:19: note: borrowed here
+   31 |     d := longer(v.ViewMut(), other)
       |                   ^~~~~~~
-vec65assertmsgwrite.olang:31:21: note: used here, after it
-   31 |     try io.Println($d[0] " " $d[1])
+vec65assertmsgwrite.olang:34:21: note: used here, after it
+   34 |     try io.Println($d[0] " " $d[1])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec68globalrefborrow.olang
@@ -7181,8 +7296,8 @@ vec88fieldviewpush.olang:11:17: note: borrowed here
 vec88fieldviewpush.olang:13:21: note: used here, after it
    13 |     try io.Println($d[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec89fieldtakeborrowed.olang
@@ -7206,8 +7321,8 @@ vec90structcopygrows.olang:12:10: note: borrowed here
 vec90structcopygrows.olang:14:21: note: used here, after it
    14 |     try io.Println($c.toks[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec91fieldcopygrows.olang
@@ -7220,8 +7335,8 @@ vec91fieldcopygrows.olang:11:12: note: borrowed here
 vec91fieldcopygrows.olang:13:21: note: used here, after it
    13 |     try io.Println($c[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec92methodgrows.olang
@@ -7234,8 +7349,8 @@ vec92methodgrows.olang:12:17: note: borrowed here
 vec92methodgrows.olang:14:21: note: used here, after it
    14 |     try io.Println($d[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'grow' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'grow' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec93methodresets.olang
@@ -7262,8 +7377,8 @@ vec94lambdakeeps.olang:11:17: note: borrowed here
 vec94lambdakeeps.olang:14:21: note: used here, after it
    14 |     try io.Println($f())
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec95globalkeeps.olang
@@ -7284,8 +7399,8 @@ vec96taskkeeps.olang:11:17: note: borrowed here
 vec96taskkeeps.olang:13:20: note: used here, after it
    13 |         spawn look(d)
       |                    ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'Push' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec97globalfieldgrows.olang
@@ -7298,8 +7413,8 @@ vec97globalfieldgrows.olang:12:18: note: borrowed here
 vec97globalfieldgrows.olang:14:21: note: used here, after it
    14 |     try io.Println($d[0])
       |                     ^
-$ROOT/std/prelude/vec.olang:31:32: note: 'bump' releases here
-   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+$ROOT/std/prelude/vec.olang:39:32: note: 'bump' releases here
+   39 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
 === vec98ownedholder.olang

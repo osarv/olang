@@ -5,12 +5,15 @@
 # and reads its IR: every lambda here asks for its captured scope (__olang_capture_scope), the Call adapter for its
 # instance's (__olang_scope_mine)
 import "std/io"
+error Stop {
+    HERE
+}
 type Node struct(v I64) {
     v
     next mut Node& = null
 }
 fn find(n mut Node&) mut Node&n ? {
-    if n.v >= 0 { error }
+    if n.v >= 0 { error Stop.HERE }
     return n
 }
 fn setNext(n mut Node&, i I64) { n.next = n.next if i < 0 else Node(i) }
@@ -80,10 +83,10 @@ fn main() ? {
     both(fn(i I64) { if (try find(c2) catch default Node(i)).v == i { c2.v = i } },
          fn(i I64) { if (try find(d2) catch default Node(i)).v == i { d2.v = i } })
     for k in range 20 {
-        if nodes[k].next == null or nodes[k].next.v != N - 1 { fail }
+        assert not (nodes[k].next == null or nodes[k].next.v != N - 1)
     }
     for k in range 20, 26 {
-        if nodes[k].v != N - 1 { fail }
+        assert nodes[k].v == N - 1
     }
     try io.Println("capscope: ok")
 }

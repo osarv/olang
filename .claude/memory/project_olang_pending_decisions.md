@@ -286,6 +286,13 @@ In effect: both as recommended; implementation waits for decision 49 to merge.
 them and tell me tomorrow/tonight"): decisions 1-51, each recorded in CLAUDE.md/HISTORY.md, are listed in
 archive/decisions_log.md. Append new hard decisions here, numbered from 52, one or two lines each with the rule and
 where it is recorded; the morning report lists them, then they move to the archive.
+52. (2026-10-17, from the errors batch's spec review /home/user/review/errors1) IEEE's invalid operation is INVALID
+   (NaN results, 0.0/0.0, inf-inf, NaN/inf to an integer); DIVIDE_BY_ZERO only for finite/0 and integers; `<<` checked by
+   value fit; int-to-narrow-float infinity is OVERFLOW; noreturn fits any value position, takes no part in inference, no
+   noreturn lambdas, T31 matches noreturn, extern may be noreturn; `!`/`try` take a clause-less `checked` operand;
+   `spawn f()!` allowed (ends the program); a Checked form requires its plain form; superset rule per instantiation;
+   lambdas infer errors without `?` in canonical order; error words may be written in a set (`? ListError.EMPTY`) so
+   catches are complete; one bad-base error for ParseInt/Format. Being built in wt-errors2.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the

@@ -7,8 +7,8 @@
 //
 //What makes a computation impossible here, and so falls back to run time: reading a mutable global (its
 //value is the running program's), writing any global (skipping the computation at run time would then skip
-//the write), an extern call, a call through a function value whose target cannot be, done/fail, reaching
-//abort/unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
+//the write), an extern call, a call through a function value whose target cannot be, reaching
+//unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
 //shift or conversion (undefined at run time - refused here rather than guessed), and running out of the step
 //budget. Every one of those is reported with the operation that caused it. A join's tasks run in sequence, each
 //to completion at the join, in the order spawned (K1).
@@ -19,7 +19,7 @@
 //
 //B3e: under "-i" the same evaluation runs a whole program (CtRunProgram), and what it refuses above because
 //only a running program may do it is done instead: globals are read and written, an extern is called in this
-//process through libffi (the runtime's own functions, X6, by this file's versions of them), done/fail exit, a
+//process through libffi (the runtime's own functions, X6, by this file's versions of them), os.Exit exits, a
 //guaranteed check aborts with the runtime's message, and there is no step budget. What the built program leaves
 //undefined still stops it, now naming the operation and its place. Tasks and destructors are not interpreted yet.
 //Memory is still never reclaimed, which a long run will notice.
@@ -134,19 +134,20 @@ const char* CT_WHY_INCOMPLETE = "it calls a function one of whose branches is st
 
 //K1: what aborts the program when reached - evaluation ends there, and where a value is required that is an error
 static const char* CT_WHY_UNREACHABLE = "it reaches unreachable code, which aborts the program";
-static const char* CT_WHY_ABORT = "it reaches abort, which aborts the program";
 static const char* CT_WHY_ASSERT = "an assertion in it fails, which aborts the program";
 static const char* CT_WHY_SLICE = "it slices out of range, which aborts the program";
 static const char* CT_WHY_LENGTH = "it makes an array of a length out of range, which aborts the program";
 static const char* CT_WHY_FIXED = "it copies an array of another length into fixed storage, which aborts the program";
+static const char* CT_WHY_BANG = "an error reaches '!', which ends the program";
+static const char* CT_WHY_TEST_ERROR = "an error leaves the test, which fails it";
 //B12a: the target is another architecture or system than this machine's - so its C math library is not the one this
 //process calls, and a function IEEE 754 does not pin down may give another result there
 static bool ctForeignTarget;
 //B12a, X8: a function of the C math library whose result is the library's own, for another machine than this one
 static const char* CT_WHY_FOREIGN_MATH = "it calls a function of the C math library whose result is the target's own library's, and the target is another machine";
 bool CtWhyAborts(const char* why) {
-    return why == CT_WHY_UNREACHABLE || why == CT_WHY_ABORT || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
-           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED;
+    return why == CT_WHY_UNREACHABLE || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
+           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED || why == CT_WHY_BANG || why == CT_WHY_TEST_ERROR;
 }
 
 //immutable globals already evaluated, or being evaluated (a cycle is a failure, not a hang). writable: its value reaches
@@ -178,6 +179,26 @@ static void ctRunAbortTok(struct token tok, const char* what) {
 
 //S18a: a written check that failed under -i says where, as the built program does - "FILE:LINE: what", then the
 //program's own message (text, evaluated now) when it gave one
+//S18d: the error return trace -i prints as the built program does - its last 32 places, the raise first
+static struct { struct token tok; const char* what; } ctErt[32];
+static long long ctErtN;
+static void ctTrace(struct token tok, const char* what, bool raise) {
+    if (!ctRun) return;
+    if (raise) ctErtN = 0;
+    ctErt[ctErtN & 31].tok = tok;
+    ctErt[ctErtN & 31].what = what;
+    ctErtN++;
+}
+static void ctTracePrint(void) {
+    if (ctErtN > 32) fprintf(stderr, "(%lld earlier places not kept)\n", ctErtN - 32);
+    for (long long i = ctErtN > 32 ? ctErtN - 32 : 0; i < ctErtN; i++) {
+        struct token t = ctErt[i & 31].tok;
+        struct str f = t.owner ? TokenGetFileName(t.owner) : StrFromCStr("?");
+        fprintf(stderr, "%.*s:%d: %s\n", f.len, f.ptr, t.lineNr, ctErt[i & 31].what);
+    }
+    ctErtN = 0;
+}
+
 static void ctRunAbortAt(struct statement* s, const char* what, struct ctVal* msg) {
     fflush(NULL);
     if (s && s->line > 0 && s->file.len) fprintf(stderr, "%.*s:%d: ", s->file.len, s->file.ptr, s->line);
@@ -198,6 +219,7 @@ static struct ctVal* ctFloat(struct type t, double f);
 //R20: a check under "try" failed with BuiltinError.word - as the generated code does, so the try's clauses (or the
 //function's error union) take it
 static struct ctVal* ctCheckFail(struct ctState* st, struct operand* op, char* word) {
+    ctTrace(op->checkRoot ? op->checkRoot->tok : op->tok, "raised here", true);
     st->flow = CF_ERROR;
     st->errType = *SemanticBuiltinErrorType();
     st->errWord = SemanticBuiltinErrorWord(word);
@@ -890,9 +912,16 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                     if (!TypeIsUnsigned(t) && y == -1 && !ctFits(t, -x)) return ctCheckFail(st, op, "OVERFLOW");
                     break;
                 case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: {
-                    //the amount in its own type: a negative one, or one past the width, is INVALID
+                    //the amount in its own type: a negative one, or one past the width, is OUT_OF_BOUNDS (QO6)
                     ctWide n = ctExact(b);
-                    if (n < 0 || n >= w) return ctCheckFail(st, op, "INVALID");
+                    if (n < 0 || n >= w) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
+                    if (op->opType == OPERATION_BTSFT_L) { //QO6: the true value x * 2^n has to fit
+                        const struct primInfo* p = PrimInfo(t.bType);
+                        bool un = p->kind == 'u';
+                        ctWide mx = un ? (((ctWide)1 << p->bits) - 1) : (((ctWide)1 << (p->bits - 1)) - 1);
+                        ctWide mn = un ? 0 : -((ctWide)1 << (p->bits - 1));
+                        if (x > (mx >> n) || x < (mn >> n)) return ctCheckFail(st, op, "OVERFLOW");
+                    }
                     break;
                 }
                 default: break;
@@ -1222,11 +1251,7 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
 
 static void ctScanStmt(struct ctScan* sc, struct statement* s) {
     if (sc->why) return;
-    struct token tok = s->op ? s->op->tok : s->var.tok;
     switch (s->sType) {
-        case STATEMENT_DONE: case STATEMENT_FAIL: //K1: abort and unreachable stop an evaluation only where reached
-            ctScanFail(sc, tok, "it ends the test or the process");
-            return;
         case STATEMENT_SPAWN: //K1: a task is run at its join, in sequence - what it does is what is scanned
             for (int i = 0; i < s->spawnTargets.len && !sc->why; i++) {
                 struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
@@ -1713,13 +1738,6 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
     st->mod = savedMod;
     //this call's clauses see it - or, for a Try form an operator called inside a tried expression, that try's (E31)
     if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = op->isTried ? NULL : op->checkRoot; }
-    //R17: through a bare "?" function, any error leaves as that function's own default error, its one word
-    struct type* generic = SemanticGenericErrorType();
-    if (st->flow == CF_ERROR && generic && func->type.errors.len == 1
-            && TypeIsSame(**(struct type**)ListGetIdx(&func->type.errors, 0), *generic)) {
-        st->errType = *generic;
-        st->errWord = 0;
-    }
     if (st->flow == CF_RETURN) {
         st->flow = CF_NORMAL;
         struct ctVal* r = st->ret;
@@ -1741,6 +1759,32 @@ static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
             match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
         }
         if (!match) continue;
+        if (!cc->ends) ctErtN = 0; //S18d: taken
+        if (cc->ends) { //E35: the program ends, naming the error, as a failed check does - while compiling, K1's abort
+            if (ctRun) {
+                fflush(NULL);
+                if (op->tok.owner && op->tok.lineNr > 0) {
+                    struct str f = TokenGetFileName(op->tok.owner);
+                    fprintf(stderr, "%.*s:%d: ", f.len, f.ptr, op->tok.lineNr);
+                }
+                struct str q = (struct str){0};
+                struct semaModule* o = st->errType.owner;
+                if (o && o->identity.len && !(o->identity.len >= 11 && !strncmp(o->identity.ptr, "std/prelude", 11))
+                        && o != st->mod) {
+                    q = o->identity;
+                    for (int k = q.len - 1; k >= 0; k--)
+                        if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
+                }
+                struct token w = st->errWord >= 0 && st->errWord < st->errType.words.len
+                                 ? *(struct token*)ListGetIdx(&st->errType.words, st->errWord) : (struct token){0};
+                fprintf(stderr, "%.*s%s%.*s.%.*s\n", q.len, q.ptr, q.len ? "." : "", st->errType.name.len,
+                        st->errType.name.ptr, w.str.len, w.str.ptr);
+                ctTracePrint();
+                abort();
+            }
+            ctFail(st, op->tok, cc->ends == 2 ? CT_WHY_TEST_ERROR : CT_WHY_BANG);
+            return NULL;
+        }
         st->flow = CF_NORMAL;
         if (cc->hasBlock) {
             size_t mark = (size_t)st->locals->len;
@@ -1751,6 +1795,7 @@ static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
         if (!cc->dflt) return NULL;
         return ctFit(st, cc->dflt, op->tryDefaultType);
     }
+    if (op->isTried) ctTrace(op->tok, "try passed it on", false); //S18d
     return NULL; //no clause named it: it propagates
 }
 
@@ -2326,7 +2371,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 bool hit = v && v->kind != CT_NULL && v->i == op->castTag; //T17d: a null reference holds no case
                 if (!isAs) return ctBool(hit);
                 if (!hit) {
-                    if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
+                    if (op->checkRoot) return ctCheckFail(st, op, "WRONG_CASE");
                     if (ctRun) ctRunAbortTok(op->tok, "'as' named what the value is not\n");
                     return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
                 }
@@ -2748,6 +2793,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             }
             return;
         case STATEMENT_ERROR:
+            ctTrace(tok, "raised here", true);
             st->flow = CF_ERROR;
             st->errType = s->op->type;
             st->errWord = s->op->intLiteralVal;
@@ -2766,23 +2812,21 @@ static void ctExec(struct ctState* st, struct statement* s) {
                     match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
                 }
                 if (!match) continue;
+                ctErtN = 0; //S18d: taken
                 st->flow = CF_NORMAL;
                 ctExecBlock(st, &cc->block);
                 return;
             }
+            ctTrace(s->op->tok, "try passed it on", false);
             return; //no clause named it: it propagates
         }
-        case STATEMENT_DONE: case STATEMENT_FAIL: case STATEMENT_ABORT: case STATEMENT_UNREACHABLE:
-            if (ctRun) { //B3e/S16: the process ends, as the built program's does outside a test
+        case STATEMENT_UNREACHABLE:
+            if (ctRun) { //B3e/S16d: the process aborts, as the built program's does outside a test
                 fflush(NULL);
-                if (s->sType == STATEMENT_DONE) exit(0);
-                if (s->sType == STATEMENT_FAIL) exit(1);
-                ctRunAbortAt(s, s->sType == STATEMENT_ABORT ? "aborted" : "reached unreachable code", NULL);
+                ctRunAbortAt(s, "reached unreachable code", NULL);
             }
-            //K1: abort and unreachable end the evaluation where reached, as they end the program; done and fail end a
-            //test or the process, which only a running program has
-            ctFail(st, tok, s->sType == STATEMENT_ABORT ? CT_WHY_ABORT : s->sType == STATEMENT_UNREACHABLE ? CT_WHY_UNREACHABLE
-                            : "it ends the test or the process");
+            //K1: unreachable ends the evaluation where reached, as it ends the program
+            ctFail(st, tok, CT_WHY_UNREACHABLE);
             return;
         case STATEMENT_DEFER: return; //S19: registered by the block it is in (ctExecBlock), and run on its way out
         case STATEMENT_JOIN: {
@@ -2805,6 +2849,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->errWord = jf.errWord;
             st->errBypass = false;
             st->errCheckRoot = NULL;
+            ctTrace(s->startTok.owner ? s->startTok : tok, "a task failed, and its join passed it on", true); //S18d: as the run time - a task's trace is its own
             for (int c = 0; c < s->catchClauses.len; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
                 bool match = cc->catchAll;
@@ -2814,6 +2859,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 }
                 if (!match) continue;
                 st->flow = CF_NORMAL;
+                ctErtN = 0; //S18d: taken
                 int mark = st->locals->len;
                 ctExecBlock(st, &cc->block);
                 st->locals->len = mark;
@@ -3349,12 +3395,11 @@ static int ctRunStopped(struct ctState* st) {
 //B5: an error escaping main is named, as the built program names it
 static int ctRunUnhandled(struct ctState* st) {
     fflush(NULL);
-    struct type* generic = SemanticGenericErrorType();
-    if (generic && TypeIsSame(st->errType, *generic)) fputs("unhandled error\n", stderr);
-    else if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
+    if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
         struct token w = *(struct token*)ListGetIdx(&st->errType.words, (int)st->errWord);
         fprintf(stderr, "unhandled error: %.*s.%.*s\n", st->errType.name.len, st->errType.name.ptr, w.str.len, w.str.ptr);
     } else fputs("unhandled error\n", stderr);
+    ctTracePrint();
     return 1;
 }
 

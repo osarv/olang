@@ -21,6 +21,7 @@ type Tok enum {
     If
     Else
     Try
+    Checked
     Catch
     Return
     Join
@@ -28,11 +29,9 @@ type Tok enum {
     Defer
     Break
     Continue
-    Abort
     Unreachable
     Extends
-    Done
-    Fail
+    Noreturn
     Assert
     For
     Do
@@ -89,6 +88,7 @@ type Tok enum {
     EqEq
     Arrow
     NotEq
+    Bang
     Lt
     Le
     Gt
@@ -127,8 +127,8 @@ fn (t Token) Has(flag U8) Bool { return (t.Flags & flag) != 0 }
 fn (k Tok) EndsStatement() Bool {
     return match k {
         case Tok.Iden, Tok.IntLit, Tok.FloatLit, Tok.CharLit, Tok.StrLit, Tok.BoolLit, Tok.NullLit => true
-        case Tok.Inc, Tok.Dec, Tok.RParen, Tok.RBrack => true
-        case Tok.Return, Tok.Done, Tok.Fail, Tok.Error, Tok.Break, Tok.Continue, Tok.Abort, Tok.Unreachable => true
+        case Tok.Inc, Tok.Dec, Tok.Bang, Tok.RParen, Tok.RBrack => true
+        case Tok.Return, Tok.Error, Tok.Noreturn, Tok.Break, Tok.Continue, Tok.Unreachable => true
         nomatch => false
     }
 }
@@ -140,6 +140,7 @@ fn (k Tok) Text() String& {
         case Tok.If => "if"
         case Tok.Else => "else"
         case Tok.Try => "try"
+        case Tok.Checked => "checked"
         case Tok.Catch => "catch"
         case Tok.Return => "return"
         case Tok.Join => "join"
@@ -147,11 +148,9 @@ fn (k Tok) Text() String& {
         case Tok.Defer => "defer"
         case Tok.Break => "break"
         case Tok.Continue => "continue"
-        case Tok.Abort => "abort"
         case Tok.Unreachable => "unreachable"
         case Tok.Extends => "extends"
-        case Tok.Done => "done"
-        case Tok.Fail => "fail"
+        case Tok.Noreturn => "noreturn"
         case Tok.Assert => "assert"
         case Tok.For => "for"
         case Tok.Do => "do"
@@ -208,6 +207,7 @@ fn (k Tok) Text() String& {
         case Tok.EqEq => "=="
         case Tok.Arrow => "=>"
         case Tok.NotEq => "!="
+        case Tok.Bang => "!"
         case Tok.Lt => "<"
         case Tok.Le => "<="
         case Tok.Gt => ">"
@@ -253,18 +253,17 @@ fn Keyword(t String&, at I64, n I64) Tok {
         case 'a' {
             if n == 2 and t[at + 1] == 's' { return Tok.As }
             if n == 3 and spells(t, at, "and") { return Tok.And }
-            if n == 5 and spells(t, at, "abort") { return Tok.Abort }
             if n == 6 and spells(t, at, "assert") { return Tok.Assert }
         }
         case 'b' { if n == 5 and spells(t, at, "break") { return Tok.Break } }
         case 'c' {
             if n == 4 and spells(t, at, "case") { return Tok.Case }
             if n == 5 and spells(t, at, "catch") { return Tok.Catch }
+            if n == 7 and spells(t, at, "checked") { return Tok.Checked }
             if n == 8 and spells(t, at, "continue") { return Tok.Continue }
         }
         case 'd' {
             if n == 2 and t[at + 1] == 'o' { return Tok.Do }
-            if n == 4 and spells(t, at, "done") { return Tok.Done }
             if n == 5 and spells(t, at, "defer") { return Tok.Defer }
             if n == 7 and spells(t, at, "default") { return Tok.Default }
             if n == 8 and spells(t, at, "destruct") { return Tok.Destruct }
@@ -279,7 +278,6 @@ fn Keyword(t String&, at I64, n I64) Tok {
         case 'f' {
             if n == 2 and t[at + 1] == 'n' { return Tok.Fn }
             if n == 3 and spells(t, at, "for") { return Tok.For }
-            if n == 4 and spells(t, at, "fail") { return Tok.Fail }
             if n == 5 and spells(t, at, "false") { return Tok.BoolLit }
         }
         case 'i' {
@@ -300,6 +298,7 @@ fn Keyword(t String&, at I64, n I64) Tok {
             if n == 3 and spells(t, at, "not") { return Tok.Not }
             if n == 4 and spells(t, at, "null") { return Tok.NullLit }
             if n == 7 and spells(t, at, "nomatch") { return Tok.Nomatch }
+            if n == 8 and spells(t, at, "noreturn") { return Tok.Noreturn }
         }
         case 'o' {
             if n == 2 and t[at + 1] == 'r' { return Tok.Or }
@@ -339,8 +338,8 @@ fn spells(t String&, at I64, word String&) Bool {
 }
 
 test "Keyword finds every reserved word and nothing else" {
-    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break,
-                 Tok.Continue, Tok.Abort, Tok.Unreachable, Tok.Extends, Tok.Done, Tok.Fail, Tok.Assert, Tok.For, Tok.Do,
+    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Checked, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break,
+                 Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do,
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum,
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Own, Tok.Take, Tok.Import, Tok.Test, Tok.Destruct,
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.NullLit] {

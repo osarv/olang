@@ -79,13 +79,18 @@ fn (f mut Fetcher&) load() {
     }
 }
 
+# Locked's miss: the lock file has no line for the key
+error unlocked {
+    KEY
+}
+
 # the commit the lock file names for key, or a miss
 fn (f mut Fetcher&) Locked(key String&) String&f ? {
     f.load()
     for i in range f.keys.Len() {
         if f.keys[i] == key { return f.commits[i] }
     }
-    error
+    error unlocked.KEY
 }
 
 # records key at commit and writes the whole file back, sorted, so it reads the same however it was built up - a line
@@ -283,7 +288,7 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     defer { try os.RemoveAll(scratch) catch os.OsError { } }
     base := $scratch "/remote"
     c1 := makeRepo(base, "tools", "fn F() I64 { return 1 }\n")
-    if c1 == "" { done }   # no git here: nothing to fetch with
+    if c1 == "" { return }   # no git here: nothing to fetch with
     cache := $scratch "/cache"
     lockPath := $scratch "/olang.lock"
     f := Fetcher(lockPath, cache, "file://" $base "/", false, true)

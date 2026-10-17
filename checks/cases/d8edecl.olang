@@ -1,0 +1,6 @@
+# check: fail error[D8e]: a 'noreturn' call gives no value, so ':=' has no type to take
+# D8e: noreturn is not a type - nothing is declared from such a call
+import "std/os"
+fn main() {
+    x := os.Exit(2)
+}

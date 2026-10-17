@@ -20,10 +20,10 @@ fn vecWork(k I64) I64 {
     v := Vec<I64>()
     for i in range 100 { v.Push(i * k) }
     t := v.Len() + v[99]
-    v.Insert(0, 7)
-    t += v.TakeAt(50) + v.SwapTake(1) + v[1]
-    v.RemoveAt(2)                                       # gives nothing: Remove lets go, Take gives
-    v.SwapRemove(3)
+    try v.Insert(0, 7) catch { unreachable }
+    t += (try v.TakeAt(50) catch { unreachable }) + (try v.SwapTake(1) catch { unreachable }) + v[1]
+    try v.RemoveAt(2) catch { unreachable }             # gives nothing: Remove lets go, Take gives
+    try v.SwapRemove(3) catch { unreachable }
     t += v[2] + v[3] + v.Len()
     v.Reverse()
     v.Sort(fn(a I64, b I64) Bool { return a < b })
@@ -70,9 +70,9 @@ test "Vec: an empty one fails First, Last, Pop and IndexOf with the default erro
     v := Vec<I64>()
     assert v.Len() == 0 and (try v.First() catch default -1) == -1 and (try v.Last() catch default -1) == -1
     assert (try v.Pop() catch default -1) == -1 and (try v.IndexOf(3) catch default -1) == -1
-    assert (try v[0] catch default -1) == -1           # E31a: the derived checked form
+    assert (checked v[0] catch default -1) == -1           # E31a: the derived checked form
     v.Push(4)
-    assert (try v[1] catch default -1) == -1 and (try v[0] catch default -1) == 4
+    assert (checked v[1] catch default -1) == -1 and (checked v[0] catch default -1) == 4
 }
 
 test "Vec: growth keeps every element, the buffer doubling from 8" {
@@ -203,7 +203,7 @@ fn vecLexWork(k I64) I64 {
     t += moved.Len() * 10 + l.toks.Len()
     l.toks = take moved                         # ...and given back
     l.toks.Push(vecTok("z", 99))
-    t += l.toks.TakeAt(0).line + l.toks.SwapTake(1).line + l.toks.Len()
+    t += (try l.toks.TakeAt(0) catch { unreachable }).line + (try l.toks.SwapTake(1) catch { unreachable }).line + l.toks.Len()
     return t
 }
 VecLexBaked I64 = vecLexWork(3)                 # K2: computed while compiling

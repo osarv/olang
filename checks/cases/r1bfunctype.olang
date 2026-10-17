@@ -1,0 +1,4 @@
+# check: fail a function type writes its error set
+# R1b: a function type says what its values may fail with - no body says it for them - so "?" alone in one is an error
+fn apply(f fn(x I64) I64 ?, x I64) I64 ? { return try f(x) }
+fn main() { }

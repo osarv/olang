@@ -12,8 +12,8 @@ fn bump(c mut Acc&) { c.N++ }
 fn bumpPt(p mut Pt&) { p.X++ }
 fn f() I64 {
     a := Acc[Acc(), Acc()]
-    (try a[1] catch default Acc()).P.X = 5
-    (try a[1] catch default Acc()).N++
+    (checked a[1] catch default Acc()).P.X = 5
+    (checked a[1] catch default Acc()).N++
     return a[1].P.X * 10 + a[1].N
 }
 Baked := f()
