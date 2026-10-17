@@ -731,6 +731,49 @@ fn (c mut Checker&) between(a source.Span, b source.Span, n I64) source.Span {
 # a member's name's span: the end of the member expression
 fn memberSpan(sp source.Span, n I64) source.Span { return source.Span(sp.End - I32(n), sp.End) }
 
+# the first of these characters after a span, past spaces: an operator's position (an index's "[", an assignment's
+# "=", a compound one's "+="), the span itself where none follows
+fn (c mut Checker&) opAfter(sp source.Span, n I64) source.Span {
+    t := c.P.L.Mods[c.fr().Mi].Src.Text
+    i := I64(sp.End)
+    for i < t.Len() and (t[i] == ' ' or t[i] == ')') { i++ }
+    if i >= t.Len() { return sp }
+    return source.Span(I32(i), I32(i + n))
+}
+
+# where an index is written: its "[" (E16, E31)
+fn (c mut Checker&) bracketOf(base ast.Expr&) source.Span { return c.opAfter(base.Span(), 1) }
+
+# where a write into a place is written (T25b, S6): a member's name, an index's "[", else the whole target
+fn (c mut Checker&) writeAt(target ast.Expr&) source.Span {
+    match target {
+        case ast.Expr.Member(sp, _, n) { return memberSpan(sp, c.text(n).Len()) }
+        case ast.Expr.Index(_, y, _) { return c.bracketOf(y) }
+        case ast.Expr.Paren(_, y) { return c.writeAt(y) }
+        nomatch { return target.Span() }
+    }
+}
+
+# an operation needing the method cap on t where t declares one of that name of another shape - an ordinary method
+# (E31, M6b): said at sp, the operation as what, and true; false where t declares none of that name
+fn (c mut Checker&) notOperator(t types.TypeId, cap String&, sp source.Span, what String&, want I64, atLeast Bool) Bool {
+    if t == types.UnknownT or not c.isNamed(t) { return false }
+    m := c.P.MethodOf(t, c.P.L.Names.Intern(cap))
+    if m < 0 { m = c.P.MethodOf(t, c.P.L.Names.Intern(lowerFirst(cap))) }
+    if m < 0 { return false }
+    got := c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() - 1
+    if (got >= want if atLeast else got == want) { return false }
+    have := "no parameters" if got == 0 else ("one parameter" if got == 1 else $got " parameters")
+    n := "one" if want == 1 else $want
+    arity := "none" if want == 0 else ($"at least " $n if atLeast else n)
+    rec := c.err(sp, msgs.NotTheOperator(c.ty(t), c.text(c.P.FnDecl(m).Name), have, what, arity))
+    fd := c.P.FnDecl(m)
+    file := c.P.L.Mods[c.P.FnModule(m)].File
+    ns := fd.Sp
+    c.P.L.Diags.Note(rec, diag.Where.Span(file, I64(ns.Start), I64(ns.End)), msgs.NoteDeclaredHere(c.tok(fd.Name)))
+    return true
+}
+
 # a type as source writes it (B11): a declared type by its name, its arguments after it; an inner reference's
 # permission before it, the outermost's said in words (T25c)
 fn (c mut Checker&) ty(t types.TypeId) String {
@@ -3351,7 +3394,8 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
         }
         m := c.roleMethod(dt, "At", items.Len())
         if m >= 0 { return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedTryAt(sp, base, dt, items)) }
-        c.err(sp, msgs.NotIndexable(c.ty(dt)))
+        bsp := c.bracketOf(x)
+        if not c.notOperator(dt, "At", bsp, "'x[i]'", 1, true) { c.err(bsp, msgs.NotIndexable(c.ty(dt))) }
         return c.unknown(sp)
     }
     p := c.elemPlace(sp, base, items)
@@ -3958,7 +4002,7 @@ fn (c mut Checker&) dropTaken(errs mut List<types.TypeId>&, mark I64, cls List<t
 fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
     p := c.place(y)
     if p == null { return }
-    if c.writeBack(sp, token.Tok.PlusEq if inc else token.Tok.MinusEq, p, null) { return }
+    if c.writeBack(sp, token.Tok.PlusEq if inc else token.Tok.MinusEq, p, null, c.opAfter(y.Span(), 2)) { return }
     c.notCapture(p, y.Span())
     t := p.Type()
     if not c.isNumber(t) or (c.isNamed(t) and not c.P.Extends(t)) {
@@ -4054,7 +4098,8 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             m := c.P.MethodOf(dt, c.P.L.Names.Intern("SetAt"))
             if m < 0 { m = c.P.MethodOf(dt, c.P.L.Names.Intern("setAt")) }
             if m < 0 {
-                c.err(isp, msgs.SetatUndeclared(c.ty(dt)))
+                osp := c.opAfter(target.Span(), 1)
+                if not c.notOperator(dt, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.SetatUndeclared(c.ty(base.Type()))) }
                 return true
             }
             pre mut Array<typed.Expr&>&c = null
@@ -4211,8 +4256,9 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         c.expr(value, types.UnknownT)
         return
     }
-    if c.writeBack(sp, op, p, value) { return }
-    c.notCapture(p, target.Span())
+    osp := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
+    if c.writeBack(sp, op, p, value, osp) { return }
+    c.notCapture(p, c.writeAt(target))
     t := p.Type()
     if op == token.Tok.Assign {
         x := c.exprTo(value, t)
@@ -4246,7 +4292,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         if c.isNumber(vt) and not c.isNamed(vt) and c.P.Flows(vt, t) {
             v = c.convert(value.Span(), v, t)
         } else {
-            c.err(value.Span(), msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
+            c.err(osp, msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
         }
     }
     c.emit(typed.Stmt.Assign(sp, p, c.prim(sp, t, binaryOp(bop), old, v)))
@@ -4286,7 +4332,7 @@ fn (c mut Checker&) replaceTemp(p typed.Place&c, t I64) typed.Place&c {
 # a store into x[i]... through At (E31b): x's place and the indices held, the value evaluated, then the element read
 # into a local, the store made into it, and the element written back by SetAt - nothing the program wrote runs
 # between the read and the write-back. Whether it is handled
-fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&) Bool {
+fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&, osp source.Span) Bool {
     vsp := value.Span() if value != null else sp
     ri := c.valueTemp(p)
     if ri < 0 { return false }
@@ -4317,7 +4363,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
             if tm >= 0 { sm = tm }
         }
         if sm < 0 {
-            c.err(sp, msgs.SetatUndeclared(c.ty(of)))
+            if not c.notOperator(of, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.WriteThroughAtNoSetat(c.ty(of))) }
             if value != null { c.expr(value, types.UnknownT) }
             return true
         }
