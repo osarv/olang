@@ -30,7 +30,7 @@ one() {
     fi
 }
 for mode in "" " -t"; do
-    for f in *.olang geom/*.olang std/*.olang compiler/*.olang compiler/tools/*.olang checks/checks.olang fuzz/*.olang \
+    for f in tests/*.olang tests/geom/*.olang std/*.olang compiler/*.olang compiler/tools/*.olang checks/checks.olang fuzz/*.olang \
              bench/*.olang; do
         [ "$f" = usertest.olang ] && continue
         one "$mode" "$f"

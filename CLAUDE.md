@@ -498,7 +498,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   carries the target's CPU and features and `null_pointer_is_valid`; LLVM 18's BF16/F16 bugs are worked around (BF16
   narrowing as integer arithmetic, asm fences on F16 bitcasts, FastISel off in `-d`, AVX512-BF16 conversions removed -
   T4, E33, B2c, B12c). The arena under `-s` poisons with `0x7FF5...`, protects and holds back closed chunks.
-- **Testing.** `make verify` runs the corpus (`shared.olang`, `worker.olang`, `runner.olang`), std's tests, `checks/`
+- **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
 

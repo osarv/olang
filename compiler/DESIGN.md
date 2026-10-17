@@ -1003,7 +1003,7 @@ Rules:
   study2 measured 172-199 MB for 4.6 MB of source.
 
 Estimated peak for a build of the compiler itself (about 1.2 MB of compiler source plus 0.6 MB of std):
-150-250 MB. The C compiler frees nothing and peaks at 3.0 GB on `runner.olang`. M5 measures the real figure.
+150-250 MB. The C compiler frees nothing and peaks at 3.0 GB on `tests/runner.olang`. M5 measures the real figure.
 
 ### 3.2 `-t`: one process per file
 

@@ -17,10 +17,10 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # M1: a module is one file, and a directory only groups them - the std modules and the prelude's files (with the
 # tests of some prelude files in std/prelude/tests, a directory of ordinary modules - only std/prelude's own files are
 # the prelude),
-# geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
+# tests/ (the corpus: shared, worker, runner, Base, Lib) and tests/geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
 # in olang like the rest; tools/ (the migration tools and what they share) and compiler/tools/genmsgs.olang have tests too
-OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang)) $(wildcard geom/*.olang) $(wildcard std/*.olang) \
+OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) \
 	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
@@ -111,7 +111,7 @@ bootstrap: build/stage0
 	@echo "bootstrap: stage 0 is build/stage0 - compiler/ holds no olang compiler yet, so there are no later stages"
 
 run: $(OLANG)
-	$(OLANG_ENV) $(OLANG) -b runner.olang
+	$(OLANG_ENV) $(OLANG) -b tests/runner.olang
 
 # picks up every *.olang file automatically - a new test file needs no makefile edit to be included.
 # (usertest.olang is the one deliberate exception - a gitignored scratch file, never part of the suite.)
@@ -139,7 +139,7 @@ checkir:
 
 # the one command to run before considering any change done: a from-scratch build with -Werror, the full
 # olang test suite (every test{} block across every .olang file), and an end-to-end smoke test of the -c
-# production compile path (build runner.olang as a real program, then actually run the resulting binary -
+# production compile path (build tests/runner.olang as a real program, then actually run the resulting binary -
 # not just compile it, since "run" alone only builds). Each step is a separate recursive make invocation so
 # they run in strict sequence (clean genuinely finishes before the rebuild starts, not just "prerequisite
 # order", which make doesn't guarantee under -j); any failure - a compiler warning, a failing olang test, a
@@ -149,7 +149,7 @@ verify:
 	$(MAKE) clean
 	$(MAKE) test
 	$(MAKE) run
-	./build/runner
+	./build/tests_runner
 	$(MAKE) checkir
 	$(MAKE) tokdiff
 	$(MAKE) astdiff
@@ -160,10 +160,10 @@ verify:
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
 # intentional data race - the "several tasks may be handed the same instance" test, which exists to show
 # that the language permits one since P3 was withdrawn - so a correct run of this target REPORTS exactly
-# one race, in shared.Tally.readOut, and exits nonzero for it. More than one means something regressed.
+# one race, in tests/shared.Tally.readOut, and exits nonzero for it. More than one means something regressed.
 race: $(OLANG)
 	-$(OLANG) -t -r $(filter-out checks/checks.olang, $(OLANG_TESTS))
-	@echo "race: expect exactly one report, in shared.Tally.readOut (the intentional one)"
+	@echo "race: expect exactly one report, in tests/shared.Tally.readOut (the intentional one)"
 
 # the differential fuzzer (fuzz/, K1): random programs whose every value is computed while compiling, built -O3, built
 # -O0 and interpreted, each run compared. Not part of "verify" - it runs as long as it is asked to. "make fuzz
@@ -178,7 +178,7 @@ fuzz: $(OLANG)
 	$(OLANG_ENV) nice -n 19 ./build/fuzz_fuzz.debug run $(SEED) $(COUNT) $(JOBS) $(CASES)
 
 # the suite under the scope sanitizer (B2f): every use of storage after its scope closed stops the program, or fails the
-# test it happens in. Not part of "verify" - shared.olang alone takes a minute and a half under it - and not a race-style
+# test it happens in. Not part of "verify" - tests/shared.olang alone takes a minute and a half under it - and not a race-style
 # expected count either: a correct run passes every test, and a failure is a use after free the static check (section
 # 8) let through. checks.olang is left out: what it checks is the compiler, and it runs its own sanitized builds.
 scopesan: $(OLANG)
