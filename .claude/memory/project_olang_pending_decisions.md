@@ -53,6 +53,19 @@ design. Do what you want") - nothing to decide until a GUI is written.
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
   PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
   print/println/eprint/eprintln and M19f's exception removed; tools/io_print.py migrates (wt-ioprint, started).
+- QO3 (2026-10-17, replaces QO1/QO2 and PRINT's "stop the program"). The user: no exceptions; "Print should not exit
+  because the user doesn't know what to do if it fails. No std function may ever exit really ever." Proposal: bare `?`
+  means "the built-in errors", a closed small set common everywhere, with a carve-out (read as: they pass through a
+  `?` function's calls with no `try`); named errors are declared on top (`? IoError` = built-ins + IoError).
+  My answer: yes, with three direction questions: (1) the carve-out is implicit propagation of the built-ins only, in
+  functions whose signature has `?` - PRINCIPLES.md's "no hidden control flow" narrows to "every way out is in the
+  signature"; (2) "no std function exits" covers std's misuse asserts too (RemoveAt out of range, Send on a closed
+  channel, a bad base become OUT_OF_BOUNDS/INVALID), while language guarantees (a failed assert, unreachable, out of
+  memory, a thread that will not start) still abort; (3) function types may carry `?`, so Map/Fold/Sort pass a
+  callback's built-in errors on (a callback that cannot fail still fits). Details mine: the set is FAILED (today's
+  default error), IO, OUT_OF_BOUNDS, OVERFLOW, DIVIDE_BY_ZERO, INVALID; a named error a bare-`?` function lets through
+  with `try` becomes FAILED (today's generalization); Str/Eq/Hash/destructors stay infallible. In effect until
+  answered: nothing changes; wt-ioprint's "Print stops the program" is provisional.
 - QO2. Too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
   replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
   Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
