@@ -1,5 +1,5 @@
 // modgraph [-t] [-D NAME=VALUE]... FILE - the C compiler's module graph, the oracle the self-hosted loader is compared
-// with (compiler/DESIGN.md section 4, compiler/tools/modgraph.sh). The program rooted at FILE is analyzed as "olang compile"
+// with (compiler/DESIGN.md section 4, compiler/tools/modgraph.olang). The program rooted at FILE is analyzed as "olang compile"
 // analyzes it - its build-decided branches decided, so the graph is of the modules the build really reaches - and
 // written as the self-hosted loader's Graph() writes it: the modules sorted by identity, each "module IDENTITY" followed
 // by its imports, "  ALIAS IDENTITY", sorted. The build constants are those "dump modules" gives (TargetOs linux,

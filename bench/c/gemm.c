@@ -1,4 +1,4 @@
-/* gemm: C = A B for square matrices, the C side of bench/gemm.sh - the same matrices and the same timing as
+/* gemm: C = A B for square matrices, the C side of bench/rungemm.olang - the same matrices and the same timing as
    bench/gemm.olang (the best of several runs, GFLOPS printed), three ways:
      naive    the i-k-j loop (bench/c/matmul.c's), each row of C updated from a row of B
      blocked  std/linalg's algorithm written in C: B packed into KC x NC panels of NR columns, A into MC x KC panels of

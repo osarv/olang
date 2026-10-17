@@ -24,5 +24,7 @@ Whether the makefile also becomes olang (`olang build.olang`) was asked (QT).
 
 **Status 2026-10-17:** every Python script is ported (wt-pyport, merged): tools/*.olang (io_print, io_try, io_fix,
 bare_typevars, perm_mut, int_literal_i64, shared srcmask/diagedit), compiler/tools/genmsgs.olang, the HTTP test server
-in olang over sockets. Run a tool as `build/out -b tools/X.olang && build/tools_X ARGS` (tools/README.md). Left: the
-shell scripts (compiler/tools/*.sh, bench/*.sh, the awk fixture) - a later port.
+in olang over sockets. Run a tool as `build/out build tools/X.olang && build/tools_X ARGS` (tools/README.md). The shell
+and awk scripts followed (wt-shport, merged 2026-10-17: compiler/tools/*.olang sharing toolkit.olang, bench/run, rungemm,
+runfused, ir, the envcheck fixture). Left: inline awk one-liners in the makefile's checkir recipe and two commands in
+checks/checks.olang.

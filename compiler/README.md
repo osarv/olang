@@ -29,9 +29,14 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 
 ## Subfolders
 
-- `tools/` - the acceptance tools (below), `dump.olang` (prints what the passes make of a file), `unparse.olang`,
-  `diaggold.olang`, `genmsgs.olang` (writes `msgs.olang` from the C table; from the repository root,
-  `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
+- `tools/` - the acceptance tools (below), all olang programs (the shell scripts they began as are gone):
+  `tokdiff`, `astdiff`, `namesdiff`, `layoutdiff` and `modgraph` compare the self-hosted passes with stage 0's oracles
+  and goldens, `layoutgold` and `diaggold_capture` capture the goldens again, and `toolkit.olang` is what they share
+  (running a program without a shell, reading a tool's output as rows, a scratch directory, `diff`). Each is built and
+  run by its make target (`make tokdiff`), or by hand from the repository root: `build/out build
+  compiler/tools/tokdiff.olang && build/compiler_tools_tokdiff [FILE...]`. Also `dump.olang` (prints what the passes
+  make of a file), `unparse.olang`, `diaggold.olang`, `genmsgs.olang` (writes `msgs.olang` from the C table; from the
+  repository root, `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
 - `goldens/` - what stage 0 gave, captured: `diag.txt` (diagnostics per checks case), `layout.txt` and
   `layout.deferred` (type layouts per program).
 - `testdata/lex/` - small inputs for the scanner's tests.

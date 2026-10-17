@@ -1,4 +1,4 @@
-# the types compiler/tools/layoutdiff.sh lets the self-hosted type table leave unlaid ("deferred"), one key per line
+# the types compiler/tools/layoutdiff.olang lets the self-hosted type table leave unlaid ("deferred"), one key per line
 # as compiler/goldens/layout.txt writes it, with why. Each needs what M5a does not have yet; when the milestone that
 # brings it lands, its lines go and layoutdiff holds those types to stage 0's layouts too.
 #

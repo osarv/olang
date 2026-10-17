@@ -1,0 +1,149 @@
+# namesdiff [CASE...] - M4's acceptance for diagnostics (compiler/DESIGN.md section 4): on every checks/cases program,
+# the errors load and names say - their rules are loading's and names' (M1-M23b, D2, D3a, B9a, B10, B10a, B10c) -
+# are the errors of those rules stage 0 said (compiler/goldens/diag.txt), at the same file, line and column. A case whose
+# golden has none of those rules must get none: no error where stage 0 found the program right. Prints the differences
+# and exits 1 if there are any.
+#
+# Run from the repository root after "make build/compiler_tools_dump". A case's "# flags:" give "dump names" its
+# -define constants and -t; the cases with none run in one process. NAMESDIFF_DUMP names another build of the dump.
+
+import "std/os"
+import "std/filepath"
+import "toolkit"
+
+fn main() {
+    dump := toolkit.Env("NAMESDIFF_DUMP", "build/compiler_tools_dump")
+    golden := "compiler/goldens/diag.txt"
+    if not toolkit.Built(dump) { toolkit.Die("namesdiff: " $dump " is not built (make " $dump ")") }
+    root := try os.Cwd() catch os.OsError {
+        toolkit.Die("namesdiff: no working directory")
+        unreachable
+    }
+    cases := List<String&>()
+    if os.Args().Len() > 1 {
+        for i in range 1, os.Args().Len() { cases.Push(os.Args()[i]) }
+    } else {
+        for f in toolkit.Matching("checks/cases", ".olang") { cases.Push($filepath.Base(f)) }
+    }
+    said := StringBuilder()
+    plain := List<String&>()
+    for c in cases {
+        text := try os.ReadFile("checks/cases/" $c) catch default ""
+        args := flagArgs(flagsOf(text))
+        if args.Len() == 0 {
+            plain.Push(c)
+        } else {
+            said.Push(names(root, dump, args, String&[c]))
+        }
+    }
+    if plain.Len() > 0 { said.Push(names(root, dump, Array<String&>(0), plain.ToArray())) }
+    n := toolkit.Sections(said.ToString())
+    if n != cases.Len() { toolkit.Die("namesdiff: dump names printed " $n " of " $cases.Len() " cases") }
+    new := toolkit.Text(toolkit.Sorted(rows(said.ToString())))
+    want := Map<String&, Bool>()
+    for c in cases { want.Put(c, true) }
+    kept := List<String&>()
+    for r in rows(toolkit.Read(golden)) {
+        tab := try r.FindByte('\t') catch default -1
+        if tab >= 0 and r[0:tab] in want { kept.Push($r) }
+    }
+    old := toolkit.Text(toolkit.Sorted(kept))
+    if old != new {
+        work := toolkit.Scratch("namesdiff")
+        defer toolkit.Clean(work)
+        toolkit.Say("namesdiff: stage 0 (<) and the self-hosted load and names (>) differ:\n")
+        toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, old, new)), 40))
+        os.Exit(1)
+    }
+    toolkit.Say("namesdiff: " $cases.Len() " cases, " $kept.Len() " errors of load's and names' rules, all the same\n")
+}
+
+# "dump names" over cases in checks/cases, with args
+fn names(root String&, dump String&, args Array<String&>&, cases Array<String&>&) String {
+    full := List<String&>()
+    full.Push($root "/" $dump)
+    full.Push("names")
+    for a in args { full.Push(a) }
+    for c in cases { full.Push(c) }
+    return $toolkit.RunShowing(full.ToArray(), String&["OLANG_STD=" $root "/std"], "checks/cases").Stdout
+}
+
+# what a case's first "# flags:" line says, "" for none
+fn flagsOf(text String&) String {
+    for line in toolkit.Rows(text) {
+        if line.StartsWith("# flags:") { return $line[8:].Trim() }
+    }
+    return ""
+}
+
+# the arguments of "dump names" the flags stand for: -t, and -D for the word after -define
+fn flagArgs(flags String&) Array<String&>& {
+    args := List<String&>()
+    want := false
+    for f in toolkit.Fields(flags) {
+        if f == "-t" {
+            args.Push("-t")
+        } else if f == "-define" {
+            want = true
+            continue
+        } else if want {
+            args.Push("-D")
+            args.Push($f)
+        }
+        want = false
+    }
+    return args.ToArray()
+}
+
+# the rules whose errors this tool compares: loading's and names'
+fn ownRule(rule String&) Bool {
+    for r in String&["M1", "M4", "M5", "M10", "M14", "M16", "M17", "M20", "M22", "M22a", "M23", "M23a", "M23b", "D2", "D3a",
+                     "D3a, E29", "B9a", "B10", "B10a", "B10c"] {
+        if rule == r { return true }
+    }
+    return false
+}
+
+# the rows of a rendering whose rule is load's or names', as "CASE<TAB>FILE:LINE:COL RULE"
+fn rows(text String&) List<String&> {
+    out := List<String&>()
+    c String& = ""
+    for line in toolkit.Rows(text) {
+        if line.StartsWith("=== ") {
+            c = $toolkit.Fields(line)[1]
+            continue
+        }
+        if line.StartsWith("== ") {
+            c = $toolkit.Fields(line)[1]
+            continue
+        }
+        e := try line.Find(": error[") catch default -1
+        if e < 0 { continue }
+        head := line[0:e]
+        if (try head.FindByte(' ') catch default -1) >= 0 { continue }
+        close := try line[e:].FindByte(']') catch default -1
+        if close < 0 { continue }
+        rule := line[e + 8:e + close]
+        if not ownRule(rule) { continue }
+        out.Push($c "\t" $head " " $rule)
+    }
+    return out
+}
+
+test "a case's flags become the dump's arguments" {
+    assert flagsOf("# check: fail D3a\n# flags: -define X=1 -t\nfn f() {}\n") == "-define X=1 -t"
+    assert flagsOf("fn f() {}\n") == ""
+    a := flagArgs("-debug -define X=1 -sanitize -t")
+    assert a.Len() == 3
+    assert a[0] == "-D"
+    assert a[1] == "X=1"
+    assert a[2] == "-t"
+    assert flagArgs("-target x86-64-v2").Len() == 0
+}
+
+test "only load's and names' rules are kept" {
+    r := rows("=== a.olang\nx.olang:3:4: error[M4]: m\nx.olang:5:1: error[T6]: t\n   3 | src\n== b.olang\nb.olang: error[D3a, E29]: n\n")
+    assert r.Len() == 2
+    assert r[0] == "a.olang\tx.olang:3:4 M4"
+    assert r[1] == "b.olang\tb.olang D3a, E29"
+}

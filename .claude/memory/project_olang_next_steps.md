@@ -55,9 +55,20 @@ overrated".
 - SMALL, after the errors and syntax batches land (they edit SPEC.md): SPEC §5's section numbers are broken - no 5.6, two
   5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
+- QUEUED after the syntax batch (QAA, the user 2026-10-17): a method call on a number literal is an error (text and
+  array literals keep them), both compilers.
 - QUEUED (QZ2/QZ4, the user 2026-10-17): Pair to std/pair after the syntax batch; after Vec phase 2b, the iterator
   helpers and StringBuilder onto Vec (`a.ToVec()`), List to std/list; benchmarks before/after. Then Vec phase 2b itself
-  (Vec as a type argument, in tasks and lambdas, move-aware List/Map) comes first of these.
+  (Vec as a type argument, in tasks and lambdas, move-aware List/Map) comes first of these. It also closes QF: a test of a long-running
+  Map of owned objects staying flat in memory.
+- RECORDED 2026-10-17 (the user: "Record them", after asking whether not going all the way to Rust shoots us in the
+  foot): (1) section 8's soundness is the project's main risk - in the port's section-8 pass (M6), write it down first
+  as a small formal model (the rules and why each is sound) before code, then test it with the scope fuzzer and
+  sanitizer as now; (2) static race safety where `own` makes it cheap - a design for the user to review first: a task's
+  argument that can be written is moved in (`take`) or read-only, giving compile-time freedom from races for fan-out
+  shapes without Rust's global exclusivity (P3 withdrawn, done properly on ownership). Neither imports the rest of
+  Rust: no `&mut` exclusivity, lifetime parameters, Send/Sync, Rc/RefCell, Pin, unsafe. Likely first small borrow from
+  Rust when code needs it: two-phase borrows (`v.Push(v.Len())`).
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.

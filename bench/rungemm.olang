@@ -1,0 +1,148 @@
+# bench/rungemm.olang - std/linalg's matrix products against C: the square product C = A B at 64 .. 2048 in F32 and F64
+# (olang's Gemm on 1 and 4 threads - built for this machine, as olang builds by default (B12) - and on 1 thread built for
+# baseline x86-64 (-target x86-64), a naive C loop, the same blocked algorithm in C, and OpenBLAS on 1 and 4 threads), the
+# matrix-vector products at batch 1 both ways round, and a training step of a small perceptron (bench/mlp.olang against
+# bench/c/mlp.c). Every time is the best of several runs inside the program. Not part of "make verify". From the
+# repository root:
+#
+#   build/out build bench/rungemm.olang && build/bench_rungemm [-q]      -q: build only
+#   BENCH_LOCK=FILE         take this flock while timing, as run.olang does
+#   OLANG=PATH              the compiler to build with (default build/out)
+
+import "std/os"
+import "benchlib"
+
+fn main() {
+    olang := benchlib.Compiler()
+    dir := benchlib.Dir
+    try os.MkDirAll($dir "/build/la") catch os.OsError { benchlib.Fail("cannot make bench/build/la", 1) }
+    # each olang program in a directory of its own, built for this machine and again for baseline x86-64; the C side is
+    # built for this machine too, with C's floating point kept as written (-ffp-contract=off), as olang's is (B12c)
+    for p in String&["gemm", "mlp"] {
+        pdir := $dir "/build/la/" $p
+        try os.MkDirAll(pdir) catch os.OsError { benchlib.Fail("cannot make " $pdir, 1) }
+        benchlib.MustQuietly(String&[olang, "build", "-target", "x86-64", "../../../" $p ".olang"], pdir)
+        benchlib.MustQuietly(String&["cp", "build/" $p, "build/" $p ".base"], pdir)
+        benchlib.MustQuietly(String&[olang, "build", "../../../" $p ".olang"], pdir)
+    }
+    benchlib.Must(String&["clang", "-O3", "-flto", "-march=native", "-ffp-contract=off", "-o", "build/la/gemm_c", "c/gemm.c",
+                          "-lopenblas", "-lpthread"])
+    benchlib.Must(String&["clang", "-O3", "-flto", "-march=native", "-ffp-contract=off", "-o", "build/la/mlp_c", "c/mlp.c",
+                          "-lopenblas", "-lpthread", "-lm"])
+    args := os.Args()
+    if args.Len() > 1 and args[1] == "-q" { return }
+    benchlib.TakeLock()
+
+    O := "build/la/gemm/build/gemm"
+    OB := "build/la/gemm/build/gemm.base"
+    C := "build/la/gemm_c"
+    benchlib.Say("| type | n | olang 1T | olang 4T | olang x86-64 1T | C naive | C blocked | OpenBLAS 1T | OpenBLAS 4T |\n")
+    benchlib.Say("|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for t in String&["f32", "f64"] {
+        for n in String&["64", "128", "256", "512", "1024", "2048"] {
+            r := reps(n)
+            o1 := gflops(run(O, String&[t, n, "1", r]))
+            o4 := gflops(run(O, String&[t, n, "4", r]))
+            on := gflops(run(OB, String&[t, n, "1", r]))
+            cn := gflops(run(C, String&[t, n, "naive", r])) if (try n.ParseInt() catch default 0) <= 1024 else gflops(run(C, String&[t, n, "naive", "1"]))
+            cb := gflops(run(C, String&[t, n, "blocked", r]))
+            b1 := gflops(runThreads(C, "1", String&[t, n, "blas", r]))
+            b4 := gflops(runThreads(C, "4", String&[t, n, "blas", r]))
+            benchlib.Say("| " $t " | " $n " | " $o1 " | " $o4 " | " $on " | " $cn " | " $cb " | " $b1 " | " $b4 " |\n")
+        }
+    }
+    benchlib.Say("\n")
+    benchlib.Say("matrix-vector products at batch 1 through Gemv, W n x m: mv is y = W x, mvt is y = W^T u - ns a product:\n")
+    benchlib.Say("| type | form | n x m | olang | olang x86-64 | C loop | OpenBLAS |\n")
+    benchlib.Say("|---|---|---:|---:|---:|---:|---:|\n")
+    for t in String&["f32", "f64"] {
+        for form in String&["mv", "mvt"] {
+            for shape in String&["64 64", "256 128", "1024 1024"] {
+                w := shape.Split(" ")
+                n := $w[0]
+                m := $w[1]
+                a := suffixed(run(O, String&[t, n, "1", "20", form, m]), "ns")
+                b := suffixed(run(OB, String&[t, n, "1", "20", form, m]), "ns")
+                c := suffixed(run(C, String&[t, n, "naive", "20", form, m]), "ns")
+                d := suffixed(runThreads(C, "1", String&[t, n, "blas", "20", form, m]), "ns")
+                benchlib.Say("| " $t " | " $form " | " $n " x " $m " | " $a " | " $b " | " $c " | " $d " |\n")
+            }
+        }
+    }
+    benchlib.Say("\n")
+    benchlib.Say("training step of a 784-128-10 perceptron, batch 64, F32 (us a step):\n")
+    M := "build/la/mlp/build/mlp"
+    benchlib.Say("| olang 1T | olang 4T | olang x86-64 1T | C naive | OpenBLAS 1T | OpenBLAS 4T |\n")
+    benchlib.Say("|---:|---:|---:|---:|---:|---:|\n")
+    m1 := suffixed(run(M, String&["300", "1"]), "us")
+    m4 := suffixed(run(M, String&["300", "4"]), "us")
+    mb := suffixed(run("build/la/mlp/build/mlp.base", String&["300", "1"]), "us")
+    mc := suffixed(run("build/la/mlp_c", String&["30", "naive"]), "us")
+    ms1 := suffixed(runThreads("build/la/mlp_c", "1", String&["300", "blas"]), "us")
+    ms4 := suffixed(runThreads("build/la/mlp_c", "4", String&["300", "blas"]), "us")
+    benchlib.Say("| " $m1 " | " $m4 " | " $mb " | " $mc " | " $ms1 " | " $ms4 " |\n")
+}
+
+# the timed repetitions of a size
+fn reps(n String&) String {
+    if n == "64" or n == "128" or n == "256" { return "30" }
+    if n == "512" { return "8" }
+    if n == "1024" { return "4" }
+    return "2"
+}
+
+# what a benchmark binary printed; its standard error goes where ours does
+fn run(bin String&, args Array<String&>&) String {
+    return runThreads(bin, "", args)
+}
+
+# the same with OPENBLAS_NUM_THREADS set to threads when it is not ""
+fn runThreads(bin String&, threads String&, args Array<String&>&) String {
+    full := List<String&>()
+    if threads != "" {
+        full.Push("env")
+        full.Push("OPENBLAS_NUM_THREADS=" $threads)
+    }
+    full.Push($bin)
+    for a in args { full.Push($a) }
+    o := benchlib.Capture(full.ToArray(), benchlib.Dir)
+    if o.Stderr.Len() > 0 { benchlib.Warn(o.Stderr) }
+    return $o.Stdout
+}
+
+# every number written just before the word GFLOPS, a row each - awk '{for (i = 1; i < NF; i++) if ($(i + 1) == "GFLOPS") print $i}'
+fn gflops(text String&) String {
+    out := List<String&>()
+    for line in text.Lines() {
+        f := benchlib.Words(line.Replace("\t", " "))
+        for i in range f.Len() - 1 {
+            if f[i + 1] == "GFLOPS" { out.Push($f[i]) }
+        }
+    }
+    return out.ToArray().Join("\n")
+}
+
+# every word ending in suffix, without it, a row each
+fn suffixed(text String&, suffix String&) String {
+    out := List<String&>()
+    for line in text.Lines() {
+        for w in benchlib.Words(line.Replace("\t", " ")) {
+            if w.EndsWith(suffix) {
+                at := try w.Find(suffix) catch default 0
+                out.Push($w[0:at] $w[at + suffix.Len():])
+            }
+        }
+    }
+    return out.ToArray().Join("\n")
+}
+
+test "numbers before GFLOPS are picked out" {
+    assert gflops("n 512 time 0.5 s 71.3 GFLOPS\nother\n") == "71.3"
+    assert gflops("1 GFLOPS 2 GFLOPS\n") == "1\n2"
+    assert gflops("GFLOPS\n") == ""
+}
+
+test "numbers with a suffix are picked out" {
+    assert suffixed("mv 64x64 123.4ns per product\n", "ns") == "123.4"
+    assert suffixed("step 55.0us\n", "us") == "55.0"
+}

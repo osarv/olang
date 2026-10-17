@@ -5,14 +5,23 @@ a good olang programmer would write it (`*.olang`) and as plain idiomatic C (`c/
 same sizes and byte-identical output, timed against each other.
 
 ```
-bench/run.sh                 # build both, check the outputs agree, time (median of 7, interleaved)
-bench/run.sh -x              # also baseline x86-64 for both (olang -target x86-64, C with no -march)
-bench/run.sh -q              # build and check only
-bench/run.sh -r 9 nbody text # 9 repetitions, only some rows
-BENCH_LOCK=/home/user/verify.lock bench/run.sh   # hold a lock while checking and timing, on a shared machine
-bench/ir.sh spectral         # whole-program optimized IR and disassembly of both versions, in build/lto/
-bench/repro/opt.sh NAME      # the same for one reproducer in repro/
+build/out build bench/run.olang      # the drivers are olang programs (they were shell scripts); build one once, from the
+build/bench_run                      # repository root, then run it: build both, check the outputs agree, time (median of 7, interleaved)
+build/bench_run -x                   # also baseline x86-64 for both (olang -target x86-64, C with no -march)
+build/bench_run -q                   # build and check only
+build/bench_run -r 9 nbody text      # 9 repetitions, only some rows
+BENCH_LOCK=/home/user/verify.lock build/bench_run   # hold a lock while checking and timing, on a shared machine
+build/out build bench/ir.olang && build/bench_ir spectral   # whole-program optimized IR and disassembly of both versions, in bench/build/lto/
+build/out build bench/repro/opt.olang && build/bench_repro_opt NAME   # the same for one reproducer in repro/
+build/out build bench/rungemm.olang && build/bench_rungemm    # std/linalg against C and OpenBLAS (below)
+build/out build bench/runfused.olang && build/bench_runfused  # the batched, fused and implicit products (below)
 ```
+
+`run.olang`, `ir.olang`, `rungemm.olang`, `runfused.olang` and `repro/opt.olang` are the drivers; `benchlib.olang` is what
+they share (the compiler to build with, running a program in this directory without a shell, the `BENCH_LOCK` flock).
+`OLANG=PATH` names another compiler to build with (default `build/out`). Each driver runs from the repository root and
+keeps its files under `bench/build/`. (`rungemm` and `runfused` carry a `run` in their names because `gemm.olang` and
+`fused.olang` are the programs they run.)
 
 Nothing here is part of `make verify` or `make test` - the makefile names the directories it tests, and `bench/` is
 not one of them.
@@ -81,7 +90,7 @@ of 5-11 repetitions under the lock, load 1-6):
 | binary-trees, C arena | 0.514 | 0.422 | 0.391 | 1.08 |
 | matmul F32 | 1.247 | 1.223 | 1.313 | 0.93 |
 
-And the whole suite after them, `bench/run.sh -r 7` (load 2-4):
+And the whole suite after them, `bench_run -r 7` (load 2-4):
 
 | benchmark | olang (s) | C (s) | olang/C |
 |---|---:|---:|---:|
@@ -116,7 +125,7 @@ std that keeps the language as it is.
 
 Items 3, 4 and 6 below were std's, and are fixed there (CLAUDE.md, "std closes the benchmarks' library gaps"): `for x
 in` a `List` walks it run by run and `ListIter`'s helpers do the same (S9f), `$n` renders an integer without
-`snprintf`, `Find` compares in place, and `Map.Update` counts in one lookup. Two runs of `bench/run.sh` on these rows
+`snprintf`, `Find` compares in place, and `Map.Update` counts in one lookup. Two runs of `bench_run` on these rows
 (7 and 9 repetitions, interleaved, on a machine at load 7-9 - so each ratio is given as the range of the two, with the
 minimums, which the load disturbs least, beside it):
 
@@ -138,7 +147,7 @@ Of the gaps this page found, what is left is wrapping arithmetic (item 5).
 
 ## Why olang is slower where it is
 
-Each finding was read off the whole-program optimized IR (`bench/ir.sh`), confirmed by an experiment - the IR
+Each finding was read off the whole-program optimized IR (`bench/ir.olang`), confirmed by an experiment - the IR
 edited by hand, or the C side changed to do what olang does - and re-timed (single runs under the same lock, so
 ±10%), and has a minimal program in `repro/` whose header says what to look for. Ordered by size.
 
@@ -240,16 +249,16 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
    `std/map` (`import`, `map.Map<...>`) while `List` was in the prelude.
 7. A function whose `for { }` returns from inside still needs `unreachable` after the loop (D10a counts no loop).
 8. (Fixed: `std/time`'s `Now`/`Since`/`Wall`.) std had no clock, so a benchmark could not time itself and this runner is
-   a shell script.
+   a shell script then.
 9. (Fixed: `x.Fixed(n)`, rounded as `%.*f`.) There was no fixed-precision float formatting (`%.9f`): `$` gives the
    shortest round-trip text only, so the Benchmarks Game's output formats could not be produced and the C side had to
    imitate olang's.
 10. (Fixed: `Find`, `FindByte` and `FindIndex` fail with the default error on a miss.) `String.Find` answered "not
    found" with `-1` - a sentinel value, against "errors are errors".
 
-## std/linalg against C and OpenBLAS (`bench/gemm.sh`)
+## std/linalg against C and OpenBLAS (`bench/rungemm.olang`)
 
-`bench/gemm.sh` times `std/linalg`'s products against the same algorithm written in C (`c/gemm.c`: the blocking,
+`bench/rungemm.olang` times `std/linalg`'s products against the same algorithm written in C (`c/gemm.c`: the blocking,
 tiles, packing and write-back of `Gemm`, so the difference is the language's), a naive C loop and OpenBLAS 0.3
 (`-lopenblas`, AVX-512 with FMA, its own threads), plus a training step of a 784-128-10 perceptron at batch 64
 (`mlp.olang` against `c/mlp.c`, the same data and the same losses). Each time is the best of several runs inside
@@ -358,7 +367,7 @@ products through `linalg.GemmWorkspace`: **0.55 s an epoch native**, 0.68 s at `
 **The vector width, and a hazard it brings.** The code generator is told to use the target's widest vectors (512 bits
 here; LLVM's own tuning for Intel's AVX-512 parts prefers 256) so that `TargetVectorBits` is the width loops actually
 get. 512 against 256 with the tile chosen to match (interleaved pairs): GEMM F32 57-71 against 41-46 GFLOPS (512 to
-1024), F64 25-32 against 15-23, the training step 0.86-1.02 against 1.19-1.38 ms; over `bench/run.sh`, matmul 0.87 s
+1024), F64 25-32 against 15-23, the training step 0.86-1.02 against 1.19-1.38 ms; over `bench_run`, matmul 0.87 s
 against 1.15 s, the Array and List sums 0.10-0.12 against 0.14-0.16, parallel 0.90 against 1.01, the rest within the
 noise (fannkuch is ~20% slower native at either width, as C's `-march=native` is). The hazard: **a hand-tiled kernel
 whose rows are not whole vectors of `TargetVectorBits`** - oann's own copy of std/linalg's earlier 4 x 12 F32 kernel -
@@ -370,7 +379,7 @@ it.
 
 oann's three asks of std/linalg (its DESIGN.md, section 13), built as `GemmBatch` (with `Batch`, `Heads`, `Stacked` and
 `Triangular`), `GemmAct` (with `Activation`, `Activate` and `ActivationBackward`) and `GemmPatches` (with `Patches` and
-`Im2col`), measured by `bench/fused.sh`: every variant run once, then every one again, and so on, each figure the median
+`Im2col`), measured by `bench/runfused.olang`: every variant run once, then every one again, and so on, each figure the median
 - F32, one thread unless said, ms. "master" is the same computation with master edf8238's std/linalg - a copy of it
 compiled as a module of its own beside the new one, so both ran in the same process, interleaved (not committed). The
 machine was shared (load average 5-6), so each row gives the range over two or three runs; a run that caught a spike

@@ -33,4 +33,6 @@ tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. 
 - `io_fix` needs the compiler path as its first argument (an absolute path; a relative one is made absolute).
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 
-The compiler's own tools are in `compiler/tools/`.
+The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and
+are olang programs now, run by their make targets - `compiler/README.md`); the benchmark drivers are in `bench/`
+(`bench/README.md`).

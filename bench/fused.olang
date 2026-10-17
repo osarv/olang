@@ -1,5 +1,5 @@
 # fused: std/linalg's batched, fused and implicit products against what they replace, each timed interleaved with the
-# others (every variant once, then every variant again, and so on) and given as the median - the side of bench/fused.sh
+# others (every variant once, then every variant again, and so on) and given as the median - the side of bench/runfused.olang
 # that runs. Not part of "make verify".
 #   attention: causal attention's products over a batch of 16 sequences of T positions, 128 columns in 4 heads, as a
 #     Gemm per sequence and head, as one GemmBatch per product, and as one causal GemmBatch (Triangular) per product
