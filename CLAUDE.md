@@ -31,6 +31,7 @@ and every question put to the user goes into the pending-decisions ledger when i
 
 @.claude/memory/MEMORY.md
 @.claude/memory/feedback_agent_effort.md
+@.claude/memory/feedback_c_only_for_port.md
 @.claude/memory/feedback_decide_details.md
 @.claude/memory/feedback_errors_are_errors.md
 @.claude/memory/feedback_folder_readmes.md
