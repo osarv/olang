@@ -261,6 +261,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   Recommended: keep Vec in the prelude, rebuild the helpers and StringBuilder on it (`a.ToVec()`), move List and Map
   to std/list and std/map; after Vec phase 2b (Vec as a type argument, in tasks/lambdas), benchmarks before/after.
   ASKED: plan it that way? In effect: (a).
+  The user then: "will there be more very basic data types like vec and map ... or will these stay the four main
+  ones?" Answered: a rule keeps the prelude fixed - only what the language and built-in types need plus the
+  everyday containers; future containers (Set, Deque, Heap, ordered map, Utf8 text) go to std. Revised: moving Map
+  out means `map.Map<K, V>` everywhere (imports are whole modules, names qualified), so keep Map in the prelude (as Go
+  and Python build it in). Recommended now: prelude = methods on built-ins, protocol traits/errors, Vec, Map,
+  String, StringBuilder, Pair; std = List and every future container (Set starts in std). After Vec phase 2b.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
