@@ -178,7 +178,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   fits where a value is expected); done/fail/abort removed, free as names; tests pass by reaching their end or `return`,
   fail on a failed assert, unreachable, `!` or an error leaving them; main may omit `?`; os.Exit(code) noreturn stays
   process-wide. Part of the errors batch. ASKED: keep `unreachable` (recommended - a checked claim the checker inserts
-  and requires; `abort` would read as a fourth way to stop) or rename it `abort`. In effect: unreachable.
+  and requires; `abort` would read as a fourth way to stop) or rename it `abort`. In effect: unreachable. ANSWERED (the user: "the abort fail done unreachable
+  logic is all good the way you proposed. Build it"): `unreachable` kept. Plus the error return trace (test and -d
+  builds). All in the errors batch (wt-errors), being built.
 - QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
   must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
   no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
