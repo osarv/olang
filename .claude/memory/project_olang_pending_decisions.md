@@ -148,7 +148,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QT ASKED 2026-10-17 (after "Write everything in Olang"): should the makefile also become an olang program
   (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
   incremental part). In effect: the makefile stays.
-- QU ASKED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
+- QU DECIDED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
   done fail abort as keywords? This runs against the no-duplicates rule which is held very strongly"). No os.Abort exists.
   Proposed: (1) remove `abort` (`assert false, "why"`); (2) remove `done`/`fail`, os.Exit test-aware (in a test 0 ends it
   passed, else failed; else the process) - reverses B5b; (3) a prelude result type `Never` (fn Exit(code I32) Never) -
@@ -173,6 +173,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   test they end the test, unwinding its scopes; an unwinding halt in production (defers, destructors) would need
   open-scope tracking on every block (2.4x measured in test builds) - principle 2 says no. Options: keep halting
   (differs only in tests) or tests-pass-by-ending (recommended). THE USER IS STILL THINKING - do not build.
+  DECIDED (the user: "noreturn is a lot better for this keyword than never. Do 2) I want to free up fail and done.
+  Also don't have abort."): `noreturn` result marker (functions and function types; a call to one leaves the path and
+  fits where a value is expected); done/fail/abort removed, free as names; tests pass by reaching their end or `return`,
+  fail on a failed assert, unreachable, `!` or an error leaving them; main may omit `?`; os.Exit(code) noreturn stays
+  process-wide. Part of the errors batch. ASKED: keep `unreachable` (recommended - a checked claim the checker inserts
+  and requires; `abort` would read as a fourth way to stop) or rename it `abort`. In effect: unreachable.
 - QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
   must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
   no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
