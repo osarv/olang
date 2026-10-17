@@ -14,6 +14,10 @@ for example arbitrary precision types etc should be restricted to the real compi
 functioning with all the relevant (and flashy) features to build the main compiler, but without the extra stuff like
 FPGA targets and stuff like that."
 
+**Why (the user):** "These rules about the difference between what goes in the different compilers is to save tokens
+and time primarily" - not purity. Never revert finished work in C to satisfy the rule (the word command line stays);
+just don't spend effort building extras twice.
+
 **How to apply:**
 - Into BOTH compilers: the language core and anything that would make the two fundamentally different (syntax, error
   model, array model, generics, the command line, test semantics), everything the port's own source or its std uses,
