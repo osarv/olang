@@ -8,6 +8,10 @@
 #include <sys/utsname.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/file.h>
 #include "syntax.h"
 #include "semantic.h"
 #include "codegen.h"
@@ -49,6 +53,9 @@ struct target {
 };
 static struct target gTarget;
 static char* gTargetSpec = "native";
+//B3h: -output's path - the executable build writes, or where compile copies its object - or NULL
+static char* gOutput = NULL;
+static int copyFile(const char* from, const char* to);
 
 //an argument list for RunProgram (util.h), as it is built
 static void argAdd(struct list* args, char* a) { ListAdd(args, &a); }
@@ -407,11 +414,17 @@ void compileModule(char* file) {
     //what the object links against beside the other modules' objects: the runtime's own (B3), made ready here too
     runtimeObject(clang, false);
     if (CodegenProgramUsesDyncall()) runtimeObject(clang, true);
+    //B3h: -output copies the object where it says - the object in build/ stays, current for the next build
+    if (gOutput) {
+        if (copyFile(objPath, gOutput) != 0) ErrFatal(StrFromCStr(gOutput), ERR_OUTPUT_CANNOT_WRITE);
+        objPath = gOutput;
+    }
     printf("%sbuilt %s%s\n", ErrMsgColor(COLOR_FG_GREEN), objPath, ErrMsgColor(COLOR_RESET));
 }
 
-//"-b": every reachable module to its own object, then one link (B1/B3)
-void buildProgram(char* file) {
+//"build": every reachable module to its own object, then one link (B1/B3) - into build/, or where -output says (B3h).
+//Returns the executable's path; quiet (running it, B3g) says nothing when it is built
+char* buildProgram(char* file, bool quiet) {
     struct semaModule* root = SemanticAnalyzeFile(file, true);
     CodegenCheckModuleNames();
     CodegenSetRoot(root);
@@ -427,10 +440,14 @@ void buildProgram(char* file) {
         ListAdd(&objs, &objPath);
     }
 
-    char* binPath = StrFmt("build/%s%s%s%s", moduleObjectBase(root), gRace ? ".race" : "", gDebug ? ".debug" : "",
-                           gScopeSan ? ".san" : "");
+    char* binPath = gOutput ? gOutput : StrFmt("build/%s%s%s%s", moduleObjectBase(root), gRace ? ".race" : "",
+                                               gDebug ? ".debug" : "", gScopeSan ? ".san" : "");
     if (linkProgram(clang, &objs, binPath) != 0) ErrFatal((struct str){0}, ERR_LINK_FAILED, binPath);
-    printf("%sbuilt ./%s%s\n", ErrMsgColor(COLOR_FG_GREEN), binPath, ErrMsgColor(COLOR_RESET));
+    if (!quiet) {
+        printf("%sbuilt %s%s%s\n", ErrMsgColor(COLOR_FG_GREEN), binPath[0] == '/' || gOutput ? "" : "./", binPath,
+               ErrMsgColor(COLOR_RESET));
+    }
+    return binPath;
 }
 
 //"-i": the program analyzed as -b analyzes it, then run by compile-time evaluation instead of built (B3e) -
@@ -534,7 +551,7 @@ static int runTestFileApart(char* file, char* clang) {
     return 1;
 }
 
-//B10: "-D Name=value" (or "-DName=value") - one build constant
+//B10: "-define Name=value" - one build constant
 static void defineFromArg(char* arg) {
     char* eq = strchr(arg, '=');
     if (!eq) ErrUsage(ERR_DEFINE_SHAPE, arg);
@@ -785,82 +802,346 @@ int main(int argc, char** argv) {
     return job.status;
 }
 
-static int compilerMain(int argc, char** argv) {
-    //"-r", "-d", "-s", "-u" and "-D" are modifiers, valid alongside any mode and in any position, so they are
-    //stripped out before the mode dispatch below reads argv positionally - up to the file "-i" interprets: what
-    //follows it is that program's command line (B3f), passed on as written, flags included
-    int outp = 1;
-    for (int i = 1; i < argc; i++) {
-        if (outp >= 3 && !strcmp(argv[1], "-i")) { argv[outp++] = argv[i]; continue; }
-        if (!strcmp(argv[i], "-r")) { gRace = true; continue; }
-        //M23c: the remote repositories this build reaches move to their refs' current commits, and olang.lock with them
-        if (!strcmp(argv[i], "-u")) { SemanticSetUpdate(true); continue; }
-        if (!strcmp(argv[i], "-d")) { gDebug = true; continue; }
-        if (!strcmp(argv[i], "-s")) { gScopeSan = true; CodegenSetScopeSan(true); continue; }
-        //B12: the machine to build for
-        if (!strcmp(argv[i], "-a")) {
-            if (i + 1 >= argc) ErrUsage(ERR_TARGET_MISSING);
-            gTargetSpec = argv[++i];
-            continue;
-        }
-        if (!strcmp(argv[i], "-D")) {
-            if (i + 1 >= argc) ErrUsage(ERR_DEFINE_MISSING);
-            defineFromArg(argv[++i]);
-            continue;
-        }
-        if (!strncmp(argv[i], "-D", 2)) { defineFromArg(argv[i] + 2); continue; }
-        //B1: every flag is one character; anything else beginning with "-" is a mistake, not a file name
-        if (argv[i][0] == '-' && strcmp(argv[i], "-b") && strcmp(argv[i], "-c") && strcmp(argv[i], "-t")
-            && strcmp(argv[i], "-i") && strcmp(argv[i], "-e")) {
-            ErrUsage(ERR_UNKNOWN_FLAG, argv[i]);
-        }
-        argv[outp++] = argv[i];
-    }
-    argc = outp;
+// ---- the command line (B1) ----
 
-    if (argc < 2) ErrUsage(ERR_USAGE);
-    //B11a: a rule of the specification, by its id
-    if (!strcmp(argv[1], "-e")) {
-        if (argc != 3) ErrUsage(ERR_EXPLAIN_NEEDS_RULE);
-        return ErrMsgExplain(argv[2]);
-    }
-    //B12: the target, for every mode but -e - a foreign one builds objects only (-c)
-    bool interpreting = !strcmp(argv[1], "-i");
-    resolveTarget(findClang(), interpreting);
-    if (gTarget.foreign && (!strcmp(argv[1], "-b") || !strcmp(argv[1], "-t"))) {
-        ErrUsage(ERR_TARGET_FOREIGN_MODE, argv[1], gTarget.spec);
-    }
-    //user constants were defined above; a built-in name given with -D is a clash, reported here
-    defineBuiltinConsts(!strcmp(argv[1], "-t"));
+//the modes, each the word after "olang" - but running a file, which is a file ending in .olang written first (B3g)
+enum mode { MODE_RUN, MODE_BUILD, MODE_COMPILE, MODE_TEST, MODE_INTERPRET, MODE_FORMAT, MODE_EXPLAIN, MODE_HELP, MODE_N };
+static const char* modeWords[MODE_N] = { "", "build", "compile", "test", "interpret", "format", "explain", "help" };
+#define M(x) (1u << (x))
 
-    if (!strcmp(argv[1], "-c")) {
-        if (argc != 3) ErrUsage(ERR_MODE_ONE_FILE, argv[1]);
-        compileModule(argv[2]);
+//what each mode is, for help
+static const char* modeUsage[MODE_N] = {
+    "olang [OPTION...] FILE.olang [ARGUMENT...]",
+    "olang build [OPTION...] FILE.olang",
+    "olang compile [OPTION...] FILE.olang",
+    "olang test [OPTION...] FILE.olang...",
+    "olang interpret [OPTION...] FILE.olang [ARGUMENT...]",
+    "olang format [OPTION...] FILE.olang...",
+    "olang explain RULE",
+    "olang help [MODE]",
+};
+static const char* modeWhat[MODE_N] = {
+    "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file",
+    "builds one program, FILE.olang its root module, into build/ (B3)",
+    "compiles one module to an object, linking nothing (B2)",
+    "runs each file's test blocks, each file built on its own (B3a)",
+    "runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)",
+    "rewrites each file in olang's one layout (B13)",
+    "prints a rule of the specification (B11a)",
+    "lists the modes, or a mode's options",
+};
+
+//the options: their word, whether a value follows, the modes they apply to and what they do
+enum option { OPT_OUTPUT, OPT_DEBUG, OPT_RACE, OPT_SANITIZE, OPT_TARGET, OPT_DEFINE, OPT_UPDATE, OPT_CHECK, OPT_N };
+static const struct { const char* word; const char* value; unsigned modes; const char* what; } options[OPT_N] = {
+    { "-output", "PATH", M(MODE_BUILD) | M(MODE_COMPILE), "writes the executable or the object to PATH (B3h)" },
+    { "-debug", NULL, M(MODE_RUN) | M(MODE_BUILD) | M(MODE_COMPILE) | M(MODE_TEST),
+      "builds unoptimized, with debug information (B2c, B2e)" },
+    { "-race", NULL, M(MODE_RUN) | M(MODE_BUILD) | M(MODE_COMPILE) | M(MODE_TEST),
+      "builds with the data race detector (B2b)" },
+    { "-sanitize", NULL, M(MODE_RUN) | M(MODE_BUILD) | M(MODE_COMPILE) | M(MODE_TEST),
+      "builds with the scope sanitizer (B2f)" },
+    { "-target", "NAME", M(MODE_BUILD) | M(MODE_COMPILE), "builds for another machine (B12)" },
+    { "-define", "Name=value", M(MODE_RUN) | M(MODE_BUILD) | M(MODE_COMPILE) | M(MODE_TEST) | M(MODE_INTERPRET),
+      "defines a build constant (B10)" },
+    { "-update", NULL, M(MODE_RUN) | M(MODE_BUILD) | M(MODE_COMPILE) | M(MODE_TEST) | M(MODE_INTERPRET),
+      "moves the remote repositories the build reaches to their refs' current commits (M23c)" },
+    { "-check", NULL, M(MODE_FORMAT), "rewrites nothing: lists each file not in the layout (B13)" },
+};
+
+static const char* modeName(enum mode m) { return m == MODE_RUN ? "running a file" : modeWords[m]; }
+
+//the modes an option applies to, as a diagnostic names them: "build and compile"
+static char* modesOf(unsigned modes) {
+    char* out = StrFmt("%s", "");
+    int n = 0, k = 0;
+    for (int m = 0; m < MODE_N; m++) n += (modes >> m) & 1;
+    for (int m = 0; m < MODE_N; m++) {
+        if (!((modes >> m) & 1)) continue;
+        k++;
+        char* next = StrFmt("%s%s%s", out, k == 1 ? "" : k == n ? " and " : ", ", modeName(m));
+        free(out);
+        out = next;
+    }
+    return out;
+}
+
+static bool endsWithOlang(const char* a) {
+    size_t n = strlen(a);
+    return n > 6 && !strcmp(a + n - 6, ".olang");
+}
+
+//"help" and "help MODE": the modes, or one mode's options, on the standard output
+static int printHelp(char* word) {
+    if (!word) {
+        printf("usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]\n\nmodes:\n");
+        printf("  %-11s %s\n", "FILE.olang", modeWhat[MODE_RUN]);
+        for (int m = 1; m < MODE_N; m++) printf("  %-11s %s\n", modeWords[m], modeWhat[m]);
+        printf("\n'olang help MODE' lists a mode's options; 'olang help run' those of running a file.\n");
         return 0;
     }
-
-    if (!strcmp(argv[1], "-b")) {
-        if (argc != 3) ErrUsage(ERR_MODE_ONE_FILE, argv[1]);
-        buildProgram(argv[2]);
-        return 0;
+    int m = !strcmp(word, "run") ? MODE_RUN : -1;
+    for (int k = 1; k < MODE_N && m < 0; k++) if (!strcmp(word, modeWords[k])) m = k;
+    if (m < 0) ErrUsage(ERR_NOT_A_MODE, word);
+    printf("usage: %s\n%s\n", modeUsage[m], modeWhat[m]);
+    bool any = false;
+    for (int o = 0; o < OPT_N; o++) {
+        if (!((options[o].modes >> m) & 1)) continue;
+        if (!any) printf("\noptions:\n");
+        any = true;
+        char* w = StrFmt("%s%s%s", options[o].word, options[o].value ? " " : "", options[o].value ? options[o].value : "");
+        printf("  %-18s %s\n", w, options[o].what);
+        free(w);
     }
+    return 0;
+}
 
-    if (!strcmp(argv[1], "-i")) {
-        if (argc < 3) ErrUsage(ERR_MODE_NEEDS_FILE, argv[1]);
-        return interpretProgram(argv[2], argc - 2, argv + 2);
-    }
+//B3h: -output's directory must be there - the compiler makes none
+static void checkOutput(void) {
+    struct stat st;
+    if (stat(gOutput, &st) == 0 && S_ISDIR(st.st_mode)) ErrUsage(ERR_OUTPUT_IS_DIR, gOutput);
+    char* dir = StrFmt("%s", gOutput);
+    char* slash = strrchr(dir, '/');
+    if (!slash) return;
+    if (slash == dir) slash[1] = '\0'; else *slash = '\0';
+    if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) ErrUsage(ERR_OUTPUT_NO_DIR, gOutput, dir);
+    free(dir);
+}
 
-    if (!strcmp(argv[1], "-t")) {
-        if (argc < 3) ErrUsage(ERR_MODE_NEEDS_FILE, argv[1]);
-        gTestBuild = true;
-        char* clang = findClang();
-        int anyFailed = 0;
-        for (int i = 2; i < argc; i++) {
-            if (runTestFileApart(argv[i], clang) != 0) anyFailed = 1;
-        }
-        return anyFailed;
-    }
-
-    ErrUsage(ERR_NOT_A_MODE, argv[1]);
+//B3g: the program run in this process's place - its status is the program's own, a signal's included, which a shell
+//reports as 128 + its number. Its command line is the file as written, and the arguments after it
+static int runProgramInPlace(char* binPath, char* file, int argc, char** argv) {
+    char** av = MallocOrCrash(sizeof(char*) * (size_t)(argc + 2));
+    av[0] = file;
+    for (int i = 0; i < argc; i++) av[i + 1] = argv[i];
+    av[argc + 1] = NULL;
+    char* path = strchr(binPath, '/') ? binPath : StrFmt("./%s", binPath);
+    fflush(NULL);
+    execv(path, av);
+    ErrFatal(StrFromCStr(binPath), ERR_CANNOT_RUN, strerror(errno));
     return 1;
+}
+
+//the newest modification time of any .olang file under dir, recursively (0 for none)
+static long long newestSource(const char* dir) {
+    long long newest = 0;
+    struct list stack = ListInit(sizeof(char*));
+    char* first = StrFmt("%s", dir);
+    ListAdd(&stack, &first);
+    while (stack.len > 0) {
+        char* d = *(char**)ListGetIdx(&stack, stack.len - 1);
+        stack.len--;
+        DIR* h = opendir(d);
+        if (!h) { free(d); continue; }
+        struct dirent* e;
+        while ((e = readdir(h))) {
+            if (e->d_name[0] == '.') continue;
+            char* p = StrFmt("%s/%s", d, e->d_name);
+            struct stat st;
+            if (stat(p, &st) != 0) { free(p); continue; }
+            if (S_ISDIR(st.st_mode)) { ListAdd(&stack, &p); continue; }
+            long long t = (long long)st.st_mtim.tv_sec * 1000000000LL + st.st_mtim.tv_nsec;
+            if (endsWithOlang(p) && t > newest) newest = t;
+            free(p);
+        }
+        closedir(h);
+        free(d);
+    }
+    ListDestroy(stack);
+    return newest;
+}
+
+static long long mtimeOf(const char* path) {
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    return (long long)st.st_mtim.tv_sec * 1000000000LL + st.st_mtim.tv_nsec;
+}
+
+//B13: "format" runs the formatter - an olang program, compiler/tools/fmt.olang beside this compiler (as std is, B2a),
+//built by this compiler once and kept in the cache (OLANG_CACHE, else ~/.cache/olang) under fmt/, in a directory named
+//for this compiler's own path, so two compilers never share one. It is built again when this compiler, or any source it
+//is built from (compiler/ and std/), is newer than it; a lock keeps two at once from building it together
+static int formatFiles(int nfiles, char** files, bool check) {
+    char self[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+    if (n <= 0) ErrUsage(ERR_FORMATTER_MISSING, "this compiler's own path cannot be read");
+    self[n] = '\0';
+    char* repo = StrFmt("%s", self);
+    char* slash = strrchr(repo, '/');
+    if (slash) *slash = '\0';
+    char* root = StrFmt("%s/..", repo);
+    char real[PATH_MAX];
+    if (!realpath(root, real)) ErrUsage(ERR_FORMATTER_MISSING, root);
+    char* src = StrFmt("%s/compiler/tools/fmt.olang", real);
+    char* compilerDir = StrFmt("%s/compiler", real);
+    char* stdDir = getenv("OLANG_STD") && *getenv("OLANG_STD") ? getenv("OLANG_STD") : StrFmt("%s/std", real);
+    if (mtimeOf(src) < 0) ErrUsage(ERR_FORMATTER_MISSING, src);
+    char* cache = getenv("OLANG_CACHE");
+    if (!cache || !*cache) {
+        char* home = getenv("HOME");
+        cache = StrFmt("%s/.cache/olang", home && *home ? home : "/tmp");
+    }
+    unsigned long long h = 14695981039346656037ull;
+    for (char* c = self; *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ull;
+    char* dir = StrFmt("%s/fmt/%016llx", cache, h);
+    char* bin = StrFmt("%s/olang-fmt", dir);
+    if (MakeDirs(dir) != 0) ErrUsage(ERR_FORMATTER_BUILD, dir);
+    int lock = open(StrFmt("%s/lock", dir), O_CREAT | O_RDWR, 0644);
+    if (lock >= 0) flock(lock, LOCK_EX);
+    long long built = mtimeOf(bin);
+    long long need = mtimeOf(self);
+    long long c1 = newestSource(compilerDir), c2 = newestSource(stdDir);
+    if (c1 > need) need = c1;
+    if (c2 > need) need = c2;
+    if (built < 0 || built < need) {
+        fprintf(stderr, "olang: building the formatter (%s), once\n", src);
+        char* av[] = { self, "build", "-output", bin, src, NULL };
+        char* log = StrFmt("%s/build.log", dir);
+        //built in the cache directory, so its objects go to the cache's build/ and none to the caller's
+        pid_t pid = fork();
+        if (pid == 0) {
+            int fd = open(log, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+            if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); }
+            if (chdir(dir) != 0) _exit(1);
+            execv(self, av);
+            _exit(1);
+        }
+        int st = 1;
+        if (pid < 0) ErrUsage(ERR_FORMATTER_BUILD, log);
+        while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+        if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) ErrUsage(ERR_FORMATTER_BUILD, log);
+    }
+    if (lock >= 0) close(lock);
+    char** av = MallocOrCrash(sizeof(char*) * (size_t)(nfiles + 3));
+    av[0] = bin;
+    av[1] = check ? "-l" : "-f";
+    for (int i = 0; i < nfiles; i++) av[i + 2] = files[i];
+    av[nfiles + 2] = NULL;
+    setenv("OLANG_STD", stdDir, 1);
+    fflush(NULL);
+    execv(bin, av);
+    ErrUsage(ERR_FORMATTER_BUILD, bin);
+    return 1;
+}
+
+static int compilerMain(int argc, char** argv) {
+    if (argc < 2) ErrUsage(ERR_USAGE);
+    //the mode: the first word, or running a file when the first word is a file or an option (B1, B3g)
+    enum mode mode = MODE_RUN;
+    int i = 1;
+    if (argv[1][0] != '-' && !endsWithOlang(argv[1])) {
+        int m = -1;
+        for (int k = 1; k < MODE_N && m < 0; k++) if (!strcmp(argv[1], modeWords[k])) m = k;
+        if (m < 0) ErrUsage(ERR_NOT_A_MODE, argv[1]);
+        mode = (enum mode)m;
+        i = 2;
+    }
+    //the options and the files, in any order - but for running a file and for interpret, whatever follows the file
+    //is the program's own (B3f), an option's spelling included
+    struct list files = ListInit(sizeof(char*));
+    char* word = NULL; //explain's rule, help's mode
+    int progArgc = 0;
+    char** progArgv = NULL;
+    bool check = false;
+    for (; i < argc; i++) {
+        char* a = argv[i];
+        if (a[0] == '-') {
+            int o = -1;
+            for (int k = 0; k < OPT_N && o < 0; k++) if (!strcmp(a, options[k].word)) o = k;
+            if (o < 0) ErrUsage(ERR_UNKNOWN_FLAG, a, modeName(mode));
+            if (!((options[o].modes >> mode) & 1)) ErrUsage(ERR_OPTION_NOT_FOR_MODE, a, modesOf(options[o].modes), modeName(mode));
+            char* v = NULL;
+            if (options[o].value) {
+                if (i + 1 >= argc) ErrUsage(ERR_OPTION_NEEDS_VALUE, a, options[o].value);
+                v = argv[++i];
+            }
+            switch ((enum option)o) {
+                case OPT_OUTPUT: gOutput = v; break;
+                case OPT_DEBUG: gDebug = true; break;
+                case OPT_RACE: gRace = true; break;
+                case OPT_SANITIZE: gScopeSan = true; CodegenSetScopeSan(true); break;
+                case OPT_TARGET: gTargetSpec = v; break;
+                case OPT_DEFINE: defineFromArg(v); break;
+                case OPT_UPDATE: SemanticSetUpdate(true); break;
+                case OPT_CHECK: check = true; break;
+                default: break;
+            }
+            continue;
+        }
+        if (mode == MODE_EXPLAIN || mode == MODE_HELP) {
+            if (word) ErrUsage(mode == MODE_EXPLAIN ? ERR_EXPLAIN_NEEDS_RULE : ERR_HELP_ONE_MODE);
+            word = a;
+            continue;
+        }
+        if (!endsWithOlang(a)) {
+            //running a file: a mode's word after the options belongs before them
+            for (int k = 1; k < MODE_N; k++) if (mode == MODE_RUN && !strcmp(a, modeWords[k])) ErrUsage(ERR_MODE_FIRST, a);
+            ErrUsage(ERR_NOT_A_SOURCE, a);
+        }
+        ListAdd(&files, &a);
+        if (mode == MODE_RUN || mode == MODE_INTERPRET) {
+            progArgc = argc - i - 1;
+            progArgv = argv + i + 1;
+            break;
+        }
+    }
+    char** fs = files.ptr;
+
+    if (mode == MODE_HELP) return printHelp(word);
+    //B11a: a rule of the specification, by its id
+    if (mode == MODE_EXPLAIN) {
+        if (!word) ErrUsage(ERR_EXPLAIN_NEEDS_RULE);
+        return ErrMsgExplain(word);
+    }
+    if (files.len == 0) ErrUsage(ERR_MODE_NEEDS_FILE, modeName(mode));
+    if ((mode == MODE_BUILD || mode == MODE_COMPILE) && files.len != 1) ErrUsage(ERR_MODE_ONE_FILE, modeName(mode));
+    if (mode == MODE_FORMAT) return formatFiles(files.len, fs, check);
+    if (gOutput) checkOutput();
+
+    //B12: the target - a foreign one builds objects only (compile)
+    bool interpreting = mode == MODE_INTERPRET;
+    resolveTarget(findClang(), interpreting);
+    if (gTarget.foreign && mode != MODE_COMPILE) ErrUsage(ERR_TARGET_FOREIGN_MODE, modeName(mode), gTarget.spec);
+    //user constants were defined above; a built-in name given with -define is a clash, reported here
+    defineBuiltinConsts(mode == MODE_TEST);
+
+    switch (mode) {
+        case MODE_COMPILE:
+            compileModule(fs[0]);
+            return 0;
+        case MODE_BUILD:
+            buildProgram(fs[0], false);
+            return 0;
+        case MODE_RUN:
+            return runProgramInPlace(buildProgram(fs[0], true), fs[0], progArgc, progArgv);
+        case MODE_INTERPRET:
+            //the program's command line is the file, then what follows it (B3f)
+            return interpretProgram(fs[0], progArgc + 1, progArgv - 1);
+        case MODE_TEST: {
+            gTestBuild = true;
+            char* clang = findClang();
+            int anyFailed = 0;
+            for (int k = 0; k < files.len; k++) {
+                if (runTestFileApart(fs[k], clang) != 0) anyFailed = 1;
+            }
+            return anyFailed;
+        }
+        default:
+            return 1;
+    }
+}
+
+//copies the file at from to to, replacing it; 0, or -1 when either cannot be opened or written
+static int copyFile(const char* from, const char* to) {
+    FILE* in = fopen(from, "rb");
+    if (!in) return -1;
+    FILE* out = fopen(to, "wb");
+    if (!out) { fclose(in); return -1; }
+    char buf[65536];
+    size_t n;
+    int rc = 0;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) if (fwrite(buf, 1, n, out) != n) rc = -1;
+    if (fclose(out) != 0) rc = -1;
+    fclose(in);
+    return rc;
 }
