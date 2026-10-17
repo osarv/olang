@@ -28,6 +28,12 @@ overrated".
   parameters share a scope (`&x`), crash + unsound (typed review repro/sharedscope*.olang); S4d decided by types in C to
   match SPEC; E31b's M1; the handle-field use-after-free `f.Blocks[b].S.Push(x)` (a List field of a struct element
   reached through x[i] builds its chunk in the call's frame; HISTORY.md has the reproducer) - in e31view's next round.
+- QUEUED language batches from 2026-10-17 (ledger QO1-QO6, QP1-QP3), one after the other after wt-ioprint and
+  wt-e31view merge, the port's checker already told: (1) ERRORS - inferred error sets, the default error and bare
+  `error` removed, std's own errors (never BuiltinError), new `try` checks (<< overflow, float narrowing, sign changes),
+  INVALID to IEEE, WRONG_CASE for `as`; (2) ARRAYS - one constructor `Array<T>(n)`, lengths inferred where made and
+  through results, written `Array<T, N>` and constant generics (G20-G28) dropped, arrays by value (an instance per
+  known length; a run-time length by value an error), call-site asserts.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.
