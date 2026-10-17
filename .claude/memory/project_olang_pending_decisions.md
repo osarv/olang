@@ -148,6 +148,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QT ASKED 2026-10-17 (after "Write everything in Olang"): should the makefile also become an olang program
   (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
   incremental part). In effect: the makefile stays.
+- QU ASKED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
+  done fail abort as keywords? This runs against the no-duplicates rule which is held very strongly"). No os.Abort exists.
+  Proposed: (1) remove `abort` (`assert false, "why"`); (2) remove `done`/`fail`, os.Exit test-aware (in a test 0 ends it
+  passed, else failed; else the process) - reverses B5b; (3) a prelude result type `Never` (fn Exit(code I32) Never) -
+  D10a counts a call to one as leaving, its body checked never to return (Zig noreturn, Rust !); (4) keep `unreachable`
+  (the checker inserts and needs it). Asked: all four, or unreachable gone too. In effect: the four keywords stay.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
