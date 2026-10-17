@@ -129,6 +129,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   D10a and fits where a value of any type is expected (`catch default os.Exit(2)`, a conditional's value). Not a type:
   no variable, parameter or type argument is `noreturn`, and `:=` from one is an error. A noreturn function fits a
   function type with no result (my call). Lambdas, constructors, operator methods and `main` may not be `noreturn`.
+  A noreturn call fits any value position - a match value, beside a conditional's other value - and takes no part in
+  generic inference (G9a); a noreturn trait method is met only by a noreturn method (T31); `extern fn` may be one (X1).
 - **The error return trace (S18d, decided by the coordinator for the user).** Test and `-d` builds keep each thread's
   last 32 places an error went - `raised here`, `try passed it on`, `left the test` - cleared where a clause takes it,
   nothing on the success path, nothing at all in other builds; printed after an error ends a test, escapes `main`, or
@@ -318,27 +320,37 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   gone (the user: "error should always require an actual error"). `main` may have no `?` at all (B4). Stage 0 checks
   the program again whenever a set read before it was final grows - a recursive call, a cycle - keeping both
   attempts' memory; a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
+  **Words in a set (R1c, 2026-10-17, the coordinator's decision):** `? ListError.EMPTY` names one word, so a function
+  promises exactly what it raises and `catch ListError.EMPTY` is complete (R14 judges word by word); inferred sets carry
+  words (a callee's, less what clauses take); a set's words are part of a function type. std names them (`Pop`/`First`/
+  `Last` EMPTY, `RemoveAt`/`Insert`/`TakeAt`/`Swap*` OUT_OF_RANGE, `IndexOf`/`Find*` NOT_FOUND, `ShortestDecimal`
+  NOT_FINITE). A lambda infers with nothing written, in the canonical order (D16b).
 - **`try` handles what fails as written; `checked` is try plus every check (R8, E15a, E24, QQ1, the user's design).**
   One `try` covers every fallible call and operator in its operand - arguments, a chain (`try f().g()`, reversing
   E24's one-call reading), a parenthesized expression - and never turns a check on; a `try` covering nothing is an
   error (not in a generic's body, where instantiations differ). `checked (e)`, `checked a[i]`, `checked a[lo:hi]`,
-  `checked x[i] = v`, `checked T[e for ...]`: overflow, zero divisors, `<<` shifting a set bit out, shift amounts
-  (`OUT_OF_BOUNDS`), any integer conversion changing the value (signs too), float narrowing to infinity, NaN from
-  non-NaN (`INVALID`, IEEE's meaning), `as` of another case (`WRONG_CASE`), indexes, slices, lengths. `for x in try c`
-  and `try join` stay `try`. No `try { block }` (declined: hides exits).
+  `checked x[i] = v`, `checked T[e for ...]`: overflow, `<<` whose true value `x * 2^n` does not fit, shift amounts
+  (`OUT_OF_BOUNDS`), any integer conversion changing the value (signs too), a finite value made infinite (`OVERFLOW`),
+  IEEE's exceptions - `DIVIDE_BY_ZERO` for an integer or a finite nonzero float divided by zero, `INVALID` for a NaN
+  from non-NaN operands (`0.0/0.0`, `inf - inf`) and a NaN or infinity made an integer - `as` of another case
+  (`WRONG_CASE`), indexes, slices, lengths. A clause-less `checked` inside a `try` or `!` hands its errors to it
+  (`(checked a[i])!`). `for x in try c` and `try join` stay `try`. No `try { block }` (declined: hides exits).
 - **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `a.F().G()!`,
   `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.IoError.W`
-  and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class.
+  and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class. `spawn f(x)!`
+  ends the program from the task's thread (P4, P6).
 - **Operators may fail; checked forms add checks (E31, E31a, QQ1, the user's calls).** A plain operator method (all
   but `Len`, `Eq`, `Str`) may declare errors, making the operator fallible as written (`try (a - b)`). Its checked form
   is `CheckedAt`, `CheckedPlus` ... (the Try forms renamed - the user, reversing their own TryAt), what `checked`
-  calls, and must fail with every error the plain one can (a compile error at the declaration otherwise).
+  calls, and must fail with every error the plain one can (a compile error at the declaration otherwise; for a generic
+  type, per instantiation). A checked form requires its plain one (`CheckedAt` alone is an error); loops never call one.
   `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared.
 - **`BuiltinError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE`) is raised only by `checked` (R20);**
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
-  (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format` takes a `Radix`, a literal one checked while compiling), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
+  (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
+  `TextError.BAD_BASE`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
   `StatsError`, `RandError`, `JsonError.UNEVEN`, linalg's `ShapeError.MISMATCH` and `ActivationError` (an operation
   with nothing to mismatch cannot fail; a float matrix never fails an activation). A `Matrix` built directly takes its
   data as a slice and an array length do (D14b, E16b); `View` is the checked form. Language guarantees still abort.
@@ -526,9 +538,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `checked l[i]` checked, first chunk held on its own. `Map`: `Put Get
   Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
   the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
-  reads olang literal syntax; `x.Fixed(n)` as `%.*f`, exact; `n.Format(base)`. `io.Writer` never fails on Write - the
+  reads olang literal syntax; every base is a `Radix` (`TextError.BAD_BASE`, a literal one decided while compiling);
+  `x.Fixed(n)` as `%.*f`, exact; `n.Format(base)`. `io.Writer` never fails on Write - the
   first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
-  captures through memory files; `chan.Send` on a closed channel stops the program; `std/csv` is RFC 4180 strict;
+  captures through memory files; `chan.Send` on a closed channel fails with `ChanError.CLOSED`; `std/csv` is RFC 4180 strict;
   `std/stats` uses the sample variance and numpy's percentiles. `Array.Sort` is a stable O(n log n) merge.
 - **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`, `own`, `checked`.
 
@@ -539,7 +552,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Representation choices**: a function value is a code/environment pair crossing calls as two words; aggregates over
   128 bytes go through memory; one `ret` per function; enum payloads are whole words; integer `$` without snprintf.
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
-  opt-in with `try`.
+  opt-in with `checked`.
 - **Benchmarks against C are in `bench/`** (`bench/run.sh`, not in verify): plain loops and allocation at or beyond C;
   remaining gaps are in abstractions above them (bench/README.md).
 - **Fuzzers:** `fuzz/` (differential: baked, decided, run - `make fuzz`) and the scope fuzzer (`make scopefuzz`).

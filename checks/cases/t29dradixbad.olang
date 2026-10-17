@@ -1,0 +1,5 @@
+# check: fail error[T29d]: this literal enters Radix through its constructor
+# T29d: a fallible constructor written out on a literal runs while compiling, its failure an error there
+fn main() {
+    r := Radix(40)
+}

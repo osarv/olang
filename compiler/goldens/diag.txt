@@ -499,9 +499,9 @@ cascademember.olang:12:10: error: S has no member 'flag'
       |          ^~~~
 compilation failed with 1 error
 === cascadetryat.olang
-cascadetryat.olang:16:11: error[E31a]: Box has only the checked form of this operation, CheckedAt - write it under 'checked'
-   16 |     c := b[0][1][2]
-      |           ^
+cascadetryat.olang:10:13: error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
+   10 | fn (b Box&) CheckedAt(i I64) Box&b ? {
+      |             ^~~~~~~~~
 compilation failed with 1 error
 === compoundnarrow.olang
 compoundnarrow.olang:7:7: error[T6b]: I32 does not flow into U8 - convert it, as U8(x)
@@ -817,6 +817,11 @@ d8efallsoff.olang:3:4: error[D8e]: a 'noreturn' function may not reach its end -
     3 | fn stop(n I64) noreturn {
       |    ^~~~
 compilation failed with 1 error
+=== d8elambda.olang
+d8elambda.olang:5:15: error[D8e]: a lambda cannot be 'noreturn'
+    5 |     f := fn() noreturn { os.Exit(3) }
+      |               ^~~~~~~~
+compilation failed with 1 error
 === d8emain.olang
 d8emain.olang: error[B4]: main takes no parameters and returns no value: 'fn main() { }', or 'fn main() ? { }'
 compilation failed with 1 error
@@ -993,10 +998,23 @@ e28condlocallent.olang:25:11: error[E28]: a conditional or a match gives a copy 
    25 |     (l[0] if k > 0 else x).Bump()
       |           ^~
 compilation failed with 5 errors
+=== e31acheckedonly.olang
+e31acheckedonly.olang:11:11: error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
+   11 | fn (c C&) CheckedAt(i I64) I64 ? E + BuiltinError {
+      |           ^~~~~~~~~
+compilation failed with 1 error
 === e31anotsuperset.olang
 e31anotsuperset.olang:13:15: error[E31a]: CheckedMinus is Minus's checked form, so it fails with every error Minus can - add MoneyError after its '?'
    13 | fn (a Money&) CheckedMinus(b Money&) Money ? BuiltinError { return Money(checked (a.c - b.c)) }
       |               ^~~~~~~~~~~~
+compilation failed with 1 error
+=== e31asupersetinst.olang
+e31asupersetinst.olang:21:17: error[E31a]: CheckedPlus is Plus's checked form, so it fails with every error Plus can - add VErr after its '?'
+   21 | fn (a Box<<T>>) CheckedPlus(b Box<T>) Box<T> ? BuiltinError {
+      |                 ^~~~~~~~~~~
+e31asupersetinst.olang:28:29: note: instantiated here, with T = V
+   28 |     y := checked (Box(V(1)) + Box(V(Neg))) catch default Box(V(0))
+      |                             ^
 compilation failed with 1 error
 === e31atrymulti.olang
 e31atrymulti.olang:13:19: error[E31a]: 'checked' on several indices needs Grid to declare CheckedAt - a check derived from Len checks one position
@@ -1320,6 +1338,11 @@ compilation failed with 1 error
 e35bangnothing.olang:4:24: error[E35]: nothing here can fail - write it without '!'
     4 | fn main() { x := inc(1)! }
       |                        ^
+compilation failed with 1 error
+=== e35spawnbangnothing.olang
+e35spawnbangnothing.olang:6:19: error[E35]: nothing here can fail - write it without '!'
+    6 |         spawn g(1)!
+      |                   ^
 compilation failed with 1 error
 === e4aexact.olang
 e4aexact.olang:5:24: error[E4a]: this literal expression's value does not fit I32
@@ -4247,7 +4270,7 @@ p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E - write
       |     ^~~~
 compilation failed with 1 error
 === p4cjoinundeclared.olang
-p4cjoinundeclared.olang:12:9: error[R9]: E can escape here, and this function does not declare it - add it after '?', or catch it
+p4cjoinundeclared.olang:12:9: error[R9]: E.WORSE can escape here, and this function does not declare it - add it after '?', or catch it
    12 |     try join {
       |         ^~~~
 compilation failed with 1 error
@@ -4370,6 +4393,26 @@ r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? IoErr
     4 |     Read() I64 ?
       |     ^~~~
 compilation failed with 1 error
+=== r1ccatchword.olang
+r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.EMPTY - it fails with LE.GONE
+   11 | fn main() { x := try g(1) catch LE.EMPTY default 0 catch LE.GONE default 1 }
+      |                                    ^~~~~
+compilation failed with 1 error
+=== r1cfuncword.olang
+r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.EMPTY, found fn(n I64) I64 ? LE.GONE
+   12 | fn main() { x := run(g) }
+      |                      ^
+compilation failed with 1 error
+=== r1cwordescapes.olang
+r1cwordescapes.olang:11:37: error[R9]: LE.GONE can escape here, and this function does not declare it - add it after '?', or catch it
+   11 | fn f(n I64) I64 ? LE.EMPTY { return try g(n) }
+      |                                     ^~~
+compilation failed with 1 error
+=== r1cwordraised.olang
+r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not this word - add it after '?'
+    8 |     if n == 0 { error LE.GONE }
+      |                          ^~~~
+compilation failed with 1 error
 === r20nothing.olang
 r20nothing.olang:4:13: error[R8]: nothing here can fail - write it without 'checked'
     4 |     r I32 = checked (a == 1) catch default 0
@@ -4379,12 +4422,12 @@ r20nothing.olang:4:24: error[E12]: expected I32, found Bool
       |                        ^~
 compilation failed with 2 errors
 === r20partial.olang
-r20partial.olang:4:13: error[R9]: BuiltinError can escape here, and this function does not declare it - add it after '?', or catch it
+r20partial.olang:4:13: error[R9]: BuiltinError.DIVIDE_BY_ZERO can escape here, and this function does not declare it - add it after '?', or catch it
     4 |     r I32 = checked (a / b) catch BuiltinError.OVERFLOW default 0
       |             ^~~~~~~
 compilation failed with 1 error
 === r20undeclared.olang
-r20undeclared.olang:7:13: error[R9]: BuiltinError can escape here, and this function does not declare it - add it after '?', or catch it
+r20undeclared.olang:7:13: error[R9]: BuiltinError.OVERFLOW can escape here, and this function does not declare it - add it after '?', or catch it
     7 |     r I32 = checked (a + b)
       |             ^~~~~~~
 compilation failed with 1 error
@@ -5879,6 +5922,11 @@ t29dparams.olang:3:14: error[T29d]: this constructor takes one parameter, of typ
     3 | type Twin I32(a I32, b I32) { }
       |              ^
 compilation failed with 1 error
+=== t29dradixbad.olang
+t29dradixbad.olang:4:16: error[T29d]: this literal enters Radix through its constructor, which does not run on it while compiling: it fails with an error no clause handles
+    4 |     r := Radix(40)
+      |                ^~
+compilation failed with 1 error
 === t29dreturn.olang
 t29dreturn.olang:4:18: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
     4 |     if v > 100 { return 100 }
@@ -5931,6 +5979,14 @@ compilation failed with 1 error
 t30sep.olang:3:28: error: expected '}', found 'Perim'
     3 | type Sh trait { Area() I32 Perim() I32 }
       |                            ^~~~~
+compilation failed with 1 error
+=== t31noreturnmeets.olang
+t31noreturnmeets.olang:12:10: error[G19]: Q does not satisfy the constraint Quitter on T: it has no method Quit that fits
+   12 |     x := stop(q)
+      |          ^~~~
+t31noreturnmeets.olang:8:11: note: 'Quit' is declared here, with another signature
+    8 | fn (q Q&) Quit() { os.Exit(1) }
+      |           ^~~~
 compilation failed with 1 error
 === t4primname.olang
 t4primname.olang:4:6: error[D3a]: 'I32' is a built-in type's name - choose another
@@ -6071,9 +6127,9 @@ trymustfail.olang:10:13: error[E31a]: CheckedAt is At's checked form, so it fail
       |             ^~~~~~~~~
 compilation failed with 1 error
 === tryonly.olang
-tryonly.olang:12:11: error[E31a]: Bag& has only the checked form of this operation, CheckedAt - write it under 'checked'
-   12 |     x := b[0]
-      |           ^
+tryonly.olang:9:13: error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
+    9 | fn (b Bag&) CheckedAt(i I64) I32 ? E { return 1 }
+      |             ^~~~~~~~~
 compilation failed with 1 error
 === trysetatnolen.olang
 trysetatnolen.olang:9:18: error[E31a]: 'checked c[i] = v' checks against Len, and Bag& has neither CheckedSetAt nor Len

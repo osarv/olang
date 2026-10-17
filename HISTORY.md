@@ -19380,3 +19380,80 @@ std formatted and used through `OLANG_STD`).
     tools; first written in Python and ported, giving the same output on checks.olang) rewrites old command lines wherever the compiler is invoked (`"$OLANG"`, `$(OLANG)`,
     `build/out`, `olang ...`) and the checks' `# flags:` headers; it migrated the makefile, checks, fuzz, bench, the
     port's tools and docs, and is re-runnable for oann. HISTORY.md keeps the old spellings, being history.
+
+### The errors batch's design review, fixed (E15a, E35, D8e, G9a, T31, X1, E31a, S9d, S9e, R1c, R3, R14, R5-R8, D16b, P4, T29d, 2026-10-17; the coordinator's decisions, details mine)
+
+A light design review of the errors batch (/home/user/review/errors1, about thirty programs on the merged compiler)
+found behaviour that differed from SPEC, gaps the new rules left open, and stale text. Each was fixed as the
+coordinator decided.
+
+**IEEE's exceptions (E15a, findings 1-4).** The table had two rows for `0.0 / 0.0` and called an infinity made an
+integer `OVERFLOW` while the compiler said `INVALID`. Now: `INVALID` is IEEE's invalid operation - a NaN from operands
+that are not NaN (`0.0/0.0`, an infinity divided by one, `inf - inf`) and a NaN or an infinity converted to an integer;
+`DIVIDE_BY_ZERO` is only a finite nonzero float divided by zero (an infinity results) and an integer `/` or `%` by
+zero; a finite value out of an integer type's range, or made infinite, is `OVERFLOW`. The code generator and the
+evaluator tested "the divisor is zero" for floats; both now test a finite nonzero dividend too, so `0/0` falls to the
+NaN check. `<<` is `OVERFLOW` exactly when `x * 2^n` does not fit - the code already shifted back and compared, which is
+that; the "a set bit is shifted out" wording disagreed with it for signed types (`I8 -1 << 1` loses a set bit and
+fits). The integer-to-float row (`F16(70000)`) was missing. A corpus test compares each case run and baked.
+
+**`noreturn` (findings 5-9).** A `noreturn` call is a value no path gives: `operandLeaves` recognises one - and a
+conditional or match all of whose values are such - and it takes the type it lands in (`leavingTakes`), as a match
+value, beside the other value of a conditional, at any fit. It takes no part in generic inference, as `null` takes
+none (G9a: `pick(3, os.Exit(1))` is `pick` at `I64`). A lambda written `fn() noreturn { ... }` was accepted: the check
+read the lambda's type, which nothing set from the syntax; it reads the token now, and the lambda is then taken as
+`noreturn` so its calls add nothing. A void type spelled `?` in diagnostics ("every value of this match is ?"); it is
+"no value" now. T31: a `noreturn` trait method is met only by a `noreturn` method - a returning one met it and the
+broken promise surfaced as D10a inside the generic. X1's grammar gained `noreturn`, which std/os already wrote.
+
+**`!` and `try` take a clause-less `checked` (finding 10).** `(checked a[i])!` gave two errors - the inner `checked`
+propagated on its own (R9) and the `!` covered nothing (E35). Now every `try`, try statement and `!` collects the
+clause-less `checked`s built in its operand (`checkedTaken`, reset where `tryCover` is - a block, a lambda) and takes
+them over: their checks are re-rooted to it (`reRootChecks`), their errors and BuiltinError words added to its own. So
+`(checked a[i])!` is the bounds-checked index that ends the program, and `try (checked a[i]) + 1` propagates with the
+rest. A `checked` with clauses handles its own errors.
+
+**`spawn f(x)!` (finding 11).** The `!` was dropped and P4's "write spawn try" reported. Decided: allowed - the task
+ends the program from its thread, as a failed assert there does (P6). The spawn gets one catch-all clause marked as
+`!`'s; the trampoline calls a small function made beside it (`@olang.taskbang.N`) which reports as `!` does - made
+before the trampoline because what it names are module constants, which cannot be written inside a function body.
+The evaluator's ending was factored out (`ctBangEnds`) and serves a task's clause too. Two fixtures compare the build,
+the debug build and `interpret`.
+
+**Checked forms (findings 12, 13).** A type with `CheckedAt` and no `At` had `x[i]` only under `checked`, and `for x in
+try c` walked it through `CheckedAt` - `try` turning a check on. Now a checked form requires its plain form (an error at
+the checked form naming it; `CheckedInc`/`CheckedDec` are satisfied by `Plus`/`Minus`, which an increment is derived
+from); a loop calls `At` only. The superset rule ("a checked form fails with every error its plain form can") is judged
+per instantiation of a generic type: when a checked form's method is instantiated, its plain form is instantiated for
+the same receiver (`checkedFormPlain`), and once the sets settle each instantiation is held to the rule with G16b's
+"instantiated here" note - `Box<V>.CheckedPlus` leaving out `V.Plus`'s `VErr` was accepted.
+
+**Lambdas infer in the canonical order (finding 14).** A lambda keeps inferring its errors with nothing written, as it
+infers its types, but its set is now sorted as an inferred set is (R1a) - in order of appearance it failed to fit a
+function type writing the same errors canonically. R8 says "a lambda whose expected type writes no errors".
+
+**Words in an error set (R1c, finding 15).** `? ListError.EMPTY`, mixed with types (`? ListError.EMPTY + IoError`).
+A set entry is an error type plus the words it holds (`struct type.errWords`, 0 for all - not part of the type's
+identity, so the codes, R6, are unchanged); several words of one type merge into one entry (`errSetUnion`). Judged
+word by word everywhere a set is: an `error` statement raising a word a written set does not hold, a `try` letting one
+through (R9), catch coverage (R14: `catchLeftWords`), a catch naming a word the call cannot fail with, function-type
+identity and fit (T22, T27), trait satisfaction (T31), the checked-form superset. Inferred sets carry words: an
+`error` statement adds its word, a try what its callee's set holds less what its clauses take - so a `?` function
+calling only `Pop` fails with `ListError.EMPTY`. The settled sets kept across attempts record words (`errKey`), and
+"a set read early grew" counts words too (`errSetSize`). A checked expression's `BuiltinError` entry holds exactly its
+checks' words. std names the words: `Pop`/`First`/`Last` `EMPTY`, `RemoveAt`/`TakeAt`/`Insert`/`SwapRemove`/`SwapTake`
+`OUT_OF_RANGE`, `IndexOf` `NOT_FOUND` (List and Vec), `Find`/`FindByte`/`FindLast` `TextError.NOT_FOUND`,
+`ShortestDecimal` `TextError.NOT_FINITE`. Signatures render their words (`$pop` is `pop(n I64) I64 ? LE.EMPTY`).
+
+**One base error (finding 15).** `ParseInt(base I64)` failed with `ParseError.BAD_BASE` at run time and `Format(base
+Radix)` with `TextError.BAD_BASE`, checked while compiling for a literal: one concept, two mechanisms. Decided (mine):
+every base is a `Radix` - 2 to 36, or 0, the base the text says (L10), which `ParseInt`/`ParseUint` read and `Format`
+writes in decimal - whose constructor fails with `TextError.BAD_BASE` (`? TextError.BAD_BASE`); `ParseError.BAD_BASE` is
+gone, and a literal base cannot fail anywhere. And `Radix(10)` written out needed `try`: a declared number's
+constructor called on a literal now runs while compiling as the literal entering the type does (T29d), the literal then
+standing for what it gives.
+
+**Stale text (finding 16).** S18d and X6 wrote `-t`, `-d`, `-i`; E6c and E16 said `try` for `checked`; P4 said "a
+function declaring errors"; R5-R7 and R14 knew only a declared list read left to right; E15a said "other than inside a
+call" where arguments are checked; PRINCIPLES.md had `try` opting into checks, `done`/`fail` among the words and `-i`;
+CLAUDE.md had `chan.Send` stopping the program and checks opted into with `try`.

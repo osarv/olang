@@ -1706,7 +1706,8 @@ fn ownleave(r mut report&) ? Failed {
 }
 
 # S16, S18b, P1d, S19c: tests failing on purpose - in a join, frames down, in a Str, in a destructor, on another stack,
-# by an error leaving the body, by a "!" - each read back by the test after it; S18d: the error return trace, after an
+# by an error leaving the body, by a "!" (on a spawned call and a checked index too, E35) - each read back by the test
+# after it; S18d: the error return trace, after an
 # error ends a test, escapes main or reaches a "!", in a -d build and under -i, and a hint to get it in any other
 test "tests that fail on purpose, and where an error went" { assert passed("testends") }
 
@@ -1715,7 +1716,7 @@ fn testends(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
-    for n in String&["traced", "banged"] {
+    for n in String&["traced", "banged", "spawnbanged", "checkbanged"] {
         try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1") == 0, $n " build", dir)
         # the shell adds its own "Aborted" line after what a program stopped by '!' printed
         try r.expect(sh(dir, "./build/" $n " > b.txt 2>&1; grep -v '^Aborted' b.txt | cmp -s - " $n ".b.want") == 0, n, dir)

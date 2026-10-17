@@ -70,19 +70,19 @@ fn (v Vec<<T>>&) At(i I64) T { return v.data[i] }
 fn (v mut Vec<<T>>&) SetAt(i I64, x T) { v.data[i] = x }
 
 # the first element - failing with EMPTY when there is none, as List's First does
-fn (v Vec<<T>>&) First() T ? VecError {
+fn (v Vec<<T>>&) First() T ? VecError.EMPTY {
     if v.n == 0 { error VecError.EMPTY }
     return v.data[0]
 }
 
 # the last element - failing with EMPTY when there is none
-fn (v Vec<<T>>&) Last() T ? VecError {
+fn (v Vec<<T>>&) Last() T ? VecError.EMPTY {
     if v.n == 0 { error VecError.EMPTY }
     return v.data[v.n - 1]
 }
 
 # removes the last element and gives it - failing with EMPTY when there is none. Moves nothing, and keeps the buffer
-fn (v mut Vec<<T>>&) Pop() T ? VecError {
+fn (v mut Vec<<T>>&) Pop() T ? VecError.EMPTY {
     if v.n == 0 { error VecError.EMPTY }
     v.n--
     return v.data[v.n]
@@ -114,12 +114,12 @@ fn (v Vec<<T>>&) RunFrom(at I64) Array<T>&v ? Exhausted {
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
-fn (v mut Vec<<T>>&) RemoveAt(i I64) ? VecError { try v.TakeAt(i) }
+fn (v mut Vec<<T>>&) RemoveAt(i I64) ? VecError.OUT_OF_RANGE { try v.TakeAt(i) }
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
 # checked once per call
-fn (v mut Vec<<T>>&) TakeAt(i I64) T ? VecError {
+fn (v mut Vec<<T>>&) TakeAt(i I64) T ? VecError.OUT_OF_RANGE {
     if i < 0 or i >= v.n { error VecError.OUT_OF_RANGE }
     x := v.data[i]
     for k in range i, v.n - 1 { v.data[k] = v.data[k + 1] }
@@ -128,11 +128,11 @@ fn (v mut Vec<<T>>&) TakeAt(i I64) T ? VecError {
 }
 
 # removes the element at position i as SwapTake does, giving nothing
-fn (v mut Vec<<T>>&) SwapRemove(i I64) ? VecError { try v.SwapTake(i) }
+fn (v mut Vec<<T>>&) SwapRemove(i I64) ? VecError.OUT_OF_RANGE { try v.SwapTake(i) }
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element, and the
 # order is not kept. i must be a position, checked once per call: one that is not fails with OUT_OF_RANGE
-fn (v mut Vec<<T>>&) SwapTake(i I64) T ? VecError {
+fn (v mut Vec<<T>>&) SwapTake(i I64) T ? VecError.OUT_OF_RANGE {
     if i < 0 or i >= v.n { error VecError.OUT_OF_RANGE }
     x := v.data[i]
     v.n--
@@ -142,7 +142,7 @@ fn (v mut Vec<<T>>&) SwapTake(i I64) T ? VecError {
 
 # puts x at position i, the elements from i on each moving up one place - so Insert(Len(), x) is Push(x). i must be from
 # 0 to Len(), checked once per call: one that is not fails with OUT_OF_RANGE
-fn (v mut Vec<<T>>&) Insert(i I64, x T) ? VecError {
+fn (v mut Vec<<T>>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
     if i < 0 or i > v.n { error VecError.OUT_OF_RANGE }
     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
     k I64 = v.n
@@ -161,7 +161,7 @@ fn (v mut Vec<<T>>&) Reverse() { v.data[:v.n].Reverse() }
 fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.data[:v.n].Sort(less) }
 
 # the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none
-fn (v Vec<<T>>&) IndexOf(x T) I64 ? VecError {
+fn (v Vec<<T>>&) IndexOf(x T) I64 ? VecError.NOT_FOUND {
     for i in range v.n {
         if v.data[i] == x { return i }
     }

@@ -14,18 +14,18 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
    a lock) have destructors, run once when their scope closes.
 2. **C-like performance.** You get what the machine can do unless you ask for less: `-O3` and whole-program LTO by
    default, generics compiled per type, data laid out as C lays it out. **No cost is paid per operation that the code
-   does not show**: indexing, arithmetic and conversions are unchecked, and `try` opts into a check where you want one.
+   does not show**: indexing, arithmetic and conversions are unchecked, and `checked` opts into a check where you want one.
    A check paid once per construction (a slice's bounds, an array's length) is fine. A cost the reader should see is
    written at the use site: atomics are named operations, an operator is a named method, a copy of an array is an
    assignment someone wrote.
 3. **Natural language, as much as possible.** Prefer a word you can say aloud to a symbol: `for x in a`, `and`/`or`/
-   `not`, `a if c else b`, `x in c`, `x is T`, `x as T`, `done`, `fail`, `unreachable`, `extends`. A symbol earns its
+   `not`, `a if c else b`, `x in c`, `x is T`, `x as T`, `noreturn`, `unreachable`, `extends`. A symbol earns its
    place when a word would be longer to read without being clearer (`+`, `[]`, `=>`).
 4. **Minimal syntax.** One way to write each thing. No semicolons; blocks always have braces; conditions have no
    parentheses; one loop keyword (`for`); one spelling of an error set (`?`); `mut` only where it decides something.
    Reuse a construct before adding one. A spelling that is removed is simply gone, not kept alive by a diagnostic.
 5. **Multi-purpose.** The same language has to serve:
-   - scripting: `-i`, text joined by adjacency, `$x` for any value;
+   - scripting: `interpret`, running a file by naming it, text joined by adjacency, `$x` for any value;
    - AI and data: F16/BF16/F8, complex numbers, comprehensions, SIMD-aligned arrays, parallel `join`/`spawn`;
    - systems work: `extern fn`, C layouts;
    - GUIs: run-time interfaces (`any Trait&`) are planned for open sets of widgets.
@@ -63,7 +63,7 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
 ## Judging a new feature
 
 1. Does the programmer have to manage memory for it? Then it is wrong.
-2. Does it add a cost on every use that the use does not show? Then it needs `try`, a name, or a redesign.
+2. Does it add a cost on every use that the use does not show? Then it needs `checked`, a name, or a redesign.
 3. Can it be said in words? Is there an existing construct it could reuse instead?
-4. Does it compose: with generics, scopes, error sets, the compile-time evaluator, `-i`?
+4. Does it compose: with generics, scopes, error sets, the compile-time evaluator, `interpret`?
 5. Does it serve more than one of the domains above?
