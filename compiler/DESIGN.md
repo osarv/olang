@@ -524,8 +524,10 @@ body); T29d's literal constructors by the call (`BodyId`, `SiteId`); D13c's zero
 - **Errors only, after checking, in `check`'s last step:** T25c/QC's by-value need; `roByArg`/`roToResult`.
 - **Errors or placement only, after checking, in `scope`:** O17/O17b's regions and handles; `MayBuild`/`MayBuildInto`
   and `Str`'s noBuild; own effects (O39-O41's release and borrow effects); borrowed own results (O37); freshness (O38);
-  C2d's may-hold; O26a/O18c's "may keep"; O10b's obligations, O23a's derived scopes and O13c's result bindings. The E31b
-  handle exemption (G2) is `scope`'s error: `check` elaborates every E31b case the same way.
+  C2d's may-hold; O26a/O18c's "may keep"; O10b's obligations, O23a's derived scopes and O13c's result bindings. E31b's
+  lend error - `x[i]`'s copy where the callee may write it - is `scope`'s, with its handle and view exemptions (G2):
+  whether a callee writes the copy's own storage is a summary of its body. `check` elaborates every E31b case the same
+  way.
 
 **What the contract leaves to each pass.** `check`: types, elaboration, permissions (T25b, T25c), D10a, S3, S4d by
 types, every rule but §8's and K's. `scope`: §8 (O-rules, P2, C2d), confinement (O38), own regions and reach (O33,
@@ -1272,8 +1274,8 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M3 | `ast`, `parse` (study2's parser is the start) | M1, M2 | parse acceptance (section 4); recovery gives one error per item on every syntax-error case (done 2026-10-11) |
 | M4 | `load`, `fetch`, `names` | M3 | load + names acceptance; the remote, lock and `-u` scenarios pass through a test driver (done 2026-10-11) |
 | M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) (built 2026-10-12; reviewed and revised the same day: function types' scopes, marks, body kinds, sites, keys - section 1.6.1) |
-| M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site |
-| M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call |
+| M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site (in progress 2026-10-17: checkdiff 234 of 415 refused cases give stage 0's first error, 269 of 273 accepted programs check clean - PROGRESS.md in wt-check) |
+| M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call (in progress, with M5b) |
 | M6 | `scope` | M5a's `typed` contract | written first as a small formal model of section 8 and section 8.8 (the rules and why each is sound, `docs/scope-model.md`), reviewed before code; then every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38); the scope fuzzer and sanitizer find nothing |
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1) |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |

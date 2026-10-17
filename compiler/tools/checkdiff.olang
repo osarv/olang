@@ -1,0 +1,318 @@
+# checkdiff - M5b/M5c's acceptance (compiler/DESIGN.md section 4): the self-hosted checker against stage 0.
+#
+#     checkdiff [-v]
+#
+# 1. Every checks/cases program stage 0 refuses (compiler/goldens/diag.txt) whose first error's rule is the checker's
+#    must give that error at the same file, line and column ("first"); "exact" counts the cases whose every error row,
+#    rule and position, is stage 0's. A first error of another pass's rule - section 8's scope pass (M6), the
+#    evaluator's (M8), the driver's and the conditional compilation's - is not counted, nor one of a rule a decision of
+#    2026-10-17 removes or changes (constant generics, G8b's spelling, the default error: QP2, QW, QO1), which the
+#    port follows instead of stage 0.
+# 2. Every root stage 0 accepts - the checks cases that build or run, and the corpus, std, compiler, checks, fuzz and
+#    bench programs - must check clean: no error and no construct the checker leaves unchecked ("gap").
+#
+# Prints the fractions, and with -v the cases that differ. Run from the repository root after
+# "make build/compiler_tools_checkdump" (CHECKDIFF_DUMP names another build of it). Exits 0: the acceptance is measured,
+# not yet required. Leaves what checkdump said in build/checkdiff.said, the gaps counted in build/checkdiff.gaps.
+
+import "std/os"
+import "std/io"
+
+fn main() ? {
+    os.RunOnStack(1 << 28, fn() { run(os.Args()) })
+}
+
+# a row of a rendering: a case, and an error's place and rule ("FILE:LINE:COL RULE") or a gap's ("gap PLACE")
+type row struct(Case String&, What String&) {
+    Case
+    What
+}
+
+fn run(args Array<String&>&) {
+    out := io.Writer(1)
+    verbose := args.Len() > 1 and args[1] == "-v"
+    dump := try os.Env("CHECKDIFF_DUMP") catch default "build/compiler_tools_checkdump"
+    root := try os.Cwd() catch os.OsError {
+        stop(out, "checkdiff: no working directory")
+        unreachable
+    }
+    if not os.Exists(dump) { stop(out, "checkdiff: " $dump " is not built (make " $dump ")") }
+    golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.OsError {
+        stop(out, "checkdiff: no goldens")
+        unreachable
+    }
+    old := rows(golden)
+    names := try os.ReadDir("checks/cases") catch os.OsError {
+        stop(out, "checkdiff: no checks/cases")
+        unreachable
+    }
+    fails List<String&>
+    oks List<String&>
+    for n in names {
+        if not n.EndsWith(".olang") { continue }
+        text := try os.ReadFile("checks/cases/" $n) catch os.OsError { continue }
+        if header(text, "# check:").StartsWith("fail") { fails.Push(n) } else { oks.Push(n) }
+    }
+
+    # ---- 1. the cases stage 0 refuses ----
+    said := StringBuilder()
+    runAll(said, $root "/" $dump, $root "/checks/cases", fails, root)
+    got := rows(said.ToString())
+    total I64 = 0
+    mine I64 = 0
+    first I64 = 0
+    exact I64 = 0
+    decided I64 = 0
+    missed := StringBuilder()
+    for c in fails {
+        want := firstRow(old, c)
+        if want == "" { continue }
+        total++
+        rule := ruleOf(want)
+        if ownedElsewhere(want) { continue }
+        if decidedAway(rule) {
+            decided++
+            continue
+        }
+        mine++
+        mineRows := errorRows(got, c)
+        if want in mineRows {
+            first++
+            if sameRows(errorRows(old, c), mineRows) { exact++ }
+        } else {
+            missed.Push($c ": want " $want "; got ")
+            for r in mineRows { missed.Push($r "; ") }
+            missed.PushChar('\n')
+        }
+    }
+    out.Write(("checkdiff: refused programs: " $first " of " $mine " checker cases give stage 0's first error (" $exact
+              " give exactly its errors; " $(total - mine - decided) " are other passes', " $decided
+              " rules decided away)\n"))
+
+    # ---- 2. the programs stage 0 accepts ----
+    said2 := StringBuilder()
+    runAll(said2, $root "/" $dump, $root "/checks/cases", oks, root)
+    tests List<String&>
+    for dir in String&["tests", "std", "compiler", "fuzz", "bench"] {
+        fs := try os.ReadDir(dir) catch os.OsError { continue }
+        for f in fs {
+            if f.EndsWith(".olang") { tests.Push($dir "/" $f) }
+        }
+    }
+    tests.Push("checks/checks.olang")
+    for f in tests { said2.Push(check($root "/" $dump, root, String&["-t", f], root)) }
+    clean := rows(said2.ToString())
+    n I64 = 0
+    ok I64 = 0
+    dirty := StringBuilder()
+    all := List<String&>()
+    for c in oks { all.Push(c) }
+    for c in tests { all.Push(c) }
+    for c in all {
+        n++
+        k I64 = 0
+        for r in clean {
+            if r.Case == c { k++ }
+        }
+        if k == 0 { ok++ } else { dirty.Push($c ": " $k "\n") }
+    }
+    out.Write("checkdiff: accepted programs: " $ok " of " $n " check clean\n")
+    errs := Map<String&, I64>()
+    gaps := Map<String&, I64>()
+    for r in clean {
+        if r.What.StartsWith("gap ") { gaps.Put(r.What, 1) } else { errs.Put(r.What, 1) }
+    }
+    out.Write("checkdiff: on them, " $errs.Len() " distinct error rows and " $gaps.Len() " distinct gap places\n")
+    if verbose {
+        out.Write("-- refused programs not giving stage 0's first error:\n")
+        out.Write(missed.ToString())
+        out.Write("-- accepted programs not clean (rows):\n")
+        out.Write(dirty.ToString())
+        out.Write("-- errors said on accepted programs:\n")
+        byRule := Map<String&, I64>()
+        for r in clean {
+            if r.What.StartsWith("gap ") { continue }
+            byRule.Update(errorOf(r.What), 1, fn(v I64) I64 { return v + 1 })
+        }
+        out.Write(counted(byRule))
+    }
+    gapCount := Map<String&, I64>()
+    everything := $said.ToString() $said2.ToString()
+    for line in everything.Lines() {
+        if not line.StartsWith("gap ") { continue }
+        at := try line[4:].Find(" ") catch default -1
+        if at >= 0 { gapCount.Update(line[5 + at:], 1, fn(v I64) I64 { return v + 1 }) }
+    }
+    try os.WriteFile("build/checkdiff.gaps", counted(gapCount)) catch os.OsError { }
+    try os.WriteFile("build/checkdiff.said", $said.ToString() $said2.ToString()) catch os.OsError { }
+    try os.WriteFile("build/checkdiff.missed", missed.ToString()) catch os.OsError { }
+    try out.Flush() catch io.IoError { }
+}
+
+# ends the program with why said
+fn stop(out mut io.Writer&, why String&) {
+    out.Write($why "\n")
+    try out.Flush() catch io.IoError { }
+    os.Exit(1)
+}
+
+# ---- reading renderings ----
+
+# the error and gap rows of what checkdump or stage 0 said: "=== CASE" or "== CASE" begins a case's rows
+fn rows(text String&) List<row> {
+    rs := List<row>()
+    c String& = ""
+    for line in text.Lines() {
+        if line.StartsWith("=== ") {
+            c = $line[4:]
+        } else if line.StartsWith("== ") {
+            c = $line[3:]
+        } else if line.StartsWith("gap ") {
+            sp := try line[4:].Find(" ") catch default line.Len() - 4
+            rs.Push(row(c, "gap " $line[4:4 + sp]))
+        } else {
+            e := try line.Find(": error[") catch default -1
+            if e < 0 or (try line[0:e].Find(" ") catch default -1) >= 0 { continue }
+            close := try line[e:].Find("]") catch default -1
+            if close < 0 { continue }
+            rs.Push(row(c, $line[0:e] " " $line[e + 8:e + close]))
+        }
+    }
+    return rs
+}
+
+# what a case's first header line of this kind says, after the key: "fail E12" for "# check: fail E12"
+fn header(text String&, key String&) String& {
+    for line in text.Lines() {
+        if line.StartsWith(key) { return $line[key.Len():].Trim() }
+        if not line.StartsWith("#") { break }
+    }
+    return ""
+}
+
+# a case's first error row, "" for none
+fn firstRow(rs List<row>&, c String&) String& {
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") { return $r.What }
+    }
+    return ""
+}
+
+# a case's error rows, sorted
+fn errorRows(rs List<row>&, c String&) List<String&> {
+    l := List<String&>()
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") { l.Push(r.What) }
+    }
+    l.Sort(fn(a String&, b String&) Bool { return a < b })
+    return l
+}
+
+fn sameRows(a List<String&>&, b List<String&>&) Bool {
+    if a.Len() != b.Len() { return false }
+    for i in range a.Len() {
+        if a[i] != b[i] { return false }
+    }
+    return true
+}
+
+# an error row's first rule: "E12" of "f.olang:3:4 E12", "T22a" of "f.olang:3:4 T22a, E31"
+fn ruleOf(what String&) String& {
+    sp := try what.Find(" ") catch default -1
+    r := what[sp + 1:]
+    k := try r.Find(",") catch default -1
+    return $r if k < 0 else $r[0:k]
+}
+
+# an error row without its place: its rule
+fn errorOf(what String&) String& {
+    sp := try what.Find(" ") catch default -1
+    return $what[sp + 1:]
+}
+
+# whether an error row's rules name one another pass owns: "E11c, O12" is the scope pass's
+fn ownedElsewhere(what String&) Bool {
+    sp := try what.Find(" ") catch default -1
+    for r in what[sp + 1:].Split(", ") {
+        if otherPass(r) { return true }
+    }
+    return false
+}
+
+# a rule another pass owns: section 8's scope pass (M6: the O rules, C2d, C2g, T17c, D16d, P2, T22a, E12c, and E31b's
+# lends, judged by what the callee writes - a handle's or a view's exemption, G2), the
+# evaluator (M8: K, S8a-S8c, S18c, B5a, B9c, D13c, G21, T29d's literals run while compiling), the driver and conditional
+# compilation (B), a code generator's or the race detector's
+fn otherPass(r String&) Bool {
+    if r.StartsWith("O") or r.StartsWith("K") or r.StartsWith("B") { return true }
+    for x in String&["C2d", "C2g", "T17c", "D16d", "P2", "T22a", "E12c", "E31b", "S8a", "S8b", "S8c", "S18c", "D13c", "G21"
+                     "T29d", "P7", "P1c"] {
+        if r == x { return true }
+    }
+    return false
+}
+
+# a rule the decisions of 2026-10-17 remove or change, which the port follows instead of stage 0: constant generics
+# and their arrays' spelling (QP2: G20-G28), the introduction rule (QW: G8b), the default error (QO1: R15-R17),
+# done/fail/abort and a test's return (QU: S15, S16-S16b)
+fn decidedAway(r String&) Bool {
+    for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "R18", "R19"
+                     "S16a", "S16b", "S16c"] {
+        if r == x { return true }
+    }
+    return false
+}
+
+# counts, most first, one "COUNT WHAT" a line
+fn counted(m Map<String&, I64>&) String& {
+    l := m.Iter().ToList()
+    l.Sort(fn(a MapEntry<String&, I64>, b MapEntry<String&, I64>) Bool { return a.Value > b.Value })
+    b := StringBuilder()
+    for e in l { b.Push($e.Value.PadStart(7) " " $e.Key "\n") }
+    return b.ToString()
+}
+
+# ---- running checkdump ----
+
+# checkdump over cases in dir: those with flags one by one (a test build, build constants), the rest in one process
+fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&>&, root String&) {
+    plain := List<String&>()
+    for c in cases {
+        text := try os.ReadFile($dir "/" $c) catch os.OsError { continue }
+        flags := header(text, "# flags:")
+        if flags == "" {
+            plain.Push(c)
+            continue
+        }
+        args := List<String&>()
+        words := flags.Split(" ")
+        for i in range words.Len() {
+            if words[i] == "-define" and i + 1 < words.Len() {
+                args.Push("-D")
+                args.Push(words[i + 1])
+            } else if words[i] == "test" {
+                args.Push("-t")
+            }
+        }
+        args.Push(c)
+        said.Push(check(dump, dir, args.ToArray(), root))
+    }
+    # in batches, so one case that runs away costs only its batch
+    for at in range 0, plain.Len(), 50 {
+        end := at + 50 if at + 50 < plain.Len() else plain.Len()
+        args := List<String&>()
+        for k in range at, end { args.Push(plain[k]) }
+        said.Push(check(dump, dir, args.ToArray(), root))
+    }
+}
+
+# what checkdump says of files, run in dir over the repository's std
+fn check(dump String&, dir String&, files Array<String&>&, root String&) String& {
+    args := List<String&>()
+    args.Push("env")
+    args.Push("OLANG_STD=" $root "/std")
+    args.Push(dump)
+    for f in files { args.Push(f) }
+    o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { return "" }
+    return $o.Stdout $o.Stderr
+}

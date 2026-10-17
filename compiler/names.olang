@@ -1328,6 +1328,14 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
         r.unknownHead(r.nameSpan(r.mi, sp.Start, head), head)
         return
     }
+    if path.Len() == 2 and (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 {
+        # an enum's case written where a type argument goes (G20: a constant argument): its head is the type
+        h := r.typeIn(r.mi, head)
+        if h.Kind == What.Type {
+            r.record(sp, h)
+            return
+        }
+    }
     t := r.aliasModule(path)
     if t >= 0 { r.record(sp, r.memberOf(t, path[path.Len() - 1])) }
 }
