@@ -43,6 +43,12 @@ overrated".
   the corpus"): wt-errors started (/home/user/wt/errors: QO1, QO4, QO6, QQ1; corpus migration after wt-ioprint lands);
   wt-arrays phase 1 started (/home/user/wt/arrays: docs/arrays.md, SPEC, inventory, plan - no bootstrap/ edits until
   wt-errors merges; phase 2 builds it). oann migrates after both.
+- 2026-10-17 ~14:35 CEST, the user away (errands): "work through what you have been given ... I want the background tasks
+  to finish before we really start talking about the new features" (docs/ideas.md). Merge order: wt-memfix (stage-0
+  memory, unblocks every verify) -> wt-tests (corpus into tests/) -> wt-runfmt (formatter + word CLI, in C too) ->
+  wt-e31view round 4 (U1-U3; review if it relaxes) -> wt-pyport -> wt-errors (big; soundness review of its relaxations
+  before merging) -> then arrays phase 2 (with QW) and the port's checker resumed (wt-check, after memfix). Each merge:
+  full verify on the merged tip, one at a time.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.
