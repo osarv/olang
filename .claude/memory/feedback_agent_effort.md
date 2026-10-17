@@ -38,3 +38,9 @@ future? It takes a lot of resources").** Stage 0's remaining job is building the
 fixed point (stage 2 == stage 3) catch a stage-0 miscompile. So: the e31view round-4 review is the last C review; C
 batches get the fuzzers, the scope sanitizer and the suite, plus a light review of the SPEC rules they change (which
 serves both compilers); deep reviews (opus, high) go to the port's section-8 and ownership passes.
+
+**Agent length (the user, 2026-10-17, asking whether to run shorter agents to save credits).** Every step re-sends an
+agent's whole context (mostly from cache, ~1/10 the price, still paid), so a long agent costs more per step as it
+grows. Rules: one fresh agent per ROUND of a big batch, starting from a hand-off note (PROGRESS-style: done, decided,
+next) that every long agent keeps up to date as it goes; resume an agent only for a short follow-up within about an
+hour (warm cache); never resume a very long agent (hundreds of k tokens) for a new round.
