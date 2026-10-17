@@ -8119,9 +8119,14 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
 //means, *unnamed the program's scope; either may be NULL
 static bool valueRefsHome(struct operand* op, struct var** out, int* depth, bool* unnamed) {
     //...a payload read out of an enum value by "match" or "as" holds what the enum does, where its references are (O4b)
-    while ((op->opType == OPERATION_MEMBER || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len
-           && !op->type.structMAlloc)
-        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    //(...and a value a lowering held in a hidden local - "ll[0][0]", its receiver held, E31b - is that local's)
+    for (;;) {
+        if (heldResult(op)) op = heldResult(op);
+        else if ((op->opType == OPERATION_MEMBER || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len
+                 && !op->type.structMAlloc)
+            op = *(struct operand**)ListGetIdx(&op->args, 0);
+        else break;
+    }
     if (op->opType != OPERATION_READ_VAR || !op->readVar || op->type.structMAlloc) return false;
     struct var* v = canonicalVar(op->readVar);
     if (!v->refsHomeSet && v->valueHomeSet) { //O25a: built where its initializer put it - a scope argument's, say
@@ -10285,20 +10290,25 @@ static bool landByObligationsIn(struct checkCtx* ctx, struct operand* rhs, bool 
 static bool mayBuildWhileChecking(struct var* func);
 static bool localKeptBeyondBlock(struct checkCtx* ctx, struct str name, struct type t);
 static bool landKeptAll; //set while a comprehension's element is declared: it is kept, in what the comprehension builds
+//(forced: an obligation needs the result scope to outlive, or to be, one an argument gives)
+static bool landForcedByObligations(struct var* func) {
+    struct var* R = func->type.resultScope ? canonicalVar(func->type.resultScope) : NULL;
+    if (!R) return false;
+    for (int i = 0; i < func->type.scopeObligations.len; i++) {
+        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
+        if (o->shorterViaParam) continue;
+        struct var* lo = canonicalVar(o->longer);
+        struct var* sh = canonicalVar(o->shorter);
+        if ((lo == R && sh != R) || (o->exact && sh == R && lo != R)) return true;
+    }
+    return false;
+}
 static bool landDeclWhereFree(struct checkCtx* ctx, struct operand* rhs, struct str name, struct type t) {
     if (rhs->opType != OPERATION_FUNCCALL || !rhs->readVar) return false;
     struct var* func = rhs->readVar;
     struct var* R = func->type.resultScope;
     if (!R || func->bodyState != 2) return false;
-    R = canonicalVar(R);
-    bool forced = false;
-    for (int i = 0; i < func->type.scopeObligations.len && !forced; i++) {
-        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
-        if (o->shorterViaParam) continue;
-        struct var* lo = canonicalVar(o->longer);
-        struct var* sh = canonicalVar(o->shorter);
-        forced = (lo == R && sh != R) || (o->exact && sh == R && lo != R);
-    }
+    bool forced = landForcedByObligations(func);
     //(...and a local kept beyond its block - "tk := lx.next(); toks.Push(tk)", toks outside the loop - takes what the
     //callee builds there with it: that is the program's own keeping)
     if (!forced && !landKeptAll && mayBuildWhileChecking(func) && !localKeptBeyondBlock(ctx, name, t)) return false;
@@ -11226,6 +11236,33 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 determined = true;
                 detArg = arg;
                 continue;
+            }
+            //O17b/O18c: a handle a call gives - "ll[0]", the receiver of "ll[0][0]" - landed by its obligations above,
+            //where the collection's elements live, is lent as its reference too, to a callee using it only through that
+            //reference: the variable is bound where the reference leads, and the handle's own copy is a temporary of this
+            //block (codegen). Lent as any other temporary, the variable was the block's, and so was every result read
+            //through it: "h := ll[0][0].S; h.Push(x)" built the new chunk there
+            if (ctx && ctx->hasOwnScope && !arg->type.structMAlloc && !OperandIsLvalue(arg) && handleField(arg->type)) {
+                struct var* hv;
+                int hd;
+                bool hu;
+                if (landedCallRefsScope(ctx, arg, &hv, &hd, &hu) && hv != SCOPE_AMBIGUOUS
+                        && handleThroughParam(func, j, arg->tok)) {
+                    if (hu) { hv = NULL; hd = 0; } //O1b: the program's scope
+                    if (determined && (!sameExactScope(hv, hd, boundTo, boundDepth) || hu != unnamed)) {
+                        Err(tok, ERR_SCOPE_ARGS_DISAGREE);
+                        noteArgsDisagree(ctx, arg, hv, hd, hu, detArg, boundTo, boundDepth, unnamed);
+                        boundTo = SCOPE_AMBIGUOUS;
+                        break;
+                    }
+                    arg->handleLent = true;
+                    boundTo = hv;
+                    boundDepth = hd;
+                    unnamed = hu;
+                    determined = true;
+                    detArg = arg;
+                    continue;
+                }
             }
             //E12c: a VALUE lvalue passed for a reference parameter is borrowed - the callee gets that very
             //storage, so its scope is where that storage is. Treating it as a temporary bound the variable to the
@@ -18954,6 +18991,16 @@ static struct statement buildVarDeclFromOperandIn(struct checkCtx* ctx, struct t
     bool landedAlready = !inResult && rhs->opType == OPERATION_FUNCCALL && rhs->readVar && rhs->readVar->type.resultScope
                          && !callIsLanding(rhs);
     bool landedByOblig = !inResult && (landedAlready || landDeclWhereFree(ctx, rhs, strFromTok(nameTok), declType));
+    //...as does the call a field, an element, a slice or a payload is read out of, as for ":=" in the program (buildVarDecl):
+    //"$handle := bs[b].S", held for "bs[b].S.Push(x)", is "e := bs[b]; h := e.S"
+    struct operand* projLanded = NULL;
+    if (!inResult && !landedByOblig) {
+        struct operand* c = rhs;
+        while (heldResult(c) || projectionBase(c)) c = heldResult(c) ? heldResult(c) : projectionBase(c);
+        if (c != rhs && c->opType == OPERATION_FUNCCALL && !spreadSourceOf(c) && callIsLanding(c)
+                && landDeclWhereFree(ctx, c, strFromTok(nameTok), declType))
+            projLanded = c;
+    }
     bool unnamedScope = false;
     if (!adoptInitializerScope(ctx, &declType, rhs, &unnamedScope)) declType.scopeDepth = ctx->blockDepth;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
@@ -18967,9 +19014,10 @@ static struct statement buildVarDeclFromOperandIn(struct checkCtx* ctx, struct t
         v->valueHomeDepth = 0;
         if (v->valueHome) markRegionBuilt(ctx->func, canonicalVar(v->valueHome)); //its storage is there (E11c)
     }
-    if (landedByOblig && !declType.structMAlloc && TypeHoldsReferences(declType)) {
-        if (landedInBlock(rhs)) valueHomeOf(ctx, rhs, v);
-        else refsHomeOf(rhs, v);
+    if ((landedByOblig || projLanded) && !declType.structMAlloc && TypeHoldsReferences(declType)) {
+        struct operand* c = projLanded ? projLanded : rhs;
+        if (landedInBlock(c)) valueHomeOf(ctx, c, v);
+        else refsHomeOf(c, v);
     }
     copyRefsHome(ctx, rhs, v); //O25h
     v->scopeBindings = rhs->scopeBindings;
@@ -21084,7 +21132,20 @@ static struct operand* atWriteBackWrap(struct checkCtx* ctx, struct operand* cal
     ListAddList(&seq->comprBody, pre);
     struct operand* val = NULL;
     if (call->type.bType != BASETYPE_VOID && !call->type.unknown) {
-        struct var* r = holdInHidden(ctx, call, tok, "res", &seq->comprBody);
+        struct var* r = NULL;
+        //(a value holding references is held as ":=" from the call holds it - landed where its obligations say, O18c:
+        //"h := ll[0][0].S" reads its references where the list's are, not in the block a temporary would be)
+        if (!call->type.structMAlloc && TypeHoldsReferences(call->type) && ctx->scope && ctx->hasOwnScope) {
+            char* nm = MallocOrCrash(32);
+            snprintf(nm, 32, "$res%d", ++hiddenCounter);
+            struct token ht = tok;
+            ht.type = TOK_IDEN;
+            ht.str = StrFromCStr(nm);
+            struct statement d = buildVarDeclFromOperand(ctx, ht, call);
+            r = scopeFindLocal(ctx->scope, ht.str);
+            if (r) ListAdd(&seq->comprBody, &d);
+        }
+        if (!r) r = holdInHidden(ctx, call, tok, "res", &seq->comprBody);
         val = OperandReadVar(r, tok);
     } else {
         struct statement st = (struct statement){0};
