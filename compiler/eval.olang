@@ -2026,6 +2026,8 @@ fn (m mut Machine&) globalWritten(p mir.Place) Bool {
 }
 
 fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
+    # under -i each module's Init sets its globals before main runs (B5a): nothing waits for one
+    if m.When == Mode.Run { return true }
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
@@ -2769,6 +2771,42 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     for i in range f.Vars.Len() { m.varIds[m.frames[nf].Vars + i] = m.program }
     m.loop(base)
     m.unwind(base)
+    return m.Stopped
+}
+
+# a global's value (K2, B3e): its initializer run where it has not been, the value then at Result, of type ResultTy.
+# While compiling, a mutable global, or one holding storage a writable reference reaches, is no compile-time value
+fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
+    m.halted = false
+    m.Stopped = Stop.None
+    m.Steps = 0
+    if m.Result.Id != 0 and m.allocOf(m.Result.Id).Kind != aFree { m.release(m.Result.Id & slotMask) }
+    m.Result, m.ResultTy = NullPtr, types.VoidT
+    g := try m.globalOf.Get(gkey(module, name)) catch {
+        m.refuse(WhyNoBody)
+        return m.Stopped
+    }
+    ty := types.TypeId(I32(m.globals[g].Ty))
+    if m.When == Mode.Compile {
+        if m.globals[g].Mutable {
+            m.refuse(WhyMutableGlobal)
+            return m.Stopped
+        }
+        if m.reachesWritable(ty) {
+            m.refuse(WhyChangeable)
+            return m.Stopped
+        }
+    }
+    if m.globals[g].State != 2 {
+        base := m.frames.Len()
+        m.startGlobal(g)
+        m.loop(base)
+        m.unwind(base)
+        if m.halted { return m.Stopped }
+    }
+    p := m.allocate(m.size(ty), aValue, m.program)
+    m.copy(p, Ptr(m.globals[g].Store, 0), m.size(ty))
+    m.Result, m.ResultTy = p, ty
     return m.Stopped
 }
 
@@ -3660,4 +3698,114 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
     m.Define(w)
     assert m.Eval(tkey(4), I64[]) == Stop.Refused(WhyReadOnly, 0, tspan(41))
+}
+
+# "fn() I64 { return x }" over the operand made by mk, keyed Body(id)
+fn retFn(t mut types.Table&, id I64, x mir.Operand) mir.Fn {
+    f := nfn(t, id)
+    r := f.AddTemp(t.Prim("I64"), Sp0)
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(r), mir.Rvalue.Use(x)))
+    f.Add(B0, mir.Stmt.Close(Sp0, S0))
+    f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(r))))
+    return f
+}
+
+fn gplace(t mut types.Table&, name source.NameId) mir.Place {
+    return mir.Place(mir.Base.Global(7, name, t.Prim("I64")), mir.Empty)
+}
+
+test "globals while compiling: an immutable one initialized when first read (K2), a mutable one or a write refused" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    i64 := t.Prim("I64")
+    ga, gb, gm, gc, gd := names.Intern("A"), names.Intern("B"), names.Intern("M"), names.Intern("C"), names.Intern("D")
+    # A = 6 * 7, B = A + 1: B read first initializes A on the way
+    fa := nfn(t, 10)
+    ra := fa.AddTemp(i64, Sp0)
+    tprim(fa, B0, I64(ra), typed.PrimOp.Mul, i64, mir.Operand.Const(i64, 6), mir.Operand.Const(i64, 7))
+    fa.Add(B0, mir.Stmt.Close(Sp0, S0))
+    fa.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(ra))))
+    tdefine(t, m, fa)
+    fb := nfn(t, 11)
+    rb := fb.AddTemp(i64, Sp0)
+    tprim(fb, B0, I64(rb), typed.PrimOp.Add, i64, mir.Operand.Copy(gplace(t, ga)), mir.Operand.Const(i64, 1))
+    fb.Add(B0, mir.Stmt.Close(Sp0, S0))
+    fb.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(rb))))
+    tdefine(t, m, fb)
+    m.DefineGlobal(7, ga, i64, false, tkey(10))
+    m.DefineGlobal(7, gb, i64, false, tkey(11))
+    tdefine(t, m, retFn(t, 1, mir.Operand.Copy(gplace(t, gb))))
+    assert m.Eval(tkey(1), I64[]) == Stop.None and m.Int(m.Result, i64) == 43
+    assert m.Global(7, ga) == Stop.None and m.Int(m.Result, i64) == 42
+    # a mutable global read; a global written
+    tdefine(t, m, retFn(t, 12, mir.Operand.Const(i64, 5)))
+    m.DefineGlobal(7, gm, i64, true, tkey(12))
+    tdefine(t, m, retFn(t, 2, mir.Operand.Copy(gplace(t, gm))))
+    assert m.Eval(tkey(2), I64[]) == Stop.Refused(WhyMutableGlobal, 0, Sp0)
+    w := nfn(t, 3)
+    w.Add(B0, mir.Stmt.Assign(tspan(3), gplace(t, gm), mir.Rvalue.Use(mir.Operand.Const(i64, 1))))
+    w.Add(B0, mir.Stmt.Close(Sp0, S0))
+    w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
+    tdefine(t, m, w)
+    assert m.Eval(tkey(3), I64[]) == Stop.Refused(WhyWritesGlobal, 0, tspan(3))
+    # C = D + 1, D = C + 1: defined in terms of each other
+    tdefine(t, m, retFn(t, 13, mir.Operand.Copy(gplace(t, gd))))
+    tdefine(t, m, retFn(t, 14, mir.Operand.Copy(gplace(t, gc))))
+    m.DefineGlobal(7, gc, i64, false, tkey(13))
+    m.DefineGlobal(7, gd, i64, false, tkey(14))
+    assert m.Eval(tkey(13), I64[]) == Stop.Refused(WhyCycle, 0, Sp0)
+    # K1a: what keeps a function from ever being evaluated, found before running it
+    why, file, sp := m.Why(tkey(3))
+    assert why == WhyWritesGlobal and sp == tspan(3), why
+    why2, _, _ := m.Why(tkey(1))
+    assert why2 == "", why2
+}
+
+test "scopes and destructors under -i: a scope's registrations run as it closes, last registered first (O15, O16)" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m mut Machine&t = NewMachine(t, Mode.Run)
+    i64 := t.Prim("I64")
+    rt := tdecl(t, names, types.DeclKind.Struct, "R")
+    t.SetStructBody(rt, t.List1(i64), true)
+    rr := t.Ref(rt, types.Writable)
+    log := names.Intern("Log")
+    # the destructor: "Log = Log * 10 + v"
+    d := tfn(t, 20, t.Func(t.List1(rr), types.VoidT, types.ListId(0)))
+    d.Vars.Push(mir.VarKind.Closing)
+    x := d.AddTemp(i64, Sp0)
+    tprim(d, B0, I64(x), typed.PrimOp.Mul, i64, mir.Operand.Copy(gplace(t, log)), mir.Operand.Const(i64, 10))
+    tprim(d, B0, I64(x), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(x)),
+          mir.Operand.Copy(d.Place(mir.Base.Local(mir.LocalId(0)), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)])))
+    d.Add(B0, mir.Stmt.Assign(Sp0, gplace(t, log), mir.Rvalue.Use(mir.Operand.Copy(mir.L(x)))))
+    d.Add(B0, mir.Stmt.Close(Sp0, S0))
+    d.End(B0, mir.Term.Return(Sp0, mir.Operand.None))
+    m.Define(d)
+    m.DefineDestructor(rt, tkey(20))
+    tdefine(t, m, retFn(t, 21, mir.Operand.Const(i64, 0)))
+    m.DefineGlobal(7, log, i64, true, tkey(21))
+    # "{ a := R(1); b := R(2); c := R(3) }; return Log": three instances in a block, destructed 3, 2, 1
+    f := nfn(t, 1)
+    blk := f.AddScope(mir.ScopeKind.Block, S0, typed.BlockId(1), Sp0)
+    f.Add(B0, mir.Stmt.Open(Sp0, blk))
+    for v in range 1, 4 {
+        r := f.AddTemp(rr, Sp0)
+        agg := f.AddTemp(rt, Sp0)
+        f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(agg), mir.Rvalue.Aggregate(rt, 0, f.Args(mir.Operand[mir.Operand.Const(i64, v)]))))
+        f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(r), mir.Rvalue.New(mir.ScopeRef.Scope(blk), mir.Operand.Copy(mir.L(agg)), rr)))
+        f.Add(B0, mir.Stmt.RegisterDtor(Sp0, mir.ScopeRef.Scope(blk), rt, mir.Operand.Copy(mir.L(r))))
+    }
+    f.Add(B0, mir.Stmt.Close(Sp0, blk))
+    f.Add(B0, mir.Stmt.Close(Sp0, S0))
+    f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(gplace(t, log))))
+    tdefine(t, m, f)
+    s := m.Eval(tkey(1), I64[])
+    assert s == Stop.None and m.Int(m.Result, i64) == 321, $s " " $m.Int(m.Result, i64)
+    # while compiling, building a value whose destructor would run is refused (K1)
+    c mut Machine&t = NewMachine(t, Mode.Compile)
+    c.Define(d)
+    c.DefineDestructor(rt, tkey(20))
+    tdefine(t, c, f)
+    assert c.Eval(tkey(1), I64[]) == Stop.Refused(WhyDestructor, 0, Sp0)
 }
