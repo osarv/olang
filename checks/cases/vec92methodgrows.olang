@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'grow' may release the Array<I64> borrowed on line 11, which is used after it
+# check: fail error[O39]: calling 'grow' may release the Array<I64> borrowed on line 12, which is used after it
 # Vec phase 2a (O39): a method of the struct that pushes to its Vec field may release the buffer a view borrows
 import "std/io"
 type Lexer struct(n I64) {

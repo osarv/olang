@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 12, which is used after it
 # Vec phase 2a (O32/O39): a copy of a struct holding a Vec is a borrowed copy - a loan on its buffer - so the original's
 # Vec does not grow while the copy is used
 import "std/io"

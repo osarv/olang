@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 13
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 14
 # vec1 F1: as vec13, with a program's own declared array type and an explicit conversion
 import "std/io"
 fn churn() I64 {

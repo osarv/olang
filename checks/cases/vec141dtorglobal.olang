@@ -1,4 +1,4 @@
-# check: fail vec141dtorglobal.olang:15:37: error[O40]: a destructor may not release owned objects
+# check: fail vec141dtorglobal.olang:16:37: error[O40]: a destructor may not release owned objects
 # also: note: 'Push' releases here
 # Vec phase 2a review (B11): a destructor pushing to a global Vec is reported at its own call, not inside Push
 import "std/io"

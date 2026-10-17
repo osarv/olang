@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<Link> borrowed on line 18, which is used after it
+# check: fail error[O39]: calling 'Push' may release the Array<Link> borrowed on line 19, which is used after it
 # Vec phase 2a (O38/O39): ...and one read out of a view in the same statement
 import "std/io"
 type Node struct(n I64) {

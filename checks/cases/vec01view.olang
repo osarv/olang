@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 7
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 8
 # Vec phase 1 (O37/O39): a view of a Vec's elements kept across a Push, which may replace the buffer
 import "std/io"
 fn main() ? {

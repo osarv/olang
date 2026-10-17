@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 9
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10
 # vec2 (or6): a mutually recursive borrowed own result keeps its loan - b is marked through a, settled after both bodies
 import "std/io"
 fn a(v Vec<I64>&, n I64) Array<I64>&v {

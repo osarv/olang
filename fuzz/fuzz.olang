@@ -123,11 +123,11 @@ fn usage() ? io.IoError {
     fail
 }
 
-fn worker(queue mut chan.Chan<I64>&, w I64) ? io.IoError {
+fn worker(queue mut chan.Chan<I64>&, w I64) {
     dir String& = $Run "/w" $w
     os.Run("mkdir -p " $os.Quote(dir))
     for seed in queue {
-        try runSeed(seed, dir)
+        try runSeed(seed, dir) catch io.IoError { }
         Ran.AtomicAdd(1)
     }
 }
@@ -278,11 +278,11 @@ fn scopeMain(args Array<String&>&) ? io.IoError {
     if Found > 0 { fail }
 }
 
-fn scopeWorker(queue mut chan.Chan<I64>&, w I64) ? io.IoError {
+fn scopeWorker(queue mut chan.Chan<I64>&, w I64) {
     dir String& = $Run "/sw" $w
     os.Run("mkdir -p " $os.Quote(dir))
     for seed in queue {
-        try scopeSeed(seed, dir)
+        try scopeSeed(seed, dir) catch io.IoError { }
         Ran.AtomicAdd(1)
     }
 }
@@ -368,7 +368,7 @@ fn scopeSeed(seed I64, dir String&) ? io.IoError {
         try scopeFinding(dir, seed, k, "-d -s disagrees with -i (or -b) (a use after a scope closed)", detail)
         return
     }
-    scopeFinding(dir, seed, -1, "-d -s run failed", read(dir, "serr.txt"))
+    try scopeFinding(dir, seed, -1, "-d -s run failed", read(dir, "serr.txt"))
 }
 
 # leaves out every scenario an error in diag is reported in, from the "# scenario k" lines of src; how many it left out

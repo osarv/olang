@@ -1,4 +1,4 @@
-# check: fail error[O39]: assigning 'c.text' may release the String borrowed on line 23
+# check: fail error[O39]: assigning 'c.text' may release the String borrowed on line 24
 # vec2 N1: a borrowed own result's object type settled over calls once every body is checked - b, checked while a's body
 # still was, borrows c.text too (a's last return), so b's loan meets a release of a String
 import "std/io"

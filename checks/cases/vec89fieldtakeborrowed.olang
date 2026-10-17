@@ -1,4 +1,4 @@
-# check: fail error[O39]: taking 'l.toks' moves the Array<I64> borrowed on line 10
+# check: fail error[O39]: taking 'l.toks' moves the Array<I64> borrowed on line 11
 # Vec phase 2a (E34/O39): a field's Vec is not taken while a borrow of its buffer is used
 import "std/io"
 type Lexer struct(n I64) {

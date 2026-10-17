@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'f' may release the Array<Plain> borrowed on line 17
+# check: fail error[O39]: calling 'f' may release the Array<Plain> borrowed on line 18
 # O39 (own7 F1): an element of an own array lent where it is borrows the buffer - a callee replacing or releasing the
 # buffer under it is refused. This is the hazard of a growable array's element lent to a function that grows it
 import "std/io"

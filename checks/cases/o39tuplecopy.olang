@@ -1,4 +1,4 @@
-# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line 16
+# check: fail error[O39]: assigning 'v.o' may release the Inner borrowed on line 17
 # O39 (own6 N1): one of several results of a method called on a borrowed copy (O32) borrows what the copy reads
 import "std/io"
 type Inner struct(k I64) {

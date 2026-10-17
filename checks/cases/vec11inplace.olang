@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<Pt> borrowed on line 9
+# check: fail error[O39]: calling 'Push' may release the Array<Pt> borrowed on line 10
 # Vec phase 1: a callee's reference into an element held in the buffer by value keeps the buffer's loan - only a result
 # that can refer neither to the buffer nor to its elements held by value is spared
 import "std/io"

@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Push' may release the Array<String&> borrowed on line 16
+# check: fail error[O39]: calling 'Push' may release the Array<String&> borrowed on line 17
 # vec2: a type-variable result bound to a reference returns what its body gives it - its argument too (O14b) - so it
 # is not taken for new storage, and keeps the loan of a view handed to it
 import "std/io"

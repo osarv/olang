@@ -618,7 +618,7 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -i ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
-    try r.expect(outOf(dir).Contains("cyclic.olang:8: the comparison recurses deeper than -i allows"),
+    try r.expect(outOf(dir).Contains("cyclic.olang:9: the comparison recurses deeper than -i allows"),
                  "-i cyclic.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -b tasks.olang > out.txt 2>&1 && ./build/tasks > want.txt 2>&1") == 0, "tasks build", dir)
     try r.expect(sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 0, "-i tasks.olang failed", dir)
@@ -715,9 +715,9 @@ fn assertloc(r mut report&) ? Failed {
                  and outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "-i: an unreachable's location", dir)
     # and a check the language guarantees - a slice, an array length, an 'as', a copy into fixed storage
     try r.expect(sh(dir, "\"$OLANG\" -b guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
-    wants := String&["guaranteed.olang:12: slice bounds out of range\n", "guaranteed.olang:13: array length out of range\n",
-                     "guaranteed.olang:15: 'as' named what the value is not\n",
-                     "guaranteed.olang:17: array length does not match its fixed storage\n"]
+    wants := String&["guaranteed.olang:13: slice bounds out of range\n", "guaranteed.olang:14: array length out of range\n",
+                     "guaranteed.olang:16: 'as' named what the value is not\n",
+                     "guaranteed.olang:18: array length does not match its fixed storage\n"]
     args := String&["", " a", " a b", " a b c"]
     for i, w in wants {
         try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)

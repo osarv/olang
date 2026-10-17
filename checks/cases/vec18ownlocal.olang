@@ -1,4 +1,4 @@
-# check: fail error[O39]: assigning 'o.data' may release the Array<Char> borrowed on line 17
+# check: fail error[O39]: assigning 'o.data' may release the Array<Char> borrowed on line 18
 # vec1 F1: as vec17, the owner an own-reference local and the field reassigned directly
 import "std/io"
 fn churn() I64 {

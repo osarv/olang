@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'Grow' may release the Array<Char> borrowed on line 15
+# check: fail error[O39]: calling 'Grow' may release the Array<Char> borrowed on line 16
 # vec1 F1: a struct's own array field converted to String, reached through a mut parameter
 import "std/io"
 fn churn() I64 {

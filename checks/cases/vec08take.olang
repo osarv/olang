@@ -1,4 +1,4 @@
-# check: fail error[O39]: assigning 'w' may release the Array<I64> borrowed on line 7
+# check: fail error[O39]: assigning 'w' may release the Array<I64> borrowed on line 8
 # Vec phase 1 (E34/O39): a Vec moved by take, then viewed, then given another buffer while the view is used
 import "std/io"
 fn main() ? {

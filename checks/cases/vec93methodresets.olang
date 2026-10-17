@@ -1,4 +1,4 @@
-# check: fail error[O39]: calling 'reset' may release the Array<I64> borrowed on line 11, which is used after it
+# check: fail error[O39]: calling 'reset' may release the Array<I64> borrowed on line 12, which is used after it
 # Vec phase 2a (O35/O39): a method giving the field another Vec releases the old one's buffer
 import "std/io"
 type Lexer struct(n I64) {
