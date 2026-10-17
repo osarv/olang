@@ -94,6 +94,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   generic's parameter checked per instantiation - holds at most 128 bytes as laid out (padding included); a larger one
   is a compile-time error naming its size and `&`. Results are not capped. Part of the arrays batch; the corpus and std
   migrated by the compiler's own errors.
+- Arrays phase 1 (wt-arrays f43feae..61603a4, docs/arrays.md, SPEC rewritten - merges only with phase 2, since checks
+  require errmsg's rules to exist in SPEC). Its two questions DECIDED by me (details within QP2/QP4): (1) a struct's
+  inline array never takes its length from a constructor argument - no inferred constant generics; the field declares
+  its length or holds a reference; (2) QP4's cap applies to parameters whose WRITTEN type is an aggregate (struct,
+  enum, array, by-value receiver); a bare type variable `x T` is exempt, so List/Map/Sort over big structs keep
+  working - the container's own semantics, not a copy the caller wrote. Phase 2 (3-4 rounds) after the errors batch.
 - QQ1 DECIDED 2026-10-17 (the user: "try (...) should cover all of ..."; "try f().g() should bind to both. Why did we
   decide against that?" - answered: never decided, an artifact of the one-call allowance, E13b/E24 2026-10-07/09).
   Proposed and confirmed in substance ("So try is for calls and checked for operators and calls?" - yes): `try` covers
