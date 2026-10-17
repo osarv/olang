@@ -121,3 +121,8 @@ days lost, though no files were. Standing measures:
    worktree of olang, oann and oagent as `backup/<name>` (its branch plus a snapshot commit of uncommitted work), and
    the review notes (/home/user/review, text only, through /home/user/.review-git) as olang's `backup/review`. Recovery:
    `git fetch origin backup/<name>`. Delete a backup branch once its work is merged and the worktree removed.
+
+**Push always (the user, 2026-10-17: "remember to push always. For example I can't see the test migration on GitHub
+yet").** Besides the backup/<name> snapshots, push every agent's branch under its own name (`wt-<name>`) whenever it
+has new commits (at least at each report and check-in), so the user can see the work on GitHub before it merges; and
+push master and the designated branch after every merge. Delete a `wt-*` branch on GitHub once it is merged.
