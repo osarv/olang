@@ -67,8 +67,8 @@ error Failed {
 # the front end: analyzes the program whose root is root and fills prog with its IR, reporting what is wrong to d; or
 # runs it (-i), giving the status it ends with
 type Frontend trait {
-    mut Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&) ? Failed
-    mut Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&) I32 ? Failed
+    mut Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&cfg) ? Failed
+    mut Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&cfg) I32 ? Failed
 }
 
 # ---- a build's configuration ----
@@ -477,7 +477,7 @@ fn (p Program&) rootIdentity() String {
 }
 
 # -c FILE: the one module's object, and the runtime's beside it (B2)
-fn Compile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&) I32 {
+fn Compile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     prog := Program()
     try fe.Analyze(file, Kind.Module, c, prog, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
@@ -488,7 +488,7 @@ fn Compile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnos
 }
 
 # -b FILE: every module's object, then one link (B3)
-fn BuildProgram(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&) I32 {
+fn BuildProgram(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     prog := Program()
     try fe.Analyze(file, Kind.Program, c, prog, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
@@ -504,7 +504,7 @@ fn BuildProgram(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Di
 }
 
 # -t FILE with one file: its test binary built and run here (B3a). 0 when every test passed
-fn TestFile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&) I32 {
+fn TestFile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     info := try os.Stat(file) catch os.OsError { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
@@ -570,7 +570,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
 }
 
 # -i FILE ARGS: the program run by the front end (B3e); the status it ends with
-fn Interpret(fe mut <F Frontend>&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
+fn Interpret(fe mut <F Frontend>&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
     return try fe.Interpret(file, args, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
 }
 
@@ -666,7 +666,8 @@ type stubFrontend struct() {
     Analyzed I64 = 0
 }
 
-fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&) ? Failed {
+fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&,
+                                 d mut diag.Diagnostics&cfg) ? Failed {
     s.Analyzed++
     n := cfg.Consts.Raw("N") if cfg.Consts.Has("N") else "41"
     attrs := $"attributes #0 = { nounwind " $cfg.Target.Attrs " }\n"
@@ -682,7 +683,8 @@ fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog 
     prog.Runtime = $tt "define void @olang_rt() #0 {\n  ret void\n}\n" $attrs
 }
 
-fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&) I32 ? Failed {
+fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&,
+                                   d mut diag.Diagnostics&cfg) I32 ? Failed {
     return I32(args.Len())
 }
 

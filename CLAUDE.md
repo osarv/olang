@@ -5209,6 +5209,19 @@ and literals made only of such, never existing storage anywhere in it) - it is
   (shape, types up to representation, initialization, scope nesting and joins on every path) and a dump, no parser.
   Found: a stage-0 use-after-free - `f.Blocks[b].Stmts.Push(s)` in a method builds the inner list's chunk in the call's
   frame (E31b's held copy; HISTORY.md has the reproducer).
+- **Port M10: the driver, over a front-end interface (B1, B3, B3a, B10, B10a, B10b, B11a, B12, B12a, B12b, 2026-10-17;
+  compiler/DESIGN.md sections 1.11 and 3, details mine).** `compiler/build.olang` (a `Frontend` trait giving each
+  object's IR, objects named by a SHA-256 of their IR, flags and clang's version, compiled side by side, the link
+  skipped by a stamp, the modes), `compiler/target.olang` (B12's resolution) and `compiler/olang.olang` (the command
+  line in stage 0's order, `-e`, the built-in constants, and load + names as the front end until M5b-M9 make IR).
+  **Decided (mine)**: hashes are 16 hex digits of SHA-256, written in olang; `-t` with several files re-runs the
+  compiler per file with output streamed, not captured and replayed (B3a's results appear as tests run), one file in
+  process; FastISel off under `-d` only for IR holding `bfloat`; a Program's units are `(Identity, Holds, Ir)`; the
+  front end so far ends a good program with "this compiler does not generate code yet". Proven by a real-clang test of
+  a stub front end (no-op builds compile and link nothing; a module, `-D` or the target rebuilds what it changes) and
+  `make drvdiff` (in verify): 43 command lines written and ended as stage 0 does. **Found on the way**: `cond.Define`
+  failed on every good `-D` (its catch-all clause ran only for errors), unseen because every caller ignored the
+  failure.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design
