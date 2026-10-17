@@ -126,3 +126,8 @@ days lost, though no files were. Standing measures:
 yet").** Besides the backup/<name> snapshots, push every agent's branch under its own name (`wt-<name>`) whenever it
 has new commits (at least at each report and check-in), so the user can see the work on GitHub before it merges; and
 push master and the designated branch after every merge. Delete a `wt-*` branch on GitHub once it is merged.
+
+**Merge promptly, keep few branches (the user, 2026-10-17: "Remember to merge the branches too so we don't end up
+with way too many active branches").** Merge a finished, verified branch at once; then remove its worktree, delete the
+local branch, its `wt-*` and `backup/*` branches on GitHub and its refs/wip, refs/backup-pushed, refs/branch-pushed refs.
+Review worktrees go when the review is read. At each check-in, prune anything merged (`git branch -r --merged`).
