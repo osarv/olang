@@ -50,6 +50,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   error, that has to go. error should always require an actual error to throw"): the default error is removed - no bare
   `error` statement, no generalization (R17); std's default-error failures get named errors. Details mine. QUEUED with
   QO4 (std misuse as named errors) as one batch after wt-ioprint and wt-e31view merge; the port's checker told.
+- QO1 follow-up (the user: "No we just need one or maybe a few error sets in prelude for the compiler carve-out
+  errors like overflow division by zero etc that have hardware hooks and can't be written in code"). Reading taken:
+  no general-purpose error replaces the default error. The prelude's own error sets are the compiler's carve-outs only:
+  BuiltinError (OVERFLOW, DIVIDE_BY_ZERO, OUT_OF_BOUNDS, INVALID - raised by `try` checks) and Exhausted (the loop
+  protocol). Details mine: std's misuse checks reuse BuiltinError's words (RemoveAt/Insert out of range and Pop/First/
+  Last on an empty list OUT_OF_BOUNDS, a bad base INVALID); a "nothing there" failure that is no misuse (Map.Get's
+  missing key, Find/IndexOf with no match, os.Env unset) gets an error declared beside its function, in its own file.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
