@@ -946,6 +946,11 @@ e15atryonlychecks.olang:3:37: error[E15a]: nothing here fails as written - write
     3 | fn add(a I32, b I32) I32 ? { return try (a + b) }
       |                                     ^~~
 compilation failed with 1 error
+=== e16atrydefaultslice.olang
+e16atrydefaultslice.olang:11:57: error[E15a]: nothing here fails as written - write 'checked' to check it
+   11 | fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (try a[0] catch default Array<I64, 2>())[0:2] }
+      |                                                         ^~~
+compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
     9 |     b := z[5]
@@ -2406,6 +2411,11 @@ o17bkeepsother.olang:13:14: error[O17]: this value's references live where its o
    13 |         r := c.me()
       |              ^
 compilation failed with 1 error
+=== o17blambdakeep.olang
+o17blambdakeep.olang:18:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   18 |         fs.Push(leak(idList(base)))
+      |                      ^~~~~~
+compilation failed with 1 error
 === o17bnoand.olang
 o17bnoand.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    14 |         b.stash()
@@ -2537,6 +2547,41 @@ compilation failed with 1 error
 o17spawntargets.olang:26:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    26 |     grow(b)
       |          ^
+compilation failed with 1 error
+=== o17tempcallresult.olang
+o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   25 |         addRef(idBox(seed), i + 1)
+      |                ^~~~~
+compilation failed with 1 error
+=== o17tempcond.olang
+o17tempcond.olang:28:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   28 |         addVia(b1 if i >= 0 else b2, i + 1)
+      |                   ^~
+compilation failed with 1 error
+=== o17tempcondarray.olang
+o17tempcondarray.olang:28:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   28 |         addVia(a[0] if i >= 0 else a[1], i + 1)
+      |                     ^~
+compilation failed with 1 error
+=== o17templambdacond.olang
+o17templambdacond.olang:22:25: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   22 |         fs.Push(leak(b1 if i >= 0 else b2))
+      |                         ^~
+compilation failed with 1 error
+=== o17templambdacycle.olang
+o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   26 |         even(idBox(seed), 2, fs)
+      |              ^~~~~
+compilation failed with 1 error
+=== o17templambdakeep.olang
+o17templambdakeep.olang:24:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   24 |         fs.Push(leak(idBox(seed)))
+      |                      ^~~~~
+compilation failed with 1 error
+=== o17tempreadonly.olang
+o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   28 |         addVia(mkBox(seed), i + 1)
+      |                ^~~~~
 compilation failed with 1 error
 === o18cprojectionborrow.olang
 o18cprojectionborrow.olang:17:14: error[O10]: this reference lives in a scope that may not outlive where it is put
