@@ -134,7 +134,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   names the executable (-b) or object (-c); default unchanged. Being built in wt-runfmt.
   ASKED: the user objected to `-f -c` (clashes with -c) and suggested `-fc`; proposed `-l` instead (gofmt's name, one
   character, no clash). DECIDED (the user: "Do that for now yes"): `olang -l files...`.
-- QS ASKED 2026-10-17 (the user: "Is there any reason why we should not have longer option names really? Could you
+- QS DECIDED 2026-10-17 (the user: "Is there any reason why we should not have longer option names really? Could you
   give me some alternatives"): reverses B1 (the user's 2026-10-08 one-character rule) if taken. Options: (1) keep one
   character; (2) GNU short+long; (3) Go-style single-dash words; (4) subcommands for modes (`olang build/compile/test/
   interpret/format/explain`, bare `olang FILE` runs) with single-dash word modifiers (-debug -race -sanitize -target
@@ -143,7 +143,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   names are readable"). Proposed list (awaiting OK): modes - bare FILE (run, new), build (-b), compile (-c), test (-t),
   interpret (-i), format (-f), explain (-e), help (new); options - -output (-o: build, compile), -debug (-d), -race (-r),
   -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
-  test interpret), -check (-l: format); single dash, no aliases for the old flags.
+  test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
+  are good"). Being built in wt-runfmt after its current work.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
