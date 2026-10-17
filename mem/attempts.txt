@@ -1,0 +1,16 @@
+source attempts=1
+scan attempts=1
+ast attempts=1
+msgs attempts=1
+diag attempts=1
+cond attempts=1
+fetch attempts=1
+load attempts=1
+parse attempts=1
+names attempts=1
+types attempts=1
+typed attempts=1
+generic attempts=1
+check attempts=1
+tools/checkdump attempts=1
+tools/dump attempts=1
