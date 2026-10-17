@@ -1,0 +1,3 @@
+clean shared.olang 1 errlines
+clean shared.olang 15 errlines
+shared.olang -t under ASan (fixes 1-3, b, c, min cap 1): 740 passed, 0 failed, no ASan report

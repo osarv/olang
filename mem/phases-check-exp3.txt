@@ -1,0 +1,10 @@
+MEMDEBUG cpu=  0.01s attempt start                            inuse=     0MB mmapped=     0MB rss=     2MB
+MEMDEBUG cpu=  0.07s  prelude loaded                          inuse=    13MB mmapped=     3MB rss=    14MB
+MEMDEBUG cpu=  0.52s  all modules loaded (tokens+syntax)      inuse=    90MB mmapped=    25MB rss=    90MB
+MEMDEBUG cpu=  0.81s  signatures+globals                      inuse=   120MB mmapped=    30MB rss=   118MB
+MEMDEBUG cpu=  5.70s  bodies+instantiations checked           inuse=   476MB mmapped=    35MB rss=   470MB
+MEMDEBUG cpu=  5.71s  settled (regions, ro, maybuild)         inuse=   476MB mmapped=    35MB rss=   471MB
+MEMDEBUG cpu=  6.36s  own borrows settled                     inuse=   482MB mmapped=    35MB rss=   478MB
+MEMDEBUG cpu=  6.36s  comptime start                          inuse=   482MB mmapped=    35MB rss=   478MB
+MEMDEBUG cpu=  6.42s attempt end                              inuse=   539MB mmapped=    35MB rss=   535MB
+--- -t
