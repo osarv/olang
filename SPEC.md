@@ -1902,31 +1902,31 @@ gives a borrow, `Values()` borrows and `Iter()` borrowed copies of its entries (
 may release a key or a value runs while one is used (O39). `Update` (whose function would be handed and give back an
 owner) and `Clone` are compile-time errors for such a map, reported where the program calls them (B11).
 
-The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer the `Vec`
-owns - an own array (§8.8) - so indexing it, walking it and `View()` cost what an array's do. `Vec<T>(cap = 0)` is
-empty, with room for `cap` elements before its buffer moves; `Push(x)` adds at the end, and when the buffer is full
-first moves every element into one twice as large (8 at first), releasing the old buffer at once (O35);
-`Reserve(n)` makes room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the
-same names and on the same terms, failing with `VecError`'s words where a `List` fails with `ListError`'s - `v[i]` and
-`v[i] = x` (E31, unchecked, `checked` checking), `First`, `Last`, `Pop`,
-`Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`,
-`Join` (of a `Vec` of texts), `ToArray`, `Iter` (a `VecIter<T>`), `RunFrom` (one run, the rest of the elements, so
-`for x in v` walks a `Vec` as it walks an array, S9f) and `Clone` (an owned result, O37) - and `View()`, a borrow of its
-elements as one array (`Array<T>&v`; `ViewMut()` writably), a borrowed own result (O37). Whatever borrows the buffer - a
-view, a walk, a part of an element held by value - is a loan on it (O38), so while one is used nothing that may move or
-release the buffer (`Push`, `PushAll`, `Reserve`, `Insert`, a release or move of the `Vec`) may run (O39): a view never
-reads a buffer that has been released. What its elements refer to lives where the `Vec` does, not in the buffer (O33),
-so an element read out of it - a reference, or a value holding one - is no loan on the buffer and is kept across its
-release (`s := v[0]` then `v.Push(x)`, O38). A `Vec` holds its buffer's owner by value, so it is an owning type (O31): a
-copy of one out of a place is a borrowed copy, through which nothing is pushed, `take v` moves it (leaving `v` empty),
-`v.Clone()` copies its elements into a new one, and a `mut Vec<T>&` parameter takes it by reference. `==` compares its
-elements (E10), it hashes as they do (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2,
-3]`. A `Vec` is the growable array; a `List` is for what its chunks give - a `Push` never moves what is stored, so
-appending never stops to copy, and a walk may push to it. A `Vec` is held by value by a local, a field (`toks Vec<Tok>`,
-its buffer the instance's - released with it, taken as `take l.toks`), a global or a result; its elements may be any
-values that own nothing - `Vec<Tok>`, `Tok` holding its text, keeps what each element refers to where the `Vec` is
-(O33). *(Not yet implemented: a `Vec` as a type argument (`List<Vec<T>>`, `Vec<Vec<T>>`, `Map<K, Vec<V>>`), an own
-array's element or an enum's payload (O31); a task that may push to one (O41); a lambda capturing one (O32).)*
+The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer, so
+indexing it and walking it cost what an array's do, past one load of the buffer the `Vec` names. A `Vec` is a
+**handle**, as a `List` and a `Map` are: a copy of a `Vec` value (`b := a`, a field, an element, a by-value argument, a
+capture, a task's argument) is a second name for the same `Vec`, and `Clone()` is a new one with the same elements and
+a buffer of its own, built where its result lands; `Array<Vec<T>>(n, Vec<T>())` is `n` names for one `Vec` (T8). It is
+an ordinary value - a type argument (`List<Vec<T>>`, `Map<K, Vec<V>>`, `Vec<Vec<T>>`), a field, a global - and its
+element type needs no zero value: a new buffer is filled with the element being stored. `Vec<T>(cap = 0)` is empty, with
+room for `cap` elements before its buffer is replaced, made by its first `Push`; `Push(x)` adds at the end, and when the
+buffer is full first replaces it by one twice as large (8 at first), every element copied into it; `Reserve(n)` makes
+room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the same names and on
+the same terms, failing with `VecError`'s words where a `List` fails with `ListError`'s - `v[i]` and `v[i] = x` (E31,
+unchecked, `checked` checking), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
+`Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts), `ToArray`
+and `Clone`; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
+`Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
+way to have its elements as an array - `Array<T>&v`, `ViewMut()` writably - a window on the buffer as it is now, good
+until the `Vec` grows (a `Push`, `PushAll`, `Insert` or `Reserve` that replaces the buffer). The buffer a growth
+replaces is kept where the `Vec` lives until that scope closes, so a view used after a growth reads the elements as
+they were - never storage that was freed - and what the elements refer to lives where the `Vec` does, not in the buffer,
+so an element read out of it (`s := v[0]`) is kept across growth. Such a stale view is a mistake the compile-time
+evaluator stops on (K1) and the scope sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
+(E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`. A `Vec` is the growable array;
+a `List` is for what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
+collections say where they stop using an array with an operation only the prelude has, `a.retire()`: nothing at run
+time, it is what the evaluator and the sanitizer learn a replaced buffer from.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
@@ -5277,7 +5277,7 @@ by value, to any depth of fields - held by value only by a local of a function, 
 local** - by a field of a struct, by a global and by a function's result; held by value anywhere else - an element, a
 parameter, a type argument, an enum payload - it is a compile-time error naming its reference, `Server&`, or an own
 one. Only an own reference is an owning parameter; an element or an `Array<T, N>` of an owning type is a compile-time
-error (T25e). A global holding an owning type by value is written with its type (`G mut Vec<I64> = Vec<I64>()`): `:=`
+error (T25e). A global holding an owning type by value is written with its type (`G mut Server = Server()`): `:=`
 declares a reference, as for any global (D15). A type variable a value of an owning type reaches binds the reference to
 it, as G9d binds one to a destructor-bearing value. A type nesting more than 64 levels of values and arrays is a
 compile-time error of its own - too deep to check whether it holds an owning type by value - never taken to hold one.)*
@@ -5354,7 +5354,7 @@ object refers to outside its region is known to outlive. A slot's reach is the s
 or an element's its container's, a global's the program's (O1b), an owner local's the shortest reach among the owners
 given to it, an owning parameter's its scope variable (O4b), bound at each call to its argument's reach - and, where
 that scope is a region, that region's reach: so the objects an owned object owns reach as far as it does, and may be
-moved out of it. A field holding an owning type by value (a `Vec`) inside an object in a region is the exception: what
+moved out of it. A field holding an owning type by value (a struct holding an own array) inside an object in a region is the exception: what
 its own objects refer to is built in that region (O33), so its reach is the region itself, which outlives nothing - it
 is moved only into another such field of the same object, read by the same path in the same statement
 (`p.lx.more = take p.lx.toks`) - a variable that is no global, then fields only, each own slot read there and not
@@ -5464,7 +5464,7 @@ and settled over every call once every body is checked, as T25c reads a by-value
 of an owning type **borrows**: the callee holds a borrow, or a borrowed copy, of its argument for the call. An owning
 parameter's argument is a move position (O34), and the callee releases what it still owns at its end (O35); a
 borrowing parameter's argument is read as O32 says, and a value made for it is released after the call. A reference
-parameter (`v mut Vec<F32>&`) is a reference to the caller's slot, through which the callee may release (O39).
+parameter (`v mut Server&`) is a reference to the caller's slot, through which the callee may release (O39).
 
 *(Not yet implemented: only a parameter written `own` owns - a parameter of an owning struct type is a reference to
 one, which borrows and through which the callee may release - and `own` on a constructor's, a trait method's or an enum
@@ -5487,7 +5487,7 @@ generic's read-only reference parameter, as read-only as the argument.
 
 A **borrowed own result** is a reference result borrowed from a reference parameter `p` (`T&p`) that returns a borrow of
 an owned object reached from `p` by own fields only, or a slice of one, or one converted to a type of the same representation (T29a,
-`String(v.View())`) - `fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }`, `fn (v Outer&) First() Inner&v {
+`String(b.View())`) - `fn (b Buf&) View() Array<I64>&b { return b.data[:b.n] }` (`data` an own array), `fn (v Outer&) First() Inner&v {
 return v.o }`, or another function's borrowed own result given `p` or a borrow so reached - or a borrow reached by own
 fields from such a result (`fn (v Outer&) Deep() Leaf&v { return v.First().deep }`), which borrows that object's type,
 below whatever the result it was reached from is below. One reached through a reference that is no own field (`return
@@ -5556,7 +5556,7 @@ several results (D8c), a type argument's, an array's elements, a function value'
 reference derives from nothing. An own array's elements refer outside its buffer (O33), so a result that can refer
 neither to the argument's own storage, nor to an own array the argument's loans are on, nor to an element such an array
 holds by value - a reference to none of their types, at any depth, and no function value or type variable - derives
-from no loan on that array: `s := v[0]` of a `Vec<String&>` keeps the text across `v.Push(x)`. Two references are none
+from no loan on that array: `s := b.data[0]` of an own `Array<String&>` keeps the text across the array's release. Two references are none
 of those: the own top of a **built** result (`T&` or `T&return` written, not borrowed from a parameter nor a type
 variable's) proven **new storage** - every return of its function - wherever it is written: in a block, an `else if`'s condition, a case guard, a `for`'s
 post clause, a catch block or a match value's clause - a constructor call, `Array<T>(n)`, a comprehension, a
@@ -5564,8 +5564,8 @@ literal, text rendered or joined there, `null`, a local declared from one of tho
 a function so proven, or a conditional, match or catch default all of whose values are - which an owned object's region,
 outliving nothing (O33), never is (a built result is no proof alone: a call whose result lands in the result scope -
 `id(a)`, `l[0]`, `m.Get(k)` - can hand an argument back into it, O14b); and an own reference in a result, which refers
-only to the object it owns. So `a := v.ToArray()` and `c := v.Clone()` of a `Vec<String&>` keep their elements' text,
-and nothing of the buffer, across `v.Push(x)`. Through a function value
+only to the object it owns. So a built copy of an own `Array<String&>`'s elements keeps their text,
+and nothing of the buffer, across the array's release. Through a function value
 nothing is kept but in its result (T22a). Deferred code (S19) uses what it reads where it runs, at its block's exits.
 
 A **reference to an owner value local's storage** - the local, or a part of it held by value, borrowed by a reference
@@ -5954,6 +5954,12 @@ of these ends the program as it would without `-sanitize` (an `os.OnCrash` messa
 under `-sanitize` as without it, but for time and memory. It is a **detector, not a proof**: it sees the uses a run made, and
 a use of storage no longer held back reads whatever the allocator has put there since. Under `interpret` it changes nothing,
 since the evaluator never reclaims storage. A sanitized object is a distinct artifact (B4), named with `.san`.
+
+A **Vec's replaced buffer** (M19d) is treated the same way before its scope closes: a buffer a growth replaced is
+overwritten with the pattern and, where the system allows it, made unreadable, so a view of the `Vec` taken before the
+growth and used after it - which without `-sanitize` reads the elements as they were - is reported as `stale view: ...`
+and ends the program as a failed check does. The buffer stays held until its scope closes, and is then held back as
+the scope's other storage is.
 
 **O2d.** Where a call binds one of a callee's scope variables to the caller's own scope, the **block** that
 means is decided by what bound it. A binding an argument determines (O17) refers to the block the
@@ -6949,6 +6955,12 @@ function holding one (a `catch { unreachable }` clause, say) is evaluated like a
 value is **required** - a global's initializer, which always runs (K2), or an `assert` checked while compiling (S18c) -
 reaching one is a compile-time error at the global or the assert, as a false assert is; where evaluation is only
 attempted (a local `if`'s condition, S8b), the code is left to the run time.
+
+A **stale view** - a read or write through a view of a `Vec`'s elements (`View()`, M19d) taken before a growth that
+replaced its buffer, or through a slice of one - ends the evaluation there too, with both places named: the use, and
+the growth (the program's call, where the growth is made inside the prelude). At run time such a view reads the old
+elements, which no program means, so where a value is required it is a compile-time error as reaching an abort is, and
+under `interpret` the program stops there.
 
 The length of an `Array<T, N>` (T7c) is `N` whatever holds it, so reading it - `a.Len()` on a parameter, say -
 reads nothing that varies and can always be evaluated; a constant variable (§12.7 G23) is its instantiation's value.
