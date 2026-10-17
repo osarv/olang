@@ -217,6 +217,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   multi-item error set is parenthesized (`f fn(I64) ? (A, B)`); `x, y I64` (D12b several names, one declaration) is
   unchanged. Core syntax: both compilers. Planned as a syntax batch after the errors batch, together with QW (moved out
   of arrays phase 2); migration by an olang tool, then oann.
+- QZ ASKED 2026-10-17 (the user: "Should std be part of prelude?"): answered no - the prelude stays what built-in
+  types and language protocols need (prelude names are reserved everywhere under D3a; every build parses and checks it;
+  imports show what a file touches; ffi/http carry link and tool needs; only the prelude may add methods to built-in
+  types). Asked: move std/math into the prelude as methods on the floats (`x.Sqrt()` instead of `math.Sqrt(x)`)?
+  Recommended yes (reserves no type names). In effect: `math.Sqrt(x)`.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
