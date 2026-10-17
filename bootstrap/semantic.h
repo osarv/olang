@@ -142,7 +142,9 @@ struct type {
     bool sigUninferable; //G4: a variable the result names that no parameter's type does - reported at the declaration,
                          //whose body is then never checked (one error, not one per use of the variable)
     struct type* retType; //heap-allocated, valid when hasRetType
-    struct list errors; //list of struct type*: error types declared in the signature's error list
+    struct list errors; //list of struct type*: error types declared in the signature's error list - or, for one written
+                        //"?" alone (errsInferred, R1a), the set its body can produce, in a canonical order once settled
+    bool errsInferred;  //R1a: the signature wrote "?" with no error types - the set is the body's
     //BASETYPE_FUNC, O13: the result scope of a BUILT result - a scope variable no parameter names, bound where
     //the call's result lands (O18a) or by a scope argument (E25). NULL for a borrowed result (T&p) and for a
     //result that neither is nor holds a reference.
@@ -441,7 +443,10 @@ struct var {
     struct semaModule* lambdaObject; //D8a: a parameter default's lambda, made for calls in this module's code - the
                                      //object emitting it, with no host (NULL: its owner's)
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
-    bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through
+    bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through; R1a: a
+                              //function or constructor declared with "?" alone - its error set is what its body can produce
+    bool errsUnsettled;       //R1a: its body read the error set of a function whose set was not final yet (a cycle, an
+                              //unchecked body) - so its own set is not final either until the attempt is judged
     int bodyState;            //O10b: 0 while this function's body is unchecked, 1 while it is being checked, 2 once
                               //it has been - its obligations are part of its signature, so a call checks the
                               //callee's body first (ensureBodyChecked) and only a cycle sees a partial set
@@ -1012,7 +1017,6 @@ struct list* SemanticAllTypeInstantiations(void);
 struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its constructor's instantiation
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
-struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
 int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this
                                               //only to print a cleaner "unhandled error: error" message,

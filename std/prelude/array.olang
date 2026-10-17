@@ -57,13 +57,18 @@ fn (a Array<<T>>&) All(keep fn(x T) Bool) Bool {
     return true
 }
 
-# the index of the first element keep holds for - failing with the default error when keep holds for none, so a miss
-# is never read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
-fn (a Array<<T>>&) FindIndex(keep fn(x T) Bool) I64 ? {
+# what an array's FindIndex fails with: no element keep holds for
+error ArrayError {
+    NOT_FOUND
+}
+
+# the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never
+# read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
+fn (a Array<<T>>&) FindIndex(keep fn(x T) Bool) I64 ? ArrayError {
     for i, x in a {
         if keep(x) { return i }
     }
-    error
+    error ArrayError.NOT_FOUND
 }
 
 # how many elements keep holds for

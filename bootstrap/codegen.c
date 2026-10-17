@@ -120,8 +120,9 @@ struct cgJoinFail { char* head; char* lbl; char* slot; };
 
 struct cgCtorOwner { char* slot; struct type t; }; //O35/N6: a constructor's own field, held by its frame until assembly
 
+struct cgFnValue { struct var* f; struct list* errs; }; //D16/R1b: errs NULL when the function's own
 struct cgCtx {
-    struct list fnValues; //D16: struct var* - named functions used as values, each needing a static closure
+    struct list fnValues; //D16: struct cgFnValue - named functions used as values, each needing an adapter
     //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
     //comes from dbgNext, which starts far above anything the TBAA metadata uses.
     bool debug;
@@ -566,14 +567,8 @@ int errorTypeOrdinal(struct type funcType, struct type errType) {
 //packs (typeOrdinal, wordOrdinal) into the single i32 code a fallible function's return communicates.
 //wordOrdinal is itself local to errType's own declaration (see OperandErrorLiteral) - so this whole value
 //is computable from two single declarations and needs zero whole-program coordination
-static bool cgFuncIsBareFallible(struct type funcType) {
-    return funcType.errors.len == 1
-           && TypeIsSame(**(struct type**)ListGetIdx(&funcType.errors, 0), *SemanticGenericErrorType());
-}
 
 long long errorCode(struct type funcType, struct type errType, long long wordOrdinal) {
-    //R17: a bare "?" function fails with its default error, whatever the failure inside it was
-    if (cgFuncIsBareFallible(funcType)) return 1LL << 16;
     long long typeOrdinal = errorTypeOrdinal(funcType, errType);
     return (typeOrdinal << 16) | wordOrdinal;
 }
@@ -1134,13 +1129,6 @@ static void cgRetErrorCode(struct cgCtx* ctx, const char* code) {
 }
 
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
-    //R17: through a bare "?" function, any error leaves as that function's own default error
-    if (cgFuncIsBareFallible(ctx->curFunc->type)) {
-        cgCloseOwnScopeWithError(ctx);
-        cgRetErrorCode(ctx, "65536"); //(1 << 16) | 0: the default error, its one word
-        ctx->terminated = true;
-        return;
-    }
     char* calleeOrd = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = lshr i32 %s, 16\n", calleeOrd, code);
 
@@ -3550,27 +3538,60 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
 }
 
 void cgEmitParamList(FILE* out, struct var* func, bool named);
-static char* cgFuncValue(struct cgCtx* ctx, struct var* f, char* sym) {
+static char* cgReencodeInto(FILE* out, const char* code, struct list* from, struct list* to, const char* pfx);
+//R1b: whether two error lists are one, in order - else a named function's value, fitted to a function type naming more
+//errors or the same ones in another order, re-encodes its codes for that type in an adapter of its own
+static bool cgSameErrs(struct list* a, struct list* b) {
+    if (a->len != b->len) return false;
+    for (int i = 0; i < a->len; i++)
+        if (!TypeIsSame(**(struct type**)ListGetIdx(a, i), **(struct type**)ListGetIdx(b, i))) return false;
+    return true;
+}
+//...the adapter's name: the function's, then a hash of the list it re-encodes for
+static char* cgFnValueName(char* sym, struct var* f, struct list* errs) {
+    if (!errs || cgSameErrs(errs, &f->type.errors)) return StrFmt("%s.fvt", sym);
+    unsigned long long h = 1469598103934665603ULL;
+    for (int i = 0; i < errs->len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(errs, i);
+        struct str parts[2] = { e->owner ? e->owner->identity : (struct str){0}, e->name };
+        for (int k = 0; k < 2; k++) {
+            for (int c = 0; c < parts[k].len; c++) h = (h ^ (unsigned char)parts[k].ptr[c]) * 1099511628211ULL;
+            h = (h ^ 0xFF) * 1099511628211ULL;
+        }
+    }
+    return StrFmt("%s.fvt.%016llx", sym, h);
+}
+
+static char* cgFuncValue(struct cgCtx* ctx, struct var* f, char* sym, struct list* errs) {
     if (f->isLambda && f->lambdaCaptures.len) return NULL; //made by cgClosure instead
     if (f->isLambda) return cgFnPair(ctx, sym, "null"); //its code takes the (absent) environment already
-    char* code = MallocOrCrash(strlen(sym) + 8);
-    sprintf(code, "%s.fvt", sym);
+    if (errs && cgSameErrs(errs, &f->type.errors)) errs = NULL;
+    char* code = cgFnValueName(sym, f, errs);
     bool have = false;
-    for (int i = 0; i < ctx->fnValues.len && !have; i++) have = *(struct var**)ListGetIdx(&ctx->fnValues, i) == f;
-    if (!have) ListAdd(&ctx->fnValues, &f);
+    for (int i = 0; i < ctx->fnValues.len && !have; i++) {
+        struct cgFnValue* v = ListGetIdx(&ctx->fnValues, i);
+        have = v->f == f && (v->errs == errs || (v->errs && errs && cgSameErrs(v->errs, errs)));
+    }
+    struct cgFnValue v = { f, errs };
+    if (!have) ListAdd(&ctx->fnValues, &v);
     return cgFnPair(ctx, code, "null");
 }
 
 //D16: the adapters of every named function this object used as a value
 void cgEmitFuncValues(struct cgCtx* ctx) {
     for (int i = 0; i < ctx->fnValues.len; i++) {
-        struct var* f = *(struct var**)ListGetIdx(&ctx->fnValues, i);
+        struct cgFnValue* fv = ListGetIdx(&ctx->fnValues, i);
+        struct var* f = fv->f;
         char sym[256];
         mangleFuncSym(f, sym, sizeof(sym));
-        char retTy[256];
-        llvmFuncRetType(f->type, retTy, sizeof(retTy));
+        char retTy[256], fRetTy[256];
+        llvmFuncRetType(f->type, fRetTy, sizeof(fRetTy));
+        struct type tt = f->type;
+        if (fv->errs) tt.errors = *fv->errs;
+        llvmFuncRetType(tt, retTy, sizeof(retTy));
         bool outFirst = cgRetViaMemory(f->type); //its result's storage comes before the closure, as at every call
-        fprintf(ctx->out, "define linkonce_odr %s %s.fvt(%sptr %%closure", retTy, sym, outFirst ? "ptr %out, " : "");
+        fprintf(ctx->out, "define linkonce_odr %s %s(%sptr %%closure", retTy, cgFnValueName(sym, f, fv->errs),
+                outFirst ? "ptr %out, " : "");
         struct cgBuf params = {0};
         for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&params, ", ptr %%sarg%d", k);
         struct cgBuf args = {0};
@@ -3585,8 +3606,26 @@ void cgEmitFuncValues(struct cgCtx* ctx) {
         }
         fprintf(ctx->out, "%s) {\nentry:\n", cgBufStr(&params));
         char* argsText = cgBufStr(&args);
-        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", sym, argsText);
-        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, sym, argsText, retTy);
+        if (strcmp(fRetTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n", sym, argsText);
+        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n", fRetTy, sym, argsText);
+        bool aggregate = f->type.hasRetType && !outFirst;
+        if (!fv->errs) {
+            if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  ret void\n}\n\n");
+            else fprintf(ctx->out, "  ret %s %%r\n}\n\n", retTy);
+        } else if (f->type.errors.len == 0) { //R1b: what cannot fail, as a type that can - its code 0
+            if (!aggregate) fprintf(ctx->out, "  ret i32 0\n}\n\n");
+            else {
+                char rt[256];
+                llvmType(*f->type.retType, rt, sizeof(rt));
+                fprintf(ctx->out, "  %%w = insertvalue %s undef, i32 0, 0\n  %%w2 = insertvalue %s %%w, %s %%r, 1\n"
+                        "  ret %s %%w2\n}\n\n", retTy, retTy, rt, retTy);
+            }
+        } else { //R1b: its codes, re-encoded for the type's list (R6)
+            if (aggregate) fprintf(ctx->out, "  %%c = extractvalue %s %%r, 0\n", fRetTy);
+            char* nc = cgReencodeInto(ctx->out, aggregate ? "%c" : "%r", &f->type.errors, fv->errs, "fv");
+            if (!aggregate) fprintf(ctx->out, "  ret i32 %s\n}\n\n", nc);
+            else fprintf(ctx->out, "  %%r2 = insertvalue %s %%r, i32 %s, 0\n  ret %s %%r2\n}\n\n", fRetTy, nc, fRetTy);
+        }
     }
 }
 
@@ -4982,13 +5021,11 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
         cgBufAdd(b, " ");
         rdSpellTypeB(*f.retType, b);
     }
-    //R16: the default error is spelled by the "?" itself, and never by name
-    int written = 0;
+    //R1a: an inferred set is rendered as what it was found to be
     if (f.errors.len) cgBufAdd(b, " ?");
     for (int i = 0; i < f.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&f.errors, i);
-        if (TypeIsSame(*e, *SemanticGenericErrorType())) continue;
-        cgBufAdd(b, "%s%.*s", written++ ? " + " : " ", e->name.len, e->name.ptr);
+        cgBufAdd(b, "%s%.*s", i ? " + " : " ", e->name.len, e->name.ptr);
     }
     rdSigDepth--;
 }
@@ -6227,7 +6264,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             if (op->opType == OPERATION_READ_VAR && op->type.bType == BASETYPE_FUNC && !op->readVar->isGlobalVar
                     && !cgFindLocal(ctx, op->readVar->name)) {
                 if (op->readVar->isLambda && op->readVar->lambdaCaptures.len) return cgClosure(ctx, op, addr); //D16c
-                return cgFuncValue(ctx, op->readVar, addr);
+                return cgFuncValue(ctx, op->readVar, addr, &op->type.errors);
             }
             char* r = cgLoadOrAddr(ctx, op->type, addr, op->opType == OPERATION_INDEX);
             if (op->ownRegion && op->ownRegion->isRegion) cgOwnBorrowHeader(ctx, op, r); //O32
@@ -8761,8 +8798,11 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     char mname[256];
     mangleFuncSym(mainFunc, mname, sizeof(mname));
 
-    char* code = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call i32 %s()\n", code, mname);
+    char* code = "0"; //R1a: a main written "?" may turn out unable to fail
+    if (mainFunc->type.errors.len) {
+        code = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i32 %s()\n", code, mname);
+    } else fprintf(ctx->fnOut, "  call void %s()\n", mname);
     char* isErr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp ne i32 %s, 0\n", isErr, code);
     int id = ctx->lblCtr++;
@@ -8776,21 +8816,14 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     //pick the message matching this specific (declared error type, word) via a chain of selects, same
     //shape as cgPropagateError's ordinal remap - main's declared error set is small and fully known here
     char* msg = cgGlobalStringConst(ctx, "unhandled error\n"); //defensive fallback, never actually selected
-    struct type* genericErr = SemanticGenericErrorType();
     for (int i = 0; i < mainFunc->type.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&mainFunc->type.errors, i);
         int typeOrdinal = i +1;
         for (int w = 0; w < e->words.len; w++) {
             char text[300];
-            //the bare error (R19) carries no real type/word to name - print it plainly instead of the
-            //otherwise-generic "TypeName.word" shape, which would read as the redundant "error.error"
-            if (e == genericErr) {
-                snprintf(text, sizeof(text), "unhandled error\n"); //R19: the default error has no name
-            } else {
-                struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
-                snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
-                    e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
-            }
+            struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
+            snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
+                e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
             char* candidate = cgGlobalStringConst(ctx, text);
             long long exact = ((long long)typeOrdinal << 16) | w;
             char* cmp = cgNewTmp(ctx);
@@ -9066,7 +9099,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
 
     ctx.debug = debug;
     ctx.bf16Opaque = debug || race;
-    ctx.fnValues = ListInit(sizeof(struct var*));
+    ctx.fnValues = ListInit(sizeof(struct cgFnValue));
     ctx.capScopes = ListInit(sizeof(struct cgCapScope));
     ctx.handed = ListInit(sizeof(struct cgHanded));
     ctx.staticLits = ListInit(sizeof(struct cgStaticLit));

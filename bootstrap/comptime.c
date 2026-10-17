@@ -1667,13 +1667,6 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
     st->mod = savedMod;
     //this call's clauses see it - or, for a Try form an operator called inside a tried expression, that try's (E31)
     if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = op->isTried ? NULL : op->checkRoot; }
-    //R17: through a bare "?" function, any error leaves as that function's own default error, its one word
-    struct type* generic = SemanticGenericErrorType();
-    if (st->flow == CF_ERROR && generic && func->type.errors.len == 1
-            && TypeIsSame(**(struct type**)ListGetIdx(&func->type.errors, 0), *generic)) {
-        st->errType = *generic;
-        st->errWord = 0;
-    }
     if (st->flow == CF_RETURN) {
         st->flow = CF_NORMAL;
         struct ctVal* r = st->ret;
@@ -3303,9 +3296,7 @@ static int ctRunStopped(struct ctState* st) {
 //B5: an error escaping main is named, as the built program names it
 static int ctRunUnhandled(struct ctState* st) {
     fflush(NULL);
-    struct type* generic = SemanticGenericErrorType();
-    if (generic && TypeIsSame(st->errType, *generic)) fputs("unhandled error\n", stderr);
-    else if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
+    if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
         struct token w = *(struct token*)ListGetIdx(&st->errType.words, (int)st->errWord);
         fprintf(stderr, "unhandled error: %.*s.%.*s\n", st->errType.name.len, st->errType.name.ptr, w.str.len, w.str.ptr);
     } else fputs("unhandled error\n", stderr);

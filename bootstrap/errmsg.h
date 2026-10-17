@@ -125,6 +125,9 @@ struct type;
     X(ERR_UNKNOWN_FUNCTION,             "",      "unknown function or type %n") \
     X(ERR_UNKNOWN_FUNCTION_MEANT,       "",      "unknown function or type %n - did you mean '%S'?") \
     X(ERR_UNKNOWN_ERROR_TYPE,           "R1",    "unknown error type %n") \
+    X(ERR_FUNC_TYPE_ERRS_UNWRITTEN,     "R1b",   "a function type writes its error set - '? IoError' - since no body says what it is") \
+    X(ERR_TRAIT_ERRS_UNWRITTEN,         "R1b",   "a trait's method writes its error set - '? IoError' - since no body says what it is") \
+    X(ERR_ERRS_NOT_IN_TYPE,             "R1b",   "%n can fail with %t, which this function type does not name - add it after its '?'") \
     X(ERR_TYPE_IS_PRIVATE,              "M6",    "type %n is private to its module") \
     X(ERR_TYPE_NAME_IN_USE,             "D2",    "type %n is already declared in this module") \
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
@@ -421,6 +424,7 @@ struct type;
     X(ERR_NOT_CALLABLE,                 "E13b",  "%t is not a function, and declares no Call") \
     X(ERR_JOIN_PIECE_CALLED,            "E11b",  "'(' after a piece of text calls it - to join the value inside, write '$(...)'") \
     X(ERR_UNHANDLED_FALLIBLE_CALL,      "E15",   "this call can fail - write 'try', and catch or pass on its errors") \
+    X(ERR_OPERATOR_CALL_FAILS,          "E31",   "this operator calls %s, which can fail - write 'try' before the expression") \
     X(ERR_IS_NOT_REFERENCES,            "E10c",  "'a is b' asks whether two references name one instance, and %t and %t are not both references") \
     X(ERR_IS_NOT_ONE_TYPE,              "E10c",  "%t and %t are different types, so they never name one instance") \
     X(ERR_AS_NEEDS_CASE,                "E32",   "after 'is' or 'as' comes a case of %t, found %s") \

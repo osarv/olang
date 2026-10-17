@@ -12,6 +12,14 @@
 # "Vec<T>(cap)" starts with room for cap elements (none by default); a full buffer is replaced by one twice the size (8
 # at first), made zero-filled, so T needs a zero value (D13c). The elements are its first Len(); the rest is room.
 
+# what a Vec's operations fail with: a First, Last or Pop of an empty Vec (EMPTY), an IndexOf finding nothing
+# (NOT_FOUND), and a position outside it given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
+error VecError {
+    EMPTY
+    NOT_FOUND
+    OUT_OF_RANGE
+}
+
 type Vec<T> struct(cap I64 = 0) {
     data own mut Array<T>& = Array<T>(cap if cap > 0 else 0)  # the buffer; its first n elements are the Vec's
     n I64 = 0
@@ -61,22 +69,21 @@ fn (v Vec<<T>>&) At(i I64) T { return v.data[i] }
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is; "try v[i] = x" checks it
 fn (v mut Vec<<T>>&) SetAt(i I64, x T) { v.data[i] = x }
 
-# the first element - failing with the default error when there is none, as List's First does
-fn (v Vec<<T>>&) First() T ? {
-    if v.n == 0 { error }
+# the first element - failing with EMPTY when there is none, as List's First does
+fn (v Vec<<T>>&) First() T ? VecError {
+    if v.n == 0 { error VecError.EMPTY }
     return v.data[0]
 }
 
-# the last element - failing with the default error when there is none
-fn (v Vec<<T>>&) Last() T ? {
-    if v.n == 0 { error }
+# the last element - failing with EMPTY when there is none
+fn (v Vec<<T>>&) Last() T ? VecError {
+    if v.n == 0 { error VecError.EMPTY }
     return v.data[v.n - 1]
 }
 
-# removes the last element and gives it - failing with the default error when there is none. Moves nothing, and keeps
-# the buffer
-fn (v mut Vec<<T>>&) Pop() T ? {
-    if v.n == 0 { error }
+# removes the last element and gives it - failing with EMPTY when there is none. Moves nothing, and keeps the buffer
+fn (v mut Vec<<T>>&) Pop() T ? VecError {
+    if v.n == 0 { error VecError.EMPTY }
     v.n--
     return v.data[v.n]
 }
@@ -84,11 +91,10 @@ fn (v mut Vec<<T>>&) Pop() T ? {
 # removes every element, keeping the buffer for the Pushes that follow
 fn (v mut Vec<<T>>&) Clear() { v.n = 0 }
 
-# keeps the first k elements and removes the rest - nothing changes when there are k or fewer. A negative k is a mistake
-# in the program, which stops it
+# keeps the first k elements and removes the rest - nothing changes when there are k or fewer, and none is kept for a k of
+# 0 or less
 fn (v mut Vec<<T>>&) Truncate(k I64) {
-    assert k >= 0
-    if k < v.n { v.n = k }
+    if k < v.n { v.n = k if k > 0 else 0 }
 }
 
 # the elements, lent as an array (a borrowed own result, O37): "d := v.View()" is good until the Vec is changed in a way
@@ -108,13 +114,13 @@ fn (v Vec<<T>>&) RunFrom(at I64) Array<T>&v ? Exhausted {
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
-fn (v mut Vec<<T>>&) RemoveAt(i I64) { v.TakeAt(i) }
+fn (v mut Vec<<T>>&) RemoveAt(i I64) ? VecError { try v.TakeAt(i) }
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
-# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
-# checked once per call, and stops it as a slice out of range does
-fn (v mut Vec<<T>>&) TakeAt(i I64) T {
-    assert i >= 0 and i < v.n
+# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
+# checked once per call
+fn (v mut Vec<<T>>&) TakeAt(i I64) T ? VecError {
+    if i < 0 or i >= v.n { error VecError.OUT_OF_RANGE }
     x := v.data[i]
     for k in range i, v.n - 1 { v.data[k] = v.data[k + 1] }
     v.n--
@@ -122,12 +128,12 @@ fn (v mut Vec<<T>>&) TakeAt(i I64) T {
 }
 
 # removes the element at position i as SwapTake does, giving nothing
-fn (v mut Vec<<T>>&) SwapRemove(i I64) { v.SwapTake(i) }
+fn (v mut Vec<<T>>&) SwapRemove(i I64) ? VecError { try v.SwapTake(i) }
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element, and the
-# order is not kept. i must be a position, checked once per call
-fn (v mut Vec<<T>>&) SwapTake(i I64) T {
-    assert i >= 0 and i < v.n
+# order is not kept. i must be a position, checked once per call: one that is not fails with OUT_OF_RANGE
+fn (v mut Vec<<T>>&) SwapTake(i I64) T ? VecError {
+    if i < 0 or i >= v.n { error VecError.OUT_OF_RANGE }
     x := v.data[i]
     v.n--
     v.data[i] = v.data[v.n]
@@ -135,9 +141,9 @@ fn (v mut Vec<<T>>&) SwapTake(i I64) T {
 }
 
 # puts x at position i, the elements from i on each moving up one place - so Insert(Len(), x) is Push(x). i must be from
-# 0 to Len(), checked once per call
-fn (v mut Vec<<T>>&) Insert(i I64, x T) {
-    assert i >= 0 and i <= v.n
+# 0 to Len(), checked once per call: one that is not fails with OUT_OF_RANGE
+fn (v mut Vec<<T>>&) Insert(i I64, x T) ? VecError {
+    if i < 0 or i > v.n { error VecError.OUT_OF_RANGE }
     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
     k I64 = v.n
     for k > i {
@@ -154,19 +160,19 @@ fn (v mut Vec<<T>>&) Reverse() { v.data[:v.n].Reverse() }
 # sorts the elements in place so that less(v[i], v[i - 1]) holds nowhere - stable, as an array's Sort is, and done by it
 fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.data[:v.n].Sort(less) }
 
-# the position of the first element equal to x, compared with "==" - failing with the default error when there is none
-fn (v Vec<<T>>&) IndexOf(x T) I64 ? {
+# the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none
+fn (v Vec<<T>>&) IndexOf(x T) I64 ? VecError {
     for i in range v.n {
         if v.data[i] == x { return i }
     }
-    error
+    error VecError.NOT_FOUND
 }
 
 # removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
 # moves them - and says whether there was one, as List's Remove does
 fn (v mut Vec<<T>>&) Remove(x T) Bool {
     i := try v.IndexOf(x) catch { return false }
-    v.RemoveAt(i)
+    try v.RemoveAt(i) catch { unreachable }   # a position IndexOf found
     return true
 }
 

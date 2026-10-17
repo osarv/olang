@@ -2172,19 +2172,13 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
 //"error TYPE.word" (same-module) or "error alias...TYPE.word" (cross-module, through an alias chain of
 //any length, originating a foreign module's own error type directly - see the report) - always ends in
 //exactly "TYPE.word" (never a bare type alone), so every identifier before the last two is unambiguously
-//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity. A bare "error", with no
-//operand at all, raises the default error (R16) - a separate, simpler shape entirely, so it's tried first.
+//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity (R3: every error names its type).
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
     if (kw.type == TOK_NONE) return NULL;
     struct token first = acceptTok(sc, TOK_IDEN);
-    if (first.type == TOK_NONE) {
-        struct syntax* bare = newNode(SNTX_STMNT_ERROR);
-        addTok(bare, kw);
-        if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-        return bare;
-    }
+    if (first.type == TOK_NONE) return parseFail(sc, cur);
     struct token dot1 = acceptTok(sc, TOK_DOT);
     if (dot1.type == TOK_NONE) return parseFail(sc, cur);
     struct token second = acceptTok(sc, TOK_IDEN);
