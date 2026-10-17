@@ -9031,6 +9031,43 @@ test "R20: try (...) checks arithmetic, shifts, conversions and lengths" {
     assert ckMixed(arr, 1, 3) == 6 and ckMixed(arr, 5, 3) == -1 and ckMixed(arr, 1, big) == -2
 }
 
+# E15a: the checks follow IEEE 754's exceptions - division by zero only for a finite nonzero dividend (an infinity
+# made), invalid operation for 0/0, inf/inf, inf-inf and a NaN or infinity made an integer; a finite value out of an
+# integer type's range is OVERFLOW, as is an integer that becomes infinite in a narrow float; "<<" fails exactly when
+# x * 2^n does not fit. EcIn is mutable, so the test runs them at run time; EcBaked runs the same while compiling (K2)
+fn ecDiv(a F64, b F64) I32 {
+    r := checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default 1.0 catch BuiltinError.INVALID default 2.0
+         catch BuiltinError.OVERFLOW default 3.0 catch default 4.0
+    return I32(r) if r < 5.0 else 0
+}
+fn ecSub(a F64, b F64) I32 { return 0 if (checked (a - b) catch BuiltinError.INVALID default 0.0 catch default 1.0) != 0.0 else 2 }
+fn ecToInt(f F64) I32 { return checked I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
+fn ecToF16(n I64) I32 {
+    h := checked F16(n) catch BuiltinError.OVERFLOW default F16(1.0)
+    return 1 if h == F16(1.0) else 0
+}
+fn ecShl(x I8, n I64) I32 { return I32(checked (x << n) catch BuiltinError.OVERFLOW default 99 catch default 98) }
+fn ecInf() F64 {
+    big F64 = 1.0e308
+    return big * 10.0
+}
+EcIn mut F64 = 0.0
+EcBaked I64 = ecDiv(1.0, 0.0) * 10000000 + ecDiv(0.0, 0.0) * 1000000 + ecToInt(ecInf()) * 100000 +
+              ecToF16(70000) * 10000 + ecShl(64, 1) * 100 + ecShl(-1, 1)
+
+test "E15a: checked operations follow IEEE's exceptions" {
+    z F64 = EcIn
+    inf F64 = ecInf()
+    assert ecDiv(1.0, z) == 1 and ecDiv(-2.5, z) == 1 and ecDiv(z, z) == 2 and ecDiv(inf, inf) == 2
+    assert ecDiv(inf, z) == 0 and ecDiv(1.0e308, 1.0e-10) == 3
+    assert ecSub(inf, inf) == 2
+    assert ecToInt(inf) == -2 and ecToInt(-inf) == -2 and ecToInt(inf - inf) == -2 and ecToInt(1.0e12) == -1
+    assert ecToF16(70000) == 1 and ecToF16(60000) == 0
+    assert ecShl(64, 1) == 99 and ecShl(-1, 1) == -2 and ecShl(-64, 1) == -128 and ecShl(-65, 1) == 99
+    assert EcBaked == ecDiv(1.0, z) * 10000000 + ecDiv(z, z) * 1000000 + ecToInt(inf) * 100000 + ecToF16(70000) * 10000 +
+                      ecShl(64, 1) * 100 + ecShl(-1, 1)
+}
+
 # T6b/R20: a tried value that widens where it lands - returned (ckByteAdd above), declared, an operand, an argument -
 # keeps its checks. The widening moved the try to a new node and its checks went on naming the old one, so a failing
 # check found no clauses and was emitted as unreachable. CkWideIn is mutable, so the test runs them at run time;

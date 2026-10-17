@@ -3328,8 +3328,13 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
                                      a->type, av, bv);
         if (op->opType == OPERATION_DIV || op->opType == OPERATION_MOD) {
             char* z;
-            if (isF) z = cgFcmp(ctx, "oeq", aty, bv, "0.0");
-            else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
+            if (isF) { //IEEE's division by zero: a finite nonzero dividend - 0/0 and NaN/0 are INVALID or NaN, inf/0 exact
+                char* bz = cgFcmp(ctx, "oeq", aty, bv, "0.0");
+                char* aFin = cgIsFinite(ctx, aty, av);
+                char* aNz = cgFcmp(ctx, "one", aty, av, "0.0");
+                char* an = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", an, aFin, aNz);
+                z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", z, bz, an);
+            } else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
             cgFailIf(ctx, op, z, "DIVIDE_BY_ZERO");
             if (!isF && !isU) { //the most negative value by -1: the true quotient is one past the maximum
                 char minv[32];

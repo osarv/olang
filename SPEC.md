@@ -2655,18 +2655,21 @@ does:
 |---|---|
 | integer `+ - *`, unary `-` | `OVERFLOW` when the true result does not fit (instead of wrapping, E6c) |
 | integer `/ %` | `DIVIDE_BY_ZERO` for a zero divisor; `OVERFLOW` for the most negative value by `-1` (E6a) |
-| float `+ - * /` | `DIVIDE_BY_ZERO` for a zero divisor; `OVERFLOW` for an infinite result from finite operands; `INVALID` for a NaN result from operands that are not NaN |
-| `<<` | `OVERFLOW` when a set bit is shifted out - the true value `x * 2^n` does not fit; `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
+| float `+ - * /` | `DIVIDE_BY_ZERO` for a finite nonzero dividend divided by zero (whose result is an infinity); `INVALID` for a NaN result from operands that are not NaN (`0.0 / 0.0`, an infinity divided by one, an infinity minus itself); `OVERFLOW` for any other infinite result from finite operands |
+| `<<` | `OVERFLOW` when the true value `x * 2^n` does not fit the type; `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
 | `>>` | `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
 | integer conversion `T(x)` | `OVERFLOW` when the value changes - it does not fit `T`, a sign change between types of one width included (instead of wrapping, T6) |
-| float to integer `T(f)` | `INVALID` for a NaN, `OVERFLOW` for an infinity or a value out of range (E26a) |
+| float to integer `T(f)` | `INVALID` for a NaN or an infinity; `OVERFLOW` for a finite value out of `T`'s range (E26a) |
+| integer to float `T(x)` | `OVERFLOW` when the value becomes infinite (an integer above 65504 to `F16`) |
 | float narrowing `F32(f)`, `F16(f)`, `BF16(f)` | `OVERFLOW` when a finite value becomes infinite |
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
 | `x as E.Case` | `WRONG_CASE` when `x` is another case (E32) |
 | `x as Array<T, N>&` | `OUT_OF_BOUNDS` for a length other than `N` (E32b) |
 | `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
 
-`INVALID` means what IEEE 754 means by an invalid operation: a NaN made from what is not one. `checked` binds as
+`INVALID` means what IEEE 754 means by an invalid operation: a NaN made from operands that are not NaN, or a NaN or an
+infinity converted to an integer. `DIVIDE_BY_ZERO` is IEEE's division by zero for a float and an integer `/` or `%` by
+zero; a finite value that becomes infinite or does not fit an integer type is `OVERFLOW`. `checked` binds as
 tightly as a unary operator, as `try` does, so a checked computation is parenthesized: `checked a + b` is
 `(checked a) + b`. A `checked` covering nothing that can fail or be checked is a compile-time error, and so is a `try`
 whose operand only `checked` would make fallible - it names `checked`. The words a checked expression can produce are

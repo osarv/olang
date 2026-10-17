@@ -896,7 +896,8 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                 case OPERATION_SUB: return ctCheckFloat(st, op, t, x, y, true, x - y);
                 case OPERATION_MUL: return ctCheckFloat(st, op, t, x, y, true, x * y);
                 case OPERATION_DIV:
-                    if (y == 0) return ctCheckFail(st, op, "DIVIDE_BY_ZERO");
+                    //IEEE's division by zero: a finite nonzero dividend; 0/0 is INVALID (ctCheckFloat), inf/0 exact
+                    if (y == 0 && isfinite(x) && x != 0) return ctCheckFail(st, op, "DIVIDE_BY_ZERO");
                     return ctCheckFloat(st, op, t, x, y, true, x / y);
                 default: break;
             }
