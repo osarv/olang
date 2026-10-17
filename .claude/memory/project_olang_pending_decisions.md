@@ -103,7 +103,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   - SUPERSEDED, proposed: the user asked whether an operator with only an error version must always be written
   `checked`; proposed instead that a plain operator method may declare errors (reversing E31a's rule), making the
   operator fallible as written and written with `try`, like a call; Checked forms only as opt-in variants of
-  infallible operators. Awaiting the user.
+  infallible operators. The user then: either operators under try never fail, or try has errors and checked has
+  extra ones - "I don't like that operators can sometimes have a try but no checked". RECOMMENDED (asked): the second -
+  a plain operator method may declare errors (`try` handles them, as for a call); its Checked form must declare a
+  superset of them (checked at the declaration), so checked only adds; with no Checked form, `checked` calls the plain
+  method (indexing keeps its derived Len check). Awaiting the user.
   The Try forms are renamed to match (the user: "So then tryAt etc becomes checkedAt?" - yes): CheckedAt, CheckedPlus,
   CheckedSetAt, CheckedSlice, ... (private checkedAt), reversing the user's own TryAt pick of 2026-10-07. `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
   built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
