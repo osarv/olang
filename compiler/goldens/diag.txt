@@ -913,6 +913,11 @@ e13btry.olang:6:16: error[E15]: this call can fail - write 'try', and catch or p
     6 |     n := pick()()
       |                ^
 compilation failed with 1 error
+=== e16atrydefaultslice.olang
+e16atrydefaultslice.olang:10:96: error[O10d]: this value lives in this function's own scope, which closes first
+   10 | fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (try a[0] catch default Array<I64, 2>())[0:2] }
+      |                                                                                                ^
+compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:8:12: error[E16]: index 5 is outside the array's 2 elements
     8 |     b := z[5]
@@ -2506,6 +2511,26 @@ compilation failed with 1 error
 o17spawntargets.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    25 |     grow(b)
       |          ^
+compilation failed with 1 error
+=== o17tempcallresult.olang
+o17tempcallresult.olang:24:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   24 |         addRef(idBox(seed), i + 1)
+      |                ^~~~~
+compilation failed with 1 error
+=== o17tempcond.olang
+o17tempcond.olang:27:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   27 |         addVia(b1 if i >= 0 else b2, i + 1)
+      |                   ^~
+compilation failed with 1 error
+=== o17tempcondarray.olang
+o17tempcondarray.olang:27:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   27 |         addVia(a[0] if i >= 0 else a[1], i + 1)
+      |                     ^~
+compilation failed with 1 error
+=== o17tempreadonly.olang
+o17tempreadonly.olang:27:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   27 |         addVia(mkBox(seed), i + 1)
+      |                ^~~~~
 compilation failed with 1 error
 === o18cprojectionborrow.olang
 o18cprojectionborrow.olang:16:14: error[O10]: this reference lives in a scope that may not outlive where it is put
