@@ -4,7 +4,7 @@
 # longest token that starts there (maximal munch, L16); a word is read whole and then looked up as a keyword (L9). A
 # literal is checked as it is read - its digits, separators and escapes (L10-L15) - and its value is decoded later,
 # from its span. Statement ends are inserted as Go's lexer inserts semicolons: after a token that can end a
-# statement, where a line ends outside parentheses and square brackets (L18, L18a).
+# statement, where a line ends (L18) - inside brackets too, where they separate a list's items (L18a).
 #
 # What it returns is plain data: the tokens by value in one array, the matching '}' of every '{' (the brace table,
 # by braces alone as B9 needs), and the lexical errors found, each a kind and a span. Nothing in it refers back to the
@@ -19,6 +19,7 @@ type LexError enum {
     NulByte
     CarriageReturn
     Semicolon
+    CommaEndsLine
     UnclosedComment
     UnclosedString
     StringNewline
@@ -51,6 +52,7 @@ fn (d Diag) Rule() String& {
         case LexError.NonAscii, LexError.NulByte => "L1"
         case LexError.CarriageReturn => "L3"
         case LexError.Semicolon => "L18"
+        case LexError.CommaEndsLine => "L18a"
         case LexError.UnclosedComment => "L4a"
         case LexError.UnclosedString, LexError.StringNewline => "L14"
         case LexError.UnclosedChar, LexError.CharNewline, LexError.EmptyChar, LexError.LongChar => "L13"
@@ -71,6 +73,7 @@ fn (d Diag) Message() String {
         case LexError.NulByte => "NUL byte in the source - is this a text file?"
         case LexError.CarriageReturn => "carriage return - save the file with LF line endings"
         case LexError.Semicolon => "olang has no ';' - a statement ends where its line does; put the next one on a line of its own"
+        case LexError.CommaEndsLine => "a comma never ends a line - items on different lines are separated by the line break; remove it"
         case LexError.UnclosedComment => "unterminated block comment - '##' closes it"
         case LexError.UnclosedString => "unterminated string literal"
         case LexError.StringNewline => "string literal not closed on its line - write \\n for a newline"
@@ -200,7 +203,7 @@ fn (s mut scanner&) run() {
                 if c == ';' {
                     s.diag(LexError.Semicolon, i, i + 1)
                     i++
-                    if last.EndsStatement() and not s.inBrackets() {
+                    if last.EndsStatement() {
                         at := lastEnd if nl else start
                         s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
                         last = token.Tok.StmtEnd
@@ -225,8 +228,10 @@ fn (s mut scanner&) run() {
         lineStart := start == 0 or t[start - 1] == '\n'
         if lineStart { flags = flags | token.LineStart }
         if lineStart and start > 0 { s.closeBeforeDecl(k, end) }
+        # L18a: a comma never ends a line - reported, and read as the line break it stands before
+        if nl and last == token.Tok.Comma { s.diag(LexError.CommaEndsLine, lastEnd - 1, lastEnd) }
         # L18 - and no statement starts with catch, so a clause may begin a line (R9b)
-        if nl and last.EndsStatement() and not s.inBrackets() and k != token.Tok.Catch {
+        if nl and last.EndsStatement() and k != token.Tok.Catch {
             s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd)))
         }
         s.toks.Push(token.Token(k, flags, I32(start), I32(end)))
@@ -237,16 +242,9 @@ fn (s mut scanner&) run() {
         i = end
     }
     # the end of the file ends a statement as a line's end does
+    if last == token.Tok.Comma { s.diag(LexError.CommaEndsLine, lastEnd - 1, lastEnd) }
     if last.EndsStatement() { s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd))) }
     s.toks.Push(token.Token(token.Tok.Eof, token.LineBreak, I32(n), I32(n)))
-}
-
-# L18a: a line's end ends nothing while the innermost bracket open is a '(' or a '['
-fn (s scanner&) inBrackets() Bool {
-    n := s.brackets.Len()
-    if n == 0 { return false }
-    top := s.brackets[n - 1]
-    return top == '(' or top == '['
 }
 
 # keeps the bracket stack: a ')' or ']' closes its own kind only (a stray one is the parser's to report); a '}' closes
@@ -648,11 +646,19 @@ test "keywords, literals, and a word after a dot is a name" {
     assert ts.Toks[11].Kind == token.Tok.Iden
 }
 
-test "a line's end ends a statement after a token that can end one, outside brackets" {
-    t := "x := f(a,\n  b)\ny := 1 +\n  2\nreturn\nif c {\n  z++\n}\n"
-    assert spelled(t, Scan(t)) == "x := f ( a , b ) ; y := 1 + 2 ; return ; if c { z ++ ; }"
-    u := "a := [\n  1,\n  2,\n]\nb := try f()\ncatch { }\nfn g() { h(fn() {\n  q()\n}) }"
-    assert spelled(u, Scan(u)) == "a := [ 1 , 2 , ] ; b := try f ( ) catch { } fn g ( ) { h ( fn ( ) { q ( ) ; } ) }"
+test "a line's end ends a statement after a token that can end one, inside brackets too" {
+    t := "x := f(a\n  b)\ny := 1 +\n  2\nreturn\nif c {\n  z++\n}\n"
+    assert spelled(t, Scan(t)) == "x := f ( a ; b ) ; y := 1 + 2 ; return ; if c { z ++ ; }"
+    u := "a := [\n  1\n  2\n]\nb := try f()\ncatch { }\nfn g() { h(fn() {\n  q()\n}) }"
+    assert spelled(u, Scan(u)) == "a := [ 1 ; 2 ; ] ; b := try f ( ) catch { } fn g ( ) { h ( fn ( ) { q ( ) ; } ) }"
+}
+
+test "a comma never ends a line (L18a)" {
+    t := "f(a,\n  b, # why\n  c)\ng(d,"
+    ts := Scan(t)
+    assert spelled(t, ts) == "f ( a , b , c ) ; g ( d ,"
+    assert ts.Diags.Len() == 3 and ts.Diags[0].Kind == LexError.CommaEndsLine and ts.Diags[0].Rule() == "L18a"
+    assert ts.Diags[0].Start == 3 and ts.Diags[1].Start == 8 and ts.Diags[2].Start == I32(t.Len()) - 1
 }
 
 test "a declaration at a line's start ends the brackets left open before it" {
@@ -661,7 +667,7 @@ test "a declaration at a line's start ends the brackets left open before it" {
     u := "x := f(a\ntest \"t\" { }\n"
     assert spelled(u, Scan(u)) == "x := f ( a ; test \"t\" { }"
     v := "x := f(a\nfn (r R) m() { }\n"
-    assert spelled(v, Scan(v)) == "x := f ( a fn ( r R ) m ( ) { }"
+    assert spelled(v, Scan(v)) == "x := f ( a ; fn ( r R ) m ( ) { }"
 }
 
 test "comments end lines; a block comment only where it spans one" {
@@ -679,7 +685,7 @@ test "flags say what stood before a token" {
 test "a semicolon is reported and ends a statement where one could end" {
     t := "a := 1; b := 2\nf(x; y)"
     ts := Scan(t)
-    assert spelled(t, ts) == "a := 1 ; b := 2 ; f ( x y ) ;"
+    assert spelled(t, ts) == "a := 1 ; b := 2 ; f ( x ; y ) ;"
     assert ts.Diags.Len() == 2 and ts.Diags[0].Kind == LexError.Semicolon and ts.Diags[0].Rule() == "L18"
     u := "a\n;\nb"
     assert spelled(u, Scan(u)) == "a ; b ;"
