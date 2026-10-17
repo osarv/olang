@@ -217,7 +217,7 @@ static bool ctFits(struct type t, ctWide v) {
 //T4: an integer value's exact mathematical value - a U64's bit pattern read unsigned; every other type's value is
 //kept normalized in its range already
 static ctWide ctExact(struct ctVal* v) {
-    if (v->type.bType == BASETYPE_U64) return (ctWide)(unsigned long long)v->i;
+    if (v->type->bType == BASETYPE_U64) return (ctWide)(unsigned long long)v->i;
     return v->i;
 }
 
@@ -256,13 +256,59 @@ static const char* CT_WHY_DESTRUCTOR = "it builds a value whose destructor runs 
 
 //every value the evaluator has made, in bytes - the memory budget (CT_MEM_BUDGET) is measured against it
 static size_t ctAllocated;
+//...counted as a value with its type inside - what one cost before types were shared (CtType), so the budget still
+//admits the evaluations it did
+#define CT_VAL_BYTES (sizeof(struct ctVal) + sizeof(struct type) - sizeof(const struct type*))
+
+//a value's type, kept once for every value of that type rather than in each value: a type is 624 bytes, a value with it
+//inside was 704, and a test build's evaluator made a million of them. Two types are one when their bytes are - the copy
+//is never written through, so a value whose type changes is given another
+static const struct type** ctTypes;
+static size_t ctTypesCap, ctTypesLen;
+static unsigned long long ctTypeHash(const struct type* t) {
+    unsigned long long h = 1469598103934665603ULL, w;
+    const unsigned char* b = (const unsigned char*)t;
+    for (size_t i = 0; i + sizeof(w) <= sizeof(struct type); i += sizeof(w)) {
+        memcpy(&w, b + i, sizeof(w));
+        h = (h ^ w) * 1099511628211ULL;
+        h ^= h >> 29;
+    }
+    return h;
+}
+const struct type* CtType(struct type t) {
+    static const struct type* last; //values are made in runs of one type
+    if (last && !memcmp(last, &t, sizeof(struct type))) return last;
+    if (ctTypesLen * 2 >= ctTypesCap) {
+        size_t cap = ctTypesCap ? ctTypesCap * 2 : 1024;
+        const struct type** nt = calloc(cap, sizeof(struct type*));
+        CheckAllocPtr(nt);
+        for (size_t i = 0; i < ctTypesCap; i++) {
+            if (!ctTypes[i]) continue;
+            size_t k = ctTypeHash(ctTypes[i]) & (cap - 1);
+            while (nt[k]) k = (k + 1) & (cap - 1);
+            nt[k] = ctTypes[i];
+        }
+        free(ctTypes);
+        ctTypes = nt;
+        ctTypesCap = cap;
+    }
+    size_t k = ctTypeHash(&t) & (ctTypesCap - 1);
+    for (; ctTypes[k]; k = (k + 1) & (ctTypesCap - 1)) {
+        if (!memcmp(ctTypes[k], &t, sizeof(struct type))) return last = ctTypes[k];
+    }
+    struct type* c = MallocOrCrash(sizeof(struct type));
+    *c = t;
+    ctTypes[k] = c;
+    ctTypesLen++;
+    return last = c;
+}
 
 static struct ctVal* ctNew(enum ctKind k, struct type t) {
-    ctAllocated += sizeof(struct ctVal);
+    ctAllocated += CT_VAL_BYTES;
     struct ctVal* v = MallocOrCrash(sizeof(struct ctVal));
     *v = (struct ctVal){0};
     v->kind = k;
-    v->type = t;
+    v->type = CtType(t);
     return v;
 }
 
@@ -277,7 +323,7 @@ static const void* ctArrayStorage(struct ctVal* a) {
     if (!a) return NULL;
     if (a->elems) return a->elems;
     struct ctVal* s = a->viewOf ? a->viewOf : a;
-    return s->type.bType != BASETYPE_ARRAY || s->type.arrMalloc ? NULL : (const void*)s;
+    return s->type->bType != BASETYPE_ARRAY || s->type->arrMalloc ? NULL : (const void*)s;
 }
 static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     if (x->kind == CT_FUNC || y->kind == CT_FUNC) {
@@ -288,8 +334,8 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     struct ctVal* b = y->kind == CT_REF ? y->target : NULL;
     //an array is its storage and its length: no storage and no length is what a null array reference is too, bit for
     //bit ({ 0, null }) - the zero value of an array has no storage yet
-    bool arrA = x->kind == CT_NULL ? x->type.bType == BASETYPE_ARRAY : a && a->kind == CT_AGG && a->type.bType == BASETYPE_ARRAY;
-    bool arrB = y->kind == CT_NULL ? y->type.bType == BASETYPE_ARRAY : b && b->kind == CT_AGG && b->type.bType == BASETYPE_ARRAY;
+    bool arrA = x->kind == CT_NULL ? x->type->bType == BASETYPE_ARRAY : a && a->kind == CT_AGG && a->type->bType == BASETYPE_ARRAY;
+    bool arrB = y->kind == CT_NULL ? y->type->bType == BASETYPE_ARRAY : b && b->kind == CT_AGG && b->type->bType == BASETYPE_ARRAY;
     if (arrA && arrB) {
         int na = a ? a->n : 0, nb = b ? b->n : 0;
         return a == b || (na == nb && ctArrayStorage(a) == ctArrayStorage(b));
@@ -301,11 +347,11 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
 //E10: a reference to an array - "==" compares the array it names, where any other reference compares by identity. A
 //null one has no storage: the null literal, or a reference to an array value's zero value ({ 0, null } at run time)
 static bool ctArrayRef(struct ctVal* v) {
-    if (v->kind == CT_NULL) return v->type.bType == BASETYPE_ARRAY;
+    if (v->kind == CT_NULL) return v->type->bType == BASETYPE_ARRAY;
     if (v->kind != CT_REF) return false;
     struct ctVal* t = v->target;
     while (t && t->kind == CT_REF) t = t->target;
-    return t && t->kind == CT_AGG && t->type.bType == BASETYPE_ARRAY;
+    return t && t->kind == CT_AGG && t->type->bType == BASETYPE_ARRAY;
 }
 //(a fixed-length array is storage of its own however long it is - an Array<T, 0> too, a slot of no bytes at run time - so
 //a reference to it, or a slice of it, is never null; only a run-time-length array's zero value has none)
@@ -316,12 +362,12 @@ static bool ctArrayRefNull(struct ctVal* v) {
     if (!t) return true;
     if (t->kind != CT_AGG || t->n != 0 || t->elems) return false;
     struct ctVal* s = t->viewOf ? t->viewOf : t;
-    return s->type.bType != BASETYPE_ARRAY || s->type.arrMalloc;
+    return s->type->bType != BASETYPE_ARRAY || s->type->arrMalloc;
 }
 
 //a fresh, independent copy: an aggregate's elements are copied, a reference keeps pointing where it did
 static struct ctVal* ctCopy(struct ctVal* v) {
-    struct ctVal* c = ctNew(v->kind, v->type);
+    struct ctVal* c = ctNew(v->kind, *v->type);
     *c = *v;
     if (v->kind == CT_AGG) {
         c->viewOf = NULL; //a copy is storage of its own
@@ -338,8 +384,8 @@ static struct ctVal* ctCopy(struct ctVal* v) {
 //changes gets new storage, which an earlier borrow of the old one goes on naming
 static void ctAssign(struct ctVal* node, struct ctVal* v) {
     if (v->kind != CT_AGG) { *node = *v; return; } //ctCopy of anything else is this same struct copy
-    bool sameShape = node->kind == CT_AGG && node->n == v->n && node->type.bType == v->type.bType
-                     && (v->type.bType != BASETYPE_CHOICE || node->i == v->i);
+    bool sameShape = node->kind == CT_AGG && node->n == v->n && node->type->bType == v->type->bType
+                     && (v->type->bType != BASETYPE_CHOICE || node->i == v->i);
     if (sameShape) {
         node->i = v->i;
         for (int i = 0; i < v->n; i++) ctAssign(node->elems[i], v->elems[i]);
@@ -718,8 +764,8 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
             if (forWrite && !ctRun && CtNodeOwner(base)) return ctFail(st, op->tok, CT_WHY_WRITES_GLOBAL);
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it reads through a null reference");
             if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
-            for (int i = 0; i < base->type.vars.len && i < base->n; i++) {
-                if (StrCmp(((struct var*)ListGetIdx(&base->type.vars, i))->name, op->memberName)) return base->elems[i];
+            for (int i = 0; i < base->type->vars.len && i < base->n; i++) {
+                if (StrCmp(((struct var*)ListGetIdx((struct list*)&base->type->vars, i))->name, op->memberName)) return base->elems[i];
             }
             return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
         }
@@ -923,7 +969,7 @@ static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struc
     if (ctIsIdentity(x) || ctIsIdentity(y)) return ctSameIdentity(x, y);
     if (x->kind == CT_AGG || y->kind == CT_AGG) {
         if (x->kind != y->kind || x->n != y->n) return 0;
-        if (x->type.bType == BASETYPE_CHOICE && x->i != y->i) return 0; //T17a: the live case, then its payload
+        if (x->type->bType == BASETYPE_CHOICE && x->i != y->i) return 0; //T17a: the live case, then its payload
         for (int i = 0; i < x->n; i++) {
             int r = ctDeepEq(st, tok, x->elems[i], y->elems[i], depth + 1);
             if (r != 1) return r;
@@ -959,7 +1005,7 @@ static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
             if (!ctFits(t, ctExact(v))) return ctCheckFail(st, op, "OVERFLOW");
         }
     }
-    if (ctIsFloat(t) && v->kind == CT_FLOAT && v->type.bType == t.bType) return ctMoveFloat(v, t); //E26: unchanged
+    if (ctIsFloat(t) && v->kind == CT_FLOAT && v->type->bType == t.bType) return ctMoveFloat(v, t); //E26: unchanged
     if (ctIsFloat(t)) return ctFloat(t, ctToFloat(v, t));
     if (ctIsInt(t)) {
         if (v->kind == CT_FLOAT) {
@@ -1604,7 +1650,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         struct var* p = ListGetIdx(&func->type.vars, 0);
         struct ctVal* node = ctNew(CT_INT, p->type);
         *node = *(ctIsRef(p->type) ? through->elems[0] : ctCopy(ctDeref(through->elems[0])));
-        if (ctIsRef(p->type)) node->type = p->type;
+        if (ctIsRef(p->type)) node->type = CtType(p->type);
         struct ctLocal l = { p->name, node };
         ListAdd(&locals, &l);
     }
@@ -1621,7 +1667,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         if (v && shareArr) v = ctDeref(v);
         if (v && shareArr && v->kind != CT_AGG) { //a null reference: the empty array the pair { 0, null } is
             v = ctCopy(v);
-            v->type = p->type;
+            v->type = CtType(p->type);
         }
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
@@ -1633,7 +1679,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         //never writes is the caller's array itself, its elements shared, as at run time
         struct ctVal* node = ctNew(CT_INT, p->type);
         *node = *(ctIsRef(p->type) || (shareArr && v->kind == CT_AGG) ? v : ctCopy(v));
-        if (shareArr && v->kind == CT_AGG) node->type = p->type;
+        if (shareArr && v->kind == CT_AGG) node->type = CtType(p->type);
         struct ctLocal l = { p->name, node };
         ListAdd(&locals, &l);
     }
@@ -1716,8 +1762,8 @@ static struct ctVal* ctIncDec(struct ctState* st, struct operand* op, bool prefi
     if (!node) return NULL;
     struct ctVal* old = ctCopy(node);
     //E6c: wraps, computed unsigned - the compiler's own arithmetic has no overflow of its own
-    struct ctVal* nv = ctIsFloat(node->type) ? ctFloat(node->type, node->f + (inc ? 1 : -1))
-                                            : ctInt(node->type, (long long)((unsigned long long)node->i + (inc ? 1ULL : ~0ULL)));
+    struct ctVal* nv = ctIsFloat(*node->type) ? ctFloat(*node->type, node->f + (inc ? 1 : -1))
+                                            : ctInt(*node->type, (long long)((unsigned long long)node->i + (inc ? 1ULL : ~0ULL)));
     ctAssign(node, nv);
     return prefix ? ctCopy(node) : old;
 }
@@ -1946,14 +1992,14 @@ static struct ctVal* ctPieceValue(struct ctVal* v, struct type t) {
     if (t.bType == BASETYPE_ARRAY && (t.arrMalloc || t.structMAlloc)) {
         if (v->kind == CT_NULL || (v->kind == CT_REF && ctArrayRefNull(v))) return v;
         struct ctVal* a = ctDeref(v);
-        struct ctVal* c = ctNew(a->kind, a->type);
+        struct ctVal* c = ctNew(a->kind, *a->type);
         *c = *a; //the same elements
         return c;
     }
     if (t.bType == BASETYPE_ARRAY) return v; //Array<T, N>: the storage it lies in
     if (ctIsRef(t)) {
         if (v->kind != CT_REF) return v;
-        struct ctVal* c = ctNew(CT_REF, v->type);
+        struct ctVal* c = ctNew(CT_REF, *v->type);
         *c = *v; //the instance it names now
         return c;
     }
@@ -2083,7 +2129,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             }
             struct ctVal* v = ctNew(CT_NULL, op->type);
             *v = *node;
-            v->type = op->type;
+            v->type = CtType(op->type);
             node->kind = CT_NULL;
             node->target = NULL;
             return v;
@@ -2114,7 +2160,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!v) return NULL;
             v = ctCopy(v);
-            v->type = op->type;
+            v->type = CtType(op->type);
             return v;
         }
         case OPERATION_MATCH: { //S12b
@@ -2179,7 +2225,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_COMPR_RESERVE: { //E27/D14b: room for more elements than an array of them can have aborts
             struct ctVal* n = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!n) return NULL;
-            struct type elem = *st->compr[st->comprDepth - 1]->type.arrElem;
+            struct type elem = *st->compr[st->comprDepth - 1]->type->arrElem;
             if ((unsigned long long)n->i > (unsigned long long)ArrayLengthLimit(TypeGetSize(elem))) {
                 if (ctRun) ctRunAbortTok(op->tok, "array length out of range\n");
                 return ctFail(st, op->tok, CT_WHY_LENGTH);
@@ -2188,14 +2234,14 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         }
         case OPERATION_COMPR_PUSH: {
             struct ctVal* a = st->compr[st->comprDepth - 1];
-            struct ctVal* v = ctFit(st, *(struct operand**)ListGetIdx(&op->args, 0), *a->type.arrElem);
+            struct ctVal* v = ctFit(st, *(struct operand**)ListGetIdx(&op->args, 0), *a->type->arrElem);
             if (!v) return NULL;
             int* cap = &st->comprCap[st->comprDepth - 1];
             if (a->n == *cap) {
                 *cap *= 2;
                 a->elems = ReallocOrCrash(a->elems, sizeof(struct ctVal*) * (size_t)*cap);
             }
-            a->elems[a->n++] = ctIsRef(*a->type.arrElem) ? v : ctCopy(v);
+            a->elems[a->n++] = ctIsRef(*a->type->arrElem) ? v : ctCopy(v);
             return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
         }
         case OPERATION_SIZED_ARRAY_ALLOC: {
@@ -2208,7 +2254,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (bad) return ctFail(st, op->tok, CT_WHY_LENGTH);
             if (n->i > INT_MAX) return ctFail(st, op->tok, "it makes an array longer than the evaluator holds");
             //every element is at least one value: measured before any is made, so a long array is refused, not made
-            if (ctOverMemory(st, op->tok, (size_t)n->i * sizeof(struct ctVal))) return NULL;
+            if (ctOverMemory(st, op->tok, (size_t)n->i * CT_VAL_BYTES)) return NULL;
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = (int)n->i;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
@@ -2255,19 +2301,19 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             //on its place - which is refused where an ordinary write (or, for AtomicLoad, read) of it would be
             struct ctVal* node = ctDeref(ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), op->opType != OPERATION_ATOMIC_LOAD));
             if (!node) return NULL;
-            struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), node->type) : NULL;
+            struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), *node->type) : NULL;
             if (op->args.len > 1 && !a) return NULL;
-            struct ctVal* b = op->args.len > 2 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 2), node->type) : NULL;
+            struct ctVal* b = op->args.len > 2 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 2), *node->type) : NULL;
             if (op->args.len > 2 && !b) return NULL;
-            struct ctVal* old = ctInt(node->type, node->i);
+            struct ctVal* old = ctInt(*node->type, node->i);
             switch (op->opType) {
                 case OPERATION_ATOMIC_LOAD: return old;
-                case OPERATION_ATOMIC_STORE: node->i = ctWrap(node->type, ctDeref(a)->i); return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+                case OPERATION_ATOMIC_STORE: node->i = ctWrap(*node->type, ctDeref(a)->i); return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
                 case OPERATION_ATOMIC_ADD: //wraps (E6c), computed unsigned
-                    node->i = ctWrap(node->type, (long long)((unsigned long long)node->i + (unsigned long long)ctDeref(a)->i));
+                    node->i = ctWrap(*node->type, (long long)((unsigned long long)node->i + (unsigned long long)ctDeref(a)->i));
                     return old;
-                case OPERATION_ATOMIC_SWAP: node->i = ctWrap(node->type, ctDeref(a)->i); return old;
-                default: if (node->i == ctDeref(a)->i) node->i = ctWrap(node->type, ctDeref(b)->i); return old;
+                case OPERATION_ATOMIC_SWAP: node->i = ctWrap(*node->type, ctDeref(a)->i); return old;
+                default: if (node->i == ctDeref(a)->i) node->i = ctWrap(*node->type, ctDeref(b)->i); return old;
             }
         }
         case OPERATION_SLICE: return ctSlice(st, op);
@@ -2350,16 +2396,16 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     //C2e: fixed storage (an inline field) takes an array of exactly its length - checked once per copy, and a mismatch
     //aborts, as the generated code checks it
     if (dst.bType == BASETYPE_ARRAY && !dst.arrMalloc && dst.arrLen && v->kind == CT_AGG
-            && v->type.bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
+            && v->type->bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
         if (ctRun) ctRunAbortTok(op->tok, "array length does not match its fixed storage\n");
         return ctFail(st, op->tok, CT_WHY_FIXED);
     }
     //a number is made afresh at its target's type, which is already the copy - no second one first
     if (ctIsInt(dst) && v->kind == CT_INT) return ctInt(dst, v->i);
-    if (ctIsFloat(dst) && v->kind == CT_FLOAT && v->type.bType == dst.bType) return ctMoveFloat(v, dst); //E33
+    if (ctIsFloat(dst) && v->kind == CT_FLOAT && v->type->bType == dst.bType) return ctMoveFloat(v, dst); //E33
     if (ctIsFloat(dst) && (v->kind == CT_INT || v->kind == CT_FLOAT)) return ctFloat(dst, ctToFloat(v, dst));
     v = ctCopy(v);
-    if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = dst;
+    if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = CtType(dst);
     return v;
 }
 
@@ -2877,9 +2923,9 @@ bool CtIsZero(struct ctVal* v) {
         case CT_INT: case CT_BOOL: return v->i == 0;
         case CT_FLOAT: return v->f == 0 && !signbit(v->f);
         case CT_AGG:
-            if (ctIsRef(v->type)) return false;
-            if (v->type.bType == BASETYPE_CHOICE && v->i != 0) return false;
-            if (v->type.bType == BASETYPE_ARRAY && v->type.arrMalloc) return v->n == 0; //an empty array is { 0, null }
+            if (ctIsRef(*v->type)) return false;
+            if (v->type->bType == BASETYPE_CHOICE && v->i != 0) return false;
+            if (v->type->bType == BASETYPE_ARRAY && v->type->arrMalloc) return v->n == 0; //an empty array is { 0, null }
             for (int i = 0; i < v->n; i++) if (!CtIsZero(v->elems[i])) return false;
             return true;
         default: return false;
@@ -2890,7 +2936,7 @@ bool CtIsPlainData(struct ctVal* v) {
     if (v->kind == CT_REF) return false;
     if (v->kind == CT_NULL) return true; //null is all-zero bits (T2a)
     if (v->kind == CT_AGG) {
-        if (ctIsRef(v->type)) return false;
+        if (ctIsRef(*v->type)) return false;
         for (int i = 0; i < v->n; i++) if (!CtIsPlainData(v->elems[i])) return false;
     }
     return true;
@@ -3171,7 +3217,7 @@ static void ctGetNum(const unsigned char* at, enum baseType b, struct ctVal* int
     if (p->kind == 'f') { unsigned long long u = 0; memcpy(&u, at, (size_t)(p->bits / 8)); into->f = FloatFromBits(u, b); return; } //E33
     long long i = 0;
     memcpy(&i, at, (size_t)(p->bits / 8));
-    into->i = ctWrap(into->type, i);
+    into->i = ctWrap(*into->type, i);
 }
 
 static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* op, struct var* func) {

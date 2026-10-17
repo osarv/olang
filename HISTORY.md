@@ -19001,3 +19001,64 @@ std directory is found from the program's own path. The HTTP test server is over
 connection, `Connection: close`), built by `std/http`'s test with the compiler running the tests; a server that does not build or
 start now fails that test, where a missing `python3` skipped it. A `-i` run of a tool is fine for a few files only: the
 interpreter frees nothing, and `genmsgs` runs out of memory under it.
+
+### Stage 0's memory on the port (2026-10-17)
+
+Stage 0 could not build the self-hosted port: `-c compiler/check.olang` passed 8.3 GB and was OOM-killed, and `-b
+compiler/tools/checkdump.olang` reached 13.6 GB. The measurement is in /home/user/review/mem (README.md, heaptrack
+profiles, the per-module table). Almost none of it was the arena design or B9c's attempts (each port module makes
+one); it was two defects and one oversized struct.
+
+**The type walkers leaked.** `TypeValueChildren` copies every field or case of a type, a 624-byte `struct type` each,
+into a fresh list. Five of its nine callers (`typeHoldsReferencesAt`, `typeHoldsWritableRefsAt`,
+`valueRefsAdmitStoresAt`, `typeHasBareDestructStructAt`, `typeHasBareOwningStructAt`) returned without freeing it. The
+port's `Diag` enum has 570 cases, so each walk of a type holding a `Msg` leaked about 360 KB. msgs.olang, which
+imports nothing, took 2.6 GB at 4.4 MB per one-line function. With this fixed, check is 1.17 GB.
+
+**Every list started with room for 16 elements.** A block of one statement took 16 x 1,648 bytes, and a syntax node
+of one part 16 x 56. The first allocation now holds one element (`LIST_ALLOC_MIN_CAP 1`), which halves what is left:
+check 0.58 GB, checkdump 0.57 GB. A smaller first allocation shows sooner what a copy of a list header, or a pointer
+into a list, hides until a list grows past 16. ASan, run with the cap at 1, found three such bugs, each real before,
+for a list long enough:
+- `scopeObligationAdd` walked a by-value copy of the obligation list while its own recursion appended to it;
+- `buildSpawnStmnt` read `pre` after appending to `blk.block`, a copy of its header;
+- `buildPrimCtorBody` recorded its body with `bodyEnd`, which keeps a copy of the header, and then appended the
+  return. The other five `bodyEnd` callers record after their last add, and `bodyEnd` now says that it must be so.
+
+With those fixed, the ASan sweep found nothing more:
+- all 1,253 `checks/cases` programs, each built as checks.olang builds it and judged against its header;
+- every `-t` file of `make test` but checks.olang, all passing;
+- `-c` of the fuzz, bench, bench/repro and fuzz/repro programs and the port's tools.
+
+**An evaluator value held its type by value.** `struct ctVal` was 704 bytes, 624 of them a `struct type`, and the
+evaluator frees nothing. A test build of check made over a million values, 744 MB of its 1.3 GB. A value now points
+at one shared, never-written copy per distinct type (`CtType`, interned by its bytes), and is 88 bytes. The memory
+budget (K1) counts a value at its old size, so the same evaluations are admitted. `-t check` went from 1.31 GB to
+0.65 GB, and its evaluation from 0.77 s to 0.34 s.
+
+The emitted IR is byte-for-byte the same. The comparisons, made with each module's object and IR deleted first
+(B7 reuses an object newer than the compiler and then writes no IR):
+- `-c` of every corpus, std, prelude, port, tools, fuzz and bench file;
+- for the two port modules master's compiler cannot hold in memory, the walker fix alone as the reference;
+- the diagnostics of all 1,051 must-fail cases.
+
+Peak RSS, master before and after:
+
+| build | before | after |
+|---|---:|---:|
+| `-c shared.olang` | 3.98 GB | 1.42 GB |
+| `-t shared.olang` | at least 6.0 GB (killed) | 1.85 GB |
+| `-c compiler/generic.olang` | 5.91 GB | 0.35 GB |
+
+On the port's checker (86d47f8):
+
+| build | before | after |
+|---|---:|---:|
+| `-c check.olang` | over 8.3 GB | 0.53 GB |
+| `-t check.olang` | - | 0.69 GB |
+| `-b checkdump.olang` | 13.6 GB | 0.54 GB |
+
+Left, measured and ranked in the review's README:
+- operands are 1,840 bytes, two embedded types, about 40% of what remains;
+- a statement embeds a whole `struct var`;
+- shared.olang's three discarded B9c attempts are never freed, about 1 GB before these fixes.
