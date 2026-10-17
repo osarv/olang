@@ -1,0 +1,15 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (the review of the view lend, P1): l[0] given to a writable reference parameter of a call through a field's
+# function value - its body is not known, so the copy is never a view and its write would be lost
+type Acc struct() {
+    N I64 = 0
+}
+type H struct(fv fn(c mut Acc&)) {
+    fv
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    h := H(fn(c mut Acc&) { c.N++ })
+    h.fv(l[0])
+}

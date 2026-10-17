@@ -1,0 +1,22 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b/R9a (T1h): the evaluator wrote the element where the run time wrote a temporary (baked 1, run 0)
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn f() I64 {
+    a := Acc[Acc(), Acc()]
+    bumpPt((try a[1] catch default Acc()).P)
+    return a[1].P.X
+}
+Baked := f()
+V mut I64 = 0
+fn main() ? {
+    V = f()
+    println("baked " $Baked " run " $V)
+}

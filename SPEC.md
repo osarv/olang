@@ -2868,7 +2868,12 @@ referent type (a temporary, E12c: a call's value, a constructor call, an enum ca
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
-`:=` declares its type (D15). A conditional of references lives where the values it can give share a scope (§8 O25a) -
+`:=` declares its type (D15). A conditional of values is a value - a copy of the one it chooses - so given for a
+writable reference parameter or receiver while any value it can give is a place (a variable, a field or an element
+reached through no reference, `x[i]` or a field of it, E31b), `bump(l[0] if k > 0 else l[1])`, it is a compile-time
+error: the call would write the copy and the place would never see it. A field or an inline element of such a
+conditional is the same, and so is a `match` giving values (S12b). Make the call on the place itself (`if k > 0 {
+bump(l[0]) } else { bump(l[1]) }`), or hold the values by reference. A conditional of references lives where the values it can give share a scope (§8 O25a) -
 `null` fits any, and a new value is built there (text written in place being constant data or a copy made there) - so
 `x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. Values
 that already live in different scopes share none: where such a conditional lives is **not known here** (§8 O12) - it is
@@ -2953,18 +2958,50 @@ shrinks the collection leaves the held index out of range when the access runs -
 (E16e), unchecked unless the store is written under `try`.
 
 **A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
-an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])`, where the element is
-not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
+an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - or `try x[i]`, the
+checked read, `g(try x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
 so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
 `x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
-read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call.
+read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call. A call
+through a function value - a local's, a parameter's, a field's (`h.fv(x[i])`), an element's (`fs[0](x[i])`), a call's
+result (`mk()(x[i])`), a lambda called where it is written - has a body no check can read, so it takes no copy of an
+element for a writable reference parameter at all, a view's or a handle's included: each is the error. So is `try a[i]
+catch default v` (or a field of it) for a writable reference parameter on any collection, a built-in array's included:
+it is the element or `v`, a value either way, which the write would be lost in (R9a); `try a[i]` alone on a built-in
+array is the element itself. A conditional or a match choosing an element, or any other place, is a value too, and the same error (E28).
+
+**A view element** - a struct element, no handle, lent to a callee that writes **nothing of the instance's own
+storage** - is lent the same way, as a copy held in a hidden local with nothing written back: `ws.Gemm(c[g, h], ...)`
+over a batch of matrices, `b[i].Fill(0)`. Nothing the callee does through the copy is lost by not writing it back,
+since it writes none of the copy's own storage. The copy is not the element, though: it names what the element referred
+to when it was read. A callee that replaces the element while the call runs - through the collection reached another
+way (a second argument, a global, a capture), or a later argument of the same call doing so before the callee runs
+(`l[0].Put(replace(l))`) - leaves the copy naming the old element's storage, and the callee's writes through the copy
+reach what the old element referred to, not the new element (from a built-in array, where `x[i]` is the element
+itself, they reach the new one). That is memory-safe - the old storage lives where the collection's elements live -
+and is what a handle's copy does too (below). Whether a callee qualifies is read off its checked body: the parameter is
+used only through its references (a reference field read out, and anything done through it - an element of `c.Data`
+written, a field of what a reference names assigned), its numeric and `Bool` fields and function values read, and the
+parameter, or a struct it holds by value (`c.w`), handed on to a read-only reference parameter, to a by-value one (a
+copy), or to a writable one of a callee that itself qualifies (a fixed point over the program's calls, cycles
+included); a handle it holds by value may be handed to a writable parameter using it only through its reference
+(O17b). Any other use says no: a field of the instance's own storage assigned or incremented at any value depth, a
+reference field repointed, the parameter repointed, a value field lent to a writable parameter of a callee that does
+not qualify, sliced or walked, a value field that is neither a number, a `Bool`, a function value nor a reference read
+at all (an enum matched or compared, an inline array's element, a struct rendered), the parameter read into a local,
+captured, compared or handed to a function value, an extern or a lambda; a callee whose body is not checked says no
+too. A callee whose body has errors is no view either, and its own error is what is said. What such a callee builds
+into what the copy holds is judged as for any copy (O17, below). `try x[i]` is never lent this way, with or without a
+default: its copy is not held apart from its `try`.
 
 **A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
 by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked
 body) a call on `x[i]`, on a field of it, an element of one read out of another, or on any call's value result giving
 one - `users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden
 local, lent as its reference: what the callee builds is built where the handle's state lives, and nothing is written
-back. A store into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner
+back. The hidden copy is held as `h := x[i].f` would be, its references where the call it is read out of lands (O18c), so
+a handle field of an element (`bs[i].S.Push(v)`, `f.Blocks[b].inner.S.Push(v)`) is pushed where the collection's
+elements are. A store into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner
 collection's `SetAt` on such a copy. A callee that uses the handle otherwise - assigning its own field (`b.s =
 State()`), keeping it - would write the copy, and is E31b's error as for any element. Spawned, such a copy would be
 held in the spawner's block, which closes (or is made again by the next turn of a loop) before the join, and is a
@@ -4113,6 +4150,11 @@ is written in; one written directly after the tried operand, outside any clause,
 `try f() catch default d` is how a value for every error is written. What a default covers is therefore
 always what the clause to its left names.
 
+A `try-expr` carrying clauses is a **value** - the element, say, or what a clause gives - and so is a field or an
+inline element of one reached through no reference, `(try a[i] catch default v).f`: never a place. Assigned into,
+incremented, or given for a writable reference parameter or receiver (E31b), it is a compile-time error - what was
+written would be kept by neither; `try x[i].f = v` (R21) is a checked store.
+
 - Each default is a `unary` (E1), binding as tightly as the `try` itself: `try f() catch default 0 == 3`
   compares the result with `3`. A compound default is parenthesized.
 - There is **one default per result**. A call returning several results (D8c) takes as many defaults,
@@ -4999,7 +5041,11 @@ out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storag
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
 `for ... in`, lands the same way before anything else is bound - `adj[a].Push(v)` and `for x in adj[a]` are
 `inner := adj[a]` followed by the call or the loop - and so does a call whose result a field, an element or a slice is
-read out of: `for x in l[0].tags` lands `l[0]` as `t := l[0]` would. A **value** result so landed holds what its
+read out of: `for x in l[0].tags` lands `l[0]` as `t := l[0]` would. Such a result that is a **handle** (O17b), given
+for a reference parameter its callee uses only through the handle's reference, is lent as that reference, as a handle
+local is: the scope variable is bound where its result landed, and the handle's own copy is a temporary of the block -
+so in `h := ll[0][0].S`, `e := ll[0][0]` and `h := lll[0][0]` the outer `At`'s receiver `ll[0]` is where `ll`'s elements
+are, and so is what is read through it. A **value** result so landed holds what its
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
 with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(rec.Clone())` for a loop's list `rec`

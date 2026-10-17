@@ -3309,6 +3309,28 @@ if TestBuild {
         }
     }
 
+    # E31b: b[g, m] is a view of the batch's storage, lent to a destination that writes only through it - so a product
+    # per head is written straight into the batch, with no copy written back (bench/fused's per-head form)
+    test "a Gemm per matrix written into b[g, m] is GemmBatch" {
+        r := rand.Rand(23)
+        a := gappyBatch(9, 7, 2, 3, r)
+        b := gappyBatch(7, 5, 2, 3, r)
+        c := gappyBatch(9, 5, 2, 3, r)
+        d := gappyBatch(9, 5, 2, 3, r)
+        ws := GemmWorkspace<F64>()
+        for g in range 2 {
+            for h in range 3 {
+                d[g, h].FillUniform(r, -1.0, 1.0)
+                ws.Gemm(d[g, h], a[g, h], false, b[g, h], false, 1.5)
+            }
+        }
+        GemmBatch(c, a, false, b, false, 1.5)
+        for g in range 2 {
+            for h in range 3 { assert d[g, h].Distance(c[g, h].ToF64()) < 1e-12 }
+        }
+        assert gapsUntouched(d)
+    }
+
     # m with every element above its diagonal (j > i + diag) set to v
     fn aboveDiagonal(m mut Matrix<<T>>&, diag I64, v T) {
         for i in range m.Rows {

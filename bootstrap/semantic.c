@@ -8162,9 +8162,14 @@ static bool valueRefsHome(struct operand* op, struct var** out, int* depth, bool
         p = b;
     }
     //...a payload read out of an enum value by "match" or "as" holds what the enum does, where its references are (O4b)
-    while ((op->opType == OPERATION_MEMBER || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len
-           && !op->type.structMAlloc)
-        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    //(...and a value a lowering held in a hidden local - "ll[0][0]", its receiver held, E31b - is that local's)
+    for (;;) {
+        if (heldResult(op)) op = heldResult(op);
+        else if ((op->opType == OPERATION_MEMBER || (op->opType == OPERATION_AS && op->castEnum)) && op->args.len
+                 && !op->type.structMAlloc)
+            op = *(struct operand**)ListGetIdx(&op->args, 0);
+        else break;
+    }
     if (op->opType != OPERATION_READ_VAR || !op->readVar || op->type.structMAlloc) return false;
     struct var* v = canonicalVar(op->readVar);
     if (!v->refsHomeSet && v->valueHomeSet) { //O25a: built where its initializer put it - a scope argument's, say
@@ -8939,8 +8944,21 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     return t;
 }
 
+//R9a/E31b: whether op, or a value it is a field or an inline element of - reached through no reference - carries catch
+//clauses: "(try a[i] catch default v).P" is a part of the element or of v, a value either way, so no place
+static bool triedUnderPath(struct operand* op) {
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (op->catchClauses.len) return true;
+        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return false;
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->type.structMAlloc) return false;
+        op = b;
+    }
+    return false;
+}
+
 bool OperandIsLvalue(struct operand* op) {
-    if (op->catchClauses.len) return false; //R9b: "try a[i] catch default 0" is a value - on failure there is no element
+    if (triedUnderPath(op)) return false; //R9b: "try a[i] catch default 0" is a value - on failure there is no element
     if (op->copiesOld) return false; //S4d: the place's old value, copied - a temporary
     //a function named as a value (or a lambda) is no storage of anyone's - it is built where it lands, like any
     //temporary (D16)
@@ -9467,7 +9485,9 @@ struct operand* OperandReadVar(struct var* v, struct token tok) {
     op->readVar = v;
     //O17b: a parameter's every read, so the analysis of what its body does with it never rests on reaching them all -
     //and D16c: a function-typed one's, so whether it is handed on where it may be kept (SemanticParamTransient) is too
-    if (v->paramCopy && v->origin && ((v->type.structMAlloc && handleField(v->type)) || v->type.bType == BASETYPE_FUNC)) {
+    //...and E31b: a struct reference parameter's, so whether its body writes the instance's own storage (viewThroughAt)
+    //never rests on the walk reaching them all either
+    if (v->paramCopy && v->origin && ((v->type.structMAlloc && v->type.bType == BASETYPE_STRUCT) || v->type.bType == BASETYPE_FUNC)) {
         struct var* c = canonicalVar(v);
         if (!c->paramReads) {
             c->paramReads = malloc(sizeof(struct list));
@@ -10432,20 +10452,25 @@ static bool landByObligationsIn(struct checkCtx* ctx, struct operand* rhs, bool 
 static bool mayBuildWhileChecking(struct var* func);
 static bool localKeptBeyondBlock(struct checkCtx* ctx, struct str name, struct type t);
 static bool landKeptAll; //set while a comprehension's element is declared: it is kept, in what the comprehension builds
+//(forced: an obligation needs the result scope to outlive, or to be, one an argument gives)
+static bool landForcedByObligations(struct var* func) {
+    struct var* R = func->type.resultScope ? canonicalVar(func->type.resultScope) : NULL;
+    if (!R) return false;
+    for (int i = 0; i < func->type.scopeObligations.len; i++) {
+        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
+        if (o->shorterViaParam) continue;
+        struct var* lo = canonicalVar(o->longer);
+        struct var* sh = canonicalVar(o->shorter);
+        if ((lo == R && sh != R) || (o->exact && sh == R && lo != R)) return true;
+    }
+    return false;
+}
 static bool landDeclWhereFree(struct checkCtx* ctx, struct operand* rhs, struct str name, struct type t) {
     if (rhs->opType != OPERATION_FUNCCALL || !rhs->readVar) return false;
     struct var* func = rhs->readVar;
     struct var* R = func->type.resultScope;
     if (!R || func->bodyState != 2) return false;
-    R = canonicalVar(R);
-    bool forced = false;
-    for (int i = 0; i < func->type.scopeObligations.len && !forced; i++) {
-        struct scopeObligation* o = ListGetIdx(&func->type.scopeObligations, i);
-        if (o->shorterViaParam) continue;
-        struct var* lo = canonicalVar(o->longer);
-        struct var* sh = canonicalVar(o->shorter);
-        forced = (lo == R && sh != R) || (o->exact && sh == R && lo != R);
-    }
+    bool forced = landForcedByObligations(func);
     //(...and a local kept beyond its block - "tk := lx.next(); toks.Push(tk)", toks outside the loop - takes what the
     //callee builds there with it: that is the program's own keeping)
     if (!forced && !landKeptAll && mayBuildWhileChecking(func) && !localKeptBeyondBlock(ctx, name, t)) return false;
@@ -10597,10 +10622,16 @@ static struct list handleMemos;
 struct handleVisit { struct var* func; int idx; };
 //a call whose answer rested on a body not checked yet (a cycle through the call being checked) - verified once every
 //body is (settleHandleLends), an error where it turns out no
-struct handlePending { struct var* func; int idx; struct token tok; bool atCopy; };
+struct handlePending { struct var* func; int idx; struct token tok; bool atCopy; bool view; };
 static struct list handlePendings;
-struct htScan { struct var* p; struct list* visiting; bool* assumed; bool* unknown; bool bad; struct list seen; };
+//view: the walk is E31b's (viewThroughAt) - p is a struct, used through its references and its scalar fields
+//badAt: where the walk said no first - the innermost statement written in the program around it, or the read of the
+//parameter no use accounted for (E31b's note at the callee)
+struct htScan { struct var* p; struct list* visiting; bool* assumed; bool* unknown; bool bad; struct list seen; bool view;
+                struct token badAt; };
 static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown);
+static bool viewThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown);
+static bool vsOp(struct htScan* sc, struct operand* op);
 static void htStmt(struct htScan* sc, struct statement* s);
 static void htBlock(struct htScan* sc, struct list* block) {
     for (int i = 0; i < block->len && !sc->bad; i++) htStmt(sc, ListGetIdx(block, i));
@@ -10642,6 +10673,7 @@ static bool htOwnStorage(struct htScan* sc, struct operand* op) {
 }
 static void htOp(struct htScan* sc, struct operand* op) {
     if (!op || sc->bad) return;
+    if (sc->view && vsOp(sc, op)) return;
     struct type cur;
     switch (op->opType) {
         case OPERATION_READ_VAR:
@@ -10702,8 +10734,13 @@ static void htOp(struct htScan* sc, struct operand* op) {
         htOp(sc, cc->dflt);
     }
 }
+static void htStmtIn(struct htScan* sc, struct statement* s);
 static void htStmt(struct htScan* sc, struct statement* s) {
     if (sc->bad) return;
+    htStmtIn(sc, s);
+    if (sc->bad && !sc->badAt.owner && s->startTok.owner) sc->badAt = s->startTok;
+}
+static void htStmtIn(struct htScan* sc, struct statement* s) {
     if (s->sType == STATEMENT_ASSIGN && s->target && htOwnStorage(sc, s->target)) { sc->bad = true; return; }
     for (int i = 0; i < s->spawnTargets.len; i++) {
         struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
@@ -10741,7 +10778,7 @@ static bool handleThroughParamAs(struct var* func, int idx, struct token tok, bo
     bool r = handleThroughAt(func, idx, &visiting, &assumed, &unknown);
     ListDestroy(visiting);
     if (r && unknown && !ErrMsgMuted()) {
-        struct handlePending h = { func, idx, tok, atCopy };
+        struct handlePending h = { func, idx, tok, atCopy, false };
         ListAdd(&handlePendings, &h);
     }
     return r;
@@ -10773,7 +10810,7 @@ static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bo
     struct handleVisit me = { key, idx };
     ListAdd(visiting, &me);
     bool assumedHere = false, unknownHere = false;
-    struct htScan sc = { pk, visiting, &assumedHere, &unknownHere, false, ListInit(sizeof(struct operand*)) };
+    struct htScan sc = { pk, visiting, &assumedHere, &unknownHere, false, ListInit(sizeof(struct operand*)), false, {0} };
     htBlock(&sc, isCtor ? &ct->ctorFunc->codeBlock : &func->codeBlock);
     //every read of the parameter the check made is one the walk found used through the handle
     for (int i = 0; pk->paramReads && i < pk->paramReads->len && !sc.bad; i++) {
@@ -10795,6 +10832,160 @@ static bool handleThroughAt(struct var* func, int idx, struct list* visiting, bo
     }
     return through;
 }
+//E31b: whether a call's parameter idx - a writable reference to a struct - leaves the instance's OWN storage unwritten
+//in the callee's CHECKED body: it is used only through its references (a reference field read out, and whatever is
+//then done through it - an element of "c.Data" written, a field of what a reference names assigned), its scalar fields
+//read, and the parameter handed on whole to a read-only reference parameter, to a by-value one (a copy), or to a
+//writable one that is itself such a parameter - a fixed point over the program's calls, as O17b's. Anything else - a
+//field of its own storage assigned or incremented (at any value depth), a reference field repointed, a value field
+//lent or sliced, the parameter as a value in an operator, a local or a capture of it, a call through a function value,
+//an extern, a lambda or a body not checked - says no, and every read of the parameter the check made must be one the walk
+//found (paramReads). A generic is judged by the instantiation called (a trait's default too), whose body is checked
+//with the types it has. A callee so judged cannot tell a copy of an element from the element: lent a hidden copy of
+//x[i], nothing it does is lost by not writing the copy back
+struct viewMemo { struct var* func; int idx; bool through; struct token why; };
+static struct list viewMemos;
+static bool vsScalar(struct type t) {
+    return !t.structMAlloc && (TypeIsNumeric(t) || t.bType == BASETYPE_BOOL || t.bType == BASETYPE_FUNC);
+}
+//op is the parameter, or a struct it holds by value reached with no reference followed ("c", "c.inner"); *cur its type
+static bool vsPath(struct htScan* sc, struct operand* op, struct type* cur) {
+    if (op->opType == OPERATION_READ_VAR) {
+        if (!op->readVar || canonicalVar(op->readVar) != sc->p) return false;
+        *cur = sc->p->type;
+        cur->structMAlloc = false;
+        return true;
+    }
+    if (op->opType != OPERATION_MEMBER || op->args.len != 1 || op->isAtCall) return false;
+    struct type bt;
+    if (!vsPath(sc, *(struct operand**)ListGetIdx(&op->args, 0), &bt) || bt.bType != BASETYPE_STRUCT) return false;
+    for (int i = 0; i < bt.vars.len; i++) {
+        struct var* f = ListGetIdx(&bt.vars, i);
+        if (!StrCmp(op->memberName, f->name)) continue;
+        if (f->type.structMAlloc || f->type.bType != BASETYPE_STRUCT) return false;
+        *cur = f->type;
+        return true;
+    }
+    return false;
+}
+//the uses viewThroughAt allows, consumed; false for anything else (htOp then walks it, and a read of the parameter it
+//reaches there says no)
+static bool vsOp(struct htScan* sc, struct operand* op) {
+    struct type cur;
+    if (op->opType == OPERATION_MEMBER) {
+        struct operand* b = op->args.len == 1 ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
+        if (!b || op->isAtCall || !vsPath(sc, b, &cur) || cur.bType != BASETYPE_STRUCT) return false;
+        for (int i = 0; i < cur.vars.len; i++) {
+            struct var* f = ListGetIdx(&cur.vars, i);
+            if (!StrCmp(op->memberName, f->name)) continue;
+            //a reference read out (what is done through it is not the instance's storage), or a scalar read
+            if (!(f->type.structMAlloc || vsScalar(f->type))) return false;
+            htConsume(sc, b);
+            return true;
+        }
+        return false;
+    }
+    if (op->opType != OPERATION_FUNCCALL) return false;
+    struct var* f = op->callee ? NULL : op->readVar;
+    bool known = f && f->type.bType == BASETYPE_FUNC && !f->type.isExtern && !f->isLambda && (f->isFuncDecl
+                 || f->isMethod || op->isCtorCall) && !(f->isGlobalVar);
+    for (int i = 0; i < op->args.len && !sc->bad; i++) {
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        if (known && i < f->type.vars.len && vsPath(sc, a, &cur) && cur.bType == BASETYPE_STRUCT) {
+            struct type q = ((struct var*)ListGetIdx(&f->type.vars, i))->type;
+            bool whole = a->opType == OPERATION_READ_VAR;
+            bool ok = (q.structMAlloc && !q.refMut && q.bType == BASETYPE_STRUCT) //read-only: nothing written
+                      || (!q.structMAlloc && q.bType == BASETYPE_STRUCT)              //by value: a copy
+                      //a handle held by value, lent to a parameter using it only through its reference (O17b)
+                      || (q.structMAlloc && q.refMut && !whole && handleField(cur) && sameHandleType(q, cur)
+                          && handleThroughAt(f, i, sc->visiting, sc->assumed, sc->unknown))
+                      //the parameter, or a struct it holds by value ("c.w"), lent to a parameter that is itself a view:
+                      //what that callee writes is none of its argument's storage, so none of this one's
+                      || (q.structMAlloc && q.refMut && q.bType == BASETYPE_STRUCT
+                          && viewThroughAt(f, i, sc->visiting, sc->assumed, sc->unknown));
+            if (!ok) { sc->bad = true; return true; }
+            htConsume(sc, a);
+            continue;
+        }
+        htOp(sc, a);
+    }
+    htOp(sc, op->callee);
+    for (int c = 0; c < op->catchClauses.len && !sc->bad; c++) {
+        struct catchClause* cc = ListGetIdx(&op->catchClauses, c);
+        htBlock(sc, &cc->block);
+        htOp(sc, cc->dflt);
+    }
+    return true;
+}
+static bool viewThroughAt(struct var* func, int idx, struct list* visiting, bool* assumed, bool* unknown) {
+    if (!func || func->type.bType != BASETYPE_FUNC || func->type.isExtern || func->isLambda || idx < 0
+            || idx >= func->type.vars.len)
+        return false;
+    struct var* key = canonicalVar(func);
+    for (int i = 0; i < viewMemos.len; i++) {
+        struct viewMemo* m = ListGetIdx(&viewMemos, i);
+        if (m->func == key && m->idx == idx) return m->through;
+    }
+    for (int i = 0; i < visiting->len; i++) { //a cycle: assumed to hold - what is decided under it is not kept
+        struct handleVisit* v = ListGetIdx(visiting, i);
+        if (v->func == key && v->idx == -2 - idx) { *assumed = true; return true; }
+    }
+    struct var* p = ListGetIdx(&func->type.vars, idx);
+    if (!p->type.structMAlloc || !p->type.refMut || p->type.bType != BASETYPE_STRUCT) return false;
+    struct type* ct = func->type.hasRetType ? func->type.retType : NULL;
+    bool isCtor = ct && ct->bType == BASETYPE_STRUCT && ct->ctorFunc && canonicalVar(ct->ctorFunc) == key;
+    if (!isCtor && !func->isFuncDecl && !func->isMethod) return false; //a function value: its body is not known
+    if (isCtor ? ct->ctorBodyState != 2 : func->bodyState != 2) { *unknown = true; return true; } //checked later
+    if (func->bodyHadErrors || func->bodyIncomplete) return false;
+    struct var* pk = canonicalVar(p);
+    struct handleVisit me = { key, -2 - idx }; //kept apart from O17b's visits of the same parameter
+    ListAdd(visiting, &me);
+    bool assumedHere = false, unknownHere = false;
+    struct htScan sc = { pk, visiting, &assumedHere, &unknownHere, false, ListInit(sizeof(struct operand*)), true, {0} };
+    htBlock(&sc, isCtor ? &ct->ctorFunc->codeBlock : &func->codeBlock);
+    for (int i = 0; pk->paramReads && i < pk->paramReads->len && !sc.bad; i++) {
+        struct operand* r = *(struct operand**)ListGetIdx(pk->paramReads, i);
+        bool found = false;
+        for (int k = 0; k < sc.seen.len && !found; k++) found = *(struct operand**)ListGetIdx(&sc.seen, k) == r;
+        if (!found) {
+            sc.bad = true;
+            sc.badAt = r->tok;
+        }
+    }
+    bool through = !sc.bad;
+    ListDestroy(sc.seen);
+    visiting->len--;
+    if (assumedHere) *assumed = true;
+    if (unknownHere) *unknown = true;
+    if (!through || (!unknownHere && (!assumedHere || visiting->len == 0))) {
+        struct viewMemo m = { key, idx, through, sc.badAt };
+        ListAdd(&viewMemos, &m);
+    }
+    return through;
+}
+//E31b: the copy of x[i] lent at tok for parameter idx of func is refused - said once, with the callee's statement that
+//made it no view where there is one. A callee whose body has errors is said nothing more about: its own error stands
+static void viewRefused(struct var* func, int idx, struct token tok) {
+    struct var* key = canonicalVar(func);
+    if (key->bodyHadErrors || func->bodyHadErrors) return;
+    Err(tok, ERR_WRITE_THROUGH_AT_CALL);
+    for (int i = 0; i < viewMemos.len; i++) {
+        struct viewMemo* m = ListGetIdx(&viewMemos, i);
+        if (m->func == key && m->idx == idx && !m->through && m->why.owner) { Note(m->why, NOTE_VIEW_REFUSED_BY); break; }
+    }
+}
+static bool viewThroughParamAs(struct var* func, int idx, struct token tok) {
+    struct list visiting = ListInit(sizeof(struct handleVisit));
+    bool assumed = false, unknown = false;
+    bool r = viewThroughAt(func, idx, &visiting, &assumed, &unknown);
+    ListDestroy(visiting);
+    if (r && unknown && !ErrMsgMuted()) {
+        struct handlePending h = { func, idx, tok, true, true };
+        ListAdd(&handlePendings, &h);
+    }
+    return r;
+}
+
 //O17b: a lend decided before a body it rested on was checked (a cycle) holds only if the answer is still yes now that
 //every body is - else the handle's own storage was lent for what keeps it
 static void settleHandleLends(void) {
@@ -10802,7 +10993,8 @@ static void settleHandleLends(void) {
         struct handlePending* h = ListGetIdx(&handlePendings, i);
         struct list visiting = ListInit(sizeof(struct handleVisit));
         bool assumed = false, unknown = false;
-        bool r = handleThroughAt(h->func, h->idx, &visiting, &assumed, &unknown);
+        bool r = h->view ? viewThroughAt(h->func, h->idx, &visiting, &assumed, &unknown)
+                         : handleThroughAt(h->func, h->idx, &visiting, &assumed, &unknown);
         ListDestroy(visiting);
         if (r && !unknown) continue;
         //one error for one argument: a copy of x[i] lent for it is E31b's, said first (atWriteBackArgs)
@@ -10811,7 +11003,10 @@ static void settleHandleLends(void) {
             struct handlePending* e = ListGetIdx(&handlePendings, k);
             said = e->tok.str.ptr == h->tok.str.ptr && e->tok.owner == h->tok.owner;
         }
-        if (!said) Err(h->tok, h->atCopy ? ERR_WRITE_THROUGH_AT_CALL : ERR_BORROW_SPLIT_SCOPES);
+        if (said) continue;
+        if (h->view) viewRefused(h->func, h->idx, h->tok);
+        else if (!(h->atCopy && canonicalVar(h->func)->bodyHadErrors))
+            Err(h->tok, h->atCopy ? ERR_WRITE_THROUGH_AT_CALL : ERR_BORROW_SPLIT_SCOPES);
     }
 }
 
@@ -11107,6 +11302,7 @@ static bool condOfRefs(struct operand* op) {
 static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type slotT, struct var* rv, int rd, bool ru);
 static void ownDeclReach(struct checkCtx* ctx, struct type declType, struct operand* rhs, struct var** reach,
                          int* reachDepth, bool* reachUnnamed);
+static bool callBodyKnown(struct var* func);
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                        struct token tok, struct list scopeArgNodes) {
     bool instanceArg = scopeArgNodes.len > 0 && firstScopeVarIndex(func) < 0;
@@ -11203,6 +11399,34 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 determined = true;
                 detArg = arg;
                 continue;
+            }
+            //O17b/O18c: a handle a call gives - "ll[0]", the receiver of "ll[0][0]" - landed by its obligations above,
+            //where the collection's elements live, is lent as its reference too, to a callee using it only through that
+            //reference: the variable is bound where the reference leads, and the handle's own copy is a temporary of this
+            //block (codegen). Lent as any other temporary, the variable was the block's, and so was every result read
+            //through it: "h := ll[0][0].S; h.Push(x)" built the new chunk there
+            if (ctx && ctx->hasOwnScope && !arg->type.structMAlloc && !OperandIsLvalue(arg) && handleField(arg->type)
+                    && callBodyKnown(func)) {
+                struct var* hv;
+                int hd;
+                bool hu;
+                if (landedCallRefsScope(ctx, arg, &hv, &hd, &hu) && hv != SCOPE_AMBIGUOUS
+                        && handleThroughParam(func, j, arg->tok)) {
+                    if (hu) { hv = NULL; hd = 0; } //O1b: the program's scope
+                    if (determined && (!sameExactScope(hv, hd, boundTo, boundDepth) || hu != unnamed)) {
+                        Err(tok, ERR_SCOPE_ARGS_DISAGREE);
+                        noteArgsDisagree(ctx, arg, hv, hd, hu, detArg, boundTo, boundDepth, unnamed);
+                        boundTo = SCOPE_AMBIGUOUS;
+                        break;
+                    }
+                    arg->handleLent = true;
+                    boundTo = hv;
+                    boundDepth = hd;
+                    unnamed = hu;
+                    determined = true;
+                    detArg = arg;
+                    continue;
+                }
             }
             //E12c: a VALUE lvalue passed for a reference parameter is borrowed - the callee gets that very
             //storage, so its scope is where that storage is. Treating it as a temporary bound the variable to the
@@ -12729,8 +12953,9 @@ static void dischargeObligation(struct checkCtx* ctx, struct operand* op, struct
         struct var* with = sArg ? shownVar(livesWithVar(sArg)) : NULL;
         //(an index a compound assignment holds for its read and its write is in this block, rendering or not - it is
         //built where it is needed by being written there first)
-        bool held = lArg && lArg->opType == OPERATION_READ_VAR && lArg->readVar && lArg->readVar->name.len
-                    && lArg->readVar->name.ptr[0] == '$';
+        //(only an index - a view's or a handle's hidden copy of an element is no index, and nothing is written back)
+        bool held = lArg && lArg->opType == OPERATION_READ_VAR && lArg->readVar && lArg->readVar->name.len >= 4
+                    && !strncmp(lArg->readVar->name.ptr, "$idx", 4);
         if (held && with && lArg->tok.owner) Note(lArg->tok, NOTE_HELD_INDEX_WHERE, with->name);
         else if (lArg && with && textT && lArg->type.bType == BASETYPE_ARRAY && lArg->type.owner == textT->owner
                 && StrCmp(lArg->type.name, textT->name) && !argIsFreshTemp(lArg) && lArg->tok.owner)
@@ -13725,7 +13950,7 @@ struct operand* incDec(struct operand* in, enum operation opType, struct token t
     ListAdd(&op->args, &in);
     if (in->type.unknown) return op; //an unknown name, reported where it is written
     if (!OperandIsLvalue(in) || in->viaConversion) {
-        Err(tok, ERR_NOT_ASSIGNABLE);
+        Err(tok, triedUnderPath(in) ? ERR_ASSIGN_INTO_TRIED : ERR_NOT_ASSIGNABLE);
         return op;
     }
     if (!OperandIsNumeric(in)) Err(tok, ERR_INCDEC_NOT_NUMBER, tok, &in->type);
@@ -15619,6 +15844,10 @@ static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* 
     fv->name = StrFromCStr("$callee");
     fv->tok = tok;
     fv->type = callee->type;
+    //E31b: "h.fv(l[0])" for a writable reference parameter - the named and method calls' check, which for a function
+    //value (its body not known) holds nothing and refuses every copy of an element
+    struct list wbPre = ListInit(sizeof(struct statement));
+    atWriteBackArgs(ctx, fv, &args, tok, &wbPre);
     struct operand* call = OperandFuncCall(ctx, fv, args, tok, ListInit(sizeof(struct syntax*)));
     call->callee = callee;
     return call;
@@ -18943,6 +19172,16 @@ static struct statement buildVarDeclFromOperandIn(struct checkCtx* ctx, struct t
     bool landedAlready = !inResult && rhs->opType == OPERATION_FUNCCALL && rhs->readVar && rhs->readVar->type.resultScope
                          && !callIsLanding(rhs);
     bool landedByOblig = !inResult && (landedAlready || landDeclWhereFree(ctx, rhs, strFromTok(nameTok), declType));
+    //...as does the call a field, an element, a slice or a payload is read out of, as for ":=" in the program (buildVarDecl):
+    //"$handle := bs[b].S", held for "bs[b].S.Push(x)", is "e := bs[b]; h := e.S"
+    struct operand* projLanded = NULL;
+    if (!inResult && !landedByOblig) {
+        struct operand* c = rhs;
+        while (heldResult(c) || projectionBase(c)) c = heldResult(c) ? heldResult(c) : projectionBase(c);
+        if (c != rhs && c->opType == OPERATION_FUNCCALL && !spreadSourceOf(c) && callIsLanding(c)
+                && landDeclWhereFree(ctx, c, strFromTok(nameTok), declType))
+            projLanded = c;
+    }
     bool unnamedScope = false;
     if (!adoptInitializerScope(ctx, &declType, rhs, &unnamedScope)) declType.scopeDepth = ctx->blockDepth;
     struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
@@ -18956,9 +19195,10 @@ static struct statement buildVarDeclFromOperandIn(struct checkCtx* ctx, struct t
         v->valueHomeDepth = 0;
         if (v->valueHome) markRegionBuilt(ctx->func, canonicalVar(v->valueHome)); //its storage is there (E11c)
     }
-    if (landedByOblig && !declType.structMAlloc && TypeHoldsReferences(declType)) {
-        if (landedInBlock(rhs)) valueHomeOf(ctx, rhs, v);
-        else refsHomeOf(rhs, v);
+    if ((landedByOblig || projLanded) && !declType.structMAlloc && TypeHoldsReferences(declType)) {
+        struct operand* c = projLanded ? projLanded : rhs;
+        if (landedInBlock(c)) valueHomeOf(ctx, c, v);
+        else refsHomeOf(c, v);
     }
     copyRefsHome(ctx, rhs, v); //O25h
     v->scopeBindings = rhs->scopeBindings;
@@ -20886,6 +21126,7 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
 //reference (a write through one goes where it points, into no copy) - or NULL
 static struct operand* atWriteRoot(struct operand* op) {
     for (int guard = 0; op && guard < 64; guard++) {
+        if (op->catchClauses.len) return NULL; //R9b: a "try ... catch" value is no place to write back into
         if (op->opType == OPERATION_FUNCCALL && op->isAtCall) return op;
         if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return NULL;
         struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
@@ -21026,6 +21267,75 @@ static struct operand* atReadAgain(struct checkCtx* ctx, struct operand* at, str
     return ctx->checkingTry ? buildIndexCall(ctx, base, idxs, tok) : operatorCallArgs(ctx, base, idxs, atName, tok);
 }
 
+//E31b: whether op is read out of "try x[i]" whose check is derived from Len - At called with its index bounds-checked
+//(buildIndexCall), no place for an assignment, but a copy of the element as "x[i]" is - or a field of one
+static bool derivedAtRead(struct operand* op) {
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (heldResult(op)) { op = heldResult(op); continue; }
+        if (op->opType == OPERATION_FUNCCALL) {
+            if (!op->readVar || !op->readVar->isMethod || op->args.len < 2) return false;
+            struct operand* i = *(struct operand**)ListGetIdx(&op->args, 1);
+            struct str n = op->readVar->name; //"At", or an instantiation's "At$..."
+            bool at = n.len >= 2 && (n.ptr[0] == 'A' || n.ptr[0] == 'a') && n.ptr[1] == 't' && (n.len == 2 || n.ptr[2] == '$');
+            return at && i->opType == OPERATION_BOUNDS;
+        }
+        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX) || !op->args.len || op->isAtCall) return false;
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->type.structMAlloc) return false;
+        op = b;
+    }
+    return false;
+}
+
+//E31b: whether a call reaches a body the check can read - a declared function, a method or a constructor, never a function
+//value (a local's, a parameter's, a field's, an element's, a call's result, a lambda) or an extern
+static bool callBodyKnown(struct var* func) {
+    if (!func || func->type.bType != BASETYPE_FUNC || func->type.isExtern || func->isLambda || func->isGlobalVar) return false;
+    if (func->isFuncDecl || func->isMethod) return true;
+    struct type* ct = func->type.hasRetType ? func->type.retType : NULL;
+    return ct && ct->bType == BASETYPE_STRUCT && ct->ctorFunc && canonicalVar(ct->ctorFunc) == canonicalVar(func);
+}
+
+//E31b: "try a[i] catch default v" (a field of one too) - the element when the check holds, v when it fails: no place, so
+//lent for a writable reference a write through it would be lost wherever it came from (R9b)
+static bool triedPlace(struct operand* op) {
+    //(a field or an inline element of one, reached through no reference, is a part of that value: "(try a[i] catch
+    //default v).P")
+    for (int guard = 0; op && guard < 64; guard++) {
+        if (op->opType != OPERATION_INDEX && op->opType != OPERATION_MEMBER) return false;
+        for (int c = 0; c < op->catchClauses.len; c++)
+            if (((struct catchClause*)ListGetIdx(&op->catchClauses, c))->dflt) return true;
+        if (op->catchClauses.len || !op->args.len || op->isAtCall) return false;
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        if (b->type.structMAlloc) return false;
+        op = b;
+    }
+    return false;
+}
+
+//E28/S12b/E31b: whether a value a conditional or a match may choose is a place - a variable, a field or an element reached
+//through no reference, "x[i]" or a field of it - whose copy a call given the whole for a writable reference would write
+static bool condChoosesPlace(struct operand* op) {
+    if (heldResult(op)) return condChoosesPlace(heldResult(op));
+    //(...a field or an inline element of one too, reached through no reference: "(a if c else b).P")
+    if ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX) && op->args.len && !op->isAtCall) {
+        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+        return !b->type.structMAlloc && condChoosesPlace(b);
+    }
+    struct list vs = ListInit(sizeof(struct operand*));
+    if (op->opType == OPERATION_COND && op->args.len == 3) {
+        ListAdd(&vs, ListGetIdx(&op->args, 1));
+        ListAdd(&vs, ListGetIdx(&op->args, 2));
+    } else if (op->opType == OPERATION_MATCH) vs = SemanticMatchValues(op);
+    else return false;
+    for (int i = 0; i < vs.len; i++) {
+        struct operand* v = *(struct operand**)ListGetIdx(&vs, i);
+        if (v->type.structMAlloc) continue;
+        if (OperandIsLvalue(v) || atWriteRoot(v) || derivedAtRead(v) || triedPlace(v) || condChoosesPlace(v)) return true;
+    }
+    return false;
+}
+
 //E31b/O17b: a value that is no place - "x[i]", a field of it, a call's result - given to a call for a writable reference
 //parameter. A handle (a List, a Map, a StringBuilder - one reference to shared state) is held as "h := v" holds it, its
 //reference where its source's is (O18c, O25h), and lent as that reference (O17b): the callee works on the state every
@@ -21035,6 +21345,9 @@ static struct operand* atReadAgain(struct checkCtx* ctx, struct operand* at, str
 //arguments are still evaluated in order.
 static void atWriteBackArgs(struct checkCtx* ctx, struct var* func, struct list* args, struct token tok, struct list* pre) {
     if (!func || func->type.bType != BASETYPE_FUNC) return;
+    //a call through a function value - a local's, a parameter's, a field's, an element's, a call's result (E13b): its
+    //body is not known, so no copy is a view or a handle lent through its reference - every one is the error
+    bool bodyKnown = callBodyKnown(func);
     bool any = false;
     for (int j = 0; j < func->type.vars.len && j < args->len; j++) {
         struct type pt = ((struct var*)ListGetIdx(&func->type.vars, j))->type;
@@ -21042,14 +21355,29 @@ static void atWriteBackArgs(struct checkCtx* ctx, struct var* func, struct list*
         if (!(pt.structMAlloc && pt.refMut) || arg->type.structMAlloc || arg->type.unknown) continue;
         //(a field of x[i] is a place an assignment writes back into, but lent to a call it is a part of the copy too)
         bool atCopy = atWriteRoot(arg) != NULL;
+        //"try a[i] catch default v" - an element, or v: a value whatever the collection, which a write would be lost in
+        if (triedPlace(arg)) { Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL); continue; }
+        //...and so is "a if c else b", "match k { ... => l[0] ... }" choosing one (E28, S12b)
+        if (condChoosesPlace(arg)) { Err(arg->tok, ERR_COND_LENT_WRITABLE); continue; }
         if (OperandIsLvalue(arg) && !atCopy) continue;
-        if (!handleField(arg->type)) {
-            if (atCopy) Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL);
+        if (!bodyKnown) {
+            if (atCopy || derivedAtRead(arg)) Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL);
+            continue;
+        }
+        //E31b: a struct copy of x[i] that is no handle is lent the same way, held - and judged by the call it is lent to:
+        //a callee writing nothing of its own storage cannot tell it from the element, so nothing needs writing back
+        bool view = !handleField(arg->type) && atCopy && arg->type.bType == BASETYPE_STRUCT && !arg->type.isTuple;
+        if (!handleField(arg->type) && !view) {
+            //...and "try x[i]", the copy read through a derived check, is never lent: it cannot be held apart from its try
+            if (atCopy || derivedAtRead(arg)) Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL);
             continue;
         }
         struct operand* src = arg;
         while (heldResult(src) || projectionBase(src)) src = heldResult(src) ? heldResult(src) : projectionBase(src);
-        if (src->opType != OPERATION_FUNCCALL || !ctx->hasOwnScope || !ctx->scope) continue;
+        if (src->opType != OPERATION_FUNCCALL || !ctx->hasOwnScope || !ctx->scope) {
+            if (view) Err(arg->tok, ERR_WRITE_THROUGH_AT_CALL);
+            continue;
+        }
         if (!any) {
             for (int k = 0; k < j; k++) {
                 struct operand** ep = ListGetIdx(args, k);
@@ -21061,9 +21389,14 @@ static void atWriteBackArgs(struct checkCtx* ctx, struct var* func, struct list*
         struct token argTok = arg->tok;
         if (arg->opType == OPERATION_FUNCCALL && arg->isAtCall) arg = atReadAgain(ctx, arg, tok, pre);
         struct operand* h = holdHandleCopy(ctx, arg, pre);
-        if (!h) continue;
+        if (!h) {
+            if (view) Err(argTok, ERR_WRITE_THROUGH_AT_CALL);
+            continue;
+        }
         h->tok = argTok;
-        if (atCopy) canonicalVar(h->readVar)->atHandleCopy = true; //judged by the call it is lent to (atHandleThrough)
+        //judged by the call it is lent to (atHandleThrough)
+        if (view) canonicalVar(h->readVar)->atViewCopy = true;
+        else if (atCopy) canonicalVar(h->readVar)->atHandleCopy = true;
         *(struct operand**)ListGetIdx(args, j) = h;
     }
 }
@@ -21076,9 +21409,15 @@ static void atHandleThrough(struct operand* call) {
     if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) return;
     for (int j = 0; j < call->args.len && j < call->readVar->type.vars.len; j++) {
         struct operand* a = *(struct operand**)ListGetIdx(&call->args, j);
-        if (a->opType != OPERATION_READ_VAR || !a->readVar || !canonicalVar(a->readVar)->atHandleCopy) continue;
+        if (a->opType != OPERATION_READ_VAR || !a->readVar) continue;
+        struct var* c = canonicalVar(a->readVar);
+        if (!c->atHandleCopy && !c->atViewCopy) continue;
         ensureBodyChecked(call->readVar);
-        if (!handleThroughParamAs(call->readVar, j, a->tok, true)) Err(a->tok, ERR_WRITE_THROUGH_AT_CALL);
+        if (c->atViewCopy) {
+            if (!viewThroughParamAs(call->readVar, j, a->tok)) viewRefused(call->readVar, j, a->tok);
+        } else if (!handleThroughParamAs(call->readVar, j, a->tok, true)) {
+            if (!canonicalVar(call->readVar)->bodyHadErrors) Err(a->tok, ERR_WRITE_THROUGH_AT_CALL);
+        }
     }
 }
 
@@ -21091,7 +21430,20 @@ static struct operand* atWriteBackWrap(struct checkCtx* ctx, struct operand* cal
     ListAddList(&seq->comprBody, pre);
     struct operand* val = NULL;
     if (call->type.bType != BASETYPE_VOID && !call->type.unknown) {
-        struct var* r = holdInHidden(ctx, call, tok, "res", &seq->comprBody);
+        struct var* r = NULL;
+        //(a value holding references is held as ":=" from the call holds it - landed where its obligations say, O18c:
+        //"h := ll[0][0].S" reads its references where the list's are, not in the block a temporary would be)
+        if (!call->type.structMAlloc && TypeHoldsReferences(call->type) && ctx->scope && ctx->hasOwnScope) {
+            char* nm = MallocOrCrash(32);
+            snprintf(nm, 32, "$res%d", ++hiddenCounter);
+            struct token ht = tok;
+            ht.type = TOK_IDEN;
+            ht.str = StrFromCStr(nm);
+            struct statement d = buildVarDeclFromOperand(ctx, ht, call);
+            r = scopeFindLocal(ctx->scope, ht.str);
+            if (r) ListAdd(&seq->comprBody, &d);
+        }
+        if (!r) r = holdInHidden(ctx, call, tok, "res", &seq->comprBody);
         val = OperandReadVar(r, tok);
     } else {
         struct statement st = (struct statement){0};
@@ -21345,7 +21697,8 @@ struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, s
     if (rhs->pendingLambda && !target->type.unknown) FinalizeLambda(rhs, &target->type);
     if (rhs->type.isTuple) Err(rhs->tok, ERR_TUPLE_NOT_A_VALUE);
     if (target->type.unknown) {} //an unknown name, reported where it is written
-    else if (!OperandIsLvalue(target) || target->viaConversion) Err(target->tok, ERR_NOT_ASSIGNABLE);
+    else if (!OperandIsLvalue(target) || target->viaConversion)
+        Err(target->tok, triedUnderPath(target) ? ERR_ASSIGN_INTO_TRIED : ERR_NOT_ASSIGNABLE);
     else if (!OperandIsMutableLvalue(target)) reportWriteBlocked(target->tok, target);
     //O13a/O25h: a value local written into (a field, an element) holds what it is given where its own references are -
     //which no binding its construction recorded says
@@ -25287,7 +25640,8 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct operand* t = NULL;
         if (!(destructTargetName(tn, &nameTok) && StrCmp(strFromTok(nameTok), StrFromCStr("_")))) {
             t = buildExprFromSyntax(ctx, tn);
-            if (!OperandIsLvalue(t) || t->viaConversion) Err(t->tok, ERR_NOT_ASSIGNABLE);
+            if (!OperandIsLvalue(t) || t->viaConversion)
+                Err(t->tok, triedUnderPath(t) ? ERR_ASSIGN_INTO_TRIED : ERR_NOT_ASSIGNABLE);
             else if (!OperandIsMutableLvalue(t)) reportWriteBlocked(t->tok, t);
         }
         ListAdd(&stmt.spawnTargets, &t);
@@ -26446,6 +26800,7 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
     obligationOrigin = prevOrigin;
     st.line = t.lineNr;
     if (t.owner) st.file = TokenGetFileName(t.owner);
+    if (!st.startTok.owner) st.startTok = t;
     return st;
 }
 
@@ -29767,6 +30122,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     callRecs = ListInit(sizeof(struct callRec)); //O10c
     regionEdges = ListInit(sizeof(struct regionEdge)); //O17
     handleMemos = ListInit(sizeof(struct handleMemo)); //O17b
+    viewMemos = ListInit(sizeof(struct viewMemo)); //E31b
     handlePendings = ListInit(sizeof(struct handlePending));
     lendChecks = ListInit(sizeof(struct lendCheck));
     unknownBuilds = ListInit(sizeof(struct unknownBuild)); //O12

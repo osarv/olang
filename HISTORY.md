@@ -15981,6 +15981,159 @@ checker, not the parse, will be where the time goes.
 - `bench/fused.olang` does not check under the current stage 0 (E31b at six `ws.Gemm(S[g, h], ...)` calls through a
   `Batch`'s `At`), so `make bench` would not build it; left to the linalg/benchmark work.
 
+## A view element lent with nothing written back (E31b, O17, 2026-10-12)
+
+**The regression.** `bench/fused.olang` stopped compiling: `ws.Gemm(S[g, h], Q[g, h], false, K[g, h], true, scale, 0,
+threads)`, `S` a `linalg.Batch<F32>` whose `At` gives a `Matrix` view, Gemm's first parameter `c mut Matrix<T>&`. Decision
+42 (study 5's review) made any `mut &` lend of a non-handle `x[i]` copy E31b's error, because the read-modify-write could
+lose a write when the callee reaches the collection another way. Nothing compiled the benchmarks in `make verify`, so it
+went unseen until port M4's module-graph oracle tripped on it. The workaround (`t := S[g, h]; ws.Gemm(t, ...)`) is not an
+answer for the library meant to carry all numeric code.
+
+**The coordinator's decision**: when the callee writes nothing of the parameter's own storage - writes only THROUGH its
+references - the copy and the element are indistinguishable to it, and lending the hidden copy with no write-back loses
+nothing. Decide it from the checked body, not tokens; keep every refusal for callees that do write own storage.
+
+**How it is built.** `atWriteBackArgs` treats a struct copy of `x[i]` that is no handle as it treats a handle's: held in a
+hidden local (`holdHandleCopy`), marked `atViewCopy`, lent as a reference, no write-back. `atHandleThrough` judges it
+against the call's function once known: `viewThroughAt(func, idx)`, the O17b walk (`htScan` with `view` set) over the
+checked body, with a memo of its own and cycles assumed then settled (`settleHandleLends`, pendings now carry `view`).
+`vsOp` consumes: a member read whose field is a reference (whatever follows goes through it) or a scalar (numeric,
+`Bool`, function value), reached through value struct fields (`vsPath`); a call handing the parameter whole to a read-only
+reference parameter, a by-value one, or a writable one that qualifies in turn; a value handle field handed to an
+O17b-qualifying parameter. Assignments, increments and atomics into own storage are `htOwnStorage`'s as before, and any
+read of the parameter the walk does not consume says no - `OperandReadVar` now records reads of every struct reference
+parameter, not only handles'. What the callee builds into what the copy holds is O17's question unchanged: the copy is a
+split value (storage in the statement's block, references where the collection's are), so a callee that can keep a build
+there is refused - `checks/cases/s5atbuilds.olang` (a `mut` method pushing text onto a List the element holds) now gets
+O17's "x[i] gives a copy, and the call can build into what it holds where the copy is" instead of E31b's message.
+
+**Decided (mine).** A generic is judged by the instantiation called - a trait's default too, since its body is checked
+for the concrete type, so the brief's "defaults count as writing" is met by reading the real body rather than refusing;
+only struct elements (an array or enum copy keeps the error); the parameter repointed, read into a local or captured
+says no even where harmless (conservative). `bench/fused.olang` builds and runs again, and under `-d -s`; std/linalg's
+new test writes a Gemm per head into `d[g, h]` and compares it with GemmBatch; `shared.olang` pins view-only callees
+(a method reached through the view, the parameter handed on, a cycle declared after its caller) after an arena churn and
+in a baked global. Must-fail cases `e31bview*`: a field assigned, incremented, a reference field repointed, a `mut`
+method writing own storage, handed on to a writer (declared later), a cycle with one writer, a function value, a local
+alias, a capture, a value field lent, and a build into what the copy holds (O17). **Kept from regressing**: a `bench`
+scenario in `checks/checks.olang` compiles every `bench/*.olang` with `-c`; `compiler/tools/modgraph.sh`'s note about
+skipping fused is gone.
+
+**Found on the way, pre-existing.** `bump(try l[0])` with `l` a `List<Acc>` and `bump(a mut Acc&)` compiled and printed
+0: under `try` a List's index is the derived form - `At` called with an `OPERATION_BOUNDS` index, not marked `isAtCall` -
+so `atWriteRoot` did not see a copy of an element and the argument was promoted as a plain temporary, the write lost.
+`derivedAtRead` recognises it (and a field of it); a non-handle such copy is E31b's error, never lent as a view, since
+it cannot be held in a hidden local apart from its try's clauses (`checks/cases/e31btryat.olang`).
+
+## The view lend's review, finished (E31b, B11, T7c, 2026-10-12)
+
+A soundness review of the view lend (`/home/user/review/e31view`, c9d14a7) found no memory-safety hole and no
+disagreement between the run time, `-d -s`, `-i` and the evaluator. What it found, and what was done, the coordinator's
+decisions with the details mine:
+
+- **F1 - a view's copy is not the element.** A callee that replaces the element through another path (a second
+  argument, a global, a capture) - or a later argument of the same call doing so before the callee runs,
+  `l[0].Put(replace(l))` - leaves the hidden copy naming the old element's storage, so its writes through the copy reach
+  what the old element referred to: the element never sees them, or another slot that now holds the old element does
+  (`s1c`). From a built-in array, where `x[i]` is the element, they land in the new element. The SPEC sentence "the
+  callee cannot tell such a copy from the element, so no write is lost" was false as written. Decided: keep the rule and
+  state the caveat in E31b, as for a handle's copy, which already behaves so (decision 44). Memory-safe, since the old
+  storage lives where the collection's elements do. Narrowing views to callees that cannot reach the collection would
+  need whole-program reach (globals, captures), which O17b never had either. Pinned by four run cases
+  (`e31bviewreplaced`, `e31bviewlaterarg`, `e31bviewotherslot`, `e31bhandlereplaced`) asserting both spellings.
+- **P1 (pre-existing, silent lost writes)** - a call through a computed function value (`h.fv(l[0])`, `fs[0](l[0])`,
+  `bumper()(l[0])`, a lambda called where it is written) went through no E31b check: `atWriteBackArgs` ran only on the
+  named and method paths, so the List copy was promoted as a plain temporary and every write lost. The computed path
+  (`buildValueCallArgs`) now calls the same `atWriteBackArgs`, and that one function decides for all three paths:
+  where the callee's body is not known (`callBodyKnown`: no declared function, method or constructor) every copy of an
+  element, a view's or a handle's included, is the error, and nothing is held. A function value through a local or a
+  parameter, which was refused only once `atHandleThrough`'s walk found no body (or, for a handle, at `settleHandleLends`),
+  is now refused there at once.
+- **T1 (pre-existing)** - `bump(try a[1] catch default Acc())` on a built-in array lent the value (the element or the
+  default) as a temporary, losing the write, while the List spelling was refused. `triedPlace`: an index or member read
+  under `try` with a clause giving a default, for a writable reference parameter, is E31b's error on any collection.
+  `try a[i]` alone on a built-in array stays the element (`e31btryelem`).
+- **r2 (recorded, not fixed)** - `put(try s[2] catch default V(...), 9)` to a view-only callee built before c9d14a7 and
+  is refused since. A view needs no write-back, so in principle the try form's copy would serve; but the derived try is
+  a hidden-local sequence ahead of its own clauses, and holding it apart from them for a view (what the default is,
+  where it lives - R11) is not "the same rule" - left refused, pinned as `e31bviewtrydefault`. The written-out form
+  works.
+- **S2 - SPEC/code mismatch.** E31b now says what `vsOp` accepts: the parameter or a struct it holds by value lent to a
+  read-only or by-value parameter, or to a writable one of a qualifying callee; a handle held by value to an
+  O17b-qualifying one.
+- **r1 (over-rejection, fixed)** - an element holding view structs by value (a layer of matrices), its callee calling
+  `c.w.Fill(3)`: `vsOp` accepted a writable lend to a qualifying callee only for the parameter whole. A value-field path
+  (`c.w`) is part of the copy's own storage, and a callee that is itself a view writes none of its argument's storage,
+  so none of the copy's: the same recursion, now for any struct path `vsPath` reaches (`e31bviewnested`; refused when the
+  method writes `m.off`, `e31bviewnestedwrite`, or repoints its parameter two calls down, `e31bviewnesteddeep`). Kept
+  after the handle rule, so a handle field still qualifies by O17b first.
+- **r3 (recorded)** - in a view callee, `match c.kind` / `c.kind == K.A` on an enum value field, an inline array element
+  read, `$c.p`, `$c`, `c == d` and `w := c` make it no view. The walk consumes a member read only where the field is a
+  reference or a scalar, because what consumes the read could still use it as a place; telling a value read from a lend
+  needs the read's context. Pinned as `e31bviewenumfield`, which also shows the new note.
+- **D1** - the "index is held here" note (B11, `NOTE_HELD_INDEX_WHERE`) fired for any `$`-named hidden local, so a view's
+  `$handle` got it though no index is held; it now fires only for a held index (`$idx`) - `e31bviewnoindexnote`.
+- **D2** - a callee whose body had errors added an E31b at every `x[i]` call; `viewRefused` and the handle path now say
+  nothing more for such a callee (`e31bviewbodyerrors`).
+- **D3** - a refused view says why: `NOTE_VIEW_REFUSED_BY`, "the callee is no view of the element because of this
+  statement", at the innermost statement written in the callee where the walk said no (`htStmt` records it; statements
+  now carry their first token, `startTok`), or at the read of the parameter no use accounted for. Memoized with the
+  answer (`viewMemo.why`). Where the cause is a further callee, the note points at the call to it, one level down.
+- **M1 (recorded, not changed)** - an element over 64KB lent as a view in a loop's condition costs a second arena copy
+  per turn: At's result and the view's hidden copy each come from the enclosing block's arena (T7c), which does not close
+  while the loop runs (5,000 turns: 715MB against 360MB for a plain read, which is itself the pre-existing class). T7c is
+  not changed now; `e31bviewbigcond` pins that it builds and runs.
+
+## The view lend's second review, fixed (E31b, O18c, O17b, R9a, E28, 2026-10-12)
+
+A second soundness review of the view lend (`/home/user/review/e31view2`, 15841b0) found two use-after-frees with one
+root cause (F1 new in c9d14a7, F2 older), the same gap one call deeper in code a program writes (F3, older), a hole left
+in T1 (T1h, older) and a lost write through a conditional (C1, older). All fixed, the coordinator's decisions, details
+mine.
+
+- **F1 and F2 - a field of `x[i]` held for a call never landed.** `atWriteBackArgs` holds `bs[b].S` (a handle field) or
+  `l[0].w` (a view field) in a hidden local through `buildVarDeclFromOperand`, and that declaration landed its
+  initializer's call by its obligations only when the initializer *was* the call. The At call a field is read out of
+  was left to the block, so the hidden copy's references were the block's: a `Push` on a handle field built its chunk in
+  the caller's frame (`bs[0].S.Push(i + 7)` in a loop printed 199007), and O17 saw no split in a view field, letting a
+  callee build through it there. `buildVarDeclFromOperandIn` now does what `buildVarDecl` does for a `:=` the program
+  writes: walk the held result and projection to the call, land it where free (`landDeclWhereFree`), and take the
+  references' home from it. F2's nine shapes run correctly; F1's five are O17's split-lend error, as the whole element
+  already was. The reviewer's scratch patch did the same.
+- **F3 - a handle a call gives, lent to a reference parameter.** `h := ll[0][0].S`, `e := ll[0][0]` and
+  `h := lll[0][0]` built into the function's own scope. The inner `ll[0]` *did* land (bindCallScopeVars lands an
+  argument's call by its obligations first), but as a value given for the outer At's reference receiver it was a
+  temporary, so the receiver's scope variable stayed landing, and the outer result with it. The coordinator's plan -
+  land a receiver or argument that is itself a still-landing call, inside the obligation landing - was built first and
+  changed nothing for that reason, so it was dropped. What fixes it is O17b's handle lend extended to a call's value: a
+  handle a landed call gives, for a reference parameter used only through the handle's reference, binds the variable
+  where its references landed (`landedCallRefsScope`), as a handle local does, and codegen builds the handle's own copy
+  in the block (`handleLent` on a non-place) - not where the variable is bound, which would allocate 8 bytes in the
+  collection's scope at every `ll[0][0]` in a loop. Measured flat (3M iterations of `ll[0][0].t` and
+  `h := ll[0][0].S`: 11.1MB, as before). This also fixes the hidden `ll[0][0].S.Push(x)` (f2h) without the reviewer's
+  RVREREAD. A first attempt held such a handle in a hidden local for every read-only reference parameter; it wrapped the
+  outer At call in a sequence, which hid the chain from E31b's write-back (`atWriteRoot`), and was reverted. Two pieces
+  of it were kept as correct on their own: a write-back's result held in a hidden local is declared as `:=` from the
+  call (landing by its obligations, `atWriteBackWrap`), and `valueRefsHome` reads through a held result.
+- **T1h - a field of a parenthesized try-default.** `bumpPt((try a[1] catch default Acc()).P)`, `(...).P.Bump()` and
+  `(...).P.X = 5` were accepted: OperandIsLvalue and `triedPlace` looked only at the operand's own clauses. The run time
+  wrote a temporary while the evaluator and `-i` wrote the element (K1: baked 51, run 0). Both now walk fields and inline
+  elements reached through no reference (`triedUnderPath`); the lend is E31b's error, an assignment or increment a new
+  one, `ERR_ASSIGN_INTO_TRIED` (R9a), naming `try x[i].f = v` (R21). `atWriteRoot` takes no tried At call for a root, so
+  the List spelling says the same instead of E31's "value a call gave back". SPEC's E31b referred to an "R9b" that does
+  not exist; it is R9a, which now states it.
+- **C1 - a conditional or a match choosing a place, lent writably.** `bump(l[0] if k > 0 else l[1])` lost the write in
+  every mode, and so did `bump(x if c else y)` with two locals and `(x if c else y).Bump()`. Decided (mine, stricter than
+  "every value a place"): an error (`ERR_COND_LENT_WRITABLE`, E28) when ANY value the conditional or match can give is a
+  place - a chosen place's write is lost whichever the others are - including a field of such a conditional. Read-only
+  lends take the copy as before.
+- **Fuzzer.** scopegen's Bag target gained `cells List<Cell>` and `grid List<List<Cell>>` (Cell holding a List) and
+  `cellOp`: pushes onto a handle field of `x[i]` and `x[i][j]` directly, by a helper, through locals read out of them
+  (F2/F3), in a loop, and from a node made in a block of its own (which must be refused).
+- Checks: run cases under `-d -s`, read back after a churn - `e31bhandlefield{loop,param,nested,twolevel,text}`,
+  `o18cnested{field,whole,handles}`; must-fail - `e31bfieldview{build,method}` (O17), `e31btrydefault{field,recv,baked}`
+  (E31b), `r9atrydefaultassign` (R9a), `e28cond{element,array,local}lent` (E28). Every one fails on 15841b0.
 ### Port M5a: types, generics and the typed contract (T16, T25a, T25b, G9a-G9d, G16a, G17, G19, G21, B9c, 2026-10-12)
 
 The fifth milestone's first part (compiler/DESIGN.md sections 1.6, 1.6.1 and 4): `compiler/types.olang` (the interned

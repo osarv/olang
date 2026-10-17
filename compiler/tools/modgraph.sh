@@ -22,7 +22,7 @@ for mode in "" -t; do
     for f in "$@"; do
         # the synthetic module of build constants is stage 0's way of holding them, not a module anyone imports
         if ! "$oracle" $mode "$f" > "$work/raw" 2>&1; then
-            # a root stage 0 refuses has no graph to compare (bench/fused.olang does not check today)
+            # a root stage 0 refuses has no graph to compare (none does today)
             echo "modgraph: stage 0 refuses $mode $f, skipped"
             skipped=$((skipped + 1))
             continue

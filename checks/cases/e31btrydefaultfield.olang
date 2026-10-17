@@ -1,0 +1,17 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b/R9a (the second review of the view lend, T1h): a field of a parenthesized "try a[i] catch default v" lent for a
+# writable reference - a part of the element or of v, a value either way: its write was lost at run time and kept by -i
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn main() ? {
+    a := Acc[Acc(), Acc()]
+    bumpPt((try a[1] catch default Acc()).P)
+    println("array P " $a[1].P.X)
+}

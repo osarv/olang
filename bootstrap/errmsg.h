@@ -358,6 +358,7 @@ struct type;
     X(ERR_MEMBER_IS_PRIVATE,            "M6a",   "member '%S' of %t is private to its module") \
     /* ---- operators and literals ---- */ \
     X(ERR_NOT_ASSIGNABLE,               "S4",    "this cannot be written - a variable, an element or a member can") \
+    X(ERR_ASSIGN_INTO_TRIED,            "R9a",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store") \
     X(ERR_INCDEC_NOT_NUMBER,            "S3a",   "%n takes a number, found %t") \
     X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
@@ -435,6 +436,7 @@ struct type;
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
     X(ERR_WRITE_THROUGH_AT_NO_SETAT,    "E31",   "this writes through x[i] on %t, which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") \
     X(ERR_WRITE_THROUGH_AT_BUILDS,      "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')") \
+    X(ERR_COND_LENT_WRITABLE,           "E28",   "a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") \
     X(ERR_WRITE_THROUGH_AT_CALL,        "E31b",  "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") \
     X(ERR_DEFAULT_ARG_NOT_ALLOWED,      "E14a",  "'default' stands only for a parameter's declared default, in a call") \
     X(ERR_DEFER_ERROR_ESCAPES,          "S19b",  "an error may not leave deferred code - catch it here") \
@@ -603,6 +605,7 @@ struct type;
     X(NOTE_REFILL_KEPT,                 "",      "or refill the one kept - '%S.Clear()', then put the elements in: one made where '%S' lives stays there, beside every one made before it, until that scope closes") \
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
     X(NOTE_LOOP_COPY_LENT,              "",      "'%S' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") \
+    X(NOTE_VIEW_REFUSED_BY,             "",      "the callee is no view of the element because of this statement") \
     X(NOTE_HELD_INDEX_WHERE,            "",      "the index is held here, for both the read and the write, in a block that closes first - make it where '%S' lives first, then index with it") \
     X(NOTE_COND_VALUE,                  "",      "this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)") \
     X(NOTE_SLICE_OF_TEMPORARY,          "",      "this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that") \

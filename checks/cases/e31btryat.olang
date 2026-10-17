@@ -1,0 +1,14 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: "try x[i]" on a List - its check derived from Len - is a copy of the element as "x[i]" is; lent to a "mut &"
+# parameter it was taken for any temporary and the write silently lost (bump left N at 0)
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(a mut Acc&) { a.N++ }
+
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    bump(try l[0])
+    println($l[0].N)
+}

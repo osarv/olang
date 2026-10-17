@@ -1,0 +1,11 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (P1): l[0] for a writable reference parameter of a call through an array element's function value
+type Acc struct() {
+    N I64 = 0
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    fs := Array<fn(c mut Acc&)>(1, fn(c mut Acc&) { c.N += 10 })
+    fs[0](l[0])
+}

@@ -933,10 +933,224 @@ e25global.olang:8:14: error[E25, O1b]: 'G' lives in the program's scope, which a
     8 |     x := gmk&G(2)
       |              ^
 compilation failed with 1 error
+=== e28condarraylent.olang
+e28condarraylent.olang:15:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   15 |     bump(a[0] if k > 0 else a[1])
+      |               ^~
+compilation failed with 1 error
+=== e28condelementlent.olang
+e28condelementlent.olang:18:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   18 |     bump(l[0] if k > 0 else l[1])
+      |               ^~
+compilation failed with 1 error
+=== e28condlocallent.olang
+e28condlocallent.olang:18:8: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   18 |     (x if k > 0 else y).Bump()
+      |        ^~
+e28condlocallent.olang:19:6: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   19 |     (match k { case 3 => x
+      |      ^~~~~
+e28condlocallent.olang:21:32: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   21 |     bumpPt((x if k > 0 else y).P)
+      |                                ^
+e28condlocallent.olang:21:32: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   21 |     bumpPt((x if k > 0 else y).P)
+      |                                ^
+e28condlocallent.olang:24:11: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   24 |     (l[0] if k > 0 else x).Bump()
+      |           ^~
+compilation failed with 5 errors
 === e31atrymulti.olang
 e31atrymulti.olang:12:15: error[E31a]: 'try' on several indices needs Grid to declare TryAt - a check derived from Len checks one position
    12 |     a := try g[0, 1] catch default -1
       |               ^
+compilation failed with 1 error
+=== e31bfieldviewbuild.olang
+e31bfieldviewbuild.olang:27:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   27 |     for i in range 3 { g(l[0].w, i + 10) }
+      |                               ^
+compilation failed with 1 error
+=== e31bfieldviewmethod.olang
+e31bfieldviewmethod.olang:27:42: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   27 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+      |                                          ^
+compilation failed with 1 error
+=== e31bfnelem.olang
+e31bfnelem.olang:10:12: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   10 |     fs[0](l[0])
+      |            ^
+compilation failed with 1 error
+=== e31bfnfield.olang
+e31bfnfield.olang:14:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     h.fv(l[0])
+      |           ^
+compilation failed with 1 error
+=== e31bfnhandle.olang
+e31bfnhandle.olang:11:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   11 |     h.fv(l[0])
+      |           ^
+compilation failed with 1 error
+=== e31bfnlambda.olang
+e31bfnlambda.olang:9:31: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+    9 |     fn(c mut Acc&) { c.N++ }(l[0])
+      |                               ^
+compilation failed with 1 error
+=== e31bfnresult.olang
+e31bfnresult.olang:10:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   10 |     bumper()(l[0])
+      |               ^
+compilation failed with 1 error
+=== e31btryat.olang
+e31btryat.olang:12:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   12 |     bump(try l[0])
+      |               ^
+compilation failed with 1 error
+=== e31btrydefault.olang
+e31btrydefault.olang:10:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   10 |     bump(try a[1] catch default Acc())
+      |               ^
+compilation failed with 1 error
+=== e31btrydefaultbaked.olang
+e31btrydefaultbaked.olang:14:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     bumpPt((try a[1] catch default Acc()).P)
+      |                                           ^
+compilation failed with 1 error
+=== e31btrydefaultfield.olang
+e31btrydefaultfield.olang:15:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     bumpPt((try a[1] catch default Acc()).P)
+      |                                           ^
+compilation failed with 1 error
+=== e31btrydefaultrecv.olang
+e31btrydefaultrecv.olang:16:36: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   16 |     (try a[1] catch default Acc()).P.Bump()
+      |                                    ^
+compilation failed with 1 error
+=== e31bviewalias.olang
+e31bviewalias.olang:18:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   18 |     f(s[0])
+      |        ^
+e31bviewalias.olang:12:5: note: the callee is no view of the element because of this statement
+   12 |     w := v
+      |     ^
+compilation failed with 1 error
+=== e31bviewbodyerrors.olang
+e31bviewbodyerrors.olang:17:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   17 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+      |                                        ^
+compilation failed with 1 error
+=== e31bviewbuilds.olang
+e31bviewbuilds.olang:17:27: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   17 |     for k in range 3 { f(s[k]) }
+      |                           ^
+compilation failed with 1 error
+=== e31bviewcapture.olang
+e31bviewcapture.olang:18:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   18 |     f(s[0])
+      |        ^
+e31bviewcapture.olang:12:5: note: the callee is no view of the element because of this statement
+   12 |     g := fn() I64 { return v.n }
+      |     ^
+compilation failed with 1 error
+=== e31bviewcycle.olang
+e31bviewcycle.olang:13:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   13 |     down(s[0], 3)
+      |           ^
+e31bviewcycle.olang:16:16: note: the callee is no view of the element because of this statement
+   16 |     if k > 0 { up(v, k - 1) }
+      |                ^~
+compilation failed with 1 error
+=== e31bviewenumfield.olang
+e31bviewenumfield.olang:31:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   31 |     f(s[1])
+      |        ^
+e31bviewenumfield.olang:24:5: note: the callee is no view of the element because of this statement
+   24 |     match c.kind {
+      |     ^~~~~
+compilation failed with 1 error
+=== e31bviewfield.olang
+e31bviewfield.olang:16:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   16 |     f(s[0])
+      |        ^
+e31bviewfield.olang:12:18: note: the callee is no view of the element because of this statement
+   12 | fn f(v mut V&) { v.n = 5 }
+      |                  ^
+compilation failed with 1 error
+=== e31bviewfnvalue.olang
+e31bviewfnvalue.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     f(s[0], fn(x mut V&) { })
+      |        ^
+e31bviewfnvalue.olang:11:34: note: the callee is no view of the element because of this statement
+   11 | fn f(v mut V&, h fn(x mut V&)) { h(v) }
+      |                                  ^
+compilation failed with 1 error
+=== e31bviewinc.olang
+e31bviewinc.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     f(s[0])
+      |        ^
+e31bviewinc.olang:11:18: note: the callee is no view of the element because of this statement
+   11 | fn f(v mut V&) { v.n++ }
+      |                  ^
+compilation failed with 1 error
+=== e31bviewmut.olang
+e31bviewmut.olang:15:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     s[1].Bump()
+      |      ^
+e31bviewmut.olang:11:24: note: the callee is no view of the element because of this statement
+   11 | fn (v mut V&) Bump() { v.n += 1 }
+      |                        ^
+compilation failed with 1 error
+=== e31bviewnesteddeep.olang
+e31bviewnesteddeep.olang:26:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   26 |     step(s[1])
+      |           ^
+e31bviewnesteddeep.olang:22:5: note: the callee is no view of the element because of this statement
+   22 |     c.b.Fill(4)
+      |     ^
+compilation failed with 1 error
+=== e31bviewnestedwrite.olang
+e31bviewnestedwrite.olang:26:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   26 |     step(s[1])
+      |           ^
+e31bviewnestedwrite.olang:22:5: note: the callee is no view of the element because of this statement
+   22 |     c.w.Fill(3)
+      |     ^
+compilation failed with 1 error
+=== e31bviewnoindexnote.olang
+e31bviewnoindexnote.olang:38:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   38 |     for k in range 3 { f(s[k], out) }
+      |                        ^
+e31bviewnoindexnote.olang:34:38: note: the callee requires it because of this statement
+   34 | fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
+      |                                      ^~~
+compilation failed with 1 error
+=== e31bviewpass.olang
+e31bviewpass.olang:14:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     f(s[0])
+      |        ^
+e31bviewpass.olang:16:18: note: the callee is no view of the element because of this statement
+   16 | fn f(v mut V&) { g(v) }
+      |                  ^
+compilation failed with 1 error
+=== e31bviewrepoint.olang
+e31bviewrepoint.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     f(s[0])
+      |        ^
+e31bviewrepoint.olang:11:18: note: the callee is no view of the element because of this statement
+   11 | fn f(v mut V&) { v.d = Array<I64>(3) }
+      |                  ^
+compilation failed with 1 error
+=== e31bviewtrydefault.olang
+e31bviewtrydefault.olang:16:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   16 |     put(try s[2] catch default V(Array<I64>(1), 0), 9)
+      |              ^
+compilation failed with 1 error
+=== e31bviewvalue.olang
+e31bviewvalue.olang:19:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   19 |     f(s[0])
+      |        ^
+e31bviewvalue.olang:15:18: note: the callee is no view of the element because of this statement
+   15 | fn f(w mut W&) { move(w.p) }
+      |                  ^~~~
 compilation failed with 1 error
 === e31calllocal.olang
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
@@ -4100,6 +4314,14 @@ r9adefaultlocal.olang:12:36: error[R11, O25]: a reference default lives where th
    12 |     return try mk(1) catch default seed
       |                                    ^~~~
 compilation failed with 1 error
+=== r9atrydefaultassign.olang
+r9atrydefaultassign.olang:14:38: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
+   14 |     (try a[1] catch default Acc()).P.X = 5
+      |                                      ^
+r9atrydefaultassign.olang:15:37: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
+   15 |     (try a[1] catch default Acc()).N++
+      |                                     ^~
+compilation failed with 2 errors
 === r9bafterall.olang
 r9bafterall.olang:10:23: error[R11a]: a catch with no error types takes every error left, so no clause can follow it
    10 |     try f() catch { } catch E { }
@@ -4504,7 +4726,7 @@ s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothin
       |         ^~~~~~~
 compilation failed with 1 error
 === s5atbuilds.olang
-s5atbuilds.olang:14:25: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+s5atbuilds.olang:14:25: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
    14 |     for k in range 3 { l[0].Tag("lit") }
       |                         ^
 compilation failed with 1 error
@@ -4512,6 +4734,9 @@ compilation failed with 1 error
 s5atnosetat.olang:15:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     r[0].Add()
       |      ^
+s5atnosetat.olang:7:25: note: the callee is no view of the element because of this statement
+    7 | fn (a mut Acc&) Add() { a.N++ }
+      |                         ^
 compilation failed with 1 error
 === s5callresultfield.olang
 s5callresultfield.olang:11:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -4572,20 +4797,29 @@ compilation failed with 1 error
 s5e31bargs.olang:16:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    16 |     bump(l[0], l)
       |           ^
+s5e31bargs.olang:10:5: note: the callee is no view of the element because of this statement
+   10 |     a.N++
+      |     ^
 compilation failed with 1 error
 === s5e31bfield.olang
 s5e31bfield.olang:14:10: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    14 |     l[0].In.Move(4)
       |          ^~
-s5e31bfield.olang:14:10: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   14 |     l[0].In.Move(4)
-      |          ^~
-compilation failed with 2 errors
+s5e31bfield.olang:6:31: note: the callee is no view of the element because of this statement
+    6 | fn (p mut Pt&) Move(dx I64) { p.X += dx }
+      |                               ^
+compilation failed with 1 error
 === s5e31bspawn.olang
 s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    12 |         spawn l[0].Add()
       |                ^
-compilation failed with 1 error
+s5e31bspawn.olang:6:25: note: the callee is no view of the element because of this statement
+    6 | fn (a mut Acc&) Add() { a.N++ }
+      |                         ^
+s5e31bspawn.olang:12:20: error[E31b, P2]: a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself
+   12 |         spawn l[0].Add()
+      |                    ^~~
+compilation failed with 2 errors
 === s5handlenote.olang
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
