@@ -1,6 +1,7 @@
 # Vec<T>, the growable array, tested - a module of its own, not part of the prelude, so these are compiled only when
-# they are run. Text and nodes kept in a Vec are read back after the arena churns; a computation through Vecs is baked
-# into a global (K2) and decided by an assert (S18c) beside the same computation at run time
+# they are run. A Vec is a handle (M19d): copies are second names, growth replaces the buffer. Text and nodes kept in a
+# Vec are read back after the arena churns; a computation through Vecs is baked into a global (K2) and decided by an
+# assert (S18c) beside the same computation at run time
 
 Run I64 = Count(1)                                      # a run-time 1: computations given it are not folded
 fn Count(k I64) I64 {
@@ -52,10 +53,10 @@ test "Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort,
 fn vecText(k I64) I64 {
     v := Vec<String&>()
     for i in range 30 { v.Push($(i * k % 17)) }
-    s := v[3]                                           # kept across the growth below (13.1)
+    s := v[3]                                           # kept across the growth below
     for i in range 30 { v.Push("x" $i) }
-    v.Sort(fn(a String&, b String&) Bool { return a < b })  # O17: Sort only permutes the buffer's elements
-    d := v.View()                                       # O37: a borrowed own result, used before the next Push
+    v.Sort(fn(a String&, b String&) Bool { return a < b })
+    d := v.View()                                       # used before the next Push
     t := d.Len() * 100 + d[0].Len() + d[59].Len() + s.Len()
     v.Push("z")
     return t + v.Len() + (try v.IndexOf("x7") catch default -1)
@@ -89,7 +90,7 @@ test "Vec: growth keeps every element, the buffer doubling from 8" {
 test "Vec: text kept in one, an element kept while it grows, read back after a churn" {
     v := Vec<String&>()
     for i in range 40 { v.Push($i) }                    # each text built where v lives - its elements' reach
-    s := v[7]                                           # an element refers outside the buffer (13.1)
+    s := v[7]                                           # an element refers outside the buffer
     for i in range 200 { v.Push("x" $i) }               # so the buffer may be replaced under it
     churn()
     assert s == "7" and v.Len() == 240 and v[37] == "37" and v[239] == "x199"
@@ -98,7 +99,7 @@ test "Vec: text kept in one, an element kept while it grows, read back after a c
     assert "12" in v and not ("z" in v) and (try v.IndexOf("x0") catch default -1) == 40
 }
 
-test "Vec: View lends the elements as an array, RunFrom walks one run" {
+test "Vec: View lends the elements as an array, and for-in walks them by position" {
     v := Vec<F64>()
     for i in range 10 { v.Push(F64(i) * 0.5) }
     d := v.View()
@@ -108,9 +109,21 @@ test "Vec: View lends the elements as an array, RunFrom walks one run" {
     m := v.ViewMut()
     m[0] = 9.0
     assert v[0] == 9.0
-    r := try v.RunFrom(4) catch default Array<F64>(0)
-    assert r.Len() == 6 and r[0] == 2.0
-    assert (try v.RunFrom(10) catch Exhausted default Array<F64>(1)).Len() == 1
+    w := 0.0
+    for x in v { w += x }                               # S9d: At and Len, the Vec read through its handle each time
+    assert w == 31.5
+}
+
+test "Vec: a for-in that pushes sees what it pushed - a work list" {
+    q := Vec<I64>()
+    q.Push(1)
+    seen := 0
+    for x in q {
+        seen++
+        if x < 100 { q.Push(x * 3) }
+    }
+    churn()
+    assert seen == 6 and q.Len() == 6 and q[5] == 243
 }
 
 test "Vec: equal Vecs compare and hash alike, and render as their elements" {
@@ -125,16 +138,63 @@ test "Vec: equal Vecs compare and hash alike, and render as their elements" {
     assert $a == "Vec<I64>[0, 1, 2, 3, 4]" and $Vec<String&>() == "Vec<String&>[]"
 }
 
-test "Vec: a borrowed copy reads, take moves, Clone copies" {
+test "Vec: a copy is a second name for the same Vec, Clone a Vec of its own" {
     a := Vec<I64>()
     for i in range 3 { a.Push(i + 1) }
-    b := a                                              # a borrowed copy: a loan on a's buffer to its last use
-    assert b.Len() == 3 and b[2] == 3
-    c := take a                                         # a left its zero value
-    assert a.Len() == 0 and c.Len() == 3
-    d := c.Clone()
-    d.Push(4)
-    assert c.Len() == 3 and d.Len() == 4
+    b := a                                              # a handle: b names a's elements and count
+    b.Push(4)
+    assert a.Len() == 4 and a[3] == 4 and b == a
+    c := a.Clone()
+    c.Push(5)
+    for i in range 100 { a.Push(i) }                    # a's buffer replaced several times; b follows it
+    churn()
+    assert c.Len() == 5 and b.Len() == 104 and b[103] == 99 and a[0] == 1 and c[4] == 5
+}
+
+fn vecPushTo(v Vec<I64>, x I64) { v.Push(x) }         # a by-value argument is a second name too
+test "Vec: one passed by value is pushed to through its copy" {
+    v := Vec<I64>()
+    for i in range 20 { vecPushTo(v, i) }
+    churn()
+    assert v.Len() == 20 and v[19] == 19
+}
+
+test "Vec: held in a List, a Map and a Vec - a type argument like any other" {
+    l := List<Vec<I64>>()
+    m := Map<String&, Vec<I64>>()
+    vv := Vec<Vec<I64>>()
+    for i in range 5 {
+        vv.Push(Vec<I64>())                             # made where vv lives, as a List's would be
+        e := vv[i]
+        for k in range i + 1 { e.Push(k * 10) }
+        l.Push(e)
+        m.Put($i, e)
+    }
+    churn()
+    g := try m.Get("3") catch { unreachable }
+    g.Push(99)                                          # the same Vec the List and the Vec hold
+    assert l[3].Len() == 5 and vv[3][4] == 99 and vv[4].Len() == 5 and l[4][4] == 40
+}
+
+test "Vec: a lambda capturing one reads it as it is when called" {
+    v := Vec<I64>()
+    v.Push(1)
+    n := fn() I64 { return v.Len() }
+    for i in range 30 { v.Push(i) }
+    churn()
+    assert n() == 31
+}
+
+fn vecFill(v Vec<I64>, k I64) { for i in range 1000 { v.Push(i * k) } }
+test "Vec: filled by tasks, one each, read after the join" {
+    a := Vec<I64>()
+    b := Vec<I64>()
+    join {
+        spawn vecFill(a, 1)
+        spawn vecFill(b, 2)
+    }
+    churn()
+    assert a.Len() == 1000 and b.Len() == 1000 and a[999] == 999 and b[999] == 1998
 }
 
 type vecNode struct(name String&, n I64) {
@@ -145,7 +205,7 @@ test "Vec: references kept in one, read back after a churn and after the Vec is 
     v := Vec<vecNode&>()
     for i in range 30 { v.Push(vecNode($i, i)) }
     first := v[0]
-    v = Vec<vecNode&>()                                 # the old buffer released; the nodes live where v does
+    v = Vec<vecNode&>()                                 # another Vec; the nodes, and the old one, live where v does
     churn()
     assert first.name == "0" and first.n == 0 and v.Len() == 0
     for i in range 3 { v.Push(vecNode("n" $i, i * 10)) }
@@ -172,14 +232,14 @@ test "Vec: room made up front, Reserve, Cap, Remove and Join" {
     assert t.Join(", ") == "a, b, c" and Vec<String&>().Join("-") == ""
 }
 
-# ---- Vec phase 2a: a Vec held by value in a field or a global, elements that are values holding references ----
+# ---- a Vec held by value in a field or a global, elements that are values holding references ----
 type vecTok struct(text String&, line I64) {
     text
     line
 }
 type vecLexer struct(src String&) {
     src
-    toks Vec<vecTok> = Vec<vecTok>()           # O31: a Vec field - its buffer is the instance's, released with it
+    toks Vec<vecTok> = Vec<vecTok>()           # a Vec field - the instance holds its handle
 }
 fn (l mut vecLexer&) run() {
     line := 0
@@ -188,7 +248,7 @@ fn (l mut vecLexer&) run() {
         line++
     }
 }
-fn vecLex(src String&) vecLexer {               # an owned result holding a Vec field (O37)
+fn vecLex(src String&) vecLexer {               # a result holding a Vec field
     l := vecLexer(src)
     l.run()
     return l
@@ -196,19 +256,20 @@ fn vecLex(src String&) vecLexer {               # an owned result holding a Vec 
 fn vecLexWork(k I64) I64 {
     l := vecLex("let x = 42 + y")
     for i in range 30 { l.toks.Push(vecTok("t" $(i * k), i)) }
-    first := l.toks[0]                          # a value element holding text, kept across the growth below (O38)
+    first := l.toks[0]                          # a value element holding text, kept across the growth below
     l.toks.Sort(fn(a vecTok, b vecTok) Bool { return a.text < b.text })
     t := l.toks.Len() * 100 + l.toks[0].text.Len() + first.text.Len()
-    moved := take l.toks                        # E34: the field taken, left its zero value
-    t += moved.Len() * 10 + l.toks.Len()
-    l.toks = take moved                         # ...and given back
+    other := l.toks                             # a second name for the field's Vec
+    l.toks = Vec<vecTok>()                      # the field given another
+    t += other.Len() * 10 + l.toks.Len()
+    l.toks = other                              # ...and the first back
     l.toks.Push(vecTok("z", 99))
     t += (try l.toks.TakeAt(0) catch { unreachable }).line + (try l.toks.SwapTake(1) catch { unreachable }).line + l.toks.Len()
     return t
 }
 VecLexBaked I64 = vecLexWork(3)                 # K2: computed while compiling
 
-test "Vec: a struct holding a Vec in a field - built, grown, sorted, taken - while compiling and at run time" {
+test "Vec: a struct holding a Vec in a field - built, grown, sorted, replaced - while compiling and at run time" {
     assert VecLexBaked == vecLexWork(3 * Run) and vecLexWork(1) == vecLexWork(Run)
 }
 
@@ -219,51 +280,52 @@ test "Vec: a Vec field filled by a method, its elements' text read back after th
     for i in range 50 { l.toks.Push(vecTok("w" $i, i)) }   # the buffer replaced several times
     churn()
     assert l.toks[1].text == "beta" and l.toks[53].text == "w49"
-    c := l                                      # a borrowed copy of the struct: a loan on its Vec's buffer (O32)
+    c := l                                      # a copy of the struct: its Vec field names the same Vec
     assert c.toks.Len() == 54 and c.toks[0].text == "alpha"
-    l.toks = Vec<vecTok>()                      # the old buffer released (O35); c's last use was above
+    l.toks = Vec<vecTok>()                      # l's field given another; c's still names the first
     l.toks.Push(vecTok("again", 7))
     churn()
-    assert l.toks.Len() == 1 and l.toks[0].text == "again"
+    assert l.toks.Len() == 1 and l.toks[0].text == "again" and c.toks.Len() == 54 and c.toks[53].text == "w49"
 }
 
 type vecWrap struct() {
-    lx vecLexer = vecLexer("one two")           # a struct holding a struct holding a Vec - owning, transitively
+    lx vecLexer = vecLexer("one two")           # a struct holding a struct holding a Vec
 }
 test "Vec: a Vec two structs deep, replaced through each level" {
     w := vecWrap()
     w.lx.run()
     assert w.lx.toks.Len() == 2 and w.lx.toks[1].text == "two"
-    w.lx = vecLex("a b c")                      # the inner struct and its Vec released
+    w.lx = vecLex("a b c")                      # the inner struct replaced, and its Vec
     churn()
     assert w.lx.toks.Len() == 3 and w.lx.toks[2].text == "c"
     w = vecWrap()                               # and the outer one
     assert w.lx.toks.Len() == 0
 }
 
-VecG mut Vec<I64> = Vec<I64>()                  # O31: a Vec global - the program's, never released, never baked (K2)
-VecGC Vec<I64> = vecSquares(5)                  # ...an immutable one, set at startup
+VecG mut Vec<I64> = Vec<I64>()                  # a Vec global - the program's
+VecGC Vec<I64> = vecSquares(5)                  # ...an immutable one, baked (K2)
 fn vecSquares(n I64) Vec<I64> {
     v := Vec<I64>()
     for i in range n { v.Push(i * i) }
     return v
 }
 fn vecGPush(x I64) { VecG.Push(x) }
-test "Vec: a global Vec, pushed to from functions, taken and given back" {
+test "Vec: a global Vec, pushed to from functions, named again and replaced" {
     for i in range 20 { vecGPush(i) }
     churn()
     assert VecG.Len() == 20 and VecG[19] == 19 and VecGC.Len() == 5 and VecGC[4] == 16
-    t := take VecG
-    assert VecG.Len() == 0 and t.Len() == 20
-    VecG = take t
-    VecG = vecSquares(3)                        # the old buffer released
+    t := VecG                                   # a second name for the global's Vec
+    t.Push(20)
+    assert VecG.Len() == 21 and VecG[20] == 20
+    VecG = vecSquares(3)                        # the global given another; t still names the first
+    assert t.Len() == 21
     assert VecG.Len() == 3 and VecG[2] == 4 and $VecG == "Vec<I64>[0, 1, 4]"
 }
 
 test "Vec: elements that are values holding references, kept across growth and read back after the arena churns" {
     v := Vec<vecTok>()
     for i in range 10 { v.Push(vecTok("e" $i, i)) }
-    e := v[3]                                   # a copy, holding text where v keeps it (O33) - no loan on the buffer
+    e := v[3]                                   # a copy, holding text where v keeps it
     for i in range 100 { v.Push(vecTok("f" $i, i)) }
     churn()
     assert e.text == "e3" and v[3].text == "e3" and v[109].text == "f99"
@@ -286,15 +348,14 @@ test "Vec: a conversion of a view names the buffer, not a copy of it" {
     assert VecViewBaked == 1 and vecViewNamed(2 * Run) == 1
 }
 
-# O26a (vec6): a Vec taken out of a local into one returned keeps what it refers to where the result goes
+# O26a (vec6): a Vec local that is returned keeps what it refers to where the result goes
 fn vecTakenOut(n I64) Vec<vecTok> {
     t := "kept-" $n
     l := Vec<vecTok>()
     l.Push(vecTok(t, n))
-    w := take l
-    return w
+    return l
 }
-test "Vec: a Vec taken into a local that is returned, its text read back after the arena churns" {
+test "Vec: a Vec local that is returned, its text read back after the arena churns" {
     w := vecTakenOut(3)
     churn()
     assert w[0].text == "kept-3" and w[0].line == 3
