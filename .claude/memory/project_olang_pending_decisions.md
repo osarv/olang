@@ -240,6 +240,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stays as it is - free functions and constants; nothing built. QZ is closed.
   Queued after
   wt-errors2 merges (std files).
+- QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
+  Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
+  things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
+  Pair, each use a small named struct (`type Span struct(Start I64, End I64) { Start End }`) - it is the tuple olang
+  chose not to have, `First`/`Second` naming nothing; (2) move it to std/pair. Recommended 1. In effect: Pair in the
+  prelude. (The prelude line otherwise: Vec, Map, String, StringBuilder in; List and future containers to std.)
 - QZ3 ASKED 2026-10-17 (the user: "Do we have traits that only integers satisfy? Floats? Signed unsigned?"): no -
   only Hashable, Iterator, Indexable; std/math limits types by `match T` exhaustiveness (an error at the call, worded as
   a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
