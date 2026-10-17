@@ -1,0 +1,28 @@
+# relaxation A: built-in array try-default handle, callee STORES the handle into an outer list -> must error
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type BagState struct() {
+    head mut Node& = null
+}
+type Bag struct() {
+    s mut BagState& = BagState()
+}
+fn (b Bag&) Stash(out mut List<Bag>&) { out.Push(b) }
+fn main() ? {
+    a := Array<Bag>(1, Bag())
+    kept := List<Bag>()
+    for i in range 3 {
+        (try a[0] catch default Bag()).Stash(kept)
+        churn()
+    }
+    churn()
+    assert kept.Len() == 3, $kept.Len()
+}

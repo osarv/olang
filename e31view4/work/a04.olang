@@ -1,0 +1,29 @@
+# split lend, read-only field: conditional of a place and a fresh value; callee keeps b.head in an outer holder
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type RBox struct(v I64) {
+    head Node& = Node(v, null)
+    tag I64 = 0
+}
+type Holder struct() {
+    n Node& = null
+}
+fn collect(b RBox&, out mut Holder&) { out.n = b.head }
+fn main() ? {
+    b1 := RBox(9)
+    h := Holder()
+    for i in range 3 {
+        collect(b1 if i > 5 else RBox(i + 1), h)
+        churn()
+    }
+    churn()
+    assert h.n.v == 3, $h.n.v
+}

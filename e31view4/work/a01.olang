@@ -1,0 +1,29 @@
+# split lend: try default of a non-handle Box on a built-in array, callee returns a node built in b's scope
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn mkN(b Box&, v I64) Node&b { return Node(v, b.head) }
+fn main() ? {
+    a := Array<Box>(1, Box())
+    keep := List<Node&>()
+    for i in range 3 {
+        r := mkN(try a[i] catch default Box(), i + 1)
+        keep.Push(r)
+        churn()
+    }
+    churn()
+    t := 0
+    for n in keep { t = t * 10 + n.v + n.next.v }
+    assert t == 123, $t
+}
