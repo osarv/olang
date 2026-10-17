@@ -12,14 +12,14 @@ still the Python scripts, run as `python3 tools/NAME.py`.
 
 | script | the change | run |
 |---|---|---|
-| `bare_typevars.py` | G8b: a type variable is written `<T>` once and `T` after | `tools/bare_typevars.py [--check] [-v] FILE\|DIR...` |
+| `bare_typevars.olang` | G8b: a type variable is written `<T>` once and `T` after | `build/tools_bare_typevars [--check] [-v] FILE\|DIR...` |
 | `perm_mut.py` | T25b: `mut` speaks only about what a reference reaches | `tools/perm_mut.py [--olang PATH] [-j N] FILE\|DIR...` |
 | `int_literal_i64.py` | T6a: an integer literal's own type is `I64` | `tools/int_literal_i64.py [--olang PATH] [-j N] FILE\|DIR...` |
 | `io_print.olang` | M19f: the prelude's `print` words became `io.Print` and friends | `build/tools_io_print [--dry] PATH...` |
 | `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `build/tools_io_try PATH...` |
 | `io_fix.olang` | after `io_try`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `build/tools_io_fix OLANG FILE...` |
 
-- `bare_typevars.py` works on the text alone. `--check` writes nothing and the exit status says whether anything
+- `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in). `--check` writes nothing and the exit status says whether anything
   would change.
 - `perm_mut.py` and `int_literal_i64.py` are driven by the compiler's own diagnostics: they compile each file with
   `--olang` (default `build/out`) and apply what it reports, repeating until nothing changes.
