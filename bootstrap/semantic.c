@@ -2845,6 +2845,35 @@ static bool typeReachesUnmet(struct type t, int depth) {
     return false;
 }
 
+struct var* VarGetMethod(struct semaModule* mod, struct str name, struct type recv);
+struct var* instantiateFunc(struct var* generic, struct list* bindings);
+//E31a: for a method named for a checked form ("CheckedPlus", "checkedAt") the name of its plain form, or NULL
+static char* checkedFormPlainName(struct str name) {
+    if (name.len < 8) return NULL;
+    bool priv = name.ptr[0] == 'c';
+    if (strncmp(name.ptr, priv ? "checked" : "Checked", 7) != 0 || name.ptr[7] < 'A' || name.ptr[7] > 'Z') return NULL;
+    char* plain = MallocOrCrash((size_t)name.len);
+    snprintf(plain, (size_t)name.len, "%.*s", name.len - 7, name.ptr + 7);
+    if (priv) plain[0] = (char)(plain[0] - 'A' + 'a');
+    return plain;
+}
+
+//E31a: the plain form, on spec's receiver, of the generic checked form generic was instantiated from as spec - found,
+//or instantiated for that receiver as the checked form was. NULL when there is none, or it is not generic
+static struct var* checkedFormPlain(struct var* generic, struct var* spec) {
+    char* plain = generic->isMethod ? checkedFormPlainName(generic->name) : NULL;
+    struct type* grecv = plain ? SemanticMethodReceiver(generic) : NULL;
+    struct type* srecv = grecv ? SemanticMethodReceiver(spec) : NULL;
+    if (!srecv) return NULL;
+    struct var* pg = VarGetMethod(generic->owner, StrFromCStr(plain), *grecv);
+    if (!pg || pg->type.bType != BASETYPE_FUNC || !pg->type.typeParams.len || !pg->type.vars.len) return NULL;
+    struct list b = ListInit(sizeof(struct typeBinding));
+    if (!TypeUnify((*(struct var*)ListGetIdx(&pg->type.vars, 0)).type, *srecv, &b)) return NULL;
+    for (int i = 0; i < pg->type.typeParams.len; i++)
+        if (!bindingGet(&b, *(struct str*)ListGetIdx(&pg->type.typeParams, i))) return NULL;
+    return instantiateFunc(pg, &b);
+}
+
 struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     for (int i = 0; i < instantiations.len; i++) {
         struct instantiation* inst = ListGetIdx(&instantiations, i);
@@ -2910,6 +2939,9 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     //declaration, its body unchecked there and in every instantiation
     if (unmet || tooDeep || generic->type.sigUninferable) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
     else ListAdd(&pendingInstances, &idx);
+    //E31a: a checked form's plain one too, for the same receiver - its errors, the instantiation's own (R1a), are what
+    //the checked form must fail with as well (checkCheckedForms)
+    if (!unmet && !tooDeep) checkedFormPlain(generic, spec);
 
     //deliberately NOT added to the owning module's own vars list: that list holds struct var BY VALUE, so
     //growing it during body checking would realloc its backing array and invalidate every struct var*
@@ -15155,7 +15187,7 @@ static const char* operatorFor(struct checkCtx* ctx, struct type t, const char* 
     const char* tn = tryOperatorName(ctx, t, capName);
     if (tn && ctx->checkingTry) return tn;
     const char* n = operatorMethodName(ctx, t, capName);
-    if (!n && tn) Err(tok, ERR_ONLY_TRY_FORM, &t, tn);
+    (void)tok; //E31a: a checked form with no plain one beside it is reported at its declaration
     return n;
 }
 
@@ -23436,8 +23468,7 @@ static struct var* forInRunFrom(struct type t, struct type* exhaustedT) {
 //S9d: whether t's At (or only its TryAt) takes one position - a type indexed by several ("m[i, j]", E31) is not walked
 //by position
 static bool atTakesOneIndex(struct checkCtx* ctx, struct type t) {
-    const char* at = operatorMethodName(ctx, t, "At");
-    if (!at) at = tryOperatorName(ctx, t, "At");
+    const char* at = operatorMethodName(ctx, t, "At"); //S9e: never a checked form - "try" turns no check on
     struct var* m = at ? methodNamedOn(t, at) : NULL;
     return m && m->type.vars.len == 2;
 }
@@ -23778,9 +23809,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         //positions 0 to Len()-1, each element At(i), Len() read every iteration. The collection is borrowed
         //(E12c), never copied, so writes through it in the body are seen.
         indexable = true;
-        //a type with only TryAt, the checked form, is walked through it - which "in try" then covers (S9e)
+        //through At, whatever checked form it has: "in try" covers what the loop calls, and turns no check on (S9e)
         atName = operatorMethodName(&wctx, src->type, "At");
-        if (!atName) atName = tryOperatorName(&wctx, src->type, "At");
         lenName = operatorMethodName(&wctx, src->type, "Len");
         //M6b: both called only where they may be - one error for the loop when either is private elsewhere
         if (!protocolReach(wctx.mod, src->type, methodNamedOn(src->type, atName), kw)
@@ -23855,7 +23885,8 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         if (!ok) {
             //an unknown one was reported; a Next or Iter of another shape is an ordinary method, said as such (E31)
             if (!src->type.unknown && !notOperatorError(src->type, "Next", src->tok, "'for ... in'")
-                    && !notOperatorError(src->type, "Iter", src->tok, "'for ... in'"))
+                    && !notOperatorError(src->type, "Iter", src->tok, "'for ... in'")
+                    && !tryOperatorName(&wctx, src->type, "At")) //(a CheckedAt alone: reported at it, E31a)
                 Err(src->tok, ERR_NOT_ITERABLE, &src->type);
             return (struct statement){0};
         }
@@ -30624,7 +30655,7 @@ static void settleInferredErrs(void) {
 
 //E31a (QQ1): a Checked form fails with every error its plain form can - "checked" only adds checks. Judged once every
 //set is known (an inferred one, R1a), on each method named for a Checked form beside its plain form on one receiver
-static void checkCheckedFormIn(struct var* m) {
+static void checkCheckedFormIn(struct var* m, struct var* plainInst) {
     if (!m || !m->isMethod || m->type.bType != BASETYPE_FUNC) return;
     //E31: Len, Eq and Str may not fail - and one written "?" alone is known to only once its set is inferred
     if (m->type.errsInferred && m->type.errors.len) {
@@ -30634,22 +30665,41 @@ static void checkCheckedFormIn(struct var* m) {
         if (cap && r && protocolShaped(*r, m, cap) && (!strcmp(cap, "Len") || !strcmp(cap, "Eq") || !strcmp(cap, "Str")))
             Err(m->tok, ERR_METHOD_CANNOT_FAIL, cap);
     }
-    if (m->name.len < 8) return;
-    bool priv = m->name.ptr[0] == 'c';
-    if (strncmp(m->name.ptr, priv ? "checked" : "Checked", 7) != 0 || m->name.ptr[7] < 'A' || m->name.ptr[7] > 'Z') return;
+    struct str base = m->name; //an instantiation's name, "CheckedPlus$V", read as the generic's
+    for (int i = 0; i < base.len; i++) if (base.ptr[i] == '$') { base.len = i; break; }
+    char* plain = checkedFormPlainName(base);
+    if (!plain) return;
+    bool priv = base.ptr[0] == 'c';
     struct type* recv = SemanticMethodReceiver(m);
     if (!recv) return;
-    char* plain = MallocOrCrash((size_t)m->name.len);
-    snprintf(plain, (size_t)m->name.len, "%.*s", m->name.len - 7, m->name.ptr + 7);
-    if (priv) plain[0] = (char)(plain[0] - 'A' + 'a');
-    struct var* p = VarGetMethod(m->owner, StrFromCStr(plain), *recv);
-    if (!p || p == m || p->type.bType != BASETYPE_FUNC) return;
+    struct var* p = plainInst ? plainInst : VarGetMethod(m->owner, StrFromCStr(plain), *recv);
+    if (!p || p->type.bType != BASETYPE_FUNC) {
+        //E31a: a checked form needs its plain one - "checked" only adds checks, and "try" never turns one on, so an
+        //operation reachable under one keyword and not the other is not written. Inc and Dec are derived from Plus and
+        //Minus (E31) where the type declares none
+        static const char* forms[] = { "At", "SetAt", "Slice", "Plus", "Minus", "Mul", "Div", "Rem", "MatMul", "Neg",
+                                       "ShiftLeft", "ShiftRight", "Inc", "Dec", NULL };
+        const char* cap = NULL;
+        for (int i = 0; forms[i] && !cap; i++) if (!strcasecmp(forms[i], plain) && (forms[i][0] == plain[0] || priv)) cap = forms[i];
+        if (!cap) return;
+        const char* derived = !strcmp(cap, "Inc") ? "Plus" : !strcmp(cap, "Dec") ? "Minus" : NULL;
+        if (derived) {
+            char dn[16];
+            snprintf(dn, sizeof(dn), "%s", derived);
+            if (priv) dn[0] = (char)(dn[0] - 'A' + 'a');
+            struct var* d = VarGetMethod(m->owner, StrFromCStr(dn), *recv);
+            if (d && d->type.bType == BASETYPE_FUNC) return;
+        }
+        Err(m->tok, ERR_CHECKED_WITHOUT_PLAIN, StrFmt("%.*s", base.len, base.ptr), plain);
+        return;
+    }
+    if (p == m) return;
     for (int i = 0; i < p->type.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&p->type.errors, i);
         bool has = false;
         for (int k = 0; k < m->type.errors.len && !has; k++) has = TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, k), *e);
         if (!has) {
-            char* nm = StrFmt("%.*s", m->name.len, m->name.ptr);
+            char* nm = StrFmt("%.*s", base.len, base.ptr);
             Err(m->tok, ERR_CHECKED_NOT_SUPERSET, nm, plain, plain, e);
             return;
         }
@@ -30661,12 +30711,20 @@ static void checkCheckedForms(void) {
         for (int k = 0; k < mod->vars.len; k++) {
             struct var* m = ListGetIdx(&mod->vars, k);
             if (m->inferErrs && m->type.typeParams.len) continue; //an instantiation's set is its own, judged below
-            checkCheckedFormIn(m);
+            checkCheckedFormIn(m, NULL);
         }
     }
+    //...and on every instantiation: a generic type's plain form may fail with what its type argument's operation does,
+    //which only the instantiation knows (E31a) - reported where it was asked for, with its arguments (G16b)
     for (int i = 0; i < instantiations.len; i++) {
         struct instantiation* in = ListGetIdx(&instantiations, i);
-        if (in->specialized->inferErrs) checkCheckedFormIn(in->specialized);
+        struct var* m = in->specialized;
+        if (!m || !m->isMethod || !checkedFormPlainName(in->generic->name)) continue;
+        struct var* p = checkedFormPlain(in->generic, m);
+        if (!p) continue; //(none, or not generic: judged on the declarations above)
+        ErrMsgPushContext(in->site, instantiationNote(&in->generic->type.typeParams, &in->bindings));
+        checkCheckedFormIn(m, p);
+        ErrMsgPopContext();
     }
 }
 

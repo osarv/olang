@@ -1,6 +1,6 @@
-# check: fail error[E31a]: Box has only the checked form of this operation, CheckedAt - write it under 'checked'
+# check: fail error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
 # also: compilation failed with 1 error
-# a type with only the checked form, indexed without 'checked': one error, not one more for every later index in the chain
+# E31a: a type with only the checked form is an error at the form, not again at every index in the chain
 type Box struct() {
     n I64 = 0
 }

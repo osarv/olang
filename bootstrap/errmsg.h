@@ -266,6 +266,7 @@ struct type;
     X(ERR_ARRAY_ONE_INDEX,              "E31",   "%t takes one index - several are passed to a type's At or SetAt") \
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
+    X(ERR_CHECKED_WITHOUT_PLAIN,        "E31a",  "%s is a checked form, which only adds checks to its plain form - declare %s beside it") \
     X(ERR_CHECKED_NOT_SUPERSET,         "E31a",  "%s is %s's checked form, so it fails with every error %s can - add %t after its '?'") \
     X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to handle an error") \
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
@@ -420,7 +421,6 @@ struct type;
     X(ERR_NO_SUCH_CASE,                 "T17",   "%t has no case %n") \
     X(ERR_NO_SUCH_CASE_MEANT,           "T17",   "%t has no case %n - did you mean '%S'?") \
     X(ERR_SCOPE_ARG_COUNT,              "E25",   "a call takes at most one scope argument") \
-    X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'checked'") \
     X(ERR_MATMUL_UNDECLARED,            "E31",   "'@' has no built-in meaning, and %t declares no MatMul") \
     X(ERR_NOT_EXTENDED_OP,              "T29f",  "%t does not extend its base, so it takes no %n - declare its method %s, or declare it with 'extends'") \
     X(ERR_COND_NOT_BOOL_TYPE,           "",      "a condition is a Bool, found %t") \
