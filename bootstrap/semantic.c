@@ -22363,6 +22363,8 @@ static int bodyBegin(void) {
     return ++nextBodyId;
 }
 
+//stmts is kept as a copy of the body's list header, so bodyEnd comes after the last statement is added to it - an add
+//that grows the list frees the storage the copy points at
 static void bodyEnd(int id, struct list stmts) {
     struct bodyRec* r = ListGetIdx(&bodyRecs, id - 1);
     if (r->ended) return; //the first recorded is the one kept
@@ -27002,13 +27004,13 @@ static void buildPrimCtorBody(struct semaModule* mod, struct type* t) {
     ctx.inCtor = true;
     ctx.bodyId = bodyBegin();
     f->codeBlock = buildBlock(&ctx, t->ctorBodySyntax);
-    bodyEnd(ctx.bodyId, f->codeBlock);
     struct operand* val = OperandReadVar(local, param->tok);
     val->type = *t;
     struct statement ret = (struct statement){0};
     ret.sType = STATEMENT_RET;
     ret.op = val;
     StatementAdd(&f->codeBlock, ret);
+    bodyEnd(ctx.bodyId, f->codeBlock);
 }
 
 //C2d: which of a constructor's parameters its instance may hold - what the argument refers to, or a part of it. Read off
