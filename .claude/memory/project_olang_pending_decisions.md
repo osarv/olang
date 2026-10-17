@@ -67,6 +67,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   F16 or BF16 - turning a finite value infinite is OVERFLOW (only F64->F32 was listed); any integer conversion changing
   the value, sign changes of one width included (I64 -1 to U64), is OVERFLOW. `>>` can lose nothing but its amount.
   Same batch as inferred sets.
+- QP1 (asked 2026-10-17). The user kept both array kinds ("Keep both or none ... then do both") but called `Array<T, 16>()`
+  beside `Array<T>(16)` "Real ugly" - two spellings for one thing. Proposed: one constructor. `Array<T>(n)` (and
+  `Array<T>(n, fill)`) is an `Array<T, n>` when n is a compile-time constant (a literal, a constant, a call K1a can
+  evaluate - G21's rule), else a run-time `Array<T>`; `Array<T, N>()` goes; the type `Array<T, N>` stays for fields,
+  parameters, results, elements; a written target type wins (`x Array<F32> = Array<F32>(16)` stays run-time), as a
+  literal adapts. One real difference: a fixed local cannot later be assigned another length. Recommended yes.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
