@@ -5203,7 +5203,9 @@ and literals made only of such, never existing storage anywhere in it) - it is
   has errors adds no E31b; the held-index note only for a held index. **Recorded, not changed**: `try x[i] catch default`
   to a view-only callee stays refused (r2); a view callee matching an enum field, reading an inline array element or
   rendering a value field is no view (r3); an element over 64KB lent as a view in a loop's condition costs a second
-  arena copy per turn (T7c's condition-growth class, doubled), left for later.
+  arena copy per turn (T7c's condition-growth class, doubled), left for later. **Second review (2026-10-12)**: a field of
+  `x[i]` held for a call lands where `:=` would (O18c); a handle a call gives is lent as its reference (O17b, `ll[0][0]`);
+  a field of a try-default (R9a) and a conditional/match choosing a place (E28) are no place to lend writably or assign.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -8894,7 +8894,7 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     return t;
 }
 
-//R9b/E31b: whether op, or a value it is a field or an inline element of - reached through no reference - carries catch
+//R9a/E31b: whether op, or a value it is a field or an inline element of - reached through no reference - carries catch
 //clauses: "(try a[i] catch default v).P" is a part of the element or of v, a value either way, so no place
 static bool triedUnderPath(struct operand* op) {
     for (int guard = 0; op && guard < 64; guard++) {

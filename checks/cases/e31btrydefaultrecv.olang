@@ -1,5 +1,5 @@
 # check: fail x[i] gives a copy of the element, which this call would write
-# E31b/R9b (T1h): as e31btrydefaultfield, a "mut" method called on the field
+# E31b/R9a (T1h): as e31btrydefaultfield, a "mut" method called on the field
 type Pt struct() {
     X I64 = 0
 }

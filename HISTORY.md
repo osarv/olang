@@ -16084,3 +16084,53 @@ decisions with the details mine:
   per turn: At's result and the view's hidden copy each come from the enclosing block's arena (T7c), which does not close
   while the loop runs (5,000 turns: 715MB against 360MB for a plain read, which is itself the pre-existing class). T7c is
   not changed now; `e31bviewbigcond` pins that it builds and runs.
+
+## The view lend's second review, fixed (E31b, O18c, O17b, R9a, E28, 2026-10-12)
+
+A second soundness review of the view lend (`/home/user/review/e31view2`, 15841b0) found two use-after-frees with one
+root cause (F1 new in c9d14a7, F2 older), the same gap one call deeper in code a program writes (F3, older), a hole left
+in T1 (T1h, older) and a lost write through a conditional (C1, older). All fixed, the coordinator's decisions, details
+mine.
+
+- **F1 and F2 - a field of `x[i]` held for a call never landed.** `atWriteBackArgs` holds `bs[b].S` (a handle field) or
+  `l[0].w` (a view field) in a hidden local through `buildVarDeclFromOperand`, and that declaration landed its
+  initializer's call by its obligations only when the initializer *was* the call. The At call a field is read out of
+  was left to the block, so the hidden copy's references were the block's: a `Push` on a handle field built its chunk in
+  the caller's frame (`bs[0].S.Push(i + 7)` in a loop printed 199007), and O17 saw no split in a view field, letting a
+  callee build through it there. `buildVarDeclFromOperandIn` now does what `buildVarDecl` does for a `:=` the program
+  writes: walk the held result and projection to the call, land it where free (`landDeclWhereFree`), and take the
+  references' home from it. F2's nine shapes run correctly; F1's five are O17's split-lend error, as the whole element
+  already was. The reviewer's scratch patch did the same.
+- **F3 - a handle a call gives, lent to a reference parameter.** `h := ll[0][0].S`, `e := ll[0][0]` and
+  `h := lll[0][0]` built into the function's own scope. The inner `ll[0]` *did* land (bindCallScopeVars lands an
+  argument's call by its obligations first), but as a value given for the outer At's reference receiver it was a
+  temporary, so the receiver's scope variable stayed landing, and the outer result with it. The coordinator's plan -
+  land a receiver or argument that is itself a still-landing call, inside the obligation landing - was built first and
+  changed nothing for that reason, so it was dropped. What fixes it is O17b's handle lend extended to a call's value: a
+  handle a landed call gives, for a reference parameter used only through the handle's reference, binds the variable
+  where its references landed (`landedCallRefsScope`), as a handle local does, and codegen builds the handle's own copy
+  in the block (`handleLent` on a non-place) - not where the variable is bound, which would allocate 8 bytes in the
+  collection's scope at every `ll[0][0]` in a loop. Measured flat (3M iterations of `ll[0][0].t` and
+  `h := ll[0][0].S`: 11.1MB, as before). This also fixes the hidden `ll[0][0].S.Push(x)` (f2h) without the reviewer's
+  RVREREAD. A first attempt held such a handle in a hidden local for every read-only reference parameter; it wrapped the
+  outer At call in a sequence, which hid the chain from E31b's write-back (`atWriteRoot`), and was reverted. Two pieces
+  of it were kept as correct on their own: a write-back's result held in a hidden local is declared as `:=` from the
+  call (landing by its obligations, `atWriteBackWrap`), and `valueRefsHome` reads through a held result.
+- **T1h - a field of a parenthesized try-default.** `bumpPt((try a[1] catch default Acc()).P)`, `(...).P.Bump()` and
+  `(...).P.X = 5` were accepted: OperandIsLvalue and `triedPlace` looked only at the operand's own clauses. The run time
+  wrote a temporary while the evaluator and `-i` wrote the element (K1: baked 51, run 0). Both now walk fields and inline
+  elements reached through no reference (`triedUnderPath`); the lend is E31b's error, an assignment or increment a new
+  one, `ERR_ASSIGN_INTO_TRIED` (R9a), naming `try x[i].f = v` (R21). `atWriteRoot` takes no tried At call for a root, so
+  the List spelling says the same instead of E31's "value a call gave back". SPEC's E31b referred to an "R9b" that does
+  not exist; it is R9a, which now states it.
+- **C1 - a conditional or a match choosing a place, lent writably.** `bump(l[0] if k > 0 else l[1])` lost the write in
+  every mode, and so did `bump(x if c else y)` with two locals and `(x if c else y).Bump()`. Decided (mine, stricter than
+  "every value a place"): an error (`ERR_COND_LENT_WRITABLE`, E28) when ANY value the conditional or match can give is a
+  place - a chosen place's write is lost whichever the others are - including a field of such a conditional. Read-only
+  lends take the copy as before.
+- **Fuzzer.** scopegen's Bag target gained `cells List<Cell>` and `grid List<List<Cell>>` (Cell holding a List) and
+  `cellOp`: pushes onto a handle field of `x[i]` and `x[i][j]` directly, by a helper, through locals read out of them
+  (F2/F3), in a loop, and from a node made in a block of its own (which must be refused).
+- Checks: run cases under `-d -s`, read back after a churn - `e31bhandlefield{loop,param,nested,twolevel,text}`,
+  `o18cnested{field,whole,handles}`; must-fail - `e31bfieldview{build,method}` (O17), `e31btrydefault{field,recv,baked}`
+  (E31b), `r9atrydefaultassign` (R9a), `e28cond{element,array,local}lent` (E28). Every one fails on 15841b0.
