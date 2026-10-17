@@ -63,14 +63,14 @@ fn main() ? {
         try io.PrintErrln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
         os.Exit(2)
     }
-    os.RunOnStack(1 << 30, fn() { run(mode, args) })
+    os.RunOnStack(1 << 30, fn() { try run(mode, args) catch io.IoError { } })
 }
 
-fn run(mode String&, args Array<String&>&) {
+fn run(mode String&, args Array<String&>&) ? io.IoError {
     out := io.Writer(1)
     std := try os.Env("OLANG_STD") catch default "std"
     if mode == "layout" {
-        layout(out, std, args[2])
+        try layout(out, std, args[2])
         try out.Flush() catch io.IoError { os.Exit(1) }
         return
     }
@@ -135,7 +135,7 @@ fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) 
 # ---- layouts ----
 
 # every group of a golden file of layouts, its program loaded and each type read back and laid out
-fn layout(out mut io.Writer&, std String&, golden String&) {
+fn layout(out mut io.Writer&, std String&, golden String&) ? io.IoError {
     text := try os.ReadFile(golden) catch os.OsError {
         try io.PrintErrln("dump: cannot read " $golden)
         os.Exit(2)
