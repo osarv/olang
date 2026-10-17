@@ -73,20 +73,16 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stack); `Array<T, N>` is written only as a type (parameters, results, elements, constructor parameters, generic
   shapes); a written target type wins. QUEUED with the error batch; the port's checker told. The user next wants to
   discuss how relevant `Array<T, N>` as a type is at all (QP2).
-- QP2 (asked 2026-10-17): drop `Array<T, N>` as a written type and constant generics (G20-G28) with it - measured: no
-  type declares a constant parameter (linalg is Matrix<T> with run-time dims, oann has none), and of 57 written
-  `Array<T, N>` in std (12 in oann) nearly all are locals QP1 turns into `Array<T>(n)`. Fixed storage stays, inferred at
-  construction (QP1; internally the fixed type remains). Restrictions in functions become ordinary asserts/ifs; my
-  addition: a function's leading asserts on its parameters are also decided at each call whose arguments the
-  evaluator knows (S18c at the call), so a shape mismatch is still a compile-time error there, and LLVM folds the check
-  after inlining otherwise. Cost: small fixed data crossing a signature by value becomes a struct (Vec3, RandState).
-  Recommended yes; the user leaning yes.
-  Then the user: "We can even lax the rule that says arrays can't be passed by value, then we get the Vec3 case
-  naturally ... I have been thinking to do this for a long time" (the ON HOLD item). My answer: by-value arrays pay off
-  only with the length in the type - `fn cross(a Array<F32, 3>, b Array<F32, 3>) Array<F32, 3>` passes in registers,
-  its copy's size written in the signature; a by-value run-time `Array<T>` is a hidden O(n) copy per call (D9a's
-  reason) and still goes through storage. So QP2 now offers: (a) drop both, structs for small fixed data; (b) keep
-  both and allow by-value parameters for `Array<T, N>` only, run-time arrays staying by reference. Recommended (b).
+- QP2 ANSWERED 2026-10-17: drop both - the written `Array<T, N>` and constant generics (G20-G28). The user: "This still
+  doesn't give more information than inferring a known size at compile time", and asked why the evaluator does not
+  simulate calls to learn a returned array's size. My answer: the evaluator runs calls only when every value is known;
+  what is wanted is a length followed through calls with the contents unknown, which is the checker's inference, not
+  evaluation. Proposed (QP3, asked): (1) fixed storage inferred where made (QP1); (2) a function's array result is fixed
+  when every return gives one length, inferred from the body as the error set is; (3) D9a relaxed - arrays passed by
+  value; a by-value array parameter makes the function, invisibly, one instance per known argument length (fixed in
+  that instance: registers, unrolled, its asserts on lengths decided at compile time, so a shape mismatch is a
+  compile-time error at that call); a reference parameter makes no instances. Open: (a) a run-time-length array passed
+  by value - an error (recommended: no unbounded hidden copy) or a copy through memory.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
