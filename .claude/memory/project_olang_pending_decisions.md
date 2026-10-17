@@ -145,7 +145,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
   test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
   are good"). Being built in wt-runfmt after its current work.
-- QT ASKED 2026-10-17 (after "Write everything in Olang"): should the makefile also become an olang program
+- QT ANSWERED 2026-10-17 ("make can stay make"): the makefile stays. Was asked (after "Write everything in Olang"): should the makefile also become an olang program
   (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
   incremental part). In effect: the makefile stays.
 - QU DECIDED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
@@ -240,6 +240,77 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stays as it is - free functions and constants; nothing built. QZ is closed.
   Queued after
   wt-errors2 merges (std files).
+- QAA DECIDED 2026-10-17 (the user: "Literals cant call methods, only variables can"): a method call whose receiver is
+  a literal - number, text, array, comprehension - is a compile-time error (`"a,b".Split(",")`, `7.Hash()`); reading
+  taken (stated to the user): any non-literal receiver stays legal (`f().g()`, `x[i].M()`). Both compilers; corpus
+  migrated (receiver into a local); queued after the syntax batch.
+  The user then: "Maybe we should allow on literals tho. It makes sense for Strings doesn't it?" ASKED: (1) allow on
+  every literal, as today (no rule - recommended), or (2) text and array literals only, numbers refused. ON HOLD until
+  answered; nothing built.
+  The user then: "What does .Hash do on a number? 2.0.Sqrt reads really bad because 2.0 is a float with a dot
+  already. Math stuff isn't supposed to be defined on numbers tho right?" Answered (Hash is Map's protocol; math stays
+  free functions); recommendation changed to (2): refuse methods on number literals, keep them on text/array literals.
+  DECIDED (the user: "Do that, disallow for numbers, allow for array and text"): a method call on a number literal is a
+  compile-time error (written through a variable); text, array literals and comprehensions keep methods. Both
+  compilers, queued after the syntax batch with the Pair move.
+- QL1 (company name): the user, 2026-10-17: "don't worry about the name" - dropped.
+- QJ1/QJ2/QF explained again 2026-10-17 (the user asked "tell me about 2-4"); recommendations unchanged (QJ1 keep -
+  or a bare `b := a` on a Vec an error; QJ2 keep; QF open until Vec phase 2b's move-aware collections, closed with a
+  test of a long-running Map of owned objects staying flat).
+- QJ2 ANSWERED 2026-10-17 ("sounds right the way you have done it yes, although I am not sure exactly"): kept - a
+  callback frees nothing through its captures (O40); the handler takes the owner as a parameter. Revisit (additive) if
+  real code keeps hitting it.
+- QF CLOSED as a question 2026-10-17 (the user: "no decision for me to make ... wait for the right time to build it"):
+  covered by `own` once Vec phase 2b makes List/Map move-aware; a work item, closed by a test of a long-running Map of
+  owned objects staying flat.
+- QJ1 revised 2026-10-17 (the user: "isn't it best not to allow copies of owned things in general? So if you want to
+  move it you use take always?"). Proposed: a value that owns something (Vec, a struct holding an owner) is never
+  copied implicitly - `b := a`, `b = a`, a by-value argument, a store into a field/element are errors; write `take a`
+  (move), `a.Clone()` (copy) or a reference (`b Vec<T>& = a`, parameter `v Vec<T>&`, as D9a for arrays). Removes
+  borrowed copies (QJ1's asymmetry, and the source of own4-own6's findings). List (a handle) unchanged. ASKED: agreed?
+  Then it goes into the Vec phase 2b design. In effect: borrowed copies.
+- QAB ASKED 2026-10-17 (the user, on ownership: "I am just worried we are introducing a lot of complexity now that
+  doesn't feel very smooth", "Can we hide reallocating away from the user completely?", "it's always the growing,
+  lessening part that is the problem", then "I want it gone completely somehow and the memory model more
+  streamlined"). Proposed: remove `own`/`take`/borrows from the language; one memory model - everything lives in a
+  scope: (1) blocks and the program, as today; (2) Vec as a handle (header + buffer, like List): growth keeps old
+  buffers until the scope closes (bounded ~2x peak), shrinking keeps capacity, a view held across a growth goes stale
+  (Go's append footgun; the local case refused); (3) a resettable scope as a std value `Slot<T>` (name open):
+  `s.Set(...)` builds into its own arena and frees the old one, `s.With(fn(c mut T&) {...})` gives access - the existing
+  scope rules keep references from escaping (a lambda parameter's scope cannot be named outside); `Set` inside its own
+  `With` aborts (one compare per Set). Reverses the user's own design (QG-QI, 2026-10-10); a large removal in both
+  compilers. ASKED: write it up first in docs/memory.md (server and interpreter worked through) for review? In effect:
+  own stays; ownership work frozen (no Vec phase 2b) until answered.
+  The user then: "The compiler is allowed to do tricks all it wants, but the user should not have to deal with it".
+  Revised proposal: no user-visible mechanism at all (no Slot either) - the language rule is only "everything lives in
+  a scope"; freeing earlier is an optimization the compiler makes wherever it proves nothing still refers to the old
+  storage (an overwritten slot, a Vec's old buffer, a removed Map entry - region inference, run on the analysis the
+  own checker does today), else it keeps it until the scope closes (always safe, never an error). Unobservable except
+  in memory, so stage 0 just drops `own` and never frees early; the port does the analysis in its scope pass. A report
+  (`olang build -memory`) lists where replaced storage is kept and why. ASKED: write docs/memory.md for review?
+  ANSWERED ("I think this is a good idea yes, as long as we can make it effective at actually finding the places
+  where memory can be freed and the rules to trigger it somewhat explicit so a programmer can make it happen at will";
+  then on Vec: two loads per access are fine if hoisted, loops are why Vec exists). Being written: docs/memory.md
+  (wt-memory) - the one-sentence rule, Vec as a handle and its hoisting, the report, removal of own from both
+  compilers, migration. Nothing removed before the user reviews it.
+  The user then: "I feel like there is a simpler solution here somehow". Proposed (recommended): drop Vec - Array for
+  fixed sizes, List for growing (never moves: no stale views, growth frees nothing), `l.ToArray()` (one visible copy)
+  where contiguity is needed; early freeing stays as the compiler's optimization for long-lived structures. Costs:
+  List random indexing ~5-6x an array's instructions; Vec phase 1 removed. The doc compares it with the handle design.
+  ANSWERED: "No don't drop vec yet" - Vec stays (the handle design is the doc's main design; drop-Vec only a note).
+  The user then: "Vec is basically a normal array hidden behind an access gate. The error we get when vec moves is a
+  correctness bug not a memory bug. This is kinda inevitable and what makes Vec problematic is how hidden it is".
+  Decided (in the doc): make it visible, not analysed - no implicit Vec -> Array<T>& conversion; `v.View()` explicit
+  ("a window on the current buffer, valid until v grows"); a view used after a growth of the same Vec in the same
+  function is a compile error; no cross-call may-grow analysis (a documented hazard, memory-safe).
+- QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
+  Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
+  things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
+  Pair, each use a small named struct (`type Span struct(Start I64, End I64) { Start End }`) - it is the tuple olang
+  chose not to have, `First`/`Second` naming nothing; (2) move it to std/pair. Recommended 1. In effect: Pair in the
+  prelude. (The prelude line otherwise: Vec, Map, String, StringBuilder in; List and future containers to std.)
+  ANSWERED (2): "Pair goes in Std not prelude" - std/pair (`pair.Pair<A, B>`), uses gaining the import. Queued after
+  the syntax batch (it touches the port and tests, as that batch does).
 - QZ3 ASKED 2026-10-17 (the user: "Do we have traits that only integers satisfy? Floats? Signed unsigned?"): no -
   only Hashable, Iterator, Indexable; std/math limits types by `match T` exhaustiveness (an error at the call, worded as
   a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
@@ -267,6 +338,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   out means `map.Map<K, V>` everywhere (imports are whole modules, names qualified), so keep Map in the prelude (as Go
   and Python build it in). Recommended now: prelude = methods on built-ins, protocol traits/errors, Vec, Map,
   String, StringBuilder, Pair; std = List and every future container (Set starts in std). After Vec phase 2b.
+  ANSWERED ("I think that is good yes", after Pair went to std): prelude = methods on built-in types, protocol traits
+  and errors, Vec, Map, StringBuilder (String and Array are built in); std = List (std/list), Pair (std/pair) and
+  every future container (Set, Deque, Heap, a sorted map). The iterator helpers and StringBuilder move onto Vec
+  (`a.ToVec()`). List moves after Vec phase 2b; Pair after the syntax batch. QZ2 closed.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/

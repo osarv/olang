@@ -1,0 +1,38 @@
+# bench/ir.olang PROG [CPROG] - the whole-program optimized IR and the disassembly of one benchmark, olang and C side by
+# side, for reading why one is slower: build/lto/PROG.olang.ll / .olang.s and build/lto/CPROG.c.ll / .c.s, under bench/.
+# The IR is what the link-time optimizer hands to code generation (save-temps' precodegen), so it is exactly what runs.
+# Run bench/run first, which leaves the program's IR in bench/build. From the repository root:
+#
+#   build/out build bench/ir.olang && build/bench_ir spectral
+
+import "std/os"
+import "benchlib"
+
+fn main() {
+    args := os.Args()
+    if args.Len() < 2 { benchlib.Fail("usage: ir PROG [CPROG]", 1) }
+    prog := $args[1]
+    cprog := $args[2] if args.Len() > 2 else prog
+    dir := benchlib.Dir
+    try os.MkDirAll($dir "/build/lto") catch os.OsError { benchlib.Fail("cannot make bench/build/lto", 1) }
+    others := benchlib.Objects(dir, String&[".main.ll", ".test.ll"])
+    link := List<String&>()
+    for a in String&["clang", "-O3", "-flto", "-o", "build/lto/" $prog ".olang", "build/" $prog ".main.ll"] { link.Push($a) }
+    for o in others { link.Push($o) }
+    for a in String&["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
+    benchlib.Must(link.ToArray())
+    benchlib.Must(String&["llvm-dis", "build/lto/" $prog ".olang.0.5.precodegen.bc", "-o", "build/lto/" $prog ".olang.ll"])
+    benchlib.MustInto(String&["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $prog ".olang"], dir, "build/lto/" $prog ".olang.s")
+    benchlib.Must(String&["clang", "-O3", "-flto", "-o", "build/lto/" $cprog ".c", "c/" $cprog ".c", "-lm", "-lpthread",
+                          "-Wl,-plugin-opt=save-temps"])
+    benchlib.Must(String&["llvm-dis", "build/lto/" $cprog ".c.0.5.precodegen.bc", "-o", "build/lto/" $cprog ".c.ll"])
+    benchlib.MustInto(String&["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $cprog ".c"], dir, "build/lto/" $cprog ".c.s")
+    # rm -f build/lto/*.bc build/lto/*.o build/lto/*.resolution.txt
+    names := try os.ReadDir($dir "/build/lto") catch default Array<String&>(0)
+    for n in names {
+        if n.EndsWith(".bc") or n.EndsWith(".o") or n.EndsWith(".resolution.txt") {
+            try os.Remove($dir "/build/lto/" $n) catch os.OsError { }
+        }
+    }
+    benchlib.Say("build/lto/" $prog ".olang.{ll,s}  build/lto/" $cprog ".c.{ll,s}\n")
+}

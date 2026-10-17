@@ -1091,7 +1091,7 @@ with the installed one; `make bootstrap` is section 5.
    - Inputs: every `.olang` file of the repository (1,232 with the checks cases; corpus, std, checks cases and fixtures,
      fuzz, bench, and `compiler/testdata/lex`, the lexical edge cases) and study2's data (`big.olang`, the deep
      nestings).
-   - `compiler/tools/tokdiff.sh` runs it; `make tokdiff`, part of `make verify`, builds both tools first (about 12 s).
+   - `compiler/tools/tokdiff.olang` runs it; `make tokdiff`, part of `make verify`, builds both tools first (about 12 s).
    - Done when there is no difference - and there is none (M1, 2026-10-11). Writing it found four C tokenizer bugs, fixed
      in `bootstrap/` (HISTORY.md, "The port starts"): a literal stopped by a newline took the newline, a run of bytes
      that begin no token after a line's end gave two statement ends (and a `;` there two), `1.5.Hash()` was "two
@@ -1105,7 +1105,7 @@ with the installed one; `make bootstrap` is section 5.
      `SyntaxParseAllBranches`, set by the oracle only), so they are compared now; deciding them is compared with M4.
    - Built (M3): `bootstrap/oracle/astdump.c` (run on a 1 GB thread, as the compiler runs), `dump.olang ast`, and
      `dump.olang roundtrip`, whose writer is `compiler/tools/unparse.olang` - it writes every node as source with no
-     parentheses added, a branch that had held diagnostics as its own text. `compiler/tools/astdiff.sh` runs both over
+     parentheses added, a branch that had held diagnostics as its own text. `compiler/tools/astdiff.olang` runs both over
      every file of the repository (`make astdiff`, part of `make verify`, about 5 s once both tools are built). What
      it normalizes: each file's rows are sorted (the two trees hold the same nodes in different shapes); stage 0's
      diagnostics are reduced to `error RULE LINE:COL`, its notes dropped, and only each item's first is compared; in
@@ -1118,12 +1118,12 @@ with the installed one; `make bootstrap` is section 5.
    - Tools: `bootstrap/oracle/modgraph.c` links stage 0 without its driver and analyzes a root as `olang compile` does (its
      build-decided branches decided), printing every module's identity and its imports, sorted;
      `dump.olang modules` prints the self-hosted loader's graph the same way (`Loader.Graph()`).
-   - `compiler/tools/modgraph.sh` (`make modgraph`) compares them on every root of the repository - the corpus, std,
+   - `compiler/tools/modgraph.olang` (`make modgraph`) compares them on every root of the repository - the corpus, std,
      `compiler/` and its tools, checks, fuzz and bench, each as an ordinary and as a test build - and on a program
      importing a remote repository made in a scratch directory (identities, edges and the lock file's lines). A root
      whose top-level conditions only B9c decides would differ until M5 decides them; there is none. Not in `make
      verify`: stage 0 checks every root whole, minutes in all.
-   - `compiler/tools/namesdiff.sh` (`make namesdiff`, part of `make verify`, about 25 s) runs `dump.olang names` on
+   - `compiler/tools/namesdiff.olang` (`make namesdiff`, part of `make verify`, about 25 s) runs `dump.olang names` on
      every `checks/cases` program, with its `# flags:` (`-D`, `-t`), and requires the errors of load's and names'
      rules to be exactly those stage 0 gave in `compiler/goldens/diag.txt`, by rule and position - and none where it
      gave none of them. All 1,132 cases agree (40 such errors). Every file of the repository outside the failing cases
@@ -1136,7 +1136,7 @@ with the installed one; `make bootstrap` is section 5.
    - The new compiler must match the rule and position everywhere, and the text wherever a case pins it.
    - Unpinned text differences are listed for review, not failed.
    - Built (M2): `compiler/goldens/diag.txt` holds stage 0's stdout on all 842 failing cases (the repository written
-     `$ROOT`), captured by `compiler/tools/diaggold_capture.sh` (`make diaggold`). `compiler/tools/diaggold.olang`
+     `$ROOT`), captured by `compiler/tools/diaggold_capture.olang` (`make diaggold`). `compiler/tools/diaggold.olang`
      reads each row back into a record, reports it to diag again, and requires the case's output byte for byte - rows,
      order, source lines, carets, notes and summary; all 842 match. It also holds `Explain` to stage 0's `-e` for
      every rule a message names, a lowercase one and a missing one. Limit: until the new compiler makes its own records,
@@ -1146,12 +1146,12 @@ with the installed one; `make bootstrap` is section 5.
    - Tools: `bootstrap/oracle/layoutdump.c` links stage 0 without its driver, checks a root as `olang compile` does, and
      prints every type it holds - each declared type, instance, array, reference, function type, tuple and anonymous
      enum - by its canonical text, with its size, alignment, LLVM spelling, struct body and field offsets, a function
-     type's result spelling and passing, and an enum's payload offsets. `compiler/tools/layoutgold.sh` (`make
+     type's result spelling and passing, and an enum's payload offsets. `compiler/tools/layoutgold.olang` (`make
      layoutgold`, minutes) runs it on every root of the repository, ordinary and as a test build, and on every checks
      case that builds, with its flags, and keeps each type under the first program holding it:
      `compiler/goldens/layout.txt`, 9,414 types from 283 programs.
    - `dump.olang layout` reads each type back from its canonical text in the program it came from (`ParseCanon`), lays
-     it out, and prints it the same way; `compiler/tools/layoutdiff.sh` (`make layoutdiff`, part of `make verify`,
+     it out, and prints it the same way; `compiler/tools/layoutdiff.olang` (`make layoutdiff`, part of `make verify`,
      about 3 s) requires every line to be stage 0's. A type may be left unlaid only where
      `compiler/goldens/layout.deferred` lists it, with why: 11 - ten an array length a call computes (G21) and one a
      type only a top-level `if` a call decides declares (B9c), both the evaluator's (M8). All 9,291 others are
@@ -1175,7 +1175,7 @@ with the installed one; `make bootstrap` is section 5.
    - `make race OLANG=build/stage1` must report exactly the one known race.
 8. **Fuzz across compilers.** Each seed is built by stage 0 and by stage 1 and the printed results compared. The
    fuzzer's own three-way agreement within stage 1 (compile time, `-O3`, `-i`) is also required.
-9. **Benchmarks.** `bench/run.sh` runs with two compilers. Stage 1's programs must be within 5% of stage 0's
+9. **Benchmarks.** `bench/run.olang` runs with two compilers. Stage 1's programs must be within 5% of stage 0's
    geometric mean, and none more than 15% slower.
 
 | stage | acceptance |
@@ -1274,7 +1274,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M5a | `types`, `generic`, `typed` | M4 | contract reviewed; all types of the corpus interned and laid out as C lays them out (sizes and offsets compared) (built 2026-10-12; reviewed and revised the same day: function types' scopes, marks, body kinds, sites, keys - section 1.6.1) |
 | M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site |
 | M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call |
-| M6 | `scope` | M5a's `typed` contract | every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38) |
+| M6 | `scope` | M5a's `typed` contract | written first as a small formal model of section 8 and section 8.8 (the rules and why each is sound, `docs/scope-model.md`), reviewed before code; then every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38); the scope fuzzer and sanitizer find nothing |
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1) |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
 | M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 |

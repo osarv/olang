@@ -1,5 +1,5 @@
 // astdump FILE... - the C parser's structure, the oracle the self-hosted parser is compared with (compiler/DESIGN.md
-// section 4, compiler/tools/astdiff.sh). For each file: "== FILE", one line per declaration and statement anywhere in its
+// section 4, compiler/tools/astdiff.olang). For each file: "== FILE", one line per declaration and statement anywhere in its
 // syntax tree - "KIND LINE:COL-LINE:COL", the span of its tokens (statement ends left out), the end just past its last
 // token - then the diagnostics the tokenizer and the parser reported, as the compiler writes them, after "-- diagnostics".
 //

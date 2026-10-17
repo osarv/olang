@@ -1,0 +1,92 @@
+# diaggold_capture [COMPILER] - captures stage 0's diagnostics on every checks/cases program that must fail to compile
+# (compiler/DESIGN.md section 4, item 3): compiler/goldens/diag.txt holds, for each such case, a line "=== CASE" and then
+# what the C compiler printed on stdout for "olang build FLAGS CASE", run in a directory of its own with the case copied
+# in, as the checks run it. The repository's root is written $ROOT, so the file does not depend on where the checkout
+# is. The cases run four at a time.
+# Run from the repository root (make diaggold); COMPILER defaults to build/out.
+
+import "std/os"
+import "std/filepath"
+import "toolkit"
+
+# how many cases are built at once
+Workers I64 = 4
+
+fn main() {
+    args := os.Args()
+    given := $args[1] if args.Len() > 1 else "build/out"
+    root := try os.Cwd() catch os.OsError {
+        toolkit.Die("diaggold_capture: no working directory")
+    }
+    dir := try os.RealPath(filepath.Dir(given)) catch os.OsError {
+        toolkit.Die("diaggold_capture: no " $given)
+    }
+    olang := $dir "/" $filepath.Base(given)
+    work := $root "/build/diaggold"
+    try os.RemoveAll(work) catch os.OsError { }
+    try os.MkDirAll(work) catch os.OsError { toolkit.Die("diaggold_capture: cannot make " $work) }
+    cases := List<String&>()
+    for f in toolkit.Matching("checks/cases", ".olang") {
+        for line in toolkit.Rows(toolkit.Read(f)) {
+            if line.StartsWith("# check: fail") {
+                cases.Push($f)
+                break
+            }
+        }
+    }
+    # each case in its own directory, four at a time
+    all := cases.ToArray()
+    join {
+        for w in range Workers {
+            spawn capture(olang, work, all, w)
+        }
+    }
+    gold := StringBuilder()
+    for f in cases {
+        name := filepath.Base(f)
+        cdir := $work "/cases/" $name[0:name.Len() - 6]
+        gold.Push("=== " $name "\n")
+        gold.Push(read($cdir "/out.txt").Replace(root, "$ROOT"))
+        if read($cdir "/err.txt").Len() > 0 { toolkit.Warn("diaggold_capture: " $name " wrote to stderr\n") }
+    }
+    out := "compiler/goldens/diag.txt"
+    toolkit.Write($out ".tmp", gold.ToString())
+    try os.Rename($out ".tmp", out) catch os.OsError { toolkit.Die("diaggold_capture: cannot write " $out) }
+    toolkit.Say("diaggold_capture: " $cases.Len() " cases captured into compiler/goldens/diag.txt\n")
+}
+
+fn read(path String&) String {
+    return $(try os.ReadFile(path) catch default "")
+}
+
+# every Workers'th case from number w: copied into a directory of its own and built there with its flags
+fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
+    for k in range w, cases.Len(), Workers {
+        name := filepath.Base(cases[k])
+        dir := $work "/cases/" $name[0:name.Len() - 6]
+        try os.MkDirAll(dir) catch os.OsError { continue }
+        text := read(cases[k])
+        try os.WriteFile($dir "/" $name, text) catch os.OsError { continue }
+        args := List<String&>()
+        args.Push(olang)
+        args.Push("build")
+        for f in toolkit.Fields(flagsOf(text)) { args.Push($f) }
+        args.Push(name)
+        o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { continue }
+        try os.WriteFile($dir "/out.txt", o.Stdout) catch os.OsError { }
+        try os.WriteFile($dir "/err.txt", o.Stderr) catch os.OsError { }
+    }
+}
+
+# the rest of a case's first "# flags: " line, "" for none
+fn flagsOf(text String&) String {
+    for line in toolkit.Rows(text) {
+        if line.StartsWith("# flags: ") { return $line[9:] }
+    }
+    return ""
+}
+
+test "a case's flags are the rest of its first flags line" {
+    assert flagsOf("# check: fail X\n# flags: -debug -define A=1\n# flags: -x\n") == "-debug -define A=1"
+    assert flagsOf("# check: fail X\n") == ""
+}

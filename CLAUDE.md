@@ -553,7 +553,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   128 bytes go through memory; one `ret` per function; enum payloads are whole words; integer `$` without snprintf.
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
   opt-in with `checked`.
-- **Benchmarks against C are in `bench/`** (`bench/run.sh`, not in verify): plain loops and allocation at or beyond C;
+- **Benchmarks against C are in `bench/`** (`bench/run.olang`, not in verify): plain loops and allocation at or beyond C;
   remaining gaps are in abstractions above them (bench/README.md).
 - **Fuzzers:** `fuzz/` (differential: baked, decided, run - `make fuzz`) and the scope fuzzer (`make scopefuzz`).
 - **Runtime facts.** Runtime thread-locals are `initialexec`; the runtime's globals sit in comdats; every function

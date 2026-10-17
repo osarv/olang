@@ -1,5 +1,5 @@
 # gemm: C = A B for square matrices through std/linalg's Gemm, timed inside the program (the best of several runs, since
-# the sizes go down to 64 x 64), printing GFLOPS - the olang side of bench/gemm.sh, against bench/c/gemm.c (naive,
+# the sizes go down to 64 x 64), printing GFLOPS - the olang side of bench/rungemm.olang, against bench/c/gemm.c (naive,
 # blocked and OpenBLAS). Arguments: f32|f64, n, threads, repetitions, and then "mv" or "mvt" and m for a
 # matrix-vector product through Gemv instead, 1000 times a run: with W an n x m matrix, "mv" is y = W x (each output
 # a row of W dotted with x - a dense layer at batch 1) and "mvt" is y = W^T u (W's rows added in, scaled - the same

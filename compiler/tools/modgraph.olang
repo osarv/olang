@@ -1,0 +1,156 @@
+# modgraph [ROOT...] - M4's acceptance for loading (compiler/DESIGN.md section 4): from every root program of the
+# repository, the self-hosted loader reaches the modules stage 0's does, with the same identities and the same import
+# edges, in an ordinary build and in a test build (-t: TestBuild true, so the prelude's tests are reached). Stage 0's
+# graph comes from build/modgraph (bootstrap/oracle/modgraph.c), the self-hosted one from "dump modules". Prints the
+# differences and exits 1 if there are any.
+#
+# Run from the repository root after "make build/modgraph build/compiler_tools_dump". A root here decides no top-level
+# condition the token evaluator cannot (B9c), which only stage 0 decides now: the loader leaves such a chain to M5/M8.
+# MODGRAPH_DUMP names another build of the dump.
+
+import "std/os"
+import "toolkit"
+
+fn main() {
+    dump := toolkit.Env("MODGRAPH_DUMP", "build/compiler_tools_dump")
+    oracle := "build/modgraph"
+    for t in String&[dump, oracle] {
+        if not toolkit.Built(t) { toolkit.Die("modgraph: " $t " is not built (make " $t ")") }
+    }
+    roots := toolkit.FilesOr(os.Args(), defaultRoots())
+    work := toolkit.Scratch("modgraph")
+    defer toolkit.Clean(work)
+    n I64 = 0
+    skipped I64 = 0
+    bad := false
+    for mode in String&["", "-t"] {
+        for f in roots {
+            # a root stage 0 refuses has no graph to compare (none does today)
+            args := List<String&>()
+            args.Push(oracle)
+            if mode != "" { args.Push(mode) }
+            args.Push(f)
+            o := toolkit.Run(args.ToArray())
+            if o.Status != 0 {
+                toolkit.Say("modgraph: stage 0 refuses " $mode " " $f ", skipped\n")
+                skipped++
+                continue
+            }
+            old := withoutBuildModule($o.Stdout $o.Stderr)
+            args.Clear()
+            args.Push(dump)
+            args.Push("modules")
+            if mode != "" { args.Push(mode) }
+            args.Push(f)
+            new := withoutHeaders(toolkit.RunShowing(args.ToArray()).Stdout)
+            n++
+            if old != new {
+                toolkit.Say("modgraph: " $mode " " $f ": stage 0 (<) and the self-hosted loader (>) differ:\n")
+                toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, old, new)), 20))
+                bad = true
+            }
+        }
+    }
+    if remote(work, dump, oracle) {
+        n++
+    } else {
+        bad = true
+    }
+    if bad { os.Exit(1) }
+    toolkit.Say("modgraph: " $n " roots, every module graph the same (" $skipped " refused by stage 0)\n")
+}
+
+# the root programs of the repository
+fn defaultRoots() List<String&> {
+    roots := List<String&>()
+    for dir in String&["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
+        for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
+    }
+    roots.Push("checks/checks.olang")
+    for dir in String&["fuzz", "bench"] {
+        for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
+    }
+    return roots
+}
+
+# the synthetic module of build constants is stage 0's way of holding them, not a module anyone imports
+fn withoutBuildModule(t String&) String {
+    rows := List<String&>()
+    for r in toolkit.Rows(t) {
+        if r != "module olang_build" { rows.Push($r) }
+    }
+    return toolkit.Text(rows)
+}
+
+fn withoutHeaders(t String&) String {
+    rows := List<String&>()
+    for r in toolkit.Rows(t) {
+        if not r.StartsWith("== ") { rows.Push($r) }
+    }
+    return toolkit.Text(rows)
+}
+
+# the first word of each row of an olang.lock, comments left out
+fn lockKeys(t String&) String {
+    rows := List<String&>()
+    for r in toolkit.Rows(t) {
+        if r.StartsWith("#") { continue }
+        sp := try r.FindByte(' ') catch default r.Len()
+        rows.Push($r[0:sp])
+    }
+    return toolkit.Text(rows)
+}
+
+# git with a fixed identity and no signing, in dir
+fn gitIn(dir String&, rest Array<String&>&) {
+    args := List<String&>()
+    for a in String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] { args.Push(a) }
+    for a in rest { args.Push($a) }
+    toolkit.Run(args.ToArray(), Array<String&>(0), dir)
+}
+
+# a remote import, from a local repository: fetched, locked, and its relative imports kept inside it (M23, M23b).
+# Says whether the two loaders agree, and reports where they do not
+fn remote(work String&, dump String&, oracle String&) Bool {
+    if (try os.Exec(String&["git", "--version"]) catch os.OsError { return true }).Status != 0 { return true }
+    root := try os.Cwd() catch os.OsError { toolkit.Die("modgraph: no working directory") }
+    base := $work "/remote"
+    r := $base "/remote/example.com/me/tools"
+    try os.MkDirAll($r "/part") catch os.OsError { toolkit.Die("modgraph: cannot make " $r) }
+    toolkit.Write($r "/lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
+    toolkit.Write($r "/part/inner.olang", "import \"../lib\"\n")
+    gitIn(r, String&["init", "-q"])
+    gitIn(r, String&["add", "."])
+    gitIn(r, String&["commit", "-qm", "x"])
+    toolkit.Write($base "/main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
+    graph := List<String&>()
+    locks := List<String&>()
+    for side in String&["old", "new"] {
+        try os.RemoveAll($base "/cache") catch os.OsError { }
+        try os.RemoveAll($base "/olang.lock") catch os.OsError { }
+        env := String&["OLANG_CACHE=" $base "/cache", "OLANG_GIT_BASE=file://" $base "/remote/", "OLANG_STD=" $root "/std"]
+        if side == "old" {
+            o := toolkit.Run(String&[$root "/" $oracle, "main.olang"], env, base)
+            graph.Push(withoutHeaders(withoutBuildModule(o.Stdout)))
+        } else {
+            o := toolkit.RunShowing(String&[$root "/" $dump, "modules", "main.olang"], env, base)
+            graph.Push(withoutHeaders(withoutBuildModule(o.Stdout)))
+        }
+        lock := try os.ReadFile($base "/olang.lock") catch default ""
+        locks.Push(lockKeys(lock))
+    }
+    if graph[0] == graph[1] and locks[0] == locks[1] { return true }
+    toolkit.Say("modgraph: the remote program: stage 0 (<) and the self-hosted loader (>) differ:\n")
+    toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, graph[0], graph[1])), 20))
+    toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, locks[0], locks[1])), 5))
+    return false
+}
+
+test "stage 0's build-constants module and the section headers are left out" {
+    assert withoutBuildModule("module a\nmodule olang_build\n  X b\n") == "module a\n  X b\n"
+    assert withoutHeaders("== f\nmodule a\n") == "module a\n"
+}
+
+test "a lock's keys are its rows' first words" {
+    assert lockKeys("# header\nexample.com/me/tools abc123\nother def\n") == "example.com/me/tools\nother\n"
+}
