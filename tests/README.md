@@ -30,7 +30,7 @@ From the repository root:
 
 - `make test` - every `test { }` block in the repository, these files included.
 - `build/out -t tests/shared.olang` - one file's tests.
-- `make run` - build `tests/runner.olang` as a program; `make verify` then runs `build/runner`.
+- `make run` - build `tests/runner.olang` as a program; `make verify` then runs `build/tests_runner`.
 - `make verify` - the full check before calling a change done.
 - `make race`, `make scopesan` - the same suite under ThreadSanitizer and the scope
   sanitizer. They are not part of `verify`.

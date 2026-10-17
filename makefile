@@ -148,7 +148,7 @@ verify:
 	$(MAKE) clean
 	$(MAKE) test
 	$(MAKE) run
-	./build/runner
+	./build/tests_runner
 	$(MAKE) checkir
 	$(MAKE) tokdiff
 	$(MAKE) astdiff
