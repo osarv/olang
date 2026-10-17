@@ -383,6 +383,7 @@ struct var {
                         //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
     bool atElemCopy; //E31: the hidden local an element "x[i]" is read into to be written through, then written back
     bool atHandleCopy; //E31b/O17b: a hidden copy of a handle element x[i], lent to a call as its reference
+    bool atViewCopy;   //E31b: a hidden copy of a struct element x[i], lent to a call that writes nothing of its own storage
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
                              //the first
@@ -463,6 +464,7 @@ struct var {
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
     struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
     bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
+    int regionStmt;             //...the statement whose check made it (ownStmtSerial), for O34's same-path move
     bool regionAnyType;         //...of objects of any own type (a borrowed own result whose object's type is not one known)
     int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
                                 //parameters by own fields, as a result borrowed from them (T&p): the first one's index + 1,
@@ -598,6 +600,7 @@ struct statement {
     enum statementType sType;
     int line; //B2e: the source line the statement starts on, for -d's line table; 0 when synthesized
     struct str file; //B2e/M22: the source file that line is in - a package's functions come from several
+    struct token startTok; //its first token as written - for a note pointing at it (E31b); no owner when synthesized
     struct var var;              //VAR_DECL: the declared variable; FOR: the loop variable
     struct operand* target;      //ASSIGN: the lvalue being assigned to
     struct list spawnTargets;    //SPAWN (D8c/P1g): one operand* per result bound, NULL for a "_"; empty for a
@@ -784,6 +787,8 @@ struct operand {
     //region (a struct var with isRegion); ownOrig is the type it had, for a move position or a take that restores it
     struct var* ownRegion;
     struct type* ownOrig;
+    struct var* ownElemRegion; //O33 (T25e): an element of an own array, held by value and holding references - stored in
+                               //this region (the buffer) while what it holds refers where the base is retagged (the reach)
     bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
     bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
     bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
@@ -983,6 +988,7 @@ bool TypeIsPermRef(struct type t); //T25b: a reference type carrying a permissio
 bool TypeIsOwning(struct type t); //O31: a struct holding an own reference in a field
 bool TypeIsOwnValue(struct type t); //O31: ...held by value - an owner value local, a borrowed copy, an owned result
 struct var* OwnValueLocalOf(struct operand* op); //O31: the owner value local a read names, or NULL
+bool OwnValuePlace(struct operand* op); //O31/O34: a place whose owning value its container owns - local, global, field
 bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including the outermost permission //D16: every lambda's hidden function
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.

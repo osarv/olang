@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'drop' may release the Conn borrowed on line
 # a call whose body may release below its argument, while a borrow below it is used after
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -18,5 +19,5 @@ fn main() ? {
     s.cur = Conn(3)
     c := s.cur
     drop(s)
-    println(c.name)
+    try io.Println(c.name)
 }

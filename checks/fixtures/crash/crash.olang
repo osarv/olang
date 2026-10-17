@@ -2,6 +2,7 @@
 # overflow on the main thread, on RunOnStack's thread and on a task's, and a failed check. The first argument says
 # which; "deep" is RunOnStack's own recursion, which on the main thread's 8MB ("shallow") overflows
 import "std/os"
+import "std/io"
 
 type Cell struct() {
     v I64 = 0
@@ -33,9 +34,9 @@ fn main() ? {
         case "deep" {
             n := try args[2].ParseInt() catch default 1000000 if args.Len() > 2 else 1000000
             os.RunOnStack(1 << 30, fn() { c.v = deep(n) + n })
-            println("deep " $c.v)
+            try io.Println("deep " $c.v)
         }
         case "shallow" { c.v = deep(1000000) }
-        nomatch { println("nothing") }
+        nomatch { try io.Println("nothing") }
     }
 }

@@ -1,0 +1,26 @@
+# check: run
+# E31b (the review of the view lend, r1): an element holding view structs by value, its callee lending a field to a
+# view-only method - the field is part of the copy's own storage and the method writes none of it, so the callee is
+# a view as "s[1].w.Fill(3)" written at the call is
+type M struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+fn (m mut M&) Fill(x I64) { m.d[m.off] = x }
+type Layer struct(w M, b M) {
+    w
+    b
+}
+type Layers struct(d mut Array<I64>&) {
+    d
+}
+fn (s Layers&) At(i I64) Layer { return Layer(M(s.d, 2 * i), M(s.d, 2 * i + 1)) }
+fn step(c mut Layer&) {
+    c.w.Fill(3)
+    c.b.Fill(4)
+}
+fn main() ? {
+    s := Layers(Array<I64>(4))
+    step(s[1])
+    assert s.d[2] == 3 and s.d[3] == 4 and s.d[0] == 0, $s.d
+}

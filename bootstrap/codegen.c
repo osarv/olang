@@ -3786,6 +3786,10 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         if (!argBuilds) ctx->capReadOnly++; //P2: where a temporary would be built, and nothing is
         char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
         if (!argBuilds) ctx->capReadOnly--;
+        //O17b: a handle a call gave, lent as its reference - the variable bound where that leads; the handle's own copy
+        //is a temporary of this block (the callee uses it only through its reference)
+        if (argOp->handleLent && !OperandIsLvalue(argOp) && !argOp->type.structMAlloc)
+            scopeOverride = cgScopeSlotAt(ctx, ctx->blockDepth);
         //C2d: a constructor parameter whose reference names no scope fills a field of the instance, so
         //an argument with no storage of its own is built where the instance lands
         if (ctor && ((!scopeOverride && !paramT.scopeParam)
@@ -6937,11 +6941,22 @@ static char* cgOwnDropFn(struct cgCtx* ctx, struct type t) {
     free(key.p);
     char* sym = cgBufStr(&symB);
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
+    //(a field holding an owning type by value - a Vec field - is released by that type's own drop, emitted first)
+    char** fieldDrops = MallocOrCrash(sizeof(char*) * (t.vars.len + 1));
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        fieldDrops[i] = !f->type.refOwn && TypeIsOwnValue(f->type) ? cgOwnDropFn(ctx, f->type) : NULL;
+    }
     char agg[1024];
     structAggSpelling(keyT, agg, sizeof(agg));
     fprintf(ctx->out, "define linkonce_odr void %s(ptr %%inst, ptr %%scope) {\nentry:\n", sym);
     for (int i = t.vars.len - 1; i >= 0; i--) {
         struct var* f = ListGetIdx(&t.vars, i);
+        if (fieldDrops[i]) {
+            fprintf(ctx->out, "  %%f%d = getelementptr %s, ptr %%inst, i32 0, i32 %d\n", i, agg, i);
+            fprintf(ctx->out, "  call void %s(ptr %%f%d, ptr %%scope)\n", fieldDrops[i], i);
+            continue;
+        }
         if (!f->type.refOwn) continue;
         fprintf(ctx->out, "  %%f%d = getelementptr %s, ptr %%inst, i32 0, i32 %d\n", i, agg, i);
         if (cgOwnIsArray(f->type)) { //an own array: its buffer, the pointer half of the field's { len, ptr }
@@ -7059,11 +7074,12 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
         cgOwnAssign(ctx, s);
         return;
     }
-    if (OwnValueLocalOf(s->target)) { //O35: an owner value local - the place, the new owner, the old owners released, the store
+    if (OwnValuePlace(s->target)) { //O35: an owner value place - the place, the new owner, the old owners released, the store
         struct type t = s->target->type;
         char* addr = cgAddr(ctx, s->target);
-        struct var* tv = canonicalVar(s->target->readVar);
-        char* scopeOverride = tv->valueHomeSet && !tv->refsHomeSet ? cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth) : NULL;
+        struct var* tv = OwnValueLocalOf(s->target);
+        char* scopeOverride = tv && tv->valueHomeSet && !tv->refsHomeSet ? cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth)
+                              : cgIsGlobalRead(s->target) ? cgProgramScope(ctx) : NULL;
         char ty[256];
         llvmType(t, ty, sizeof(ty));
         char* fresh = cgValueSlot(ctx, t, ty);
@@ -7867,7 +7883,7 @@ static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, lon
             if (v->kind != CT_AGG) return true;
             struct type c = ((struct var*)ListGetIdx(&t.vars, (int)v->i))->type;
             struct ctVal shape = *v;
-            shape.type = c;
+            shape.type = CtType(c);
             return cgConstBytes(&shape, c, buf + 8, ChoicePayloadSize(t));
         }
         case BASETYPE_STRUCT: {

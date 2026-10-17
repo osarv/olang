@@ -1,6 +1,6 @@
 # check: run
-# flags: -D N=5
-# B10/T6a: a -D integer is typed as its literal is - an I64 - and adapts nowhere, as a typed value does not; a literal
+# flags: -define N=5
+# B10/T6a: a -define integer is typed as its literal is - an I64 - and adapts nowhere, as a typed value does not; a literal
 # beside it, or written against a typed target, still adapts
 fn kind(v <T>) I32 {
     match T {

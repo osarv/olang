@@ -1,0 +1,20 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a struct field held by value lent on to a writing callee is the parameter's own storage
+type P struct(x I64) {
+    x
+}
+type W struct(d mut Array<I64>&, p P) {
+    d
+    p
+}
+type Ws struct(d mut Array<I64>&) {
+    d
+}
+fn (s Ws&) At(i I64) W { return W(s.d, P(i)) }
+fn move(p mut P&) { p.x += 1 }
+fn f(w mut W&) { move(w.p) }
+
+fn main() ? {
+    s := Ws(Array<I64>(4))
+    f(s[0])
+}

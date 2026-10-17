@@ -1,4 +1,5 @@
 # D16c: a lambda passed to a callee that keeps nothing of it lives in the frame
+import "std/io"
 type Node struct(v I64) {
     v
 }
@@ -8,4 +9,4 @@ type Bag struct(head Node&) {
 fn apply(f fn() I64) I64 { return f() }
 fn peek(n Node&) I64 { return apply(fn() I64 { return n.v }) }
 fn (b Bag&) Str() String { return "b" $peek(b.head) }
-fn main() ? { println($Bag(Node(4))) }
+fn main() ? { try io.Println($Bag(Node(4))) }

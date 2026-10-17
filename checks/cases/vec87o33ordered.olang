@@ -1,5 +1,6 @@
 # check: run
 # vec5 O33: what stays legal - the region read into a local first, then the call (a plain one and a spawned one)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -23,5 +24,5 @@ fn main() ? {
         join { spawn setN(Node(20 + i), p) }
         assert s.cur.n.v == 20 + i
     }
-    println("ok")
+    try io.Println("ok")
 }

@@ -1,0 +1,14 @@
+# check: run
+# E31b/O17b (decision 44, the handle analogue of e31bviewreplaced): a List element of a List, replaced through another
+# path, then pushed through the hidden copy - the push lands in the replaced list, never in the element
+fn work(c mut List<I64>&, l mut List<List<I64>>&) {
+    l[0] = List<I64>()
+    c.Push(5)
+}
+fn main() ? {
+    l := List<List<I64>>()
+    first := List<I64>()
+    l.Push(first)
+    work(l[0], l)
+    assert l[0].Len() == 0 and first.Len() == 1, "element " $l[0].Len() " replaced " $first.Len()
+}

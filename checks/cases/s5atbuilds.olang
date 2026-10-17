@@ -1,7 +1,7 @@
-# check: fail x[i] gives a copy of the element, which this call would write
-# E31b: a "mut" method called on x[i] - an element that is no handle - would write a copy of it, while the method can
-# reach the collection another way; the copy is written out ("t := l[i]; t.M(); l[i] = t") or the elements held by
-# reference
+# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
+# E31b/O17: a "mut" method called on x[i] - an element that is no handle. Tag writes nothing of the copy's own
+# storage (it pushes through the List the element holds), so the copy is lent with nothing written back - but it builds
+# the text where the copy is, the statement's block, not where the collection's list lives (O17's split value)
 type Rec struct(name String&) {
     name
     tags List<String&> = List<String&>()

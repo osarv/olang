@@ -1,0 +1,21 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a cycle of callees, one of which writes the parameter's own storage on one branch
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    down(s[0], 3)
+}
+fn down(v mut V&, k I64) {
+    if k > 0 { up(v, k - 1) }
+}
+fn up(v mut V&, k I64) {
+    if k == 1 { v.n = 9 }
+    down(v, k)
+}

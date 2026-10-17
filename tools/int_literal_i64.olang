@@ -1,0 +1,354 @@
+# T6a (2026-10-10): an integer literal's own type - what it is where nothing gives it a type - is I64, where it was I32.
+# So "x := 0" declares an I64, a range of literals counts in I64 ("for i in range 10"), a type variable only literals
+# reach binds I64, and "-D N=5" defines an I64. A literal written against a typed target still adapts, as before.
+#
+# Code written under the old rule may now hand such an I64 to something narrower - an I32 parameter, field or element -
+# which a number does not flow into (T6b). The compiler says where, and adds a note naming the declaration that made
+# the value an I64. This applies those notes:
+#   - "x := 0" (or "for x := 0, ...") becomes "x I32 = 0" - the type the old rule gave it, which the program was
+#     written against, so nothing else changes meaning;
+#   - "for i in range 10" becomes "for i in range I32(10)" - a range's first argument that is not a literal gives the
+#     type of its values (S9b); the end argument is the one converted ("range 1, I32(10)").
+# The type written is the one the note asks for (the narrower type the value was handed to). An error with no such note
+# - a Fold or a generic call whose type variable only a literal reached, a conditional of an I32 and such a local - is
+# printed for a look by hand: its fix is usually to write the literal's type ("Fold(I32(0), ...)") or to widen what
+# receives it to I64, which is often the better type for a count.
+#
+# Each file is compiled (-t when it has tests, -c otherwise), the notes applied, and that repeats until nothing more
+# changes. Only files under the paths given are edited; a note about another file is left alone. A checks/cases program
+# that must fail keeps the failure it is about: nothing is applied from a diagnostic carrying its expected text.
+# Comments and string literals are never edited. Files are rewritten in place.
+#
+#     build/out build tools/int_literal_i64.olang && build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...
+#
+#   --olang  the compiler to run (default: build/out in the repository this tool is in)
+#   -j       how many compilations run at once (default 3)
+# For oann: build/tools_int_literal_i64 --olang /home/user/olang/build/out /home/user/oann
+#
+# A port of the Python script of the same name (same arguments, same edits, same output); the files it writes get Python's
+# text-mode newlines ("\r\n" and "\r" become "\n"). Each compilation worker has a directory of its own (the Python script
+# gave a file the directory numbered by its place in the list, which two files compiling at once could share).
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+
+# ---- the notes ----
+
+# the type a note asks for when it is "'NAME' is I64, its literal's own type - declare the type it should have, 'NAME TYPE = ...'",
+# else the default error
+fn localType(msg String&) String ? {
+    marker := "' is I64, its literal's own type - declare the type it should have, '"
+    from := 0
+    for {
+        at := from + (try msg[from:].Find(marker) catch { error })
+        from = at + 1
+        # 'NAME before the marker
+        start := at
+        for start > 0 and srcmask.IsWord(msg[start - 1]) { start-- }
+        if start == 0 or msg[start - 1] != '\'' or start == at or not srcmask.IsIdStart(msg[start]) { continue }
+        # NAME TYPE = ...' after it
+        p := at + marker.Len()
+        if p >= msg.Len() or not srcmask.IsIdStart(msg[p]) { continue }
+        for p < msg.Len() and srcmask.IsWord(msg[p]) { p++ }
+        if p >= msg.Len() or msg[p] != ' ' { continue }
+        p++
+        t := p
+        if t >= msg.Len() or not msg[t].IsUpper() { continue }
+        for p < msg.Len() and (msg[p].IsLetter() or msg[p].IsDigit()) { p++ }
+        if not msg[p:].StartsWith(" = ...'") { continue }
+        return $msg[t:p]
+    }
+    error
+}
+
+# the type a note asks for when it is "the range's literals make 'NAME' I64 - write 'TYPE(' ..." or "... convert its end,
+# 'TYPE(' ...", else the default error
+fn rangeType(msg String&) String ? {
+    marker := "the range's literals make '"
+    from := 0
+    for {
+        at := from + (try msg[from:].Find(marker) catch { error })
+        from = at + 1
+        p := at + marker.Len()
+        if p >= msg.Len() or not srcmask.IsIdStart(msg[p]) { continue }
+        for p < msg.Len() and srcmask.IsWord(msg[p]) { p++ }
+        if not msg[p:].StartsWith("' I64 - ") { continue }
+        p += 8
+        if msg[p:].StartsWith("write ") {
+            p += 6
+        } else if msg[p:].StartsWith("convert its end, ") {
+            p += 17
+        } else {
+            continue
+        }
+        if p >= msg.Len() or msg[p] != '\'' { continue }
+        p++
+        t := p
+        if t >= msg.Len() or not msg[t].IsUpper() { continue }
+        for p < msg.Len() and srcmask.IsWord(msg[p]) and msg[p] != '_' { p++ }
+        if p < msg.Len() and msg[p] == '(' { return $msg[t:p] }
+    }
+    error
+}
+
+# the edits the compiler's output asks for in the allowed paths, and the errors mentioning I64 that no note answers (as
+# requests with an empty kind, the error's row in Why)
+fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Request>&,
+             unanswered mut List<diagedit.Request>&) {
+    currentPath := ""
+    current := ""
+    answered := false
+    for row in output.Split("\n") {
+        path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
+        full := diagedit.RealPathOf(path)
+        if isError {
+            if current.Len() > 0 and not answered and current.Contains("I64") and diagedit.Allowed(currentPath, allowed) {
+                unanswered.Push(diagedit.Request($currentPath, 0, 0, "", "", $current))
+            }
+            currentPath = $full
+            current = $row
+            answered = false
+            continue
+        }
+        localT := try localType(msg) catch default ""
+        rangeT := ""
+        if localT.Len() == 0 { rangeT = $(try rangeType(msg) catch default "") }
+        if current.Len() > 0 and (localT.Len() > 0 or rangeT.Len() > 0) {
+            if diagedit.Allowed(full, allowed) {
+                if localT.Len() > 0 {
+                    edits.Push(diagedit.Request($full, line, col, "local", $localT, $current))
+                } else {
+                    edits.Push(diagedit.Request($full, line, col, "range", $rangeT, $current))
+                }
+            }
+            answered = true
+        }
+    }
+    if current.Len() > 0 and not answered and current.Contains("I64") and diagedit.Allowed(currentPath, allowed) {
+        unanswered.Push(diagedit.Request($currentPath, 0, 0, "", "", $current))
+    }
+}
+
+# the span (start, end) of the end argument of the range whose note points at column at: the one argument of "range e", the
+# second of "range s, e[, step]" - or the default error
+fn rangeEnd(text String&, at I64, mask String&) (I64, I64) ? {
+    n := text.Len()
+    k := (at + 1 if at + 1 < n else n) - 5
+    for k >= 0 and not (text[k:].StartsWith("range") and mask[k] == 'c' and (k == 0 or not srcmask.IsWord(text[k - 1]))) { k-- }
+    if k < 0 { error }
+    i := k + 5
+    starts List<I64>
+    ends List<I64>
+    start := i
+    depth I64 = 0
+    for i < n {
+        c := text[i]
+        if mask[i] != 'c' {
+            i++
+            continue
+        }
+        if c == '(' or c == '[' {
+            depth++
+        } else if c == ')' or c == ']' {
+            if depth == 0 { break }
+            depth--
+        } else if c == ',' and depth == 0 {
+            starts.Push(start)
+            ends.Push(i)
+            start = i + 1
+        } else if c == '{' and depth == 0 {
+            break
+        } else if depth == 0 and srcmask.IsPySpace(c) and ((text[i + 1:].StartsWith("if") and not wordAt(text, i + 3))
+                                                           or (text[i + 1:].StartsWith("for") and not wordAt(text, i + 4))) {
+            # a comprehension's filter or next clause
+            break
+        }
+        i++
+    }
+    starts.Push(start)
+    ends.Push(i)
+    pick := 1 if starts.Len() >= 2 else 0
+    s := starts[pick]
+    e := ends[pick]
+    for s < e and (text[s] == ' ' or text[s] == '\t') { s++ }
+    for e > s and (text[e - 1] == ' ' or text[e - 1] == '\t') { e-- }
+    if s >= e { error }
+    return s, e
+}
+
+# whether position i of text holds a word character
+fn wordAt(text String&, i I64) Bool {
+    return i < text.Len() and srcmask.IsWord(text[i])
+}
+
+# whether the text starts with a type's name and a "(": [A-Z][A-Za-z0-9]*\(
+fn startsWithConversion(text String&) Bool {
+    if text.Len() == 0 or not text[0].IsUpper() { return false }
+    i := 1
+    for i < text.Len() and (text[i].IsLetter() or text[i].IsDigit()) { i++ }
+    return i < text.Len() and text[i] == '('
+}
+
+# the edits applied to their files; how many locals and how many ranges were typed
+fn apply(requests List<diagedit.Request>&) (I64, I64) {
+    paths List<String&>
+    for r in requests {
+        if not (r.Path in paths) { paths.Push($r.Path) }
+    }
+    locals I64 = 0
+    ranges I64 = 0
+    for path in paths {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("int_literal_i64: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        expect List<String&>
+        diagedit.ExpectedTexts(src, expect)
+        lines := src.Split("\n")
+        mine List<diagedit.Request>
+        for r in requests {
+            if r.Path == path { mine.Push(r) }
+        }
+        # by line, and right to left within a line, so earlier columns stay put
+        mine.Sort(fn(a, b) {
+            if a.Line != b.Line { return a.Line < b.Line }
+            return a.Col > b.Col
+        })
+        seen List<String&>
+        shLine List<I64>
+        shAt List<I64>
+        shDelta List<I64>
+        for r in mine {
+            key := $r.Line ":" $r.Col
+            if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
+            seen.Push($key)
+            idx := r.Line - 1
+            text := $lines[idx]
+            mask := srcmask.Mask(text, true)
+            at := r.Col - 1
+            typ := r.Arg
+            replaced := ""
+            if r.Kind == "local" {
+                # NAME[ \t]*:= at the column
+                if at < 0 or at >= text.Len() or not srcmask.IsIdStart(text[at]) { continue }
+                e := at
+                for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+                p := e
+                for p < text.Len() and (text[p] == ' ' or text[p] == '\t') { p++ }
+                if not text[p:].StartsWith(":=") or mask[at] != 'c' { continue }
+                replaced = $text[:at] $text[at:e] " " $typ " =" $text[p + 2:]
+            } else {
+                s, e := try rangeEnd(text, at, mask) catch { continue }
+                if startsWithConversion(text[s:e]) { continue }    # converted already
+                replaced = $text[:s] $typ "(" $text[s:e] ")" $text[e:]
+                at = s
+            }
+            lines[idx] = $replaced
+            diagedit.Realign(lines, idx, replaced.Len() - text.Len(), at)
+            shLine.Push(r.Line)
+            shAt.Push(at)
+            shDelta.Push(lines[idx].Len() - text.Len())
+            if r.Kind == "local" { locals++ } else { ranges++ }
+        }
+        diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
+        try os.WriteFile(path, lines.Join("\n")) catch {
+            srcmask.SayErr("int_literal_i64: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    return locals, ranges
+}
+
+fn main() ? {
+    olang := $srcmask.RepoRoot() "/build/out"
+    jobs I64 = 3
+    paths List<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if args[i] == "--olang" or args[i] == "-j" {
+            if i + 1 >= args.Len() {
+                srcmask.SayErr("int_literal_i64: " $args[i] " needs a value")
+                os.Exit(1)
+            }
+            if args[i] == "--olang" {
+                olang = $args[i + 1]
+            } else {
+                jobs = try args[i + 1].ParseInt() catch {
+                    srcmask.SayErr("int_literal_i64: -j needs a number")
+                    os.Exit(1)
+                    unreachable
+                }
+            }
+            i += 2
+        } else {
+            paths.Push($args[i])
+            i++
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    if jobs < 1 {
+        srcmask.SayErr("int_literal_i64: -j needs a positive number")
+        os.Exit(1)
+    }
+    olang = $diagedit.RealPathOf(olang)
+    files List<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed List<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+
+    tmp := try os.MkTemp("", "int_literal_i64") catch {
+        srcmask.SayErr("int_literal_i64: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer try os.RemoveAll(tmp) catch { }
+    work mut Array<String&>& = Array<String&>(jobs)
+    for k in range jobs {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k]) catch {
+            srcmask.SayErr("int_literal_i64: cannot make " $work[k])
+            os.Exit(1)
+        }
+    }
+    totalLocals I64 = 0
+    totalRanges I64 = 0
+    unanswered List<diagedit.Request>
+    fileArray := files.ToArray()
+    for round in range 1, 9 {
+        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        requests List<diagedit.Request>
+        unanswered = List<diagedit.Request>()
+        for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
+        locals, ranges := apply(requests)
+        srcmask.Say("round " $round ": " $locals " locals typed, " $ranges " ranges typed")
+        totalLocals += locals
+        totalRanges += ranges
+        if locals == 0 and ranges == 0 { break }
+    }
+    srcmask.Say("total: " $totalLocals " locals typed, " $totalRanges " ranges typed")
+    seen List<String&>
+    for u in unanswered {
+        expect List<String&>
+        text := try srcmask.ReadText(u.Path) catch default ""
+        diagedit.ExpectedTexts(text, expect)
+        if not (u.Why in seen) and not diagedit.ContainsAny(u.Why, expect) {
+            seen.Push($u.Why)
+            srcmask.Say("by hand: " $u.Why)
+        }
+    }
+}
+
+test "a note names the type to write, a range its end" {
+    assert (try localType("'n' is I64, its literal's own type - declare the type it should have, 'n I32 = ...'") catch default "") == "I32"
+    assert (try rangeType("the range's literals make 'i' I64 - write 'U8(' here for U8 values") catch default "") == "U8"
+    assert (try rangeType("the range's literals make 'i' I64 - convert its end, 'I16(...)', for I16 values") catch default "") == "I16"
+    text := "for i in range 1, 10 { }"
+    s, e := try rangeEnd(text, 15, srcmask.Mask(text, true)) catch { unreachable }
+    assert text[s:e] == "10"
+}

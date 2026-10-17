@@ -1,6 +1,7 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/D16c: a capturing lambda handed to a callee keeping nothing of it makes, in its own body, a closure living
 # where its capture does - the receiver's - which the walk of that body sees (the transient flag is the call's, C5)
+import "std/io"
 type Node struct(v I64) {
     v
 }
@@ -17,5 +18,5 @@ fn (b Bag&) Str() String {
     return "b" $n
 }
 fn main() ? {
-    println($Bag(Node(4)))
+    try io.Println($Bag(Node(4)))
 }

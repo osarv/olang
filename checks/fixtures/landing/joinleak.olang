@@ -2,6 +2,7 @@
 # evaluated before anything is rendered, and a rendering reaching a Str grows in an arena of its own, on the unwind chain
 # while a test runs (a builder that malloc'd past 256 bytes and freed only at its end lost it on every such exit: 1.5GB at
 # 2M passes)
+import "std/io"
 fn g(i I64) I64 ? {
     if i % 2 == 0 { error }
     return i
@@ -19,5 +20,5 @@ fn main() ? {
         t := $box $big $(try g(i + 2) catch { continue })
         n += s.Len() + t.Len()
     }
-    println($n)
+    try io.Println($n)
 }

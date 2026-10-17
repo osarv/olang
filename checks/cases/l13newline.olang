@@ -2,8 +2,9 @@
 # also: compilation failed with 1 error
 # L13/L18: a character literal stopped by its line's end is one not closed on its line, not one holding more than one
 # character - and it ends the line, so the next line is read on its own
+import "std/io"
 fn main() ? {
     a := 'q
     b := 2
-    println($b)
+    try io.Println($b)
 }

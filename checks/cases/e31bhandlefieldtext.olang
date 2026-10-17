@@ -1,0 +1,28 @@
+# check: run
+# flags: -debug -sanitize
+# E31b/O18c (F2): text pushed onto a List<String&> field of the element - it segfaulted
+import "std/io"
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+type B2 struct() {
+    names List<String&>
+    t I64 = 0
+}
+fn add(bs mut List<B2>&, x I64) {
+    bs[0].names.Push($x)
+}
+fn main() ? {
+    bs := List<B2>()
+    bs.Push(B2())
+    add(bs, 7)
+    try churn()
+    assert bs[0].names.Len() == 1 and bs[0].names[0] == "7", $bs[0].names
+}

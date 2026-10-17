@@ -1,5 +1,6 @@
 # E11c/D16c: a Str making a capturing lambda for Any - the receiver's scope is a real one, which the closure's escape
 # reads
+import "std/io"
 type Item struct(id I64) {
     id
     tags List<String&> = List<String&>()
@@ -12,5 +13,5 @@ fn main() ? {
     it := Item(7)
     it.tags.Push("a")
     it.tags.Push("7")
-    println($it)
+    try io.Println($it)
 }

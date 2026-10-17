@@ -104,3 +104,31 @@ supersedes the "one agent at a time, stay on the line" pacing above. Run as many
 independent work that does not cost effect per token: no duplicated work, no merge-conflict churn (split by file/area),
 no agents queued idle on the verify slots, and the same quality bar (reviews before merging relaxations). Running out
 of the week early is fine; arm a send_later for just after the reset when it happens.
+
+**Never lose work to a limit (the user, 2026-10-17: "Make sure you don't lose any work when the limits are hit").** The
+weekly limit hit on 2026-10-12 stopped every agent, and nothing woke the session until the user did on 10-17 - five
+days lost, though no files were. Standing measures:
+1. A recurring Routine `olang: resume after usage limits` (trig_017cXPwPDKrFi8trMLqFdUpt, every 2 hours) wakes this
+   session: snapshot, read usage, resume any agent a rate limit stopped (SendMessage keeps its context). A wake during
+   a limit fails and the next one, after the reset, gets through - so a stop costs at most 2 hours.
+2. `/home/user/wipsnap.sh`, run every 10 minutes by `/home/user/wiploop.sh` (a detached process - a limit stops the
+   session, not it; both outside the repo, restart the loop in a new container: `setsid nohup /home/user/wiploop.sh &`), saves every worktree's uncommitted
+   work into `refs/wip/<name>` in the shared repo, through a private index, never touching the agent's index, HEAD or
+   files. Run at every check-in. It guards against an agent's mistake or a killed process, not a lost container.
+3. Every agent brief says: commit each coherent piece on your branch as you go, never one big commit at the end.
+4. Against a lost container: the user, 2026-10-17: "You can push to GitHub. I want to make sure I don't lose any progress
+   by running in the cloud. Else is rather run locally". So wipsnap.sh pushes, every 10 minutes when changed, each
+   worktree of olang, oann and oagent as `backup/<name>` (its branch plus a snapshot commit of uncommitted work), and
+   the review notes (/home/user/review, text only, through /home/user/.review-git) as olang's `backup/review`. Recovery:
+   `git fetch origin backup/<name>`. Delete a backup branch once its work is merged and the worktree removed.
+
+**Push always (the user, 2026-10-17: "remember to push always. For example I can't see the test migration on GitHub
+yet").** Besides the backup/<name> snapshots, push every agent's branch under its own name (`wt-<name>`) whenever it
+has new commits (at least at each report and check-in), so the user can see the work on GitHub before it merges; and
+push master and the designated branch after every merge. Delete a `wt-*` branch on GitHub once it is merged.
+
+**Merge promptly; keep the branches (the user, 2026-10-17: "Remember to merge the branches too so we don't end up
+with way too many active branches", then "You don't need to delete the branch memory from the agents. It's fine that
+they are part of the ref tree. Restore locally so we don't end up with a bunch of merge problems").** Merge a finished,
+verified branch at once, so few branches are unmerged at a time. Keep the branch itself, locally and on GitHub (the
+git proxy refuses deletions anyway). Removing a finished agent's worktree (disk space) is fine; never delete branches.

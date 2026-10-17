@@ -4,7 +4,7 @@ This is the reference manual for olang: a precise, current-state description of 
 
 ## Structure
 
-The specification is organized into eleven numbered sections below, ordered so that each section
+The specification is organized into thirteen numbered sections below, ordered so that each section
 only depends on concepts already introduced by earlier ones:
 
 | § | Covers |
@@ -18,9 +18,25 @@ only depends on concepts already introduced by earlier ones:
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
 | 8 Ownership and Scopes | Scopes, scope tags, reference markers, results, the static scope checker, owned references |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
-| 10 Compilation Model | Compilation units, the `-c`/`-b`/`-t`/`-i` modes, `main`, the command line, test blocks, process exit, targets |
+| 10 Compilation Model | Compilation units, the `compile`/`build`/`test`/`interpret` modes, `main`, the command line, test blocks, process exit, targets |
 | 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
 | 12 Generics | Type and constant parameters on functions and struct types, inference, `match` over a type, monomorphization |
+| 13 Compile-time evaluation | What the compiler computes while compiling, what it refuses, constant contexts |
+
+Each rule is named by a letter for its area and a number, `T7`, sometimes with a lowercase letter for a later rule
+that refines it, `O25h`. Numbers are given in the order rules are written and are never reused, so a removed rule leaves
+a gap and a name always means the same rule. Diagnostics print the name (`error[O25]`) and `olang explain O25` prints
+the rule. The letters:
+
+| Letter | Area | Letter | Area |
+|---|---|---|---|
+| L | lexical structure (§1) | R | error handling (§7) |
+| T | types (§2) | O | ownership and scopes (§8) |
+| D | declarations (§3) | C | constructors and destructors (§9) |
+| M | modules (§4) | B | the build: compilation model and command line (§10) |
+| E | expressions (§5) | X | external functions (§11) |
+| S | statements (§6) | G | generics (§12) |
+| P | concurrency (§6.8) | K | compile-time evaluation (§13) |
 
 Cross-references between sections exist only where a rule genuinely cannot be stated without one,
 and always name the target section and rule, never an internal implementation detail (a function
@@ -376,7 +392,7 @@ per access: null is the all-zero representation and the lowest addresses are nev
 faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
 moves code on that assumption. A field further into a struct than the unmapped range reaches (64KB on Linux) is
 not covered, and reading it through null is undefined as an index out of range is (E16e); an element of a null
-array is out of range already, its length being 0. While compiling (K1) and under `-i` (§10 B3e), a read through
+array is out of range already, its length being 0. While compiling (K1) and under `interpret` (§10 B3e), a read through
 null is reported where it is written. This is the cost of `null`: §8 continues to guarantee that a reference
 never outlives what it points at, and no longer guarantees that it points at anything.
 
@@ -458,7 +474,7 @@ own type (E6d).
 type, L10a), `F64` for a float literal, `Char` for a character literal, and `Bool` for `true`/`false` - the widest
 signed integer and the widest float, so a value nothing types is never narrowed or wrapped by a type nobody chose. This
 is the type `:=` infers (§6.2 D15: `x := 0` is an `I64`) and the type such a literal carries into a context that
-requires no particular type of it - a range of literals (S9b), a type variable only literals reach (G9a), a `-D` build
+requires no particular type of it - a range of literals (S9b), a type variable only literals reach (G9a), a `-define` build
 constant (B10). A literal written against a typed target still adapts to it (T6): `b U8 = 3`, an `I32` argument `5`,
 `i32 + 1` and `case 5` against an `I32` are as before. Where an `I64` made so meets a narrower integer it does not flow
 into (T6b) - `x := 0` handed to an `I32` parameter - the type it should have is declared (`x I32 = 0`), or the value
@@ -592,7 +608,8 @@ member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenc
 **T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-reference)
 member or payload types - an `Array<T, N>` (T7c) included, since it holds its elements in the value - if that
 chain passes through a reference marker (§2.9) at least once; an unmarked, unbroken self-embedding cycle is a
-compile-time error, reported at the member that closes it.
+compile-time error, reported at the member that closes it. A generic type is judged per instantiation: `x N<T>` in
+`type N<T>` makes every `N<...>` hold itself, reported once each instantiation is made.
 
 ### 2.5 Enum types
 
@@ -979,8 +996,9 @@ of one, an `Array<own T&, N>` held by value, transitively - is an **owning type*
 
 `own` may be written on a field's type, an element or type argument (`List<own Msg&>`, `Map<I64, own Conn&>`), a
 local, a parameter, a result and a global. *(§8.8, not yet implemented: only a reference to a struct type, or to an
-array of a run-time length whose elements are numbers, values holding no reference, references or function values
-(`own mut Array<I64>&`, `own Array<Node&>&`, `own mut String&`), as a field's, a local's or a global's type, or a
+array of a run-time length whose elements own nothing - numbers, values (holding references or not), references or
+function values (`own mut Array<I64>&`, `own Array<Tok>&`, `own Array<Node&>&`, `own mut String&`), as a field's, a
+local's or a global's type, or a
 declared function's parameter or single result - not a constructor's, a trait method's or an enum payload's - and
 anything else is a compile-time error saying it is not supported yet, re-checked for each instantiation (G18).)* It is a
 compile-time error before anything that is not a reference (`own
@@ -1069,7 +1087,8 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
   merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
-  variable, a field, an element or a slice, `Name(v)` is that storage read as `Name` - it may be written exactly
+  variable, a field, an element, a slice or a reference a call gives (`String(v.View())`, of any length kind), `Name(v)`
+  is that storage read as `Name` - it may be written exactly
   where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
   lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
   assignment may name. An `Array<T, N>` (T7c) is lent as a slice of it. A conversion to a declared type over an
@@ -1077,7 +1096,8 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
   exactly as `v as Array<T, N>&` views it (E32b): the length checked once, where the conversion is evaluated - a
   mismatch aborts as an out-of-range slice does, and under `try` fails with `BuiltinError.OUT_OF_BOUNDS` - and the
   result is a reference to that storage under the declared type's name, of any `v`, a temporary included. Only a
-  temporary `v` of another shape makes the conversion a value of its own.
+  temporary `v` of another shape makes the conversion a value of its own - a conditional or a `match` of references
+  among them (E28, S12b), whose values keep their own types.
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
   usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
   always safe — and it is the same latitude `I32(m)` already gives a named numeric, without needing a
@@ -1260,7 +1280,7 @@ function's own parameters) — that is a compile-time error, not shadowing.
 
 **D3a.** There is **no shadowing** at all: a local declaration or a parameter may not reuse a name its
 module declares in its `vars` set (a global, a function or an external function), the name of a build
-constant (B10), the name of one of the prelude's functions for writing text (§4 M19f), or the name of a type it sees -
+constant (B10), or the name of a type it sees -
 one its module declares, one of the prelude's (§4 M19d), or a built-in one (a primitive, `Bool`, `Array`); each is a
 compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
@@ -1667,7 +1687,7 @@ and committing the file makes every checkout build the same code. A commit names
 no separate checksum. A locked commit that cannot be fetched is a compile-time error naming the lock, and so is a line
 whose commit is not a commit name (40 hexadecimal digits, or 64 in a repository using SHA-256).
 
-**M23c (updating).** `-u` is a **modifier**, valid in any position alongside any mode (B2b). Every remote
+**M23c (updating).** `-update` is an **option** of every mode that loads a program (§10 B1). Every remote
 repository the compilation reaches is resolved as though the lock file had no line for it - fetched at its ref's
 current commit (M23b) - and its line is rewritten; one whose ref has not moved keeps the line it had. A repository is
 updated at most once per compilation, however many of its modules are imported. Lines for repositories the
@@ -1799,14 +1819,12 @@ empty are kept and filled again by the `Push`es that follow. `TakeAt(i)` removes
 `RemoveAt(i)` removes it and gives nothing, and `Insert(i, x)` puts `x` at `i` (`Insert(Len(), x)` is `Push(x)`); each
 moves the elements after `i` one place, so costs their number, and takes `i` from `0` to `Len() - 1` (`TakeAt`,
 `RemoveAt`) or `Len()` (`Insert`) - another is a mistake in the program, checked once per call, and stops it as an
-`assert` does. (`TakeAt`, and `RemoveAt` giving nothing: §8.8, not yet implemented - until then `RemoveAt` gives the
-element.) `Reverse()` reverses the elements in place, and `Sort(less)` sorts them as an array's `Sort` does, stably,
+`assert` does. `Reverse()` reverses the elements in place, and `Sort(less)` sorts them as an array's `Sort` does, stably,
 through one contiguous copy. `IndexOf(x)` gives the position of the first element equal to `x` by `==` (E10a), failing
 with the default error (R15) when there is none; `Remove(x)` removes that element as `RemoveAt` would and says whether
 there was one; `SwapTake(i)` removes the element at `i` and gives it, the last element taking its place - one element
 moved whatever the length, the order not kept - and takes `i` as `TakeAt` does, and `SwapRemove(i)` does the same
-giving nothing. (`SwapTake`, and `SwapRemove` giving nothing: §8.8, not yet implemented - until then `SwapRemove`
-gives the element.) A `List` of texts has `Join(sep)`, as an array of texts does. `$` renders a `List` (E11c) as an
+giving nothing. A `List` of texts has `Join(sep)`, as an array of texts does. `$` renders a `List` (E11c) as an
 array of its elements renders, with the `List`
 named in front: `List<I64>[1, 2, 3]`, `List<String&>["a"]`, `List<I64>[]` - each element as it renders inside any other
 value. Changing a `List` other than by `Push` while a walk of it is under way
@@ -1860,7 +1878,7 @@ empty, with room for `cap` elements before its buffer moves; `Push(x)` adds at t
 first moves every element into one twice as large (8 at first), releasing the old buffer at once (O35);
 `Reserve(n)` makes room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the
 same names and on the same terms - `v[i]` and `v[i] = x` (E31, unchecked, `try` checking), `First`, `Last`, `Pop`,
-`Insert`, `RemoveAt`, `SwapRemove`, `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`,
+`Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`,
 `Join` (of a `Vec` of texts), `ToArray`, `Iter` (a `VecIter<T>`), `RunFrom` (one run, the rest of the elements, so
 `for x in v` walks a `Vec` as it walks an array, S9f) and `Clone` (an owned result, O37) - and `View()`, a borrow of its
 elements as one array (`Array<T>&v`; `ViewMut()` writably), a borrowed own result (O37). Whatever borrows the buffer - a
@@ -1873,10 +1891,11 @@ copy of one out of a place is a borrowed copy, through which nothing is pushed, 
 `v.Clone()` copies its elements into a new one, and a `mut Vec<T>&` parameter takes it by reference. `==` compares its
 elements (E10), it hashes as they do (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2,
 3]`. A `Vec` is the growable array; a `List` is for what its chunks give - a `Push` never moves what is stored, so
-appending never stops to copy, and a walk may push to it. *(Not yet implemented: `TakeAt` and `SwapTake`, and
-`RemoveAt` and `SwapRemove` giving nothing, as for a `List`; a `Vec` whose elements are values holding references
-(T25e); a `Vec` held anywhere but by a local or as a result - a field, a global, a type argument (`List<Vec<T>>`,
-`Vec<Vec<T>>`), an own array's element (O31); a task that may push to one (O41).)*
+appending never stops to copy, and a walk may push to it. A `Vec` is held by value by a local, a field (`toks Vec<Tok>`,
+its buffer the instance's - released with it, taken as `take l.toks`), a global or a result; its elements may be any
+values that own nothing - `Vec<Tok>`, `Tok` holding its text, keeps what each element refers to where the `Vec` is
+(O33). *(Not yet implemented: a `Vec` as a type argument (`List<Vec<T>>`, `Vec<Vec<T>>`, `Map<K, Vec<V>>`), an own
+array's element or an enum's payload (O31); a task that may push to one (O41); a lambda capturing one (O32).)*
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
@@ -1949,26 +1968,20 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 `x`'s sign bit is set, so `(-0.04).Fixed(1)` is `-0.0`. A NaN is `nan`, an infinity `inf` or `-inf`, as `$` writes them
 (E11a). It is ordinary computation in the prelude, so it is evaluated while compiling (K1) as at run time.
 
-**M19f (writing text).** The prelude declares four functions for writing text, which every module reaches by its
-bare name, with no import, as it reaches a build constant (B10):
+**M19f (writing text).** Writing text is `std/io`'s, with no words of the prelude's or of the compiler's own:
 
 ```
-fn print(t String&)          # t, to the standard output
-fn println(t String& = "")   # t and a line end, to the standard output
-fn eprint(t String&)         # t, to the standard error
-fn eprintln(t String& = "")  # t and a line end, to the standard error
+fn Print(t String&) ? IoError            # t, to the standard output
+fn Println(t String& = "") ? IoError     # t and a line end, to the standard output
+fn PrintErr(t String&) ? IoError         # t, to the standard error
+fn PrintErrln(t String& = "") ? IoError  # t and a line end, to the standard error
 ```
 
-Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `println("n is " $n)`.
-`println` and `eprintln` write the text and its line end as one write. Each call writes at once, with nothing held
-back - a buffered writer for much output is a library's (`std/io`'s `Writer`). None of them can fail: a write the system does
-not complete ends the program as a failed check does (S18) - aborting, or failing the test that is running - with a
-line on the standard error naming the function and the stream (`print could not write to the standard output`). So a
-program writing its output needs no `try` and no error set for it; `io.Print` and `io.PrintErr` are the forms that hand
-the failure back. A write is an effect, so a call of one is never evaluated while compiling (K1) and is performed under
-`-i` (B3e). They are lowercase, as the language's keywords are, and are the one exception to M6: the prelude's other
-lowercase names are its own. No module may declare a function or global of one of these names, and no local or
-parameter may take one (D3a).
+Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.Println("n is " $n)`.
+`Println` and `PrintErrln` write the text and its line end as one write. Each call writes at once, with nothing held
+back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
+`IoError`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
+of one is never evaluated while compiling (K1) and is performed under `interpret` (B3e).
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -2319,7 +2332,7 @@ The comparison takes no shortcut through identity, and it walks only what these 
 values of its own type - a struct holding an array of references to its own type, `type S struct(xs Array<S>&)` - is
 compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element naming the
 array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a comparison
-evaluated while compiling (K1), or under `-i`, stops with a message instead, each level it descends counting as a call
+evaluated while compiling (K1), or under `interpret`, stops with a message instead, each level it descends counting as a call
 does against the evaluator's depth limit. A struct or enum reference (identity, above) ends any such walk.
 
 **E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
@@ -2865,7 +2878,12 @@ referent type (a temporary, E12c: a call's value, a constructor call, an enum ca
 storage) meet at the reference type, the new value built where the conditional lands (E12c, §8 O18a):
 `n if c else Node(1)`. Nothing else is converted. Wherever the conditional lands, each value must fit there on its
 own, under every rule a value landing there meets (E12, §8). It is text written in place (T29c) when both values are.
-`:=` declares its type (D15). A conditional of references lives where the values it can give share a scope (§8 O25a) -
+`:=` declares its type (D15). A conditional of values is a value - a copy of the one it chooses - so given for a
+writable reference parameter or receiver while any value it can give is a place (a variable, a field or an element
+reached through no reference, `x[i]` or a field of it, E31b), `bump(l[0] if k > 0 else l[1])`, it is a compile-time
+error: the call would write the copy and the place would never see it. A field or an inline element of such a
+conditional is the same, and so is a `match` giving values (S12b). Make the call on the place itself (`if k > 0 {
+bump(l[0]) } else { bump(l[1]) }`), or hold the values by reference. A conditional of references lives where the values it can give share a scope (§8 O25a) -
 `null` fits any, and a new value is built there (text written in place being constant data or a copy made there) - so
 `x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. Values
 that already live in different scopes share none: where such a conditional lives is **not known here** (§8 O12) - it is
@@ -2950,18 +2968,50 @@ shrinks the collection leaves the held index out of range when the access runs -
 (E16e), unchecked unless the store is written under `try`.
 
 **A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
-an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])`, where the element is
-not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
+an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - or `try x[i]`, the
+checked read, `g(try x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
 so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
 `x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
-read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call.
+read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call. A call
+through a function value - a local's, a parameter's, a field's (`h.fv(x[i])`), an element's (`fs[0](x[i])`), a call's
+result (`mk()(x[i])`), a lambda called where it is written - has a body no check can read, so it takes no copy of an
+element for a writable reference parameter at all, a view's or a handle's included: each is the error. So is `try a[i]
+catch default v` (or a field of it) for a writable reference parameter on any collection, a built-in array's included:
+it is the element or `v`, a value either way, which the write would be lost in (R9a); `try a[i]` alone on a built-in
+array is the element itself. A conditional or a match choosing an element, or any other place, is a value too, and the same error (E28).
+
+**A view element** - a struct element, no handle, lent to a callee that writes **nothing of the instance's own
+storage** - is lent the same way, as a copy held in a hidden local with nothing written back: `ws.Gemm(c[g, h], ...)`
+over a batch of matrices, `b[i].Fill(0)`. Nothing the callee does through the copy is lost by not writing it back,
+since it writes none of the copy's own storage. The copy is not the element, though: it names what the element referred
+to when it was read. A callee that replaces the element while the call runs - through the collection reached another
+way (a second argument, a global, a capture), or a later argument of the same call doing so before the callee runs
+(`l[0].Put(replace(l))`) - leaves the copy naming the old element's storage, and the callee's writes through the copy
+reach what the old element referred to, not the new element (from a built-in array, where `x[i]` is the element
+itself, they reach the new one). That is memory-safe - the old storage lives where the collection's elements live -
+and is what a handle's copy does too (below). Whether a callee qualifies is read off its checked body: the parameter is
+used only through its references (a reference field read out, and anything done through it - an element of `c.Data`
+written, a field of what a reference names assigned), its numeric and `Bool` fields and function values read, and the
+parameter, or a struct it holds by value (`c.w`), handed on to a read-only reference parameter, to a by-value one (a
+copy), or to a writable one of a callee that itself qualifies (a fixed point over the program's calls, cycles
+included); a handle it holds by value may be handed to a writable parameter using it only through its reference
+(O17b). Any other use says no: a field of the instance's own storage assigned or incremented at any value depth, a
+reference field repointed, the parameter repointed, a value field lent to a writable parameter of a callee that does
+not qualify, sliced or walked, a value field that is neither a number, a `Bool`, a function value nor a reference read
+at all (an enum matched or compared, an inline array's element, a struct rendered), the parameter read into a local,
+captured, compared or handed to a function value, an extern or a lambda; a callee whose body is not checked says no
+too. A callee whose body has errors is no view either, and its own error is what is said. What such a callee builds
+into what the copy holds is judged as for any copy (O17, below). `try x[i]` is never lent this way, with or without a
+default: its copy is not held apart from its `try`.
 
 **A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
 by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked
 body) a call on `x[i]`, on a field of it, an element of one read out of another, or on any call's value result giving
 one - `users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden
 local, lent as its reference: what the callee builds is built where the handle's state lives, and nothing is written
-back. A store into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner
+back. The hidden copy is held as `h := x[i].f` would be, its references where the call it is read out of lands (O18c), so
+a handle field of an element (`bs[i].S.Push(v)`, `f.Blocks[b].inner.S.Push(v)`) is pushed where the collection's
+elements are. A store into an element of a handle element (`names[i][j] = v`, `names[i][j] op= v`) is likewise the inner
 collection's `SetAt` on such a copy. A callee that uses the handle otherwise - assigning its own field (`b.s =
 State()`), keeping it - would write the copy, and is E31b's error as for any element. Spawned, such a copy would be
 held in the spawner's block, which closes (or is made again by the next turn of a loop) before the join, and is a
@@ -3581,7 +3631,7 @@ error, or while a test is running to standard output, before the test's `FAIL` l
 `FILE:LINE: aborted` (S16c), `FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
 value is not`, `FILE:LINE: array length does not match its fixed storage`. An assert's message (S17) follows, after
-`: `. A program run with `-i` (B3e) prints the same.
+`: `. A program run with `interpret` (B3e) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
 values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, which
@@ -3646,7 +3696,7 @@ process immediately, so there is no frame left for a task to outlive. A `test` l
 
 **P1c.** `spawn` guarantees the call runs. A thread the operating system declines to create is therefore
 a broken guarantee, not a condition to report: it aborts with `could not start task`, exactly as a failed
-`assert` or an out-of-range slice bound does (§6.7 S18a), and is recoverable under `-t` on the same terms.
+`assert` or an out-of-range slice bound does (§6.7 S18a), and is recoverable under `test` on the same terms.
 Running the call inline instead would look like graceful degradation and is not — two tasks that
 communicate through a channel deadlock the moment one runs to completion before the other has started.
 The cost is one comparison per `spawn`, against the cost of creating the thread.
@@ -3659,7 +3709,7 @@ requires of every other exit. This reaches through function frames, not only the
 Without it a task outlives the test that started it and runs on into the next one, which is the only way
 the guarantee in P1/P1b can be broken. It is why S18b is no longer a gap.
 
-The chain of open scopes this needs is maintained only in builds that can use it: outside `-t` a failed
+The chain of open scopes this needs is maintained only in builds that can use it: outside `test` a failed
 check aborts the process (S18a), so nothing is ever unwound and nothing is tracked. A module compiled for
 a test build is therefore a distinct artifact from its ordinary object (§10 B4), named accordingly.
 
@@ -3776,7 +3826,7 @@ cleanup, and what waiting workers retain is bounded by their number times that s
 of tasks or the size of what they did.
 
 **P6.** A failing `assert` (§6.7 S18) on a task's thread always aborts the process; it is never the
-recoverable, per-test failure S18 describes, even under `-t`. A test's recovery point belongs to the
+recoverable, per-test failure S18 describes, even under `test`. A test's recovery point belongs to the
 spawner's stack, which the spawner is still parked on at the join, so there is nothing on a task's thread
 to recover to. An error a task lets through is different: it is a value the task hands to its join (P4b), not a jump.
 
@@ -3810,7 +3860,7 @@ promised a guarantee it did not provide — and since P3a is now explicit that P
 begin with, an exemption from it had nothing left to mean. A type that really does synchronise itself still
 works exactly as before; what is gone is the marker that told the compiler to stop asking.
 
-**P7.** Data races are detected at **run time**, not compile time. Building with `-r` (valid alongside
+**P7.** Data races are detected at **run time**, not compile time. Building with `-race` (valid alongside
 any mode) instruments every emitted function and links LLVM's ThreadSanitizer; a detected race is reported
 against the olang function it occurred in, and the process exits nonzero. This is a build mode, not a
 language feature: it changes no rule in this section, and an uninstrumented build behaves exactly as
@@ -3832,7 +3882,7 @@ between threads without a lock, say — must annotate itself, or correct code wi
 share (§8 O8b) is guarded by a `pthread` mutex, which is intercepted like any other, so storage one thread reclaimed
 and another reuses is ordered for the detector exactly as it is for the program.
 
-`-r` is a whole-build mode rather than a per-file one: every object of a program and the runtime's (§8.7, B3)
+`-race` is a whole-build mode rather than a per-file one: every object of a program and the runtime's (§8.7, B3)
 are instrumented together, since an uninstrumented one would hide what it does from the detector, and a module's
 object inlines parts of the runtime. An instrumented object is therefore a distinct artifact from a clean one
 (§10 B4) and is named accordingly.
@@ -3841,7 +3891,7 @@ Two limits are the detector's own. The handler `os.OnCrash` installs is never in
 ThreadSanitizer's own state is inconsistent - a fault inside its bookkeeping - so a crash still ends the process with
 its signal. And ThreadSanitizer records each thread's calls on a stack of fixed size that it does not check, so a call
 chain deeper than roughly 200,000 frames (possible on `os.RunOnStack`'s stacks) corrupts its state: such a run may
-crash, abort, or hang inside the detector, and only a build without `-r` runs it as written.
+crash, abort, or hang inside the detector, and only a build without `-race` runs it as written.
 
 **P4.** A spawned call **may fail**. A task whose call can fail - a function declaring errors (§7 R1), or a spawned
 lambda (D16e) whose body lets one out - is written `spawn try CALL`, optionally with catch clauses (§7.5) after it:
@@ -3948,7 +3998,7 @@ value discarded.
 ordered with respect to each other, so a program built from them alone contains no data race under P8b. A
 plain access and an atomic access to the same location are **not** ordered, and are a race exactly as two
 plain accesses would be — this language has no type that marks a location as atomically-accessed, so
-keeping every access to such a location atomic is the program's own responsibility, and `-r` (P7) is
+keeping every access to such a location atomic is the program's own responsibility, and `-race` (P7) is
 what checks it.
 
 ### 6.8.1 Memory model
@@ -3979,7 +4029,7 @@ define what such a program does, and no guarantee stated anywhere else applies t
 
 There is no exception for any type or size. Only P9's atomic methods are atomic, so **no** other access is —
 not to a `U8`, not to an `I32`, not to a pointer — and a concurrent read of something being written may observe
-a value that was never stored. `-r` (P7) detects races that actually occur on a given run, which is a
+a value that was never stored. `-race` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
 
 **P8c.** A program adds ordering of its own by calling a synchronisation primitive through `extern fn`
@@ -4109,6 +4159,11 @@ block provably leaves may not (the default could never be the value). A `default
 is written in; one written directly after the tried operand, outside any clause, is a compile-time error —
 `try f() catch default d` is how a value for every error is written. What a default covers is therefore
 always what the clause to its left names.
+
+A `try-expr` carrying clauses is a **value** - the element, say, or what a clause gives - and so is a field or an
+inline element of one reached through no reference, `(try a[i] catch default v).f`: never a place. Assigned into,
+incremented, or given for a writable reference parameter or receiver (E31b), it is a compile-time error - what was
+written would be kept by neither; `try x[i].f = v` (R21) is a checked store.
 
 - Each default is a `unary` (E1), binding as tightly as the `try` itself: `try f() catch default 0 == 3`
   compares the result with `3`. A compound default is parenthesized.
@@ -4750,7 +4805,8 @@ result) keeps that storage's scope (O25a).
 For either kind, a local is returned also when, in the rest of its block, a value mentioning it **flows** into what is
 returned: it is assigned to a local (or a field or an element of one) that is returned or already in the result scope,
 or is a local declared from it that is, or is handed to a method called on such a local (`l.Push(x)` with `l`
-returned). A plain copy of a value local into a value (`f := e`, `b = a`) is no flow of it: the copy keeps its
+returned). `take` of it, or of a field of it, gives it whole, so a local taken from flows where the taker goes
+(`w := take l.toks; return w`, `l.toks = take v; return l`). A plain copy of a value local into a value (`f := e`, `b = a`) is no flow of it: the copy keeps its
 references where its source's are (O25h), and the source stays where it is; a reference declared from it borrows it,
 which is. The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that
 such a local lives in the caller's scope rather than in its block; a value passed to a plain function together with a
@@ -4995,7 +5051,11 @@ out of it (`e.Key`, `e.inner.next`) has that scope, while the local's own storag
 stays its block. A call's result passed on as an argument for a parameter with a scope variable, or walked by a
 `for ... in`, lands the same way before anything else is bound - `adj[a].Push(v)` and `for x in adj[a]` are
 `inner := adj[a]` followed by the call or the loop - and so does a call whose result a field, an element or a slice is
-read out of: `for x in l[0].tags` lands `l[0]` as `t := l[0]` would. A **value** result so landed holds what its
+read out of: `for x in l[0].tags` lands `l[0]` as `t := l[0]` would. Such a result that is a **handle** (O17b), given
+for a reference parameter its callee uses only through the handle's reference, is lent as that reference, as a handle
+local is: the scope variable is bound where its result landed, and the handle's own copy is a temporary of the block -
+so in `h := ll[0][0].S`, `e := ll[0][0]` and `h := lll[0][0]` the outer `At`'s receiver `ll[0]` is where `ll`'s elements
+are, and so is what is read through it. A **value** result so landed holds what its
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
 with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(rec.Clone())` for a loop's list `rec`
@@ -5047,8 +5107,8 @@ the scope it was built in (where its constructor's instance landed, C2d) and des
 > **Partly implemented.** The compiler accepts `own` on a reference to a struct type, or to an array of a run-time length
 > (T25e), as the type of a field, a local, a global, or a declared function's parameter or result, and `take` of such a
 > slot: O30-O42 hold for these as each says. Not yet: `own` anywhere else (T25e: a compile-time error saying so), and
-> with it M19d's own elements, `TakeAt`, `SwapTake`, `Take` and `Vec`; an owning type held by value anywhere but a
-> body's local or a function's result, and so parameters owning by another owning type (O31, O36); an owner local moved by its
+> with it M19d's own elements (`List<own Msg&>`, `Map.Take`); an owning type held by value anywhere but a body's local,
+> a field, a global or a function's result, and so parameters owning by another owning type (O31, O36); an owner local moved by its
 > last use without `take` other than by `return`, and an owner given by a conditional, a match, an array literal, a
 > `spawn`'s target or a `catch default` other than `null` (O34); releases through a function value, a destructor or a
 > task, and a task's call owning a parameter or giving an owned result (O40, O41); and the rules elsewhere marked
@@ -5081,12 +5141,15 @@ are owners. An owner is made only by:
 - `take p` (E34), which moves the owner out of the slot `p`;
 - an owner local or an owning parameter read for the last time in a move position (O34).
 
-*(Not yet implemented: an owning type other than an own reference is a struct holding one, held by value only by a
-local of a function, test or lambda body - an **owner value local** - and by a function's result; held by value anywhere
-else - a field, an element, a parameter, a global, a type argument - it is a compile-time error naming its reference,
-`Server&`, or an own one. Only an own reference is an owning parameter or a global; an element or an `Array<T, N>` of an
-owning type is a compile-time error (T25e). A type variable a value of an owning type reaches binds the reference to it,
-as G9d binds one to a destructor-bearing value.)*
+*(Not yet implemented: an owning type other than an own reference is a struct holding one - or holding such a struct
+by value, to any depth of fields - held by value only by a local of a function, test or lambda body - an **owner value
+local** - by a field of a struct, by a global and by a function's result; held by value anywhere else - an element, a
+parameter, a type argument, an enum payload - it is a compile-time error naming its reference, `Server&`, or an own
+one. Only an own reference is an owning parameter; an element or an `Array<T, N>` of an owning type is a compile-time
+error (T25e). A global holding an owning type by value is written with its type (`G mut Vec<I64> = Vec<I64>()`): `:=`
+declares a reference, as for any global (D15). A type variable a value of an owning type reaches binds the reference to
+it, as G9d binds one to a destructor-bearing value. A type nesting more than 64 levels of values and arrays is a
+compile-time error of its own - too deep to check whether it holds an owning type by value - never taken to hold one.)*
 
 **O32 (reading a slot: borrows and borrowed copies).** A slot read anywhere but in a move position (O34) keeps its
 owner:
@@ -5095,11 +5158,14 @@ owner:
   read is a `mut Conn&` - living in the object's region (O33);
 - a value of another owning type so read is a **borrowed copy**: the same type, owning nothing. Each own reference in
   it is read from it as from a slot, giving a borrow; none may be moved out of it (E34), assigned, or given where an
-  owner goes (O34); nothing in it is released when it ends. It is read-only as a read-only copy is (T25c): it is not
+  owner goes (O34); nothing in it is released when it ends. A part of it holding an owning type by value (`c.a`, `c.toks`)
+  is not assigned either: it owns nothing, so nothing would release what it was given. It is read-only as a read-only copy is (T25c): it is not
   lent where it may be written, and nothing is written through its references. Its other parts are its own, as any
   copy's are. *(Not yet implemented: a borrowed copy is declared only by `x := y` from a local `y` holding a value of
-  an owning type - an owner value local, or a borrowed copy, whose source the new one borrows from too - and is not
-  assigned another value.)*
+  an owning type - an owner value local, or a borrowed copy, whose source the new one borrows from too - or from a
+  field holding one, of such a local or of an instance reached through a reference (`c := l.toks`), and is not
+  assigned another value. One is not declared from a global or a field of one - any call may release what a global owns - and `x := G` is a
+  compile-time error saying to `take` it or read through it (`G.View()`, `G[i]`).)*
 
 An own array's object is its buffer, and its elements are not owned objects: an element read through a borrow of the
 array - indexed, walked by `for ... in` - is what a plain array in that slot would give, its references living where
@@ -5135,8 +5201,11 @@ An own array's region holds its buffer alone. What its elements refer to lives i
 where a plain array in that slot keeps its elements' referents: a temporary stored in an element is built there, not
 in the region, an element read out of it lives there - through a slice of the borrow too (`b.names[0:2][0] = t`) - and
 releasing the array releases its buffer and nothing its elements refer to. Lent to a call that can store into it, the
-borrow is a split value (O17a). *(Not yet implemented: an element that is a value holding a reference - a struct, an enum or an
-`Array<T, N>` by value - is a compile-time error (T25e).)*
+borrow is a split value (O17a). An element that is a value holding references - a struct, an enum or an `Array<T, N>`
+by value - is stored in the buffer, its own storage the region, while what it holds lives in the slot's reach as a
+reference element's referent does, at every depth of a read through it: it is a split value (O17a) too, held by
+reference only where it is (borrowed in place, O38), and a value read out of it is a copy holding what lives in the
+reach.
 
 A temporary is built in an object's region (O6) only through a borrow of the object itself - read from its slot, or a
 borrowed result that is the object (O37) - or through a reference this function read out of such a borrow, or where a
@@ -5154,7 +5223,17 @@ object refers to outside its region is known to outlive. A slot's reach is the s
 or an element's its container's, a global's the program's (O1b), an owner local's the shortest reach among the owners
 given to it, an owning parameter's its scope variable (O4b), bound at each call to its argument's reach - and, where
 that scope is a region, that region's reach: so the objects an owned object owns reach as far as it does, and may be
-moved out of it. An owner's reach is, for a value made where it is used, the shortest scope among those the references
+moved out of it. A field holding an owning type by value (a `Vec`) inside an object in a region is the exception: what
+its own objects refer to is built in that region (O33), so its reach is the region itself, which outlives nothing - it
+is moved only into another such field of the same object, read by the same path in the same statement
+(`p.lx.more = take p.lx.toks`) - a variable that is no global, then fields only, each own slot read there and not
+through a local holding a borrow - unless nothing it holds can refer outside what it owns; the object moved whole
+(`take p.lx`) carries the region with it. Two reads made in different statements are two objects whatever their
+spelling, since a reference local, a reference parameter or a global may be repointed between them (a cursor walking a
+chain); a global may be repointed by a call within one statement. Where the instance holding the field was reached
+through a call's reference result - directly, or through a variable some such call's result reaches - and the callee
+gives a borrowed own result (O37), the region is not known where the move is checked, and the move is refused as one
+whose reach is not known; through the own field itself (`take p.lx.toks`) it is known. An owner's reach is, for a value made where it is used, the shortest scope among those the references
 it holds outside its region live in - what C2d, E12c and T17c bind for any instance, the program's scope when it holds
 none; for a call's owned result, the call's result scope, which lands where the result is put (O18a); for `take p`,
 the reach of `p`; for an owner local or an owning parameter read for the last time, its slot's.
@@ -5278,7 +5357,11 @@ generic's read-only reference parameter, as read-only as the argument.
 A **borrowed own result** is a reference result borrowed from a reference parameter `p` (`T&p`) that returns a borrow of
 an owned object reached from `p` by own fields only, or a slice of one, or one converted to a type of the same representation (T29a,
 `String(v.View())`) - `fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }`, `fn (v Outer&) First() Inner&v {
-return v.o }`, or another function's borrowed own result given `p` or a borrow so reached.
+return v.o }`, or another function's borrowed own result given `p` or a borrow so reached - or a borrow reached by own
+fields from such a result (`fn (v Outer&) Deep() Leaf&v { return v.First().deep }`), which borrows that object's type,
+below whatever the result it was reached from is below. One reached through a reference that is no own field (`return
+v.Plain().deep`, `Plain` returning a plain reference field) is not one: what holds it is not below `p`, and it is O10's
+error.
 The result is where `p`'s referent lives, but it is good only while the object is not released: each call makes a loan
 (O38) on the objects below each argument given for a parameter it may be borrowed from (`p`, and any other parameter
 whose referent lives where `p`'s does) of the type of the owned object the result borrows - the buffer's `Array<Char>`
@@ -5293,8 +5376,8 @@ would never meet the release of what it borrows. Only a call by name makes that 
 function giving a borrowed own result is called by name only: made a value (D16, E31) - a named function, by its own
 name or through an import alias (`f := lib.View`), a lambda, a type whose `Call` gives one adapted to a function type -
 it is a compile-time error. So `d := v.View()` followed by
-`v.Push(x)` is a compile-time error while `d` is used after it. *(Not yet implemented: a borrow reached through
-another call's borrowed own result and then an own field - `return v.First().deep` - is not one, and is O10's error.)*
+`v.Push(x)` is a compile-time error while `d` is used after it. A release of an object meets a loan on any object it
+holds by own fields (O39), so `d := v.Deep()` meets a release of `v.o` as well as of `v.o.deep`.
 *(Not yet implemented: only a result written `own`, or of an owning type held by value, is owned - one of several
 results never is (T25e), and a borrowed result of an owning type held by value is a compile-time error - and a call's
 owned result is an owner only in a move position (`x := f()`, an own slot, an owner value local, an owning parameter, a
@@ -5325,8 +5408,10 @@ else is a compile-time error saying to keep a `Clone()` of it instead:
 
 - an argument a call may keep beyond the call - in another argument, its receiver or a collection (`l.Push(b)`,
   `m.Put(k, b)`, `put(g, b)`, `g.set(b)`), what the callee's body requires of their scopes saying so (O10b), a field of
-  the argument read at its derived scope (O23a) counting as the argument - or one given to a call whose body is not
-  known (a generic one, an `extern`), a task's call that may keep it among them;
+  the argument read at its derived scope (O23a) counting as the argument, and the parameter it would be kept in able to
+  hold, at any depth and through references own ones included, a reference to an object the loan is on or to the
+  argument's own storage (`v.Push(Link(...))` keeps nothing of a borrow of `v` where `Link` can refer to neither) - or
+  one given to a call whose body is not known (a generic one, an `extern`), a task's call that may keep it among them;
 - a store through a reference, into a handle, or into a global or a capture;
 - a spawn target given a call's result derived from it, or the task's call's own borrowed own result (P1g, O37);
 - an owner made from it or holding it - an object built into an own slot, an owned result (O37), an owner given to an
@@ -5665,21 +5750,44 @@ too: a copy of one out of a place is a borrowed copy, which §8.8 tracks (O32), 
 ### 10.1 Compilation modes
 
 **B1.** Each module — one `.olang` file (§4 M1) — is a **separate compilation unit**, compiled to its own
-object file and linked with the others. The compiler operates in exactly one of four modes, selected
-by a command-line flag; there is no other entry point. **Every flag is one character**: the modes `-c` (B2), `-b`
-(B3), `-t` (B3a) and `-i` (B3e), and the modifiers `-r` (B2b), `-d` (B2c), `-s` (B2f), `-u` (§4 M23c), `-a` (B12) and `-D` (B10). Any other argument
-beginning with `-` is an error — except one after the file `-i` interprets, which is that program's own (B3f). Apart from
-the modes, `-e RULE` prints a rule of this specification (B11a).
+object file and linked with the others. The command line names one **mode**, the word after `olang`, and there is no
+other entry point; or it names a file, which is built and run (B3g):
 
-**B2.** `-c <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
+```
+command   ::= "olang" [ mode-word ] { option } { argument }
+mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
+option    ::= "-output" PATH | "-debug" | "-race" | "-sanitize" | "-target" NAME | "-define" NAME "=" VALUE
+            | "-update" | "-check"
+```
+
+A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
+an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
+`explain` (B11a) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+**option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
+the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
+beginning with `-` that is no option is an error:
+
+| option | applies to | rule |
+|---|---|---|
+| `-output PATH` | build, compile | B3h |
+| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
+| `-target NAME` | running a file, build, compile, test, interpret | B12 |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret | B10, §4 M23c |
+| `-check` | format | B13 |
+
+`build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
+every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
+spellings: a flag of one character is an unknown option.
+
+**B2.** `compile <file>`: compiles the single module `<file>` to one object file, and stops — nothing is
 linked and no other module's code is generated. Every module `<file>` imports, transitively, is still
 read and analyzed, because that is where their declarations come from (B2a); only code generation is
 confined to `<file>` itself. `main` is neither required nor emitted.
 
-**B2b.** `-r` is a **modifier**, valid in any position alongside any of the modes above, and it applies
+**B2b.** `-race` is an **option** of the modes that build (B1), and it applies
 to the whole build: every emitted function is instrumented and ThreadSanitizer is linked in (§6.8 P7).
 Because the instrumented form of a module is a different artifact from its clean one, it is named
-separately (B4) — so a `-r` build never silently reuses a clean object, and the two can be current at
+separately (B4) — so a `-race` build never silently reuses a clean object, and the two can be current at
 the same time.
 
 **O2c.** Storage for a local or a temporary is reserved once per **call**, never once per execution of the
@@ -5687,23 +5795,23 @@ statement declaring it. A declaration inside a loop therefore costs nothing per 
 any length runs in constant stack.
 
 **B2c.** Generated code is **fully optimized by default**, in every mode, for the machine it is built for - this
-machine's own CPU unless `-a` names another (B12). `-d` is the single exception:
+machine's own CPU unless `-target` names another (B12). `-debug` is the single exception:
 it disables optimization so that the emitted code corresponds to the program as written — nothing is
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
-functions actually called and the state is inspectable. It is a modifier, valid alongside any mode and in
-any position, and composes with `-r`.
+functions actually called and the state is inspectable. It is an option of the modes that build (B1), and composes
+with `-race`.
 
-**B2e.** Under `-d` the build also carries **source-level debug information** (DWARF): every function
+**B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
 of the program has a source location and its own name, every statement a line, and every parameter and local
 of a primitive or reference type its name and value. A debugger can therefore break on a function or a
 `file:line`, step by statement, show arguments and locals, and print a backtrace in source terms. A by-value
 aggregate local is not yet described, and a test build's `test` blocks share one function scope. Outside
-`-d` no debug information is emitted.
+`-debug` no debug information is emitted.
 
 A debug object is a distinct artifact from an optimized one and is named accordingly (B4) — without that,
-a `-d` build would silently reuse optimized objects and be exactly what was not asked for.
+a `-debug` build would silently reuse optimized objects and be exactly what was not asked for.
 
-**B2f.** `-s` is a modifier, valid alongside any mode and in any position, that builds the **scope sanitizer** into
+**B2f.** `-sanitize` is an option of the modes that build (B1); it builds the **scope sanitizer** into
 the whole program: a check, at run time, that storage a closing scope reclaimed (O8) is not used afterwards - a use the
 static check (§8.4) should have refused. Storage a scope reclaims is overwritten with a pattern (every 8 bytes
 `0x7FF57FF57FF57FF5`: a NaN as any float, an integer near its type's maximum, and an address no reference can hold) and
@@ -5711,9 +5819,9 @@ held back from reuse - the most recently reclaimed, up to 256MB or 16,384 chunks
 long as it is held back where the system allows it. Reading or writing held-back storage, following a reference read out
 of it, or allocating a length read out of it is reported as `use after scope closed: ...` and ends the program as a
 failed check does (S18): a test fails and the others run, and outside a test the process aborts. A fault that is not one
-of these ends the program as it would without `-s` (an `os.OnCrash` message included). A program that obeys §8 behaves
-under `-s` as without it, but for time and memory. It is a **detector, not a proof**: it sees the uses a run made, and
-a use of storage no longer held back reads whatever the allocator has put there since. Under `-i` it changes nothing,
+of these ends the program as it would without `-sanitize` (an `os.OnCrash` message included). A program that obeys §8 behaves
+under `-sanitize` as without it, but for time and memory. It is a **detector, not a proof**: it sees the uses a run made, and
+a use of storage no longer held back reads whatever the allocator has put there since. Under `interpret` it changes nothing,
 since the evaluator never reclaims storage. A sanitized object is a distinct artifact (B4), named with `.san`.
 
 **O2d.** Where a call binds one of a callee's scope variables to the caller's own scope, the **block** that
@@ -5728,12 +5836,12 @@ block's scope, and a value the caller holds outside it is reclaimed at the block
 **B2d.** A build is **link-time optimized**. Each module is compiled to an intermediate form and the whole
 program is optimized once, at the link, so a call into another module is subject to inlining — and to
 everything inlining enables — exactly as a call within one module is. This holds wherever optimization
-holds: `-d` (B2c) disables it along with the rest, and `-r` (§6.8 P7) does not use it, because
+holds: `-debug` (B2c) disables it along with the rest, and `-race` (§6.8 P7) does not use it, because
 attributing a report to the right function depends on code not moving between them. Those builds produce
 distinct artifacts already (B4), so an optimized object and one that is not are never mixed.
 
-One consequence is visible: the object file `-c` writes holds that intermediate form rather than native
-code, which is what `-c` produces in any compiler that was asked for link-time optimization. It links
+One consequence is visible: the object file `compile` writes holds that intermediate form rather than native
+code, which is what `compile` produces in any compiler that was asked for link-time optimization. It links
 normally here; it is not a native object for another toolchain to consume.
 
 **B2a.** A module's imports are resolved from their **source**, exactly as they are within one program:
@@ -5743,7 +5851,7 @@ that could disagree. This matters beyond convenience: a function's scope obligat
 derived from its body, so a separate interface would carry a fact its own source is the only authority
 for.
 
-**B3.** `-b <file>`: builds one program, with `<file>` as its root module. Every module reachable from
+**B3.** `build <file>`: builds one program, with `<file>` as its root module. Every module reachable from
 `<file>` by imports is compiled as in B2, and the results are linked into one native executable.
 `<file>` must declare a `main` function (§10.2). A module's object is rebuilt when it is older than
 that module's own source **or than any source it transitively imports** — an object depends on the
@@ -5759,8 +5867,8 @@ compiled from the standard library's `std/runtime` for the build's target and mo
 once; it is named by a hash of what it is compiled from, so a build reuses it exactly when that is unchanged, and every
 module's object name carries that hash too, since an object holds the runtime's declarations and the parts it inlines.
 
-**B3a.** `-t <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
-root module (transitively pulling in its own imports, exactly as `-b` would) and runs every
+**B3a.** `test <file> [<file> ...]`: for each listed file, independently, compiles that file as its own
+root module (transitively pulling in its own imports, exactly as `build` would) and runs every
 `test { }` block declared *directly in that file* (§10.4) — not those declared in any module it
 merely imports. `main` is not required in this mode, and is not run even if present. Each listed
 file's compilation and test run is independent: a compile-time error in one listed file - or a listed file that does
@@ -5771,8 +5879,8 @@ released before the next begins: a list needs the memory of its largest file, no
 result is written out as the test ends, and a file whose tests' process is ended by a signal - a crash - is reported as
 such, so what ran before it is never lost.
 
-**B3e.** `-i <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
-program is analyzed exactly as under `-b` - `main` is required (B4), and every compile-time error is reported the
+**B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
+program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
 same way - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
@@ -5795,17 +5903,31 @@ function with an `F16` or `BF16` parameter or result (an array of either is pass
 stops a program on something it does not run, the blocks it is in are still left as the built program, which would
 go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
 program itself ends - `done`, `fail`, `os.Exit`, a check failing - deferred code runs only where the built program's
-does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
-`-D` apply as to any build, and `-a` sets the build constants it decides (B10a) - naming this machine's architecture
+does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-race`, `-debug` and `-sanitize` choose how code is generated, and `interpret` generates none, so they are not its
+options (B1); `-update` and `-define` apply as to any build, and `-target` sets the build constants it decides (B10a) - naming this machine's architecture
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
-implementation memory is not reclaimed while the program runs, so `-i` suits short runs. Recursing deeper than the
+implementation memory is not reclaimed while the program runs, so `interpret` suits short runs. Recursing deeper than the
 interpreter's stack holds stops it, naming the call, with status 1 - never a crash; so does a comparison of data that
 holds itself (E10).
 
-**B3f.** `-i <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
+**B3f.** `interpret <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
 program's command line (B4a) is `<file>`, as written, followed by those arguments.
+
+**B3g (running a file).** `olang [<option> ...] <file> [<argument> ...]` - a file ending in `.olang` where the mode
+would stand - builds the program whose root module is `<file>` exactly as `build` does (B3: into `build/` beside the
+working directory, objects reused while current, `main` required), saying nothing when the build succeeds, and then runs
+it in the compiler's place: its standard input, output and error are the compiler's, its command line (B4a) is `<file>`
+as written followed by every argument after it - one beginning with `-` included - and its exit status is the
+compiler's (a signal that ends it ends the process, which a shell reports as 128 plus its number). A compile-time error
+is reported as `build` reports it, with status 1, and nothing is run. Since a line starting with `#` is a comment (L4), a
+file whose first line is `#!/usr/bin/env olang` runs as a script.
+
+**B3h (the output).** `-output PATH` names what `build` or `compile` writes: `build`'s executable is linked at `PATH`
+instead of `build/<name>`; `compile`'s object is built in `build/` as before (so it is reused while current, B3) and
+copied to `PATH`. The directory `PATH` names must exist - the compiler makes none, and one that does not is an error
+naming it - and `PATH` must not be a directory. `-output` is no option of any other mode (B1).
 
 **B3b.** A symbol a module defines is named from that module's **identity** (§4 M22a) — its path — never from
 anything about the compilation it happens to be part of: an object compiled on its own has to agree with one
@@ -5819,15 +5941,15 @@ named directly on the command line takes the identity its importers give it.
 name, and the duplicates are discarded at link time.
 
 **B3d.** The instantiations of generics (§12 G16) are the **whole program's**, and are defined by the object
-of the compilation's **root** module only — `-b`'s and `-t`'s root, or `-c`'s one module — each under one
+of the compilation's **root** module only — `build`'s and `test`'s root, or `compile`'s one module — each under one
 shared name per B3b; every other object refers to them. An ordinary module's object therefore depends on
 nothing but its own module and its imports, and is correctly reused by any program that imports it. The
 root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
-covers every change to the instantiation set. Copies a `-c` object of another module carries are discarded at link time.
+covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time.
 
 ### 10.2 Program entry
 
-**B4.** In `-b` and `-i` modes, the root module must declare a function named `main` with exactly this shape:
+**B4.** In `build` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
 no parameters, no success type, and at least one declared error
 (§3 D8) — `fn main() ? SomeError [+ ...] { ... }`. Any other
 shape (parameters, a `ret-type`, or no declared error at all) is a compile-time error. There is no
@@ -5836,12 +5958,12 @@ other valid `main` signature; in particular, there is no "return an int/bool sta
 **B4a (the command line and the environment).** A program's command line and environment are not passed to `main`.
 The runtime keeps them from the moment the process starts — before any global is initialized (B5a), so a global's
 initializer may read them — and a program reaches them through the runtime's functions (§11 X6). The command line is
-the program's own name first, as the operating system gave it (under `-i`, B3f, the file being interpreted), then
+the program's own name first, as the operating system gave it (under `interpret`, B3f, the file being interpreted), then
 each argument in order. A test binary's command line is its own name alone.
 
 ### 10.3 Process exit
 
-**B5.** Running the compiled program (`-b` mode), or interpreting it (`-i`, B3e), invokes `main`. If it returns normally (falls off
+**B5.** Running the compiled program (`build` mode), or interpreting it (`interpret`, B3e), invokes `main`. If it returns normally (falls off
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
 uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
 declared error type and word that escaped) and exits with status `1`.
@@ -5876,7 +5998,7 @@ the OS's abort status, which is distinct from `fail`'s: one is a broken guarante
 `STR_LIT` is the test's description. A `test` block has no error union of its own — the same rule a
 destructor's body follows (§9.3 C7): every fallible call inside it must be fully caught.
 
-**B8.** A `test` block is only ever executed under `-t` (§10.1 B3a), and only for the file it is
+**B8.** A `test` block is only ever executed under `test` (§10.1 B3a), and only for the file it is
 directly declared in. Each test in a run prints its own description together with pass/fail, and
 one test failing (§6.7 S18, inside the block itself) does not stop the remaining tests in the same
 file, or any other listed file, from running.
@@ -5896,7 +6018,7 @@ S8a and S8b say when its condition is dead code and when the build decides it.
 **B9a.** A top-level condition decides which declarations exist, so it is decided before the module's
 types are resolved where it can be: when it uses only **literals**, **build constants** (B10), and
 **immutable globals** the module declares at its top level outside every conditional — in any of its files
-— whose own initializers are built the same way, or whose value `-D` gives (a build constant's default, B10c); combined with parentheses, `not`, unary `-`, `* / % + -`,
+— whose own initializers are built the same way, or whose value `-define` gives (a build constant's default, B10c); combined with parentheses, `not`, unary `-`, `* / % + -`,
 the six comparisons, `and` and `or`. It must evaluate to a `Bool`. Text (a string literal, a text build constant,
 or a global holding one) compares with `==` and `!=` **by content**. A mutable global has no value a build
 could decide on and is rejected, as are globals defined in terms of each other.
@@ -5925,45 +6047,45 @@ naming the operation that prevents it and where it is written; so is one using a
 only inside a branch still being decided, since its value would depend on the choice it is making. Text
 compares here as it does everywhere else: a `String` by content, through its `Eq` (E10a).
 
-**B10.** `-D Name=value` (or `-DName=value`), given any number of times alongside any mode, defines a
+**B10.** `-define Name=value`, given any number of times to a mode that loads a program (B1), defines a
 **build constant**: an immutable global named `Name`, visible by its bare name in **every** module of the
 build, whose type and value are those of a literal written as `value`. `true` or `false` is a `Bool`; text
 that is - after an optional `-` - one whole integer literal (L10) is an integer, and one whole float literal (L12) an
-`F64` (each typed by T6a: `-D N=5` is an `I64`); anything else — or anything in double quotes — is text, a `String` (T29c), so it
-compares, renders and passes as any other text does: `-D Version=1.2.3` is text. A value beginning `0x` or `0b` is
-always a number and must be a valid one (`-D X=0x` is an error), and a number must be one a literal can be (L10): a
+`F64` (each typed by T6a: `-define N=5` is an `I64`); anything else — or anything in double quotes — is text, a `String` (T29c), so it
+compares, renders and passes as any other text does: `-define Version=1.2.3` is text. A value beginning `0x` or `0b` is
+always a number and must be a valid one (`-define X=0x` is an error), and a number must be one a literal can be (L10): a
 decimal integer at most `U64`'s largest - above `I64`'s maximum it is a `U64`, as its literal would be, so
-`-D X=18446744073709551615` is a `U64` - or, negated, at least `I64`'s most negative value; a `0x`/`0b` one a bit pattern of
-at most 64 bits; and a float that is not an infinity. A malformed or out-of-range value is an error naming the `-D`
+`-define X=18446744073709551615` is a `U64` - or, negated, at least `I64`'s most negative value; a `0x`/`0b` one a bit pattern of
+at most 64 bits; and a float that is not an infinity. A malformed or out-of-range value is an error naming the `-define`
 flag that gave it.
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, unless the declaration gives it a default (B10c), as is defining one name twice.
 
 **B10c (a build constant's default).** An immutable global declared at the top level of a module outside the standard
-library, whose type is one a `-D` value can have - `Bool`, `I32`, `I64`, `U64`, `F64` or `String` - is a **build
-constant with a default**: `-D` of its name replaces its initializer, the value read as B10 reads it and fitted to the
-declared type as a literal written there would be (`-D Port=443` for `Port I64 = 8080` is an `I64`); a value that does
-not fit is an error naming the flag. Without `-D`, the declaration's own value stands. The declaration stays its
-module's global - its bare name in the module, `m.Name` from an importer - while `-D Name=value` still defines the
+library, whose type is one a `-define` value can have - `Bool`, `I32`, `I64`, `U64`, `F64` or `String` - is a **build
+constant with a default**: `-define` of its name replaces its initializer, the value read as B10 reads it and fitted to the
+declared type as a literal written there would be (`-define Port=443` for `Port I64 = 8080` is an `I64`); a value that does
+not fit is an error naming the flag. Without `-define`, the declaration's own value stands. The declaration stays its
+module's global - its bare name in the module, `m.Name` from an importer - while `-define Name=value` still defines the
 build constant `Name` every module sees (B10), the two holding one value; every such declaration of the name takes it.
-Whether `-D` names it or not, it is configuration as a build constant is: a condition reading it depends on the build
-(S8a, S8b). Any other top-level declaration of a name `-D` defines - a function, a type, a mutable global, a global of
+Whether `-define` names it or not, it is configuration as a build constant is: a condition reading it depends on the build
+(S8a, S8b). Any other top-level declaration of a name `-define` defines - a function, a type, a mutable global, a global of
 another type, one in the standard library - is B10's error; and a condition naming a name that exists nowhere (B9c,
-S8b) says it may be a build constant `-D` did not define.
+S8b) says it may be a build constant `-define` did not define.
 
-**B10a.** Every build defines eight build constants of its own, and `-D` may not redefine them. Five describe its
+**B10a.** Every build defines eight build constants of its own, and `-define` may not redefine them. Five describe its
 target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
 `TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
 `Bool`, whether the target has fused multiply-add instructions - whether `math.Fma` (X8) is one instruction or a call.
-Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-d`, `-r` and
-`-t` respectively.
+Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-debug`, `-race` and
+`test` respectively.
 
 **B10b.** The build constants' values are part of what a module compiles to — a top-level condition may
 take a different branch under different ones, and compile-time evaluation (K2) may make one part of a
-global's data — so a module's object is a distinct artifact for each set of values of the `-D` names its
+global's data — so a module's object is a distinct artifact for each set of values of the `-define` names its
 import closure mentions (B4). Changing a value rebuilds exactly the modules that mention it, directly or
 through an import, and never reuses an object compiled under the old value; a module that mentions no
 changed name is not rebuilt, and changing a value back finds the earlier objects current.
@@ -5971,8 +6093,7 @@ changed name is not rebuilt, and changing a value back finds the earlier objects
 ### 10.6 Targets
 
 **B12.** Every build is for a **target**: an architecture, an operating system, and a CPU of that architecture, whose
-instructions the generated code may use and whose costs it is tuned for. `-a TARGET`, a modifier valid alongside any
-mode and in any position (B1), names it; without it the target is `native` - **the machine the compiler runs on**, its
+instructions the generated code may use and whose costs it is tuned for. `-target TARGET`, an option (B1), names it; without it the target is `native` - **the machine the compiler runs on**, its
 own CPU with every instruction set extension it has, as clang's `-march=native` finds them. `TARGET` is one of:
 
 - `native`;
@@ -5985,7 +6106,7 @@ own CPU with every instruction set extension it has, as clang's `-march=native` 
 The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library. A CPU and its
 extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. Any other target, a CPU its
 architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
-which `-i` otherwise does not need - `-i` takes `native`, on x86-64, to be the x86-64 level this processor has.
+which `interpret` otherwise does not need - `interpret` takes `native`, on x86-64, to be the x86-64 level this processor has.
 
 The target decides the build constants `TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits` and `TargetHasFma`
 (B10a), so a program chooses code for its target with an ordinary `if` on them (B9, S8b) - and the compile-time
@@ -5994,8 +6115,8 @@ evaluator, reading the same constants, takes the same branch (K1). Generated cod
 use.
 
 **B12a (another machine).** A target whose architecture or operating system is not this machine's is **another
-machine**. It is built for with `-c` only, which gives each module's object, for that machine, to be linked there; `-b`
-and `-t`, which link and run what they build, and `-i`, which runs it here, are command-line errors for it. An object
+machine**. It is built for with `compile` only, which gives each module's object, for that machine, to be linked there; `build`
+and `test`, which link and run what they build, and `interpret`, which runs it here, are command-line errors for it. An object
 holds the target's intermediate form (B2d), compiled to the machine's code at the link, so another machine is built for
 only where the clang found can compile all the code the runtime holds for it: LLVM 18's AArch64 back end cannot
 compile `BF16` code, so with it `aarch64` is refused. While compiling for another machine, a call of a function of the C
@@ -6048,11 +6169,42 @@ reference to hold instead (`'Chan<Ticket&>' holds it by reference, whose zero va
 Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
 `NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
 
-**B11a.** `-e RULE` prints the text of rule `RULE` of this specification - from its definition to the next rule or
+**B11a.** `explain RULE` prints the text of rule `RULE` of this specification - from its definition to the next rule or
 heading, under the heading of the section holding it - and compiles nothing. The rule is the one an error's brackets
-name; a first letter written in lowercase is read as uppercase (`-e t6b` is T6b). The specification is found as the
-standard library is (M23): `../SPEC.md` beside the compiler. Without it, or for a rule it does not state, `-e` is an
+name; a first letter written in lowercase is read as uppercase (`explain t6b` is T6b). The specification is found as the
+standard library is (M23): `../SPEC.md` beside the compiler. Without it, or for a rule it does not state, `explain` is an
 error.
+
+### 10.8 Formatting
+
+**B13.** `format <file> ...` rewrites each file in place in olang's one layout; with `-check` it rewrites nothing and
+writes the name of each file not in the layout, one a line, and its status is 1 when any is not. Only what stands between
+two tokens changes - the spaces on a line and the indentation before it - so a file formatted holds the same tokens, the
+same line breaks and the same comments, and means what it meant; formatting a formatted file changes nothing. The
+layout, which has no options:
+
+- Indentation is four spaces a level. A block's lines are one level in from the line the statement it belongs to began
+  on; a bracket's lines one level in from the line it opens on; a line beginning with a closing bracket is at the level
+  its bracket's line set. A line continuing a statement - one with no statement end before it (L18), whose line before
+  does not end in an opening bracket, a `}`, a type's `>`, a marker `&` or, inside a bracket, a `,` - is one level further.
+- Between two tokens of a line there is one space, but none: after an opening bracket `(` `[` or a type-argument `<`;
+  before a closing one, a type-argument `>`, `,` or a postfix `++`/`--`; around `.` and a slice's `:`; after a prefix
+  operator (`-x`, `~x`, `$x`, `++x`); before a call's `(` and an index's `[`, a lambda's or function type's `fn(` and a
+  constructor's `struct(` included - but `fn (receiver)`, and `) (results)` after a parameter list, take one. A type
+  variable's introduction is a type like any other (`a <T>`). A reference marker `&`, and a scope after it (`T&x`,
+  `f&x(`), keeps the spacing it was written with, since that spacing decides what it is (T24, E25).
+- A `{` has one space before it; a block on one line has one space inside each brace (`{ }` when empty).
+- A comment stays where it is, as written; a line comment's trailing spaces go. Consecutive lines each ending in a line
+  comment have their comments start in one column, one space past the longest of their code.
+- Blank lines are kept, at most one in a row, and none at the start or the end of the file, after a line ending in an
+  opening bracket, or before a line beginning with a closing one. No line ends in a space, and the file ends in one
+  newline.
+- A type-argument `>` written together with an `=` after it (`List<I64>= x`) is written `List<I64> = x`.
+
+A file that does not parse is left as it is and its diagnostics are reported, status 1. A branch the build decides that
+does not parse (B9) - one that may be right for another build - is left as written, on every line it is on. The
+formatter is an olang program shipped beside the compiler; the first `format` after the compiler or its sources change
+builds it, once.
 
 ## 11. External Functions
 
@@ -6167,8 +6319,8 @@ must state exactly the prototype below (X1a).
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
-| `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, a `done` or a `fail` inside `f` ends the test as it would have had `f` been called directly (S16a, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `-i` as the call `f()`, the evaluator's own limits on depth standing for the stack |
-| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `-i` the message is written first when the interpreter's process crashes |
+| `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, a `done` or a `fail` inside `f` ends the test as it would have had `f` been called directly (S16a, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `interpret` as the call `f()`, the evaluator's own limits on depth standing for the stack |
+| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `interpret` the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
 
@@ -6198,7 +6350,7 @@ and with its prototype - every parameter and the result `F64`, or every one `F32
   multiply-add, B12c), and otherwise the library's function.
 - **Any other** is always a call of the library's function, never replaced by another function or by an expression
   that may round differently (`pow(x, 2.0)` by `x * x`), so its result is the library's wherever it is computed: while
-  compiling, by the built program, or under `-i`. Which value that is, beyond what IEEE 754 requires, is the library's
+  compiling, by the built program, or under `interpret`. Which value that is, beyond what IEEE 754 requires, is the library's
   (implementation-defined).
 
 A declaration naming one of these with any other prototype is an ordinary external function.
@@ -6528,7 +6680,7 @@ introduced (G8b). A name is a type variable or a constant variable, never both; 
 parameter one constant variable fills has its type, and the type written at an introduction is never a trait (G19
 constrains types; what values a constant may take is G27's). Each is a compile-time error at the declaration. A
 constant variable's name may not be that of a value the declaration can see - a global, a function, a build constant,
-the prelude's `print`/`println`/`eprint`/`eprintln` (M19f), a parameter or a local (D3a) - so a bare `N` means one thing
+a parameter or a local (D3a) - so a bare `N` means one thing
 wherever it is written.
 
 **G23 (a constant variable is a value).** A constant variable is also a **primary expression** (E1), written bare,
@@ -6640,7 +6792,7 @@ error as they would at run time. It is **not** possible when evaluation would:
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
 - run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
-  a hang: evaluation that would run out of the stack it runs on stops there, refused (under `-i`, with that message),
+  a hang: evaluation that would run out of the stack it runs on stops there, refused (under `interpret`, with that message),
   every turn of a loop counts toward the first, each level `==` descends into a value (E10) toward the second, and an
   array too long for the memory budget is refused before it is made.
 
@@ -6669,13 +6821,13 @@ attempted (a local `if`'s condition, S8b), the code is left to the run time.
 The length of an `Array<T, N>` (T7c) is `N` whatever holds it, so reading it - `a.Len()` on a parameter, say -
 reads nothing that varies and can always be evaluated; a constant variable (§12.7 G23) is its instantiation's value.
 
-Under `-i` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
-refused - tasks excepted, which `-i` does not run yet (B3e).
+Under `interpret` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
+refused - tasks excepted, which `interpret` does not run yet (B3e).
 
 Owned references (§8.8) are evaluated with their meaning: an object built into an own slot lives in a region of its
 own, a release (O35) ends it and everything built in its region - its destructors falling under the rule above - and
 a use of a released object, which a program the compiler accepts cannot make (O39), stops the evaluation, refused
-(under `-i`, with a message naming the use). *(Not yet implemented: the evaluator keeps a released object as it was
+(under `interpret`, with a message naming the use). *(Not yet implemented: the evaluator keeps a released object as it was
 and stops on no use of it - which O39 leaves no program to make.)*
 
 **K1a.** Whether a call of a function can ever be evaluated is a property of the **function**, not of the

@@ -1,0 +1,318 @@
+# fmt - the formatter "olang format" and "olang format -check" run (SPEC.md B13), over the self-hosted scanner and parser
+# (compiler/fmt.olang). Built by the compiler, which finds this file beside itself (bootstrap/main.c).
+#
+#     fmt -f FILE...    each file rewritten in place in the one layout
+#     fmt -l FILE...    each file not in the layout named, one a line; nothing written
+#     fmt -p FILE...    each file's layout written to the standard output; nothing written
+#     fmt -v FILE...    for the tests: each file formatted in memory, and checked - the tree read back is the file's
+#                       (compiler/tools/unparse), its comments are its own, and formatting the result changes nothing.
+#                       A line for each file that failed, what failed; then a count. Nothing written
+#
+# A file that does not parse is left as it is, and its diagnostics are written as the compiler writes them. The exit
+# status is 1 when a file did not parse, could not be read or written, (-l) is not in the layout, or (-v) failed.
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+import "../source"
+import "../scan"
+import "../token"
+import "../parse"
+import "../diag"
+import "../msgs"
+import "../ast"
+import layout "../fmt"
+import "unparse"
+
+fn main() ? {
+    args := os.Args()
+    mode := args[1] if args.Len() >= 2 else ""
+    if (mode != "-f" and mode != "-l" and mode != "-p" and mode != "-v") or args.Len() < 3 {
+        try io.PrintErrln("usage: fmt -f|-l|-p|-v FILE...") catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { os.Exit(run(mode, args)) })
+}
+
+fn run(mode String&, args Array<String&>&) I32 {
+    out := io.Writer(1)
+    errs := io.Writer(2)
+    std := try os.Env("OLANG_STD") catch default "std"
+    prelude := preludeTypes(std)
+    status I32 = 0
+    same I64 = 0
+    changed I64 = 0
+    skipped I64 = 0
+    failed I64 = 0
+    for k in range 2, args.Len() {
+        path := args[k]
+        src := try source.Read(path) catch os.OsError {
+            errs.Write("olang: " $path ": cannot be read\n")
+            status = 1
+            continue
+        }
+        names := source.Names()
+        o := oracleFor(path, std, prelude, names)
+        diags := diag.Diagnostics(diag.ColorWanted())
+        file := diags.AddFile(path, src.Text)
+        ts := scan.Scan(src.Text)
+        for d in ts.Diags {
+            diags.Error(diag.Where.Span(file, I64(d.Start), I64(d.End)), msgs.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message()))
+        }
+        p := parse.Parser(src, ts, names, o, diags, file)
+        decls := p.File()
+        if ts.Diags.Len() > 0 or diags.AllSaid().Len() > 0 {
+            if mode == "-v" {
+                skipped++
+                continue
+            }
+            errs.Write(diags.Render())
+            status = 1
+            continue
+        }
+        held := unparse.HeldBranches(decls, names, src.Text, diags)
+        text := layout.Format(src.Text, ts, p.ArgAngles, p.VarAngles, p.CloseAngles, held)
+        if mode == "-f" {
+            if text != src.Text {
+                try os.WriteFile(path, text) catch os.OsError {
+                    errs.Write("olang: " $path ": cannot be written\n")
+                    status = 1
+                }
+            }
+        } else if mode == "-p" {
+            out.Write(text)
+        } else if mode == "-l" {
+            if text != src.Text {
+                out.Write($path "\n")
+                status = 1
+            }
+        } else {
+            what := verify(src, text, std, prelude)
+            if what != "" {
+                out.Write($path ": " $what "\n")
+                failed++
+                status = 1
+            } else if text == src.Text {
+                same++
+            } else {
+                changed++
+            }
+        }
+    }
+    if mode == "-v" {
+        out.Write($(same + changed + skipped + failed) " files: " $same " already formatted, " $changed " formatted, "
+                  $skipped " skipped (they do not parse), " $failed " failed\n")
+    }
+    try out.Flush() catch io.IoError { return 1 }
+    try errs.Flush() catch io.IoError { return 1 }
+    return status
+}
+
+# what is wrong with text as the layout of src, or "": it parses, its tree is src's, it holds src's comments, and it is
+# its own layout
+fn verify(src source.Source&, text String&, std String&, prelude String&) String& {
+    names := source.Names()
+    o := oracleFor(src.Path, std, prelude, names)
+    diags := diag.Diagnostics(false)
+    file := diags.AddFile(src.Path, src.Text)
+    ts := scan.Scan(src.Text)
+    p := parse.Parser(src, ts, names, o, diags, file)
+    decls := p.File()
+    before := unparse.Unparse(decls, names, src.Text, diags)
+    written := source.Source(src.Path, text)
+    diags2 := diag.Diagnostics(false)
+    file2 := diags2.AddFile(src.Path, text)
+    ts2 := scan.Scan(text)
+    p2 := parse.Parser(written, ts2, names, o, diags2, file2)
+    decls2 := p2.File()
+    if ts2.Diags.Len() > 0 or diags2.AllSaid().Len() > 0 { return "the text written does not parse" }
+    after := unparse.Unparse(decls2, names, text, diags2)
+    if after != before {
+        dbg := try os.Env("FMT_DEBUG") catch default ""
+        if dbg != "" {
+            try os.WriteFile($dbg ".before", before) catch os.OsError { }
+            try os.WriteFile($dbg ".after", after) catch os.OsError { }
+        }
+        return "the tree read back differs: " $firstDifference(before, after)
+    }
+    if comments(src.Text) != comments(text) { return "the comments differ" }
+    held2 := unparse.HeldBranches(decls2, names, text, diags2)
+    again := layout.Format(text, ts2, p2.ArgAngles, p2.VarAngles, p2.CloseAngles, held2)
+    if again != text { return "formatting it again changes it: " $firstDifference(text, again) }
+    return ""
+}
+
+fn firstDifference(a String&, b String&) String {
+    i I64 = 0
+    for i < a.Len() and i < b.Len() and a[i] == b[i] { i++ }
+    line I64 = 1
+    for j in range i {
+        if a[j] == '\n' { line++ }
+    }
+    return "at line " $line
+}
+
+# every comment of a text, one after another, each followed by a newline - a line comment without the spaces ending its
+# line. A comment is found where a token cannot be: outside string and character literals
+fn comments(t String&) String {
+    b := StringBuilder()
+    n := t.Len()
+    i I64 = 0
+    for i < n {
+        c := t[i]
+        if c == '"' or c == '\'' {
+            i++
+            for i < n and t[i] != c and t[i] != '\n' {
+                if t[i] == '\\' { i++ }
+                i++
+            }
+            i++
+        } else if c == '#' {
+            e := i + 1
+            if e < n and t[e] == '#' {
+                e++
+                for e + 1 < n and not (t[e] == '#' and t[e + 1] == '#') { e++ }
+                e = e + 2 if e + 1 < n else n
+                b.Push(t[i:e])
+            } else {
+                for e < n and t[e] != '\n' { e++ }
+                f := e
+                for f > i and (t[f - 1] == ' ' or t[f - 1] == '\t') { f-- }
+                b.Push(t[i:f])
+            }
+            b.PushChar('\n')
+            i = e
+        } else {
+            i++
+        }
+    }
+    return b.ToString()
+}
+
+# ---- type names, as the compiler's loader gives them to the parser (as compiler/tools/dump.olang reads them) ----
+
+fn oracleFor(path String&, std String&, prelude String&, names mut source.Names&) parse.Oracle {
+    l := loader(std)
+    m := l.load(path)
+    o := parse.Oracle()
+    if m >= 0 { l.oracle(o, names, m, prelude) }
+    return o
+}
+
+fn preludeTypes(std String&) String {
+    l := loader(std)
+    return l.prelude()
+}
+
+# every module the files reach: its real path, its declared type and error names (" A B "), and its imports - each
+# import's alias and the module it reaches (-1 for a remote one or a file that is not there)
+type loader struct(std String&) {
+    std
+    paths List<String&>
+    types List<String&>
+    impMod List<I64>
+    impAlias List<String&>
+    impTarget List<I64>
+}
+
+# the names the prelude declares, " A B ", from every file of std/prelude
+fn (l mut loader&) prelude() String {
+    b := StringBuilder()
+    b.PushChar(' ')
+    dir := filepath.Join(l.std, "prelude")
+    names := try os.ReadDir(dir) catch os.OsError { return " " }
+    for n in names {
+        if not n.EndsWith(".olang") { continue }
+        m := l.load(filepath.Join(dir, n))
+        if m >= 0 { b.Push(l.types[m][1:]) }
+    }
+    return b.ToString()
+}
+
+# an import's file: "std/x" under std, a remote one (its first part holds a dot) none, anything else beside the importer
+fn (l loader&) target(importer String&, ipath String&) String {
+    first := ipath
+    slash := try ipath.FindByte('/') catch default -1
+    if slash >= 0 { first = ipath[:slash] }
+    if first.Contains(".") { return "" }
+    if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) ".olang" }
+    return $filepath.Join(filepath.Dir(importer), ipath) ".olang"
+}
+
+# the module at path, loaded once, its imports with it; -1 where there is no such file
+fn (l mut loader&) load(path String&) I64 {
+    real := try os.RealPath(path) catch os.OsError { return -1 }
+    for i in range l.paths.Len() {
+        if l.paths[i] == real { return i }
+    }
+    src := try source.Read(real) catch os.OsError { return -1 }
+    ts := scan.Scan(src.Text)
+    m := l.paths.Len()
+    l.paths.Push($real)
+    b := StringBuilder()
+    b.PushChar(' ')
+    aliases List<String&>
+    paths List<String&>
+    toks := ts.Toks
+    n := toks.Len()
+    for i in range n {
+        k := toks[i].Kind
+        named := i + 1 < n and toks[i + 1].Kind == token.Tok.Iden
+        if (k == token.Tok.Type and named) or
+           (k == token.Tok.Error and named and i + 2 < n and toks[i + 2].Kind == token.Tok.LBrace) {
+            b.Push(src.Text[toks[i + 1].Start:toks[i + 1].End])
+            b.PushChar(' ')
+        }
+        if k == token.Tok.Import {
+            j := i + 1
+            alias String& = ""
+            if j < n and toks[j].Kind == token.Tok.Iden {
+                alias = $src.Text[toks[j].Start:toks[j].End]
+                j++
+            }
+            if j < n and toks[j].Kind == token.Tok.StrLit {
+                ip := src.Text[toks[j].Start + 1:toks[j].End - 1]
+                if alias == "" { alias = $filepath.Base(ip) }
+                aliases.Push($alias)
+                paths.Push($ip)
+            }
+        }
+    }
+    l.types.Push(b.ToString())
+    for k in range aliases.Len() {
+        t := l.target(real, paths[k])
+        target I64 = -1
+        if t != "" { target = l.load(t) }
+        l.impMod.Push(m)
+        l.impAlias.Push($aliases[k])
+        l.impTarget.Push(target)
+    }
+    return m
+}
+
+# the oracle for module m: its own names, the prelude's capitalized ones and Array bare, and its imports' through their
+# alias chains
+fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelude String&) {
+    l.addNames(o, names, "", l.types[m])
+    for t in prelude.Split(" ") {
+        if t != "" and t[0].IsUpper() { o.Add(names, "", t) }
+    }
+    o.Add(names, "", "Array")
+    l.chains(o, names, m, "", 0)
+}
+
+fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias String&, list String&) {
+    for t in list.Split(" ") {
+        if t != "" { o.Add(names, alias, t) }
+    }
+}
+
+fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefix String&, depth I64) {
+    if depth >= 4 { return }
+    for i in range l.impMod.Len() {
+        if l.impMod[i] != m or l.impTarget[i] < 0 { continue }
+        chain := $prefix $l.impAlias[i]
+        l.addNames(o, names, chain, l.types[l.impTarget[i]])
+        l.chains(o, names, l.impTarget[i], $chain ".", depth + 1)
+    }
+}

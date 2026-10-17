@@ -94,7 +94,7 @@ echo "checkdiff: refused programs: $first of $mine checker cases give stage 0's 
 oks=$(cd checks/cases && grep -L '^# check: fail' *.olang)
 run checks/cases $oks
 tests=""
-for f in *.olang std/*.olang compiler/*.olang checks/checks.olang fuzz/*.olang bench/*.olang; do tests="$tests $f"; done
+for f in tests/*.olang std/*.olang compiler/*.olang checks/checks.olang fuzz/*.olang bench/*.olang; do tests="$tests $f"; done
 for f in $tests; do (OLANG_STD="$root/std" "$root/$dump" -t "$f") >> "$work/said" 2>&1; done
 rows < "$work/said" > "$work/clean.rows"
 n=0; clean=0

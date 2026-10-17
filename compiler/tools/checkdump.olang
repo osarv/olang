@@ -23,7 +23,7 @@ import typecheck "../check"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        eprintln("usage: checkdump [-D NAME=VALUE]... [-t] FILE...")
+        try io.PrintErrln("usage: checkdump [-D NAME=VALUE]... [-t] FILE...") catch io.IoError { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(args) })

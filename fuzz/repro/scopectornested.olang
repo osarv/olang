@@ -4,13 +4,14 @@
 # arena and reclaimed at the end of each turn.
 #     expected: 210 (as -i prints)
 #     actual:   -d segfaults (the List's chunks hold whatever reused them); built -d -s: "use after scope closed: storage
-#               a closed scope gave back was read or written". shared.olang's two tests over c3Holder and sc3Countdown
+#               a closed scope gave back was read or written". tests/shared.olang's two tests over c3Holder and sc3Countdown
 #               have the shape and pass by luck - both fail under -d -s ("make scopesan")
 # Found by the scope sanitizer on the corpus (make scopesan).
 # Cause (semantic.c, the argument-determined binding where a call binds its callee's scope variables, ~9283-9417): a
 # receiver that is a constructor's field local - here "left", whose scope is the instance's (%here) - binds Push's scope
 # variable with boundTo NULL and boundDepth 0, so SemanticBoundScopeDepth (~6685) answers the call's own block depth,
 # and codegen's cgBoundScopeArg -> cgScopeSlotAt passes the loop body's scope rather than cgOwnAllocSlot's %here.
+import "std/io"
 type Countdown struct(n I64) {
     left List<I64>
     for i in range n { left.Push(n - i) }
@@ -19,5 +20,5 @@ fn main() ? {
     c := Countdown(20)
     s I64 = 0
     for v in c.left { s += v }
-    println($s)
+    try io.Println($s)
 }

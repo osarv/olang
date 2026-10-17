@@ -11,7 +11,7 @@ set -e
 dump=${MODGRAPH_DUMP:-build/compiler_tools_dump}
 oracle=build/modgraph
 for t in "$dump" "$oracle"; do [ -x "$t" ] || { echo "modgraph: $t is not built (make $t)"; exit 1; }; done
-[ $# -gt 0 ] || set -- *.olang geom/*.olang std/*.olang compiler/*.olang compiler/tools/*.olang checks/checks.olang \
+[ $# -gt 0 ] || set -- tests/*.olang tests/geom/*.olang std/*.olang compiler/*.olang compiler/tools/*.olang checks/checks.olang \
     fuzz/*.olang bench/*.olang
 work=$(mktemp -d "${TMPDIR:-/tmp}/modgraph.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -22,7 +22,7 @@ for mode in "" -t; do
     for f in "$@"; do
         # the synthetic module of build constants is stage 0's way of holding them, not a module anyone imports
         if ! "$oracle" $mode "$f" > "$work/raw" 2>&1; then
-            # a root stage 0 refuses has no graph to compare (bench/fused.olang does not check today)
+            # a root stage 0 refuses has no graph to compare (none does today)
             echo "modgraph: stage 0 refuses $mode $f, skipped"
             skipped=$((skipped + 1))
             continue

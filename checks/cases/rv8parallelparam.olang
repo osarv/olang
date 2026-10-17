@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # S4c: a parallel assignment's temporary going into a reference is held as that reference - built where the target's
 # referent lives, as "a.next = Node(i)" alone is - so a parameter's or a capture's field takes one (it was refused with
 # O17a and O25: held as a value, it was a copy in the statement's block that the field would borrow), and at a

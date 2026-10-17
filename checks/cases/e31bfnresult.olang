@@ -1,0 +1,11 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (P1): l[0] for a writable reference parameter of a call through a call's result - a function value
+type Acc struct() {
+    N I64 = 0
+}
+fn bumper() fn(c mut Acc&) { return fn(c mut Acc&) { c.N++ } }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    bumper()(l[0])
+}

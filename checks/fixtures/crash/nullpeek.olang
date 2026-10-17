@@ -2,6 +2,7 @@
 # stack), which it used to treat as undefined and act on: the rest of main, its return included, was deleted and
 # control fell into the code after it, printing the first lines again forever
 import "std/os"
+import "std/io"
 
 type Node struct(v I64, next Node&) {
     v
@@ -22,11 +23,11 @@ fn (s Stack&) Peek() I64 { return s.top.v }
 
 fn main() ? {
     os.OnCrash("nullpeek crashed\n")
-    println("start")
+    try io.Println("start")
     s := Stack()
     s.Push(4)
-    println("after a push: " $s.Peek())
+    try io.Println("after a push: " $s.Peek())
     t := Stack()
-    println("peek of an empty stack: " $t.Peek())
-    println("end")
+    try io.Println("peek of an empty stack: " $t.Peek())
+    try io.Println("end")
 }

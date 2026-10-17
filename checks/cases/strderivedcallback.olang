@@ -1,6 +1,7 @@
 # check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
 # C2d/O23a: a callback handed elements read through a "&p" field of a view over the receiver's array would build where
 # the element's derived scope resolves at the call - an underestimate - so it is refused (C3)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -27,7 +28,7 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     b := Bag(Array<mut Node&>(1, Node(3)))
-    println($b)
+    try io.Println($b)
     t := churn(100)
-    println($b.ns[0].next.v " " $t)
+    try io.Println($b.ns[0].next.v " " $t)
 }

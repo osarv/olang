@@ -1,0 +1,16 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a "mut" method writing the receiver's own field, called on x[i]
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn (v mut V&) Bump() { v.n += 1 }
+
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    s[1].Bump()
+}

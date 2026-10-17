@@ -1,0 +1,26 @@
+# check: run
+# flags: -debug -sanitize
+# O18c/O17b (F3): handles all the way, "h := lll[0][0]; h.Push(x)"
+import "std/io"
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+fn add(lll mut List<List<List<I64>>>&, x I64) {
+    h := lll[0][0]
+    h.Push(x)
+}
+fn main() ? {
+    lll := List<List<List<I64>>>()
+    lll.Push(List<List<I64>>())
+    lll[0].Push(List<I64>())
+    add(lll, 7)
+    try churn()
+    assert lll[0][0].Len() == 1 and lll[0][0][0] == 7, $lll[0][0]
+}

@@ -1,0 +1,23 @@
+# check: run
+# flags: -debug -sanitize
+# E31b/O17b/O18c (F2, F3): two levels, "ll[0][0].S.Push(x)" - the inner read "ll[0]" lent to the outer At as its reference
+import "std/io"
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+fn add(ll mut List<List<Blk>>&, x I64) { ll[0][0].S.Push(x) }
+fn main() ? {
+    ll := List<List<Blk>>()
+    ll.Push(List<Blk>())
+    ll[0].Push(Blk())
+    add(ll, 7)
+    try churn()
+    assert ll[0][0].S.Len() == 1 and ll[0][0].S[0] == 7, $ll[0][0].S
+}

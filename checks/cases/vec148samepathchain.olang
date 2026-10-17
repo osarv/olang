@@ -1,0 +1,34 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# vec7 F1, its natural form: a cursor walking a chain moves the next parser's words into a borrow of the previous one's lexer
+# - 'prev.more' and 'c.lx.toks' are the same path by name (c, then lx), two different objects
+import "std/io"
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+    next mut Parser& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    first mut Parser& = Parser()
+    first.lx = Lexer()
+    first.next = Parser()
+    first.next.lx = Lexer()
+    for i in range 3 { first.next.lx.toks.Push($i "-word-in-the-second-lexer") }
+    c mut Parser& = first
+    prev := c.lx
+    c = c.next
+    prev.more = take c.lx.toks
+    c.lx = null
+    churn()
+    try io.Println(first.lx.more[0])
+}

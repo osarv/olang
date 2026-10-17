@@ -1,5 +1,6 @@
 # check: fail error[O39]: calling 'rec' may release the Conn borrowed on line
 # what a body may release is found through calls, recursive ones included
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -19,5 +20,5 @@ fn main() ? {
     s.cur = Conn(1)
     c := s.cur
     rec(s, 3)
-    println(c.name)
+    try io.Println(c.name)
 }

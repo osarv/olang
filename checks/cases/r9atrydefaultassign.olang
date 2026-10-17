@@ -1,0 +1,24 @@
+# check: fail a 'try ... catch' value is the element or what a clause gives
+# R9a (T1h): an assignment, and an increment, through a field of "try a[i] catch default v" - no place (baked 51, run 0)
+import "std/io"
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn f() I64 {
+    a := Acc[Acc(), Acc()]
+    (try a[1] catch default Acc()).P.X = 5
+    (try a[1] catch default Acc()).N++
+    return a[1].P.X * 10 + a[1].N
+}
+Baked := f()
+V mut I64 = 0
+fn main() ? {
+    V = f()
+    try io.Println("baked " $Baked " run " $V)
+}

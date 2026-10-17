@@ -6,7 +6,7 @@ struct type;
 
 //B11: every diagnostic is one row - "path:line:col: error[RULE]: message" - then the source line and a caret under
 //what it is about, and any notes as rows of their own ("path:line:col: note: ..."). RULE is the rule of the
-//specification the diagnostic applies, and "olang -e RULE" prints that rule's text (B11a): the long explanation lives
+//specification the diagnostic applies, and "olang explain RULE" prints that rule's text (B11a): the long explanation lives
 //there, under the rule, and a message says what is wrong here, in a few words, and what to write instead where that is
 //obvious. Messages are lowercase, one line, with no period at the end.
 //
@@ -23,30 +23,41 @@ struct type;
 //specification states.
 #define DIAGNOSTICS(X) \
     /* ---- the command line ---- */ \
-    X(ERR_USAGE,                        "B1",    "nothing to do - write a mode and a file, as 'olang -b main.olang'") \
-    X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are -b, -c, -t, -i and -e") \
+    X(ERR_USAGE,                        "B1",    "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") \
+    X(ERR_NOT_A_MODE,                   "B1",    "'%s' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run") \
     X(ERR_MODE_ONE_FILE,                "B1",    "%s takes exactly one file") \
     X(ERR_MODE_NEEDS_FILE,              "B1",    "%s needs a file") \
-    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown flag '%s' - the flags are -b -c -t -i -e -r -d -s -u -a -D") \
-    X(ERR_TARGET_MISSING,               "B12",   "-a needs a target after it, as '-a x86-64-v3'") \
+    X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown option '%s' - 'olang help' lists the options of %s") \
+    X(ERR_OPTION_NOT_FOR_MODE,          "B1",    "%s applies to %s, not to %s") \
+    X(ERR_OPTION_NEEDS_VALUE,           "B1",    "%s needs a value after it: %s") \
+    X(ERR_NOT_A_SOURCE,                 "B1",    "'%s' is no olang file to run - a file's name ends in .olang") \
+    X(ERR_MODE_FIRST,                   "B1",    "the mode comes first: 'olang %s' and then its options") \
+    X(ERR_HELP_ONE_MODE,                "B1",    "help takes at most one mode") \
+    X(ERR_OUTPUT_IS_DIR,                "B3h",   "-output %s is a directory - name the file to write") \
+    X(ERR_OUTPUT_NO_DIR,                "B3h",   "-output %s: there is no directory %s") \
+    X(ERR_OUTPUT_CANNOT_WRITE,          "B3h",   "cannot write it") \
+    X(ERR_CANNOT_RUN,                   "B3g",   "the program cannot be run: %s") \
+    X(ERR_FORMATTER_MISSING,            "B13",   "the formatter's source is not beside this compiler: %s") \
+    X(ERR_FORMATTER_BUILD,              "B13",   "the formatter could not be built - %s says why") \
+    X(ERR_TARGET_MISSING,               "B12",   "-target needs a target after it, as '-target x86-64-v3'") \
     X(ERR_TARGET_UNKNOWN,               "B12",   "unknown target '%s' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted") \
     X(ERR_TARGET_UNSUPPORTED,           "B12",   "olang does not build for '%s' - it builds for x86_64 and aarch64 Linux with the GNU C library") \
-    X(ERR_TARGET_NATIVE_FOREIGN,        "B12",   "'-a %s': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") \
-    X(ERR_TARGET_FOREIGN_MODE,          "B12a",  "%s builds and runs on this machine, and '-a %s' is another architecture or system - only -c builds for it") \
+    X(ERR_TARGET_NATIVE_FOREIGN,        "B12",   "'-target %s': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") \
+    X(ERR_TARGET_FOREIGN_MODE,          "B12a",  "%s builds and runs on this machine, and '-target %s' is another architecture or system - only compile builds for it") \
     X(ERR_TARGET_NO_BACKEND,            "B12a",  "this clang cannot build for '%s': its back end for that architecture cannot generate the BF16 code the runtime holds") \
     X(ERR_TARGET_NO_CLANG,              "B12",   "clang not found on PATH - it is what builds the program, and what says what target '%s' is") \
-    X(ERR_EXPLAIN_NEEDS_RULE,           "B11a",  "-e takes one rule, as 'olang -e B1'") \
+    X(ERR_EXPLAIN_NEEDS_RULE,           "B11a",  "explain takes one rule, as 'olang explain B1'") \
     X(ERR_NO_SPEC,                      "B11a",  "no specification at %s") \
     X(ERR_NO_RULE,                      "B11a",  "the specification has no rule %s") \
-    X(ERR_DEFINE_MISSING,               "B10",   "-D needs Name=value after it") \
-    X(ERR_DEFINE_SHAPE,                 "B10",   "-D takes Name=value, found '%s'") \
-    X(ERR_DEFINE_NOT_NAME,              "B10",   "-D %s=%s: the name is not an identifier") \
-    X(ERR_DEFINE_TWICE,                 "B10",   "-D %s=%s: defined twice") \
-    X(ERR_DEFINE_BAD_NUMBER,            "B10",   "-D %s=%s: not a number - '0x' and '0b' take digits of their own base") \
-    X(ERR_DEFINE_INT_RANGE,             "B10",   "-D %s=%s: beyond 64 bits") \
-    X(ERR_DEFINE_NEG_RANGE,             "B10",   "-D %s=%s: below I64's minimum") \
-    X(ERR_DEFINE_FLOAT_RANGE,           "B10",   "-D %s=%s: beyond F64's range") \
-    X(ERR_DEFINE_BUILTIN,               "B10a",  "-D cannot redefine the built-in constant %s") \
+    X(ERR_DEFINE_MISSING,               "B10",   "-define needs Name=value after it") \
+    X(ERR_DEFINE_SHAPE,                 "B10",   "-define takes Name=value, found '%s'") \
+    X(ERR_DEFINE_NOT_NAME,              "B10",   "-define %s=%s: the name is not an identifier") \
+    X(ERR_DEFINE_TWICE,                 "B10",   "-define %s=%s: defined twice") \
+    X(ERR_DEFINE_BAD_NUMBER,            "B10",   "-define %s=%s: not a number - '0x' and '0b' take digits of their own base") \
+    X(ERR_DEFINE_INT_RANGE,             "B10",   "-define %s=%s: beyond 64 bits") \
+    X(ERR_DEFINE_NEG_RANGE,             "B10",   "-define %s=%s: below I64's minimum") \
+    X(ERR_DEFINE_FLOAT_RANGE,           "B10",   "-define %s=%s: beyond F64's range") \
+    X(ERR_DEFINE_BUILTIN,               "B10a",  "-define cannot redefine the built-in constant %s") \
     /* ---- files and the toolchain ---- */ \
     X(ERR_CANNOT_OPEN,                  "",      "cannot open this file") \
     X(ERR_NOT_REGULAR,                  "",      "not a regular file") \
@@ -99,9 +110,9 @@ struct type;
     X(ERR_COND_NOT_BOOL,                "B9",    "the condition beginning %n is not a Bool") \
     /* ---- imports and modules ---- */ \
     X(ERR_IMPORT_REMOTE_BAD_NAME,       "M23a",  "a remote import's host, owner, repository and ref may hold only letters, digits, '.', '_' and '-'") \
-    X(ERR_IMPORT_LOCK_NOT_A_COMMIT,     "M23b",  "olang.lock names no commit for %s - delete its line, or build with -u") \
+    X(ERR_IMPORT_LOCK_NOT_A_COMMIT,     "M23b",  "olang.lock names no commit for %s - delete its line, or build with -update") \
     X(ERR_IMPORT_FETCH_FAILED,          "M23a",  "could not fetch %s with git - check the path and the connection") \
-    X(ERR_IMPORT_LOCKED_FETCH_FAILED,   "M23b, M23c", "could not fetch the commit olang.lock names for %s - delete its line, or build with -u") \
+    X(ERR_IMPORT_LOCKED_FETCH_FAILED,   "M23b, M23c", "could not fetch the commit olang.lock names for %s - delete its line, or build with -update") \
     X(ERR_IMPORT_PATH_TOO_LONG,         "M23",   "this import path is too long to name a file") \
     X(ERR_IMPORT_FILE_NOT_FOUND,        "M23",   "no .olang file at %s") \
     X(ERR_IMPORT_HAS_EXTENSION,         "M23",   "an import names its file without '.olang'") \
@@ -132,9 +143,8 @@ struct type;
     X(ERR_BUILD_CONST_REDECLARED,       "B10",   "%n is a build constant - choose another name") \
     X(ERR_BUILD_DEFAULT_MUT,            "B10c",  "%n is a build constant, and a declaration giving it a default is immutable - drop 'mut'") \
     X(ERR_BUILD_DEFAULT_TYPE,           "B10c",  "%n is a build constant, and a default for it is a Bool, I32, I64, U64, F64 or String - found %t") \
-    X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-D %S=%S does not fit %n, which is %t") \
-    X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-D %S=VALUE', or declare it with a default") \
-    X(ERR_PRELUDE_WORD_REDECLARED,      "M19f",  "%n is the prelude's function, seen in every module - choose another name") \
+    X(ERR_BUILD_DEFAULT_FIT,            "B10c",  "-define %S=%S does not fit %n, which is %t") \
+    X(ERR_UNKNOWN_BUILD_NAME,           "B10",   "unknown name %n - if it is a build constant, define it with '-define %S=VALUE', or declare it with a default") \
     X(ERR_NAME_IN_USE,                  "D2",    "%n is already declared in this module") \
     X(ERR_UNKNOWN_SCOPE_NAME,           "O4a",   "%n names no variable visible here - a marker names where the reference lives, as '&x'") \
     X(ERR_RETURN_SCOPE_NONE,            "O26",   "'&return' names the result scope, and this function has none") \
@@ -144,7 +154,7 @@ struct type;
     X(ERR_CONSTRAINT_UNMET_METHOD,      "G19",   "%t does not satisfy the constraint %S on %S: it has no method %S that fits") \
     X(ERR_CONSTRAINT_UNMET_HASH,        "G19, E10b", "%t does not satisfy the constraint %S on %S: it has no Hash - declare 'Hash() I64', agreeing with '=='") \
     X(ERR_UNBOUNDED_INSTANTIATION,      "G17",   "this generic's instantiations never end - each one requires a larger one") \
-    X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%S cannot hold itself by value - hold it through a reference ('&')") \
+    X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%t cannot hold itself by value - hold it through a reference ('&')") \
     X(ERR_ARRAY_TYPE_HOLDS_ITSELF,      "T29",   "%S holds itself through the array it is declared over - hold the array in a struct: 'type %S struct(items %t&)'") \
     X(ERR_MISSING_TYPE_ARGS,            "G7",    "%n is generic - write its type arguments, as '%S<I32>'") \
     X(ERR_TYPE_ARG_COUNT,               "G7",    "type arguments for %S: expected %d, found %d") \
@@ -185,9 +195,10 @@ struct type;
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
-    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
+    X(ERR_TYPE_TOO_DEEP_TO_CHECK,       "O31",   "this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less") \
+    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
     X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
-    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')") \
+    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')") \
     X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
     X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type, or a declared function's parameter or result - here it is not supported yet") \
     X(ERR_OWN_RECEIVER,                 "O36",   "a method is called on a borrow, so its receiver never owns - drop 'own', or take the owner as another parameter") \
@@ -214,7 +225,7 @@ struct type;
     X(ERR_TAKE_BORROWED_COPY,           "E34",   "'%S' is a borrowed copy and owns nothing - take from '%S', which owns what it holds, 'take %S'") \
     X(ERR_OWN_COPY_ASSIGNED,            "O32",   "'%S' is a borrowed copy of '%S' and owns nothing, so it is not assigned - declare another with ':='") \
     X(ERR_OWN_COPY_PART,                "O32",   "'%s' belongs to what '%S' was copied from - assign it there") \
-    X(ERR_OWN_VALUE_SOURCE,             "O32",   "%t owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local holding one ('b := a') - this is neither") \
+    X(ERR_OWN_VALUE_SOURCE,             "O32",   "%t owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it") \
     X(ERR_OWN_VALUE_NOT_AN_OWNER,       "O34",   "a local of %t, which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one") \
     X(ERR_OWN_VALUE_DEFAULT,            "O34",   "%t owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves") \
     X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
@@ -357,6 +368,7 @@ struct type;
     X(ERR_MEMBER_IS_PRIVATE,            "M6a",   "member '%S' of %t is private to its module") \
     /* ---- operators and literals ---- */ \
     X(ERR_NOT_ASSIGNABLE,               "S4",    "this cannot be written - a variable, an element or a member can") \
+    X(ERR_ASSIGN_INTO_TRIED,            "R9a",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store") \
     X(ERR_INCDEC_NOT_NUMBER,            "S3a",   "%n takes a number, found %t") \
     X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
@@ -373,6 +385,7 @@ struct type;
     X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
     X(NOTE_OWN_TASK_BORROWS,            "",      "the task borrows it here") \
     X(NOTE_OWN_TASK_CALLS_VALUE,        "",      "it calls a function value here") \
+    X(NOTE_OWN_REACH_VIA_CALL,          "",      "this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads") \
     X(NOTE_OWN_BORROW_LOCAL,            "",      "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") \
     X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
     X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \
@@ -433,6 +446,7 @@ struct type;
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
     X(ERR_WRITE_THROUGH_AT_NO_SETAT,    "E31",   "this writes through x[i] on %t, which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") \
     X(ERR_WRITE_THROUGH_AT_BUILDS,      "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')") \
+    X(ERR_COND_LENT_WRITABLE,           "E28",   "a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") \
     X(ERR_WRITE_THROUGH_AT_CALL,        "E31b",  "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") \
     X(ERR_DEFAULT_ARG_NOT_ALLOWED,      "E14a",  "'default' stands only for a parameter's declared default, in a call") \
     X(ERR_DEFER_ERROR_ESCAPES,          "S19b",  "an error may not leave deferred code - catch it here") \
@@ -601,6 +615,7 @@ struct type;
     X(NOTE_REFILL_KEPT,                 "",      "or refill the one kept - '%S.Clear()', then put the elements in: one made where '%S' lives stays there, beside every one made before it, until that scope closes") \
     X(NOTE_DECLARE_WHERE,               "",      "'%S' is declared here, in a block that closes first - declare it where '%S' lives: '%S %S&%S = ...'") \
     X(NOTE_LOOP_COPY_LENT,              "",      "'%S' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") \
+    X(NOTE_VIEW_REFUSED_BY,             "",      "the callee is no view of the element because of this statement") \
     X(NOTE_HELD_INDEX_WHERE,            "",      "the index is held here, for both the read and the write, in a block that closes first - make it where '%S' lives first, then index with it") \
     X(NOTE_COND_VALUE,                  "",      "this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)") \
     X(NOTE_SLICE_OF_TEMPORARY,          "",      "this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that") \

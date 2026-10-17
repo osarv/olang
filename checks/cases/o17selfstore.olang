@@ -3,6 +3,7 @@
 # value's own storage there - which, for a copy of src.b, is bump's block, while the node lives where src's references
 # do. Only what is read out of the region by following a reference brings in nothing new; this was taken for that, and
 # the node kept a reference into a closed block
+import "std/io"
 type Node struct() {
     owner mut Box& = null
     v I64 = 0
@@ -34,5 +35,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    println($w.b.head.owner.tag)
+    try io.Println($w.b.head.owner.tag)
 }
