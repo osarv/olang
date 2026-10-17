@@ -44,17 +44,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
 **Asked/answered 2026-10-17 (syntax talk):**
 - QN (Python-like indentation instead of `{}`): ANSWERED - keep `{}` ("Ok we keep {}"), after my recommendation
   against (blocks inside expressions - lambdas, catch-with-default, match values - and silent misindentation).
-- QO1 REOPENED 2026-10-17 (QO3, which was to replace it, was withdrawn; the user: "Now for error declaration in
-  headers. We still haven't settled that"). Offered: (a) keep (bare `?` = the default error, generalizing what passes
-  through; `? E` = exactly E); (b) Zig's inferred sets - bare `?` is the set the body can produce, inferred exactly (a
-  fixed point over calls, order of appearance as D16b does for lambdas), so a caller sees and can catch every name, the
-  default error only where the body writes a bare `error`; `? E` is a written, checked promise; a function type still
-  writes its set; (c) open named sets (undone 2026-10-05); (d) `? E + error`. Recommended (b). In effect: (a).
-- QO1. `? IoError` reads as FEWER errors than bare `?`. The user proposed `? IoError` = "any error, and IoError's words
-  knowable". In effect: closed sets (R15, Swift's `throws` vs `throws(E)`). That proposal is what the first default-error
-  version did and the user reverted on 2026-10-05 ("it is the presence of error"; 51 `catch { unreachable }` removed).
-  Options: (a) keep closed; (b) named sets open; (c) closed by default plus an explicit open form `? IoError + error`
-  ("these, and anything else"). Recommended: (a), with (c) as an addition if mixed cases come up.
+- QO1 ANSWERED 2026-10-17 (the user: "Do 2. This fits nicely with main cleanliness and also olang decisions made so
+  far."): inferred error sets, as Zig's - a bare `?` is the set the body can produce (a fixed point over calls), `? E` a
+  written promise the body is held to, function types write their set. And (the user: "For using just error without an
+  error, that has to go. error should always require an actual error to throw"): the default error is removed - no bare
+  `error` statement, no generalization (R17); std's default-error failures get named errors. Details mine. QUEUED with
+  QO4 (std misuse as named errors) as one batch after wt-ioprint and wt-e31view merge; the port's checker told.
+- (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
   PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
