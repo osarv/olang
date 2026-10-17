@@ -3,7 +3,7 @@
 #
 #     doc := try json.Parse(text)
 #     name := try (try doc["users"][0]["name"]).AsStr()
-#     try io.Print(json.Encode(doc, "  "))
+#     io.Print(json.Encode(doc, "  "))
 #
 # A value is a Json, an enum held by reference (T17d): a tree whose arrays and objects hold their parts by reference,
 # matched with nested patterns (case Json.Arr(items)). A tree never changes once built - every payload is read-only -

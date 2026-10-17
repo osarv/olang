@@ -16327,3 +16327,13 @@ V1: T16 was checked over declared types only, so a generic holding itself by val
 overflowed the stack; each instantiation is checked as it is made.
 
 The fuzzer writes both shapes now; own seeds 1-300 found 18 use-after-frees on c7099f6 (10 F1, 8 F2) and none on the fix.
+
+### One printing pathway, `std/io` (M19f, 2026-10-17)
+
+The user's decision: printing has one home. `std/io` gained `Print`, `Println(t = "")`, `PrintErr` and `PrintErrln`;
+none can fail to the caller - a write the system refuses prints a line naming the function on the standard error and
+ends the program as a failed check does (recoverable inside a test). Removed: `std/prelude/print.olang`, the lowercase
+words' special cases in the checker (the bare-name exception to M6, the D3a/G22 name bans) and the `m19fredeclared`
+check. The repository was migrated by `tools/io_print.py` (`try io.Print(...)` became `io.Print(...)`, bare `println(`
+became `io.Println(`, with `import "std/io"` added); the scope fuzzer's generated programs import `std/io` and write
+`io.Println`. SPEC M19f rewritten; D3a and G22 no longer mention the prelude's writing functions.

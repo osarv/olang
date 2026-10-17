@@ -5242,6 +5242,10 @@ and literals made only of such, never existing storage anywhere in it) - it is
   words in `p`'s block, memory only) recorded. Also: T29a retypes only a call's reference (a conditional of views is a
   copy again, N1) and a fixed-length one too (X1b); a type too deep to walk is its own error, not O31 (N2); a generic
   holding itself by value is T16, where the compiler crashed (V1). Cases `vec147`-`vec160`; five fuzzer shapes.
+- **One printing pathway, `std/io` (M19f, 2026-10-17, the user's decision; reverses M19f's prelude words).** `io.Print`,
+  `io.Println(t = "")`, `io.PrintErr`, `io.PrintErrln` take no `try`: a failed write ends the program as a failed check
+  does, with a stderr line naming the function. The prelude's `print`/`println`/`eprint`/`eprintln`, their compiler
+  special cases and the ban on declaring those names are gone; `try io.Print(...)` became `io.Print(...)`.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

@@ -2550,7 +2550,7 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
             if ci < has.Len() and has[ci] {
                 prints.Push("    assert $c" $ci "(" $g.lits ") == " $quoted(expect[ci]) "\n")
             }
-            prints.Push("    try io.Print(\"" $ci ": \" $K" $ci " \" | \" $c" $ci "(" $g.vars ") \"\\n\")\n")
+            prints.Push("    io.Print(\"" $ci ": \" $K" $ci " \" | \" $c" $ci "(" $g.vars ") \"\\n\")\n")
         }
     }
     b.Push("fn main() ? io.IoError {\n    if os.Args().Len() > 1000 {\n")
