@@ -36,5 +36,5 @@ fn main() ? {
         want2 += 4 * (1000000 + i)
         want3 += 4 * (2000000 + i)
     }
-    if s1 != want1 or s2 != want2 or s3 != want3 { fail }
+    assert not (s1 != want1 or s2 != want2 or s3 != want3)
 }

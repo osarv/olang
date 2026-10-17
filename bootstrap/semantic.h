@@ -145,6 +145,7 @@ struct type {
     struct list errors; //list of struct type*: error types declared in the signature's error list - or, for one written
                         //"?" alone (errsInferred, R1a), the set its body can produce, in a canonical order once settled
     bool errsInferred;  //R1a: the signature wrote "?" with no error types - the set is the body's
+    bool noReturn;      //D8e: "noreturn" - the function never returns to its caller
     //BASETYPE_FUNC, O13: the result scope of a BUILT result - a scope variable no parameter names, bound where
     //the call's result lands (O18a) or by a scope argument (E25). NULL for a borrowed result (T&p) and for a
     //result that neither is nor holds a reference.
@@ -549,10 +550,7 @@ enum statementType {
     STATEMENT_DEFER, //S19: block is the deferred code, run on every way out of the block this statement is in
     STATEMENT_BREAK,    //S11: leaves the innermost enclosing loop
     STATEMENT_CONTINUE, //S11: ends the current iteration
-    STATEMENT_ABORT,       //S16c
     STATEMENT_UNREACHABLE, //S16d
-    STATEMENT_DONE,  //process exit, OS-standard success (0) - never takes a value
-    STATEMENT_FAIL, //process exit, OS-standard failure (1) - never takes a value
     STATEMENT_ASSERT,
     STATEMENT_ERROR,
     STATEMENT_TRY_CATCH
@@ -581,7 +579,8 @@ struct catchClause {
     struct var* taskFn;
     struct operand* taskCall;
     bool givesValue;
-    bool ends;               //E35: "x!" - the error ends the test or the program, naming itself, as a failed check
+    unsigned char ends;      //E35: 1 for "x!" - the error ends the test or the program, naming itself, as a failed check;
+                             //2 (S16) - an error a try lets out of a test body, which fails the test
 };
 
 //D16: one variable a lambda captured - as the body around it sees it, and the lambda's own copy
@@ -983,6 +982,7 @@ void VarListAddSetOrigin(struct list* l, struct var v);
 
 void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
+bool OperandIsNoReturnCall(struct operand* op); //D8e
 
 //requireMain: only "-b" (§10 B3) needs a "main" - "-c" compiles a plain module and "-t" runs tests,
 //neither of which has or wants one

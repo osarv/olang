@@ -2261,8 +2261,8 @@ test "a malformed function: every malformation is caught" {
     s14 := f14.AddScope(ScopeKind.Inert, ScopeId(0), typed.BlockId(-1), Sp0)
     r14 := f14.AddTemp(ri, Sp0)
     f14.Blocks[0].Stmts[1] = Stmt.Open(Sp0, s14)
-    try f14.Blocks[0].Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri))) catch { fail }
-    try f14.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, s14)) catch { fail }
+    try f14.Blocks[0].Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
+    try f14.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, s14))
     expect(t, f14, "bb0[2]: built in S1, which is inert")
     f15 := addFn(t)
     f15.Blocks[0].Stmts[2] = Stmt.Give(Sp0, ScopeId(0))
@@ -2270,7 +2270,7 @@ test "a malformed function: every malformation is caught" {
     # an arena local stored into before its storage is made
     f16 := addFn(t)
     a16 := f16.AddLocal(Local(source.NameId(0), Sp0, i32, LocalKind.Temp, ScopeRef.Scope(ScopeId(0))))
-    try f16.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3)))) catch { fail }
+    try f16.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3))))
     expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
     # an own slot given a borrow
     m := t.AddModule("t")
@@ -2279,7 +2279,7 @@ test "a malformed function: every malformation is caught" {
     f17 := addFn(t)
     ow := f17.AddTemp(t.Ref(q, types.Owning | types.Writable), Sp0)
     brw := f17.AddTemp(t.Ref(q, types.Writable), Sp0)
-    try f17.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(ow), Rvalue.Use(Operand.Copy(L(brw))))) catch { fail }
+    try f17.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(ow), Rvalue.Use(Operand.Copy(L(brw)))))
     expect(t, f17, "bb0[1]: an own slot given a borrow, not an owner")
     # a check written as an operation; a switch with a value twice
     f18 := addFn(t)
@@ -2327,15 +2327,15 @@ test "a malformed function: every malformation is caught" {
     f21 := addFn(t)
     j21 := f21.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0)
     k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Place[], TaskClause[])
-    try f21.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j21)) catch { fail }
-    try f21.Blocks[0].Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21)) catch { fail }
-    try f21.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, j21)) catch { fail }
+    try f21.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j21))
+    try f21.Blocks[0].Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
+    try f21.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, j21))
     expect(t, f21, "bb0[3]: join S1 closed with tasks not waited for")
     f22 := addFn(t)
     j22 := f22.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0, t.List1(types.DefaultErrT))
     b22 := f22.NewBlock()
     f22.Blocks[0].Stmts.Truncate(2)
-    try f22.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j22)) catch { fail }
+    try f22.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j22))
     f22.End(b0, Term.Wait(Sp0, j22, b22, NoLocal, NoBlock))
     f22.Add(b22, Stmt.Close(Sp0, j22))
     f22.Add(b22, Stmt.Close(Sp0, ScopeId(0)))
@@ -2343,7 +2343,7 @@ test "a malformed function: every malformation is caught" {
     assert f22.Verify(t) == "bb0[term]: a wait for a join that can fail with no failed edge\n", f22.Verify(t)
     f23 := addFn(t)
     k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Place[], TaskClause[])
-    try f23.Blocks[0].Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23)) catch { fail }
+    try f23.Blocks[0].Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
     expect(t, f23, "a spawn into S0, which is no join")
 }
 

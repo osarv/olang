@@ -1,0 +1,16 @@
+# S18d: an error escaping main - its trace in a -d build and under -i, a hint to rebuild with -d in any other; and a "!"
+error FxErr {
+    GONE
+}
+Depth mut I64 = 3
+fn inner(n I64) I64 ? {
+    if n > 0 { error FxErr.GONE }
+    return n
+}
+fn middle(n I64) I64 ? {
+    return try inner(n)
+}
+fn main() ? {
+    if Depth > 100 { x := middle(Depth)! }
+    x := try middle(Depth)
+}

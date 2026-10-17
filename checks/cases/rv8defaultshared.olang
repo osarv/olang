@@ -40,6 +40,6 @@ fn main() ? {
     }
     f := fn(k I64) I64 { return pickd(a).v + k }
     churn()
-    if one(a) != 16 or deep(a, 2) != 24 or f(1) != 8 or x.v != 7 or y.v != 5 { fail }
-    if kept[4].v != 7 or kept[5].v != 5 or listd(a) != 4 { fail }
+    assert not (one(a) != 16 or deep(a, 2) != 24 or f(1) != 8 or x.v != 7 or y.v != 5)
+    assert not (kept[4].v != 7 or kept[5].v != 5 or listd(a) != 4)
 }

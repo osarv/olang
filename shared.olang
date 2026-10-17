@@ -368,9 +368,7 @@ fn alwaysCloses() Bool ? CloseError {
 type Handle struct(id I32) {
     id
 } destruct {
-    try alwaysCloses() catch CloseError {
-        fail
-    }
+    alwaysCloses()!
     resourcesClosed = resourcesClosed + 1
 }
 
@@ -1842,9 +1840,9 @@ test "a callee's join is entirely its own" {
 #                                          # the argument is declared in a block that closes before the
 #                                          # join does, so the task could outlive its own storage
 
-# S18b/P1d: leaving a test EARLY unwinds before it jumps. "done" ends a test as passed and "assert
-# false" ends it as failed, but both leave by the same longjmp, so both take the same path - which is why
-# these can be written as passing tests at all. Before this, the jump ran no join and no scope close: the
+# S18b/P1d: leaving a test early unwinds its scopes and joins its tasks - by a return, the ordinary way out (below),
+# and by a failure, which leaves by a longjmp unwound before the jump (the checks scenario "testends", since such a
+# test fails). Before this, the jump ran no join and no scope close: the
 # task below kept running into the next test, and none of the handles were destructed. The closes could
 # not simply be emitted at the harness's landing block, because LLVM does not model longjmp's edge and
 # proves them no-ops on the only path it can see; the runtime now keeps a chain of the scopes actually
@@ -1863,7 +1861,7 @@ test "a test left early still waits for its tasks" {
     finishedEarly = 0
     join {
         spawn slowlyFinish(400000)
-        done
+        return
     }
 }
 
@@ -1886,7 +1884,7 @@ test "a test left early runs the destructors of every scope it abandons" {
     resourcesClosed = 0
     top Handle& = makeHandle(0)
     handlesDeeper()
-    done
+    return
 }
 
 test "...all three of them ran" {
@@ -4465,45 +4463,57 @@ test "float division by zero is a value, not a failure" {
 # and what costs nothing still stands: a constant zero divisor is rejected where it is written -
 #   n I32 = 10 / 0                    a compile error, not something to find out at run time
 
-# ---- S16/S16a/S16b: done and fail ----
+# ---- S16: how a test ends ----
 
-# Both end the INNERMOST thing that can end: the current test if one is running, the process otherwise.
-# Which applies is decided at run time, not by where the statement is written - the same rule a failed
-# assert already followed (S18), so a "fail" in a helper called from a test ends that test rather than
-# the run. That is what makes them one rule instead of two.
-# "fail" replaced "crash", which named the wrong thing: it is an orderly exit the program chose, running
-# the normal exit path and reporting the OS-standard failure status. The violent kind - no cleanup, a core
-# dump - is reachable only by a runtime check failing, never by anything a program can write, which is why
-# S16b records the decision NOT to add an "abort" statement: it would differ from "fail" only in leaving a
-# core file.
-fn endsTheTestAsPassed() I32 {
-    done
-    return -1        # never reached
-}
+# A test passes by reaching its end or a bare "return", and fails by a failed assert or check, "unreachable", a "!"
+# taking an error, or an error a "try" lets out of its body. A return runs the deferred code pending and closes the
+# scopes on the way out, as a function's does. (A test failing on purpose cannot be shown in a passing suite: the
+# checks scenario "testends" builds such tests and reads what they print.)
+s16Log mut I64 = 0
 
-test "done ends the current test as passed" {
+test "return ends the current test as passed" {
     assert true
-    done
+    return
     unreachable        # never reached
 }
 
-test "done from a helper ends the test too - the rule is dynamic, not lexical" {
-    endsTheTestAsPassed()
-    unreachable        # never reached
+test "a return from a nested block ends the test, running what is deferred" {
+    defer s16Log = 7
+    for i in range 5 {
+        if i == 2 {
+            s16Log = 1
+            return
+        }
+    }
+    unreachable
+}
+
+test "...and the deferred code ran" {
+    assert s16Log == 7
 }
 
 test "a test after one that ended early still runs" {
     assert true
 }
 
-# "fail" cannot be demonstrated in a passing test - it would mark this one failed - so it is named here:
-#   test "..." { fail }                          marks this test failed, the run continues
-#   fn main() ? E { fail }                     exits the process with status 1
-# and outside a test run both keep their process meaning: "done" exits 0, "fail" exits 1.
+error S16Err {
+    MISSING
+}
+
+fn s16Find(n I64) I64 ? {
+    if n < 0 { error S16Err.MISSING }
+    return n * 2
+}
+
+test "a try in a test need not catch: what succeeds goes on" {
+    x := try s16Find(4)
+    assert x == 8
+    try s16Find(1)
+}
 
 # S18a: each runtime check now names what failed instead of all three printing "assertion failed":
 #   assertion failed / slice bounds out of range / array length out of range
-# S18b: a test abandoned partway - by a failed assert, a failed check, or done/fail - does NOT run the
+# S18b: a test abandoned partway - by a failed assert, a failed check, or unreachable - does NOT run the
 # destructors of values still live in it. The recovery path is a longjmp, and unwinding after one cannot
 # be expressed in a way an optimizer keeps: LLVM does not model the jump, so from the landing block the
 # only edge in comes from before the setjmp, where the scopes are still empty - it proves any close
@@ -8252,8 +8262,8 @@ test "E31/S9e: try calls the Try forms or derives them from Len; try on a store 
     k mut TxSink& = TxSink()
     k[2] = 40
     assert k.last == 42
-    try txWalkPropagates() catch TxErr { done }
-    fail
+    try txWalkPropagates() catch TxErr { return }
+    unreachable
 }
 
 # E29/S9e: "try (x in c)" reaches a Has that can fail; "try T[e for x in c]" covers a comprehension's own calls, an
@@ -10325,21 +10335,8 @@ test "a block inside a catch clause closes at its own brace" {
     assert dfInClause() == 221345
 }
 
-# S19c: a test ended early - by done here - runs no deferred code, neither a helper's nor its own; its scopes are
-# still closed (S18b)
-dfDoneLog mut I64 = 0
-fn dfEndsEarly() {
-    defer dfDoneLog = 2
-    done
-}
-test "S19c: a test ended by done runs no deferred code" {
-    dfDoneLog = 0
-    defer dfDoneLog = 1
-    dfEndsEarly()
-}
-test "...neither the helper's nor the test's own" {
-    assert dfDoneLog == 0
-}
+# S19c: a test ended early runs no deferred code, neither a helper's nor its own; its scopes are still closed (S18b) -
+# shown by the checks scenario "testends", since such a test fails
 
 # a statement after one that always leaves is dead, and compiles to a block nothing reaches - it used to follow the
 # terminator in the same block, which is invalid IR
@@ -11619,11 +11616,11 @@ fn fzChecked(x I32) I32 ? fzErr {
 }
 fn fzGuarded(x I32) I32 {
     if x < 0 { unreachable }
-    if x > 1000 { abort }
+    if x > 1000 { unreachable }
     return try fzChecked(x) catch { unreachable }
 }
 FzGuardedBaked I32 = fzGuarded(5)
-test "K1: a function holding unreachable or abort is evaluated until it reaches one" {
+test "K1: a function holding unreachable is evaluated until it reaches one" {
     assert FzGuardedBaked == 15 and fzGuarded(5) == 15
     assert fzGuarded(I32(fzRun) + 4) == 15
 }
@@ -12646,7 +12643,7 @@ test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
     assert MxCalls == 2 and g[1, 0] == 5
     g[mxNext() - 2, 0] *= 3
     assert MxCalls == 3 and g[1, 0] == 15
-    checked g[1, 1] = 4 catch { fail }
+    checked g[1, 1] = 4
     checked g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
     assert MxCalls == 0 and g[1, 1] == 4 and (checked g[-1, 0] catch default 7) == 7
 }
@@ -15060,31 +15057,8 @@ test "E11c: a Str walking a Map and a List of its receiver renders the same afte
     assert s == "37/1/30" and t == "Map<I64, List<I64>>{1: List<I64>[4, 5]}"
 }
 
-# S16/E11c: "done" inside a Str ends the test as passed - the scope "$" opened for the Str's result and the Str's own block
-# are closed on the way out, their destructors running
-DoneStrDestructs mut I64 = 0
-type doneStrRes struct(k I64) {
-    k
-} destruct { DoneStrDestructs += k }
-type doneStrBag struct(n I64) {
-    n
-}
-fn (b doneStrBag&) Str() String {
-    r doneStrRes&return = doneStrRes(1)
-    q := doneStrRes(2)
-    if b.n == 7 { done }
-    return "b" $r.k $q.k
-}
-
-test "S16/E11c: done inside a Str ends the test, closing what it built" {
-    b := doneStrBag(7)
-    s := $b
-    assert s == "never"
-}
-
-test "S16/E11c: ...and both of the Str's destructors ran" {
-    assert DoneStrDestructs == 3
-}
+# S16/E11c: a test failing inside a Str closes the scope "$" opened for the Str's result and the Str's own block, their
+# destructors running - shown by the checks scenario "testends", since such a test fails
 
 # C11/O16: every constructor call of a type declaring a destructor is one instance, destructed once when the scope it was
 # built in closes - one standing as a statement, read through, rendered, passed, stored, in a conditional, pushed alike
@@ -16529,7 +16503,7 @@ test "D10a/P4c: a function may end in a join that leaves" {
 test "P4b: a test ending early waits for a failing task and drops its error" {
     try join {
         spawn try peSpin(-sbRun, 200000)
-        done
+        return
     } catch peErr { unreachable }
 }
 
@@ -16629,7 +16603,7 @@ type b6Res struct(k I64) {
             for j in range 10 { keep.Push(b6Tracker(kk * 100 + j)) }
         }
     }
-    if keep.Len() != 10 { fail }
+    assert keep.Len() == 10
 }
 fn b6Once(i I64) {
     r b6Res& = b6Res(i)
@@ -16643,27 +16617,8 @@ test "C9a/P2: what a destructor's task builds is destructed with the scope being
     assert B6Count - before == 40
 }
 
-# C9a/S18: a destructor ending its test early leaves the scope's other destructors to the test's unwind, which runs them -
-# each once. The second test reads what the first left
-B6Log mut I64 = 0
-type b6Step struct(k I64) {
-    k
-} destruct {
-    B6Log = B6Log * 10 + k
-    if k == 2 { done }
-}
-fn b6Steps() {
-    s1 b6Step& = b6Step(1)
-    s2 b6Step& = b6Step(2)
-    s3 b6Step& = b6Step(3)
-}
-test "C9a/S18: a destructor that ends its test - the scope's other destructors still run" {
-    b6Steps()
-    unreachable
-}
-test "C9a/S18: ...each of them once" {
-    assert B6Log == 321
-}
+# C9a/S18: a destructor failing its test leaves the scope's other destructors to the test's unwind, which runs them -
+# each once: the checks scenario "testends"
 
 # C10: a method called on a field read bare in a destructor - "l.Push(k)" - is called on the instance's field, as a bare
 # read of it reads it

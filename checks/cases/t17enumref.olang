@@ -13,5 +13,5 @@ fn sum(e E&) I64 {
 }
 fn main() ? {
     x E& = E.Add(E.Lit(1), E.Add(E.Lit(2), E.Lit(3)))
-    if sum(x) != 6 { fail }
+    assert sum(x) == 6
 }

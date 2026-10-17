@@ -40,11 +40,9 @@ struct tokRule tokRules[] = {
     {TOK_DEFER, "defer", NULL},
     {TOK_BREAK, "break", NULL},
     {TOK_CONTINUE, "continue", NULL},
-    {TOK_ABORT, "abort", NULL},
     {TOK_UNREACHABLE, "unreachable", NULL},
     {TOK_EXTENDS, "extends", NULL},
-    {TOK_DONE, "done", NULL},
-    {TOK_FAIL, "fail", NULL},
+    {TOK_NORETURN, "noreturn", NULL},
     {TOK_ASSERT, "assert", NULL},
     {TOK_FOR, "for", NULL},
     {TOK_DO, "do", NULL},
@@ -607,8 +605,8 @@ bool stmntEndTriggerType(enum tokenType type) {
         case TOK_STR_LIT: case TOK_BOOL_LIT: case TOK_NULL_LIT:
         case TOK_INC: case TOK_DEC: case TOK_BANG:
         case TOK_PAREN_C: case TOK_SQUARE_C:
-        case TOK_RET: case TOK_DONE: case TOK_FAIL: case TOK_ERROR:
-        case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:
+        case TOK_RET: case TOK_ERROR: case TOK_NORETURN:
+        case TOK_BREAK: case TOK_CONTINUE: case TOK_UNREACHABLE:
             return true;
         default: return false;
     }

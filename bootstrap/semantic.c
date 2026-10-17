@@ -550,7 +550,7 @@ bool TypeIsSame(struct type a, struct type b) {
                 struct var* vb = ListGetIdx(&b.vars, i);
                 if (va->mut != vb->mut || !typeSameNested(va->type, vb->type)) return false;
             }
-            if (a.hasRetType != b.hasRetType) return false;
+            if (a.hasRetType != b.hasRetType || a.noReturn != b.noReturn) return false;
             if (a.hasRetType && !typeSameNested(*a.retType, *b.retType)) return false;
             //T22: the same errors in the same order - a fallible call reports an error by its position
             if (a.errors.len != b.errors.len) return false;
@@ -5505,6 +5505,10 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
 
     t.errors = ListInit(sizeof(struct type*));
     t.errsInferred = resolveErrorList(mod, firstPartOfType(sigNode, SNTX_ERROR_LIST), &t.errors);
+    if (hasTokOfType(sigNode, TOK_NORETURN)) { //D8e
+        t.noReturn = true;
+        if (firstPartOfType(sigNode, SNTX_ERROR_LIST)) Err(firstTokOfType(sigNode, TOK_NORETURN), ERR_NORETURN_ERRORS);
+    }
 
     //G3: this function is generic exactly when a type variable appears anywhere in its signature - there
     //is no declaration list to consult, the set IS whatever appears. Collected from the parameters first
@@ -5631,6 +5635,7 @@ struct type resolveExternFuncSig(struct semaModule* mod, struct syntax* declNode
     bool runtimeFn = name.len > 8 && !strncmp(name.ptr, "__olang_", 8);
     resolveExternParamList(mod, firstPartOfType(declNode, SNTX_EXTERN_PARAM_LIST), &t.vars, runtimeFn);
     t.errors = ListInit(sizeof(struct type*));
+    t.noReturn = hasTokOfType(declNode, TOK_NORETURN); //D8e: "extern fn exit(code I32) noreturn"
 
     struct syntax* retTypeNode = firstPartOfType(declNode, SNTX_RET_TYPE);
     if (retTypeNode) {
@@ -6170,24 +6175,24 @@ static bool eqWellShaped(struct var* m) {
 
 //E31: the operator methods, by capitalized name, with how many operands each takes besides the receiver and
 //whether it gives a result. The same name with a lowercase first letter is the module's private operator.
-struct operatorShape { const char* name; int operands; bool result; bool mayFail; bool mustFail; };
+struct operatorShape { const char* name; int operands; bool result; bool mayFail; };
 static const struct operatorShape operatorShapes[] = {
     //QQ1: a plain operator may fail, declaring its errors - "try (a + b)" handles them as for a call
-    {"Plus", 1, true, true, false}, {"Minus", 1, true, true, false}, {"Mul", 1, true, true, false},
-    {"Div", 1, true, true, false}, {"Rem", 1, true, true, false}, {"MatMul", 1, true, true, false},
-    {"Neg", 0, true, true, false}, {"Less", 1, true, true, false}, {"At", 1, true, true, false},
-    {"SetAt", 2, false, true, false}, {"Slice", 2, true, true, false}, {"BitAnd", 1, true, true, false},
-    {"BitOr", 1, true, true, false}, {"BitXor", 1, true, true, false}, {"ShiftLeft", 1, true, true, false},
-    {"ShiftRight", 1, true, true, false}, {"BitNot", 0, true, true, false}, {"Inc", 0, true, true, false},
-    {"Dec", 0, true, true, false}, {"Len", 0, true, false, false},
-    {"Eq", 1, true, false, false}, {"Str", 0, true, false, false}, //E10a/E11c: what "==" and "$" consult
+    {"Plus", 1, true, true}, {"Minus", 1, true, true}, {"Mul", 1, true, true},
+    {"Div", 1, true, true}, {"Rem", 1, true, true}, {"MatMul", 1, true, true},
+    {"Neg", 0, true, true}, {"Less", 1, true, true}, {"At", 1, true, true},
+    {"SetAt", 2, false, true}, {"Slice", 2, true, true}, {"BitAnd", 1, true, true},
+    {"BitOr", 1, true, true}, {"BitXor", 1, true, true}, {"ShiftLeft", 1, true, true},
+    {"ShiftRight", 1, true, true}, {"BitNot", 0, true, true}, {"Inc", 0, true, true},
+    {"Dec", 0, true, true}, {"Len", 0, true, false},
+    {"Eq", 1, true, false}, {"Str", 0, true, false}, //E10a/E11c: what "==" and "$" consult
     //E31a: the checked forms, which "checked" calls (CheckedAt, CheckedSlice and CheckedSetAt are derived from the plain
     //form and Len when not declared) - each a superset of its plain form's errors (checkCheckedForms)
-    {"CheckedPlus", 1, true, true, true}, {"CheckedMinus", 1, true, true, true}, {"CheckedMul", 1, true, true, true},
-    {"CheckedDiv", 1, true, true, true}, {"CheckedRem", 1, true, true, true}, {"CheckedMatMul", 1, true, true, true},
-    {"CheckedNeg", 0, true, true, true}, {"CheckedAt", 1, true, true, true}, {"CheckedSetAt", 2, false, true, true},
-    {"CheckedSlice", 2, true, true, true}, {"CheckedShiftLeft", 1, true, true, true},
-    {"CheckedShiftRight", 1, true, true, true}, {"CheckedInc", 0, true, true, true}, {"CheckedDec", 0, true, true, true},
+    {"CheckedPlus", 1, true, true}, {"CheckedMinus", 1, true, true}, {"CheckedMul", 1, true, true},
+    {"CheckedDiv", 1, true, true}, {"CheckedRem", 1, true, true}, {"CheckedMatMul", 1, true, true},
+    {"CheckedNeg", 0, true, true}, {"CheckedAt", 1, true, true}, {"CheckedSetAt", 2, false, true},
+    {"CheckedSlice", 2, true, true}, {"CheckedShiftLeft", 1, true, true},
+    {"CheckedShiftRight", 1, true, true}, {"CheckedInc", 0, true, true}, {"CheckedDec", 0, true, true},
 };
 
 //M6b: while the prelude's Equal and HashElements are checked for an instantiation - the element-wise "==" and the
@@ -6287,7 +6292,8 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         if (!strcmp(operatorShapes[k].name, cap)) sh = &operatorShapes[k];
     int before = ErrMsgGetNErrors();
     if (sh) {
-        if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
+        if (a->type.noReturn) Err(a->tok, ERR_NORETURN_HERE, "an operator's method"); //D8e
+        else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
         else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) Err(a->tok, ERR_LESS_NOT_BOOL);
@@ -8471,6 +8477,7 @@ static bool funcFitsByPermission(struct type want, struct type have) {
         if ((!refs && va->mut != vb->mut) || !TypeIsSameStrict(va->type, b)) return false;
     }
     if (want.hasRetType != have.hasRetType) return false;
+    if (want.noReturn && !have.noReturn) return false; //D8e: a noreturn function fits a type with no result too
     if (want.hasRetType) {
         struct type b = *have.retType;
         if (TypeIsPermRef(*want.retType) && TypeIsPermRef(b) && !want.retType->refMut) b.refMut = false;
@@ -8484,6 +8491,8 @@ static bool funcFitsByPermission(struct type want, struct type have) {
 }
 
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
+    //D8e: control never arrives where a noreturn call's value would be used, so it fits whatever is expected
+    if (OperandIsNoReturnCall(op) && op->type.bType == BASETYPE_VOID && !target.unknown) { op->type = target; return TYPE_FIT_OK; }
     if (target.unknown || op->type.unknown) return TYPE_FIT_OK; //already reported as an unknown type
     if (target.bType == BASETYPE_INTERFACE) return TYPE_FIT_OK; //T30: reported where the trait was written as a type
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
@@ -9010,7 +9019,8 @@ static bool inferOwnValue;
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     FinalizeLambda(rhs, NULL); //D16b
-    if (rhs->isNullLiteral || rhs->type.bType == BASETYPE_NULL) Err(rhs->tok, ERR_DECL_FROM_NULL);
+    if (OperandIsNoReturnCall(rhs)) Err(rhs->tok, ERR_DECL_FROM_NORETURN); //D8e
+    else if (rhs->isNullLiteral || rhs->type.bType == BASETYPE_NULL) Err(rhs->tok, ERR_DECL_FROM_NULL);
     else if (!operandHasDeclType(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
     //...and an expression of numeric literals alone (E4a), computed while compiling, declares what its value written
     //as one literal would (T6a): "x := 1 + 2" an I32, "x := 2147483647 + 1" an I64, as "x := 2147483648" is
@@ -15558,6 +15568,11 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
         t.arrLen = NULL;
         reportTypeFit(OperandFitsType(ctx->func, a, t), a->tok, a, t);
         reportTypeFit(OperandFitsType(ctx->func, b, t), b->tok, b, t);
+    } else if (OperandIsNoReturnCall(b) && b->type.bType == BASETYPE_VOID) { //D8e: a noreturn call gives way to the other value
+        b->type = a->type;
+    } else if (OperandIsNoReturnCall(a) && a->type.bType == BASETYPE_VOID) {
+        a->type = b->type;
+        t = b->type;
     } else if (!TypeIsSame(a->type, b->type)) {
         if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && operandAdaptsAsLiteral(a) && operandAdaptsAsLiteral(b)) {
             t = numericTypeRank(a->type) >= numericTypeRank(b->type) ? a->type : b->type;
@@ -16547,6 +16562,21 @@ void rejectDefaultArgs(struct list args) {
     }
 }
 
+//S16: set where what a try lets through would leave a test body, which has no error union - the try then takes it with
+//a clause of its own that fails the test (ends == 2), added by its builder through takeTestEscape
+static bool testEscapes;
+static void takeTestEscape(struct list* clauses, struct token tok) {
+    if (!testEscapes) return;
+    testEscapes = false;
+    struct catchClause cc = (struct catchClause){0};
+    cc.tok = tok;
+    cc.catchAll = true;
+    cc.ends = 2;
+    cc.matches = ListInit(sizeof(struct catchMatch));
+    if (!clauses->elemSize) *clauses = ListInit(sizeof(struct catchClause));
+    ListAdd(clauses, &cc);
+}
+
 //every error type a `try`'d call can produce must appear in the enclosing function's own declared error
 //list, so an unhandled/uncaught error always has somewhere valid to propagate to. Required even for error
 //types a catch clause fully handles, not just the ones that actually escape - see the report, this is a
@@ -16555,7 +16585,7 @@ void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type callee
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
     if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
-    if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
+    if (!ctx->func) { if (ctx->inTest) { testEscapes = true; return; } Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     for (int i = 0; i < calleeType.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&calleeType.errors, i);
         bool found = false;
@@ -16759,17 +16789,7 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
         } else {
             bool leaves = blk && blockLeavesValue(&cc.block);
             if (hasDefault && leaves) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_DEAD);
-            if (!hasDefault && !leaves && !valueLeft) {
-                //B5b: "os.Exit(2)" ends the program, but as an ordinary call - D10a cannot see it leave
-                struct statement* lastSt = cc.block.len ? ListGetIdx(&cc.block, cc.block.len - 1) : NULL;
-                struct var* lf = lastSt && lastSt->sType == STATEMENT_EXPR && lastSt->op && lastSt->op->opType == OPERATION_FUNCCALL
-                                 ? lastSt->op->readVar : NULL;
-                bool exits = lf && (StrCmp(lf->name, StrFromCStr("Exit"))
-                                    || (lf->type.isExtern && (StrCmp(lf->name, StrFromCStr("exit"))
-                                                              || StrCmp(lf->name, StrFromCStr("_exit"))
-                                                              || StrCmp(lf->name, StrFromCStr("abort")))));
-                Err(exits ? lastSt->op->tok : cc.tok, exits ? ERR_CATCH_EXIT_NOT_LEAVE : ERR_CATCH_MUST_LEAVE);
-            }
+            if (!hasDefault && !leaves && !valueLeft) Err(cc.tok, ERR_CATCH_MUST_LEAVE);
             if (hasDefault && !leaves) {
                 if (!rt) {
                     Err(cc.tok, ERR_DEFAULT_NO_VALUE);
@@ -16789,6 +16809,7 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
         ListAdd(out, &cc);
     }
     if (!sawAll) checkUncaughtPropagate(ctx, tok, errors, &seen);
+    takeTestEscape(out, tok);
 }
 
 //R20: marks every operation in a tried expression that can fail a check as checked by root, and returns the
@@ -16986,6 +17007,7 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         struct type et = (struct type){0};
         et.errors = errors;
         checkTrySuperset(ctx, tok, et);
+        takeTestEscape(&callOp->catchClauses, tok);
     }
     return callOp;
 }
@@ -23193,6 +23215,7 @@ static void forInTryFinish(struct forInTry* ft) {
         if (!p->isToken && p->sntx->type == SNTX_CATCH_CLAUSE) bad = clauseLoopExit(p->sntx);
     }
     if (bad.type != TOK_NONE) Err(bad, ERR_FOR_IN_CLAUSE_EXIT);
+    bool escapesTest = false;
     for (int c = 0; c < ft->calls.len; c++) {
         struct operand* call = *(struct operand**)ListGetIdx(&ft->calls, c);
         struct checkCtx* cctx = &ft->ctxs[c];
@@ -23201,7 +23224,10 @@ static void forInTryFinish(struct forInTry* ft) {
                 struct type et = (struct type){0};
                 et.errors = ft->errors;
                 checkTrySuperset(cctx, ft->kw, et);
+                escapesTest = testEscapes;
             }
+            testEscapes = escapesTest; //S16: each of the loop's calls lets it out of the test
+            takeTestEscape(&call->catchClauses, ft->kw);
             continue;
         }
         //built once per call, each in its own place - a clause's block is code, emitted where the call is; reported once
@@ -25236,7 +25262,8 @@ static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, s
         ownValueGiven(ctx, val, *ctx->func->type.retType, ctx->func->type.resultScope, 0, false);
     }
     if (ctx->inCtor) Err(tok, ERR_RETURN_IN_CTOR);
-    else if (ctx->inTest && !ctx->func) Err(tok, ERR_RETURN_IN_TEST); //S15: a test is not a function
+    else if (ctx->inTest && !ctx->func) { if (val) Err(tok, ERR_RETURN_IN_TEST); } //S15: a test passes by a bare return
+    else if (ctx->func && ctx->func->type.noReturn) Err(tok, ERR_RETURN_IN_NORETURN); //D8e
     else if (val && ctx->func && !ctx->func->type.hasRetType) Err(tok, ERR_RETURN_VALUE_IN_VOID);
     else if (!val && ctx->func && ctx->func->type.hasRetType) Err(tok, ERR_RETURN_NEEDS_VALUE, ctx->func->type.retType);
     else if (val && ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->refOwn) {
@@ -26041,6 +26068,12 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//D8e: a call to a "noreturn" function, or through a "noreturn" function value
+bool OperandIsNoReturnCall(struct operand* op) {
+    return op && op->opType == OPERATION_FUNCCALL && op->readVar && op->readVar->type.bType == BASETYPE_FUNC
+           && op->readVar->type.noReturn;
+}
+
 //D10a: does control definitely leave this block, rather than running off its end? A conservative,
 //purely structural answer - no dataflow, no constant folding - so it says "no" for some bodies that in
 //fact always return, which is exactly what "unreachable" is for.
@@ -26055,10 +26088,9 @@ static bool stmntAlwaysExits(struct statement* s) {
         case STATEMENT_BREAK: case STATEMENT_CONTINUE: return exitsCountLoopJumps;
         //every way out of a function body: a return, an error (which returns), and the four that end the
         //test or the process outright
-        case STATEMENT_RET: case STATEMENT_ERROR:
-        case STATEMENT_DONE: case STATEMENT_FAIL:
-        case STATEMENT_ABORT: case STATEMENT_UNREACHABLE:
+        case STATEMENT_RET: case STATEMENT_ERROR: case STATEMENT_UNREACHABLE:
             return true;
+        case STATEMENT_EXPR: return OperandIsNoReturnCall(s->op); //D8e
         case STATEMENT_IF:
             //G15: a selected "match <T>" arm collapses to an "if" whose condition is a literal true, with
             //no else - the arm IS the statement. Such an if always runs its block, so it exits when the
@@ -26550,6 +26582,7 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
     bodyEnd(c.bodyId, L->codeBlock);
     L->bodyHadErrors = ErrMsgGetNErrors() != errsBefore;
     if (L->type.hasRetType && !blockAlwaysExits(&L->codeBlock)) Err(kw, ERR_MISSING_RETURN, L->type.retType); //D10a
+    if (L->type.noReturn) Err(kw, ERR_NORETURN_HERE, "a lambda"); //D8e
     L->inferRet = false;
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
@@ -26662,18 +26695,12 @@ struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum st
     return (struct statement){.sType = kind};
 }
 
-//S16c/S16d: no operand and nothing to check - the difference between them is entirely what they claim,
-//which is why both exist: "abort" says stop now, "unreachable" says control was never supposed to be here.
+//S16d: no operand and nothing to check - it says control was never supposed to be here
 struct statement buildAbortLikeStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     (void)ctx;
     struct statement st = (struct statement){.sType = kind};
     st.var.tok = firstTokAnywhere(s); //K1: where an evaluation that reaches it says it stopped
     return st;
-}
-
-struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
-    (void)ctx; (void)s;
-    return (struct statement){.sType = STATEMENT_DONE};
 }
 
 //"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
@@ -26740,11 +26767,6 @@ struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.op = cond;
     stmt.assertMsg = msg;
     return stmt;
-}
-
-struct statement buildFailStmnt(struct checkCtx* ctx, struct syntax* s) {
-    (void)ctx; (void)s;
-    return (struct statement){.sType = STATEMENT_FAIL};
 }
 
 //"try f(...) catch A || B.word { ... }" - pure control flow, the caught error is never bound to a value.
@@ -26815,7 +26837,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
         if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
         if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
-        if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
+        if (!ctx->func) { if (ctx->inTest) { testEscapes = true; return; } Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         bool found = false;
         for (int j = 0; j < ctx->func->type.errors.len; j++) {
             struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
@@ -26919,6 +26941,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct type et = (struct type){0};
         et.errors = errors;
         checkTrySuperset(ctx, tok, et);
+        takeTestEscape(&root->catchClauses, tok);
     }
     return out;
 }
@@ -27041,10 +27064,7 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_DEFER: return buildDeferStmnt(ctx, actual);
         case SNTX_STMNT_BREAK: return buildBreakStmnt(ctx, actual, STATEMENT_BREAK);
         case SNTX_STMNT_CONTINUE: return buildBreakStmnt(ctx, actual, STATEMENT_CONTINUE);
-        case SNTX_STMNT_ABORT: return buildAbortLikeStmnt(ctx, actual, STATEMENT_ABORT);
         case SNTX_STMNT_UNREACHABLE: return buildAbortLikeStmnt(ctx, actual, STATEMENT_UNREACHABLE);
-        case SNTX_STMNT_DONE: return buildDoneStmnt(ctx, actual);
-        case SNTX_STMNT_FAIL: return buildFailStmnt(ctx, actual);
         case SNTX_STMNT_ASSERT: return buildAssertStmnt(ctx, actual);
         case SNTX_STMNT_ERROR: return buildErrorStmnt(ctx, actual);
         case SNTX_STMNT_TRY_CATCH: return buildTryCatchStmnt(ctx, actual);
@@ -27135,6 +27155,7 @@ static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spe
     if (spec->type.hasRetType && !blockAlwaysExits(&spec->codeBlock)) { //D10a, per instantiation (G18)
         Err(spec->tok, ERR_MISSING_RETURN, spec->type.retType);
     }
+    if (spec->type.noReturn && !blockAlwaysExits(&spec->codeBlock)) Err(spec->tok, ERR_NORETURN_FALLS_OFF); //D8e
     roSettleResults(spec); //T25c: what its calls' results copy out of their arguments, known before any caller asks
     roBodyFunc = savedRoBody;
     currentBindings = savedBindings; //restored, not nulled: instantiations can nest
@@ -27952,6 +27973,7 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
         if (func->type.hasRetType && !blockAlwaysExits(&func->codeBlock)) {
             Err(func->tok, ERR_MISSING_RETURN, func->type.retType);
         }
+        if (func->type.noReturn && !blockAlwaysExits(&func->codeBlock)) Err(func->tok, ERR_NORETURN_FALLS_OFF); //D8e
     }
     roBodyFunc = savedRoBody;
     flushRegionLocalStores(func); //O17
@@ -30688,7 +30710,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) { if (!ErrMsgGetNSyntaxErrors()) ErrFile(rootModule->fileName, ERR_NO_MAIN); }
         //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to
         //stderr) - no other success type is meaningful as a process exit code, so none is allowed
-        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType) {
+        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType || mainFunc->type.noReturn) {
             ErrFile(rootModule->fileName, ERR_MAIN_SIGNATURE);
         }
     }

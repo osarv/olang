@@ -51,7 +51,7 @@ struct type;
     X(ERR_CANNOT_OPEN,                  "",      "cannot open this file") \
     X(ERR_NOT_REGULAR,                  "",      "not a regular file") \
     X(ERR_IS_DIRECTORY,                 "M1",    "a directory - a module is one .olang file") \
-    X(ERR_NO_MAIN,                      "B4",    "no main function - a program starts at 'fn main() ? { }'") \
+    X(ERR_NO_MAIN,                      "B4",    "no main function - a program starts at 'fn main() { }'") \
     X(ERR_NO_CLANG,                     "",      "clang not found on PATH - install clang-20 (the IR is in %s)") \
     X(ERR_CLANG_FAILED,                 "",      "clang could not compile %s") \
     X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
@@ -456,7 +456,6 @@ struct type;
     X(ERR_DEFAULT_IN_STATEMENT,         "R11",   "a try written as a statement gives no value, so it takes no default") \
     X(ERR_DEFAULT_DEAD,                 "R11",   "this clause's block always leaves, so its default is never the value - remove it") \
     X(ERR_CATCH_MUST_LEAVE,             "R11",   "a clause here leaves, or gives the value with 'default v'") \
-    X(ERR_CATCH_EXIT_NOT_LEAVE,         "R11, B5b", "a call that ends the program is not a leave - write 'unreachable' after it") \
     X(ERR_CLAUSE_LAST_VALUE,            "R11",   "a block's last value is not the clause's value - write '} default %S' after the block") \
     X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
@@ -534,7 +533,12 @@ struct type;
     X(ERR_DEFER_RETURNS,                "S19b",  "deferred code may not return - it runs while its block is left") \
     X(ERR_RETURN_COUNT,                 "D8c",   "this function returns %d value%s, found %d") \
     X(ERR_RETURN_IN_CTOR,               "C2b",   "a constructor gives no value - its fields are the instance; fail with 'error'") \
-    X(ERR_RETURN_IN_TEST,               "S15",   "a test has nothing to return to - end it with 'done' or 'fail'") \
+    X(ERR_RETURN_IN_TEST,               "S15",   "a test has no result - a bare 'return' ends it as passed") \
+    X(ERR_RETURN_IN_NORETURN,           "D8e",   "a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'") \
+    X(ERR_NORETURN_FALLS_OFF,           "D8e",   "a 'noreturn' function may not reach its end - end every path with a noreturn call, 'unreachable' or 'for { }'") \
+    X(ERR_NORETURN_ERRORS,              "D8e",   "a 'noreturn' function never returns to its caller, so it fails with nothing - drop the '?'") \
+    X(ERR_NORETURN_HERE,                "D8e",   "%s cannot be 'noreturn'") \
+    X(ERR_DECL_FROM_NORETURN,           "D8e",   "a 'noreturn' call gives no value, so ':=' has no type to take") \
     X(ERR_RETURN_VALUE_IN_VOID,         "D8",    "this function returns no value") \
     X(ERR_RETURN_NEEDS_VALUE,           "D8",    "this function returns %t, so 'return' needs a value") \
     X(ERR_ERROR_OUTSIDE_FUNCTION,       "R3",    "'error' fails a function, and this is not inside one") \

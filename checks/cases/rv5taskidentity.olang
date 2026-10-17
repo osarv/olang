@@ -13,5 +13,5 @@ fn main() ? {
     join {
         spawn r = same2(g, g)
     }
-    if not same2(g, g) or not r { fail }
+    assert not (not same2(g, g) or not r)
 }

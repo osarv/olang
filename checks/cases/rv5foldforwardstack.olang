@@ -30,5 +30,5 @@ fn run() {
 }
 fn main() ? {
     run()
-    if Dtors != 6 { fail }
+    assert Dtors == 6
 }

@@ -55,5 +55,5 @@ fn main() ? {
     churn()
     s I64 = 0
     for v in c.left { s += v }
-    if second(e1) != 42 or second(e2) != 43 or second(e3) != 44 or s != 210 { fail }
+    assert not (second(e1) != 42 or second(e2) != 43 or second(e3) != 44 or s != 210)
 }

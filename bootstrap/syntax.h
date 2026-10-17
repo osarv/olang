@@ -99,10 +99,7 @@ enum syntaxType {
     SNTX_STMNT_DEFER, //S19: "defer" followed by a block - "defer STATEMENT" arrives as a block holding it
     SNTX_STMNT_BREAK,
     SNTX_STMNT_CONTINUE,
-    SNTX_STMNT_ABORT,
     SNTX_STMNT_UNREACHABLE,
-    SNTX_STMNT_DONE,
-    SNTX_STMNT_FAIL,
     SNTX_STMNT_ASSERT,
     SNTX_STMNT_ERROR,
     SNTX_CATCH_ERR,

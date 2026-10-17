@@ -14,7 +14,7 @@ only depends on concepts already introduced by earlier ones:
 | 3 Declarations | Type, error, variable, and function declarations; scope of names |
 | 4 Modules | Files as modules, imports, visibility, cross-module name resolution, re-export |
 | 5 Expressions | Operators, precedence, literals as values, calls, member/index access |
-| 6 Statements | Control flow: if/for/do/match, assignment, return, assert, done/fail, defer |
+| 6 Statements | Control flow: if/for/do/match, assignment, return, assert, unreachable, defer |
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
 | 8 Ownership and Scopes | Scopes, scope tags, reference markers, results, the static scope checker, owned references |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
@@ -104,14 +104,14 @@ spelling: see §4.3 (visibility).
 **L9.** The following words are reserved and may not be used as identifiers:
 
 ```
-if        else    try     checked catch   return  done    fail    assert
+if        else    try     checked catch   return  assert  noreturn
 for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
 trait     spawn   join    defer   own     take
 import    test    destruct
-abort     unreachable
+unreachable
 extern    default
 ```
 
@@ -122,8 +122,8 @@ keyword either, for the same reason: it is `NULL_LIT` (L11a). (`own` and `take`:
 written - after the receiver clause of its declaration, and after `.` where `(` follows - nothing else can stand, and
 any of the words above is a method's name there: `fn (w mut World&) spawn() I32`, `w.spawn()`, `p.fail(tok)`.
 
-A field may be named by a word above that is a whole statement by itself - `done`, `fail`, `break`, `continue`,
-`abort`, `unreachable`, after which nothing can follow on its line - or that begins no statement and no value: `in`,
+A field may be named by a word above that is a whole statement by itself - `break`, `continue`, `unreachable`,
+after which nothing can follow on its line - or that begins no statement and no value: `in`,
 `is`, `as`, `and`, `or`, `xor`, `range`, `case`, `nomatch`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
 `test`, `extern`, `default`. It is declared with its type or `:=` (`done I64 = 0`, `in Bool`, `type := Kind.A`), never
 as a pun, and is reached only after `.` (`s.done`, `s.done++`) - a word after `.` is always a member's name, and a line
@@ -234,7 +234,7 @@ tokenizer under L18.
 
 ```
 IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, NULL_LIT,
-++, --, !, ), ], return, done, fail, error, break, continue, abort, unreachable
+++, --, !, ), ], return, error, break, continue, unreachable
 ```
 
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
@@ -793,14 +793,15 @@ a `mut` one may be assigned another - a named function's value, or a lambda's ca
 whole program and so lives in the program's scope (O1b).
 
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
-parameter's type, permission included (T25b), in order, presence and identity of a return type, and their error lists - the
+parameter's type, permission included (T25b), in order, presence and identity of a return type, `noreturn` (D8e), and their error lists - the
 same error types **in the same order**, since a fallible call reports an error by its position in the
 callee's own list (§7). A function value **fits** a function type that differs only in permission where reading for
 writing is safe: a parameter may be read-only where the type passes a writable reference (it reads what it may write), and
 the result writable where the type gives a read-only one - so `fn(acc I32, b Box&) I32` is accepted for
 `fn(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
-type's list. Every other part must be the same.
+type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
+list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same.
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
@@ -1305,7 +1306,7 @@ ahead of those in the parameter list, and is in every other respect an ordinary 
 reference marker and a scope tag read exactly as they do there. A declaration without a receiver is never
 a method, whatever its first parameter's type.
 
-**D8.** `func-sig ::= "(" param-list ")" [ ret-type ] [ "?" [ error-list ] ]`, where:
+**D8.** `func-sig ::= "(" param-list ")" ( [ ret-type ] [ "?" [ error-list ] ] | "noreturn" )`, where:
 
 ```
 param-list      ::= [ param { "," param } [ "," ] ]   (a trailing "," only as L18a allows)
@@ -1326,6 +1327,19 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 `error-list-item` must name a declared error type (§2.6). `?` with nothing after it declares an **inferred** error
 set (§7.1 R1a); a list of types declares those types and nothing else.
 See §7 for what a `error-list`'s combined set means.
+
+**D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
+noreturn`) **never returns to its caller**: no path through its body may reach a `return` or fall off its end. Its body is
+checked as D10a checks a body owing a result - every path must leave - with no `return` admitted: a path leaves by a call
+to a `noreturn` function or through a `noreturn` function value, by `unreachable` (S16d), or by a `for { }` with no
+`break` of its own. It declares no error set (an error is a way back to its caller), so whatever can fail inside it is
+handled there. A call to a `noreturn` function, written as a statement, leaves for D10a; and as an expression it fits
+wherever a value of any type is expected - `catch default os.Exit(2)`, `x I64 = Fatal("no x") if bad else 3`, an
+argument - since control never arrives where the value would be used. `noreturn` is not a type: no variable,
+parameter, field, element or type argument is `noreturn`, and `:=` from such a call is a compile-time error (D15). A
+function type may write it too (`fn(I32) noreturn`, T21); a `noreturn` function fits such a type, and also one with the
+same parameters, no result and no error set, which it satisfies by never returning (T22). A method and an `extern fn`
+may be `noreturn`; a constructor, a destructor, an operator method (E31), a lambda and `main` may not.
 
 **D8c (several results).** A `ret-type` written as a parenthesized list of two or more types declares that
 the function returns **several values**, one per type, in that order. They are not one value: there is no
@@ -1487,7 +1501,8 @@ is equivalent to a bare `return` with no value, which is only valid when the fun
 the end of its body without returning. Falling off the end is a compile-time error.
 
 Whether a path leaves is decided **structurally**, with no dataflow analysis and no constant folding. A
-`return` leaves, and so does an `error` (§7), `done`, `fail`, `abort` and `unreachable` (§6.6). An `if`
+`return` leaves, and so does an `error` (§7), `unreachable` (§6.6) and a call to a `noreturn` function or through a
+`noreturn` function value (D8e), written as a statement. An `if`
 leaves only when it has an `else` and both sides leave; a `match` only when every clause leaves and it is
 either exhaustive by §6.4 S13a or has a `nomatch` that leaves; a block written as a statement (S1a) when its statements
 do; a `join` (§6.8) when its block leaves and, for a `try join`, every clause does (P4c - what no clause takes leaves
@@ -3168,7 +3183,7 @@ what can fail in the postfix expression before it **as written**, exactly what a
 fallible call and operator in it, arguments and every link of a chain included), by **ending the program**: an error
 reaching it ends it as a failed `assert` does (S18) - while a test runs it fails that test, and otherwise the program
 writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
-of its path (`io.IoError.FAILED`), and its word - to standard error and aborts. Its value is the expression's on
+of its path (`io.IoError.FAILED`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; `checked`
 asks for checks, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
 `fn main() { io.Println("Hello World!")! }` is a program. `!` on an expression that cannot fail as written is a
@@ -3193,8 +3208,7 @@ a long function may give memory back before it returns. No expression begins wit
 block. It runs once, and it leaves (D10a) when its statements do.
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
-| destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | done-stmnt | fail-stmnt | abort-stmnt
-| unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
+| destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
 | defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
 `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` in §6.9.
 
@@ -3460,7 +3474,7 @@ is a block; `=>` is an error there.
 **S12b (a match used as a value).** `match-expr ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"` in
 expression position (E1) evaluates to the value of the clause that is selected. Each clause either gives its value,
 `case P => v` - the expression runs to the end of its line or to the next clause - or runs a block that leaves:
-`return`, `error`, `break`, `continue`, `done`, `fail`, `abort` or `unreachable`, as D10a decides it with `break`
+`return`, `error`, `break`, `continue`, `unreachable` or a `noreturn` call, as D10a decides it with `break`
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
 error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
@@ -3579,43 +3593,31 @@ rule).
 must fit (E12) it; if it declares several results (D8c), there is one `expr` per result, each fitting its
 own result type, or a single call returning exactly those results. If the enclosing function declares no `ret-type`, `expr` must be absent — a bare
 `return` (or falling off the end of the function's block) is the only valid way to end it. A
-`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b), and so is a `return` in a
-`test` body (outside a function written inside it): a test is not a function, with no caller to return to - `done`
-ends it early as passed and `fail` as failed (S16a).
+`return` in a constructor's body is a compile-time error whatever its shape (§9.1 C2b). In a `test` body (outside a
+function written inside it) a bare `return` ends the test as **passed** (S16), running the deferred code pending and
+closing the scopes on the way out as any `return` does; a test has no result, so a `return` there takes none.
 
-### 6.6 `done` and `fail`
+### 6.6 How a test ends, and `unreachable`
 
-**S16.** `done-stmnt ::= "done" STMNT_END` and `fail-stmnt ::= "fail" STMNT_END` are each valid in
-any function or test body. Both are unconditional and immediate — not a return to the caller, and
-unrelated to the enclosing function's own declared error union (§7). Neither prints any diagnostic.
-
-**S16a.** Each ends **the innermost thing that can end**: the current test if one is running, and the
-process otherwise. So `done` ends a test as **passed** and otherwise exits with the OS-standard success
-status; `fail` ends a test as **failed** and otherwise exits with the OS-standard failure status. See §10
-for the exact status values.
-
-Which applies is decided at run time, not by where the statement is written — exactly as it is for a
-failed `assert` (S18). A `fail` inside a helper called from a test ends *that test*, not the process,
-which is what makes the two rules one rule rather than two.
-
-**S16b.** `fail` is an orderly exit the program chose: it runs the process's normal exit path and
-reports the OS-standard failure status. It is **not** an abort — that is what S16c is for, and the
-difference is visible in the status a supervisor sees.
-
-**S16c.** `abort-stmnt ::= "abort" STMNT_END` stops immediately and violently: no cleanup, the OS's
-abort status, a core dump where the platform produces one. It behaves in every respect as a failed
-`assert` does (S18), including being a recoverable, per-test failure while a test is running — which is
-the point of having it, since `assert(false)` already produced exactly this and said nothing about why.
+**S16.** A test (§10.4) **passes** when its body reaches its end or a `return` (S15). It **fails** when an `assert`
+fails (S18), a check the language guarantees fails (S18a), `unreachable` is reached (S16d), a `!` handles a failure
+(E35), or an error leaves its body: a `try` in a test body need not catch everything it covers (R8), and an error it
+lets through ends the test as failed, its `FAIL` line naming the error - `FAIL - NAME: TypeName.WORD`, the type named
+as a `!` names it (E35) - and the error's trace following (S18d). Each of these is decided at run time, not by where it is
+written, so a failed assert inside a helper called from a test fails *that test*. Outside a test a program ends by
+returning from `main` (or letting an error escape it, §10 B5), by calling a `noreturn` function such as `os.Exit`
+(D8e, B5b), or by an abort.
 
 **S16d.** `unreachable-stmnt ::= "unreachable" STMNT_END` states that control was never expected to
-arrive. Reaching it is a failure and aborts exactly as S16c does, with a message saying so. It is
-**checked, never assumed**: the compiler draws no conclusion from it and generates no code that relies on
-the claim, so a wrong `unreachable` is a diagnosed abort rather than undefined behaviour.
+arrive. Reaching it is a failure and behaves in every respect as a failed `assert` does (S18), with a message saying
+so: it fails the running test, and otherwise aborts the process - no cleanup, the OS's abort status, a core dump where
+the platform produces one. It is **checked, never assumed**: the compiler draws no conclusion from it and generates no
+code that relies on the claim, so a wrong `unreachable` is a diagnosed abort rather than undefined behaviour.
 
 `unreachable` exists because D10a requires a result on every path and the analysis behind it is
 deliberately structural — it cannot see that a loop never exits, or that a `match` a caller guarantees is
-exhaustive really is. `unreachable` is how a program says so, and it is the only one of these four
-statements a checker ever *requires*.
+exhaustive really is. `unreachable` is how a program says so.
+
 
 ### 6.7 `assert`
 
@@ -3628,8 +3630,8 @@ or `$x` (E11a/E11b), or any other `String` - evaluated **only when the assert fa
 are paid only then: `assert n < cap, "n is " $n ", cap " $cap`. The message may not leave: it gives text, and is evaluated only
 where the assert fails. A `return` or an `error` statement in it, a `try` an error can leave it through (in a catch block
 in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
-deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `done`, `fail`, `abort` and `unreachable` end
-the test or the process and may appear.
+deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unreachable` and a
+`noreturn` call end the test or the process and may appear.
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
@@ -3637,13 +3639,13 @@ the test or the process and may appear.
   applies inside a function called from a test just as much as inside the `test { }` block itself;
 - otherwise: the process aborts immediately (an unrecoverable failure), the same way a failed assertion
   aborts in C — leaving a core dump and skipping the normal exit path, which is what distinguishes a
-  broken guarantee from the orderly `fail` (S16b).
+  broken guarantee from an orderly `os.Exit` (B5b).
 
 **S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
 array length out of range (§3.5 D14b), an `as` that does not hold (E32), a copy into fixed storage of another length
 (T7d) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
-`FILE:LINE: aborted` (S16c), `FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
+`FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
 value is not`, `FILE:LINE: array length does not match its fixed storage`. An assert's message (S17) follows, after
 `: `. A program run with `-i` (B3e) prints the same.
@@ -3655,7 +3657,22 @@ the program (K1), and a true one needs, and gets, no run-time check. This holds 
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
-**S18b.** Leaving a test early — by a failed assert, a failed runtime check, `done` or `fail` — runs the
+**S18d (the error return trace).** A test build (`-t`) and a debug build (`-d`, §10) keep, for each thread, a trace of
+where the error being returned went - its last 32 places: an `error` statement (R3) or a check failing under `checked`
+(E15a) **raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
+on a task's error (P4b), adds its place; a clause that takes an error clears it. Nothing is recorded where nothing fails,
+and a build of any other kind records nothing at all. The trace is printed, oldest first, one `FILE:LINE: what` line per
+place - `raised here`, `try passed it on`, `a task failed, and its join passed it on`, `left the test` - preceded by
+`(N earlier places not kept)` when more than 32 were recorded:
+- when an error leaves a test body (S16), after the test's `FAIL - NAME: TypeName.WORD` line;
+- when an error escapes `main` (B5), after `unhandled error: TypeName.WORD`;
+- when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
+
+In a build that keeps no trace the last two print `(build with -d to see where it came from)` instead. A program run
+with `-i` (B3e) prints the trace as a debug build does.
+
+**S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
+error leaving the test (S16) — runs the
 destructors of every value still live and reclaims every scope still open, innermost first, through
 function frames as well as the test body's own blocks. A test that does not run to completion tears down
 exactly what one that does would, except that deferred code still pending is not run (§6.9 S19c).
@@ -3705,8 +3722,8 @@ about one body. It stays purely additive if it is ever wanted.
 arena (§8, O2) is reclaimed on the way out, and a task may still be holding storage from it. The block's
 deferred code (§6.9 S19a) runs before the wait, as the block's last statements.
 
-`done`, `fail`, `abort` and `unreachable` (§6.7) are the exceptions, and are not joins: each ends the
-process immediately, so there is no frame left for a task to outlive. A `test` left early by a failing
+`unreachable` and a `noreturn` call (§6.6) are the exceptions, and are not joins: outside a test each ends the
+process, so there is no frame left for a task to outlive. A `test` left early by a failing
 `assert` does unwind, and does join — see P1d.
 
 **P1c.** `spawn` guarantees the call runs. A thread the operating system declines to create is therefore
@@ -3716,8 +3733,8 @@ Running the call inline instead would look like graceful degradation and is not 
 communicate through a channel deadlock the moment one runs to completion before the other has started.
 The cost is one comparison per `spawn`, against the cost of creating the thread.
 
-**P1d.** Leaving a `test` early — by a failing `assert`, a failed runtime check, `done` or `fail` (§6.7
-S18, S16) — unwinds **before** it jumps: every scope open between that point and the test's own start is
+**P1d.** Leaving a `test` early — by a failing `assert`, a failed runtime check, `unreachable` or a `!`
+(§6.6 S16, §6.7 S18) — unwinds **before** it jumps: every scope open between that point and the test's own start is
 closed, innermost first, and each `join` block among them waits for its tasks first, exactly as P1b
 requires of every other exit. This reaches through function frames, not only the test body's own blocks.
 
@@ -3928,7 +3945,7 @@ before the task is finished, as the body of a spawned lambda would (D16e) - what
 is captured (D16c), copied when the `spawn` runs, and must last until the join on the terms P2 states for a lambda's
 captures. A task is a function of its own, and its clauses are its code, so they may not leave it: a `return`, a
 `break` or `continue` not inside a loop written in the clause, an `error` statement, and a `try` an error can leave the
-clause through are compile-time errors. `abort`, `unreachable`, `done` and `fail` end the process from a task's thread
+clause through are compile-time errors. `unreachable` and a `noreturn` call end the process from a task's thread
 (P6, S16) and may be written.
 
 - Without targets the clauses are a statement's (R10): each has a block and no default.
@@ -3950,8 +3967,8 @@ no other: stopping siblings is cooperative, through a cancellation token (`std/c
 The join fails on **every** way out of its block - falling off its end, a `return`, a `break`, a `continue` - and its
 failure takes the place of that way out: a return's value is discarded and a loop is not jumped, exactly as an error
 raised there would do. The one exception is an error already leaving the block - raised by the block's own code, or
-propagated through it - which leaves as it would, the tasks' errors dropped. `done`, `fail`, `abort` and `unreachable`
-end the process or the test (P1b, P1d) and fail no join.
+propagated through it - which leaves as it would, the tasks' errors dropped. `unreachable` and a
+`noreturn` call end the process or the test (P1b, P1d) and fail no join.
 
 **P4c.** A join that can fail is written **`try join`**. `try join { ... }`, with catch clauses (§7.5) after the block
 or none, is the statement form of `try` (R10) with the join as what it tries. What the join can fail with is what its
@@ -4087,7 +4104,7 @@ there, as in a destructor), and a `break` or `continue` other than one inside a 
 compile-time errors. A `spawn` in it needs a `join` written in it (P1a): it runs on every way out of its block, so no
 `join` outside it is certain to be the one that waits. A `defer` inside deferred code is the deferred code of the block it is written in, as anywhere.
 
-**S19c.** `done`, `fail`, `abort`, `unreachable` and a failed `assert` or run-time check end the test or the process
+**S19c.** `unreachable`, a `noreturn` call, a failing `!` and a failed `assert` or run-time check end the test or the process
 (§6.6, §6.7) rather than leave a block, and run no deferred code - neither what is pending where they are reached nor,
 when one is reached inside deferred code, the rest of it. A test ended early this way still waits for its tasks and
 closes its scopes, destructors included (S18b, P1d); its pending deferred code is not run. They may be written in
@@ -4175,7 +4192,9 @@ an error, may cover nothing in one instantiation and something in another, and c
 nothing. `try` never turns a check on:
 an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; `checked` (E15a) is
 `try` plus every check the language can make. A spawned call (§6.8 P4) and a `join` block (P4c) are tried on the same
-terms: whatever can fail is written with `try`, and nothing else is.
+terms: whatever can fail is written with `try`, and nothing else is. Where nothing names what a `try` lets
+through - a function with no `?`, a lambda whose type writes no errors - its clauses must take all of it, except in a `test`
+body, where what is let through fails the test (S16).
 
 **R9.** As an **expression** (`try-expr`, §5.1 E24, only where a value is expected): evaluates the
 operand; if it produced its success value, the `try` expression's value is that; if it produced an
@@ -4314,7 +4333,7 @@ it can produce, and catching those is complete (R13): a checked index or slice p
 checked `as` only `WRONG_CASE`.
 
 **R22.** Every failure a program can handle is an error of a declared type with a word (R3) - there is no error
-without a type. What the language guarantees instead of an error - a failed `assert`, `unreachable`, `abort`, a
+without a type. What the language guarantees instead of an error - a failed `assert`, `unreachable`, a
 slice or a length out of range outside `checked`, running out of memory, a task that cannot start - ends the test or
 the process (§6.6) and is never an error. The standard library holds itself to this: a function that can fail on its
 arguments (an index out of range, an empty collection, a closed channel, a bad base) fails with an error declared
@@ -4371,8 +4390,8 @@ ordinary containment rule and with no rule of its own.
 
 A block's scope closes at the block's end and at every other exit from it: a `return` (`error` and a
 propagating `try` included, both being returns), `break` and `continue` - in each case after the block's
-deferred code has run (§6.9 S19a), so deferred code may read what the scope holds. `done`/`fail`/`abort`/`unreachable`
-(§6.6) end the test or the process; scopes left that way are closed by the unwinding §6.6 describes, or not
+deferred code has run (§6.9 S19a), so deferred code may read what the scope holds. `unreachable` and a
+`noreturn` call (§6.6) end the test or the process; scopes left that way are closed by the unwinding §6.6 describes, or not
 at all.
 
 **O2b.** The cost of a block scope is paid only where it is used. A scope is a chunk-list head that stays
@@ -5891,8 +5910,8 @@ program is analyzed exactly as under `-b` - `main` is required (B4), and every c
 same way - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
-the interpreting process, `done` and `fail` end it with status 0 and 1, an error escaping `main` is reported as B5
-says, an atomic operation is performed, and a check the language guarantees - a failed `assert`, `abort`,
+the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
+says, an atomic operation is performed, and a check the language guarantees - a failed `assert`,
 `unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
 aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
 out of range, dividing by zero, a shift or conversion out of range - or where it traps reading through a null
@@ -5909,7 +5928,7 @@ lands in the program's scope and is never destructed (K2c); reaching one stops t
 function with an `F16` or `BF16` parameter or result (an array of either is passed, X3). Whenever the interpreter
 stops a program on something it does not run, the blocks it is in are still left as the built program, which would
 go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
-program itself ends - `done`, `fail`, `os.Exit`, a check failing - deferred code runs only where the built program's
+program itself ends - `os.Exit`, a check failing - deferred code runs only where the built program's
 does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-r` and `-d` choose how code is generated, and `-i` generates none, so they change nothing here; `-u` and
 `-D` apply as to any build, and `-a` sets the build constants it decides (B10a) - naming this machine's architecture
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
@@ -5959,13 +5978,13 @@ each argument in order. A test binary's command line is its own name alone.
 **B5.** Running the compiled program (`-b` mode), or interpreting it (`-i`, B3e), invokes `main`. If it returns normally (falls off
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
 uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
-declared error type and word that escaped) and exits with status `1`.
+declared error type and word that escaped) and exits with status `1`. What follows that line is the error's trace in a
+test or debug build, and how to get one in any other (§6.7 S18d).
 
 **B5b.** A program ends with any other status only by calling `os.Exit(code)` (the `std/os` module), which ends the
-process with `code` as its status — of which the platform passes on the low 8 bits — by the same exit path `done` and
-`fail` take (S16b). It ends the **process** whatever is running, a test included, where `done` and `fail` end the
-innermost thing that can end (S16a); a test that calls it ends the whole test run. It is an ordinary call, not a
-statement D10a counts as leaving: where a result is owed, `unreachable` follows it.
+process with `code` as its status — of which the platform passes on the low 8 bits — running the process's normal exit
+path. It ends the **process** whatever is running, a test included: a test that calls it ends the whole test run. It is
+`noreturn` (D8e), so a call to it leaves for D10a and fits where any value is expected.
 
 **B5a.** Every module's global variables (§3 D12) are initialized before `main` runs. Within a module, a global's
 initializer runs **after the initializers of the globals it reads** - directly, or through a function it calls,
@@ -5980,10 +5999,9 @@ the same cycle has no defined value to read and must not be written. Compile-tim
 global's value as this order sets it, so whether a global is computed while compiling never changes what another
 reads.
 
-**B6.** `done` and `fail` (§6.6) exit the process immediately, from anywhere, with status `0` or `1`
-respectively, printing nothing, independent of §10.3's own `main`-return handling — except while a test
-is running, where they end that test instead (S16a). An abort from a failed runtime check (S18) reports
-the OS's abort status, which is distinct from `fail`'s: one is a broken guarantee, the other a decision.
+**B6.** An abort from a failed runtime check (S18), or `unreachable` reached outside a test (S16d), reports the OS's
+abort status, which is distinct from what `os.Exit(1)` reports (B5b): one is a broken guarantee, the other a
+decision.
 
 ### 10.4 Test blocks
 
@@ -6282,7 +6300,7 @@ must state exactly the prototype below (X1a).
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
-| `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, a `done` or a `fail` inside `f` ends the test as it would have had `f` been called directly (S16a, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `-i` as the call `f()`, the evaluator's own limits on depth standing for the stack |
+| `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `-i` as the call `f()`, the evaluator's own limits on depth standing for the stack |
 | `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `-i` the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
@@ -6746,7 +6764,6 @@ error as they would at run time. It is **not** possible when evaluation would:
   the library's that is not exact - a call through a function value is evaluated when the function it reaches is,
   which is known only when the call is reached; the runtime's `__olang_run_on_stack(bytes, f)` (X6) is evaluated as
   the call `f()` is;
-- end the test or the process (`done`, `fail`);
 - let an error escape that no clause handles;
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by
   `-1`, shift by a count outside the type's width, convert a float the target cannot represent, or index
@@ -6773,7 +6790,7 @@ this order's. A task waiting for something only another task or the spawner afte
 atomic) runs out of the budget below and is refused; a lock or a channel is reached through `extern` and is refused
 already.
 
-Reaching what **aborts the program** - `abort` (S16c), `unreachable` (S16d), an `assert` whose condition is false, or a
+Reaching what **aborts the program** - `unreachable` (S16d), an `assert` whose condition is false, or a
 guaranteed check failing (a slice out of range, E16b; an array length out of range, D14b; an array copied into fixed
 storage of another length, C2e) - ends the evaluation there, as it ends the program. Only reaching one does: a
 function holding one (a `catch { unreachable }` clause, say) is evaluated like any other until it does (K1a). Where a
@@ -6797,7 +6814,7 @@ and stops on no use of it - which O39 leaves no program to make.)*
 arguments one call passes: a function whose body — or anything it calls, or the initializer of an
 immutable global it reads — contains an operation K1 excludes can never be, whichever path a particular
 call would take. A context that needs such a call evaluated reports that operation and where it is
-written. What aborts the program (`abort`, `unreachable`, `assert`, a guaranteed check) is not such an operation: it
+written. What aborts the program (`unreachable`, `assert`, a guaranteed check) is not such an operation: it
 stops an evaluation only where it is reached (K1).
 
 **K2.** An **immutable global** whose initializer can be evaluated at compile time is: its value is

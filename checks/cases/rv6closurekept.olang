@@ -55,6 +55,6 @@ fn run() I64 {
 fn main() ? {
     want I64 = 0
     for i in range 20000 { want += 3 * (1 + i) + 300000 }
-    if run() != want { fail }
-    if Dtors != 60 { fail }
+    assert run() == want
+    assert Dtors == 60
 }

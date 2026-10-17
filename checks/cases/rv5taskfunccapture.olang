@@ -9,6 +9,6 @@ fn main() ? {
     join {
         spawn fn() { for i in range 10 { ha.f(i) } }
     }
-    if a.Len() != 10 { fail }
-    for i, x in a { if x != i { fail } }
+    assert a.Len() == 10
+    for i, x in a { assert x == i }
 }

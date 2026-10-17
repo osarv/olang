@@ -244,7 +244,7 @@ fn produce(c mut Chan<I32>&, n I32) {
 
 fn consume(c mut Chan<I32>&, n I32, total mut sumBox&) {
     for i in range n {
-        total.v = total.v + (try Recv(c) catch { fail })
+        total.v = total.v + (Recv(c)!)
     }
 }
 
@@ -280,15 +280,15 @@ test "a wait with a token returns what is there, and gives up when the deadline 
     c mut Chan<I32>& = Chan<I32>(1)
     Init(c)
     tok := cancel.After(30)
-    try SendUntil(c, 5, tok) catch { fail }
+    try SendUntil(c, 5, tok)
     assert (try RecvUntil(c, tok) catch default -1) == 5
     start := cancel.NowNs()
     v := try RecvUntil(c, tok) catch cancel.Stopped.TIMED_OUT default -2 catch default -3
     assert v == -2
     assert cancel.NowNs() - start >= 20000000
-    try SendUntil(c, 1, tok) catch { fail }
-    try SendUntil(c, 2, tok) catch cancel.Stopped.TIMED_OUT { done } catch { fail }
-    fail
+    try SendUntil(c, 1, tok)
+    try SendUntil(c, 2, tok) catch cancel.Stopped.TIMED_OUT { return }
+    unreachable
 }
 
 fn waitFor(c mut Chan<I32>&, tok cancel.Token&, got mut sumBox&) {
@@ -352,7 +352,7 @@ fn sendReadings(c mut Chan<reading>&, n I32) {
 
 fn sumReadings(c mut Chan<reading>&, n I32, total mut sumBox&) {
     for i in range n {
-        r := try Recv(c) catch { fail }
+        r := Recv(c)!
         total.v = total.v + r.sensor
     }
 }
@@ -368,14 +368,14 @@ test "a channel carries any element type" {
     assert total.v == 1225
     f mut Chan<F64>& = Chan<F64>(2)
     Init(f)
-    try Send(f, 1.5) catch { fail }
-    try Send(f, 2.25) catch { fail }
-    assert (try Recv(f) catch { fail }) + (try Recv(f) catch { fail }) == 3.75
+    try Send(f, 1.5)
+    try Send(f, 2.25)
+    assert (try Recv(f)) + (try Recv(f)) == 3.75
     t mut Chan<String&>& = Chan<String&>(2)
     Init(t)
-    try Send(t, "one") catch { fail }
-    try Send(t, $(1 + 1)) catch { fail }
-    assert (try Recv(t) catch { fail }) == "one" and (try Recv(t) catch { fail }) == "2"
+    try Send(t, "one")
+    try Send(t, $(1 + 1))
+    assert (try Recv(t)) == "one" and (try Recv(t)) == "2"
 }
 
 # capacity 0: each Send returns only once its value has been received, so the sender is never more than one value
@@ -397,7 +397,7 @@ test "a channel of capacity 0 is a rendezvous" {
     assert total.v == 4950 and sentAll.v == 1
     # nobody receives, so a send with a deadline gives up - and its value is withdrawn, not left behind
     tok := cancel.After(20)
-    try SendUntil(c, 7, tok) catch cancel.Stopped.TIMED_OUT { } catch { fail }
+    try SendUntil(c, 7, tok) catch cancel.Stopped.TIMED_OUT { }
     assert c.count == 0
     tok2 := cancel.After(20)
     assert (try RecvUntil(c, tok2) catch cancel.Stopped.TIMED_OUT default -1 catch default -2) == -1
@@ -407,9 +407,9 @@ test "a channel of capacity 0 is a rendezvous" {
 test "a closed channel gives what it holds, then fails with CLOSED" {
     c mut Chan<I32>& = Chan<I32>(4)
     Init(c)
-    try Send(c, 1) catch { fail }
-    try Send(c, 2) catch { fail }
-    try Send(c, 3) catch { fail }
+    try Send(c, 1)
+    try Send(c, 2)
+    try Send(c, 3)
     assert not IsClosed(c)
     Close(c)
     Close(c)                                 # again: nothing changes
@@ -462,7 +462,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
     join {
         for w in range 3 { spawn walkCount(c, seen) }
         spawn waitClosed(c, tok, seen, got)
-        for i in range I32(10) { try Send(c, i) catch { fail } }
+        for i in range I32(10) { try Send(c, i) }
         Close(c)
     }
     assert seen.v.AtomicLoad() == 10 and got.v == 1
@@ -482,7 +482,7 @@ test "a channel's capacity is an I64" {
     items := I64[4, 5, 6]
     c mut Chan<I64>& = Chan<I64>(items.Len())
     Init(c)
-    for x in items { try Send(c, x) catch { fail } }
+    for x in items { try Send(c, x) }
     total I64 = 0
     for i in range items.Len() { total += try Recv(c) catch ChanError { unreachable } }
     assert total == 15

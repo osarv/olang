@@ -25,7 +25,7 @@ fn main() ? {
         spawn r = id(g)
     }
     churn()
-    if r() != 42 { fail }
+    assert r() == 42
     churn()
-    if n.next.v != 42 or not (r is g) { fail }
+    assert not (n.next.v != 42 or not (r is g))
 }

@@ -107,9 +107,22 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value first; `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call). An assigned value
   borrowing storage within the place takes its old value as a copy, decided by types (S4d).
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
-  `break` of its own leaves, a leaving `join` counts. `unreachable` is checked, never assumed (S16d); `abort` behaves
-  as a failed assert (S16c). `done`/`fail` end the current test, else the process, with 0/1 (S16, `crash` renamed
-  `fail` by the user). `os.Exit(code)` for any status (B5b).
+  `break` of its own leaves, a leaving `join` counts, a `noreturn` call counts. `unreachable` is checked, never assumed
+  (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b), process-wide, tests included.
+- **A test passes by ending, fails by what fails (S15/S16, QU, the user's design 2026-10-17).** A test passes by
+  reaching its end or a bare `return` (deferred code runs); it fails by a failed assert or check, `unreachable`, a `!`,
+  or an error leaving its body - a `try` in a test need not catch everything (`FAIL - name: T.W`, then the trace).
+  `done`, `fail` and `abort` are gone, ordinary names now (they were the test/process enders; `crash` had been renamed
+  `fail` by the user).
+- **`noreturn` (D8e, QU, the user's design).** `fn Exit(code I32) noreturn`, `fn(I32) noreturn`: the body is checked
+  never to return or fall off its end (no `?`; every path a noreturn call, `unreachable` or `for { }`); a call leaves for
+  D10a and fits where a value of any type is expected (`catch default os.Exit(2)`, a conditional's value). Not a type:
+  no variable, parameter or type argument is `noreturn`, and `:=` from one is an error. A noreturn function fits a
+  function type with no result (my call). Lambdas, constructors, operator methods and `main` may not be `noreturn`.
+- **The error return trace (S18d, decided by the coordinator for the user).** Test and `-d` builds keep each thread's
+  last 32 places an error went - `raised here`, `try passed it on`, `left the test` - cleared where a clause takes it,
+  nothing on the success path, nothing at all in other builds; printed after an error ends a test, escapes `main`, or
+  reaches a `!`, and by `-i`. Other builds print `(build with -d to see where it came from)` instead.
 - **`assert cond[, message]` is a statement (S17/S18, the user's call for the message).** Outside `-t` a failure
   aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
@@ -144,7 +157,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (2026-10-05); UFCS method calls (M19); `same(a, b)` and the `atomicLoad`-style builtins (2026-10-09); `compif` (B9);
   `while` (S9); a `size()` builtin (2026-09-30, serialization is future work); an `Iterable` interface (T35b:
   `xs.Iter()`); labeled break (2026-10-08); interface switch dispatch (dropped by the user, "it gains very little and
-  causes a lot of problems"); Str purity (E11c, decision 49).
+  causes a lot of problems"); Str purity (E11c, decision 49); `done`, `fail`, `abort` (2026-10-17, QU: a test ends by
+  returning, a program by `os.Exit`).
 
 ### Types
 
@@ -318,12 +332,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
-- **`main`**: no parameters or result, any error set or none; an escaping error prints `unhandled error: T.W` and
-  exits 1. `os.Args()`/`os.Env()` give the command line (B4a).
+- **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`
+  (and its trace, S18d) and exits 1. `os.Args()`/`os.Env()` give the command line (B4a).
 - **Where errors may be raised (R3, R10, R14).** `error` is valid in an ordinary function and a constructor, never in
-  a `test` or `destruct`; the `try ... catch { }` statement discards the value. A constructor field that fails
-  produces no instance. A run-time array length out of range aborts outside `checked` (D14b), out of memory aborts
-  (D14c). `tools/errors_migrate.olang` migrates code (Try forms renamed, `try` to `checked`, `try` for what now fails).
+  a `test` or `destruct` (a test's `try` may let an error out, which fails it, S16); the `try ... catch { }`
+  statement discards the value. A constructor field that fails produces no instance. A run-time array length out of range aborts outside `checked` (D14b), out of memory aborts
+  (D14c). `tools/errors_migrate.olang` migrates code (Try forms renamed, `try` to `checked`, `try` for what now fails);
+  `tools/donefail_migrate.olang` moves code off `done`/`fail`/`abort`.
 
 ### Memory and scopes (§8)
 
@@ -467,7 +482,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Refusals and agreements.** Refused: mutable-global reads, global writes, externs (but known libm, X8), tasks run
   in sequence at the join (allowed), atomics on non-global places (allowed), process endings, undefined behaviour,
   destructor-bearing values outside a global's own frame (K2c), anything past the step and 256MB budgets. Reaching
-  `abort`/`unreachable` where a value is required is an error at the place. Every disagreement with the run time found
+  `unreachable` where a value is required is an error at the place. Every disagreement with the run time found
   (by reviews and the differential fuzzer) is a bug fixed in the evaluator.
 - **`-i` is stage 1** (no memory reclaimed, no destructors, tasks in sequence); stage 2 is the port's M8, not built in
   C.

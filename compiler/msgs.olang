@@ -467,7 +467,6 @@ type Diag enum {
     DefaultInStatement
     DefaultDead
     CatchMustLeave
-    CatchExitNotLeave
     ClauseLastValue
     DefaultNoValue
     DefaultNeedsCatch
@@ -541,6 +540,11 @@ type Diag enum {
     ReturnCount
     ReturnInCtor
     ReturnInTest
+    ReturnInNoreturn
+    NoreturnFallsOff
+    NoreturnErrors
+    NoreturnHere
+    DeclFromNoreturn
     ReturnValueInVoid
     ReturnNeedsValue
     ErrorOutsideFunction
@@ -706,7 +710,7 @@ fn NotRegular() Msg { return Msg(Diag.NotRegular, "", "not a regular file") }
 fn IsDirectory() Msg { return Msg(Diag.IsDirectory, "M1", "a directory - a module is one .olang file") }
 
 # ERR_NO_MAIN
-fn NoMain() Msg { return Msg(Diag.NoMain, "B4", "no main function - a program starts at 'fn main() ? { }'") }
+fn NoMain() Msg { return Msg(Diag.NoMain, "B4", "no main function - a program starts at 'fn main() { }'") }
 
 # ERR_NO_CLANG
 fn NoClang(text String&) Msg { return Msg(Diag.NoClang, "", "clang not found on PATH - install clang-20 (the IR is in " $text ")") }
@@ -1884,9 +1888,6 @@ fn DefaultDead() Msg { return Msg(Diag.DefaultDead, "R11", "this clause's block 
 # ERR_CATCH_MUST_LEAVE
 fn CatchMustLeave() Msg { return Msg(Diag.CatchMustLeave, "R11", "a clause here leaves, or gives the value with 'default v'") }
 
-# ERR_CATCH_EXIT_NOT_LEAVE
-fn CatchExitNotLeave() Msg { return Msg(Diag.CatchExitNotLeave, "R11, B5b", "a call that ends the program is not a leave - write 'unreachable' after it") }
-
 # ERR_CLAUSE_LAST_VALUE
 fn ClauseLastValue(text String&) Msg { return Msg(Diag.ClauseLastValue, "R11", "a block's last value is not the clause's value - write '} default " $text "' after the block") }
 
@@ -2104,7 +2105,22 @@ fn ReturnCount(n1 I64, text String&, n2 I64) Msg { return Msg(Diag.ReturnCount, 
 fn ReturnInCtor() Msg { return Msg(Diag.ReturnInCtor, "C2b", "a constructor gives no value - its fields are the instance; fail with 'error'") }
 
 # ERR_RETURN_IN_TEST
-fn ReturnInTest() Msg { return Msg(Diag.ReturnInTest, "S15", "a test has nothing to return to - end it with 'done' or 'fail'") }
+fn ReturnInTest() Msg { return Msg(Diag.ReturnInTest, "S15", "a test has no result - a bare 'return' ends it as passed") }
+
+# ERR_RETURN_IN_NORETURN
+fn ReturnInNoreturn() Msg { return Msg(Diag.ReturnInNoreturn, "D8e", "a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'") }
+
+# ERR_NORETURN_FALLS_OFF
+fn NoreturnFallsOff() Msg { return Msg(Diag.NoreturnFallsOff, "D8e", "a 'noreturn' function may not reach its end - end every path with a noreturn call, 'unreachable' or 'for { }'") }
+
+# ERR_NORETURN_ERRORS
+fn NoreturnErrors() Msg { return Msg(Diag.NoreturnErrors, "D8e", "a 'noreturn' function never returns to its caller, so it fails with nothing - drop the '?'") }
+
+# ERR_NORETURN_HERE
+fn NoreturnHere(text String&) Msg { return Msg(Diag.NoreturnHere, "D8e", $text " cannot be 'noreturn'") }
+
+# ERR_DECL_FROM_NORETURN
+fn DeclFromNoreturn() Msg { return Msg(Diag.DeclFromNoreturn, "D8e", "a 'noreturn' call gives no value, so ':=' has no type to take") }
 
 # ERR_RETURN_VALUE_IN_VOID
 fn ReturnValueInVoid() Msg { return Msg(Diag.ReturnValueInVoid, "D8", "this function returns no value") }

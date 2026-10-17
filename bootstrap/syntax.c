@@ -280,14 +280,13 @@ static struct token acceptFnKeyword(SyntaxCtx sc) {
 //"fn (p mut Parser&) fail(t Token)". A field is no method: its name is a constructor's local, and stays a name. A
 //keyword after "." is taken only when "(" follows it (wantCall), so "x.done" is still read as it always was
 static bool isKeywordTok(struct token t);
-//L9a: a keyword a field may be named by - one that is a whole statement by itself ("done", "fail", "break", "continue",
-//"abort", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
-//"is", "range", "type", "test", ...): a field's declaration ("done I64 = 0", "type := Kind.A") can be told from a
-//statement, and the field is reached after "." ("s.done"). A keyword beginning a statement with more after it ("if",
+//L9a: a keyword a field may be named by - one that is a whole statement by itself ("break", "continue", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
+//"is", "range", "type", "test", ...): a field's declaration ("range I64 = 0", "type := Kind.A") can be told from a
+//statement, and the field is reached after "." ("s.range"). A keyword beginning a statement with more after it ("if",
 //"return", "spawn"), or a value ("fn", "not", "try"), or written inside one ("else", "mut", "destruct") is not one
 static bool keywordMayNameField(enum tokenType t) {
     switch (t) {
-        case TOK_DONE: case TOK_FAIL: case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:
+        case TOK_BREAK: case TOK_CONTINUE: case TOK_UNREACHABLE:
         case TOK_IN: case TOK_IS: case TOK_AS: case TOK_AND: case TOK_OR: case TOK_XOR: case TOK_RANGE: case TOK_CASE:
         case TOK_NOMATCH: case TOK_TYPE: case TOK_STRUCT: case TOK_CHOICE: case TOK_INTERFACE: case TOK_EXTENDS:
         case TOK_IMPORT: case TOK_TEST: case TOK_EXTERN: case TOK_DEFAULT:
@@ -919,8 +918,13 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* ret = parseRetType(sc);
-    if (ret) addSntx(s, ret);
+    //D8e: "noreturn" stands where a result would
+    struct token nr = acceptTok(sc, TOK_NORETURN);
+    if (nr.type != TOK_NONE) addTok(s, nr);
+    else {
+        struct syntax* ret = parseRetType(sc);
+        if (ret) addSntx(s, ret);
+    }
     struct syntax* errs = parseFuncErrorList(sc);
     if (errs) addSntx(s, errs);
     return s;
@@ -1229,8 +1233,12 @@ struct syntax* parseExternFuncDecl(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* retType = parseRetType(sc);
-    if (retType) addSntx(s, retType);
+    struct token nr = acceptTok(sc, TOK_NORETURN); //D8e
+    if (nr.type != TOK_NONE) addTok(s, nr);
+    else {
+        struct syntax* retType = parseRetType(sc);
+        if (retType) addSntx(s, retType);
+    }
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     return s;
 }
@@ -2105,43 +2113,12 @@ struct syntax* parseStmntContinue(SyntaxCtx sc) {
     return s;
 }
 
-//S16c/S16d: bare statements, the same shape as done/fail
-struct syntax* parseStmntAbort(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_ABORT);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_ABORT);
-    addTok(s, kw);
-    return s;
-}
-
 struct syntax* parseStmntUnreachable(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_UNREACHABLE);
     if (kw.type == TOK_NONE) return NULL;
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_STMNT_UNREACHABLE);
-    addTok(s, kw);
-    return s;
-}
-
-struct syntax* parseStmntDone(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_DONE);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_DONE);
-    addTok(s, kw);
-    return s;
-}
-
-struct syntax* parseStmntFail(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_FAIL);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_FAIL);
     addTok(s, kw);
     return s;
 }
@@ -2405,7 +2382,7 @@ static struct syntax* parseMultiDeclStmnt(SyntaxCtx sc) {
 static struct syntax* (*const stmntForms[])(SyntaxCtx) = {
     parseStmntDestruct, parseMultiDeclStmnt, parseVarDecl, parseStmntTryStore, parseStmntAssign, parseStmntIf,
     parseStmntFor, parseStmntDo, parseStmntMatch, parseStmntRet, parseStmntJoin, parseStmntBlock, parseStmntSpawn, parseStmntDefer,
-    parseStmntBreak, parseStmntContinue, parseStmntAbort, parseStmntUnreachable, parseStmntDone, parseStmntFail,
+    parseStmntBreak, parseStmntContinue, parseStmntUnreachable,
     parseStmntAssert, parseStmntError, parseStmntTryCatch, parseStmntExpr,
 };
 
@@ -4755,19 +4732,19 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_MATCH_VALUE_ONE);
         return true;
     }
-    //"done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
+    //"range mut Bool = false" - a keyword beginning a line as a name would ("range" ended the statement there)
     if (isKeywordTok(prev) && prev.lineNr == found.lineNr && TokenBefore(prev).lineNr < prev.lineNr
         && (found.type == TOK_MUT || found.type == TOK_ASS_INFER || found.type == TOK_ASS || found.type == TOK_COMMA
-            || (found.type == TOK_IDEN && (prev.type == TOK_DONE || prev.type == TOK_FAIL || prev.type == TOK_BREAK
-                                           || prev.type == TOK_CONTINUE || prev.type == TOK_ABORT || prev.type == TOK_UNREACHABLE
+            || (found.type == TOK_IDEN && (prev.type == TOK_BREAK
+                                           || prev.type == TOK_CONTINUE || prev.type == TOK_UNREACHABLE
                                            || prev.type == TOK_JOIN)))) {
         ErrSyntax(prev, ERR_KEYWORD_AS_NAME, prev);
         return true;
     }
     //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block (before L9's keyword-as-name:
     //"case X => return f(x)" is the same mistake as "=> return 1", not a name)
-    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_ABORT || found.type == TOK_RET
-            || found.type == TOK_FAIL || found.type == TOK_DONE || found.type == TOK_BREAK || found.type == TOK_CONTINUE
+    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_RET
+            || found.type == TOK_BREAK || found.type == TOK_CONTINUE
             || found.type == TOK_ERROR)) {
         TokenCtx tc = found.owner;
         int from = TokenGetStrStart(found);

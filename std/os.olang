@@ -7,7 +7,7 @@ import "io"
 import "cancel"
 
 extern fn system(cmd Array<U8>) I32
-extern fn exit(status I32)
+extern fn exit(status I32) noreturn
 extern fn open(path Array<U8>, flags I32) I32
 extern fn creat(path Array<U8>, mode U32) I32
 extern fn close(fd I32) I32
@@ -104,11 +104,10 @@ fn Env(name String&) String& ? OsError {
         catch OsError { error OsError.NOT_FOUND }
 }
 
-# B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the same exit path
-# `done` and `fail` take. It ends the PROCESS whatever is running - a test included, so a test calling it ends the
-# whole run - where `done`/`fail` end the innermost thing that can end (S16a). An ordinary call to D10a: a function
-# owing a result writes `unreachable` after it.
-fn Exit(code I32) {
+# B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the process's
+# normal exit path. It ends the PROCESS whatever is running - a test included, so a test calling it ends the whole run.
+# It is noreturn (D8e): a call to it leaves, for D10a, and fits where any value is expected (`catch default os.Exit(2)`).
+fn Exit(code I32) noreturn {
     exit(code)
 }
 
@@ -605,13 +604,13 @@ test "Env gives a variable's value, and fails when it is not set" {
 
 test "WriteFile creates a file, and empties one that is there" {
     assert Run("rm -rf build/os_files && mkdir -p build/os_files") == 0
-    try WriteFile("build/os_files/a.txt", "first line\nsecond") catch { fail }
+    try WriteFile("build/os_files/a.txt", "first line\nsecond")
     text := try ReadFile("build/os_files/a.txt") catch default ""
     assert text == "first line\nsecond"
-    try WriteFile("build/os_files/a.txt", "short") catch { fail }
+    try WriteFile("build/os_files/a.txt", "short")
     again := try ReadFile("build/os_files/a.txt") catch default ""
     assert again == "short"
-    try WriteFile("build/os_files/empty", "") catch { fail }
+    try WriteFile("build/os_files/empty", "")
     assert (try ReadFile("build/os_files/empty") catch default "x") == ""
     denied := false
     try WriteFile("build/os_files/no/such/dir/f", "x") catch OsError.NOT_FOUND { denied = true } catch { }
@@ -622,15 +621,15 @@ test "Create writes through a descriptor, a piece at a time" {
     assert Run("mkdir -p build/os_files") == 0
     fd := try Create("build/os_files/pieces") catch default -1
     assert fd >= 0
-    try io.Write(fd, "one ") catch { fail }
-    try io.Write(fd, "two") catch { fail }
-    try Close(fd) catch { fail }
+    try io.Write(fd, "one ")
+    try io.Write(fd, "two")
+    try Close(fd)
     assert (try ReadFile("build/os_files/pieces") catch default "") == "one two"
     rd := try Open("build/os_files/pieces") catch default -1
     buf Array<U8, 16>
     got := try io.Read(rd, buf) catch default buf[:0]
     assert got.Len() == 7
-    try Close(rd) catch { fail }
+    try Close(rd)
     closed := false
     try Close(rd) catch OsError.FAILED { closed = true } catch { }
     assert closed
@@ -642,22 +641,22 @@ test "io.Lines follows a file another descriptor is still writing" {
     assert Run("mkdir -p build/os_files") == 0
     w := try Create("build/os_files/follow") catch default -1
     assert w >= 0
-    try io.Write(w, "first\n") catch { fail }
+    try io.Write(w, "first\n")
     r := try Open("build/os_files/follow") catch default -1
     lines := io.Lines(r, 4)
     assert (try lines.Next() catch default "?") == "first"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
-    try io.Write(w, "second line\nthi") catch { fail }
+    try io.Write(w, "second line\nthi")
     assert (try lines.Next() catch default "?") == "second line"
     assert (try lines.Next() catch default "?") == "thi"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
-    try io.Write(w, "rd\n\n") catch { fail }
+    try io.Write(w, "rd\n\n")
     assert (try lines.Next() catch default "?") == "rd"
     assert (try lines.Next() catch default "?") == ""
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
-    try Close(w) catch { fail }
-    try Close(r) catch { fail }
+    try Close(w)
+    try Close(r)
 }
 
 test "Stat gives the kind, the size, and the modification time to the nanosecond" {
@@ -682,18 +681,18 @@ test "Stat gives the kind, the size, and the modification time to the nanosecond
 
 test "MkDir and MkDirAll make directories" {
     assert Run("rm -rf build/os_files/m && mkdir -p build/os_files") == 0
-    try MkDirAll("build/os_files/m/x/y/") catch { fail }
+    try MkDirAll("build/os_files/m/x/y/")
     assert IsDir("build/os_files/m/x/y")
-    try MkDirAll("build/os_files/m/x/y") catch { fail }        # all there already: nothing to do
+    try MkDirAll("build/os_files/m/x/y")        # all there already: nothing to do
     there := false
     try MkDir("build/os_files/m/x") catch OsError.EXISTS { there = true } catch { }
     assert there
-    try MkDir("build/os_files/m/z") catch { fail }
+    try MkDir("build/os_files/m/z")
     assert IsDir("build/os_files/m/z")
     noParent := false
     try MkDir("build/os_files/m/a/b") catch OsError.NOT_FOUND { noParent = true } catch { }
     assert noParent
-    try WriteFile("build/os_files/m/f", "") catch { fail }
+    try WriteFile("build/os_files/m/f", "")
     inTheWay := false
     try MkDirAll("build/os_files/m/f/g") catch OsError.NOT_DIR { inTheWay = true } catch { }
     assert inTheWay
@@ -701,23 +700,23 @@ test "MkDir and MkDirAll make directories" {
 
 test "ReadDir, Rename and Remove" {
     assert Run("rm -rf build/os_files/d && mkdir -p build/os_files/d/sub") == 0
-    try WriteFile("build/os_files/d/b", "2") catch { fail }
-    try WriteFile("build/os_files/d/a", "1") catch { fail }
-    try WriteFile("build/os_files/d/.hidden", "") catch { fail }
+    try WriteFile("build/os_files/d/b", "2")
+    try WriteFile("build/os_files/d/a", "1")
+    try WriteFile("build/os_files/d/.hidden", "")
     names := try ReadDir("build/os_files/d") catch default Array<String&>(0)
     assert names.Len() == 4
     assert names[0] == ".hidden" and names[1] == "a" and names[2] == "b" and names[3] == "sub"
-    try Rename("build/os_files/d/a", "build/os_files/d/z") catch { fail }
-    try Rename("build/os_files/d/b", "build/os_files/d/z") catch { fail }      # replaces it
+    try Rename("build/os_files/d/a", "build/os_files/d/z")
+    try Rename("build/os_files/d/b", "build/os_files/d/z")      # replaces it
     assert (try ReadFile("build/os_files/d/z") catch default "") == "2"
-    try Remove("build/os_files/d/.hidden") catch { fail }
+    try Remove("build/os_files/d/.hidden")
     after := try ReadDir("build/os_files/d") catch default Array<String&>(0)
     assert after.Len() == 2 and after[0] == "sub" and after[1] == "z"
     full := false
     try Remove("build/os_files/d") catch OsError.NOT_EMPTY { full = true } catch { }
     assert full
-    try Remove("build/os_files/d/z") catch { fail }
-    try Remove("build/os_files/d/sub") catch { fail }
+    try Remove("build/os_files/d/z")
+    try Remove("build/os_files/d/sub")
     assert (try ReadDir("build/os_files/d") catch default Array<String&>(1)).Len() == 0
     gone := false
     try ReadDir("build/os_files/nothing") catch OsError.NOT_FOUND { gone = true } catch { }
@@ -735,7 +734,7 @@ test "ReadLink, RealPath and Cwd" {
     dangling := false
     try RealPath("build/os_files/l/link") catch OsError.NOT_FOUND { dangling = true } catch { }
     assert dangling
-    try WriteFile("build/os_files/l/target.txt", "t") catch { fail }
+    try WriteFile("build/os_files/l/target.txt", "t")
     real := try RealPath("build/os_files/l/./link") catch default ""
     cwd := try Cwd() catch default ""
     assert cwd.StartsWith("/") and real == $cwd "/build/os_files/l/target.txt"
@@ -781,7 +780,7 @@ test "IsTerminal tells a terminal from a file, a pipe and no descriptor" {
     assert not IsTerminal(-1) and not IsTerminal(1000000)
     fd := try Open("/dev/null") catch default -1
     assert fd >= 0 and not IsTerminal(fd)
-    try Close(fd) catch { fail }
+    try Close(fd)
     p := Array<I32>(2)
     assert pipe(p) == 0 and not IsTerminal(p[0]) and not IsTerminal(p[1])
     close(p[0])
@@ -795,28 +794,28 @@ test "IsTerminal tells a terminal from a file, a pipe and no descriptor" {
 }
 
 test "Exec runs a program without a shell, and gathers what it writes" {
-    r := try Exec(String&["printf", "%s|%s|%s", "two words", "it's", "$HOME;*"]) catch { fail }
+    r := try Exec(String&["printf", "%s|%s|%s", "two words", "it's", "$HOME;*"])
     assert r.Status == 0 and r.Stdout == "two words|it's|$HOME;*" and r.Stderr == ""
-    e := try Exec(String&["sh", "-c", "echo out; echo err >&2; exit 3"]) catch { fail }
+    e := try Exec(String&["sh", "-c", "echo out; echo err >&2; exit 3"])
     assert e.Status == 3 and e.Stdout == "out\n" and e.Stderr == "err\n"
-    k := try Exec(String&["sh", "-c", "kill -9 $$"]) catch { fail }
+    k := try Exec(String&["sh", "-c", "kill -9 $$"])
     assert k.Status == 137 and k.Stdout == ""                 # ended by signal 9: 128 + 9, as a shell says
 }
 
 test "Exec feeds its input to the program's standard input" {
-    c := try Exec(String&["cat"], "line one\nline two") catch { fail }
+    c := try Exec(String&["cat"], "line one\nline two")
     assert c.Status == 0 and c.Stdout == "line one\nline two"
-    w := try Exec(String&["wc", "-c"]) catch { fail }             # no input: the end of the file at once
+    w := try Exec(String&["wc", "-c"])             # no input: the end of the file at once
     assert w.Stdout.Trim() == "0"
     bytes := Array<U8>(70000, 'x')
-    big := try Exec(String&["wc", "-c"], bytes) catch { fail }
+    big := try Exec(String&["wc", "-c"], bytes)
     assert big.Stdout.Trim() == "70000"
 }
 
 test "Exec takes any amount of output without waiting on it" {
-    big := try Exec(String&["head", "-c", "3000000", "/dev/zero"]) catch { fail }
+    big := try Exec(String&["head", "-c", "3000000", "/dev/zero"])
     assert big.Status == 0 and big.Stdout.Len() == 3000000 and big.Stdout[2999999] == 0
-    both := try Exec(String&["sh", "-c", "head -c 200000 /dev/zero; head -c 300000 /dev/zero >&2"]) catch { fail }
+    both := try Exec(String&["sh", "-c", "head -c 200000 /dev/zero; head -c 300000 /dev/zero >&2"])
     assert both.Stdout.Len() == 200000 and both.Stderr.Len() == 300000
 }
 
@@ -835,18 +834,18 @@ test "Exec fails only when the program cannot be started" {
     try Exec(String&["echo", String(U8['a', 0, 'b'])]) catch OsError.FAILED { zero = true } catch { }
     assert zero
     assert Run("chmod +x build/os_files/noexec.sh") == 0
-    ok := try Exec(String&["build/os_files/noexec.sh"]) catch { fail }
+    ok := try Exec(String&["build/os_files/noexec.sh"])
     assert ok.Status == 0 and ok.Stdout == "hi\n"
 }
 
 # Exec runs the program in a directory of its own when asked: a relative program and relative paths are found from it
 test "Exec runs a program in the directory it is given" {
     assert Run("mkdir -p build/os_files/indir && printf '#!/bin/sh\\necho here\\n' > build/os_files/indir/here.sh && chmod +x build/os_files/indir/here.sh") == 0
-    where := try Exec(String&["pwd"], default, default, "build/os_files/indir") catch { fail }
+    where := try Exec(String&["pwd"], default, default, "build/os_files/indir")
     assert where.Status == 0 and where.Stdout.EndsWith("/build/os_files/indir\n")
-    ran := try Exec(String&["./here.sh"], default, default, "build/os_files/indir") catch { fail }
+    ran := try Exec(String&["./here.sh"], default, default, "build/os_files/indir")
     assert ran.Stdout == "here\n"
-    cat := try Exec(String&["cat", "here.sh"], default, default, "build/os_files/indir") catch { fail }
+    cat := try Exec(String&["cat", "here.sh"], default, default, "build/os_files/indir")
     assert cat.Stdout.EndsWith("echo here\n")
     nowhere := false
     try Exec(String&["pwd"], default, default, "build/os_files/no-such-dir") catch OsError.NOT_FOUND { nowhere = true } catch { }
@@ -863,7 +862,7 @@ test "ExecUntil kills a program that outlives its token" {
     timedOut := false
     try ExecUntil(String&["sleep", "5"], cancel.After(100)) catch cancel.Stopped.TIMED_OUT { timedOut = true } catch { }
     assert timedOut and cancel.NowNs() - start < 4000000000
-    quick := try ExecUntil(String&["echo", "in time"], cancel.After(60000)) catch { fail }
+    quick := try ExecUntil(String&["echo", "in time"], cancel.After(60000))
     assert quick.Status == 0 and quick.Stdout == "in time\n"
     tok mut cancel.Token& = cancel.Token()
     tok.Cancel()
@@ -874,20 +873,20 @@ test "ExecUntil kills a program that outlives its token" {
 
 # Start runs programs beside this one; Wait gives what each did, once; Kill ends one sooner
 test "Start, Wait, Kill and Pid" {
-    slow := try Start(String&["sleep", "5"]) catch { fail }
-    fed := try Start(String&["cat"], "fed in") catch { fail }
+    slow := try Start(String&["sleep", "5"])
+    fed := try Start(String&["cat"], "fed in")
     assert slow.Pid() > 0 and fed.Pid() > 0 and slow.Pid() != fed.Pid()
     slow.Kill()
-    killed := try slow.Wait() catch { fail }
+    killed := try slow.Wait()
     assert killed.Status == 137
     slow.Kill()                                     # waited for: nothing to end
     again := false
     try slow.Wait() catch OsError.FAILED { again = true } catch { }
     assert again
-    got := try fed.Wait() catch { fail }
+    got := try fed.Wait()
     assert got.Status == 0 and got.Stdout == "fed in" and got.Stderr == ""
-    failing := try Start(String&["sh", "-c", "echo oops >&2; exit 3"]) catch { fail }
-    f := try failing.WaitUntil(cancel.After(60000)) catch { fail }
+    failing := try Start(String&["sh", "-c", "echo oops >&2; exit 3"])
+    f := try failing.WaitUntil(cancel.After(60000))
     assert f.Status == 3 and f.Stderr == "oops\n"
     missing := false
     try Start(String&["olang-no-such-program"]) catch OsError.NOT_FOUND { missing = true } catch { }
@@ -896,7 +895,7 @@ test "Start, Wait, Kill and Pid" {
 
 # what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
 fn echoed(i I64) Output {
-    return try Exec(String&["echo", "run " $i]) catch { fail }
+    return Exec(String&["echo", "run " $i])!
 }
 
 test "what Exec gives back lives where it is put" {
@@ -908,22 +907,22 @@ test "what Exec gives back lives where it is put" {
 
 test "RemoveAll removes a tree, depth first, and never follows a link" {
     assert Run("rm -rf build/os_files/ra && mkdir -p build/os_files/ra/t/a/b/c build/os_files/ra/keep") == 0
-    try WriteFile("build/os_files/ra/t/a/b/c/f", "x") catch { fail }
-    try WriteFile("build/os_files/ra/t/a/.hidden", "y") catch { fail }
-    try WriteFile("build/os_files/ra/keep/k", "kept") catch { fail }
+    try WriteFile("build/os_files/ra/t/a/b/c/f", "x")
+    try WriteFile("build/os_files/ra/t/a/.hidden", "y")
+    try WriteFile("build/os_files/ra/keep/k", "kept")
     assert Run("ln -s ../keep build/os_files/ra/t/a/b/link && ln -s nowhere build/os_files/ra/t/dangling") == 0
-    try RemoveAll("build/os_files/ra/t") catch { fail }
+    try RemoveAll("build/os_files/ra/t")
     assert not Exists("build/os_files/ra/t") and (try ReadFile("build/os_files/ra/keep/k") catch default "") == "kept"
-    try RemoveAll("build/os_files/ra/t") catch { fail }            # nothing there: nothing to do
-    try RemoveAll("") catch { fail }
-    try RemoveAll("build/os_files/ra/keep/k") catch { fail }       # a file is removed as Remove would
+    try RemoveAll("build/os_files/ra/t")            # nothing there: nothing to do
+    try RemoveAll("")
+    try RemoveAll("build/os_files/ra/keep/k")       # a file is removed as Remove would
     assert not Exists("build/os_files/ra/keep/k") and IsDir("build/os_files/ra/keep")
     for bad in String&["build/os_files/ra/keep/.", "build/os_files/ra/keep/..", ".", "..", "build/os_files/ra/keep/./"] {
         refused := false
         try RemoveAll(bad) catch OsError.FAILED { refused = true } catch { }
         assert refused and IsDir("build/os_files/ra/keep")
     }
-    try RemoveAll("build/os_files/ra/keep/") catch { fail }        # a trailing '/' names the directory
+    try RemoveAll("build/os_files/ra/keep/")        # a trailing '/' names the directory
     assert not Exists("build/os_files/ra/keep")
 }
 
@@ -939,27 +938,27 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
     assert plain.Len() == "build/os_files/mt/".Len() + 6 and IsDir(plain)
     tmp := try MkTemp() catch default ""
     assert tmp.StartsWith("/") and IsDir(tmp)
-    try RemoveAll(tmp) catch { fail }
+    try RemoveAll(tmp)
     missing := false
     try MkTemp("build/os_files/mt/no/such") catch OsError.NOT_FOUND { missing = true } catch { }
     assert missing
     slash := false
     try MkTemp("build/os_files/mt", "a/b") catch OsError.FAILED { slash = true } catch { }
     assert slash
-    try RemoveAll("build/os_files/mt") catch { fail }
+    try RemoveAll("build/os_files/mt")
     assert not Exists(a)
 }
 
 # where a program's standard output goes: a memory file Exec reads back, or - not captured - this program's own
 test "Exec without capture leaves the program this one's output and error" {
     mine := try ReadLink("/proc/self/fd/1") catch default "none"
-    seen := try Exec(String&["sh", "-c", "readlink /proc/$$/fd/1"]) catch { fail }
+    seen := try Exec(String&["sh", "-c", "readlink /proc/$$/fd/1"])
     assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $mine "\n"
     assert Run("mkdir -p build/os_files") == 0
-    free := try Exec(String&["sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4"], "", false) catch { fail }
+    free := try Exec(String&["sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4"], "", false)
     assert free.Status == 4 and free.Stdout == "" and free.Stderr == ""
     assert (try ReadFile("build/os_files/fd1") catch default "") == $mine "\n"
-    fed := try Exec(String&["sh", "-c", "cat > build/os_files/fed"], "fed in", false) catch { fail }
+    fed := try Exec(String&["sh", "-c", "cat > build/os_files/fed"], "fed in", false)
     assert fed.Status == 0 and (try ReadFile("build/os_files/fed") catch default "") == "fed in"
 }
 
@@ -999,14 +998,14 @@ if TestBuild {
         assert stackBaked == 500500 and stackSumOn(1000) == stackBaked      # while compiling (K2) as at run time
     }
 
-    # P1d through a thread of RunOnStack's own: "done" ends the test, and what f's scopes held is destructed on the way
-    test "done inside RunOnStack ends the test, unwinding the scopes f had open" {
+    # what f's scopes held is destructed as f returns - and as a failure on its thread ends the calling test (P1d), which
+    # the checks scenario "testends" shows, since such a test fails
+    test "a return inside RunOnStack closes the scopes f had open" {
         RunOnStack(1 << 20, fn() {
             r stackRes& = stackRes()
             assert stackDrops == 0
-            done
+            return
         })
-        fail
     }
 
     test "the test before ended with f's scopes closed" {

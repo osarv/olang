@@ -22,5 +22,5 @@ fn main() ? {
     for i, x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } }
     for i, x in c { if x.v != i + 2000000 or x.w != 3 * (i + 2000000) { bad++ } }
     for i, x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } }
-    if bad != 0 or a.Len() + b.Len() + c.Len() + d.Len() != 120000 { fail }
+    assert not (bad != 0 or a.Len() + b.Len() + c.Len() + d.Len() != 120000)
 }

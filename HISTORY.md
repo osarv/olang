@@ -19059,3 +19059,56 @@ a compile error". No `try { block }`. QV (late in the batch): a postfix `!` ends
 **Found on the way.** A comprehension under `try` counted its own `Next`'s `Exhausted` as the try's error (fixed in
 `tryErrors`); a for-in's own `At` on a checked-only type was refused as an unhandled fallible operator (fixed:
 `loopOwnCall`).
+
+### Tests end by ending, `done`/`fail`/`abort` removed, `noreturn`, the error return trace (S15, S16, S16d, S18d, D8e, D10a, T22, B4, B5, B5b, B6, E35, 2026-10-17; the user's decisions QU, confirmed "the QU design stands as sent"; the trace decided by the coordinator for the user, who asked that an error escaping a test print as much as a failed assert)
+
+**What changed.** `done`, `fail` and `abort` were three statements ending "the innermost thing that can end" - the
+running test, else the process - with a pass, a failure and an abort. The user removed them: a test passes by reaching
+its end or `return`, which is now allowed in a test body (S15 used to reject it, naming `done`), and fails by a failed
+assert, `unreachable`, a `!`, or an error a `try` lets out of its body - so a test may use `try` without catching
+everything, an escaping error failing that one test. A program ends by returning from `main`, an error escaping it, or
+`os.Exit`, which is process-wide in tests too. `unreachable` stays (the user: kept, not renamed). The three words are
+ordinary names now. Beside that, `noreturn` (D8e): a result marker - `fn Exit(code I32) noreturn`, `fn(I32) noreturn` -
+whose body is checked never to return; a call to one leaves for D10a and fits wherever a value of any type is expected,
+which is what lets `catch default os.Exit(2)` and a conditional's `else die()` be written. `os.Exit` is the first one.
+This replaces the special case `catch` clauses had for a last statement calling `Exit` or `exit` (ERR_CATCH_EXIT_NOT_LEAVE,
+which told the program to write `unreachable` after it).
+
+**The error return trace** (Zig's): test and `-d` builds record, per thread, the last 32 places an error went -
+`raised here` at an `error` statement or a check failing under `checked`, `try passed it on` at each propagating try,
+`a task failed, and its join passed it on` at a failing join, `left the test` where it escaped a test - cleared by any
+clause that takes the error; nothing is recorded on the success path, and other builds emit no recording at all. It is
+printed after `FAIL - name: Type.WORD` when an error ends a test, after `unhandled error:` when one escapes `main`, and
+after a `!`'s message. In other builds those two print `(build with -d to see where it came from)` (today's flag; the
+CLI is to move to words later). `-i` keeps the same trace from its own frames.
+
+**Decided (mine), numbered.**
+1. An error leaving a test is reported on the harness's FAIL line - `FAIL - NAME: Type.WORD` - followed by the trace,
+   its last line `FILE:LINE: left the test` at the try that let it out; other failures keep `FAIL - NAME` after their
+   own message.
+2. `error T.W` stays invalid in a test body (R3): an assert says a test's own failure better, and an error a test raises
+   itself has no caller.
+3. A `noreturn` function declares no error set (an error is a way back to its caller, D8e); lambdas, constructors,
+   operator methods and `main` may not be `noreturn`; `:=` from a noreturn call is an error; `noreturn` is not a type,
+   so it is written only where a result stands.
+4. A noreturn function value fits a function type with the same parameters and no result (T22): never returning, it
+   keeps every promise such a type makes; the representation is the same (`void`).
+5. In a conditional, a noreturn call gives way to the other value's type (E28).
+6. In codegen a noreturn call is followed by `unreachable` and a block nothing reaches, where its value - of whatever type
+   it was fitted to - is `poison`.
+7. The trace holds pointers to constant `FILE:LINE: what` lines in a thread-local ring, so recording is two stores and
+   an add; a join records the task's failure as a raise at the join, since the task's own trace is its thread's.
+8. A test whose failure the evaluator can prove - a `try` there whose error certainly escapes, an assert reading what it
+   gives - is a compile-time error, as a false assert is (S18c, K1's abort class: "an error leaves the test").
+
+**Migration.** `tools/donefail_migrate.olang` (olang, re-runnable): `try X catch { fail }` is `try X` in a test body and
+`X!` elsewhere; `catch E { fail }` ending a try in a test is dropped; `if C { fail }` is `assert` of the negation (a
+single `==`/`!=` turned round, else `not`, parenthesized past `and`/`or`); `{ done }`/`done` in a test or `main` is
+`return`; what is left of `fail` in a test, and `abort`, is `unreachable` (`assert false` would be decided while
+compiling, S18c). It changed 429 lines and listed 16 for a person: helpers ending in `fail` (std/io's test helpers now
+use `!` and `unreachable`; fuzz's mains `os.Exit(1)`), and the tests whose subject was an early exit through a helper,
+a lambda, RunOnStack, a Str or a destructor - which became the checks scenario `testends`: a fixture whose tests fail on
+purpose (inside a join, two frames down, in a helper with deferred code, in a Str, in a destructor, on another stack, by
+an escaping error, by a `!`), each read back by the test after it, the whole output compared with a `.want`, plus
+programs whose escaping error and `!` traces are compared built, built `-d` and interpreted. Bare `error` statements left
+in checks cases and fixtures were given an `error Stop { HERE }` of their own.

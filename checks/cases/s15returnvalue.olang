@@ -1,0 +1,6 @@
+# check: fail error[S15]: a test has no result - a bare 'return' ends it as passed
+# S15/S16: a test passes by a bare return, which takes no value
+test "a test" {
+    return 1
+}
+fn main() { }

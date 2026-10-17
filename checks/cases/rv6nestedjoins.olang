@@ -43,5 +43,5 @@ fn main() ? {
     }
     one I64 = 0
     for i in range 10000 { one += 2 * i }
-    if x != 2 * one + 1 or y != 2 * one + 1 or z != one { fail }
+    assert not (x != 2 * one + 1 or y != 2 * one + 1 or z != one)
 }

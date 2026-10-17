@@ -95,7 +95,7 @@ fn main() ? {
     }
     summary String& = "fuzz: " $Ran " programs, " $Total " cases (" $Baked " globals baked while compiling)"
     try io.Print($summary ", " $Found " findings" $endRun() "\n")
-    if Found > 0 { fail }
+    if Found > 0 { os.Exit(1) }
 }
 
 # this run's own directory under build/fz, so nothing another run writes - a leftover one included - is read here
@@ -103,7 +103,7 @@ fn newRun() ? io.IoError {
     os.Run("mkdir -p " $os.Quote($Root "/build/fz"))
     Run = try os.MkTemp($Root "/build/fz", "run") catch {
         try io.PrintErr("fuzz: cannot make a run directory under build/fz\n")
-        fail
+        os.Exit(1)
     }
 }
 
@@ -120,7 +120,7 @@ fn endRun() String& {
 fn usage() ? io.IoError {
     try io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
                      " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]\n"))
-    fail
+    os.Exit(1)
 }
 
 fn worker(queue mut chan.Chan<I64>&, w I64) {
@@ -275,7 +275,7 @@ fn scopeMain(args Array<String&>&) ? io.IoError {
     }
     summary String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
     try io.Print($summary ", " $Found " findings" $endRun() "\n")
-    if Found > 0 { fail }
+    if Found > 0 { os.Exit(1) }
 }
 
 fn scopeWorker(queue mut chan.Chan<I64>&, w I64) {

@@ -594,9 +594,6 @@ fn (w mut walker&) stmt(s ast.Stmt&) {
             kind := match k {
                 case token.Tok.Break => "BREAK"
                 case token.Tok.Continue => "CONTINUE"
-                case token.Tok.Done => "DONE"
-                case token.Tok.Fail => "FAIL"
-                case token.Tok.Abort => "ABORT"
                 case _ => "UNREACHABLE"
             }
             w.line(kind, sp)

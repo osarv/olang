@@ -8,6 +8,9 @@
 import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
+error Stop {
+    HERE
+}
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -21,7 +24,7 @@ type Buf struct() {
 }
 fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
 fn fails(k I64) I64 ? {
-    if k >= 0 { error }
+    if k >= 0 { error Stop.HERE }
     return k
 }
 fn mkl(k I64) own mut Leaf& { return Leaf(k) }
@@ -89,7 +92,7 @@ fn viaCatchBreak(arr Array<I64>&) I64 {
 }
 # N6: a constructor failing after making its own fields - one, or two and an own array
 fn check(n I64) I64 ? {
-    if n > 2 { error }
+    if n > 2 { error Stop.HERE }
     return n
 }
 type FailTry struct(n I64) ? {
@@ -100,7 +103,7 @@ type FailTry struct(n I64) ? {
 type FailOwn struct(n I64) ? {
     n
     a own mut Leaf& = Leaf(n)
-    if n > 2 { error }
+    if n > 2 { error Stop.HERE }
 }
 type FailMany struct(n I64) ? {
     n

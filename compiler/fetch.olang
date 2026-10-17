@@ -283,7 +283,7 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     defer { try os.RemoveAll(scratch) catch os.OsError { } }
     base := $scratch "/remote"
     c1 := makeRepo(base, "tools", "fn F() I64 { return 1 }\n")
-    if c1 == "" { done }   # no git here: nothing to fetch with
+    if c1 == "" { return }   # no git here: nothing to fetch with
     cache := $scratch "/cache"
     lockPath := $scratch "/olang.lock"
     f := Fetcher(lockPath, cache, "file://" $base "/", false, true)

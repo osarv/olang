@@ -2690,23 +2690,23 @@ if TestBuild {
         m := Matrix<F32>(3, 4)
         assert m.Rows == 3 and m.Cols == 4 and m.Stride == 4 and m.Sum() == 0.0 and m.Contiguous()
         for i in range 12 { m.Data[i] = F32(i) }
-        rows := (try m.RowRange(1, 3) catch { fail })
+        rows := (try m.RowRange(1, 3))
         assert rows.Rows == 2 and rows.Get(0, 0) == 4.0 and rows.Contiguous()
-        cols := (try m.ColRange(1, 3) catch { fail })
+        cols := (try m.ColRange(1, 3))
         assert cols.Cols == 2 and cols.Stride == 4 and cols.Get(2, 1) == 10.0 and not cols.Contiguous()
         cols.Fill(-1.0)
         assert m.Get(0, 1) == -1.0 and m.Get(2, 2) == -1.0 and m.Get(2, 3) == 11.0 and m.Get(1, 0) == 4.0
-        block := (try m.Block(1, 2, 2, 2) catch { fail })
+        block := (try m.Block(1, 2, 2, 2))
         block.Set(1, 1, 99.0)
         assert m.Get(2, 3) == 99.0
         r := m.Row(2)
         r[0] = 7.0
         assert m.Get(2, 0) == 7.0 and r.Len() == 4
-        flat := (try m.Reshape(2, 6) catch { fail })
+        flat := (try m.Reshape(2, 6))
         assert flat.Get(1, 5) == 99.0 and flat.Rows == 2
         # over the caller's storage
         store := Array<F64>(10)
-        v := (try View(store, 2, 2, 3, 4) catch { fail })
+        v := (try View(store, 2, 2, 3, 4))
         v.Fill(1.0)
         assert store[2] == 1.0 and store[4] == 1.0 and store[5] == 0.0 and store[6] == 1.0 and store[8] == 1.0
         assert store[9] == 0.0 and store[0] == 0.0
@@ -2718,25 +2718,25 @@ if TestBuild {
     test "element operators, in-place forms and Map" {
         a := counting(2, 3, 1.0)
         b := Full(2, 3, 2.0)
-        assert (try (a + b) catch { fail }).Get(1, 2) == 8.0 and (try (a - b) catch { fail }).Get(0, 0) == -1.0
-        assert (try (a * b) catch { fail }).Get(1, 0) == 8.0
-        assert (try (a / b) catch { fail }).Get(0, 1) == 1.0 and (-a).Get(1, 1) == -5.0 and (a * 3.0).Get(1, 2) == 18.0 and (a + 0.5).Get(0, 0) == 1.5
+        assert (try (a + b)).Get(1, 2) == 8.0 and (try (a - b)).Get(0, 0) == -1.0
+        assert (try (a * b)).Get(1, 0) == 8.0
+        assert (try (a / b)).Get(0, 1) == 1.0 and (-a).Get(1, 1) == -5.0 and (a * 3.0).Get(1, 2) == 18.0 and (a + 0.5).Get(0, 0) == 1.5
         c := a.Clone()
-        try c.Add(b) catch { fail }
-        try c.Sub(a) catch { fail }
+        try c.Add(b)
+        try c.Sub(a)
         assert c == b
         c.Scale(0.5)
-        try c.AddScaled(a, 2.0) catch { fail }
+        try c.AddScaled(a, 2.0)
         assert c.Get(1, 2) == 13.0
         d := Matrix<F64>(2, 3)
-        try d.Map(a, fn(x) { return x * x }) catch { fail }
+        try d.Map(a, fn(x) { return x * x })
         assert d.Get(1, 2) == 36.0
-        try d.Map2(a, b, fn(x, y) { return x - y }) catch { fail }
+        try d.Map2(a, b, fn(x, y) { return x - y })
         assert d.Get(0, 0) == -1.0
-        try d.Map3(a, b, a, fn(x, y, z) { return x * y + z }) catch { fail }
+        try d.Map3(a, b, a, fn(x, y, z) { return x * y + z })
         assert d.Get(1, 2) == 18.0
         # in place: the destination is an operand
-        try d.Map(d, fn(x) { return x + 1.0 }) catch { fail }
+        try d.Map(d, fn(x) { return x + 1.0 })
         assert d.Get(1, 2) == 19.0
         e := a.Exp()
         assert e.Get(0, 0) == math.Exp(1.0) and a.Sqrt().Get(1, 0) == 2.0 and a.Log().Get(0, 0) == 0.0
@@ -2749,16 +2749,16 @@ if TestBuild {
     test "a row is added to every row, and outer products are added in place" {
         m := counting(3, 2, 0.0)
         bias := counting(1, 2, 10.0)
-        try m.AddRow(bias) catch { fail }
+        try m.AddRow(bias)
         assert m.Get(0, 0) == 10.0 and m.Get(2, 1) == 16.0
         w := Matrix<F64>(2, 3)
         x := F64[1.0, 2.0]
         y := F64[3.0, 4.0, 5.0]
-        try Ger(w, x, y, 2.0, 1.0) catch { fail }
+        try Ger(w, x, y, 2.0, 1.0)
         assert w.Get(1, 2) == 20.0 and w.Get(0, 0) == 6.0
-        try w.AddOuterDifference(x, y, x, y, 1.0) catch { fail }
+        try w.AddOuterDifference(x, y, x, y, 1.0)
         assert w.Get(1, 2) == 20.0
-        try w.AddOuterDifference(x, y, F64[3.0, 4.0], F64[1.0, 2.0, 0.0], 1.0) catch { fail }
+        try w.AddOuterDifference(x, y, F64[3.0, 4.0], F64[1.0, 2.0, 0.0], 1.0)
         assert w.Get(0, 1) == 6.0 and w.Get(1, 2) == 30.0 and w.Get(1, 0) == 14.0
     }
 
@@ -2795,19 +2795,19 @@ if TestBuild {
                 b.FillUniform(r, -1.0, 1.0)
                 want := referenceProduct(a, transA, b, transB)
                 c := Matrix<F64>(m, n)
-                try Gemm(c, a, transA, b, transB) catch { fail }
-                assert (try c.Distance(want) catch { fail }) < 1e-9 * F64(k)
+                try Gemm(c, a, transA, b, transB)
+                assert (try c.Distance(want)) < 1e-9 * F64(k)
                 # beta = 1 accumulates, beta = 0 never reads what is there, alpha scales
                 c.Fill(1.0)
-                try Gemm(c, a, transA, b, transB, 2.0, 1.0) catch { fail }
+                try Gemm(c, a, transA, b, transB, 2.0, 1.0)
                 twice := want * 2.0 + 1.0
-                assert (try c.Distance(twice) catch { fail }) < 1e-9 * F64(k)
+                assert (try c.Distance(twice)) < 1e-9 * F64(k)
                 c.Fill(math.NaN)
-                try Gemm(c, a, transA, b, transB, 1.0, 0.0) catch { fail }
-                assert (try c.Distance(want) catch { fail }) < 1e-9 * F64(k)
+                try Gemm(c, a, transA, b, transB, 1.0, 0.0)
+                assert (try c.Distance(want)) < 1e-9 * F64(k)
                 # threads change nothing
                 d := Matrix<F64>(m, n)
-                try Gemm(d, a, transA, b, transB, 1.0, 0.0, 4) catch { fail }
+                try Gemm(d, a, transA, b, transB, 1.0, 0.0, 4)
                 assert d == c
             }
         }
@@ -2829,14 +2829,14 @@ if TestBuild {
                 for i in range b.Data.Len() { b.Data[i] = F32(i * 3 % 5 - 2) }
                 want := referenceProduct(a, transA, b, false)
                 c := Matrix<F32>(m, n)
-                try Gemm(c, a, transA, b, false) catch { fail }
+                try Gemm(c, a, transA, b, false)
                 assert c.ToF64() == want, "the product " $m "x" $k "x" $n
                 ai := Matrix<I32>(a.Rows, a.Cols)
-                try ai.Convert(a) catch { fail }
+                try ai.Convert(a)
                 bi := Matrix<I32>(k, n)
-                try bi.Convert(b) catch { fail }
+                try bi.Convert(b)
                 ci := Matrix<I32>(m, n)
-                try Gemm(ci, ai, transA, bi, false) catch { fail }
+                try Gemm(ci, ai, transA, bi, false)
                 assert ci.ToF64() == want, "the integer product " $m "x" $k "x" $n
             }
         }
@@ -2859,21 +2859,21 @@ if TestBuild {
                 a.FillUniform(r, -1.0, 1.0)
                 b.FillUniform(r, -1.0, 1.0)
                 want := Matrix<F64>(m, n)
-                try Gemm(want, a, transA, b, transB, 2.0, 0.0, 1) catch { fail }
+                try Gemm(want, a, transA, b, transB, 2.0, 0.0, 1)
                 c := Matrix<F64>(m, n)
                 c.Fill(1.0)
-                try ws.Gemm(c, a, transA, b, transB, 2.0, 0.0) catch { fail }
+                try ws.Gemm(c, a, transA, b, transB, 2.0, 0.0)
                 assert c == want
                 c.Fill(1.0)
-                try ws.Gemm(c, a, transA, b, transB, 2.0, 1.0, 4) catch { fail }
-                assert (try c.Distance(want + 1.0) catch { fail }) < 1e-9 * F64(k)
+                try ws.Gemm(c, a, transA, b, transB, 2.0, 1.0, 4)
+                assert (try c.Distance(want + 1.0)) < 1e-9 * F64(k)
                 # F16 is packed in F32, into the workspace's F32 panels
                 a16 := a.ToF16()
                 b16 := b.ToF16()
                 want16 := Matrix<F16>(m, n)
-                try Gemm(want16, a16, transA, b16, transB) catch { fail }
+                try Gemm(want16, a16, transA, b16, transB)
                 c16 := Matrix<F16>(m, n)
-                try wide.Gemm(c16, a16, transA, b16, transB) catch { fail }
+                try wide.Gemm(c16, a16, transA, b16, transB)
                 assert c16 == want16
             }
             if size == 0 {
@@ -2888,8 +2888,8 @@ if TestBuild {
         x := Matrix<F64>(300, 517)
         y := Matrix<F64>(517, 270)
         z := Matrix<F64>(300, 270)
-        try ws.Gemm(z, x, false, y, false) catch { fail }
-        try wide.Gemm(Matrix<F16>(300, 270), x.ToF16(), false, y.ToF16(), false) catch { fail }
+        try ws.Gemm(z, x, false, y, false)
+        try wide.Gemm(Matrix<F16>(300, 270), x.ToF16(), false, y.ToF16(), false)
         assert ws.b is big and wide.wideB is bigWide and ws.wideB == null and wide.b == null
     }
 
@@ -2907,7 +2907,7 @@ if TestBuild {
             k.Fill(0.5)
             s := Matrix<F32>(64, t)
             before := ws.b
-            try ws.Gemm(s, q, false, k, true) catch { fail }
+            try ws.Gemm(s, q, false, k, true)
             assert s.Get(63, t - 1) == 32.0
             if not (ws.b is before) { replaced++ }
         }
@@ -2918,23 +2918,23 @@ if TestBuild {
     test "the product operators, and products of views" {
         a := counting(2, 3, 0.0)
         b := counting(3, 2, 1.0)
-        c := try (a @ b) catch { fail }
+        c := try (a @ b)
         assert c.Get(0, 0) == 13.0 and c.Get(1, 1) == 52.0
-        assert (try (a @ a.T()).Get(0, 1) catch { fail }) == 14.0 and (try (a.T() @ a).Get(2, 2) catch { fail }) == 29.0
-        assert (try (b.T() @ a.T()) catch { fail }) == c.T().Clone()
+        assert (try (a @ a.T()).Get(0, 1)) == 14.0 and (try (a.T() @ a).Get(2, 2)) == 29.0
+        assert (try (b.T() @ a.T())) == c.T().Clone()
         big := counting(4, 5, 0.0)
-        left := (try big.ColRange(1, 4) catch { fail })
-        right := (try big.Block(0, 1, 3, 2) catch { fail })
-        assert (try (left @ right) catch { fail }) == (try (left.Clone() @ right.Clone()) catch { fail })
+        left := (try big.ColRange(1, 4))
+        right := (try big.Block(0, 1, 3, 2))
+        assert (try (left @ right)) == (try (left.Clone() @ right.Clone()))
         # a vector times a matrix, and a matrix times a vector, both ways round
         x := counting(1, 3, 1.0)
         w := counting(2, 3, 0.0)
-        y := try (x @ w.T()) catch { fail }
+        y := try (x @ w.T())
         assert y.Get(0, 0) == 8.0 and y.Get(0, 1) == 26.0
-        col := try (w @ x.Reshape(3, 1)) catch { fail }
+        col := try (w @ x.Reshape(3, 1))
         assert col.Get(1, 0) == 26.0
         z := Matrix<F64>(1, 3)
-        try Gemm(z, x.RowRange(0, 1).Reshape(1, 3), false, counting(3, 3, 0.0), false) catch { fail }
+        try Gemm(z, x.RowRange(0, 1).Reshape(1, 3), false, counting(3, 3, 0.0), false)
         assert z.Get(0, 2) == 1.0 * 2.0 + 2.0 * 5.0 + 3.0 * 8.0
         o := Outer(F64[1.0, 2.0], F64[3.0, 4.0, 5.0])
         assert o.Rows == 2 and o.Get(1, 2) == 10.0
@@ -2943,64 +2943,64 @@ if TestBuild {
     test "products in every element type: F16, BF16 and F8 computed in F32, integers wrapping" {
         a := counting(3, 4, 1.0)
         b := counting(4, 2, -3.0)
-        want := try (a @ b) catch { fail }
-        assert (try (a.ToF32() @ b.ToF32()).ToF64() catch { fail }) == want
-        assert (try (a.ToF16() @ b.ToF16()).ToF64() catch { fail }) == want
-        assert (try (a.ToBF16() @ b.ToBF16()).ToF64() catch { fail }) == want
+        want := try (a @ b)
+        assert (try (a.ToF32() @ b.ToF32()).ToF64()) == want
+        assert (try (a.ToF16() @ b.ToF16()).ToF64()) == want
+        assert (try (a.ToBF16() @ b.ToBF16()).ToF64()) == want
         ai := Matrix<I32>(3, 4)
-        try ai.Convert(a) catch { fail }
+        try ai.Convert(a)
         bi := Matrix<I32>(4, 2)
-        try bi.Convert(b) catch { fail }
-        ci := try (ai @ bi) catch { fail }
+        try bi.Convert(b)
+        ci := try (ai @ bi)
         assert ci.Get(2, 1) == I32(want.Get(2, 1))
         a8 := Matrix<F8E4M3>(3, 4)
-        try a8.Convert(a) catch { fail }
+        try a8.Convert(a)
         b8 := Matrix<F8E4M3>(4, 2)
-        try b8.Convert(Full(4, 2, 0.5)) catch { fail }
+        try b8.Convert(Full(4, 2, 0.5))
         c8 := Matrix<F32>(3, 2)
         c32 := Matrix<F32>(3, 2)
         out8 := Matrix<F8E4M3>(3, 2)
-        try Gemm(out8, a8, false, b8, false) catch { fail }
-        try c8.Convert(out8) catch { fail }
-        try Gemm(c32, a.ToF32(), false, Full(4, 2, F32(0.5)), false) catch { fail }
+        try Gemm(out8, a8, false, b8, false)
+        try c8.Convert(out8)
+        try Gemm(c32, a.ToF32(), false, Full(4, 2, F32(0.5)), false)
         assert c8.Get(0, 0) == c32.Get(0, 0) and c8.Get(0, 0) == 5.0
         # an F16 sum many times beyond F16's own precision, accumulated in F32
         ones := Full(1, 4096, F16(1.0))
-        assert ones.Sum() == 4096.0 and (try ones.Dot(ones) catch { fail }) == 4096.0
+        assert ones.Sum() == 4096.0 and (try ones.Dot(ones)) == 4096.0
     }
 
     test "sums, means, norms and extremes" {
         m := counting(3, 4, 1.0)
         assert m.Sum() == 78.0 and m.Mean() == 6.5 and m.Max() == 12.0 and m.Min() == 1.0
-        assert (try m.Dot(m) catch { fail }) == 650.0 and m.Norm() == math.Sqrt(650.0) and m.MaxAbs() == 12.0
-        assert (try m.Distance(m) catch { fail }) == 0.0 and (try m.Distance(m + 1.0) catch { fail }) == math.Sqrt(12.0)
-        assert (try m.MaxAbsDifference(m * 2.0) catch { fail }) == 12.0
+        assert (try m.Dot(m)) == 650.0 and m.Norm() == math.Sqrt(650.0) and m.MaxAbs() == 12.0
+        assert (try m.Distance(m)) == 0.0 and (try m.Distance(m + 1.0)) == math.Sqrt(12.0)
+        assert (try m.MaxAbsDifference(m * 2.0)) == 12.0
         rows := Array<F64>(3)
-        try m.RowSums(rows) catch { fail }
+        try m.RowSums(rows)
         assert rows[0] == 10.0 and rows[2] == 42.0
         maxes := Array<F64>(3)
-        try m.RowMax(maxes) catch { fail }
+        try m.RowMax(maxes)
         assert maxes[1] == 8.0
         cols := Full(1, 4, 100.0)
-        try m.ColumnSums(cols) catch { fail }
+        try m.ColumnSums(cols)
         assert cols.Get(0, 0) == 15.0 and cols.Get(0, 3) == 24.0
-        try m.ColumnSums(cols, 1.0) catch { fail }
+        try m.ColumnSums(cols, 1.0)
         assert cols.Get(0, 3) == 48.0
         wide := counting(2, 150, 0.0)
         wcols := Matrix<F64>(1, 150)
-        try wide.ColumnSums(wcols) catch { fail }
+        try wide.ColumnSums(wcols)
         assert wcols.Get(0, 149) == 149.0 + 299.0 and wcols.Get(0, 70) == 70.0 + 220.0
         scores := counting(2, 3, 0.0)
         scores.Set(0, 1, 9.0)
         scores.Set(1, 0, 5.0)
         classes := Array<I32>(2)
-        try scores.ArgMaxRows(classes) catch { fail }
+        try scores.ArgMaxRows(classes)
         assert classes[0] == 1 and classes[1] == 0
         scores.Set(1, 2, math.NaN)
-        try scores.ArgMaxRows(classes) catch { fail }
+        try scores.ArgMaxRows(classes)
         assert classes[1] == 2 and math.IsNan(scores.Max())
         # a strided view sums only its own elements
-        assert (try m.ColRange(1, 3) catch { fail }).Sum() == 2.0 + 3.0 + 6.0 + 7.0 + 10.0 + 11.0
+        assert (try m.ColRange(1, 3)).Sum() == 2.0 + 3.0 + 6.0 + 7.0 + 10.0 + 11.0
         # a long sum in lanes: exact here, since every partial sum is an integer
         long := counting(1, 1001, 0.0)
         assert long.Sum() == 500500.0
@@ -3031,7 +3031,7 @@ if TestBuild {
         bf := m.ToBF16()
         assert bf.Get(0, 1) == BF16(1.0 / 3.0)
         back := Matrix<F64>(2, 2)
-        try back.Convert(bf) catch { fail }
+        try back.Convert(bf)
         assert back.Get(0, 1) == F64(BF16(1.0 / 3.0))
     }
 
@@ -3056,16 +3056,16 @@ if TestBuild {
         a := counting(3, 3, 1.0)
         a.Set(2, 2, 10.0)
         x := counting(3, 2, 0.0)
-        b := try (a @ x) catch { fail }
-        got := try Solve(a, b) catch { fail }
-        assert (try got.MaxAbsDifference(x) catch { fail }) < 1e-12
-        inv := try a.Inverse() catch { fail }
+        b := try (a @ x)
+        got := try Solve(a, b)
+        assert (try got.MaxAbsDifference(x)) < 1e-12
+        inv := try a.Inverse()
         id := Matrix<F64>(3, 3)
         id.SetIdentity()
-        assert (try (a @ inv).MaxAbsDifference(id) catch { fail }) < 1e-12
+        assert (try (a @ inv).MaxAbsDifference(id)) < 1e-12
         singular := Full(3, 3, 2.0)
         failed Bool = false
-        try Solve(singular, b) catch SolveError.SINGULAR { failed = true } catch { fail }
+        try Solve(singular, b) catch SolveError.SINGULAR { failed = true }
         assert failed
     }
 
@@ -3093,26 +3093,26 @@ if TestBuild {
             x.FillUniform(r, -1.0, 1.0)
             want := referenceProduct(a, false, x, false)
             y := Array<F64>(rows, math.NaN)
-            try Gemv(y, a, false, x.Data) catch { fail }
+            try Gemv(y, a, false, x.Data)
             for i in range rows { assert math.Abs(y[i] - want.Get(i, 0)) < 1e-13 * F64(cols) }
             # a's columns: y = 2 a^T u + y
             u := Matrix<F64>(rows, 1)
             u.FillUniform(r, -1.0, 1.0)
             wantT := referenceProduct(a, true, u, false)
             yt := Array<F64>(cols, 1.0)
-            try Gemv(yt, a, true, u.Data, 2.0, 1.0) catch { fail }
+            try Gemv(yt, a, true, u.Data, 2.0, 1.0)
             for j in range cols { assert math.Abs(yt[j] - (2.0 * wantT.Get(j, 0) + 1.0)) < 1e-13 * F64(rows) }
             # a view: its rows are not contiguous with each other
-            v := (try a.ColRange(1, cols - 1) catch { fail })
+            v := (try a.ColRange(1, cols - 1))
             xv := Matrix<F64>(cols - 2, 1)
             xv.Fill(1.0)
             wantV := referenceProduct(v, false, xv, false)
             yv := Array<F64>(rows)
-            try Gemv(yv, v, false, xv.Data) catch { fail }
+            try Gemv(yv, v, false, xv.Data)
             for i in range rows { assert math.Abs(yv[i] - wantV.Get(i, 0)) < 1e-13 * F64(cols) }
             wantVT := referenceProduct(v, true, u, false)
             yvt := Array<F64>(cols - 2)
-            try Gemv(yvt, v, true, u.Data) catch { fail }
+            try Gemv(yvt, v, true, u.Data)
             for j in range cols - 2 { assert math.Abs(yvt[j] - wantVT.Get(j, 0)) < 1e-13 * F64(rows) }
         }
         # a batch of one to four rows through Gemm takes the same path, every transpose
@@ -3125,9 +3125,9 @@ if TestBuild {
                 a.FillUniform(r, -1.0, 1.0)
                 b.FillUniform(r, -1.0, 1.0)
                 c := Full(m, 29, F32(1.0))
-                try Gemm(c, a, transA, b, transB, 1.0, 1.0) catch { fail }
+                try Gemm(c, a, transA, b, transB, 1.0, 1.0)
                 want := referenceProduct(a, transA, b, transB) + 1.0
-                assert (try c.ToF64().MaxAbsDifference(want) catch { fail }) < 1e-5
+                assert (try c.ToF64().MaxAbsDifference(want)) < 1e-5
             }
         }
     }
@@ -3136,18 +3136,18 @@ if TestBuild {
         x := F64[1.0, 2.0]
         y := F64[3.0, 4.0, 5.0]
         w := counting(2, 3, 0.0)
-        try Ger(w, x, y) catch { fail }
+        try Ger(w, x, y)
         assert w.Get(1, 2) == 5.0 + 10.0 and w.Get(0, 0) == 3.0
-        try Ger(w, x, y, 2.0, 0.5) catch { fail }
+        try Ger(w, x, y, 2.0, 0.5)
         assert w.Get(1, 2) == 0.5 * 15.0 + 2.0 * 2.0 * 5.0
         w.Fill(math.NaN)
-        try Ger(w, x, y, 1.0, 0.0) catch { fail }
+        try Ger(w, x, y, 1.0, 0.0)
         assert w == Outer(x, y)
         u := counting(2, 3, 1.0)
-        try Ger2(u, x, y, F64[1.0, -1.0], F64[1.0, 1.0, 1.0], 1.0, 0.9) catch { fail }
+        try Ger2(u, x, y, F64[1.0, -1.0], F64[1.0, 1.0, 1.0], 1.0, 0.9)
         assert u.Get(1, 2) == 0.9 * 6.0 + (10.0 - 1.0) and u.Get(0, 0) == 0.9 + (3.0 + 1.0)
         f := Matrix<F32>(2, 3)
-        try Ger(f, F32[1.0, 2.0], F32[3.0, 4.0, 5.0], 0.5) catch { fail }
+        try Ger(f, F32[1.0, 2.0], F32[3.0, 4.0, 5.0], 0.5)
         assert f.Get(1, 2) == 5.0
     }
 
@@ -3159,7 +3159,7 @@ if TestBuild {
         mask.Set(0, 1, 1)
         mask.Set(1, 2, 1)
         w := Matrix<F64>(2, 3)
-        try w.AddScaledMasked(Full(2, 3, 1.0), 0.5, mask) catch { fail }
+        try w.AddScaledMasked(Full(2, 3, 1.0), 0.5, mask)
         assert w.Sum() == 1.0 and w.Get(0, 1) == 0.5 and w.Get(1, 2) == 0.5
         r := rand.Rand(3)
         b := Matrix<U8>(100, 100)
@@ -3174,34 +3174,34 @@ if TestBuild {
     test "row reductions, normalised rows and the softmax of rows" {
         m := counting(2, 3, -2.0)
         out := Array<F64>(2)
-        try m.RowMaxAbs(out) catch { fail }
+        try m.RowMaxAbs(out)
         assert out[0] == 2.0 and out[1] == 3.0
-        try m.RowAbsSums(out) catch { fail }
+        try m.RowAbsSums(out)
         assert out[0] == 3.0 and out[1] == 6.0
-        try m.RowNorms(out) catch { fail }
+        try m.RowNorms(out)
         assert out[0] == math.Sqrt(5.0) and out[1] == math.Sqrt(14.0)
         cs := Matrix<F64>(1, 3)
-        try counting(2, 3, -4.0).ColumnAbsSums(cs) catch { fail }
+        try counting(2, 3, -4.0).ColumnAbsSums(cs)
         assert cs.Get(0, 0) == 5.0 and cs.Get(0, 1) == 3.0 and cs.Get(0, 2) == 3.0
         n := m.Clone()
         n.NormalizeRows()
-        try n.RowNorms(out) catch { fail }
+        try n.RowNorms(out)
         assert math.Abs(out[0] - 1.0) < 1e-15 and math.Abs(out[1] - 1.0) < 1e-15
         zero := Matrix<F64>(1, 3)
         zero.NormalizeRows()
         assert zero.Sum() == 0.0
         # a block of columns, in place, over a temperature: what is outside the block is untouched
         s := counting(2, 4, 0.0)
-        block := (try s.ColRange(1, 4) catch { fail })
-        try block.RowSoftmax(block, 2.0) catch { fail }
+        block := (try s.ColRange(1, 4))
+        try block.RowSoftmax(block, 2.0)
         assert s.Get(0, 0) == 0.0 and s.Get(1, 0) == 4.0
         sums := Array<F64>(2)
-        try block.RowSums(sums) catch { fail }
+        try block.RowSums(sums)
         assert math.Abs(sums[0] - 1.0) < 1e-15 and math.Abs(sums[1] - 1.0) < 1e-15
         want F64 = math.Exp(-1.0) / (math.Exp(-1.0) + math.Exp(-0.5) + 1.0)
         assert math.Abs(s.Get(0, 1) - want) < 1e-15 and math.Abs(s.Get(1, 1) - want) < 1e-15
         p := Matrix<F32>(2, 3)
-        try p.RowSoftmax(m.ToF32(), 1.0) catch { fail }
+        try p.RowSoftmax(m.ToF32(), 1.0)
         assert p.Get(0, 2) > p.Get(0, 1) and math.Abs(p.Sum() - 2.0) < 1e-6
     }
 
@@ -3234,7 +3234,7 @@ if TestBuild {
         assert FastSigmoid(F32(-1000.0)) == 0.0 and FastSigmoid(1000.0) == 1.0 and FastSigmoid(0.0) == 0.5
         m := counting(2, 2, -1.0).ToF32()
         e := Matrix<F32>(2, 2)
-        try e.Map(m, fn(x) { return FastExp(x) }) catch { fail }
+        try e.Map(m, fn(x) { return FastExp(x) })
         assert math.Abs(F64(e.Get(1, 1)) - math.Exp(2.0)) < 1e-6 * math.Exp(2.0)
     }
 
@@ -3290,11 +3290,11 @@ if TestBuild {
                 c := gappyBatch(m, n, 3, 2, r)
                 c0 := gappyBatch(m, n, 3, 2, r)
                 for e in range c.Data.Len() { c0.Data[e] = c.Data[e] }
-                try GemmBatch(c, a, transA, b, transB, 2.0, 0.5) catch { fail }
+                try GemmBatch(c, a, transA, b, transB, 2.0, 0.5)
                 for g in range 3 {
                     for h in range 2 {
-                        want := try (referenceProduct(a[g, h], transA, b[g, h], transB) * 2.0 + c0[g, h].ToF64() * 0.5) catch { fail }
-                        assert (try c[g, h].Distance(want) catch { fail }) < 1e-9 * F64(k)
+                        want := try (referenceProduct(a[g, h], transA, b[g, h], transB) * 2.0 + c0[g, h].ToF64() * 0.5)
+                        assert (try c[g, h].Distance(want)) < 1e-9 * F64(k)
                     }
                 }
                 assert gapsUntouched(c)
@@ -3302,7 +3302,7 @@ if TestBuild {
                 d := gappyBatch(m, n, 3, 2, r)
                 for e in range d.Data.Len() { d.Data[e] = c0.Data[e] }
                 ws := GemmWorkspace<F64>()
-                try ws.GemmBatch(d, a, transA, b, transB, 2.0, 0.5, Triangular.None, 0, 4) catch { fail }
+                try ws.GemmBatch(d, a, transA, b, transB, 2.0, 0.5, Triangular.None, 0, 4)
                 for e in range d.Data.Len() { assert d.Data[e] == c.Data[e] or math.IsNan(c.Data[e]) }
             }
         }
@@ -3320,12 +3320,12 @@ if TestBuild {
         for g in range 2 {
             for h in range 3 {
                 d[g, h].FillUniform(r, -1.0, 1.0)
-                try ws.Gemm(d[g, h], a[g, h], false, b[g, h], false, 1.5) catch { fail }
+                try ws.Gemm(d[g, h], a[g, h], false, b[g, h], false, 1.5)
             }
         }
-        try GemmBatch(c, a, false, b, false, 1.5) catch { fail }
+        try GemmBatch(c, a, false, b, false, 1.5)
         for g in range 2 {
-            for h in range 3 { assert (try d[g, h].Distance(c[g, h].ToF64()) catch { fail }) < 1e-12 }
+            for h in range 3 { assert (try d[g, h].Distance(c[g, h].ToF64())) < 1e-12 }
         }
         assert gapsUntouched(d)
     }
@@ -3352,10 +3352,10 @@ if TestBuild {
                 k.FillUniform(r, -1.0, 1.0)
                 s := Matrix<F64>(2 * 2 * T, T + first)
                 s.Fill(math.NaN)
-                S := (try s.Stacked(T, 2) catch { fail })
-                Q := (try q.Heads(T, 2) catch { fail })
-                K := (try k.Heads(T + first, 2) catch { fail })
-                try GemmBatch(S, Q, false, K, true, 0.5, 0, Triangular.Result, d) catch { fail }
+                S := (try s.Stacked(T, 2))
+                Q := (try q.Heads(T, 2))
+                K := (try k.Heads(T + first, 2))
+                try GemmBatch(S, Q, false, K, true, 0.5, 0, Triangular.Result, d)
                 for g in range 2 {
                     for h in range 2 {
                         want := referenceProduct(Q[g, h], false, K[g, h], true)
@@ -3368,7 +3368,7 @@ if TestBuild {
                     }
                 }
                 # beta = 1 adds below the diagonal, and still touches nothing above it
-                try GemmBatch(S, Q, false, K, true, 0.5, 1, Triangular.Result, d) catch { fail }
+                try GemmBatch(S, Q, false, K, true, 0.5, 1, Triangular.Result, d)
                 for g in range 2 {
                     for h in range 2 {
                         want := referenceProduct(Q[g, h], false, K[g, h], true)
@@ -3394,17 +3394,17 @@ if TestBuild {
                     p.FillUniform(r, 0.0, 1.0)
                     clean := p.Clone()
                     for g in range 3 {
-                        aboveDiagonal((try clean.RowRange(g * T, (g + 1) * T) catch { fail }), diag, 0.0)
-                        aboveDiagonal((try p.RowRange(g * T, (g + 1) * T) catch { fail }), diag, math.NaN)      # never read
+                        aboveDiagonal((try clean.RowRange(g * T, (g + 1) * T)), diag, 0.0)
+                        aboveDiagonal((try p.RowRange(g * T, (g + 1) * T)), diag, math.NaN)      # never read
                     }
                     v := Matrix<F64>(3 * T, 19)
                     v.FillUniform(r, -1.0, 1.0)
                     y := Matrix<F64>(3 * T, 19)
                     y.Fill(1.0)
-                    try GemmBatch(y.Stacked(T), p.Stacked(T), transA == 1, v.Stacked(T), false, 1, 2, Triangular.Left, diag) catch { fail }
+                    try GemmBatch(y.Stacked(T), p.Stacked(T), transA == 1, v.Stacked(T), false, 1, 2, Triangular.Left, diag)
                     for g in range 3 {
-                        want := try (referenceProduct(clean.Stacked(T)[g, 0], transA == 1, v.Stacked(T)[g, 0], false) + 2.0) catch { fail }
-                        assert (try y.Stacked(T)[g, 0].Distance(want) catch { fail }) < 1e-12 * F64(T)
+                        want := try (referenceProduct(clean.Stacked(T)[g, 0], transA == 1, v.Stacked(T)[g, 0], false) + 2.0)
+                        assert (try y.Stacked(T)[g, 0].Distance(want)) < 1e-12 * F64(T)
                     }
                 }
             }
@@ -3428,13 +3428,13 @@ if TestBuild {
         p := Matrix<F32>(B * heads * T, T)
         p.FillUniform(r, 0.0, 1.0)
         for e in range B * heads {
-            aboveDiagonal((try p.RowRange(e * T, (e + 1) * T) catch { fail }), 0, 0.0)
+            aboveDiagonal((try p.RowRange(e * T, (e + 1) * T)), 0, 0.0)
         }
-        Q := try q.Heads(T, heads) catch { fail }
-        K := try k.Heads(T, heads) catch { fail }
-        V := try v.Heads(T, heads) catch { fail }
-        DY := try dy.Heads(T, heads) catch { fail }
-        P := (try p.Stacked(T, heads) catch { fail })
+        Q := try q.Heads(T, heads)
+        K := try k.Heads(T, heads)
+        V := try v.Heads(T, heads)
+        DY := try dy.Heads(T, heads)
+        P := (try p.Stacked(T, heads))
         s := Matrix<F32>(B * heads * T, T)
         y := Matrix<F32>(B * T, D)
         dp := Matrix<F32>(B * heads * T, T)
@@ -3442,41 +3442,41 @@ if TestBuild {
         dk := Matrix<F32>(B * T, D)
         dv := Matrix<F32>(B * T, D)
         ws := GemmWorkspace<F32>()
-        try ws.GemmBatch(s.Stacked(T, heads), Q, false, K, true, 0.25, 0, Triangular.Result) catch { fail }
-        try ws.GemmBatch(y.Heads(T, heads), P, false, V, false, 1, 0, Triangular.Left) catch { fail }
-        try ws.GemmBatch(dp.Stacked(T, heads), DY, false, V, true, 1, 0, Triangular.Result) catch { fail }
-        try ws.GemmBatch(dq.Heads(T, heads), P, false, K, false, 1, 0, Triangular.Left) catch { fail }
-        try ws.GemmBatch(dk.Heads(T, heads), P, true, Q, false, 1, 0, Triangular.Left) catch { fail }
-        try ws.GemmBatch(dv.Heads(T, heads), P, true, DY, false, 1, 0, Triangular.Left, 0, 3) catch { fail }
+        try ws.GemmBatch(s.Stacked(T, heads), Q, false, K, true, 0.25, 0, Triangular.Result)
+        try ws.GemmBatch(y.Heads(T, heads), P, false, V, false, 1, 0, Triangular.Left)
+        try ws.GemmBatch(dp.Stacked(T, heads), DY, false, V, true, 1, 0, Triangular.Result)
+        try ws.GemmBatch(dq.Heads(T, heads), P, false, K, false, 1, 0, Triangular.Left)
+        try ws.GemmBatch(dk.Heads(T, heads), P, true, Q, false, 1, 0, Triangular.Left)
+        try ws.GemmBatch(dv.Heads(T, heads), P, true, DY, false, 1, 0, Triangular.Left, 0, 3)
         for g in range B {
             for h in range heads {
                 ss := Matrix<F32>(T, T)
-                try ws.Gemm(ss, Q[g, h], false, K[g, h], true, 0.25) catch { fail }
+                try ws.Gemm(ss, Q[g, h], false, K[g, h], true, 0.25)
                 ps := Matrix<F32>(T, T)
-                try ws.Gemm(ps, DY[g, h], false, V[g, h], true) catch { fail }
+                try ws.Gemm(ps, DY[g, h], false, V[g, h], true)
                 for i in range T {
                     for j in range i + 1 {
-                        assert math.Abs((try s.Stacked(T, heads) catch { fail })[g, h].Get(i, j) - ss.Get(i, j)) < 1e-5
-                        assert math.Abs((try dp.Stacked(T, heads) catch { fail })[g, h].Get(i, j) - ps.Get(i, j)) < 1e-5
+                        assert math.Abs((try s.Stacked(T, heads))[g, h].Get(i, j) - ss.Get(i, j)) < 1e-5
+                        assert math.Abs((try dp.Stacked(T, heads))[g, h].Get(i, j) - ps.Get(i, j)) < 1e-5
                     }
                 }
                 for which in range 4 {
-                    got := (try y.Heads(T, heads) catch { fail })[g, h]
+                    got := (try y.Heads(T, heads))[g, h]
                     want := Matrix<F32>(T, 10)
-                    if which == 0 { (try ws.Gemm(want, P[g, h], false, V[g, h], false) catch { fail }) }
+                    if which == 0 { (try ws.Gemm(want, P[g, h], false, V[g, h], false)) }
                     if which == 1 {
-                        got = (try dq.Heads(T, heads) catch { fail })[g, h]
-                        try ws.Gemm(want, P[g, h], false, K[g, h], false) catch { fail }
+                        got = (try dq.Heads(T, heads))[g, h]
+                        try ws.Gemm(want, P[g, h], false, K[g, h], false)
                     }
                     if which == 2 {
-                        got = (try dk.Heads(T, heads) catch { fail })[g, h]
-                        try ws.Gemm(want, P[g, h], true, Q[g, h], false) catch { fail }
+                        got = (try dk.Heads(T, heads))[g, h]
+                        try ws.Gemm(want, P[g, h], true, Q[g, h], false)
                     }
                     if which == 3 {
-                        got = (try dv.Heads(T, heads) catch { fail })[g, h]
-                        try ws.Gemm(want, P[g, h], true, DY[g, h], false) catch { fail }
+                        got = (try dv.Heads(T, heads))[g, h]
+                        try ws.Gemm(want, P[g, h], true, DY[g, h], false)
                     }
-                    assert (try got.MaxAbsDifference(want) catch { fail }) < 1e-5
+                    assert (try got.MaxAbsDifference(want)) < 1e-5
                 }
             }
         }
@@ -3498,10 +3498,10 @@ if TestBuild {
                 b.FillUniform(r, -1.0, 1.0)
                 want := referenceProduct(a, transA, b, transB)
                 c := Full(m, n, 1.0)
-                try Gemm(c, a, transA, b, transB, 1, 1) catch { fail }
-                assert (try c.Distance(want + 1.0) catch { fail }) < 1e-12 * F64(k)
+                try Gemm(c, a, transA, b, transB, 1, 1)
+                assert (try c.Distance(want + 1.0)) < 1e-12 * F64(k)
                 d := Full(m, n, 1.0)
-                try Gemm(d, a, transA, b, transB, 1, 1, 4) catch { fail }
+                try Gemm(d, a, transA, b, transB, 1, 1, 4)
                 assert d == c
             }
         }
@@ -3528,16 +3528,16 @@ if TestBuild {
         assert Activate(-2.0, Activation.Relu) == 0.0 and Activate(3.0, Activation.Relu) == 3.0
         assert math.IsNan(Activate(math.NaN, Activation.Relu))
         assert ActivationSlope(0.0, Activation.Relu) == 0.0 and ActivationSlope(0.5, Activation.Relu) == 1.0
-        assert (try Activate(I32(-3), Activation.Relu) catch { fail }) == 0 and Activate(F16(-1.5), Activation.Relu) == 0.0
+        assert (try Activate(I32(-3), Activation.Relu)) == 0 and Activate(F16(-1.5), Activation.Relu) == 0.0
         z := counting(3, 4, -6.0)
         y := Matrix<F64>(3, 4)
-        try y.Activate(z, Activation.Gelu) catch { fail }
+        try y.Activate(z, Activation.Gelu)
         assert y.Get(2, 3) == Activate(5.0, Activation.Gelu)
         dy := Full(3, 4, 2.0)
         dz := Full(3, 4, 1.0)
-        try dz.ActivationBackward(dy, z, Activation.Relu, 1) catch { fail }
+        try dz.ActivationBackward(dy, z, Activation.Relu, 1)
         assert dz.Get(0, 0) == 1.0 and dz.Get(2, 3) == 3.0
-        try dz.ActivationBackward(dy, z, Activation.Gelu) catch { fail }
+        try dz.ActivationBackward(dy, z, Activation.Gelu)
         assert dz.Get(1, 1) == 2.0 * ActivationSlope(-1.0, Activation.Gelu)
     }
 
@@ -3554,13 +3554,13 @@ if TestBuild {
         assert ActivationSlope(F32(0.5), Activation.Relu) == 1.0 and ActivationSlope(F32(0.0), Activation.Relu) == 0.0
         assert ActivationSlope(F32(-3.0), Activation.Identity) == 1.0 and ActivationSlope(F16(2.0), Activation.Relu) == 1.0
         z := Matrix<F32>(3, 4)
-        try z.Convert(counting(3, 4, -6.0)) catch { fail }
+        try z.Convert(counting(3, 4, -6.0))
         dy := Full(3, 4, F32(2.0))
         for act in Activation[Activation.Identity, Activation.Relu, Activation.Gelu, Activation.Tanh, Activation.Sigmoid] {
             dz := Full(3, 4, F32(1.0))
-            try dz.ActivationBackward(dy, z, act) catch { fail }
+            try dz.ActivationBackward(dy, z, act)
             dz2 := Full(3, 4, F32(1.0))
-            try dz2.ActivationBackward(dy, z, act, 1) catch { fail }
+            try dz2.ActivationBackward(dy, z, act, 1)
             for r in range 3 {
                 for c in range 4 {
                     assert dz.Get(r, c) == 2.0 * ActivationSlope(z.Get(r, c), act)
@@ -3587,20 +3587,20 @@ if TestBuild {
                 bias.FillUniform(r, -1.0, 1.0)
                 for act in Activation[Activation.Identity, Activation.Relu, Activation.Gelu, Activation.Tanh, Activation.Sigmoid] {
                     want := Full(m, n, F32(0.5))
-                    try Gemm(want, a, transA, b, transB, 2, 3) catch { fail }
-                    try want.AddRow(bias) catch { fail }
+                    try Gemm(want, a, transA, b, transB, 2, 3)
+                    try want.AddRow(bias)
                     pre := want.Clone()
-                    try want.Activate(want, act) catch { fail }
+                    try want.Activate(want, act)
                     got := Full(m, n, F32(0.5))
                     z := Matrix<F32>(m, n)
-                    try GemmAct(got, a, transA, b, transB, bias, act, 2, 3, 1, z) catch { fail }
+                    try GemmAct(got, a, transA, b, transB, bias, act, 2, 3, 1, z)
                     assert got == want and z == pre
                     # threads, and no bias
                     got.Fill(0.5)
-                    try GemmAct(got, a, transA, b, transB, null, act, 2, 3, 4) catch { fail }
+                    try GemmAct(got, a, transA, b, transB, null, act, 2, 3, 4)
                     want.Fill(0.5)
-                    try Gemm(want, a, transA, b, transB, 2, 3) catch { fail }
-                    try want.Activate(want, act) catch { fail }
+                    try Gemm(want, a, transA, b, transB, 2, 3)
+                    try want.Activate(want, act)
                     assert got == want
                 }
             }
@@ -3612,19 +3612,19 @@ if TestBuild {
         b.Scale(F16(0.001))
         bias := counting(1, 40, -20.0).ToF16()
         c := Matrix<F16>(37, 40)
-        try GemmAct(c, a, false, b, false, bias, Activation.Gelu) catch { fail }
+        try GemmAct(c, a, false, b, false, bias, Activation.Gelu)
         want := referenceProduct(a, false, b, false)
-        try want.AddRow(bias.ToF64()) catch { fail }
-        try want.Activate(want, Activation.Gelu) catch { fail }
-        assert (try c.ToF64().MaxAbsDifference(want) catch { fail }) <= 0.001 * want.MaxAbs()
+        try want.AddRow(bias.ToF64())
+        try want.Activate(want, Activation.Gelu)
+        assert (try c.ToF64().MaxAbsDifference(want)) <= 0.001 * want.MaxAbs()
         # integers: the bias and ReLU
         ai := Matrix<I32>(5, 6)
-        try ai.Convert(counting(5, 6, -15.0)) catch { fail }
+        try ai.Convert(counting(5, 6, -15.0))
         bi := Matrix<I32>(6, 70)
-        try bi.Convert(counting(6, 70, -200.0)) catch { fail }
+        try bi.Convert(counting(6, 70, -200.0))
         ci := Matrix<I32>(5, 70)
-        try GemmAct(ci, ai, false, bi, false, null, Activation.Relu) catch { fail }
-        wi := try (ai @ bi) catch { fail }
+        try GemmAct(ci, ai, false, bi, false, null, Activation.Relu)
+        wi := try (ai @ bi)
         for i in range 5 {
             for j in range 70 { assert ci.Get(i, j) == (wi.Get(i, j) if wi.Get(i, j) > 0 else 0) }
         }
@@ -3667,9 +3667,9 @@ if TestBuild {
             n I64 = 3
             x := Matrix<F64>(n, H * W * C)
             x.FillUniform(r, -1.0, 1.0)
-            p := (try Patches(x, C, H, W, K, S, P) catch { fail })
+            p := (try Patches(x, C, H, W, K, S, P))
             cols := Matrix<F64>(p.Rows, p.Cols)
-            try p.Im2col(cols, 3) catch { fail }
+            try p.Im2col(cols, 3)
             assert cols == definedPatches(x, C, H, W, K, S, P)
             w := Matrix<F64>(outC, p.Cols)
             w.FillUniform(r, -1.0, 1.0)
@@ -3678,27 +3678,27 @@ if TestBuild {
             # the forward: y = act(patches w^T + b)
             y := Matrix<F64>(p.Rows, outC)
             z := Matrix<F64>(p.Rows, outC)
-            try GemmPatches(y, p, w, true, bias, Activation.Relu, 1, 0, 1, z) catch { fail }
+            try GemmPatches(y, p, w, true, bias, Activation.Relu, 1, 0, 1, z)
             want := referenceProduct(cols, false, w, true)
-            try want.AddRow(bias) catch { fail }
-            assert (try z.Distance(want) catch { fail }) < 1e-12 * F64(p.Cols)
-            try want.Activate(want, Activation.Relu) catch { fail }
-            assert (try y.Distance(want) catch { fail }) < 1e-12 * F64(p.Cols)
+            try want.AddRow(bias)
+            assert (try z.Distance(want)) < 1e-12 * F64(p.Cols)
+            try want.Activate(want, Activation.Relu)
+            assert (try y.Distance(want)) < 1e-12 * F64(p.Cols)
             y2 := Matrix<F64>(p.Rows, outC)
-            try GemmAct(y2, cols, false, w, true, bias, Activation.Relu) catch { fail }
+            try GemmAct(y2, cols, false, w, true, bias, Activation.Relu)
             assert y2 == y
             # threads, and F32: the same
             y3 := Matrix<F64>(p.Rows, outC)
-            try GemmPatches(y3, p, w, true, bias, Activation.Relu, 1, 0, 3) catch { fail }
+            try GemmPatches(y3, p, w, true, bias, Activation.Relu, 1, 0, 3)
             assert y3 == y
             x32 := x.ToF32()
-            p32 := (try Patches(x32, C, H, W, K, S, P) catch { fail })
+            p32 := (try Patches(x32, C, H, W, K, S, P))
             y32 := Matrix<F32>(p.Rows, outC)
-            try GemmPatches(y32, p32, w.ToF32(), true, bias.ToF32(), Activation.Gelu) catch { fail }
+            try GemmPatches(y32, p32, w.ToF32(), true, bias.ToF32(), Activation.Gelu)
             want32 := Matrix<F32>(p.Rows, outC)
             cols32 := Matrix<F32>(p.Rows, p.Cols)
-            try p32.Im2col(cols32) catch { fail }
-            try GemmAct(want32, cols32, false, w.ToF32(), true, bias.ToF32(), Activation.Gelu) catch { fail }
+            try p32.Im2col(cols32)
+            try GemmAct(want32, cols32, false, w.ToF32(), true, bias.ToF32(), Activation.Gelu)
             assert y32 == want32
         }
     }

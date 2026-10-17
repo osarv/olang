@@ -19,5 +19,5 @@ fn viaTask(n I64) I64 {
 Baked I64 = viaTask(10)
 N mut I64 = 10
 fn main() ? {
-    if Baked != 285 or viaTask(N) != Baked { fail }
+    assert not (Baked != 285 or viaTask(N) != Baked)
 }

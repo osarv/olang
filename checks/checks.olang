@@ -32,7 +32,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "bench", "objnames", "remote",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad",
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv",
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr",
-                     "frameenv", "ownleave", "vecalias", "inferfield"]
+                     "frameenv", "ownleave", "vecalias", "inferfield", "testends"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -274,6 +274,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
         case "frameenv" { try frameenv(r) }
+        case "testends" { try testends(r) }
         nomatch {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
@@ -1608,8 +1609,10 @@ fn strheld(r mut report&) ? Failed {
                         "g9deval", "g9dcontainers"] { continue }
         try r.expect(sh(dir, "\"$OLANG\" -i " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
     }
-    try r.expect(sh(dir, "\"$OLANG\" -t donenested.olang > out.txt 2>&1") == 0, "donenested", dir)
-    try r.expect(outOf(dir).Contains("3 passed, 0 failed"), "donenested output", dir)
+    #S16, S18b: a test failing inside a Str unwinds what the Str made, and the next test runs
+    try r.expect(sh(dir, "\"$OLANG\" -t donenested.olang > out.txt 2>&1") != 0, "donenested", dir)
+    try r.expect(outOf(dir).Contains("1 passed, 2 failed") and outOf(dir).CountOf("Res destructed 7") == 2,
+                 "donenested output", dir)
     #C6: a check failing after a rendering whose builder grew inside a render helper unwinds live frames only
     try r.expect(sh(dir, "timeout 120 \"$OLANG\" -t builderunwind.olang > out.txt 2>&1") != 0, "builderunwind", dir)
     try r.expect(outOf(dir).Contains("1 passed, 1 failed"), "builderunwind output", dir)
@@ -1690,4 +1693,23 @@ fn ownleave(r mut report&) ? Failed {
                           " --errors-for-leak-kinds=definite --error-exitcode=9 ./build/ownabort_test > va.txt 2> vga.txt;"
                           " test $? -ne 9 && grep -q '^made 4 dropped 4$' va.txt && test ! -s vga.txt")) == 0,
                  "ownabort under valgrind", dir)
+}
+
+# S16, S18b, P1d, S19c: tests failing on purpose - in a join, frames down, in a Str, in a destructor, on another stack,
+# by an error leaving the body, by a "!" - each read back by the test after it; S18d: the error return trace, after an
+# error ends a test, escapes main or reaches a "!", in a -d build and under -i, and a hint to get it in any other
+test "tests that fail on purpose, and where an error went" { assert passed("testends") }
+
+fn testends(r mut report&) ? Failed {
+    dir := fresh("testends")
+    os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -t ends.olang > out.txt 2>&1") != 0, "ends", dir)
+    try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
+    for n in String&["traced", "banged"] {
+        try r.expect(sh(dir, "\"$OLANG\" -b " $n ".olang > out.txt 2>&1") == 0, $n " build", dir)
+        try r.expect(sh(dir, "./build/" $n " > b.txt 2>&1; cmp -s b.txt " $n ".b.want") == 0, n, dir)
+        try r.expect(sh(dir, "\"$OLANG\" -b -d " $n ".olang > out.txt 2>&1") == 0, $n " -d build", dir)
+        try r.expect(sh(dir, "./build/" $n ".debug > d.txt 2>&1; cmp -s d.txt " $n ".d.want") == 0, $n " -d", dir)
+        try r.expect(sh(dir, "\"$OLANG\" -i " $n ".olang > i.txt 2>&1; cmp -s i.txt " $n ".d.want") == 0, $n " -i", dir)
+    }
 }

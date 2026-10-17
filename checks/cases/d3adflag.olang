@@ -3,5 +3,5 @@
 error E { X }
 fn main() ? E {
     Level := 1
-    if Level > 3 { fail }
+    assert not Level > 3
 }

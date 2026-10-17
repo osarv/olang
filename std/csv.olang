@@ -243,7 +243,7 @@ test "Rows reports what is not CSV, and where" {
             assert rows.Line == 5 and n == 3
             n = -1
             break
-        } catch CsvError { fail }
+        }
         assert rows.Line == I64[1, 2, 4][n] and row.Len() == 2
         n++
     }
@@ -254,20 +254,20 @@ test "fields borrow the text unless a doubled quote must be made one" {
     text := "plain,\"quoted\",\"dou\"\"bled\"\n"
     for row in try Rows(text) {
         assert row[0] == "plain" and row[1] == "quoted" and row[2] == "dou\"bled"
-    } catch CsvError { fail }
+    }
 }
 
 test "Record quotes what must be, and Rows reads it back" {
-    assert try Record(String&["a", "b c", "say \"hi\""]) catch { fail } == "a,b c,\"say \"\"hi\"\"\"\n"
-    assert try Record(String&["x,y", "two\nlines", "", "cr\r"]) catch { fail } == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
-    assert try Record(String&["a;b", "c,d"], ';') catch { fail } == "\"a;b\";c,d\n"
-    assert try Record(Array<String&>(0)) catch { fail } == "\n"
+    assert try Record(String&["a", "b c", "say \"hi\""]) == "a,b c,\"say \"\"hi\"\"\"\n"
+    assert try Record(String&["x,y", "two\nlines", "", "cr\r"]) == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
+    assert try Record(String&["a;b", "c,d"], ';') == "\"a;b\";c,d\n"
+    assert try Record(Array<String&>(0)) == "\n"
     fields := String&["", "\"", "a,\"b\"\r\nc", " lead", "x"]
-    text := try Record(fields) catch { fail }
+    text := try Record(fields)
     for row in try Rows(text) {
         assert row.Len() == 5
         for k in range 5 { assert row[k] == fields[k] }
-    } catch CsvError { fail }
+    }
 }
 
 # a table read while compiling (K2): rows counted and a field summed

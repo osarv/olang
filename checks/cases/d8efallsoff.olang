@@ -1,0 +1,6 @@
+# check: fail error[D8e]: a 'noreturn' function may not reach its end - end every path with a noreturn call, 'unreachable' or 'for { }'
+# D8e: every path of a noreturn function leaves - here one falls off the end
+fn stop(n I64) noreturn {
+    if n > 0 { unreachable }
+}
+fn main() { stop(1) }

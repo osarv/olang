@@ -163,7 +163,7 @@ test "State and SetState put a generator back where it was, evaluated while comp
     s[1] = 2
     s[2] = 3
     s[3] = 4
-    try r.SetState(s) catch { fail }
+    try r.SetState(s)
     assert r.Next() == 11520 and r.Next() == 0 and r.Next() == 1509978240     # the reference outputs from 1, 2, 3, 4
 }
 

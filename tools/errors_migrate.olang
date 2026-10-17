@@ -5,9 +5,9 @@
 #   - a "try" that only turned checks on - "nothing here fails as written - write 'checked' to check it" (E15a), or one
 #     before a type that has only the checked form of an operation (E31a) - becomes "checked";
 #   - a call that can now fail - a std function that used to stop the program on a caller's mistake (Format with a bad
-#     base, List.Insert out of range, chan.Send on a closed channel, a linalg shape) - is written "try CALL": inside a
-#     test block as "try CALL catch { fail }" (a failure fails the test, as the old stop did), elsewhere as "try CALL",
-#     the function then declaring what it lets through (R9: the error type is added after its "?").
+#     base, List.Insert out of range, chan.Send on a closed channel, a linalg shape) - is written "try CALL" - in a
+#     test block too, where an error it lets through fails the test (S16), as the old stop did - and a function then
+#     declares what it lets through (R9: "?" is added, or the error type after its list).
 #
 # Run from anywhere, on files or directories; each file is compiled with "-t" (a test build reaches everything the file
 # imports), what the diagnostics name is rewritten wherever they point, and that repeats until nothing more changes:
@@ -179,16 +179,13 @@ error Unparsed {
     SIGNATURE
 }
 
-# a call that can now fail, tried: in a test "try CALL catch { fail }" (parenthesized inside an expression), elsewhere
-# "try CALL"
+# a call that can now fail, written "try CALL" - in a test too, where what it lets through fails the test (S16)
 fn tryCall(text String&, line I64, col I64) String ? {
     ls, le := lineSpan(text, line)
     l := text[ls:le]
     a, b := try callExtent(l, col)
-    if not inTest(text, line) { return splice(text, ls + a, 0, "try ") }
-    whole := l[:a].Trim().Len() == 0 and codeOf(l[b:]).Trim().Len() == 0
-    if whole { return splice(splice(text, ls + b, 0, " catch { fail }"), ls + a, 0, "try ") }
-    return splice(splice(text, ls + b, 0, " catch { fail })"), ls + a, 0, "(try ")
+    if b < a { error Unparsed.CALL }
+    return splice(text, ls + a, 0, "try ")
 }
 
 # the "try" at col, or the last one before col on its line, made "checked"
@@ -218,7 +215,12 @@ fn declareError(text String&, line I64, errType String&) String ? {
             at := ls + code.Len() - 2
             if code.EndsWith(" ? {") { error Unparsed.SIGNATURE }         # inferred: nothing to add
             q := try code.FindLast(" ? ") catch default -1
-            return splice(text, at, 0, (" + " $errType) if q >= 0 else (" ? " $errType))
+            if q < 0 { return splice(text, at, 0, " ?") }                  # no set yet: let it be inferred (R1a)
+            for w in code[q + 3:code.Len() - 2].Split(" + ") {
+                if w.Trim() == errType { error Unparsed.SIGNATURE }         # already listed
+            }
+            if not text.Contains("error " $errType " {") { error Unparsed.SIGNATURE }   # another module's: written by hand
+            return splice(text, at, 0, " + " $errType)
         }
         n--
     }

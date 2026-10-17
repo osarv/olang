@@ -930,26 +930,26 @@ if TestBuild {
 
     test "every kind of value, and asking for its parts" {
         doc := try Parse("{\"s\": \"text\", \"n\": -12.5e1, \"t\": true, \"f\": false, \"z\": null, \"a\": [1, [2, 3], {}]}")
-            catch { fail }
-        try kinds(doc) catch { fail }
+
+        try kinds(doc)
         assert (try (doc["s"] as Json.Str) catch default "") == "text"
         assert (try (doc["a"][1][1] as Json.Num) catch default 0.0) == 3.0
         assert (try (doc["a"][9] as Json.Num) catch default -1.0) == -1.0
         assert "s" in doc and "a" in doc and "missing" not in doc
         assert asking(doc, "missing") == "MISSING" and asking(doc, 0) == "WRONG_KIND"
-        a := try doc["a"] catch { fail }
+        a := try doc["a"]
         assert asking(a, 3) == "MISSING" and asking(a, -1) == "MISSING" and asking(a, 2) == "ok"
-        assert asking(a, "s") == "WRONG_KIND" and asking(try doc["s"] catch { fail }, 0) == "WRONG_KIND"
+        assert asking(a, "s") == "WRONG_KIND" and asking(try doc["s"], 0) == "WRONG_KIND"
         wrong := false
-        try (try doc["s"] catch { fail }).AsNum() catch JsonError.WRONG_KIND { wrong = true } catch { fail }
+        try (try doc["s"]).AsNum() catch JsonError.WRONG_KIND { wrong = true }
         assert wrong
-        half := try Parse("2.5") catch { fail }
+        half := try Parse("2.5")
         notWhole := false
-        try half.AsInt() catch JsonError.WRONG_KIND { notWhole = true } catch { fail }
+        try half.AsInt() catch JsonError.WRONG_KIND { notWhole = true }
         assert notWhole
         tooBig := false
-        try (try Parse("1e19") catch { fail }).AsInt() catch JsonError.WRONG_KIND { tooBig = true } catch { fail }
-        assert tooBig and (try (try Parse("-9223372036854775808") catch { fail }).AsInt() catch default 0) == -9223372036854775807 - 1
+        try (try Parse("1e19")).AsInt() catch JsonError.WRONG_KIND { tooBig = true }
+        assert tooBig and (try (try Parse("-9223372036854775808")).AsInt() catch default 0) == -9223372036854775807 - 1
     }
 
     test "numbers are read to the nearest F64" {
@@ -972,14 +972,14 @@ if TestBuild {
     }
 
     test "strings: escapes, \\u and surrogate pairs to UTF-8" {
-        s := try (try Parse("\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\"") catch { fail }).AsStr() catch { fail }
+        s := try (try Parse("\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\"")).AsStr()
         assert s == "a\"b\\c/d" $Char(8) $Char(12) "\n\r\t"
-        e := try (try Parse("\"\\u00e9\\u4e2d\\ud83d\\ude00\\u0000!\"") catch { fail }).AsStr() catch { fail }
+        e := try (try Parse("\"\\u00e9\\u4e2d\\ud83d\\ude00\\u0000!\"")).AsStr()
         assert e.Len() == 2 + 3 + 4 + 1 + 1
         assert e[0] == 0xC3 and e[1] == 0xA9 and e[2] == 0xE4 and e[3] == 0xB8 and e[4] == 0xAD
         assert e[5] == 0xF0 and e[6] == 0x9F and e[7] == 0x98 and e[8] == 0x80 and e[9] == 0 and e[10] == '!'
-        raw := try (try Parse("[\"é中😀\"]") catch { fail })[0] catch { fail }
-        assert (try raw.AsStr() catch { fail }) == "é中😀"
+        raw := try (try Parse("[\"é中😀\"]"))[0]
+        assert (try raw.AsStr()) == "é中😀"
         assert problem("\"\\ud83d\"") == "BAD_ESCAPE 1:2" and problem("\"\\ude00\"") == "BAD_ESCAPE 1:2"
         assert problem("\"\\ud83dx\"") == "BAD_ESCAPE 1:2" and problem("\"\\x\"") == "BAD_ESCAPE 1:2"
         assert problem("\"\\u12g4\"") == "BAD_ESCAPE 1:6" and problem("\"\\u12") == "UNTERMINATED 1:6"
@@ -1020,7 +1020,7 @@ if TestBuild {
     }
 
     test "Encode writes compact and indented text" {
-        doc := try Parse("{\"a\": [1, 2.5, \"x\\ny\"], \"b\": {}, \"c\": [], \"d\": null, \"e\": true}") catch { fail }
+        doc := try Parse("{\"a\": [1, 2.5, \"x\\ny\"], \"b\": {}, \"c\": [], \"d\": null, \"e\": true}")
         assert Encode(doc) == "{\"a\":[1,2.5,\"x\\ny\"],\"b\":{},\"c\":[],\"d\":null,\"e\":true}"
         assert Encode(doc, "  ") == "{\n  \"a\": [\n    1,\n    2.5,\n    \"x\\ny\"\n  ],\n  \"b\": {},\n  \"c\": [],\n  \"d\": null,\n  \"e\": true\n}"
         assert Encode(doc, "\t").StartsWith("{\n\t\"a\": [\n\t\t1,")
@@ -1043,15 +1043,15 @@ if TestBuild {
 
     test "what Encode writes, Parse reads back as an equal value" {
         text := "[{\"x\": 1, \"y\": [true, false, null, \"\\u00e9\\ud83d\\ude00\"]}, -0.0, 1e-300, \"\", {\"\": {}}]"
-        doc := try Parse(text) catch { fail }
-        again := try Parse(Encode(doc)) catch { fail }
-        pretty := try Parse(Encode(doc, "    ")) catch { fail }
+        doc := try Parse(text)
+        again := try Parse(Encode(doc))
+        pretty := try Parse(Encode(doc, "    "))
         assert doc == again and doc == pretty and Encode(again) == Encode(doc)
         assert Encode(doc) == "[{\"x\":1,\"y\":[true,false,null,\"é😀\"]},-0,1e-300,\"\",{\"\":{}}]"
     }
 
     test "objects keep their order, answer with the last of a repeated name, and index big ones" {
-        doc := try Parse("{\"b\": 1, \"a\": 2, \"b\": 3}") catch { fail }
+        doc := try Parse("{\"b\": 1, \"a\": 2, \"b\": 3}")
         assert (try (doc["b"] as Json.Num) catch default 0.0) == 3.0
         assert Encode(doc) == "{\"b\":1,\"a\":2,\"b\":3}"
         big := StringBuilder()
@@ -1061,33 +1061,33 @@ if TestBuild {
             big.Push("\"key" $i "\": " $(i * i))
         }
         big.Push(", \"key7\": -1}")
-        o := try Parse(big.ToString()) catch { fail }
+        o := try Parse(big.ToString())
         for i in range 500 {
             want F64 = F64(i * i) if i != 7 else -1.0
             assert (try (o["key" $i] as Json.Num) catch default -2.0) == want
         }
         assert "key499" in o and "key500" not in o and "" not in o
-        assert (try o.AsObj() catch { fail }).Len() == 501
+        assert (try o.AsObj()).Len() == 501
     }
 
     test "two values are equal when they hold equal parts, objects in any order" {
-        a := try Parse("{\"x\": [1, 2, {\"p\": null}], \"y\": \"s\"}") catch { fail }
-        b := try Parse("{\"y\": \"s\", \"x\": [1.0, 2e0, {\"p\": null}]}") catch { fail }
-        c := try Parse("{\"y\": \"s\", \"x\": [1, 2, {\"p\": false}]}") catch { fail }
+        a := try Parse("{\"x\": [1, 2, {\"p\": null}], \"y\": \"s\"}")
+        b := try Parse("{\"y\": \"s\", \"x\": [1.0, 2e0, {\"p\": null}]}")
+        c := try Parse("{\"y\": \"s\", \"x\": [1, 2, {\"p\": false}]}")
         assert a == b and a != c and a.Hash() == b.Hash()
-        assert (try Parse("0") catch { fail }) == (try Parse("-0") catch { fail })
-        assert (try Parse("[1, 2]") catch { fail }) != (try Parse("[2, 1]") catch { fail })
-        assert (try Parse("{\"a\": 1}") catch { fail }) != (try Parse("{\"a\": 1, \"b\": 2}") catch { fail })
+        assert (try Parse("0")) == (try Parse("-0"))
+        assert (try Parse("[1, 2]")) != (try Parse("[2, 1]"))
+        assert (try Parse("{\"a\": 1}")) != (try Parse("{\"a\": 1, \"b\": 2}"))
     }
 
     test "values built in code" {
         o := try Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null]),
-            Json.Bool(true)]) catch { fail }
-        uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch JsonError.UNEVEN default -1 catch { fail }
+            Json.Bool(true)])
+        uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch JsonError.UNEVEN default -1
         assert uneven == -1
         doc Json& = Json.Obj(o)
         assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
-        assert doc == (try Parse("{\"ok\": true, \"tags\": [1, null], \"name\": \"olang\"}") catch { fail })
+        assert doc == (try Parse("{\"ok\": true, \"tags\": [1, null], \"name\": \"olang\"}"))
         items := List<Json&>()
         for i in range 3 { items.Push(Json.Num(F64(i))) }
         assert Encode(Json.Arr(items.ToArray())) == "[0,1,2]"
@@ -1105,7 +1105,7 @@ if TestBuild {
     }
 
     fn parsed(n I64) Json& {
-        return try Parse("{\"n\": " $n ", \"s\": \"value " $n "\", \"a\": [" $n ", {\"deep\": \"x\\ty\"}]}") catch { fail }
+        return Parse("{\"n\": " $n ", \"s\": \"value " $n "\", \"a\": [" $n ", {\"deep\": \"x\\ty\"}]}")!
     }
 
     test "a tree lives where its caller puts it, and no longer needs the text" {
@@ -1134,12 +1134,12 @@ if TestBuild {
     }
 
     test "the fixture file" {
-        text := try os.ReadFile("checks/fixtures/json/sample.json") catch { fail }
+        text := try os.ReadFile("checks/fixtures/json/sample.json")
         at := Position()
-        doc := try Parse(text, at) catch { fail }
+        doc := try Parse(text, at)
         assert at.Offset == text.Len() and at.Line == 15 and at.Col == 1
-        try fixture(doc) catch { fail }
-        assert (try Parse(Encode(doc, "  ")) catch { fail }) == doc
+        try fixture(doc)
+        assert (try Parse(Encode(doc, "  "))) == doc
     }
 
     # K1: Parse and Encode run while compiling - this global is baked, and agrees with the same work done at run time
@@ -1148,6 +1148,6 @@ if TestBuild {
 
     test "Parse and Encode give the same while compiling as at run time" {
         assert bakedText == "{\"a\":[1,0.0025,\"é\"],\"b\":{\"c\":null}}"
-        assert Encode(try Parse(sourceText) catch { fail }) == bakedText
+        assert Encode(try Parse(sourceText)) == bakedText
     }
 }
