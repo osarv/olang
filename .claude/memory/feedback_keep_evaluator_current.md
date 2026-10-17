@@ -19,3 +19,10 @@ the one most easily missed. See [[feedback-surface-and-fix-bugs]].
 **Extended 2026-10-07:** "always make the evaluator handle everything it can" - an exclusion in K1 needs a real
 reason (the body is outside the program, a run-time effect would be skipped, undefined behaviour). Exclusions that
 are only "not built yet" (as interface dispatch was) are gaps to close, not design.
+
+**Extended 2026-10-17 (the user: "I want the comptime eval to basically always run through everything it can. Anything
+that can be simulated at compile time should be.")** Not only "handle what it can when asked": a design should reach for
+compile-time evaluation and inference wherever they can stand in for something written or checked at run time - lengths
+followed through calls, a function's leading asserts decided at each call whose arguments are known, pure calls with
+constant arguments inside bodies computed while compiling. Anything it cannot decide falls back to the run time,
+never to an error or a guess.

@@ -81,8 +81,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   when every return gives one length, inferred from the body as the error set is; (3) D9a relaxed - arrays passed by
   value; a by-value array parameter makes the function, invisibly, one instance per known argument length (fixed in
   that instance: registers, unrolled, its asserts on lengths decided at compile time, so a shape mismatch is a
-  compile-time error at that call); a reference parameter makes no instances. Open: (a) a run-time-length array passed
-  by value - an error (recommended: no unbounded hidden copy) or a copy through memory.
+  compile-time error at that call); a reference parameter makes no instances. QP3 ANSWERED: "Do A for now and if it becomes a problem we will
+  expand to B" - a run-time-length array passed by value is a compile-time error (write `&` or copy explicitly). All of
+  QP1-QP3 QUEUED as the arrays batch, after the error batch (both rewrite semantic.c).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
