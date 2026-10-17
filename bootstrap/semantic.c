@@ -25852,7 +25852,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         blk.block = pre;
         ListAdd(&blk.block, &stmt);
         blk.line = tok.lineNr;
-        blk.file = ((struct statement*)ListGetIdx(&pre, 0))->file;
+        blk.file = ((struct statement*)ListGetIdx(&blk.block, 0))->file;
         return blk;
     }
     return stmt;
