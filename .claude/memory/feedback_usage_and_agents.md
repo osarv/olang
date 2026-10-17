@@ -127,7 +127,8 @@ yet").** Besides the backup/<name> snapshots, push every agent's branch under it
 has new commits (at least at each report and check-in), so the user can see the work on GitHub before it merges; and
 push master and the designated branch after every merge. Delete a `wt-*` branch on GitHub once it is merged.
 
-**Merge promptly, keep few branches (the user, 2026-10-17: "Remember to merge the branches too so we don't end up
-with way too many active branches").** Merge a finished, verified branch at once; then remove its worktree, delete the
-local branch, its `wt-*` and `backup/*` branches on GitHub and its refs/wip, refs/backup-pushed, refs/branch-pushed refs.
-Review worktrees go when the review is read. At each check-in, prune anything merged (`git branch -r --merged`).
+**Merge promptly; keep the branches (the user, 2026-10-17: "Remember to merge the branches too so we don't end up
+with way too many active branches", then "You don't need to delete the branch memory from the agents. It's fine that
+they are part of the ref tree. Restore locally so we don't end up with a bunch of merge problems").** Merge a finished,
+verified branch at once, so few branches are unmerged at a time. Keep the branch itself, locally and on GitHub (the
+git proxy refuses deletions anyway). Removing a finished agent's worktree (disk space) is fine; never delete branches.
