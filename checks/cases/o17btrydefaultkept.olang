@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # O17b (U2): the default taken - a handle built where the element's references are, kept by the callee and pushed on
 import "std/io"
 fn churn() ? io.IoError {

@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # O17b (U2): "(try a[0] catch default Bag()).Sneak(v)" on a built-in array, Bag a handle and Sneak a read-only method
 # building through its reference - lent as its reference where the element's are (the default built there too), as the
 # List spelling already was; it was built in the loop body. Read back after a churn
