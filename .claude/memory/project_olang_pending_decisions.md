@@ -230,6 +230,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   trait only the four floats satisfy (`fn (x T) Sqrt() T`, the match T inside as today); std/math removed; `Pi`, `Inf`,
   `NaN` prelude constants; the rest computed in place and folded while compiling (`1.0.Exp()`, `2.0.Sqrt()`,
   `2.0.Log()`); E4a extended: an immutable global whose value is literal-only adapts like that literal (so `f F32 = Pi`).
+  The user then: "calling methods on literals makes zero sense" - so no `1.0.Exp()` constants. ASKED: (1) prelude
+  constants `Pi Euler Sqrt2 Ln2 Ln10 Inf NaN` (no bare `E` - a common type-parameter/enum name), or (2) std/math kept
+  with constants only (`math.Pi`, `math.E`). Recommended 1, with the E4a extension either way. Also offered: a method
+  call on a number literal as a compile error (text literals keep methods). In effect: nothing built.
   Queued after
   wt-errors2 merges (std files).
 - QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
