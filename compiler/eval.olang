@@ -3568,3 +3568,96 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
         }
     }
 }
+
+fn tdecl(t mut types.Table&, names mut source.Names&, kind types.DeclKind, name String&) types.TypeId {
+    mod := t.AddModule("eval_test_" $name)
+    return t.Named(t.AddDecl(mod, names.Intern(name), kind, 0, 0), types.ListId(0))
+}
+
+test "aggregates, enums, arrays and references: laid out as the target lays them out, read and written in place" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    i32, i64 := t.Prim("I32"), t.Prim("I64")
+    # struct P(x I32, y I64): "p := P(3, 40); r := &p; r.x = 7; return I64(p.x) + p.y"
+    pt := tdecl(t, names, types.DeclKind.Struct, "P")
+    t.SetStructBody(pt, t.List(types.TypeId[i32, i64]), false)
+    rp := t.Ref(pt, types.Writable)
+    f := nfn(t, 1)
+    p, r, x, y := f.AddTemp(pt, Sp0), f.AddTemp(rp, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0)
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(p), mir.Rvalue.Aggregate(pt, 0, f.Args(mir.Operand[mir.Operand.Const(i32, 3),
+                                                                                         mir.Operand.Const(i64, 40)]))))
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(r), mir.Rvalue.Ref(mir.L(p), rp)))
+    f.Add(B0, mir.Stmt.Assign(Sp0, f.Place(mir.Base.Local(r), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)]),
+                              mir.Rvalue.Use(mir.Operand.Const(i32, 7))))
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(x), mir.Rvalue.Prim(typed.PrimOp.Convert, i64, f.Args(mir.Operand[
+        mir.Operand.Copy(f.Place(mir.Base.Local(p), mir.Proj[mir.Proj.Field(0)]))]))))
+    tprim(f, B0, I64(y), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(x)),
+          mir.Operand.Copy(f.Place(mir.Base.Local(p), mir.Proj[mir.Proj.Field(1)])))
+    f.Add(B0, mir.Stmt.Close(Sp0, S0))
+    f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(y))))
+    tdefine(t, m, f)
+    assert m.Eval(tkey(1), I64[]) == Stop.None and m.Int(m.Result, i64) == 47
+    assert m.size(pt) == 16 and m.partOffset(pt, 1) == 8
+    # enum Shape { Circle(r I64)  Empty }: "s := Shape.Circle(5) if k == 0 else Shape.Empty; match s { ... }"
+    st := tdecl(t, names, types.DeclKind.Enum, "Shape")
+    t.SetEnumBody(st, source.NameId[names.Intern("Circle"), names.Intern("Empty")],
+                  t.List(types.TypeId[t.Record(t.List1(i64)), types.TypeId(0)]))
+    g := tfn(t, 2, t.Func(t.List1(i64), i64, types.ListId(0)))
+    sv, tag, c := g.AddTemp(st, Sp0), g.AddTemp(i64, Sp0), g.AddTemp(types.BoolT, Sp0)
+    circle, empty, probe, isc, other := g.NewBlock(), g.NewBlock(), g.NewBlock(), g.NewBlock(), g.NewBlock()
+    tprim(g, B0, I64(c), typed.PrimOp.Eq, types.BoolT, tcopy(0), mir.Operand.Const(i64, 0))
+    g.End(B0, mir.Term.Branch(mir.Operand.Copy(mir.L(c)), circle, empty))
+    g.Add(circle, mir.Stmt.Assign(Sp0, mir.L(sv), mir.Rvalue.Aggregate(st, 0, g.Args(mir.Operand[mir.Operand.Const(i64, 5)]))))
+    g.End(circle, mir.Term.Goto(probe))
+    g.Add(empty, mir.Stmt.Assign(Sp0, mir.L(sv), mir.Rvalue.Aggregate(st, 1, mir.Empty)))
+    g.End(empty, mir.Term.Goto(probe))
+    g.Add(probe, mir.Stmt.Assign(Sp0, mir.L(tag), mir.Rvalue.Tag(mir.L(sv))))
+    g.End(probe, mir.Term.Switch(mir.Operand.Copy(mir.L(tag)), g.AddCases(mir.Case[mir.Case(0, isc)]), other))
+    g.Add(isc, mir.Stmt.Close(Sp0, S0))
+    g.End(isc, mir.Term.Return(Sp0, mir.Operand.Copy(g.Place(mir.Base.Local(sv), mir.Proj[mir.Proj.Payload(0),
+                                                                                           mir.Proj.Field(0)]))))
+    g.Add(other, mir.Stmt.Close(Sp0, S0))
+    g.End(other, mir.Term.Return(Sp0, mir.Operand.Const(i64, -1)))
+    tdefine(t, m, g)
+    assert m.Eval(tkey(2), I64[0]) == Stop.None and m.Int(m.Result, i64) == 5
+    assert m.Eval(tkey(2), I64[1]) == Stop.None and m.Int(m.Result, i64) == -1
+    assert m.size(st) == 16
+    # arrays: "a := Array<I64>(5, 2); copy [10, 20, 30] in; s := a[1:4]; return a[0] + a.Len() + s[0] + a[4]"
+    arr := t.Array(i64, types.TypeId(0))
+    ra := t.Ref(arr, types.ReadOnly)
+    h := nfn(t, 3)
+    a, sl, n, v1, v2, v3 := h.AddTemp(arr, Sp0), h.AddTemp(ra, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0),
+                            h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0)
+    lit, ref := h.AddTemp(ra, Sp0), h.AddTemp(ra, Sp0)
+    k := h.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bits(10), typed.Const.Bits(20), typed.Const.Bits(30)]))
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(a), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 5),
+                                                                 mir.Operand.Const(i64, 2))))
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(lit), mir.Rvalue.Use(mir.Operand.Data(ra, k, 0, tspan(30)))))
+    h.Add(B0, mir.Stmt.CopyElems(Sp0, mir.L(a), h.Place(mir.Base.Local(lit), mir.Proj[mir.Proj.Deref]), mir.Operand.Const(i64, 3)))
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(sl), mir.Rvalue.Slice(mir.L(a), mir.Operand.Const(i64, 1),
+                                                               mir.Operand.Const(i64, 4), ra)))
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(n), mir.Rvalue.Prim(typed.PrimOp.Len, i64, h.Args(mir.Operand[mir.Operand.Copy(mir.L(a))]))))
+    tprim(h, B0, I64(v1), typed.PrimOp.Add, i64,
+          mir.Operand.Copy(h.Place(mir.Base.Local(a), mir.Proj[mir.Proj.At(0)])), mir.Operand.Copy(mir.L(n)))
+    tprim(h, B0, I64(v2), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(v1)),
+          mir.Operand.Copy(h.Place(mir.Base.Local(sl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)])))
+    tprim(h, B0, I64(v3), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(v2)),
+          mir.Operand.Copy(h.Place(mir.Base.Local(a), mir.Proj[mir.Proj.At(4)])))
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(ref), mir.Rvalue.Ref(mir.L(a), ra)))
+    h.Add(B0, mir.Stmt.Close(Sp0, S0))
+    h.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(v3))))
+    tdefine(t, m, h)
+    assert m.Eval(tkey(3), I64[]) == Stop.None and m.Int(m.Result, i64) == 37
+    # constant data is read-only: a write through a reference to it refused
+    w := nfn(t, 4)
+    wl := w.AddTemp(ra, Sp0)
+    w.Add(B0, mir.Stmt.Assign(Sp0, mir.L(wl), mir.Rvalue.Use(mir.Operand.Data(ra, w.AddConst(typed.Const.Bytes(U8[1, 2])),
+                                                                               0, tspan(40)))))
+    w.Add(B0, mir.Stmt.Assign(tspan(41), w.Place(mir.Base.Local(wl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)]),
+                              mir.Rvalue.Use(mir.Operand.Const(i64, 9))))
+    w.Add(B0, mir.Stmt.Close(Sp0, S0))
+    w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
+    m.Define(w)
+    assert m.Eval(tkey(4), I64[]) == Stop.Refused(WhyReadOnly, 0, tspan(41))
+}
