@@ -1061,7 +1061,9 @@ value enters the type. A **literal** entering the type - an initializer, an assi
 value - goes through it too: `p Percent = 150` is `Percent(150)`, the constructor run on the literal **while
 compiling** (K1) and the literal standing for the value it gave, so nothing runs when the program does. A
 constructor that fails on the literal, or that cannot be evaluated at compile time at all (it writes a global, say),
-makes that a compile-time error at the literal - there is no `try` to write on a literal. And where the type **extends** its base (T29f), the base's arithmetic produces it
+makes that a compile-time error at the literal - there is no `try` to write on a literal. The constructor written out
+on a literal, where it can fail - `Radix(10)` - is the same: run while compiling, no `try` written, a failure a
+compile-time error there; one that cannot fail is an ordinary call. And where the type **extends** its base (T29f), the base's arithmetic produces it
 **without** running the constructor: the constructor checks how a value enters, not what arithmetic later makes of
 it.
 

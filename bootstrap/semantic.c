@@ -18095,8 +18095,9 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         }
         //T29d: "Radix(10)" - a declared number's constructor called on a literal runs while compiling, as the literal
         //entering the type would (the literal then stands for what it gives), so it cannot fail where it runs
+        //- where it can fail: one that cannot is an ordinary call, run where it is written, as it always was
         if (func->type.hasRetType && func->type.retType->bType != BASETYPE_STRUCT && func->type.retType->ctorFunc == func
-                && args.len == 1) {
+                && func->type.errors.len && args.len == 1) {
             struct operand* lit = *(struct operand**)ListGetIdx(&args, 0);
             if (operandIsLiteralLike(lit) && !lit->isNullLiteral && !lit->type.owner && TypeIsNumeric(lit->type)) {
                 struct type t = *func->type.retType;
