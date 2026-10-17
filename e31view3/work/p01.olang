@@ -1,0 +1,39 @@
+# F3's handle copy (ll[0] as the receiver of Len/At/Iter) in odd positions
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn f(ll List<List<I64>>&) I64 ? {
+    n I64 = 0
+    for k := 0, k < ll[0].Len(), k++ { n = n + ll[0][k] }
+    i I64 = 0
+    for i < ll[0].Len() { i++ }
+    match ll[0].Len() {
+        case 3 if ll[0][2] == 7 { n = n + 100 }
+        case _ { n = n + 1000 }
+    }
+    v := I64[x * 2 for x in ll[0] if x < ll[0].Len() * 10]
+    n = n + v[0]
+    w := try ll[0].First() catch default ll[0].Len()
+    n = n + w
+    q := ll[0].Len() if ll[0][0] > 0 else ll[0][1]
+    n = n + q
+    assert ll[0].Len() == 3, "len " $ll[0].Len()
+    defer println("deferred " $ll[0][0])
+    if 7 in ll[0] { n = n + 10000 }
+    if 0 < ll[0][0] < ll[0].Len() + ll[0][2] { n = n + 100000 }
+    t := try ll[0][5] catch default ll[0][1]
+    n = n + t
+    churn()
+    return n
+}
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(5)
+    ll[0].Push(6)
+    ll[0].Push(7)
+    println("f " $(try f(ll)))
+}

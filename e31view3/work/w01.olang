@@ -1,0 +1,25 @@
+# atWriteBackWrap: a value a mut method on a handle element gives, held in a hidden local and kept in an outer List
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn (l mut List<I64>&) Make(x I64) List<I64> {
+    l.Push(x)
+    r := List<I64>()
+    r.Push(x * 10)
+    return r
+}
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    keep := List<List<I64>>()
+    for i in range 3 {
+        keep.Push(ll[0].Make(i + 1))
+        churn()
+    }
+    churn()
+    for k in keep { for v in k { println("keep " $v) } }
+    for v in ll[0] { println("ll " $v) }
+}

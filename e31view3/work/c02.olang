@@ -1,0 +1,40 @@
+# a slice of a field of a conditional (and of a match) choosing elements: lent writable, and returned as a borrow
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Pt struct() {
+    X I64 = 0
+    arr Array<I64, 2>
+}
+fn bumpArr(x mut Array<I64>&) { x[0] = x[0] + 1 }
+fn viewC(a Array<Pt>&, c Bool) Array<I64>&a { return (a[0] if c else a[1]).arr[0:2] }
+fn viewM(a Array<Pt>&, k I64) Array<I64>&a {
+    return (match k { case 0 => a[0] case _ => a[1] }).arr[0:2]
+}
+fn deep(n I64) I64 {
+    b := Array<I64, 8>()
+    for i in range 8 { b[i] = n * 1000 + i }
+    if n == 0 { return b[3] }
+    return deep(n - 1) + b[1]
+}
+fn run() I64 {
+    a := Array<Pt>(2)
+    bumpArr((a[0] if a.Len() > 1 else a[1]).arr[0:1])
+    return a[0].arr[0]
+}
+Baked I64 = run()
+fn main() ? {
+    a := Array<Pt>(2)
+    a[0].arr[1] = 22
+    a[1].arr[1] = 44
+    v := viewC(a, true)
+    m := viewM(a, 1)
+    t := deep(5)
+    churn()
+    x := v[1]
+    y := m[1]
+    println("v " $x " m " $y " t " $t " baked " $Baked " run " $run())
+}

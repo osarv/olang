@@ -1,0 +1,22 @@
+# a callee capturing its handle parameter in a lambda it keeps, given a handle a call gives (F3): the lambda holds a
+# reference to the handle's own copy, made in the call's block
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn keep(l List<I64>&, fs mut List<fn() I64>&) { fs.Push(fn() I64 { return l.Len() }) }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(1)
+    ll[0].Push(2)
+    fs := List<fn() I64>()
+    for i in range 3 {
+        keep(ll[0], fs)
+        churn()
+    }
+    churn()
+    for f in fs { println("len " $f()) }
+}

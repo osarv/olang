@@ -1,0 +1,19 @@
+# a constructor keeping a reference to the handle's own storage (a pun of a reference parameter), given a handle a
+# call gives: the handle's copy is a temporary of the call's block
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type W struct(l List<I64>&) { l }
+fn get(m mut Map<I64, List<I64>>&, k I64) List<I64> ? { return try m.Get(k) }
+fn mk(m mut Map<I64, List<I64>>&) W& ? { return W(try get(m, 1)) }
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    (try m.Get(1)).Push(5)
+    w := try mk(m)
+    churn()
+    for s in w.l { println("for " $s) }
+}
