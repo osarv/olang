@@ -12,7 +12,7 @@
 # Run from anywhere, on files or directories; each file is compiled with "-t" (a test build reaches everything the file
 # imports), what the diagnostics name is rewritten wherever they point, and that repeats until nothing more changes:
 #
-#     build/out -b tools/errors_migrate.olang && build/errors_migrate build/out shared.olang std/ ...
+#     build/out -b tools/errors_migrate.olang && build/tools_errors_migrate build/out shared.olang std/ ...
 #
 # What it cannot decide - an operator that can now fail (E31: where the expression starts), a signature over several
 # lines, a bare "error" statement (each needs an error type of its own) - is listed at the end for a person.
@@ -326,4 +326,18 @@ fn main() ? {
         if edits == 0 { break }
     }
     for l in left { try io.Println(l) }
+}
+
+test "the checked forms are renamed as whole words" {
+    assert renameTryForms("fn (b Bag&) TryAt(i I64) I32 ? E") == "fn (b Bag&) CheckedAt(i I64) I32 ? E"
+    assert renameTryForms("x.trySlice(1, 2) + TryAtAll + Retry") == "x.checkedSlice(1, 2) + TryAtAll + Retry"
+}
+
+test "a call is tried, a try made checked, an error declared" {
+    assert try tryCall("fn f() ? {\n    g(1)\n}\n", 2, 5) catch default "" == "fn f() ? {\n    try g(1)\n}\n"
+    assert try checkedAt("    x := try (a + b)\n", 1, 10) catch default "" == "    x := checked (a + b)\n"
+    assert try declareError("fn f() {\n    try g()\n}\n", 2, "E") catch default "" == "fn f() ? {\n    try g()\n}\n"
+    src := "error E {\n    X\n}\nfn f() ? F {\n    try g()\n}\n"
+    assert try declareError(src, 5, "E") catch default "" == "error E {\n    X\n}\nfn f() ? F + E {\n    try g()\n}\n"
+    assert (try declareError("fn f() ? {\n}\n", 2, "E") catch default "none") == "none"
 }

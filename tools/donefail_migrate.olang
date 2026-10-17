@@ -230,3 +230,31 @@ fn main() ? {
     try io.Println($total " lines changed")
     for l in left { try io.Println(l) }
 }
+
+test "a fail ending a catch becomes '!' outside a test and goes in one" {
+    left List<String&>
+    assert migrateLine("    try f(x) catch { fail }", false, false, "a", left) == "    f(x)!"
+    assert migrateLine("    try f(x) catch { fail }", true, false, "a", left) == "    try f(x)"
+    assert migrateLine("    try f(x) catch E { fail }", true, false, "a", left) == "    try f(x)"
+    assert left.Len() == 0
+}
+
+test "'if C { fail }' becomes an assert of the negation" {
+    left List<String&>
+    assert migrateLine("    if a == b { fail }", true, false, "a", left) == "    assert a != b"
+    assert migrateLine("    if not ok { fail }", true, false, "a", left) == "    assert ok"
+    assert migrateLine("    if a or b { fail }", true, false, "a", left) == "    assert not (a or b)"
+    assert migrateLine("    if x > 3 { fail }", true, false, "a", left) == "    assert not x > 3"
+}
+
+test "done is return in a test or main, abort and a test's last fail unreachable" {
+    left List<String&>
+    assert migrateLine("    if skip { done }", true, false, "a", left) == "    if skip { return }"
+    assert migrateLine("    done", false, true, "a", left) == "    return"
+    assert migrateLine("    nomatch { fail }", true, false, "a", left) == "    nomatch { unreachable }"
+    assert migrateLine("    abort", false, false, "a", left) == "    unreachable"
+    assert migrateLine("    # done here", true, false, "a", left) == "    # done here"
+    assert left.Len() == 0
+    migrateLine("    done", false, false, "f.olang:3", left)
+    assert left.Len() == 1 and left[0] == "f.olang:3: done - outside a test or main"
+}
