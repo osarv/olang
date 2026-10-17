@@ -19037,7 +19037,10 @@ a compile error". No `try { block }`. QV (late in the batch): a postfix `!` ends
    `OUT_OF_RANGE`), `MapError.MISSING`, `TextError` (`NOT_FOUND`, `BAD_BASE`, `NOT_FINITE`), `ParseError.BAD_BASE`,
    `ArrayError.NOT_FOUND`, `ChanError.CLOSED` for a Send on a closed channel, `StatsError` (`TOO_FEW`, `OUT_OF_RANGE`,
    `BAD_EDGES`), `RandError.ZERO_STATE`, `CsvError.BAD_SEPARATOR`, `JsonError.UNEVEN`, `PathError.UNRELATED`,
-   `FfiError.BAD_ARGUMENTS`; `n.Format(base)` can fail, since a base is a caller's argument.
+   `FfiError.BAD_ARGUMENTS`. `n.Format(base)` takes a `Radix` (`type Radix I64` with a constructor failing with
+   `TextError.BAD_BASE` outside 2 to 36), so a literal base is checked while compiling (T29d) and `Format` cannot
+   fail; a computed base is `Radix(b)`, written with `try`. (First built as a fallible `Format`, which put `try` on
+   every hexadecimal rendering in the port's sources for a base that is always a literal.)
 7. linalg: every shape check is `ShapeError.MISMATCH`, so the destination forms, the products, `View`, the range views
    and the matrix operators can fail; an operation with nothing to mismatch (`Fill`, `Scale`, `Clamp`, `Clone`,
    `Mapped`, a matrix and a scalar) cannot - private unchecked kernels (`mapInto`, ...) serve the operations that

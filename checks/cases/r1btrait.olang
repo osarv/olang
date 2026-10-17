@@ -1,0 +1,6 @@
+# check: fail a trait's method writes its error set
+# R1b: a trait's method signature writes its error set, as a function type does
+type Source trait {
+    Read() I64 ?
+}
+fn main() { }

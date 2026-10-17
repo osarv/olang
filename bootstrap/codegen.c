@@ -2393,8 +2393,8 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
         strcpy(idxTy, "i64");
     }
 
-    //E16: an ordinary index is NOT checked at run time - the same reading C gives it. E16d's "try a[i]" is
-    //the opt-in: it asks for the check and takes the failure as the bare error, so a checked access is
+    //E16: an ordinary index is NOT checked at run time - the same reading C gives it. E16d's "checked a[i]" is
+    //the opt-in: it asks for the check and takes the failure as BuiltinError.OUT_OF_BOUNDS, so a checked access is
     //visible both where it is written and in the enclosing signature. What is free stays free either way -
     //a constant index into a fixed-size array is settled at compile time (see OperandIndex), and a SLICE
     //is still always checked (E16b) because that cost is per slice expression, never per element access.
@@ -4695,8 +4695,8 @@ static char* cgToI64(struct cgCtx* ctx, struct operand* v) {
 
 //E16/E16b: what happens when a bounds check fails. Without "try" this is the same hard abort a failed
 //assert produces - __olang_check_failed never returns (it longjmps out of the enclosing test under -t and
-//aborts otherwise), so nothing ever continues with an out-of-range access. With "try" (E16c/E16d) it
-//propagates the bare error under THIS function's own signature instead, which is the same encode-and-return
+//aborts otherwise), so nothing ever continues with an out-of-range access. With "checked" (E16c/E16d) it
+//propagates BuiltinError.OUT_OF_BOUNDS under THIS function's own signature instead, which is the same encode-and-return
 //an "error" statement performs: there is no callee whose code would need decoding first.
 //Shared by the slice and index checks, which differ only in what they compare.
 static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, char* badLbl, char* word,
@@ -6076,7 +6076,7 @@ static void cgBangEnd(struct cgCtx* ctx, struct operand* op, char* code, struct 
 }
 
 //R9b: the failure path of a try with catch clauses, tried in order. code is the error code, or NULL for a
-//failed bounds check, whose one possible error (the bare error) makes every match static. Each clause runs
+//failed bounds check, whose one possible error (OUT_OF_BOUNDS) makes every match static. Each clause runs
 //its block; one with a default then stores it as the try's value (value position), and a statement's clause
 //falling off its block continues after the statement (endLbl). Returns true when an error no clause names
 //can reach the current position, where the caller emits its propagation - which differs between a call and

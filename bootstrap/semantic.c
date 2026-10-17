@@ -2704,8 +2704,7 @@ static void typeSpell(struct sbuf* b, struct type t) {
         for (int i = 0; i < t.errors.len; i++) {
             struct type* e = *(struct type**)ListGetIdx(&t.errors, i);
             sbufStr(b, "E-");
-            if (e->owner && e->name.len) typeSpell(b, *e);
-            else sbufStr(b, "default"); //R15: the default error, which has no name
+            typeSpell(b, *e);
             sbufStr(b, "-x");
         }
         sbufStr(b, "-f");
@@ -6291,7 +6290,6 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
         else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
-        else if (a->type.errors.len == 0 && sh->mustFail) Err(a->tok, ERR_TRY_FORM_MUST_FAIL, sh->name);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) Err(a->tok, ERR_LESS_NOT_BOOL);
         else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) Err(a->tok, ERR_LEN_SHAPE);
         else if (!strcmp(sh->name, "Eq") || !strcmp(sh->name, "Str")) {
@@ -16707,7 +16705,7 @@ static bool catchMatchCovered(struct list* seen, struct catchMatch* m) {
 }
 
 //R9b: the catch clauses after a tried operand, in order. errors: what the operand can produce (struct type*:
-//a call's declared errors, or the bare error alone for a checked index or slice). In value position (valuePos)
+//a call's errors, or BuiltinError alone for a checked index or slice). In value position (valuePos)
 //each clause ends one of two ways - its block provably leaves (D10a, counting break and continue), or it
 //gives the value with its own default - and never both, since a default after a block that always leaves
 //could never be used. rt is the value's type there (NULL when there is none). In a statement a clause simply
@@ -30352,7 +30350,16 @@ static void settleInferredErrs(void) {
 //E31a (QQ1): a Checked form fails with every error its plain form can - "checked" only adds checks. Judged once every
 //set is known (an inferred one, R1a), on each method named for a Checked form beside its plain form on one receiver
 static void checkCheckedFormIn(struct var* m) {
-    if (!m || !m->isMethod || m->type.bType != BASETYPE_FUNC || m->name.len < 8) return;
+    if (!m || !m->isMethod || m->type.bType != BASETYPE_FUNC) return;
+    //E31: Len, Eq and Str may not fail - and one written "?" alone is known to only once its set is inferred
+    if (m->type.errsInferred && m->type.errors.len) {
+        bool priv = false;
+        const char* cap = protocolOf(m->name, &priv);
+        struct type* r = SemanticMethodReceiver(m);
+        if (cap && r && protocolShaped(*r, m, cap) && (!strcmp(cap, "Len") || !strcmp(cap, "Eq") || !strcmp(cap, "Str")))
+            Err(m->tok, ERR_METHOD_CANNOT_FAIL, cap);
+    }
+    if (m->name.len < 8) return;
     bool priv = m->name.ptr[0] == 'c';
     if (strncmp(m->name.ptr, priv ? "checked" : "Checked", 7) != 0 || m->name.ptr[7] < 'A' || m->name.ptr[7] > 'Z') return;
     struct type* recv = SemanticMethodReceiver(m);

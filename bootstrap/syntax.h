@@ -53,9 +53,6 @@ enum syntaxType {
     SNTX_TEST_DECL,
     SNTX_ERROR_DECL,
     SNTX_ERROR_LIST,
-    SNTX_BARE_ERROR,   //bare "error" keyword, standing in for a real name - see the report on "the
-                          //bare error": valid as an error-list item, an error-stmnt's own bare form
-                          //(where it's the whole SNTX_STMNT_ERROR node, not a child of it), and a catch-item
     SNTX_RET_TYPE,
     SNTX_PARAM,
     SNTX_RECEIVER,          //M19: "( param )" between "fn" and the name - marks a METHOD, and is the only

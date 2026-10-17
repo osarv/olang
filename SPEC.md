@@ -1927,13 +1927,15 @@ number (a sign alone included) and `OVERFLOW` for a number beyond its type's ran
 never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
 with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
 none, since a `Char` would inherit them (T29f) and pad its number rather than the character. Every integer type, `U8`
-included, has `n.Format(base = 10) String ? TextError`: new text writing `n` in `base`, `2` to `36`, the digits past `9` being the
+included, has `n.Format(base Radix = 10) String`: new text writing `n` in `base`, `2` to `36`, the digits past `9` being the
 lowercase letters, with a `-` before a negative number's digits and nothing else - no prefix, no padding, no `_`
 (`(255).Format(16)` is `"ff"`, `(-255).Format(16)` is `"-ff"`, `I64`'s most negative is written whole). It is what
 `ParseInt` and `ParseUint` read back in the same base, and in base `10` it is `$n`; an unsigned value's text is its
 bits read unsigned (`U64(-1).Format(16)` is sixteen `f`s), and a `Char`'s is its code (`'A'.Format(16)` is `"41"`, the
-method a `Char` inherits from `U8`). A base outside `2` to `36` - `0` included, which `ParseInt` reads as any of a
-literal's three forms - fails with `TextError.BAD_BASE`.
+method a `Char` inherits from `U8`). The base is a `Radix`, the prelude's `type Radix I64` whose constructor fails with
+`TextError.BAD_BASE` outside `2` to `36` - `0` included, which `ParseInt` reads as any of a literal's three forms: a
+literal base is checked while compiling (T29d), so `(255).Format(16)` cannot fail and `Format(40)` is a compile-time
+error, and a base computed while the program runs is made one with `Radix(b)`, which can fail.
 
 The prelude declares the complex numbers `C16`, `C32` and `C64`, named by the width of each part (two
 `F16`s, two `F32`s, two `F64`s): structs `(Re, Im)` with `Im` defaulting to `0`, the operators `+ - * /` and unary `-`

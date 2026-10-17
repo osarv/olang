@@ -256,7 +256,6 @@ struct type;
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
     X(ERR_CHECKED_NOT_SUPERSET,         "E31a",  "%s is %s's checked form, so it fails with every error %s can - add %t after its '?'") \
-    X(ERR_TRY_FORM_MUST_FAIL,           "E31a",  "%s is a checked form, so it declares the errors it fails with") \
     X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to handle an error") \
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \

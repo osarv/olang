@@ -789,8 +789,8 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     return s;
 }
 
-//one "error-list-item": a declared error type's name, possibly through an alias chain - "?" alone already stands for
-//the default error (R15), which no name spells
+//one "error-list-item": a declared error type's name, possibly through an alias chain - "?" alone is an inferred set
+//(R1a)
 struct syntax* parseErrorListItem(SyntaxCtx sc) {
     return parseName(sc);
 }
@@ -821,7 +821,7 @@ struct syntax* parseFuncErrorList(SyntaxCtx sc) {
     (void)cur;
     struct syntax* s = newNode(SNTX_ERROR_LIST);
     addTok(s, q);
-    //R16: "?" alone is the default error; any types named after it are added to it
+    //R1a: "?" alone is the set the body can fail with; a list after it is a written promise
     struct syntax* first = parseErrorListItem(sc);
     if (!first) return s;
     addSntx(s, first);
@@ -4517,9 +4517,9 @@ static void scanRegion(TokenCtx tc, struct scanResult* r, bool inBranch) {
                 ListAdd(&r->typeNames, &n);
             }
         } else if (t.type == TOK_ERROR) {
-            //a real error-decl ("error IDEN { ... }") registers a type name. "error" alone - the statement raising
-            //the default error - is followed by no name, and what does follow it is left for the main loop, which
-            //tracks brace depth: consuming it unread once desynced the depth for the rest of the scan
+            //a real error-decl ("error IDEN { ... }") registers a type name. "error" followed by no name (a statement
+            //written wrongly) leaves what follows it for the main loop, which tracks brace depth: consuming it unread
+            //once desynced the depth for the rest of the scan
             int before = TokenGetCursor(tc);
             struct token name = TokenFeed(tc);
             if (name.type == TOK_IDEN) {

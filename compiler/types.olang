@@ -1011,7 +1011,7 @@ fn (t mut Table&) joined(b mut StringBuilder&, l ListId) {
 }
 
 # a U64's bits, held in an I64, as the unsigned number they are
-fn UnsignedText(bits I64) String { return try U64(bits).Format() }
+fn UnsignedText(bits I64) String { return U64(bits).Format() }
 
 # ---- symbols (G16a) ----
 
@@ -1035,9 +1035,9 @@ fn Symbol(text String&) String {
     return $s[:88] "_H" $hex16(h1) $hex16(h2)
 }
 
-fn hex2(v U8) String { return try I64(v).Format(16).PadStart(2, '0') }
+fn hex2(v U8) String { return I64(v).Format(16).PadStart(2, '0') }
 
-fn hex16(v U64) String { return try v.Format(16).PadStart(16, '0') }
+fn hex16(v U64) String { return v.Format(16).PadStart(16, '0') }
 
 # two independent 64-bit FNV-1a hashes, from different offset bases
 fn hash128(text String&) (U64, U64) {

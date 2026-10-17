@@ -309,7 +309,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
-  (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format(base)` can fail), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
+  (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format` takes a `Radix`, a literal one checked while compiling), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
   `StatsError`, `RandError`, `JsonError.UNEVEN`, linalg's `ShapeError.MISMATCH` and `ActivationError` (an operation
   with nothing to mismatch cannot fail; a float matrix never fails an activation). A `Matrix` built directly takes its
   data as a slice and an array length do (D14b, E16b); `View` is the checked form. Language guarantees still abort.

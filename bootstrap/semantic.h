@@ -1019,9 +1019,7 @@ struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its con
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
 struct type* SemanticBuiltinErrorType(void);
-int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this
-                                              //only to print a cleaner "unhandled error: error" message,
-                                              //never for ordinal encoding (already generic, see the report)
+int SemanticBuiltinErrorWord(char* word); //R20: the ordinal of BuiltinError's word, which a check fails with
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticParamTransient(struct var* func, int j);
