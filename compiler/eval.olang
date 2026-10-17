@@ -1,0 +1,2940 @@
+# eval - the abstract machine over MIR (compiler/DESIGN.md 1.8, 1.8.1; SPEC K1, K1a, K2, B3e): what evaluates a MIR
+# function while compiling - a constant, a condition, a zero value, a literal's constructor, a global baked, an assert
+# decided - and what runs a whole program under -i. Miri's model, not a tree walker:
+#
+# - Memory is allocations, each with an id and bytes laid out exactly as the target lays them out (types' layout, the
+#   same code emit's layout follows), and a pointer map: a reference stored in memory is its offset in the bytes and,
+#   beside them, the id of the allocation it points into. A reference is an (allocation, offset) pair, checked on
+#   every access - the allocation live, the access within it - so undefined behaviour stops the evaluation with where
+#   it happened instead of reading something the program never had.
+# - An allocation's id carries a generation: a slot reused after its allocation was freed gives a new id, so a
+#   reference into a closed scope is caught however long ago it closed. Bytes live in one heap, freed blocks reused by
+#   size class, so a loop that allocates and frees reaches a steady size and one that allocates nothing never grows.
+# - Scopes are arenas: an allocation belongs to the scope it was made in and is freed when that scope closes, after
+#   the scope's registrations run, last registered first - destructors (O16) and owners released (O35) - and the
+#   regions given to its own slots are closed (O30).
+# - Floats are held as bits and computed at their own type, so a value is the target's exactly (E33a).
+# - Integers wrap at every width (E6c); what the specification leaves undefined - a zero divisor, the most negative
+#   value divided by -1, a shift outside the width, a float converted out of range, an index outside an array, a null
+#   reference read - stops with the operation's place (K1). The checked forms are tests MIR wrote before the operation
+#   (Overflows, Prim compares), so nothing here decides a check.
+# - The interpreter is iterative: frames, scopes and registrations are tables, never the host's stack, so recursion is
+#   bounded by the budget alone and a destructor run by a closing scope is a frame like a call's.
+# - Tasks run in sequence at their join's Wait, in spawn order (K1, P4b).
+# - An extern is called through std/ffi's dynamic call: while compiling only the C math library's functions (X8),
+#   under -i any the process can find.
+#
+# Two modes: Compile refuses what K1 lists (an effect a skipped run-time computation would skip, undefined behaviour,
+# a budget run out) with the reason stage 0 gives; Run (-i) performs the effects and stops only on undefined behaviour.
+# What eval reads of a function is its MIR alone, run as written: it never decides order, placement or checks.
+
+import "source"
+import "types"
+import "typed"
+import "mir"
+import "std/ffi"
+
+# ---- requests and what they give ----
+
+type Mode enum {
+    Compile    # while compiling (K1): every effect K1 lists refused, the budgets applying
+    Run        # -i (B3e): effects performed, only undefined behaviour stopping the program
+}
+
+# how an evaluation ended short of a value: None when the request's function returned (its result is Result)
+type Stop enum {
+    None
+    Raised(code I64)    # an error left the request's function, its code under that function's error list (R6)
+    # the test or the process ended (S16, S16a) or reached what aborts the program (S16c, S16d, S18a): its kind, where,
+    # and an assert's message (S17), "" for none
+    Exited(kind mir.ExitKind, file I64, sp source.Span, msg String&)
+    # evaluation refused (K1) - an effect, undefined behaviour or a budget - and where the operation is
+    Refused(why String&, file I64, sp source.Span)
+}
+
+# what a stop prints (S18a, B3e): "FILE:LINE: text", the file read through src; "" for a value, done and fail
+fn (s Stop) Text(src source.Source&) String {
+    match s {
+        case Stop.None { return "" }
+        case Stop.Raised(code) { return "an error escapes, code " $code }
+        case Stop.Exited(kind, _, sp, msg) {
+            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return "" }
+            if msg == "" { return $src.Path ":" $src.Line(sp.Start) ": " $mir.ExitText(kind) }
+            return $src.Path ":" $src.Line(sp.Start) ": " $mir.ExitText(kind) ": " $msg
+        }
+        case Stop.Refused(why, _, sp) { return $src.Path ":" $src.Line(sp.Start) ": " $why }
+    }
+}
+
+# the reasons K1 gives, as stage 0 words them
+WhyMutableGlobal String& = "it reads a mutable global, whose value is the running program's"
+WhyChangeable String& = "it reads a global holding storage a writable reference reaches, which the running program can change"
+WhyWritesGlobal String& = "it writes a global or what one holds, which the running program would then not see written"
+WhyCycle String& = "these globals are defined in terms of each other"
+WhyNoValue String& = "its initializer does not produce a value"
+WhyDestructor String& = "it builds a value whose destructor runs when its scope closes"
+WhyExtern String& = "it calls an external function"
+WhyEnds String& = "it ends the test or the process"
+WhySteps String& = "the computation runs longer than compile-time evaluation allows"
+WhyMemory String& = "the computation takes more memory than compile-time evaluation allows"
+WhyDepth String& = "the computation recurses deeper than compile-time evaluation allows"
+WhyRunDepth String& = "it recurses deeper than -i allows"
+WhyNull String& = "it reads through a null reference"
+WhyNullCall String& = "it calls through a null function value"
+WhyClosed String& = "it uses storage after the scope it was made in closed"
+WhyOutside String& = "it indexes outside the array, which is undefined at run time"
+WhyBeyond String& = "it reaches outside the storage it refers to"
+WhyReadOnly String& = "it writes constant data"
+WhyDivZero String& = "it divides by zero"
+WhyDivMin String& = "it divides the most negative value by -1, which overflows"
+WhyShift String& = "it shifts by a count outside the type's width"
+WhyConvert String& = "it converts a float the target type cannot represent"
+WhyNaNOp String& = "it reads the bits of a NaN an operation made, whose sign and payload are unspecified"
+WhyNaNSignal String& = "it reads the bits of a signalling NaN, which moving it may have quieted"
+WhyNoBody String& = "it calls a function whose body is not available"
+WhyNotModelled String& = "it uses a value compile-time evaluation does not model"
+WhyPayload String& = "it reads the payload of a case the value does not hold"
+WhyLong String& = "it makes an array longer than the evaluator holds"
+WhyFfiFind String& = "it calls an external function -i cannot find in this process"
+WhyFfiPass String& = "it calls an external function with a parameter type -i cannot pass"
+WhyNoClause String& = "a task's error has no clause to take it"
+
+# ---- pointers ----
+
+# a reference: an allocation's id and an offset into it. Id 0 is null. An id is its allocation's slot and the slot's
+# generation (Gen << 24 | slot), so an id outlives the allocation it named and is never confused with a later one
+type Ptr struct(Id I64, Off I64) {
+    Id
+    Off
+}
+
+NullPtr Ptr = Ptr(0, 0)
+
+slotBits I64 = 24
+slotMask I64 = (1 << 24) - 1
+
+# ---- the machine's tables ----
+
+# what an allocation holds: a value of the program, read-only data, a global's storage, a function's code
+aFree I64 = 0
+aValue I64 = 1
+aData I64 = 2
+aGlobal I64 = 3
+aCode I64 = 4
+
+type alloc struct() {
+    Base I64 = 0         # where its bytes start in the heap
+    Size I64 = 0
+    Class I64 = 0        # its block's size class: 1 << Class bytes
+    Gen I64 = 0
+    Kind I64 = 0
+    Scope I64 = 0        # the scope (an id) it was made in and is freed with; 0 for none
+    Prev I64 = 0         # its neighbours, by slot, in its scope's list of allocations
+    Next I64 = 0
+    Owner I64 = -1       # K1: the global whose storage it is, -1 for none
+    ReadOnly Bool = false
+    Code I64 = -1        # a code allocation's function: its index in codeKeys, or an extern's in its own numbering
+    Extern Bool = false
+}
+
+# what a scope is at run time
+sBlock I64 = 0       # an arena a function opens, of any MIR kind but those below
+sStore I64 = 1       # a frame's own storage: its frame locals, what is built in ScopeRef.Frame
+sProgram I64 = 2
+sInert I64 = 3
+sBuilder I64 = 4
+sRegion I64 = 5
+sJoin I64 = 6
+
+type scope struct() {
+    Gen I64 = 0
+    Live Bool = false
+    Kind I64 = 0
+    Allocs I64 = 0       # the slot of its last allocation, 0 for none
+    Regs I64 = -1        # its last registration, -1 for none
+    Parent I64 = 0       # a region given to an own slot: the scope whose closing closes it
+    Child I64 = 0        # the regions given to slots in it
+    Sibling I64 = 0
+    Buf I64 = 0          # a builder's text: its allocation and length
+    BufLen I64 = 0
+    Tasks I64 = -1       # a join's tasks in spawn order: the first and the last
+    TasksEnd I64 = -1
+    Kept I64 = 0         # a join's earliest kept error, under its own list; 0 for none
+    Errors I64 = 0       # a join's error list (a ListId)
+}
+
+# a registration in a scope, run when it closes: a destructor of a type for the instance at P, or an own slot at P
+gDtor I64 = 0
+gOwner I64 = 1
+
+type reg struct() {
+    Kind I64 = 0
+    Ty I64 = 0
+    Id I64 = 0
+    Off I64 = 0
+    Next I64 = -1
+}
+
+# a task spawned and not yet run (P1): the function and task it came from, the allocation holding its call's
+# arguments, its targets' addresses, its clauses' handlers and the scopes it is handed (laid out by taskLayout)
+type task struct() {
+    Fn I64 = 0
+    Task I64 = 0
+    Buf I64 = 0
+    Next I64 = -1
+}
+
+# how a frame returns: to the frame below's Call, as the request's result, from a destructor, as a task, as a task's
+# clause, as a global's initializer
+rRequest I64 = 0
+rCall I64 = 1
+rDtor I64 = 2
+rTask I64 = 3
+rClause I64 = 4
+rGlobal I64 = 5
+
+type frame struct() {
+    Fn I64 = 0
+    Block I64 = 0
+    Stmt I64 = 0
+    Locals I64 = 0       # where its locals' allocation ids start in localIds
+    Scopes I64 = 0       # where the ids of the scopes it opens start in scopeIds
+    Vars I64 = 0         # where its scope variables start in varIds
+    Store I64 = 0        # its own storage's scope
+    Ret I64 = 0
+    RetArg I64 = 0       # rCall: the caller's call; rTask, rClause: the task's slot; rGlobal: the global
+    Closing I64 = 0      # where its scopes being closed start in closing
+    Pending Bool = false # a statement or a terminator waits for closes, tasks or a return to finish
+    Done Bool = false    # its Return or Raise has delivered its value and closes its storage
+    Raised Bool = false
+    Code I64 = 0
+    PrevInit I64 = -1    # rGlobal: the global being initialized before it
+}
+
+# a global (K1, K2, B5a): its storage and whether its initializer has run
+type global struct() {
+    Ty I64 = 0
+    Mutable Bool = false
+    Init I64 = -1        # its initializer, an index into codeKeys; -1 for none
+    Store I64 = 0        # its storage's allocation id
+    State I64 = 0        # 0 not set, 1 being initialized, 2 set
+}
+
+type gkey struct(Module I64, Name source.NameId) {
+    Module
+    Name
+}
+
+type dkey struct(File I64, Start I32, End I32, Ty types.TypeId) {
+    File
+    Start
+    End
+    Ty
+}
+
+# a value's shape, from its type: how its bytes are read
+vVoid I64 = 0
+vBool I64 = 1
+vInt I64 = 2
+vUint I64 = 3
+vFloat I64 = 4
+vPtr I64 = 5       # a reference: one word
+vPair I64 = 6      # a run-time-length array, or a reference to one: its length, then its storage (T11)
+vFunc I64 = 7      # a function value: its code, then its environment (T21)
+vEnum I64 = 8      # an enum carrying a payload: a tag word, then the payload (T17)
+vOrd I64 = 9       # an enum carrying none, an error code: an I32
+vAgg I64 = 10      # a struct, a tuple, a record
+vFixed I64 = 11    # an array of a length the type says (T7c)
+vNone I64 = 12     # no layout
+
+# ---- the machine ----
+
+type Machine struct(T mut types.Table&, When Mode) {
+    T
+    When
+    StepBudget I64 = 20000000
+    MemBudget I64 = 1 << 28
+    DepthBudget I64 = 2000
+    Steps I64 = 0
+    Live I64 = 0                 # bytes allocated and not freed
+    Result Ptr = NullPtr         # the last request's result
+    ResultTy types.TypeId = types.VoidT
+    Stopped Stop = Stop.None
+    halted Bool = false
+    # the program's code
+    fns List<mir.Fn>
+    fnOf Map<mir.FnKey, I64>
+    codeKeys List<mir.FnKey>     # every function a value or a code allocation names, by its own index
+    codeOf Map<mir.FnKey, I64>
+    codeAllocs List<I64>         # by codeKeys' index: its code allocation, 0 until asked
+    externs Map<I64, String&>
+    externCode Map<I64, I64>     # an extern's code allocation
+    dtors Map<types.TypeId, mir.FnKey>
+    globals List<global>
+    globalOf Map<gkey, I64>
+    datas Map<dkey, I64>
+    # memory
+    heap mut Array<U8>& = Array<U8>(1 << 16)
+    prov mut Array<I64>& = Array<I64>(1 << 13)
+    top I64 = 8
+    free mut Array<I64>& = Array<I64>(64)
+    allocs List<alloc>
+    freeAllocs List<I64>
+    scopes List<scope>
+    freeScopes List<I64>
+    regs List<reg>
+    freeRegs List<I64>
+    tasks List<task>
+    freeTasks List<I64>
+    # execution
+    frames List<frame>
+    localIds List<I64>
+    scopeIds List<I64>
+    varIds List<I64>
+    closing List<I64>
+    program I64 = 0
+    scratch I64 = 0
+    tmps mut Array<I64>& = Array<I64>(3)
+    initGlobal I64 = -1
+    lastOwnScope I64 = 0
+    offAt Map<types.TypeId, I64>
+    offs List<I64>
+    writableOf Map<types.TypeId, Bool>
+    stopFile I64 = 0
+    stopSp source.Span = source.Span(0, 0)
+}
+
+# a machine evaluating in the mode given, its budgets K1's (stage 0's): 20,000,000 steps, 256 MB, 2,000 frames while
+# compiling; under -i no step or memory budget and 100,000 frames
+fn NewMachine(t mut types.Table&, mode Mode) Machine {
+    m := Machine(t, mode)
+    m.allocs.Push(alloc())      # slot 0: no allocation, so an id is never 0
+    m.scopes.Push(scope())
+    m.program = m.newScope(sProgram)
+    if mode == Mode.Run {
+        m.StepBudget = -1
+        m.MemBudget = -1
+        m.DepthBudget = 100000
+    }
+    m.scratch = m.allocate(64, aValue, m.program).Id
+    for i in range 3 { m.tmps[i] = m.allocate(64, aValue, m.program).Id }
+    return m
+}
+
+# ---- defining the program ----
+
+# a MIR function, by its key
+fn (m mut Machine&) Define(f mir.Fn) {
+    m.fnOf.Put(f.Of, m.fns.Len())
+    m.fns.Push(f)
+}
+
+# an extern (X1), by generic.Program's function index, as the linker names it
+fn (m mut Machine&) DefineExtern(f I64, name String&) { m.externs.Put(f, $name) }
+
+# the destructor of a type (C7): a function of one parameter, a reference to the instance, run when its scope closes
+fn (m mut Machine&) DefineDestructor(t types.TypeId, k mir.FnKey) { m.dtors.Put(t, k) }
+
+# a global, by its module and name: its type, whether it is mutable, and its initializer's function, which gives the
+# value (DESIGN.md 1.8: a body per global). While compiling an immutable one is initialized when first read (K2);
+# under -i its module's Init sets it (B5a)
+fn (m mut Machine&) DefineGlobal(module I64, name source.NameId, ty types.TypeId, mutable Bool, init mir.FnKey) {
+    m.lay(ty)
+    g := global()
+    g.Ty = I64(ty)
+    g.Mutable = mutable
+    g.Init = m.codeIndex(init)
+    a := m.allocate(m.size(ty), aGlobal, m.program)
+    g.Store = a.Id
+    m.globalOf.Put(gkey(module, name), m.globals.Len())
+    m.allocs[a.Id & slotMask].Owner = m.globals.Len()
+    m.globals.Push(g)
+}
+
+fn (m mut Machine&) codeIndex(k mir.FnKey) I64 {
+    i := try m.codeOf.Get(k) catch default -1
+    if i >= 0 { return i }
+    m.codeOf.Put(k, m.codeKeys.Len())
+    m.codeKeys.Push(k)
+    m.codeAllocs.Push(0)
+    return m.codeKeys.Len() - 1
+}
+
+# ---- stopping ----
+
+fn (m mut Machine&) stop(s Stop) {
+    if m.halted { return }
+    m.halted = true
+    m.Stopped = s
+}
+
+fn (m mut Machine&) refuse(why String&) { m.stop(Stop.Refused($why, m.stopFile, m.stopSp)) }
+
+# ---- types ----
+
+# a type's layout, computed the first time it is asked for, its embedded parts first (generic does the same, with
+# T16's report, for every type the program holds; here only for types a test or a request reaches first)
+fn (m mut Machine&) lay(ty types.TypeId) Bool {
+    t := m.T
+    st := t.LayoutState(ty)
+    if st == types.LaidOut { return true }
+    if st != types.NotLaidOut { return false }
+    t.SetLayoutState(ty, types.LayingOut)
+    ok := true
+    if t.KindOf(ty) == types.Kind.Ref { m.layRepr(t.Referent(ty)) }
+    for e in t.Embedded(ty) {
+        if not m.lay(e) { ok = false }
+    }
+    ok = ok and t.ComputeLayout(ty)
+    t.SetLayoutState(ty, types.LaidOut if ok else types.NoLayout)
+    return ok
+}
+
+# the declared types a reference's referent is over, laid out, so Repr and its shape are known
+fn (m mut Machine&) layRepr(ty types.TypeId) {
+    t := m.T
+    k := t.KindOf(ty)
+    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over and t.HasBody(ty) { m.lay(ty) }
+}
+
+fn (m mut Machine&) size(ty types.TypeId) I64 {
+    if ty == types.NullT { return 8 }
+    if ty == types.VoidT or not m.lay(ty) { return 0 }
+    return m.T.Size(ty)
+}
+
+fn (m mut Machine&) rtArray(ty types.TypeId) Bool {
+    r := m.T.Repr(ty)
+    return m.T.KindOf(r) == types.Kind.Array and m.T.Length(r) == types.TypeId(0)
+}
+
+fn (m mut Machine&) shape(ty types.TypeId) I64 {
+    t := m.T
+    m.lay(ty)
+    r := t.Repr(ty)
+    return match t.KindOf(r) {
+        case types.Kind.Void => vVoid
+        case types.Kind.Bool => vBool
+        case types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64 => vInt
+        case types.Kind.U8, types.Kind.U16, types.Kind.U32, types.Kind.U64 => vUint
+        case types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64 => vFloat
+        case types.Kind.Null => vPtr
+        case types.Kind.DefaultErr => vOrd
+        case types.Kind.Ref => vPair if m.rtArray(t.Referent(r)) else vPtr
+        case types.Kind.Func => vFunc
+        case types.Kind.Array => vPair if t.Length(r) == types.TypeId(0) else vFixed
+        case types.Kind.Tuple, types.Kind.Record => vAgg
+        case types.Kind.AnonEnum => vEnum if t.HasPayload(t.ShapeCases(r)) else vOrd
+        case types.Kind.Named => m.namedShape(r)
+        case _ => vNone
+    }
+}
+
+fn (m mut Machine&) namedShape(r types.TypeId) I64 {
+    t := m.T
+    return match t.DeclKindOf(t.DeclOf(r)) {
+        case types.DeclKind.Struct => vAgg
+        case types.DeclKind.Enum => vEnum if t.HasPayload(t.Cases(r)) else vOrd
+        case types.DeclKind.Error => vOrd
+        case _ => vNone
+    }
+}
+
+# a struct's, tuple's or record's parts, in order
+fn (m mut Machine&) partList(ty types.TypeId) types.ListId {
+    t := m.T
+    r := t.Repr(ty)
+    return match t.KindOf(r) {
+        case types.Kind.Tuple, types.Kind.Record => t.Parts(r)
+        case types.Kind.Named => t.Fields(r)
+        case _ => types.ListId(0)
+    }
+}
+
+fn (m mut Machine&) partType(ty types.TypeId, i I64) types.TypeId { return m.T.Items(m.partList(ty))[i] }
+
+# a part's offset, the type's offsets kept the first time asked for
+fn (m mut Machine&) partOffset(ty types.TypeId, i I64) I64 {
+    r := m.T.Repr(ty)
+    at := try m.offAt.Get(r) catch default -1
+    if at < 0 {
+        m.lay(r)
+        at = m.offs.Len()
+        for o in m.T.Offsets(r) { m.offs.Push(o) }
+        m.offAt.Put(r, at)
+    }
+    return m.offs[at + i]
+}
+
+# an enum's case's payload, a Record (0 for none)
+fn (m mut Machine&) payloadType(ty types.TypeId, tag I64) types.TypeId {
+    t := m.T
+    r := t.Repr(ty)
+    cs := t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
+    xs := t.Items(cs)
+    return xs[tag] if tag >= 0 and tag < xs.Len() else types.TypeId(0)
+}
+
+# the bytes one value of a number type takes
+fn (m mut Machine&) width(ty types.TypeId) I64 {
+    sh := m.shape(ty)
+    if sh == vBool { return 1 }
+    if sh == vOrd { return 4 }
+    if sh == vPtr { return 8 }
+    return m.T.Bits(m.T.Repr(ty)) / 8
+}
+
+# a fixed array's length, from its type
+fn (m mut Machine&) fixedLen(ty types.TypeId) I64 { return m.T.ConstValue(m.T.Length(m.T.Repr(ty))) }
+
+fn (m mut Machine&) elemOf(ty types.TypeId) types.TypeId {
+    t := m.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
+    return t.Elem(r)
+}
+
+# whether a value of the type reaches storage a writable reference can change (K1): a writable reference in it, held in
+# place or through the references it holds
+fn (m mut Machine&) reachesWritable(ty types.TypeId) Bool {
+    t := m.T
+    if ty in m.writableOf { return try m.writableOf.Get(ty) catch default false }
+    m.writableOf.Put(ty, false)
+    yes := false
+    r := t.Repr(ty)
+    match t.KindOf(r) {
+        case types.Kind.Ref {
+            yes = (t.PermOf(r) & types.Writable) != 0 or m.reachesWritable(t.Referent(r))
+        }
+        case types.Kind.Array { yes = m.reachesWritable(t.Elem(r)) }
+        case types.Kind.Tuple, types.Kind.Record, types.Kind.Named, types.Kind.AnonEnum {
+            for p in t.Items(m.partList(r)) { yes = yes or m.reachesWritable(p) }
+            if t.KindOf(r) == types.Kind.AnonEnum or (t.KindOf(r) == types.Kind.Named and
+                                                      t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum) {
+                cs := t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
+                for c in t.Items(cs) {
+                    if c != types.TypeId(0) { yes = yes or m.reachesWritable(c) }
+                }
+            }
+        }
+        case _ { }
+    }
+    m.writableOf.Put(ty, yes)
+    return yes
+}
+
+# ---- the heap ----
+
+# a size class: the smallest power of two from 8 holding n bytes
+fn classOf(n I64) I64 {
+    c I64 = 3
+    for (1 << c) < n { c++ }
+    return c
+}
+
+fn (m mut Machine&) grow(need I64) {
+    if need <= m.heap.Len() { return }
+    n := m.heap.Len()
+    for n < need { n *= 2 }
+    old := m.heap
+    m.heap = Array<U8>(n)
+    for i in range m.top { m.heap[i] = old[i] }
+    oldp := m.prov
+    m.prov = Array<I64>(n / 8)
+    for i in range (m.top + 7) / 8 { m.prov[i] = oldp[i] }
+}
+
+# a new allocation of n bytes in scope s, zeroed: its id at offset 0; null, stopped, past the memory budget
+fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
+    if m.halted { return NullPtr }
+    if n < 0 or n > (1 << 40) {
+        m.refuse(WhyLong)
+        return NullPtr
+    }
+    if m.MemBudget >= 0 and m.Live + n > m.MemBudget {
+        m.refuse(WhyMemory)
+        return NullPtr
+    }
+    c := classOf(n)
+    base := m.free[c]
+    if base != 0 {
+        m.free[c] = m.rdRaw(base, 8)
+        for i in range 1 << c { m.heap[base + i] = 0 }
+        for i in range (1 << c) / 8 { m.prov[base / 8 + i] = 0 }
+    } else {
+        base = m.top
+        m.grow(m.top + (1 << c))
+        m.top += 1 << c
+    }
+    slot := try m.freeAllocs.Pop() catch default m.newSlot()
+    a := m.allocs[slot]
+    a.Base, a.Size, a.Class, a.Kind, a.Scope = base, n, c, kind, s
+    a.Owner, a.ReadOnly, a.Code, a.Extern = -1, false, -1, false
+    a.Prev, a.Next = 0, 0
+    if s != 0 {
+        sc := s & slotMask
+        head := m.scopes[sc].Allocs
+        a.Next = head
+        if head != 0 { m.allocs[head].Prev = slot }
+        m.scopes[sc].Allocs = slot
+        if m.When == Mode.Compile and s == m.program and m.initGlobal >= 0 { a.Owner = m.initGlobal }
+    }
+    m.allocs[slot] = a
+    m.Live += n
+    return Ptr(a.Gen << slotBits | slot, 0)
+}
+
+fn (m mut Machine&) newSlot() I64 {
+    m.allocs.Push(alloc())
+    return m.allocs.Len() - 1
+}
+
+# frees an allocation: its block back to its class's list, its slot's generation moved on, out of its scope's list
+fn (m mut Machine&) release(slot I64) {
+    a := m.allocs[slot]
+    if a.Kind == aFree { return }
+    if a.Scope != 0 {
+        sc := a.Scope & slotMask
+        if a.Prev != 0 { m.allocs[a.Prev].Next = a.Next } else { m.scopes[sc].Allocs = a.Next }
+        if a.Next != 0 { m.allocs[a.Next].Prev = a.Prev }
+    }
+    for i in range (1 << a.Class) / 8 { m.prov[a.Base / 8 + i] = 0 }
+    m.wrRaw(a.Base, 8, m.free[a.Class])
+    m.free[a.Class] = a.Base
+    m.Live -= a.Size
+    a.Kind = aFree
+    a.Gen = (a.Gen + 1) & ((1 << 38) - 1)
+    a.Scope, a.Prev, a.Next = 0, 0, 0
+    m.allocs[slot] = a
+}
+
+# the heap address of n bytes at p, checked: the allocation live, the bytes within it, a write allowed. -1, stopped,
+# where not
+fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
+    if m.halted { return -1 }
+    if p.Id == 0 {
+        m.refuse(WhyNull)
+        return -1
+    }
+    slot := p.Id & slotMask
+    if slot >= m.allocs.Len() {
+        m.refuse(WhyClosed)
+        return -1
+    }
+    a := m.allocs[slot]
+    if a.Kind == aFree or a.Gen != p.Id >> slotBits {
+        m.refuse(WhyClosed)
+        return -1
+    }
+    if p.Off < 0 or n < 0 or p.Off + n > a.Size {
+        m.refuse(WhyBeyond)
+        return -1
+    }
+    if write {
+        if a.ReadOnly {
+            m.refuse(WhyReadOnly)
+            return -1
+        }
+        if m.When == Mode.Compile and a.Owner >= 0 and a.Owner != m.initGlobal {
+            m.refuse(WhyWritesGlobal)
+            return -1
+        }
+    }
+    return a.Base + p.Off
+}
+
+fn (m mut Machine&) rdRaw(addr I64, n I64) I64 {
+    v I64 = 0
+    for i in range n { v = v | (I64(m.heap[addr + i]) << (8 * i)) }
+    return v
+}
+
+fn (m mut Machine&) wrRaw(addr I64, n I64, v I64) {
+    for i in range n { m.heap[addr + i] = U8((v >> (8 * i)) & 0xFF) }
+}
+
+# a pointer stored at addr is no longer one where bytes over it are written
+fn (m mut Machine&) unmark(addr I64, n I64) {
+    if n <= 0 { return }
+    for w in range addr / 8, (addr + n - 1) / 8 + 1 { m.prov[w] = 0 }
+}
+
+# n bytes at p, as an integer zero-extended from them
+fn (m mut Machine&) rd(p Ptr, n I64) I64 {
+    a := m.at(p, n, false)
+    if a < 0 { return 0 }
+    return m.rdRaw(a, n)
+}
+
+fn (m mut Machine&) wr(p Ptr, n I64, v I64) {
+    a := m.at(p, n, true)
+    if a < 0 { return }
+    m.unmark(a, n)
+    m.wrRaw(a, n, v)
+}
+
+# the reference stored at p
+fn (m mut Machine&) rdPtr(p Ptr) Ptr {
+    a := m.at(p, 8, false)
+    if a < 0 { return NullPtr }
+    off := m.rdRaw(a, 8)
+    id := m.prov[a / 8] if a % 8 == 0 else 0
+    if id == 0 and off != 0 {
+        m.refuse(WhyNotModelled)
+        return NullPtr
+    }
+    return Ptr(id, off)
+}
+
+fn (m mut Machine&) wrPtr(p Ptr, q Ptr) {
+    a := m.at(p, 8, true)
+    if a < 0 { return }
+    m.unmark(a, 8)
+    m.wrRaw(a, 8, q.Off)
+    if q.Id != 0 {
+        if a % 8 != 0 {
+            m.refuse(WhyNotModelled)
+            return
+        }
+        m.prov[a / 8] = q.Id
+    }
+}
+
+# n bytes from src to dst, the pointers among them with them; the two may overlap
+fn (m mut Machine&) copy(dst Ptr, src Ptr, n I64) {
+    if n <= 0 { return }
+    s := m.at(src, n, false)
+    d := m.at(dst, n, true)
+    if s < 0 or d < 0 { return }
+    m.move(d, s, n)
+}
+
+fn (m mut Machine&) move(d I64, s I64, n I64) {
+    if d == s { return }
+    if d < s {
+        for i in range n { m.heap[d + i] = m.heap[s + i] }
+    } else {
+        for i in range n { m.heap[d + n - 1 - i] = m.heap[s + n - 1 - i] }
+    }
+    aligned := (d - s) % 8 == 0
+    lo, hi := d / 8, (d + n - 1) / 8 + 1
+    if not aligned {
+        for w in range lo, hi { m.prov[w] = 0 }
+        return
+    }
+    shift := (s - d) / 8
+    if d < s {
+        for w in range lo, hi { m.prov[w] = m.prov[w + shift] if w * 8 >= d and w * 8 + 8 <= d + n else 0 }
+    } else {
+        for k in range hi - lo {
+            w := hi - 1 - k
+            m.prov[w] = m.prov[w + shift] if w * 8 >= d and w * 8 + 8 <= d + n else 0
+        }
+    }
+}
+
+fn (m mut Machine&) zero(dst Ptr, n I64) {
+    if n <= 0 { return }
+    d := m.at(dst, n, true)
+    if d < 0 { return }
+    m.unmark(d, n)
+    for i in range n { m.heap[d + i] = 0 }
+}
+
+fn (m mut Machine&) allocOf(id I64) alloc { return m.allocs[id & slotMask] }
+
+# a scratch allocation of at least n bytes (k: 0 the register an aggregate is built in, 1-3 an operand's)
+fn (m mut Machine&) scratchFor(k I64, n I64) Ptr {
+    id := m.scratch if k == 0 else m.tmps[k - 1]
+    if m.allocOf(id).Size >= n { return Ptr(id, 0) }
+    m.release(id & slotMask)
+    p := m.allocate(n * 2, aValue, m.program)
+    if k == 0 { m.scratch = p.Id } else { m.tmps[k - 1] = p.Id }
+    return p
+}
+
+# ---- scopes ----
+
+fn (m mut Machine&) newScope(kind I64) I64 {
+    slot := try m.freeScopes.Pop() catch default m.newScopeSlot()
+    s := m.scopes[slot]
+    s.Live, s.Kind, s.Allocs, s.Regs, s.Parent, s.Child, s.Sibling = true, kind, 0, -1, 0, 0, 0
+    s.Buf, s.BufLen, s.Tasks, s.TasksEnd, s.Kept, s.Errors = 0, 0, -1, -1, 0, 0
+    m.scopes[slot] = s
+    return s.Gen << slotBits | slot
+}
+
+fn (m mut Machine&) newScopeSlot() I64 {
+    m.scopes.Push(scope())
+    return m.scopes.Len() - 1
+}
+
+# whether a scope id names a scope still open
+fn (m mut Machine&) live(id I64) Bool {
+    slot := id & slotMask
+    return id != 0 and slot < m.scopes.Len() and m.scopes[slot].Live and m.scopes[slot].Gen == id >> slotBits
+}
+
+fn (m mut Machine&) addReg(s I64, kind I64, ty I64, p Ptr) {
+    if not m.live(s) {
+        m.refuse(WhyClosed)
+        return
+    }
+    slot := try m.freeRegs.Pop() catch default m.newRegSlot()
+    sc := s & slotMask
+    r := reg()
+    r.Kind, r.Ty, r.Id, r.Off, r.Next = kind, ty, p.Id, p.Off, m.scopes[sc].Regs
+    m.regs[slot] = r
+    m.scopes[sc].Regs = slot
+}
+
+fn (m mut Machine&) newRegSlot() I64 {
+    m.regs.Push(reg())
+    return m.regs.Len() - 1
+}
+
+# a region given to the own slot stored last: it closes when that slot's scope does, unless released before (O30)
+fn (m mut Machine&) adopt(region I64, parent I64) {
+    if not m.live(parent) or not m.live(region) { return }
+    r, p := region & slotMask, parent & slotMask
+    m.scopes[r].Parent = parent
+    m.scopes[r].Sibling = m.scopes[p].Child
+    m.scopes[p].Child = region
+}
+
+fn (m mut Machine&) disown(region I64) {
+    r := region & slotMask
+    parent := m.scopes[r].Parent
+    if parent == 0 or not m.live(parent) { return }
+    p := parent & slotMask
+    if m.scopes[p].Child == region {
+        m.scopes[p].Child = m.scopes[r].Sibling
+    } else {
+        c := m.scopes[p].Child
+        for c != 0 {
+            next := m.scopes[c & slotMask].Sibling
+            if next == region {
+                m.scopes[c & slotMask].Sibling = m.scopes[r].Sibling
+                break
+            }
+            c = next
+        }
+    }
+    m.scopes[r].Parent = 0
+}
+
+# one step of closing the scope on top of the closing stack: its next registration run (a destructor as a frame, an
+# owner's region pushed to close), else its next region, else its allocations freed and it gone
+fn (m mut Machine&) stepClose() {
+    id := m.closing[m.closing.Len() - 1]
+    sc := id & slotMask
+    if not m.live(id) {
+        try m.closing.Pop() catch { }
+        return
+    }
+    r := m.scopes[sc].Regs
+    if r >= 0 {
+        g := m.regs[r]
+        m.scopes[sc].Regs = g.Next
+        m.freeRegs.Push(r)
+        if g.Kind == gDtor {
+            m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
+        } else {
+            m.releaseSlot(Ptr(g.Id, g.Off))
+        }
+        return
+    }
+    c := m.scopes[sc].Child
+    if c != 0 {
+        m.scopes[sc].Child = m.scopes[c & slotMask].Sibling
+        m.scopes[c & slotMask].Parent = 0
+        if m.live(c) { m.closing.Push(c) }
+        return
+    }
+    for m.scopes[sc].Allocs != 0 { m.release(m.scopes[sc].Allocs) }
+    s := m.scopes[sc]
+    s.Live = false
+    s.Gen = (s.Gen + 1) & ((1 << 38) - 1)
+    m.scopes[sc] = s
+    m.freeScopes.Push(sc)
+    try m.closing.Pop() catch { }
+}
+
+# the own slot at p let go of: its object's region closed and the slot left null (O35)
+fn (m mut Machine&) releaseSlot(p Ptr) {
+    q := m.rdPtr(p)
+    if m.halted or q.Id == 0 { return }
+    m.wrPtr(p, NullPtr)
+    region := m.allocOf(q.Id).Scope
+    if not m.live(region) { return }
+    m.disown(region)
+    m.closing.Push(region)
+}
+
+fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
+    k := try m.dtors.Get(t) catch {
+        m.refuse(WhyNoBody)
+        return
+    }
+    fi := try m.fnOf.Get(k) catch {
+        m.refuse(WhyNoBody)
+        return
+    }
+    fr := m.pushFrame(fi, rDtor, 0)
+    if fr < 0 { return }
+    f := m.fns[fi]
+    if f.Params.Len() > 0 { m.wrPtr(m.localPtr(fr, f.Params[0]), p) }
+    for i in range f.Vars.Len() { m.varIds[m.frames[fr].Vars + i] = closing }
+}
+
+# ---- frames ----
+
+# a frame for function fi pushed: its own storage, its frame locals made there, its scope variables to be set by the
+# caller. Its index; -1, stopped, past the depth budget
+fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
+    if m.frames.Len() >= m.DepthBudget {
+        m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
+        return -1
+    }
+    f := m.fns[fi]
+    fr := frame()
+    fr.Fn, fr.Ret, fr.RetArg = fi, ret, retArg
+    fr.Locals, fr.Scopes, fr.Vars = m.localIds.Len(), m.scopeIds.Len(), m.varIds.Len()
+    fr.Closing = m.closing.Len()
+    fr.Store = m.newScope(sStore)
+    for l in f.Locals {
+        id I64 = 0
+        if l.Home == mir.ScopeRef.Frame {
+            id = m.allocate(m.size(l.Ty), aValue, fr.Store).Id
+        }
+        m.localIds.Push(id)
+    }
+    for i in range f.Scopes.Len() { m.scopeIds.Push(0) }
+    for i in range f.Vars.Len() { m.varIds.Push(0) }
+    m.frames.Push(fr)
+    return m.frames.Len() - 1
+}
+
+fn (m mut Machine&) popFrame() {
+    fr := try m.frames.Pop() catch { return }
+    m.localIds.Truncate(fr.Locals)
+    m.scopeIds.Truncate(fr.Scopes)
+    m.varIds.Truncate(fr.Vars)
+}
+
+fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
+    id := m.localIds[m.frames[fi].Locals + I64(l)]
+    if id == 0 {
+        m.refuse(WhyClosed)
+        return NullPtr
+    }
+    return Ptr(id, 0)
+}
+
+fn (m mut Machine&) fnOfFrame(fi I64) mir.Fn { return m.fns[m.frames[fi].Fn] }
+
+# the scope a ScopeRef names in frame fi
+fn (m mut Machine&) scopeOf(fi I64, r mir.ScopeRef) I64 {
+    fr := m.frames[fi]
+    return match r {
+        case mir.ScopeRef.Scope(s) => m.scopeIds[fr.Scopes + I64(s)]
+        case mir.ScopeRef.Var(i) => m.varIds[fr.Vars + i]
+        case mir.ScopeRef.Program => m.program
+        case mir.ScopeRef.Frame => fr.Store
+        case mir.ScopeRef.RegionOf(l) => m.regionOf(fi, l)
+    }
+}
+
+fn (m mut Machine&) regionOf(fi I64, l mir.LocalId) I64 {
+    q := m.rdPtr(m.localPtr(fi, l))
+    if q.Id == 0 { return 0 }
+    return m.allocOf(q.Id).Scope
+}
+
+# where something is built in scope s: refused where s is not open
+fn (m mut Machine&) buildScope(fi I64, r mir.ScopeRef) I64 {
+    s := m.scopeOf(fi, r)
+    if not m.live(s) {
+        m.refuse(WhyClosed)
+        return 0
+    }
+    return s
+}
+
+# ---- places ----
+
+# a place's storage and its type, in frame fi
+fn (m mut Machine&) place(fi I64, p mir.Place) (Ptr, types.TypeId) {
+    f := m.fnOfFrame(fi)
+    t := m.T
+    ptr := NullPtr
+    ty := types.UnknownT
+    match p.B {
+        case mir.Base.Local(l) {
+            ptr = m.localPtr(fi, l)
+            ty = f.Locals[I64(l)].Ty
+        }
+        case mir.Base.Global(module, name, gt) {
+            g := try m.globalOf.Get(gkey(module, name)) catch {
+                m.refuse(WhyNoBody)
+                return NullPtr, gt
+            }
+            ptr = Ptr(m.globals[g].Store, 0)
+            ty = gt
+        }
+        case mir.Base.None { }
+    }
+    for i in range p.Path.N {
+        if m.halted { return NullPtr, ty }
+        match f.Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Field(k) {
+                ptr = Ptr(ptr.Id, ptr.Off + m.partOffset(ty, k))
+                ty = m.partType(ty, k)
+            }
+            case mir.Proj.Index(l) {
+                lt := f.Locals[I64(l)].Ty
+                v := m.intValue(m.rd(m.localPtr(fi, l), m.width(lt)), lt)
+                ptr, ty = m.element(ptr, ty, v)
+            }
+            case mir.Proj.At(k) { ptr, ty = m.element(ptr, ty, k) }
+            case mir.Proj.Deref {
+                r := t.Referent(t.Repr(ty))
+                if not m.rtArray(r) { ptr = m.rdPtr(ptr) }
+                if ptr.Id == 0 { m.refuse(WhyNull) }
+                ty = r
+            }
+            case mir.Proj.Payload(tag) {
+                if m.rd(ptr, 8) != tag { m.refuse(WhyPayload) }
+                ptr = Ptr(ptr.Id, ptr.Off + 8)
+                ty = m.payloadType(ty, tag)
+            }
+        }
+    }
+    return ptr, ty
+}
+
+# element i of the array at p
+fn (m mut Machine&) element(p Ptr, ty types.TypeId, i I64) (Ptr, types.TypeId) {
+    e := m.elemOf(ty)
+    data, n := m.arrayView(p, ty)
+    if m.halted { return NullPtr, e }
+    if i < 0 or i >= n {
+        m.refuse(WhyOutside)
+        return NullPtr, e
+    }
+    return Ptr(data.Id, data.Off + i * m.size(e)), e
+}
+
+# an array's elements and how many, from storage at p holding a value of type ty: a fixed array in place, a run-time
+# one or a reference to either through what it holds
+fn (m mut Machine&) arrayView(p Ptr, ty types.TypeId) (Ptr, I64) {
+    t := m.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.Ref {
+        x := t.Repr(t.Referent(r))
+        if t.Length(x) != types.TypeId(0) { return m.rdPtr(p), m.fixedLen(x) }
+    } else if t.Length(r) != types.TypeId(0) {
+        return p, m.fixedLen(r)
+    }
+    n := m.rd(p, 8)
+    data := m.rdPtr(Ptr(p.Id, p.Off + 8))
+    if n > 0 and data.Id == 0 { m.refuse(WhyNull) }
+    return data, n
+}
+
+# ---- operands ----
+
+fn (m mut Machine&) opType(fi I64, x mir.Operand) types.TypeId {
+    return match x {
+        case mir.Operand.None => types.VoidT
+        case mir.Operand.Copy(p) => m.placeType(fi, p)
+        case mir.Operand.Const(ty, _), mir.Operand.Data(ty, _, _, _) => ty
+    }
+}
+
+# a place's type, its projections followed with no memory read
+fn (m mut Machine&) placeType(fi I64, p mir.Place) types.TypeId {
+    f := m.fnOfFrame(fi)
+    t := m.T
+    ty := match p.B {
+        case mir.Base.Local(l) => f.Locals[I64(l)].Ty
+        case mir.Base.Global(_, _, gt) => gt
+        case mir.Base.None => types.UnknownT
+    }
+    for i in range p.Path.N {
+        ty = match f.Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Field(k) => m.partType(ty, k)
+            case mir.Proj.Index(_), mir.Proj.At(_) => m.elemOf(ty)
+            case mir.Proj.Deref => t.Referent(t.Repr(ty))
+            case mir.Proj.Payload(tag) => m.payloadType(ty, tag)
+        }
+    }
+    return ty
+}
+
+# an operand's value written into storage at dst, n bytes of a dt
+fn (m mut Machine&) put(fi I64, dst Ptr, dt types.TypeId, x mir.Operand) {
+    match x {
+        case mir.Operand.None { }
+        case mir.Operand.Copy(p) {
+            src, st := m.place(fi, p)
+            m.copy(dst, src, m.size(st))
+        }
+        case mir.Operand.Const(ty, bits) {
+            n := m.size(dt)
+            if bits == 0 or m.shape(ty) == vAgg or m.shape(ty) == vFixed {
+                m.zero(dst, n)
+            } else {
+                m.wr(dst, m.width(ty), bits)
+            }
+        }
+        case mir.Operand.Data(ty, c, file, sp) { m.putData(fi, dst, ty, c, file, sp) }
+    }
+}
+
+# an operand's storage: a place's own, or a scratch allocation k holding the value
+fn (m mut Machine&) addr(fi I64, x mir.Operand, k I64) Ptr {
+    match x {
+        case mir.Operand.Copy(p) {
+            ptr, _ := m.place(fi, p)
+            return ptr
+        }
+        case _ { }
+    }
+    ty := m.opType(fi, x)
+    s := m.scratchFor(k, m.size(ty) + 16)
+    m.put(fi, s, ty, x)
+    return s
+}
+
+# a scalar operand's bits, zero-extended from its width
+fn (m mut Machine&) scalar(fi I64, x mir.Operand) I64 {
+    return match x {
+        case mir.Operand.None => 0
+        case mir.Operand.Const(ty, bits) => bits & m.mask(m.width(ty))
+        case _ => m.rd(m.addr(fi, x, 1), m.width(m.opType(fi, x)))
+    }
+}
+
+fn (m mut Machine&) mask(n I64) I64 { return -1 if n >= 8 else (1 << (8 * n)) - 1 }
+
+# an integer's value from its bits: sign-extended for a signed type, as stored for an unsigned one
+fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
+    w := m.width(ty)
+    if w >= 8 { return bits }
+    v := bits & m.mask(w)
+    if m.shape(ty) == vInt and ((v >> (8 * w - 1)) & 1) == 1 { return v | ~m.mask(w) }
+    return v
+}
+
+# ---- constant data (T25d) ----
+
+# read-only storage of a constant, one instance per written position and type, made the first time it is asked for;
+# its elements, and how many
+fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) (Ptr, I64) {
+    key := dkey(file, sp.Start, sp.End, ty)
+    id := try m.datas.Get(key) catch default 0
+    node := f.Consts[I64(c)]
+    n := m.constLen(f, node)
+    if id == 0 {
+        e := m.elemOf(ty)
+        p := m.allocate(n * m.size(e), aData, m.program)
+        if m.halted { return NullPtr, 0 }
+        m.writeElems(f, p, e, node)
+        m.allocs[p.Id & slotMask].ReadOnly = true
+        id = p.Id
+        m.datas.Put(key, id)
+    }
+    return Ptr(id, 0), n
+}
+
+fn (m mut Machine&) constLen(f mir.Fn&, node mir.ConstNode) I64 {
+    return match node {
+        case mir.ConstNode.Bits(_) => 1
+        case mir.ConstNode.Bytes(r), mir.ConstNode.Items(r) => I64(r.N)
+    }
+}
+
+# a constant's elements written from p on, each an e
+fn (m mut Machine&) writeElems(f mir.Fn&, p Ptr, e types.TypeId, node mir.ConstNode) {
+    es := m.size(e)
+    match node {
+        case mir.ConstNode.Bits(v) { m.wr(p, m.width(e), v) }
+        case mir.ConstNode.Bytes(r) {
+            for i in range r.N { m.wr(Ptr(p.Id, p.Off + i), 1, I64(f.Bytes[I64(r.At) + i])) }
+        }
+        case mir.ConstNode.Items(r) {
+            for i in range r.N {
+                item := f.Consts[I64(f.ConstItems[I64(r.At) + i])]
+                at := Ptr(p.Id, p.Off + i * es)
+                sh := m.shape(e)
+                match item {
+                    case mir.ConstNode.Bits(v) { m.wr(at, m.width(e), v) }
+                    case _ {
+                        if sh == vFixed {
+                            m.writeElems(f, at, m.elemOf(e), item)
+                        } else {
+                            # a nested array: storage of its own, held by reference
+                            n := m.constLen(f, item)
+                            ee := m.elemOf(e)
+                            q := m.allocate(n * m.size(ee), aData, m.program)
+                            if m.halted { return }
+                            m.writeElems(f, q, ee, item)
+                            m.allocs[q.Id & slotMask].ReadOnly = true
+                            if sh == vPair { m.wr(at, 8, n) }
+                            m.wrPtr(Ptr(at.Id, at.Off + (8 if sh == vPair else 0)), q)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, sp source.Span) {
+    f := m.fnOfFrame(fi)
+    node := f.Consts[I64(c)]
+    match node {
+        case mir.ConstNode.Bits(v) {
+            m.wr(dst, m.width(ty), v)
+            return
+        }
+        case _ { }
+    }
+    p, n := m.dataFor(f, ty, c, file, sp)
+    if m.halted { return }
+    match m.shape(ty) {
+        case vPair {
+            m.wr(dst, 8, n)
+            m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
+        }
+        case vPtr { m.wrPtr(dst, p) }
+        case vFixed { m.copy(dst, p, m.size(ty)) }
+        nomatch { m.refuse(WhyNotModelled) }
+    }
+}
+
+# ---- rvalues ----
+
+# a statement's value stored into a place (S4): the place first, its index locals read, then the value, then the store
+fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
+    dst, dt := m.place(fi, p)
+    if m.halted { return }
+    t := m.T
+    if t.IsRef(t.Repr(dt)) and (t.PermOf(t.Repr(dt)) & types.Owning) != 0 { m.lastOwnScope = m.allocOf(dst.Id).Scope }
+    match rv {
+        case mir.Rvalue.Use(x) { m.put(fi, dst, dt, x) }
+        case mir.Rvalue.Ref(q, ty) { m.ref(fi, dst, q, ty) }
+        case mir.Rvalue.Take(q) {
+            src, st := m.place(fi, q)
+            n := m.size(st)
+            s := m.scratchFor(0, n)
+            m.copy(s, src, n)
+            m.zero(src, n)
+            m.copy(dst, s, n)
+        }
+        case mir.Rvalue.Prim(op, ty, args) { m.wr(dst, m.width(ty), m.prim(fi, op, ty, args)) }
+        case mir.Rvalue.Overflows(op, ty, args) { m.wr(dst, 1, 1 if m.overflows(fi, op, ty, args) else 0) }
+        case mir.Rvalue.Tag(q) {
+            src, st := m.place(fi, q)
+            m.wr(dst, 8, m.tagOf(src, st))
+        }
+        case mir.Rvalue.Aggregate(ty, tag, args) { m.aggregate(fi, dst, ty, tag, args) }
+        case mir.Rvalue.New(s, x, ty) { m.newRef(fi, dst, s, x, ty) }
+        case mir.Rvalue.NewArray(s, ty, n, fill) { m.newArray(fi, dst, s, ty, n, fill) }
+        case mir.Rvalue.Slice(q, lo, hi, ty) { m.slice(fi, dst, q, lo, hi, ty) }
+        case mir.Rvalue.Closure(code, ty, s, args) { m.closure(fi, dst, code, s, args) }
+        case mir.Rvalue.Recode(x, from, to) {
+            m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
+        }
+        case mir.Rvalue.Text(b, into, ty) { m.text(fi, dst, b, into) }
+    }
+}
+
+fn (m mut Machine&) tagOf(p Ptr, ty types.TypeId) I64 {
+    if m.shape(ty) == vOrd { return m.intValue(m.rd(p, 4), mir.I32T) }
+    return m.rd(p, 8)
+}
+
+# a reference to a place itself (E12c): its address, or for an array the pair (length, storage) a reference to a
+# run-time-length array is (T11), a fixed array's length from its type
+fn (m mut Machine&) ref(fi I64, dst Ptr, q mir.Place, ty types.TypeId) {
+    src, st := m.place(fi, q)
+    if m.halted { return }
+    if m.shape(ty) != vPair {
+        m.wrPtr(dst, src)
+        return
+    }
+    if m.shape(st) == vPair {
+        m.copy(dst, src, 16)
+        return
+    }
+    m.wr(dst, 8, m.fixedLen(st))
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), src)
+}
+
+fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mir.Range) {
+    f := m.fnOfFrame(fi)
+    n := m.size(ty)
+    s := m.scratchFor(0, n)
+    m.zero(s, n)
+    sh := m.shape(ty)
+    for i in range args.N {
+        x := f.Ops[I64(args.At) + i]
+        if sh == vFixed {
+            e := m.elemOf(ty)
+            m.put(fi, Ptr(s.Id, i * m.size(e)), e, x)
+        } else if sh == vEnum {
+            pl := m.payloadType(ty, tag)
+            m.put(fi, Ptr(s.Id, 8 + m.partOffset(pl, i)), m.partType(pl, i), x)
+        } else {
+            m.put(fi, Ptr(s.Id, m.partOffset(ty, i)), m.partType(ty, i), x)
+        }
+    }
+    if sh == vEnum { m.wr(s, 8, tag) } else if sh == vOrd { m.wr(s, 4, tag) }
+    m.copy(dst, s, n)
+}
+
+fn (m mut Machine&) newRef(fi I64, dst Ptr, s mir.ScopeRef, x mir.Operand, ty types.TypeId) {
+    r := m.T.Referent(m.T.Repr(ty))
+    if m.rtArray(r) {
+        m.put(fi, dst, r, x)
+        return
+    }
+    sc := m.buildScope(fi, s)
+    if m.halted { return }
+    p := m.allocate(m.size(r), aValue, sc)
+    m.put(fi, p, r, x)
+    m.wrPtr(dst, p)
+}
+
+fn (m mut Machine&) newArray(fi I64, dst Ptr, s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill mir.Operand) {
+    e := m.elemOf(ty)
+    count := m.intValue(m.scalar(fi, n), m.opType(fi, n))
+    es := m.size(e)
+    if count < 0 or (es > 0 and count > (1 << 40) / es) {
+        m.refuse(WhyLong)
+        return
+    }
+    sc := m.buildScope(fi, s)
+    if m.halted { return }
+    p := m.allocate(count * es, aValue, sc)
+    if m.halted { return }
+    if fill != mir.Operand.None and count > 0 {
+        m.put(fi, p, e, fill)
+        for i in range 1, count { m.copy(Ptr(p.Id, i * es), p, es) }
+    }
+    m.wr(dst, 8, count)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
+}
+
+fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Place, lo mir.Operand, hi mir.Operand, ty types.TypeId) {
+    src, st := m.place(fi, q)
+    if m.halted { return }
+    data, n := m.arrayView(src, st)
+    a := m.intValue(m.scalar(fi, lo), m.opType(fi, lo))
+    b := m.intValue(m.scalar(fi, hi), m.opType(fi, hi))
+    if m.halted { return }
+    if a < 0 or a > b or b > n {
+        m.refuse(WhyOutside)
+        return
+    }
+    es := m.size(m.elemOf(st))
+    m.wr(dst, 8, b - a)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), Ptr(data.Id, data.Off + a * es) if b > a or data.Id != 0 else NullPtr)
+}
+
+# the code allocation standing for a function: a function value's first word
+fn (m mut Machine&) codePtr(k mir.FnKey) Ptr {
+    i := m.codeIndex(k)
+    if m.codeAllocs[i] == 0 {
+        p := m.allocate(0, aCode, m.program)
+        m.allocs[p.Id & slotMask].Code = i
+        m.codeAllocs[i] = p.Id
+    }
+    return Ptr(m.codeAllocs[i], 0)
+}
+
+# a function value (T21): its code, and an environment in s holding its captures in order, then the scope each lives
+# in (D16c); none for a named function
+fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, args mir.Range) {
+    cp := m.codePtr(code)
+    if args.N == I32(0) {
+        m.wrPtr(dst, cp)
+        m.wrPtr(Ptr(dst.Id, dst.Off + 8), NullPtr)
+        return
+    }
+    f := m.fnOfFrame(fi)
+    tys := Array<types.TypeId>(I64(args.N))
+    for i in range args.N { tys[i] = m.opType(fi, f.Ops[I64(args.At) + i]) }
+    offs, total := m.pack(tys)
+    sc := m.buildScope(fi, s)
+    if m.halted { return }
+    env := m.allocate(total + 8 * I64(args.N), aValue, sc)
+    for i in range args.N {
+        x := f.Ops[I64(args.At) + i]
+        m.put(fi, Ptr(env.Id, offs[i]), tys[i], x)
+        # where the capture lives: its referent's scope for a reference, the environment's for a value
+        held := sc
+        if m.shape(tys[i]) == vPtr or m.shape(tys[i]) == vPair {
+            q := m.rdPtr(Ptr(env.Id, offs[i] + (8 if m.shape(tys[i]) == vPair else 0)))
+            if q.Id != 0 { held = m.allocOf(q.Id).Scope }
+        }
+        m.wr(Ptr(env.Id, total + 8 * i), 8, held)
+    }
+    m.wrPtr(dst, cp)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), env)
+}
+
+# types laid out one after another, each at its own alignment, as a record is: their offsets and the whole size
+# rounded to 8
+fn (m mut Machine&) pack(tys Array<types.TypeId>&) (Array<I64>, I64) {
+    offs := Array<I64>(tys.Len())
+    off I64 = 0
+    for i in range tys.Len() {
+        m.lay(tys[i])
+        a := m.T.Align(tys[i]) if tys[i] != types.VoidT else 1
+        if a < 1 { a = 1 }
+        off = (off + a - 1) / a * a
+        offs[i] = off
+        off += m.size(tys[i])
+    }
+    return offs, (off + 7) / 8 * 8
+}
+
+# an error code under one list as the same error under another (R6, R17)
+fn (m mut Machine&) recode(code I64, from types.ListId, to types.ListId) I64 {
+    if code == 0 { return 0 }
+    xs := m.T.Items(from)
+    k := (code >> 16) - 1
+    if k < 0 or k >= xs.Len() {
+        m.refuse(WhyNotModelled)
+        return 0
+    }
+    c := mir.ErrorCode(m.T, to, xs[k], code & 0xFFFF)
+    if c < 0 {
+        m.refuse(WhyNotModelled)
+        return 0
+    }
+    return c
+}
+
+fn (m mut Machine&) text(fi I64, dst Ptr, b mir.ScopeRef, into mir.ScopeRef) {
+    bs := m.scopeOf(fi, b)
+    sc := m.buildScope(fi, into)
+    if m.halted or not m.live(bs) { return }
+    n := m.scopes[bs & slotMask].BufLen
+    p := m.allocate(n, aValue, sc)
+    if m.halted { return }
+    if n > 0 { m.copy(p, Ptr(m.scopes[bs & slotMask].Buf, 0), n) }
+    m.wr(dst, 8, n)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
+}
+
+# ---- operations (E6-E8, E26, E33) ----
+
+fn (m mut Machine&) arg(fi I64, args mir.Range, i I64) mir.Operand { return m.fnOfFrame(fi).Ops[I64(args.At) + i] }
+
+fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) I64 {
+    x := m.arg(fi, args, 0)
+    at := m.opType(fi, x)
+    match op {
+        case typed.PrimOp.Len { return m.lenOf(fi, x, at) }
+        case typed.PrimOp.Same {
+            p := m.addr(fi, x, 1)
+            q := m.addr(fi, m.arg(fi, args, 1), 2)
+            n := m.size(at)
+            if m.halted { return 0 }
+            for w in range (n + 7) / 8 {
+                a := m.rdPtrOrBits(Ptr(p.Id, p.Off + 8 * w))
+                b := m.rdPtrOrBits(Ptr(q.Id, q.Off + 8 * w))
+                if a.Id != b.Id or a.Off != b.Off { return 0 }
+            }
+            return 1
+        }
+        case typed.PrimOp.IsCase {
+            return 1 if m.tagOf(m.addr(fi, x, 1), at) == m.scalar(fi, m.arg(fi, args, 1)) else 0
+        }
+        case typed.PrimOp.Convert { return m.convert(m.scalar(fi, x), at, ty) }
+        case typed.PrimOp.Bitcast { return m.bitcast(m.scalar(fi, x), at) }
+        case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap,
+             typed.PrimOp.AtomicCompareSwap { return m.atomic(fi, op, args, at) }
+        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl {
+            m.refuse(WhyNotModelled)
+            return 0
+        }
+        nomatch { }
+    }
+    sh := m.shape(at)
+    a := m.scalar(fi, x)
+    if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not {
+        return m.unary(op, a, at, sh)
+    }
+    yt := m.opType(fi, m.arg(fi, args, 1))
+    b := m.scalar(fi, m.arg(fi, args, 1))
+    if m.halted { return 0 }
+    if sh == vFloat { return m.floatOp(op, a, b, at) }
+    if sh == vInt or sh == vUint { return m.intOp(op, a, b, at, yt) }
+    if sh == vBool {
+        return match op {
+            case typed.PrimOp.BitAnd => a & b
+            case typed.PrimOp.BitOr => a | b
+            case typed.PrimOp.BitXor, typed.PrimOp.Ne => a ^ b
+            case typed.PrimOp.Eq => 1 if a == b else 0
+            case typed.PrimOp.Lt => 1 if a < b else 0
+            case typed.PrimOp.Le => 1 if a <= b else 0
+            case typed.PrimOp.Gt => 1 if a > b else 0
+            case typed.PrimOp.Ge => 1 if a >= b else 0
+            nomatch => m.notModelled()
+        }
+    }
+    # == and != of anything else (a reference, an error code, a plain enum): its words alike
+    if op == typed.PrimOp.Eq or op == typed.PrimOp.Ne {
+        p := m.addr(fi, x, 1)
+        q := m.addr(fi, m.arg(fi, args, 1), 2)
+        same := true
+        n := m.size(at)
+        for w in range (n + 7) / 8 {
+            k := 8 if n - 8 * w >= 8 else n - 8 * w
+            pa := m.rdPtrOrBits(Ptr(p.Id, p.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(p.Id, p.Off + 8 * w), k))
+            qa := m.rdPtrOrBits(Ptr(q.Id, q.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(q.Id, q.Off + 8 * w), k))
+            if pa.Id != qa.Id or pa.Off != qa.Off { same = false }
+        }
+        return 1 if same == (op == typed.PrimOp.Eq) else 0
+    }
+    return m.notModelled()
+}
+
+fn (m mut Machine&) notModelled() I64 {
+    m.refuse(WhyNotModelled)
+    return 0
+}
+
+# a word as a reference where one is stored there, else as bits
+fn (m mut Machine&) rdPtrOrBits(p Ptr) Ptr {
+    a := m.at(p, 8, false)
+    if a < 0 { return NullPtr }
+    return Ptr(m.prov[a / 8] if a % 8 == 0 else 0, m.rdRaw(a, 8))
+}
+
+fn (m mut Machine&) lenOf(fi I64, x mir.Operand, at types.TypeId) I64 {
+    t := m.T
+    r := t.Repr(at)
+    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
+    if t.Length(r) != types.TypeId(0) { return m.fixedLen(r) }
+    return m.rd(m.addr(fi, x, 1), 8)
+}
+
+fn (m mut Machine&) unary(op typed.PrimOp, a I64, at types.TypeId, sh I64) I64 {
+    w := m.width(at)
+    return match op {
+        case typed.PrimOp.Not => a ^ 1
+        case typed.PrimOp.BitNot => ~a & m.mask(w)
+        nomatch => (a ^ (1 << (8 * w - 1))) & m.mask(w) if sh == vFloat else (0 - a) & m.mask(w)
+    }
+}
+
+fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt types.TypeId) I64 {
+    w := m.width(at)
+    signed := m.shape(at) == vInt
+    x := m.intValue(a, at)
+    y := m.intValue(b, at)
+    ux, uy := U64(a & m.mask(w)), U64(b & m.mask(w))
+    min := I64(1) << (8 * w - 1) if w < 8 else -9223372036854775807 - 1
+    r I64 = 0
+    match op {
+        case typed.PrimOp.Add { r = x + y }
+        case typed.PrimOp.Sub { r = x - y }
+        case typed.PrimOp.Mul { r = x * y }
+        case typed.PrimOp.Div, typed.PrimOp.Rem {
+            if y == 0 {
+                m.refuse(WhyDivZero)
+                return 0
+            }
+            if signed {
+                if y == -1 and (x == min or (w < 8 and x == -min)) {
+                    m.refuse(WhyDivMin)
+                    return 0
+                }
+                r = x / y if op == typed.PrimOp.Div else x % y
+            } else {
+                r = I64(ux / uy) if op == typed.PrimOp.Div else I64(ux % uy)
+            }
+        }
+        case typed.PrimOp.Shl, typed.PrimOp.Shr {
+            n := m.intValue(b, bt)
+            if m.shape(bt) == vUint and m.width(bt) == 8 and b < 0 { n = 64 }
+            if n < 0 or n >= 8 * w {
+                m.refuse(WhyShift)
+                return 0
+            }
+            if op == typed.PrimOp.Shl {
+                r = x << n
+            } else if signed {
+                r = x >> n
+            } else {
+                r = I64(ux >> U64(n))
+            }
+        }
+        case typed.PrimOp.BitAnd { r = x & y }
+        case typed.PrimOp.BitOr { r = x | y }
+        case typed.PrimOp.BitXor { r = x ^ y }
+        case typed.PrimOp.Eq { return 1 if x == y else 0 }
+        case typed.PrimOp.Ne { return 1 if x != y else 0 }
+        case typed.PrimOp.Lt { return 1 if (x < y if signed else ux < uy) else 0 }
+        case typed.PrimOp.Le { return 1 if (x <= y if signed else ux <= uy) else 0 }
+        case typed.PrimOp.Gt { return 1 if (x > y if signed else ux > uy) else 0 }
+        case typed.PrimOp.Ge { return 1 if (x >= y if signed else ux >= uy) else 0 }
+        nomatch { return m.notModelled() }
+    }
+    return r & m.mask(w)
+}
+
+# a float of the type's width, as an F64 holding its value exactly
+fn (m mut Machine&) toF64(bits I64, ty types.TypeId) F64 {
+    return match m.T.Repr(ty) {
+        case types.TypeId(11) => F64(U16(bits & 0xFFFF).F16FromBits())
+        case types.TypeId(12) => F64(U16(bits & 0xFFFF).BF16FromBits())
+        case types.TypeId(13) => F64(U32(bits & 0xFFFFFFFF).F32FromBits())
+        nomatch => U64(bits).F64FromBits()
+    }
+}
+
+# an F64's value rounded once to the float type's width, as its bits
+fn (m mut Machine&) fromF64(v F64, ty types.TypeId) I64 {
+    return match m.T.Repr(ty) {
+        case types.TypeId(11) => I64(F16(v).Bits())
+        case types.TypeId(12) => I64(BF16(v).Bits())
+        case types.TypeId(13) => I64(F32(v).Bits())
+        nomatch => I64(v.Bits())
+    }
+}
+
+# an operation of two floats at their own type: F64 and F32 as themselves, F16 and BF16 computed in F32 and rounded
+# once, which is exact for + - * / (F32 holds twice their precision and more), as the target computes them
+fn (m mut Machine&) floatOp(op typed.PrimOp, a I64, b I64, ty types.TypeId) I64 {
+    r := m.T.Repr(ty)
+    if r == types.TypeId(14) {
+        x, y := U64(a).F64FromBits(), U64(b).F64FromBits()
+        return match op {
+            case typed.PrimOp.Add => I64((x + y).Bits())
+            case typed.PrimOp.Sub => I64((x - y).Bits())
+            case typed.PrimOp.Mul => I64((x * y).Bits())
+            case typed.PrimOp.Div => I64((x / y).Bits())
+            nomatch => m.floatCompare(op, x, y)
+        }
+    }
+    x, y := F32(m.toF64(a, ty)), F32(m.toF64(b, ty))
+    v := match op {
+        case typed.PrimOp.Add => x + y
+        case typed.PrimOp.Sub => x - y
+        case typed.PrimOp.Mul => x * y
+        case typed.PrimOp.Div => x / y
+        nomatch => F32(0.0)
+    }
+    match op {
+        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div { }
+        nomatch { return m.floatCompare(op, F64(x), F64(y)) }
+    }
+    if r == types.TypeId(13) { return I64(v.Bits()) }
+    return m.fromF64(F64(v), ty)
+}
+
+fn (m mut Machine&) floatCompare(op typed.PrimOp, x F64, y F64) I64 {
+    yes := match op {
+        case typed.PrimOp.Eq => x == y
+        case typed.PrimOp.Ne => x != y
+        case typed.PrimOp.Lt => x < y
+        case typed.PrimOp.Le => x <= y
+        case typed.PrimOp.Gt => x > y
+        case typed.PrimOp.Ge => x >= y
+        nomatch => false
+    }
+    match op {
+        case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge { }
+        nomatch { return m.notModelled() }
+    }
+    return 1 if yes else 0
+}
+
+# a number converted (T4, T6b, E26): integers truncated or extended, a float rounded once, a float to an integer
+# truncated - undefined, so refused, where the integer type cannot hold it
+fn (m mut Machine&) convert(bits I64, from types.TypeId, to types.TypeId) I64 {
+    fs, ts := m.shape(from), m.shape(to)
+    if ts != vInt and ts != vUint and ts != vFloat and ts != vBool {
+        return bits    # a value to a type of its representation (T29)
+    }
+    tw := m.width(to)
+    if fs == vInt or fs == vUint or fs == vBool {
+        v := m.intValue(bits, from)
+        unsigned := fs == vUint and m.width(from) == 8 and v < 0
+        if ts == vFloat { return m.intToFloat(v, unsigned, to) }
+        return v & m.mask(tw)
+    }
+    if fs != vFloat { return m.notModelled() }
+    x := m.toF64(bits, from)
+    if ts == vFloat { return m.fromF64(x, to) }
+    # a float to an integer: in range after truncation, a NaN never
+    lim := 2.0
+    for i in range 8 * tw - 1 { lim = lim * 2.0 }
+    lo, hi := -lim / 2.0, lim / 2.0
+    if ts == vUint { lo, hi = 0.0, lim }
+    if x != x or x <= lo - 1.0 or x >= hi {
+        m.refuse(WhyConvert)
+        return 0
+    }
+    if ts == vUint and tw == 8 { return I64(U64(x)) }
+    return I64(x) & m.mask(tw)
+}
+
+fn (m mut Machine&) intToFloat(v I64, unsigned Bool, to types.TypeId) I64 {
+    r := m.T.Repr(to)
+    if unsigned {
+        u := U64(v)
+        return match r {
+            case types.TypeId(11) => I64(F16(u).Bits())
+            case types.TypeId(12) => I64(BF16(u).Bits())
+            case types.TypeId(13) => I64(F32(u).Bits())
+            nomatch => I64(F64(u).Bits())
+        }
+    }
+    return match r {
+        case types.TypeId(11) => I64(F16(v).Bits())
+        case types.TypeId(12) => I64(BF16(v).Bits())
+        case types.TypeId(13) => I64(F32(v).Bits())
+        nomatch => I64(F64(v).Bits())
+    }
+}
+
+# a float's bits read as an integer of its width (E33) - while compiling, not those of a NaN an operation made (its
+# payload the default one) nor of a signalling NaN (E33a)
+fn (m mut Machine&) bitcast(bits I64, from types.TypeId) I64 {
+    if m.shape(from) == vFloat and m.When == Mode.Compile {
+        w := 8 * m.width(from)
+        man := m.T.Bits(m.T.Repr(from))
+        mbits := match m.T.Repr(from) {
+            case types.TypeId(11) => 10
+            case types.TypeId(12) => 7
+            case types.TypeId(13) => 23
+            nomatch => 52
+        }
+        expMask := ((1 << (w - 1 - mbits)) - 1) << mbits
+        frac := bits & ((1 << mbits) - 1)
+        if (bits & expMask) == expMask and frac != 0 {
+            quiet := ((frac >> (mbits - 1)) & 1) == 1
+            if not quiet {
+                m.refuse(WhyNaNSignal)
+                return 0
+            }
+            if frac == 1 << (mbits - 1) {
+                m.refuse(WhyNaNOp)
+                return 0
+            }
+        }
+    }
+    return bits
+}
+
+# an atomic operation, evaluated as the plain one on its place (K1, P9)
+fn (m mut Machine&) atomic(fi I64, op typed.PrimOp, args mir.Range, at types.TypeId) I64 {
+    p := m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1))
+    it := m.T.Referent(m.T.Repr(at))
+    w := m.width(it)
+    old := m.rd(p, w)
+    if m.halted { return 0 }
+    match op {
+        case typed.PrimOp.AtomicLoad { return old }
+        case typed.PrimOp.AtomicStore { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 1))) }
+        case typed.PrimOp.AtomicAdd { m.wr(p, w, (old + m.scalar(fi, m.arg(fi, args, 1))) & m.mask(w)) }
+        case typed.PrimOp.AtomicSwap { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 1))) }
+        nomatch {
+            if old == (m.scalar(fi, m.arg(fi, args, 1)) & m.mask(w)) { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 2))) }
+        }
+    }
+    return old
+}
+
+# whether op's true result over args does not fit ty (E15a's OVERFLOW)
+fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) Bool {
+    x := m.arg(fi, args, 0)
+    at := m.opType(fi, x)
+    a := m.scalar(fi, x)
+    w := m.width(ty)
+    signed := m.shape(ty) == vInt
+    if op == typed.PrimOp.Convert {
+        if m.shape(at) == vFloat {
+            v := m.toF64(a, at)
+            lim := 2.0
+            for i in range 8 * w - 1 { lim = lim * 2.0 }
+            lo, hi := -lim / 2.0, lim / 2.0
+            if not signed { lo, hi = 0.0, lim }
+            return v != v or v <= lo - 1.0 or v >= hi
+        }
+        v := m.intValue(a, at)
+        big := m.shape(at) == vUint and m.width(at) == 8 and v < 0
+        return not m.fits(v, big, w, signed)
+    }
+    x0 := m.intValue(a, ty)
+    if op == typed.PrimOp.Neg {
+        return x0 == m.minOf(w) if signed else x0 != 0
+    }
+    b := m.intValue(m.scalar(fi, m.arg(fi, args, 1)), ty)
+    if not signed {
+        ua, ub := U64(a & m.mask(w)), U64(b & m.mask(w))
+        return match op {
+            case typed.PrimOp.Add => ((ua + ub) & U64(m.mask(w))) < ua or (w == 8 and ua + ub < ua)
+            case typed.PrimOp.Sub => ua < ub
+            case typed.PrimOp.Mul => ua != 0 and ((ua * ub) / ua != ub or (w < 8 and ua * ub > U64(m.mask(w))))
+            nomatch => false
+        }
+    }
+    if w < 8 {
+        r := match op {
+            case typed.PrimOp.Add => x0 + b
+            case typed.PrimOp.Sub => x0 - b
+            case typed.PrimOp.Mul => x0 * b
+            nomatch => 0
+        }
+        if op == typed.PrimOp.Div { return x0 == m.minOf(w) and b == -1 }
+        return r < m.minOf(w) or r > -(m.minOf(w) + 1)
+    }
+    return match op {
+        case typed.PrimOp.Add => ((x0 ^ (x0 + b)) & (b ^ (x0 + b))) < 0
+        case typed.PrimOp.Sub => ((x0 ^ b) & (x0 ^ (x0 - b))) < 0
+        case typed.PrimOp.Mul => (x0 != 0 and b != 0 and ((x0 * b) / b != x0 or (x0 == -1 and b == m.minOf(8))
+                                                         or (b == -1 and x0 == m.minOf(8))))
+        case typed.PrimOp.Div => x0 == m.minOf(8) and b == -1
+        nomatch => false
+    }
+}
+
+fn (m mut Machine&) minOf(w I64) I64 { return -9223372036854775807 - 1 if w >= 8 else -(I64(1) << (8 * w - 1)) }
+
+# whether an integer (big: a U64 above I64's maximum) fits w bytes of a signedness
+fn (m mut Machine&) fits(v I64, big Bool, w I64, signed Bool) Bool {
+    if big { return not signed and w == 8 }
+    if signed { return w == 8 or (v >= m.minOf(w) and v <= -(m.minOf(w) + 1)) }
+    return v >= 0 and (w == 8 or v <= m.mask(w))
+}
+
+# ---- statements ----
+
+fn (m mut Machine&) stmt(fi I64, st mir.Stmt) {
+    f := m.fnOfFrame(fi)
+    match st {
+        case mir.Stmt.Assign(sp, p, rv) {
+            m.at0(f, sp)
+            if not m.globalsReady(fi, p, rv) { return }
+            m.assign(fi, p, rv)
+        }
+        case mir.Stmt.Live(sp, l) {
+            m.at0(f, sp)
+            loc := f.Locals[I64(l)]
+            sc := m.buildScope(fi, loc.Home)
+            if m.halted { return }
+            m.localIds[m.frames[fi].Locals + I64(l)] = m.allocate(m.size(loc.Ty), aValue, sc).Id
+        }
+        case mir.Stmt.Dead(_, l) {
+            slot := m.frames[fi].Locals + I64(l)
+            id := m.localIds[slot]
+            if id != 0 and m.allocOf(id).Gen == id >> slotBits { m.release(id & slotMask) }
+            m.localIds[slot] = 0
+        }
+        case mir.Stmt.Open(_, s) {
+            si := f.Scopes[I64(s)]
+            kind := match si.Kind {
+                case mir.ScopeKind.Inert => sInert
+                case mir.ScopeKind.Builder => sBuilder
+                case mir.ScopeKind.Region => sRegion
+                case mir.ScopeKind.Join => sJoin
+                nomatch => sBlock
+            }
+            id := m.newScope(kind)
+            m.scopeIds[m.frames[fi].Scopes + I64(s)] = id
+            if kind == sJoin { m.scopes[id & slotMask].Errors = I64(si.Errors) }
+            if kind == sBuilder {
+                b := m.allocate(64, aValue, id)
+                m.scopes[id & slotMask].Buf = b.Id
+            }
+        }
+        case mir.Stmt.Close(_, s) {
+            id := m.scopeIds[m.frames[fi].Scopes + I64(s)]
+            m.scopeIds[m.frames[fi].Scopes + I64(s)] = 0
+            if m.live(id) {
+                m.closing.Push(id)
+                m.frames[fi].Pending = true
+                return
+            }
+        }
+        case mir.Stmt.Give(_, s) {
+            id := m.scopeIds[m.frames[fi].Scopes + I64(s)]
+            m.scopeIds[m.frames[fi].Scopes + I64(s)] = 0
+            m.adopt(id, m.lastOwnScope)
+        }
+        case mir.Stmt.RegisterDtor(sp, s, ty, x) {
+            m.at0(f, sp)
+            sc := m.scopeOf(fi, s)
+            if m.When == Mode.Compile and not (sc == m.program and m.initGlobal >= 0) {
+                m.refuse(WhyDestructor)
+                return
+            }
+            p := m.rdPtr(m.addr(fi, x, 1))
+            m.addReg(sc, gDtor, I64(ty), p)
+        }
+        case mir.Stmt.RegisterOwner(sp, s, p) {
+            m.at0(f, sp)
+            slot, _ := m.place(fi, p)
+            m.addReg(m.scopeOf(fi, s), gOwner, 0, slot)
+        }
+        case mir.Stmt.Release(sp, p) {
+            m.at0(f, sp)
+            slot, _ := m.place(fi, p)
+            n := m.closing.Len()
+            m.releaseSlot(slot)
+            if m.closing.Len() > n {
+                m.frames[fi].Pending = true
+                return
+            }
+        }
+        case mir.Stmt.Write(sp, b, how, x) {
+            m.at0(f, sp)
+            m.write(fi, b, how, x)
+        }
+        case mir.Stmt.CopyElems(sp, d, src, n) {
+            m.at0(f, sp)
+            dp, dt := m.place(fi, d)
+            sp2, srcT := m.place(fi, src)
+            dd, dn := m.arrayView(dp, dt)
+            sd, sn := m.arrayView(sp2, srcT)
+            k := m.intValue(m.scalar(fi, n), m.opType(fi, n))
+            if m.halted { return }
+            if k < 0 or k > dn or k > sn {
+                m.refuse(WhyOutside)
+                return
+            }
+            m.copy(dd, sd, k * m.size(m.elemOf(dt)))
+        }
+        case mir.Stmt.Spawn(sp, j, k) {
+            m.at0(f, sp)
+            m.spawn(fi, j, k)
+        }
+    }
+    if not m.halted { m.frames[fi].Stmt += 1 }
+}
+
+fn (m mut Machine&) at0(f mir.Fn&, sp source.Span) {
+    m.stopFile = f.File
+    m.stopSp = sp
+}
+
+# the text an operand renders as, appended to a builder (E11a)
+fn (m mut Machine&) write(fi I64, b mir.ScopeRef, how mir.WriteKind, x mir.Operand) {
+    bs := m.scopeOf(fi, b)
+    if not m.live(bs) {
+        m.refuse(WhyClosed)
+        return
+    }
+    xt := m.opType(fi, x)
+    match how {
+        case mir.WriteKind.Bytes {
+            p := m.addr(fi, x, 1)
+            data, n := m.arrayView(p, xt)
+            if m.halted { return }
+            for i in range n { m.appendByte(bs, m.rd(Ptr(data.Id, data.Off + i), 1)) }
+        }
+        case mir.WriteKind.Char { m.appendByte(bs, m.scalar(fi, x)) }
+        case mir.WriteKind.Bool { m.appendText(bs, "true" if m.scalar(fi, x) != 0 else "false") }
+        case mir.WriteKind.Int { m.appendText(bs, $m.intValue(m.scalar(fi, x), xt)) }
+        case mir.WriteKind.Uint { m.appendText(bs, $U64(m.scalar(fi, x))) }
+        case mir.WriteKind.Float { m.appendText(bs, m.floatText(m.scalar(fi, x), xt)) }
+    }
+}
+
+# a float's text as "$" writes it at its own type (E11a)
+fn (m mut Machine&) floatText(bits I64, ty types.TypeId) String {
+    return match m.T.Repr(ty) {
+        case types.TypeId(11) => $U16(bits & 0xFFFF).F16FromBits()
+        case types.TypeId(12) => $U16(bits & 0xFFFF).BF16FromBits()
+        case types.TypeId(13) => $U32(bits & 0xFFFFFFFF).F32FromBits()
+        nomatch => $U64(bits).F64FromBits()
+    }
+}
+
+fn (m mut Machine&) appendText(bs I64, s String&) {
+    for c in s { m.appendByte(bs, I64(c)) }
+}
+
+fn (m mut Machine&) appendByte(bs I64, c I64) {
+    sc := bs & slotMask
+    buf, n := m.scopes[sc].Buf, m.scopes[sc].BufLen
+    if n >= m.allocOf(buf).Size {
+        nb := m.allocate(2 * n, aValue, bs)
+        if m.halted { return }
+        m.copy(nb, Ptr(buf, 0), n)
+        m.release(buf & slotMask)
+        m.scopes[sc].Buf = nb.Id
+        buf = nb.Id
+    }
+    m.wr(Ptr(buf, n), 1, c)
+    m.scopes[sc].BufLen = n + 1
+}
+
+# ---- globals ----
+
+# while compiling, an immutable global a statement reads is initialized first (K2): its initializer run as a frame
+# before the statement, which runs again once it has. A mutable one, or one whose value a writable reference reaches,
+# is refused (K1). Whether the statement can run now
+fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
+    if m.When == Mode.Run { return true }
+    f := m.fnOfFrame(fi)
+    if not m.globalWritten(p) { return false }
+    return match rv {
+        case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => m.operandReady(fi, x)
+        case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => m.placeReady(fi, q)
+        case mir.Rvalue.Slice(q, lo, hi, _) => m.placeReady(fi, q) and m.operandReady(fi, lo) and m.operandReady(fi, hi)
+        case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r),
+             mir.Rvalue.Closure(_, _, _, r) => m.rangeReady(fi, f, r)
+        case mir.Rvalue.NewArray(_, _, n, fill) => m.operandReady(fi, n) and m.operandReady(fi, fill)
+        case _ => true
+    }
+}
+
+fn (m mut Machine&) rangeReady(fi I64, f mir.Fn&, r mir.Range) Bool {
+    for i in range r.N {
+        if not m.operandReady(fi, f.Ops[I64(r.At) + i]) { return false }
+    }
+    return true
+}
+
+fn (m mut Machine&) operandReady(fi I64, x mir.Operand) Bool {
+    return match x {
+        case mir.Operand.Copy(p) => m.placeReady(fi, p)
+        case _ => true
+    }
+}
+
+# a store into a global: refused while compiling unless it is the global being initialized
+fn (m mut Machine&) globalWritten(p mir.Place) Bool {
+    match p.B {
+        case mir.Base.Global(module, name, _) {
+            g := try m.globalOf.Get(gkey(module, name)) catch default -1
+            if g >= 0 and g != m.initGlobal {
+                m.refuse(WhyWritesGlobal)
+                return false
+            }
+        }
+        case _ { }
+    }
+    return true
+}
+
+fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
+    match p.B {
+        case mir.Base.Global(module, name, _) {
+            g := try m.globalOf.Get(gkey(module, name)) catch default -1
+            if g < 0 or g == m.initGlobal { return true }
+            gl := m.globals[g]
+            if gl.Mutable {
+                m.refuse(WhyMutableGlobal)
+                return false
+            }
+            if m.reachesWritable(types.TypeId(I32(gl.Ty))) {
+                m.refuse(WhyChangeable)
+                return false
+            }
+            if gl.State == 2 { return true }
+            if gl.State == 1 {
+                m.refuse(WhyCycle)
+                return false
+            }
+            m.startGlobal(g)
+            return false
+        }
+        case _ { return true }
+    }
+}
+
+fn (m mut Machine&) startGlobal(g I64) {
+    init := m.globals[g].Init
+    fi := try m.fnOf.Get(m.codeKeys[init]) catch {
+        m.refuse(WhyNoBody)
+        return
+    }
+    fr := m.pushFrame(fi, rGlobal, g)
+    if fr < 0 { return }
+    m.frames[fr].PrevInit = m.initGlobal
+    m.initGlobal = g
+    m.globals[g].State = 1
+}
+
+# ---- calls ----
+
+fn (m mut Machine&) callee(fi I64, c mir.Callee) (I64, Ptr, Bool, I64) {
+    # the function called (its index in fns, -1 for none), its environment, whether it is an extern and which
+    match c {
+        case mir.Callee.Fn(key, _) {
+            i := try m.fnOf.Get(key) catch default -1
+            if i < 0 { m.refuse(WhyNoBody) }
+            return i, NullPtr, false, 0
+        }
+        case mir.Callee.Extern(e, _) { return -1, NullPtr, true, e }
+        case mir.Callee.Value(x) {
+            p := m.addr(fi, x, 3)
+            code := m.rdPtr(p)
+            env := m.rdPtr(Ptr(p.Id, p.Off + 8))
+            if m.halted { return -1, NullPtr, false, 0 }
+            if code.Id == 0 {
+                m.refuse(WhyNullCall)
+                return -1, NullPtr, false, 0
+            }
+            a := m.allocOf(code.Id)
+            if a.Kind != aCode {
+                m.refuse(WhyNotModelled)
+                return -1, NullPtr, false, 0
+            }
+            if a.Extern { return -1, env, true, a.Code }
+            i := try m.fnOf.Get(m.codeKeys[a.Code]) catch default -1
+            if i < 0 { m.refuse(WhyNoBody) }
+            return i, env, false, 0
+        }
+    }
+}
+
+fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
+    return match c {
+        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty) => ty
+        case mir.Callee.Value(x) => m.T.Repr(m.opType(fi, x))
+    }
+}
+
+# a call of callee c from frame fi: a frame pushed with its arguments, scopes and captures - or an extern run now, its
+# result stored. The new frame's index, -1 for an extern's call done, -2 stopped
+fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range, ret I64, retArg I64) I64 {
+    f := m.fnOfFrame(fi)
+    callee, env, isExtern, ext := m.callee(fi, c)
+    if m.halted { return -2 }
+    vty := m.calleeType(fi, c)
+    if isExtern { return -2 }
+    nf := m.pushFrame(callee, ret, retArg)
+    if nf < 0 { return -2 }
+    g := m.fns[callee]
+    for i in range args.N {
+        if i < g.Params.Len() {
+            l := g.Params[i]
+            m.put(fi, m.localPtr(nf, l), g.Locals[I64(l)].Ty, f.Ops[I64(args.At) + i])
+        }
+    }
+    # the passed scope variables: in order for a direct call, mapped through the value's type for a function value
+    # whose code's own type differs (T22a)
+    passed := 0
+    for k in g.Vars {
+        match k {
+            case mir.VarKind.Capture(_) { }
+            case _ { passed++ }
+        }
+    }
+    direct := match c {
+        case mir.Callee.Fn(_, _) => true
+        case _ => false
+    }
+    vvars := m.T.ScopeVarsOf(vty)
+    for i in range passed {
+        s := m.program
+        if direct or vvars.Len() == passed {
+            if i < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + i]) }
+        } else {
+            want := match g.Vars[i] {
+                case mir.VarKind.Param(p) => p
+                case mir.VarKind.Result, mir.VarKind.Instance => types.ResultVar
+                case mir.VarKind.Closing => types.ClosingVar
+                nomatch => -9
+            }
+            for j in range vvars.Len() {
+                if vvars[j] == want and j < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + j]) }
+            }
+        }
+        m.varIds[m.frames[nf].Vars + i] = s
+    }
+    if g.Captures.Len() > 0 {
+        if env.Id == 0 {
+            m.refuse(WhyNullCall)
+            return -2
+        }
+        tys := Array<types.TypeId>(g.Captures.Len())
+        for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+        offs, total := m.pack(tys)
+        for i in range g.Captures.Len() {
+            m.copy(m.localPtr(nf, g.Captures[i]), Ptr(env.Id, env.Off + offs[i]), m.size(tys[i]))
+            if passed + i < g.Vars.Len() {
+                m.varIds[m.frames[nf].Vars + passed + i] = m.rd(Ptr(env.Id, env.Off + total + 8 * i), 8)
+            }
+        }
+    }
+    if m.halted { return -2 }
+    return nf
+}
+
+# an extern called now (X1, X8, B3e): its arguments marshalled for the dynamic call, its result stored at dst
+fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, dst Ptr, hasDst Bool) Bool {
+    f := m.fnOfFrame(fi)
+    name := try m.externs.Get(e) catch {
+        m.refuse(WhyNoBody)
+        return false
+    }
+    t := m.T
+    ps := t.Items(t.Params(ty))
+    res := t.Result(ty)
+    if m.When == Mode.Compile and not mathExtern(name, ps.Len()) {
+        m.refuse(WhyExtern)
+        return false
+    }
+    kinds := Array<U8>(ps.Len())
+    nwords I64 = 0
+    for i in range ps.Len() {
+        if m.shape(ps[i]) == vPair or m.shape(ps[i]) == vFixed {
+            data, n := m.arrayView(m.addr(fi, f.Ops[I64(args.At) + i], 1), ps[i])
+            nwords += 1 + ffi.WordsFor(n * m.size(m.elemOf(ps[i])))
+            kinds[i] = ffi.ArrayOf(m.ffiKind(m.elemOf(ps[i])))
+        } else {
+            nwords++
+            kinds[i] = ffi.Code(m.ffiKind(ps[i]))
+        }
+    }
+    if m.halted { return false }
+    words := Array<U64>(nwords)
+    w I64 = 0
+    for i in range ps.Len() {
+        x := f.Ops[I64(args.At) + i]
+        if kinds[i] >= 0x80 {
+            data, n := m.arrayView(m.addr(fi, x, 1), ps[i])
+            bytes := n * m.size(m.elemOf(ps[i]))
+            words[w] = U64(n)
+            for b in range bytes {
+                v := U64(m.rd(Ptr(data.Id, data.Off + b), 1))
+                words[w + 1 + b / 8] = words[w + 1 + b / 8] | (v << (U64(b % 8) * 8))
+            }
+            w += 1 + ffi.WordsFor(bytes)
+        } else {
+            words[w] = U64(m.scalar(fi, x))
+            if m.shape(ps[i]) == vInt { words[w] = U64(m.intValue(I64(words[w]), ps[i])) }
+            w++
+        }
+    }
+    rk := U8(0) if res == types.VoidT else ffi.Code(m.ffiKind(res))
+    out := try ffi.Call(name, kinds, words, rk) catch ffi.FfiError.NOT_FOUND {
+        m.refuse(WhyFfiFind)
+        return false
+    } catch {
+        m.refuse(WhyFfiPass)
+        return false
+    }
+    # what the function wrote into an array is copied back into its storage
+    w = 0
+    for i in range ps.Len() {
+        if kinds[i] >= 0x80 {
+            data, n := m.arrayView(m.addr(fi, f.Ops[I64(args.At) + i], 1), ps[i])
+            bytes := n * m.size(m.elemOf(ps[i]))
+            if m.allocOf(data.Id).ReadOnly == false {
+                for b in range bytes {
+                    m.wr(Ptr(data.Id, data.Off + b), 1, I64((words[w + 1 + b / 8] >> (U64(b % 8) * 8)) & 0xFF))
+                }
+            }
+            w += 1 + ffi.WordsFor(bytes)
+        } else {
+            w++
+        }
+    }
+    if hasDst and res != types.VoidT { m.wr(dst, m.width(res), I64(out)) }
+    return not m.halted
+}
+
+fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
+    return match m.T.Repr(ty) {
+        case types.TypeId(3) => ffi.Kind.I8
+        case types.TypeId(4) => ffi.Kind.I16
+        case types.TypeId(5) => ffi.Kind.I32
+        case types.TypeId(7) => ffi.Kind.U8
+        case types.TypeId(8) => ffi.Kind.U16
+        case types.TypeId(9) => ffi.Kind.U32
+        case types.TypeId(10) => ffi.Kind.U64
+        case types.TypeId(11) => ffi.Kind.F16
+        case types.TypeId(12) => ffi.Kind.BF16
+        case types.TypeId(13) => ffi.Kind.F32
+        case types.TypeId(14) => ffi.Kind.F64
+        nomatch => ffi.Kind.I64
+    }
+}
+
+# the C math library's functions (X8): evaluated while compiling, each under its own name for F64 and with "f" after
+# it for F32 - the host's library is the target's, as long as the target is this machine (B12a is the driver's)
+mathNames := String&["sqrt", "fma", "floor", "ceil", "trunc", "round", "roundeven", "fabs", "copysign", "cbrt", "exp",
+                     "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "sin", "cos", "tan", "asin", "acos", "atan",
+                     "atan2", "sinh", "cosh", "tanh", "erf", "erfc", "hypot"]
+mathArity := I64[1, 3, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2]
+
+fn mathExtern(name String&, arity I64) Bool {
+    for i, n in mathNames {
+        if (name == n or name == $n "f") and arity == mathArity[i] { return true }
+    }
+    return false
+}
+
+# ---- terminators ----
+
+fn (m mut Machine&) term(fi I64, t mir.Term) {
+    f := m.fnOfFrame(fi)
+    match t {
+        case mir.Term.None { m.notModelled() }
+        case mir.Term.Goto(b) { m.jump(fi, b) }
+        case mir.Term.Branch(c, yes, no) {
+            if not m.operandReady(fi, c) { return }
+            m.jump(fi, yes if m.scalar(fi, c) != 0 else no)
+        }
+        case mir.Term.Switch(x, cases, otherwise) {
+            if not m.operandReady(fi, x) { return }
+            v := m.scalar(fi, x)
+            to := otherwise
+            for i in range cases.N {
+                if (f.Cases[I64(cases.At) + i].Value & m.mask(m.width(m.opType(fi, x)))) == v {
+                    to = f.Cases[I64(cases.At) + i].To
+                }
+            }
+            if not m.halted { m.jump(fi, to) }
+        }
+        case mir.Term.Call(sp, k) {
+            m.at0(f, sp)
+            c := f.Calls[I64(k)]
+            if not m.rangeReady(fi, f, c.Args) { return }
+            match c.Target {
+                case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
+                case mir.Callee.Value(x) {
+                    _, env, isExtern, e := m.callee(fi, c.Target)
+                    if m.halted { return }
+                    if isExtern {
+                        m.externCall(fi, c, e, m.calleeType(fi, c.Target))
+                    } else {
+                        m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(k))
+                    }
+                }
+                case _ { m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(k)) }
+            }
+        }
+        case mir.Term.Return(sp, x) {
+            m.at0(f, sp)
+            if not m.operandReady(fi, x) { return }
+            m.leave(fi, false, x, 0)
+        }
+        case mir.Term.Raise(sp, x) {
+            m.at0(f, sp)
+            m.leave(fi, true, mir.Operand.None, m.intValue(m.scalar(fi, x), mir.I32T))
+        }
+        case mir.Term.Wait(sp, j, ok, code, failed) {
+            m.at0(f, sp)
+            m.wait(fi, j, ok, code, failed)
+        }
+        case mir.Term.Exit(sp, kind, msg) {
+            m.at0(f, sp)
+            m.exit(fi, f.File, sp, kind, msg)
+        }
+    }
+}
+
+fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
+    m.frames[fi].Block = I64(b)
+    m.frames[fi].Stmt = 0
+}
+
+fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
+    name := try m.externs.Get(e) catch default ""
+    f := m.fnOfFrame(fi)
+    # __olang_run_on_stack(bytes, f): the call f() (X6, K1)
+    if name == "__olang_run_on_stack" {
+        callee := mir.Callee.Value(f.Ops[I64(c.Args.At) + 1])
+        m.enter(fi, callee, mir.Empty, mir.Empty, rCall, try m.callIndex(fi, c) catch default 0)
+        return
+    }
+    dst := NullPtr
+    if c.HasDest {
+        dst, _ = m.place(fi, c.Dest)
+    }
+    if m.callExtern(fi, e, ty, c.Args, dst, c.HasDest) { m.jump(fi, c.Ok) }
+}
+
+fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? {
+    t := m.fnOfFrame(fi).Blocks[m.frames[fi].Block].T
+    match t {
+        case mir.Term.Call(_, k) { return I64(k) }
+        case _ { error }
+    }
+}
+
+fn (m mut Machine&) exit(fi I64, file I64, sp source.Span, kind mir.ExitKind, msg mir.Operand) {
+    if m.When == Mode.Compile and (kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail) {
+        m.refuse(WhyEnds)
+        return
+    }
+    text String&m = ""
+    if msg != mir.Operand.None {
+        p := m.addr(fi, msg, 1)
+        data, n := m.arrayView(p, m.opType(fi, msg))
+        b := StringBuilder()
+        for i in range n { b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1)))) }
+        text = b.ToString()
+    }
+    m.stop(Stop.Exited(kind, file, sp, text))
+}
+
+# a Return or a Raise: the value delivered where the frame returns to, then the frame's own storage closed, then the
+# frame gone and what it returned to going on
+fn (m mut Machine&) leave(fi I64, raised Bool, x mir.Operand, code I64) {
+    fr := m.frames[fi]
+    if not fr.Done {
+        if not raised { m.deliver(fi, x) }
+        if m.halted { return }
+        m.frames[fi].Done = true
+        m.frames[fi].Raised = raised
+        m.frames[fi].Code = code
+        m.closing.Push(fr.Store)
+        m.frames[fi].Pending = true
+        return
+    }
+    m.popFrame()
+    m.returned(fr)
+}
+
+# a returning frame's value written where it goes: the caller's destination, the request's result, a task's targets,
+# a global's storage
+fn (m mut Machine&) deliver(fi I64, x mir.Operand) {
+    fr := m.frames[fi]
+    if x == mir.Operand.None { return }
+    xt := m.opType(fi, x)
+    match fr.Ret {
+        case rCall {
+            caller := fi - 1
+            c := m.fnOfFrame(caller).Calls[fr.RetArg]
+            if c.HasDest {
+                dst, dt := m.place(caller, c.Dest)
+                m.put(fi, dst, dt, x)
+            }
+        }
+        case rRequest {
+            n := m.size(xt)
+            p := m.allocate(n, aValue, m.program)
+            m.put(fi, p, xt, x)
+            m.Result, m.ResultTy = p, xt
+        }
+        case rGlobal {
+            g := m.globals[fr.RetArg]
+            m.put(fi, Ptr(g.Store, 0), types.TypeId(I32(g.Ty)), x)
+        }
+        case rTask, rClause { m.toTargets(fi, fr.RetArg, x, xt) }
+        nomatch { }
+    }
+}
+
+fn (m mut Machine&) returned(fr frame) {
+    match fr.Ret {
+        case rCall {
+            caller := m.frames.Len() - 1
+            c := m.fnOfFrame(caller).Calls[fr.RetArg]
+            if fr.Raised {
+                if c.Err == mir.NoBlock {
+                    m.refuse(WhyNotModelled)
+                    return
+                }
+                m.wr(m.localPtr(caller, c.Code), 4, fr.Code)
+                m.jump(caller, c.Err)
+            } else {
+                m.jump(caller, c.Ok)
+            }
+        }
+        case rRequest {
+            if fr.Raised { m.stop(Stop.Raised(fr.Code)) }
+        }
+        case rGlobal {
+            if fr.Raised {
+                m.refuse(WhyNoValue)
+                return
+            }
+            m.globals[fr.RetArg].State = 2
+            m.initGlobal = fr.PrevInit
+        }
+        case rTask { m.taskEnded(fr) }
+        case rClause { m.freeTask(fr.RetArg) }
+        nomatch { }
+    }
+}
+
+# ---- tasks (P1, P4, run in sequence at their join as K1 says) ----
+
+# a task's buffer: its call's arguments, then its targets' addresses, then its clauses' handlers, then the scopes it is
+# handed, then its function value where it calls through one - offsets in that order
+fn (m mut Machine&) taskLayout(f mir.Fn&, k mir.Task, fi I64) (Array<I64>, I64) {
+    tys := Array<types.TypeId>(I64(k.Args.N))
+    for i in range k.Args.N { tys[i] = m.opType(fi, f.Ops[I64(k.Args.At) + i]) }
+    offs, total := m.pack(tys)
+    return offs, total
+}
+
+fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
+    f := m.fnOfFrame(fi)
+    k := f.Tasks[I64(ti)]
+    js := m.scopeIds[m.frames[fi].Scopes + I64(j)]
+    if not m.live(js) {
+        m.refuse(WhyClosed)
+        return
+    }
+    offs, total := m.taskLayout(f, k, fi)
+    nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
+    buf := m.allocate(total + 8 * nt + 16 * nc + 8 * ns + 16, aValue, js)
+    if m.halted { return }
+    for i in range k.Args.N {
+        x := f.Ops[I64(k.Args.At) + i]
+        m.put(fi, Ptr(buf.Id, offs[i]), m.opType(fi, x), x)
+    }
+    at := total
+    for i in range nt {
+        p, _ := m.place(fi, f.Places[I64(k.Targets.At) + i])
+        m.wrPtr(Ptr(buf.Id, at + 8 * i), p)
+    }
+    at += 8 * nt
+    for i in range nc {
+        h := f.Clauses[I64(k.Clauses.At) + i].Handler
+        if h != mir.Operand.None { m.put(fi, Ptr(buf.Id, at + 16 * i), m.opType(fi, h), h) }
+    }
+    at += 16 * nc
+    for i in range ns { m.wr(Ptr(buf.Id, at + 8 * i), 8, m.scopeOf(fi, f.Refs[I64(k.Scopes.At) + i])) }
+    at += 8 * ns
+    match k.Target {
+        case mir.Callee.Value(x) { m.put(fi, Ptr(buf.Id, at), m.opType(fi, x), x) }
+        case _ { }
+    }
+    slot := try m.freeTasks.Pop() catch default m.newTaskSlot()
+    tk := task()
+    tk.Fn, tk.Task, tk.Buf, tk.Next = m.frames[fi].Fn, I64(ti), buf.Id, -1
+    m.tasks[slot] = tk
+    sc := js & slotMask
+    if m.scopes[sc].TasksEnd >= 0 { m.tasks[m.scopes[sc].TasksEnd].Next = slot } else { m.scopes[sc].Tasks = slot }
+    m.scopes[sc].TasksEnd = slot
+}
+
+fn (m mut Machine&) newTaskSlot() I64 {
+    m.tasks.Push(task())
+    return m.tasks.Len() - 1
+}
+
+fn (m mut Machine&) freeTask(slot I64) { m.freeTasks.Push(slot) }
+
+# a join waited for: its next task run as a frame, or, none left, on to ok - or to failed with the earliest kept error
+fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId, failed mir.BlockId) {
+    js := m.scopeIds[m.frames[fi].Scopes + I64(j)]
+    if not m.live(js) {
+        m.refuse(WhyClosed)
+        return
+    }
+    sc := js & slotMask
+    slot := m.scopes[sc].Tasks
+    if slot >= 0 {
+        m.scopes[sc].Tasks = m.tasks[slot].Next
+        if m.scopes[sc].Tasks < 0 { m.scopes[sc].TasksEnd = -1 }
+        m.startTask(fi, slot)
+        return
+    }
+    kept := m.scopes[sc].Kept
+    m.scopes[sc].Kept = 0
+    if kept != 0 and failed != mir.NoBlock {
+        m.wr(m.localPtr(fi, code), 4, kept)
+        m.jump(fi, failed)
+        return
+    }
+    m.jump(fi, ok)
+}
+
+fn (m mut Machine&) startTask(fi I64, slot I64) {
+    tk := m.tasks[slot]
+    f := m.fns[tk.Fn]
+    k := f.Tasks[tk.Task]
+    offs, total := m.taskLayout(f, k, fi)
+    nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
+    callee := -1
+    env := NullPtr
+    ty := types.UnknownT
+    match k.Target {
+        case mir.Callee.Fn(key, t) {
+            callee = try m.fnOf.Get(key) catch default -1
+            ty = t
+        }
+        case mir.Callee.Value(_) {
+            vp := Ptr(tk.Buf, total + 8 * nt + 16 * nc + 8 * ns)
+            code := m.rdPtr(vp)
+            env = m.rdPtr(Ptr(vp.Id, vp.Off + 8))
+            if code.Id != 0 and m.allocOf(code.Id).Kind == aCode and not m.allocOf(code.Id).Extern {
+                callee = try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch default -1
+            }
+        }
+        case _ { }
+    }
+    if callee < 0 {
+        m.refuse(WhyNoBody)
+        return
+    }
+    nf := m.pushFrame(callee, rTask, slot)
+    if nf < 0 { return }
+    g := m.fns[callee]
+    for i in range k.Args.N {
+        if i < g.Params.Len() {
+            l := g.Params[i]
+            m.copy(m.localPtr(nf, l), Ptr(tk.Buf, offs[i]), m.size(g.Locals[I64(l)].Ty))
+        }
+    }
+    sat := total + 8 * nt + 16 * nc
+    passed I64 = 0
+    for kv in g.Vars {
+        match kv {
+            case mir.VarKind.Capture(_) { }
+            case _ { passed++ }
+        }
+    }
+    for i in range passed {
+        m.varIds[m.frames[nf].Vars + i] = m.rd(Ptr(tk.Buf, sat + 8 * i), 8) if i < ns else m.program
+    }
+    m.loadCaptures(nf, g, env, passed)
+}
+
+fn (m mut Machine&) loadCaptures(nf I64, g mir.Fn&, env Ptr, passed I64) {
+    if g.Captures.Len() == 0 { return }
+    if env.Id == 0 {
+        m.refuse(WhyNullCall)
+        return
+    }
+    tys := Array<types.TypeId>(g.Captures.Len())
+    for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+    offs, total := m.pack(tys)
+    for i in range g.Captures.Len() {
+        m.copy(m.localPtr(nf, g.Captures[i]), Ptr(env.Id, env.Off + offs[i]), m.size(tys[i]))
+        if passed + i < g.Vars.Len() { m.varIds[m.frames[nf].Vars + passed + i] = m.rd(Ptr(env.Id, env.Off + total + 8 * i), 8) }
+    }
+}
+
+# a task's result stored into its targets (P1g): one result whole, several part by part
+fn (m mut Machine&) toTargets(fi I64, slot I64, x mir.Operand, xt types.TypeId) {
+    tk := m.tasks[slot]
+    f := m.fns[tk.Fn]
+    k := f.Tasks[tk.Task]
+    _, total := m.taskLayout(f, k, fi - 1)
+    nt := I64(k.Targets.N)
+    if nt == 0 { return }
+    src := m.addr(fi, x, 1)
+    if nt == 1 {
+        m.copy(m.rdPtr(Ptr(tk.Buf, total)), src, m.size(xt))
+        return
+    }
+    for i in range nt {
+        m.copy(m.rdPtr(Ptr(tk.Buf, total + 8 * i)), Ptr(src.Id, src.Off + m.partOffset(xt, i)), m.size(m.partType(xt, i)))
+    }
+}
+
+# a task ended: done, or its error to the first clause taking it - run as a frame where it has a handler - or kept for
+# its join where none takes it and its join keeps none earlier (P4a, P4b)
+fn (m mut Machine&) taskEnded(fr frame) {
+    if not fr.Raised {
+        m.freeTask(fr.RetArg)
+        return
+    }
+    slot := fr.RetArg
+    tk := m.tasks[slot]
+    f := m.fns[tk.Fn]
+    k := f.Tasks[tk.Task]
+    waiter := m.frames.Len() - 1
+    ty := match k.Target {
+        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t) => t
+        case mir.Callee.Value(x) => m.T.Repr(m.opType(waiter, x))
+    }
+    errs := m.T.Errors(ty)
+    xs := m.T.Items(errs)
+    ki := (fr.Code >> 16) - 1
+    word := fr.Code & 0xFFFF
+    et := xs[ki] if ki >= 0 and ki < xs.Len() else types.DefaultErrT
+    _, total := m.taskLayout(f, k, waiter)
+    for i in range k.Clauses.N {
+        cl := f.Clauses[I64(k.Clauses.At) + i]
+        takes := cl.All
+        for j in range cl.Items.N {
+            it := f.Items[I64(cl.Items.At) + j]
+            if m.T.Same(it.Err, et) and (it.Word < 0 or it.Word == word) { takes = true }
+        }
+        if not takes { continue }
+        if cl.Handler == mir.Operand.None {
+            m.freeTask(slot)
+            return
+        }
+        hp := Ptr(tk.Buf, total + 8 * I64(k.Targets.N) + 16 * i)
+        code := m.rdPtr(hp)
+        env := m.rdPtr(Ptr(hp.Id, hp.Off + 8))
+        if code.Id == 0 or m.allocOf(code.Id).Kind != aCode {
+            m.refuse(WhyNullCall)
+            return
+        }
+        hf := try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch {
+            m.refuse(WhyNoBody)
+            return
+        }
+        nf := m.pushFrame(hf, rClause, slot)
+        if nf < 0 { return }
+        g := m.fns[hf]
+        passed I64 = 0
+        for kv in g.Vars {
+            match kv {
+                case mir.VarKind.Capture(_) { }
+                case _ { passed++ }
+            }
+        }
+        for v in range passed { m.varIds[m.frames[nf].Vars + v] = m.program }
+        m.loadCaptures(nf, g, env, passed)
+        return
+    }
+    # no clause: kept for the join, re-encoded under its list, where the join keeps none from an earlier task
+    wf := m.fnOfFrame(waiter)
+    match wf.Blocks[m.frames[waiter].Block].T {
+        case mir.Term.Wait(_, j, _, _, _) {
+            js := m.scopeIds[m.frames[waiter].Scopes + I64(j)]
+            sc := js & slotMask
+            if m.scopes[sc].Kept == 0 {
+                m.scopes[sc].Kept = m.recode(fr.Code, errs, types.ListId(I32(m.scopes[sc].Errors)))
+            }
+        }
+        case _ { m.refuse(WhyNoClause) }
+    }
+    m.freeTask(slot)
+}
+
+# ---- the loop ----
+
+# runs until the frames are back to base or the machine stops
+fn (m mut Machine&) loop(base I64) {
+    for m.frames.Len() > base and not m.halted {
+        m.Steps++
+        if m.StepBudget >= 0 and m.Steps > m.StepBudget {
+            m.refuse(WhySteps)
+            return
+        }
+        fi := m.frames.Len() - 1
+        fr := m.frames[fi]
+        if m.closing.Len() > fr.Closing {
+            m.stepClose()
+            continue
+        }
+        f := m.fns[fr.Fn]
+        bb := f.Blocks[fr.Block]
+        if fr.Pending {
+            m.frames[fi].Pending = false
+            if fr.Stmt < bb.Stmts.Len() {
+                m.frames[fi].Stmt += 1
+            } else {
+                m.term(fi, bb.T)
+            }
+            continue
+        }
+        if fr.Stmt < bb.Stmts.Len() { m.stmt(fi, bb.Stmts[fr.Stmt]) } else { m.term(fi, bb.T) }
+    }
+}
+
+# ---- requests ----
+
+# evaluates the function k with these arguments (each a number's bits, or 0 for a null reference): Stop.None and its
+# result at Result, of type ResultTy, or why not. What the request built is freed when it ends, but for its result,
+# kept until the next request
+fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
+    m.halted = false
+    m.Stopped = Stop.None
+    m.Steps = 0
+    if m.Result.Id != 0 and m.allocOf(m.Result.Id).Kind != aFree { m.release(m.Result.Id & slotMask) }
+    m.Result, m.ResultTy = NullPtr, types.VoidT
+    fi := try m.fnOf.Get(k) catch {
+        m.refuse(WhyNoBody)
+        return m.Stopped
+    }
+    base := m.frames.Len()
+    nf := m.pushFrame(fi, rRequest, 0)
+    if nf < 0 { return m.Stopped }
+    f := m.fns[fi]
+    for i in range args.Len() {
+        if i < f.Params.Len() {
+            l := f.Params[i]
+            ty := f.Locals[I64(l)].Ty
+            m.wr(m.localPtr(nf, l), m.width(ty), args[i])
+        }
+    }
+    for i in range f.Vars.Len() { m.varIds[m.frames[nf].Vars + i] = m.program }
+    m.loop(base)
+    m.unwind(base)
+    return m.Stopped
+}
+
+# a stopped request's frames and scopes dropped, freed with no registration run
+fn (m mut Machine&) unwind(base I64) {
+    for m.frames.Len() > base {
+        fi := m.frames.Len() - 1
+        fr := m.frames[fi]
+        for i in range m.scopeIds.Len() - fr.Scopes {
+            id := m.scopeIds[fr.Scopes + i]
+            if m.live(id) { m.dropScope(id) }
+        }
+        if m.live(fr.Store) { m.dropScope(fr.Store) }
+        m.closing.Truncate(fr.Closing)
+        m.popFrame()
+    }
+    if m.initGlobal >= 0 and m.halted {
+        for g in range m.globals.Len() {
+            if m.globals[g].State == 1 { m.globals[g].State = 0 }
+        }
+        m.initGlobal = -1
+    }
+}
+
+fn (m mut Machine&) dropScope(id I64) {
+    sc := id & slotMask
+    for m.scopes[sc].Regs >= 0 {
+        r := m.scopes[sc].Regs
+        m.scopes[sc].Regs = m.regs[r].Next
+        m.freeRegs.Push(r)
+    }
+    for m.scopes[sc].Tasks >= 0 {
+        t := m.scopes[sc].Tasks
+        m.scopes[sc].Tasks = m.tasks[t].Next
+        m.freeTasks.Push(t)
+    }
+    for m.scopes[sc].Allocs != 0 { m.release(m.scopes[sc].Allocs) }
+    s := m.scopes[sc]
+    s.Live = false
+    s.Gen = (s.Gen + 1) & ((1 << 38) - 1)
+    s.TasksEnd = -1
+    m.scopes[sc] = s
+    m.freeScopes.Push(sc)
+}
+
+# -i (B3e): each module's initialization in B5a's order, then main - Stop.None for main's return
+fn (m mut Machine&) Main(inits Array<mir.FnKey>&, main mir.FnKey) Stop {
+    none := Array<I64>(0)
+    for k in inits {
+        s := m.Eval(k, none)
+        if s != Stop.None { return s }
+    }
+    return m.Eval(main, none)
+}
+
+# ---- reading results ----
+
+# the integer at p, of type ty, sign-extended for a signed one
+fn (m mut Machine&) Int(p Ptr, ty types.TypeId) I64 { return m.intValue(m.rd(p, m.width(ty)), ty) }
+
+# the n bytes at p as an integer, zero-extended
+fn (m mut Machine&) Bits(p Ptr, n I64) I64 { return m.rd(p, n) }
+
+# the reference stored at p
+fn (m mut Machine&) RefAt(p Ptr) Ptr { return m.rdPtr(p) }
+
+# the text at p: an array of U8 or Char, or a reference to one
+fn (m mut Machine&) Text(p Ptr, ty types.TypeId) String {
+    data, n := m.arrayView(p, ty)
+    b := StringBuilder()
+    for i in range n { b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1)))) }
+    return b.ToString()
+}
+
+# the bytes the heap holds and how many allocations and scopes are live, for measuring
+fn (m Machine&) HeapBytes() I64 { return m.top }
+fn (m Machine&) Allocations() I64 { return m.allocs.Len() }
+fn (m Machine&) ScopeSlots() I64 { return m.scopes.Len() }
+
+# ---- K1a: whether a function can ever be evaluated ----
+
+# the first operation in a function, or in a function it calls by name, that K1 excludes while compiling, with where
+# it is written: "" for none. A call through a function value is decided when it is reached (K1)
+fn (m mut Machine&) Why(k mir.FnKey) (String, I64, source.Span) {
+    seen := Map<I64, Bool>()
+    work List<I64>
+    start := try m.fnOf.Get(k) catch { return $WhyNoBody, 0, source.Span(0, 0) }
+    work.Push(start)
+    seen.Put(start, true)
+    for work.Len() > 0 {
+        fi := try work.Pop() catch { break }
+        f := m.fns[fi]
+        for bb in f.Blocks {
+            for s in bb.Stmts {
+                match s {
+                    case mir.Stmt.Assign(sp, p, rv) {
+                        if m.writesGlobal(p) { return $WhyWritesGlobal, f.File, sp }
+                        if m.readsMutable(f, rv) { return $WhyMutableGlobal, f.File, sp }
+                    }
+                    case mir.Stmt.RegisterDtor(sp, s2, _, _) {
+                        if s2 != mir.ScopeRef.Program { return $WhyDestructor, f.File, sp }
+                    }
+                    case _ { }
+                }
+            }
+            match bb.T {
+                case mir.Term.Exit(sp, kind, _) {
+                    if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return $WhyEnds, f.File, sp }
+                }
+                case mir.Term.Call(sp, c) {
+                    match f.Calls[I64(c)].Target {
+                        case mir.Callee.Extern(e, ty) {
+                            name := try m.externs.Get(e) catch default ""
+                            if name != "__olang_run_on_stack" and not mathExtern(name, m.T.Items(m.T.Params(ty)).Len()) {
+                                return $WhyExtern, f.File, sp
+                            }
+                        }
+                        case mir.Callee.Fn(key, _) {
+                            g := try m.fnOf.Get(key) catch { return $WhyNoBody, f.File, sp }
+                            if not (try seen.Get(g) catch default false) {
+                                seen.Put(g, true)
+                                work.Push(g)
+                            }
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+    return "", 0, source.Span(0, 0)
+}
+
+fn (m mut Machine&) writesGlobal(p mir.Place) Bool {
+    return match p.B {
+        case mir.Base.Global(_, _, _) => true
+        case _ => false
+    }
+}
+
+fn (m mut Machine&) readsMutable(f mir.Fn&, rv mir.Rvalue) Bool {
+    return match rv {
+        case mir.Rvalue.Use(mir.Operand.Copy(p)) => m.mutableGlobal(p)
+        case mir.Rvalue.Prim(_, _, r) => m.rangeMutable(f, r)
+        case _ => false
+    }
+}
+
+fn (m mut Machine&) rangeMutable(f mir.Fn&, r mir.Range) Bool {
+    for i in range r.N {
+        match f.Ops[I64(r.At) + i] {
+            case mir.Operand.Copy(p) {
+                if m.mutableGlobal(p) { return true }
+            }
+            case _ { }
+        }
+    }
+    return false
+}
+
+fn (m mut Machine&) mutableGlobal(p mir.Place) Bool {
+    match p.B {
+        case mir.Base.Global(module, name, _) {
+            g := try m.globalOf.Get(gkey(module, name)) catch default -1
+            return g >= 0 and m.globals[g].Mutable
+        }
+        case _ { return false }
+    }
+}
