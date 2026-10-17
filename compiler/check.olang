@@ -1966,6 +1966,10 @@ fn (c mut Checker&) partsEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, t
         fs = c.P.T.Parts(t)
     } else if k == types.Kind.Named and c.declKind(t) == types.DeclKind.Struct {
         fs = c.P.T.Fields(t)
+    } else if k == types.Kind.Array {
+        return c.arraysEqual(sp, x, y, t)
+    } else if k == types.Kind.Named and c.declKind(t) == types.DeclKind.Enum {
+        return c.enumsEqual(sp, x, y, t)
     } else {
         return null
     }
@@ -1978,6 +1982,66 @@ fn (c mut Checker&) partsEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, t
         e := c.equality(sp, token.Tok.EqEq, c.read(sp, typed.Place.Field(sp, ts[i], px, i)),
                         c.read(sp, typed.Place.Field(sp, ts[i], py, i)))
         r = e if i == 0 else typed.Expr.Cond(sp, types.BoolT, typed.Cond(r, e, c.lit(sp, types.BoolT, 0)))
+    }
+    if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, sfrom), r)) }
+    return r
+}
+
+# '==' on arrays an element of which declares Eq somewhere in its parts (E10a): the lengths, then each pair of
+# elements by its own '==', in a loop the comparison's Seq holds, stopping at the first that differs
+fn (c mut Checker&) arraysEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, at types.TypeId) typed.Expr&c {
+    sfrom := c.stmts.Len()
+    rt := c.P.T.Ref(at, types.ReadOnly)
+    a := c.hidden(sp, rt)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(a)), c.fit(x, rt, sp)))
+    b := c.hidden(sp, rt)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(b)), c.fit(y, rt, sp)))
+    n := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, a), null)))
+    r := c.hidden(sp, types.BoolT)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(r)), c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.readLocal(sp, n),
+                                                          c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, b), null))))
+    k := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Loop, sp)
+    more := c.and2(sp, c.readLocal(sp, r), c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), c.readLocal(sp, n)))
+    c.emit(c.breakUnless(sp, more, id))
+    et := c.P.T.Elem(at)
+    ea := c.read(sp, typed.Place.Elem(sp, et, typed.Elem(typed.Place.Deref(sp, at, c.readLocal(sp, a)), c.readLocal(sp, k), typed.Check.None)))
+    eb := c.read(sp, typed.Place.Elem(sp, et, typed.Elem(typed.Place.Deref(sp, at, c.readLocal(sp, b)), c.readLocal(sp, k), typed.Check.None)))
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, types.BoolT, typed.LocalId(I32(r))), c.equality(sp, token.Tok.EqEq, ea, eb)))
+    body := c.close(id, outer, mark, from)
+    pfrom := c.stmts.Len()
+    pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+                             c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
+    post := c.close(pid, pouter, pmark, pfrom)
+    c.emit(typed.Stmt.Loop(sp, body, post))
+    return typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, sfrom), c.readLocal(sp, r)))
+}
+
+# '==' on enum values a payload of which declares Eq somewhere in its parts (E10a): the same case, then that case's
+# payload fields each by its own '=='
+fn (c mut Checker&) enumsEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, et types.TypeId) typed.Expr&c {
+    sfrom := c.stmts.Len()
+    px := c.heldOf(sp, c.fit(x, et, sp))
+    py := c.heldOf(sp, c.fit(y, et, sp))
+    cases := c.P.T.Items(c.P.T.Cases(et))
+    r typed.Expr&c = c.lit(sp, types.BoolT, 0)
+    for kk in range cases.Len() {
+        k := cases.Len() - 1 - kk
+        ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
+        same := c.prim(sp, types.BoolT, typed.PrimOp.IsCase, c.read(sp, py), c.lit(sp, c.i64(), k))
+        qx := typed.Place.Payload(sp, cases[k], typed.Payload(px, k, typed.Check.None))
+        qy := typed.Place.Payload(sp, cases[k], typed.Payload(py, k, typed.Check.None))
+        for i in range ps.Len() {
+            e := c.equality(sp, token.Tok.EqEq, c.read(sp, typed.Place.Field(sp, ps[i], qx, i)),
+                            c.read(sp, typed.Place.Field(sp, ps[i], qy, i)))
+            same = c.and2(sp, same, e)
+        }
+        here := c.prim(sp, types.BoolT, typed.PrimOp.IsCase, c.read(sp, px), c.lit(sp, c.i64(), k))
+        r = typed.Expr.Cond(sp, types.BoolT, typed.Cond(here, same, r))
     }
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, sfrom), r)) }
     return r
@@ -2165,6 +2229,10 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
 
 # a if c else b (E28): one type for both values, a literal adapting
 fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr&c {
+    # G26: decided for this instance where the condition reads a constant variable - the chosen value alone checked
+    dk := c.constCond(k)
+    if dk == 1 { return c.expr(a, want) }
+    if dk == 0 { return c.expr(b, want) }
     t := c.cond1(k)
     x := c.expr(a, want)
     y := c.expr(b, want)
@@ -2458,10 +2526,18 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 return c.arrayMake(sp, c.resolve(targs[0]), args, want)
             }
             if ref.Kind == names.What.Builtin and c.text(n) == "Array" and targs.Len() == 2 {
-                # a written fixed length is dropped (QP2): a length is inferred where an array is made, Array<T>(N) -
-                # an error once SPEC and stage 0 change, a gap until then
-                c.gap(gsp, "a written fixed length, dropped: Array<T>(N) makes an array of N (QP2)")
-                return c.unknown(sp)
+                # Array<T, N>(): a fixed array's zero value (T7c). QP1 drops the form for Array<T>(N), which makes the
+                # same; accepted until SPEC, stage 0 and the corpus change with the arrays batch
+                if args.Len() != 0 {
+                    c.err(sp, msgs.ArgCount(0, "s", args.Len()))
+                    return c.unknown(sp)
+                }
+                elem := c.resolve(targs[0])
+                length := c.P.ConstArg(c.fr().Ctx, targs[1], c.i64())
+                if elem == types.UnknownT { return c.unknown(sp) }
+                return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, Array<typed.Expr&>(0),
+                                       c.lit(sp, c.i64(), c.P.T.ConstValue(length) if c.P.T.KindOf(length) == types.Kind.Const else 0),
+                                       c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 {
                 # written as a type is, so a constant argument is folded against its parameter's type (G21)
@@ -4213,6 +4289,19 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         c.gap(sp, "an if the build decides, still undecided (S8b, B9c)")
         return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0)))
     }
+    # G26: a condition reading a constant variable is decided for this instance, the chosen branch alone checked
+    dk := c.constCond(i.Cond)
+    if dk == 1 { return typed.Stmt.Block(sp, c.branchBlock(i.Then)) }
+    if dk == 0 {
+        if i.Else == null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
+        match i.Else {
+            case ast.Stmt.If(esp, e) {
+                if e.Cond == null { return typed.Stmt.Block(esp, c.branchBlock(e.Then)) }
+                return c.ifOf(esp, e)
+            }
+            nomatch { return c.elseOf(sp, i.Else) }
+        }
+    }
     k := c.cond1(i.Cond)
     then := c.branchBlock(i.Then)
     els typed.Block&c = null
@@ -4245,6 +4334,37 @@ fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
 fn (c mut Checker&) elseDropped(s ast.Stmt&) Bool {
     match s {
         case ast.Stmt.If(_, e) { return e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) }
+        nomatch { return false }
+    }
+}
+
+# a condition with a constant variable written in it, decided for this instance (G26): 1 true, 0 false, -1 where it
+# reads none, or is not decided by the constants alone
+fn (c mut Checker&) constCond(x ast.Expr&) I64 {
+    if not c.readsConst(x) { return -1 }
+    k := c.P.FoldConst(c.fr().Ctx, x, types.BoolT)
+    if c.P.T.KindOf(k) != types.Kind.Const { return -1 }
+    return 1 if c.P.T.ConstValue(k) != 0 else 0
+}
+
+# whether an expression has a constant variable of this instance written in it (G26)
+fn (c mut Checker&) readsConst(x ast.Expr&) Bool {
+    if x == null { return false }
+    match x {
+        case ast.Expr.Name(sp, n) {
+            ref := c.P.R.Use(c.fr().File, sp.Start)
+            if ref.Kind != names.What.TypeVar { return false }
+            t := try c.fr().Ctx.Vars.Get(n) catch default types.UnknownT
+            return c.P.T.KindOf(t) == types.Kind.Const
+        }
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Member(_, a, _) { return c.readsConst(a) }
+        case ast.Expr.Binary(_, _, a, b) { return c.readsConst(a) or c.readsConst(b) }
+        case ast.Expr.Chain(_, ch) {
+            for e in ch.Xs {
+                if c.readsConst(e) { return true }
+            }
+            return false
+        }
         nomatch { return false }
     }
 }
@@ -5013,6 +5133,14 @@ fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) 
     return c.matchExpr(sp, m, true, want)
 }
 
+# "case _" of a match on a type or a constant variable (S13f): any
+fn isWildType(c mut Checker&, t ast.TypeRef&) Bool {
+    match t {
+        case ast.TypeRef.Named(_, path, args) { return path.Len() == 1 and args.Len() == 0 and c.text(path[0]) == "_" }
+        nomatch { return false }
+    }
+}
+
 # the case "match T" chooses for this instance: its index, -1 for nomatch, -2 where the subject is not known
 fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
     st := types.UnknownT
@@ -5027,6 +5155,7 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
     isConst := c.P.T.KindOf(st) == types.Kind.Const
     for i in range m.Cases.Len() {
         for tr in m.Cases[i].Types {
+            if isWildType(c, tr) { return i }
             # a constant variable's cases are constants of its type, a type variable's types
             ct := c.P.ConstArg(c.fr().Ctx, tr, c.P.T.ConstType(st)) if isConst else c.resolve(tr)
             if c.P.T.Same(ct, st) { return i }
