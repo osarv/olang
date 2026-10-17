@@ -6,7 +6,8 @@ stage 0. It is the reference for behaviour only (diagnostics, edge cases, test r
 `SPEC.md` says what olang means.
 
 Built so far: the front end (source, tokens, parser, diagnostics, loader, name resolution) and the type table. The
-typed core and the MIR are written as contracts. Checking, lowering, evaluation and emission are not built yet,
+typed core and the MIR are written as contracts. Checking (`check.olang`) is in progress; lowering, evaluation and
+emission are not built yet,
 so this does not compile programs. The formatter (`olang format`) is the one part already in use. The command line
 is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 
@@ -25,11 +26,13 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 | `names.olang` | declaration tables and name resolution |
 | `types.olang`, `generic.olang` | interned types and layouts; instances, unification, constraints |
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
+| `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
 | `fmt.olang` | the formatter's layout (B13), over the scanner's tokens; `tools/fmt.olang` is its program |
 
 ## Subfolders
 
-- `tools/` - the acceptance tools (below), `dump.olang` (prints what the passes make of a file), `unparse.olang`,
+- `tools/` - the acceptance tools (below), `dump.olang` (prints what the passes make of a file), `checkdump.olang`
+  (what the checker says of a program), `checkdiff.olang` (the checker against stage 0's goldens), `unparse.olang`,
   `diaggold.olang`, `genmsgs.olang` (writes `msgs.olang` from the C table; from the repository root,
   `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
 - `goldens/` - what stage 0 gave, captured: `diag.txt` (diagnostics per checks case), `layout.txt` and
@@ -50,6 +53,7 @@ make diagtest      # diagnostics (msgs, diag) against the goldens
 make layoutgold    # capture layout.txt again from stage 0 (minutes)
 make diaggold      # capture diag.txt again from build/out
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
+make checkdiff     # the checker's first errors equal stage 0's on refused cases; accepted programs check clean
 ```
 
 The `*diff` targets build the C oracles in `bootstrap/oracle/` and `build/compiler_tools_dump` first.

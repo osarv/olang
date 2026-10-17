@@ -561,7 +561,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
   loading and names, M5a types and the typed contract, M7's MIR contract; the compiler under test is `OLANG ?=
-  build/out`.
+  build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
+  elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c").
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made
