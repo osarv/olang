@@ -82,8 +82,18 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     globalTypes Map<Pair<I64, I64>, types.TypeId>
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
+    atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     textT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
+}
+
+# an element read through At where a place is wanted (E31, E31b): its body and site, the collection's place, and the
+# type declaring At and SetAt
+type atRec struct(Body I64, Site I64, Base typed.Place&, Of types.TypeId) {
+    Body
+    Site
+    Base
+    Of
 }
 
 # ---- the program ----
@@ -2769,8 +2779,19 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
     }
     at := c.arrayOf(t)
     if at == types.UnknownT {
-        if t != types.UnknownT { c.gap(sp, "indexing a declared type as a place (E31 SetAt)") }
-        return null
+        if t == types.UnknownT { return null }
+        # x[i] on a type with At (E31): the element read, a value with no storage - written through, it is written
+        # back by SetAt (E31b, writeBack)
+        m := c.roleMethod(t, "At", items.Len())
+        if m < 0 {
+            c.err(sp, msgs.NotIndexable(c.ty(t)))
+            return null
+        }
+        call := c.invoke(sp, sp, m, c.read(sp, base), items, null)
+        if typeOf(call) == types.UnknownT { return null }
+        site := c.site(typed.SiteKind.Temp, sp)
+        c.atRecs.Push(atRec(c.fr().Body, I64(site), base, t))
+        return typed.Place.Temp(sp, typeOf(call), call, site)
     }
     if items.Len() != 1 {
         c.err(sp, msgs.ArrayOneIndex(c.ty(t)))
@@ -3044,6 +3065,7 @@ fn (c mut Checker&) notStmtSpan(x ast.Expr&) source.Span {
 fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
     p := c.place(y)
     if p == null { return }
+    if c.writeBack(sp, token.Tok.PlusEq if inc else token.Tok.MinusEq, p, null) { return }
     t := p.Type()
     if not c.isNumber(t) or (c.isNamed(t) and not c.P.Extends(t)) {
         if t != types.UnknownT { c.gap(sp, "'++' on a declared type (E31 Inc)") }
@@ -3111,10 +3133,8 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             if base == null { return false }
             dt := c.deref(base.Type())
             if dt == types.UnknownT or c.arrayOf(dt) != types.UnknownT { return false }
-            if op != token.Tok.Assign {
-                c.gap(sp, "a compound assignment through SetAt (E31)")
-                return true
-            }
+            # a compound one reads the element through At and writes it back (writeBack)
+            if op != token.Tok.Assign { return false }
             m := c.P.MethodOf(dt, c.P.L.Names.Intern("SetAt"))
             if m < 0 { m = c.P.MethodOf(dt, c.P.L.Names.Intern("setAt")) }
             if m < 0 {
@@ -3260,6 +3280,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         return
     }
     c.notCapture(p, target.Span())
+    if c.writeBack(sp, op, p, value) { return }
     t := p.Type()
     if op == token.Tok.Assign {
         x := c.exprTo(value, t)
@@ -3289,6 +3310,125 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         }
     }
     c.emit(typed.Stmt.Assign(sp, p, c.prim(sp, t, binaryOp(bop), old, v)))
+}
+
+# the element read through At that a store into p writes into, reached from p's top without passing a reference:
+# its record's index, -1 for none (E31b)
+fn (c mut Checker&) valueTemp(p typed.Place&) I64 {
+    match p {
+        case typed.Place.Field(_, _, base, _) { return c.valueTemp(base) }
+        case typed.Place.Elem(_, _, e) { return c.valueTemp(e.Base) }
+        case typed.Place.Payload(_, _, pl) { return c.valueTemp(pl.Base) }
+        case typed.Place.Temp(_, _, _, site) {
+            body := c.fr().Body
+            for i in range c.atRecs.Len() {
+                if c.atRecs[i].Body == body and c.atRecs[i].Site == I64(site) { return i }
+            }
+            return -1
+        }
+        nomatch { return -1 }
+    }
+}
+
+# p with the element read through At replaced by the local t holding it
+fn (c mut Checker&) replaceTemp(p typed.Place&c, t I64) typed.Place&c {
+    match p {
+        case typed.Place.Field(sp, ty, base, k) { return typed.Place.Field(sp, ty, c.replaceTemp(base, t), k) }
+        case typed.Place.Elem(sp, ty, e) {
+            return typed.Place.Elem(sp, ty, typed.Elem(c.replaceTemp(e.Base, t), e.Index, e.Checked))
+        }
+        case typed.Place.Payload(sp, ty, pl) { return typed.Place.Payload(sp, ty, typed.Payload(c.replaceTemp(pl.Base, t), pl.Tag, pl.Checked)) }
+        case typed.Place.Temp(sp, ty, _, _) { return typed.Place.Local(sp, ty, typed.LocalId(I32(t))) }
+        nomatch { return p }
+    }
+}
+
+# a store into x[i]... through At (E31b): x's place and the indices held, the value evaluated, then the element read
+# into a local, the store made into it, and the element written back by SetAt - nothing the program wrote runs
+# between the read and the write-back. Whether it is handled
+fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&) Bool {
+    vsp := value.Span() if value != null else sp
+    ri := c.valueTemp(p)
+    if ri < 0 { return false }
+    of := c.atRecs[ri].Of
+    tv := c.tempValue(p)
+    if c.valueTemp(c.atRecs[ri].Base) >= 0 {
+        c.gap(sp, "a store through two collections' elements (E31b)")
+        if value != null { c.expr(value, types.UnknownT) }
+        return true
+    }
+    args := c.callArgs(tv)
+    if args == null {
+        c.gap(sp, "a store through an element read of this kind (E31b)")
+        return true
+    }
+    n := args.Len() - 1
+    sm := c.roleMethod(of, "SetAt", n + 1)
+    if sm < 0 {
+        c.err(sp, msgs.SetatUndeclared(c.ty(of)))
+        if value != null { c.expr(value, types.UnknownT) }
+        return true
+    }
+    held List<I64>
+    for i in range n {
+        a := args[i + 1]
+        h := c.local(source.NameId(0), a.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
+        c.emit(typed.Stmt.Let(a.Span(), typed.LocalId(I32(h)), a))
+        held.Push(h)
+    }
+    pt := p.Type()
+    x typed.Expr&c = null
+    if op == token.Tok.Assign {
+        x = c.exprTo(value, pt)
+        if pt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, pt, x)) }
+    } else {
+        if not c.isNumber(pt) or (c.isNamed(pt) and not c.P.Extends(pt)) {
+            if pt != types.UnknownT { c.gap(sp, "a compound assignment to what is no number (E31)") }
+            return true
+        }
+        if value == null {
+            x = c.lit(sp, pt, floatBits(c.under(pt), 1.0) if c.P.T.IsFloat(c.under(pt)) else 1)
+        } else {
+            x = c.value(c.expr(value, pt), vsp)
+            if typeOf(x) != pt and c.isNumber(typeOf(x)) and c.P.Flows(typeOf(x), pt) { x = c.convert(vsp, x, pt) }
+        }
+    }
+    hv := c.local(source.NameId(0), vsp, typeOf(x), typed.LocalKind.Held, typed.Mark.None)
+    c.emit(typed.Stmt.Let(vsp, typed.LocalId(I32(hv)), x))
+    reads mut Array<typed.Expr&>&c = Array<typed.Expr&>(n)
+    for i in range n { reads[i] = c.readLocal(sp, held[i]) }
+    am := c.roleMethod(of, "At", n)
+    el := c.invoke(sp, sp, am, c.read(sp, c.atRecs[ri].Base), null, reads)
+    t := c.hidden(sp, typeOf(el))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(t)), el))
+    p2 := c.replaceTemp(p, t)
+    v := c.readLocal(sp, hv)
+    if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Place.Target(sp, pt)), v) }
+    c.emit(typed.Stmt.Assign(sp, p2, v))
+    sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(n + 1)
+    for i in range n { sargs[i] = c.readLocal(sp, held[i]) }
+    sargs[n] = c.readLocal(sp, t)
+    c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sm, c.read(sp, c.atRecs[ri].Base), null, sargs)))
+    return true
+}
+
+# the value of the Temp a store reaches (valueTemp's)
+fn (c mut Checker&) tempValue(p typed.Place&) typed.Expr&p {
+    return match p {
+        case typed.Place.Field(_, _, base, _) => c.tempValue(base)
+        case typed.Place.Elem(_, _, e) => c.tempValue(e.Base)
+        case typed.Place.Payload(_, _, pl) => c.tempValue(pl.Base)
+        case typed.Place.Temp(_, _, x, _) => x
+        case _ => null
+    }
+}
+
+# a call's arguments, the receiver first; null for what is no call
+fn (c mut Checker&) callArgs(x typed.Expr&) Array<typed.Expr&>&x {
+    return match x {
+        case typed.Expr.Call(_, _, cl) => cl.Args
+        case _ => null
+    }
 }
 
 # a branch's statements in a block of their own, what they report held where its parse held them (B9, S8b)
@@ -4520,4 +4660,21 @@ test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
     c.RootOnly = true
     c.CheckProgram()
     assert rootRules(l) == "D16a D16c ", rootRules(l)
+}
+
+test "x[i] through At and SetAt: reads, stores, compound stores and increments written back (E31, E31b)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "type P struct(x I64, y I64) { x\n    y }\n"
+                       "fn main() ? {\n    l := List<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n"
+                       "    n := List<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n"
+                       "    assert l[0].x + l[0].y + n[0] > 0\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "", rootRules(l)
+    assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
 }
