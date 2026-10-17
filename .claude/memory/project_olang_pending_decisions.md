@@ -154,6 +154,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   passed, else failed; else the process) - reverses B5b; (3) a prelude result type `Never` (fn Exit(code I32) Never) -
   D10a counts a call to one as leaving, its body checked never to return (Zig noreturn, Rust !); (4) keep `unreachable`
   (the checker inserts and needs it). Asked: all four, or unreachable gone too. In effect: the four keywords stay.
+- QV ASKED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
+  must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
+  no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
+  errors / no std exits, rejected; (4) non-null assertion - unneeded (T2b). Recommended 1; `!` directly before `=`
+  lexes as `!=`. In effect: `!` unused.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
