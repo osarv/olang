@@ -100,7 +100,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   every fallible call in its operand, a parenthesized expression or a chain included, and never turns on a check;
   `checked (...)` / `checked a[i]` / `checked a[lo:hi]` / `checked x[i] = v` is try plus the E15a checks (built-in
   operations, a type's Try forms), calls included; a type with only a Try form is usable only under `checked`.
-  `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
+  The Try forms are renamed to match (the user: "So then tryAt etc becomes checkedAt?" - yes): CheckedAt, CheckedPlus,
+  CheckedSetAt, CheckedSlice, ... (private checkedAt), reversing the user's own TryAt pick of 2026-10-07. `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
   built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
