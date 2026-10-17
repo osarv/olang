@@ -297,7 +297,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   fixed sizes, List for growing (never moves: no stale views, growth frees nothing), `l.ToArray()` (one visible copy)
   where contiguity is needed; early freeing stays as the compiler's optimization for long-lived structures. Costs:
   List random indexing ~5-6x an array's instructions; Vec phase 1 removed. The doc compares it with the handle design.
-  ASKED: take it? In effect: nothing changed.
+  ANSWERED: "No don't drop vec yet" - Vec stays (the handle design is the doc's main design; drop-Vec only a note).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
   things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
