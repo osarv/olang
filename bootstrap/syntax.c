@@ -4814,7 +4814,7 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_CONST_ARG_PAREN, found);
         return true;
     }
-    //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
+    //"fn f() ?error {" - '?' alone is the inferred set (R1a), and 'error' names no error type
     if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
         ErrSyntax(found, ERR_ERROR_AFTER_QUESTION);
         return true;

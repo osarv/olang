@@ -87,7 +87,7 @@ struct type;
     X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
     X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
     X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
-    X(ERR_ERROR_AFTER_QUESTION,         "R15",   "'?' alone is the default error - write '?', or name the types: '? IoError'") \
+    X(ERR_ERROR_AFTER_QUESTION,         "R1a",   "'?' alone is what the body can fail with - write '?', or name the types: '? IoError'") \
     X(ERR_VALUE_AFTER_EQ,               "D12",   "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \
     /* ---- top-level conditions (each message takes the token it is about) ---- */ \
     X(ERR_COND_NAME,                    "B9a",   "%n is not a build constant or an immutable global of this module") \
@@ -127,7 +127,6 @@ struct type;
     X(ERR_UNKNOWN_ERROR_TYPE,           "R1",    "unknown error type %n") \
     X(ERR_FUNC_TYPE_ERRS_UNWRITTEN,     "R1b",   "a function type writes its error set - '? IoError' - since no body says what it is") \
     X(ERR_TRAIT_ERRS_UNWRITTEN,         "R1b",   "a trait's method writes its error set - '? IoError' - since no body says what it is") \
-    X(ERR_ERRS_NOT_IN_TYPE,             "R1b",   "%n can fail with %t, which this function type does not name - add it after its '?'") \
     X(ERR_TYPE_IS_PRIVATE,              "M6",    "type %n is private to its module") \
     X(ERR_TYPE_NAME_IN_USE,             "D2",    "type %n is already declared in this module") \
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
@@ -540,8 +539,6 @@ struct type;
     X(ERR_RETURN_VALUE_IN_VOID,         "D8",    "this function returns no value") \
     X(ERR_RETURN_NEEDS_VALUE,           "D8",    "this function returns %t, so 'return' needs a value") \
     X(ERR_ERROR_OUTSIDE_FUNCTION,       "R3",    "'error' fails a function, and this is not inside one") \
-    X(ERR_DEFAULT_ERROR_NAMED_SIG,      "R16",   "this function names its errors, so it fails with one of them: 'error T.WORD'") \
-    X(ERR_DEFAULT_ERROR_UNDECLARED,     "R16",   "this function declares no errors - add '?' to fail with the default error") \
     X(ERR_ERROR_WORD_IS_PRIVATE,        "M6a",   "error word %n is private to its module") \
     X(ERR_ERROR_UNDECLARED,             "R3",    "this function does not declare %n - add it after '?'") \
     /* ---- join and spawn ---- */ \
@@ -585,7 +582,6 @@ struct type;
     X(ERR_MISSING_RETURN,               "D10a",  "the end can be reached without returning %t - return on every path, or end it with 'unreachable'") \
     X(ERR_BREAK_OUTSIDE_LOOP,           "S11",   "%n acts on the innermost loop, and there is none here") \
     X(ERR_DEFER_LOOP_JUMP,              "S19b",  "%n may not leave deferred code - it runs while its block is left") \
-    X(ERR_CATCH_DEFAULT_NOT_PRODUCED,   "R18",   "the call does not fail with the default error") \
     X(ERR_CATCH_NOT_PRODUCED,           "R14",   "the call does not fail with %t") \
     X(ERR_TRY_CATCH_ON_SLICE,           "R10",   "a try statement discards its value, leaving a slice nothing - write 's := try a[lo:hi]' and catch where it is used") \
     /* ---- decided while compiling ---- */ \
