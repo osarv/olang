@@ -19580,3 +19580,13 @@ lambda's set), and writes type parameter lists (`fn f(a <T>, b T)` -> `fn f<T>(a
 (a unary `-`) is moved only where its list is old (it has line-end commas) or with `--old`, for a tree written wholly in
 the old syntax (a branch, oann). Strings are never touched: programs inside strings (tests, generators) were migrated
 by hand.
+
+**Merged with the checker's errors batch (361fa14).** `check.olang`, `checkdiff` and `checkdump` came in written in the
+old syntax and were migrated by the tool with `--old` (31 line-end commas, 13 items parenthesized, one type parameter
+list), the merged lines of `types.olang` without it (3 commas). The checker reads the new AST: a constructor that
+introduces variables is one with a `struct<...>` list (`StructBody.TypeParams`), a bare type variable in a local's type
+takes its initializer's scope (O25a, `Mark.Infer`; it was the `<U>` spelling), and G8b's "written again" gap is gone with
+`Expr.TypeVar`. `generic.CtorVars` (G10d, new on master) takes the constructor's variables from that list, with their
+constraints. `checkdiff`: 232 of 413 refused checker cases give stage 0's first error and 278 of 282 accepted programs
+check clean - master's run on the same day gave 234 of 415 and 274 of 278, with the same 181 cases failing in both; the
+difference is the removed G8b/G22 cases and the three `T17, T19, C2` comma cases, which now build.

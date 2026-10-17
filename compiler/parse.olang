@@ -45,7 +45,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     diags
     file
     pos I64 = 0
-    half token.Tok = token.Tok.Eof     # the rest of a split "<<", ">>", ">=" or ">>=", read next (point 10)
+    half token.Tok = token.Tok.Eof     # the rest of a split ">>", ">=" or ">>=", read next (point 10)
     halfStart I32 = 0
     prevKind token.Tok = token.Tok.Eof # the last token read, and where it ended
     prevEnd I32 = 0

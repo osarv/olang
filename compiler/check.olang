@@ -393,47 +393,18 @@ fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl&) {
 # declares one - neither a generic's (checked per instance, G16) nor one whose parameters introduce variables (G10d)
 fn (c mut Checker&) declaredCtor(mi I64, td ast.TypeDecl&) {
     if td == null or td.Body == null or (td.Params != null and td.Params.Len() > 0) { return }
-    ps Array<ast.Param&>&td = null
     match td.Body {
-        case ast.TypeBody.Struct(s) { ps = s.Params }
+        case ast.TypeBody.Struct(s) {
+            if s.TypeParams != null and s.TypeParams.Len() > 0 { return }
+        }
         case ast.TypeBody.Over(_, ctor) {
-            if ctor == null { return }
-            ps = ctor.S.Params
+            if ctor == null or (ctor.TypeParams != null and ctor.TypeParams.Len() > 0) { return }
         }
         nomatch { return }
-    }
-    if ps != null {
-        for p in ps {
-            if introduces(p.Ty) { return }
-        }
     }
     ei := c.P.TypeEntry(mi, td.Name)
     if ei < 0 { return }
     c.ctorBody(c.P.T.Named(c.P.DeclFor(mi, ei), types.ListId(0)))
-}
-
-# whether a written type introduces a variable anywhere in it (G8b's "<T>")
-fn introduces(t ast.TypeRef&) Bool {
-    if t == null { return false }
-    match t {
-        case ast.TypeRef.Var(_, _, _) { return true }
-        case ast.TypeRef.Named(_, _, args) {
-            for a in args {
-                if introduces(a) { return true }
-            }
-        }
-        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Perm(_, of, _, _) { return introduces(of) }
-        case ast.TypeRef.Func(_, sg) {
-            for p in sg.Params {
-                if introduces(p.Ty) { return true }
-            }
-            for r in sg.Results {
-                if introduces(r) { return true }
-            }
-        }
-        nomatch { }
-    }
-    return false
 }
 
 fn (c mut Checker&) declsIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
@@ -1221,12 +1192,11 @@ fn (c mut Checker&) mutBefore(tr ast.TypeRef&, t types.TypeId) source.Span {
     }
 }
 
-# whether a written type is a type variable, bare (G8b) or introduced: "mut T" is writable when T is bound to a
-# reference (T2), whatever an instance binds it to
+# whether a written type is a type variable (G8b): "mut T" is writable when T is bound to a reference (T2), whatever an
+# instance binds it to
 fn (c mut Checker&) namesTypeVar(t ast.TypeRef&) Bool {
     if t == null { return false }
     match t {
-        case ast.TypeRef.Var(_, _, _) { return true }
         case ast.TypeRef.Named(sp, path, args) {
             if path.Len() != 1 or args.Len() > 0 { return false }
             return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar
@@ -1451,7 +1421,10 @@ fn (c mut Checker&) markOf(t ast.TypeRef&) typed.Mark {
             return typed.Mark.Global(c.fr().Mi, sc)
         }
         case ast.TypeRef.Perm(_, of, _, _) { return c.markOf(of) }
-        case ast.TypeRef.Var(_, _, _) { return typed.Mark.Infer }
+        case ast.TypeRef.Named(_, _, _) {
+            # a local written as a bare type variable takes its initializer's scope (O25a)
+            return typed.Mark.Infer if c.namesTypeVar(t) else typed.Mark.None
+        }
         nomatch { return typed.Mark.None }
     }
 }
@@ -3136,7 +3109,6 @@ fn exprKindName(x ast.Expr&) String& {
         case ast.Expr.MatchE(_, _) => "a match value (S12b)"
         case ast.Expr.Range(_, _) => "a range outside a for (S9b)"
         case ast.Expr.Default(_) => "'default' outside a call (E14a)"
-        case ast.Expr.TypeVar(_, _) => "a type variable written again (G8b)"
         case ast.Expr.Index(_, _, _) => "an index of this kind"
         case _ => "an expression of this kind"
     }

@@ -1629,24 +1629,31 @@ fn (p mut Program&) PreludeType(identity String&, name String&) types.TypeId { r
 # a type with no constructor
 fn (p mut Program&) CtorSig(t types.TypeId) types.TypeId { return p.CtorSigAt(t, types.ListId(0)) }
 
-# the variables a struct's constructor introduces in its parameters (G10d) - none for a generic type's, whose
-# parameters write the type's own (G8b) - registered under CtorOwner: how many
+# the variables a struct's constructor lists after "struct" (G10d, QW: "struct<T>(g Graph<T>&)") - none for a generic
+# type's, which may have no list - registered under CtorOwner with their constraints: how many
 fn (p mut Program&) CtorVars(d types.DeclId) I64 {
     owner := CtorOwner(d)
     if (try p.varsAt.Get(owner) catch default -1) >= 0 { return p.VarCount(owner) }
     ns List<source.NameId>
     td := p.typeDecl(d)
+    tps Array<ast.TypeParam&>&td = null
     if td != null and td.Body != null and (td.Params == null or td.Params.Len() == 0) {
         match td.Body {
-            case ast.TypeBody.Struct(s) {
-                if s.Params != null {
-                    for prm in s.Params { p.introductions(prm.Ty, ns) }
-                }
-            }
+            case ast.TypeBody.Struct(s) { tps = s.TypeParams }
             nomatch { }
         }
     }
+    if tps != null {
+        for tp in tps {
+            if not ns.Has(tp.Name) { ns.Push(tp.Name) }
+        }
+    }
     p.addVars(owner, ns.ToArray())
+    if tps != null {
+        c := Context(p.declMi[I64(d)], owner)
+        for i in range ns.Len() { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
+        for tp in tps { p.constraint(c, tp.Name, tp.Ty) }
+    }
     return ns.Len()
 }
 

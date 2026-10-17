@@ -112,8 +112,8 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   - the conditional `a if c else b` (E28) at the lowest level, with L18b's rule about a line-initial `if`.
 - **Lookahead.** The parser looks one token ahead, plus a few bounded peeks at the sites listed in section 2. It
   never backtracks and never memoizes.
-- **Type-argument mode.** Inside a type-argument list, `>` closes the list. `<<`, `>>`, `>=` and `>>=` are split
-  there (section 2, point 10).
+- **Type-argument mode.** Inside a type-argument list, `>` closes the list. `>>`, `>=` and `>>=` are split there;
+  `<<` never opens a list (section 2, point 10).
 - **Error recovery.**
   - An error in a statement skips to that statement's end at the same bracket depth, or to its block's `}`.
   - An error in a declaration skips to the next line that starts with a declaration keyword.
@@ -338,7 +338,8 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
 - **`generic.Program`** makes declared types' bodies on request (an instance's by substituting its generic's), resolves
   written types in a module's context, folds constant arguments, infers type variables (`Unify`/`bind`: G9a-G9d), checks
   constraints where a variable is bound (`Satisfies`, `BoundMet`: G19), finds methods by receiver key (M19, M21, T29e),
-  makes functions' signatures (G8b's introductions read left to right) and names their instances (G16a).
+  makes functions' signatures (over the variables their receiver's type arguments introduce, then their list's: G3,
+  QW) and names their instances (G16a).
 - **G17** has both of its bounds: a type nesting more than 48 deep is refused where it is interned, and a chain of more
   than 1,000 instances' layouts each asking for the next where the layouts are requested (a constant that keeps
   changing). Each is said once per declaration.
@@ -897,19 +898,19 @@ repository (25.7k lines of corpus and std). "study2 uses" counts how often study
    - **`T[...]` is deferred, Go-style.** `Name[ ... ]` parses as one index-or-literal node; the resolver makes it an
      array literal when `Name` is a type. A comprehension inside one is valid only for a literal. `Name&[` is always
      a literal, since no expression begins with `[`.
-   - **`x is T` is deferred.** After `is` or `is not`, the operand is a type when it begins with `mut`, `fn` or
-     `<`, or carries type arguments or a marker. Otherwise a bare path stays undecided for the resolver.
+   - **`x is T` is deferred.** After `is` or `is not`, the operand is a type when it begins with `mut` or `fn`, or
+     carries type arguments or a marker. Otherwise a bare path stays undecided for the resolver.
    - **`Name<` uses the oracle.** It cannot be deferred: `a < b > (c)` is a legal comparison chain (E30) with the
      same tokens as a generic constructor call.
      - The oracle holds the type and error names declared in the module (in any branch), in the prelude and in
-       imported modules (all from the pre-scan, section 1.4), plus the current item's introduced type variables
-       (G8b), which also make `match T` take types (G13).
+       imported modules (all from the pre-scan, section 1.4), plus the current item's type variables - its list's and
+       those its receiver introduces (G3, QW) - which also make `match T` take types (G13).
      - It is exact: D2 and D3a forbid a name being both a type and a value in one module.
      - Sites: 585 `Name<...>(` and 6 `Name<...>[`. study2 needed a type name 3,654 times.
    - Question 1 (section 8) offers the alternative: making `Name<` context-free.
 2. **Statement-start declarations: (a), two tokens.** A statement is a declaration when an identifier is followed by
-   an identifier, `mut`, `fn`, `enum`, `struct`, `:=`, or `<`. A `<` cannot start a comparison statement, since S3
-   forbids those. Anything else starts an expression statement. study2 uses: 6,374.
+   an identifier, `mut`, `fn`, `enum`, `struct` or `:=` (a type variable is written bare, QW, so a type never begins
+   with `<`). Anything else starts an expression statement. study2 uses: 6,374.
 3. **`a, b =` lists: (a), a cover grammar.** The parser reads an expression list, and the token after it decides:
    - `=` makes a parallel assignment (S4c);
    - `:=` makes a destructuring or a list of declarations (D8c, D12b);
@@ -951,18 +952,17 @@ repository (25.7k lines of corpus and std). "study2 uses" counts how often study
    study2 uses: 2,994. Sites: 319 joins.
 9. **Mixed type and constant arguments: (a), a cover grammar, decided by the resolver.** An argument is read
    according to how it begins:
-   - `mut`, `fn`, `<`, `enum`, `struct` or `trait` begins a type;
+   - `mut`, `fn`, `enum`, `struct` or `trait` begins a type;
    - a literal, `(`, `-`, `~` or `not` begins a constant expression;
    - a name begins a type path (with arguments and markers). If an operator other than `,` or `>` follows, the path
      continues as an expression (`Array<T, N + 1>`).
 
    Whether a bare path is a type or a constant (G20, G23) is the resolver's decision. Inside the list, `>` closes,
    and comparisons and shifts must be parenthesized (G21). study2 uses: 10.
-10. **Splitting `<<` and `>>`: (a).** In type-argument context, the parser splits:
-    - `<<` that opens a list whose first argument introduces a variable (G8b);
-    - `>>`, `>=` and `>>=` that close a list.
-
-    The rest of the split token is read next, as Java, C++11 and Rust parsers do. Sites: 246 `<<` in types.
+10. **Splitting `>>`: (a).** In type-argument context, the parser splits `>>`, `>=` and `>>=` that close a list;
+    the rest of the split token is read next, as Java, C++11 and Rust parsers do. `<<` is never split: since QW a
+    type variable is listed after a function's name (`fn max<T>(a T, b T) T`) or introduced by a receiver's type
+    arguments (`fn (l List<T>&) Push(x T)`), and written bare everywhere, so no list begins with a `<`.
 11. **L20a's line-end statement ends: (a), using the line-break flag.** A statement ends after a `}`, a bare `&`, a
     pun's `mut`, or a type's closing `>` exactly when the next token has a line break before it, or is `}` or the end
     of the file. No lookahead is added, and `s Array<I32>(4)` stays an error at the `(`.
@@ -1111,7 +1111,7 @@ with the installed one; `make bootstrap` is section 5.
      every file of the repository (`make astdiff`, part of `make verify`, about 5 s once both tools are built). What
      it normalizes: each file's rows are sorted (the two trees hold the same nodes in different shapes); stage 0's
      diagnostics are reduced to `error RULE LINE:COL`, its notes dropped, and only each item's first is compared; in
-     the round trip, statement ends, a trailing comma before `)` or `]`, and the split of `<<`, `>>`, `>=`, `>>=` into
+     the round trip, statement ends, a trailing comma before `)` or `]`, and the split of `>>`, `>=`, `>>=` into
      single angles are not compared; an L21 inside an item kept whole is dropped, and one that ends an item is compared
      without its position. A missing tool or a short output is a failure. Clean on all 1,262 files and study2's data;
      nesting is checked against stage 0 with both built for a limit of 40 (96 forms at 36-40 levels) and at 1,000 and
