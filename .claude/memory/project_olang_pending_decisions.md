@@ -145,6 +145,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
   test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
   are good"). Being built in wt-runfmt after its current work.
+- QT ASKED 2026-10-17 (after "Write everything in Olang"): should the makefile also become an olang program
+  (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
+  incremental part). In effect: the makefile stays.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
