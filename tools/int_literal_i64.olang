@@ -19,7 +19,7 @@
 # that must fail keeps the failure it is about: nothing is applied from a diagnostic carrying its expected text.
 # Comments and string literals are never edited. Files are rewritten in place.
 #
-#     build/out -b tools/int_literal_i64.olang && build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...
+#     build/out build tools/int_literal_i64.olang && build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...
 #
 #   --olang  the compiler to run (default: build/out in the repository this tool is in)
 #   -j       how many compilations run at once (default 3)

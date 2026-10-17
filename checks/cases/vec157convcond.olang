@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # vec7 N1 (T29a): only a call's reference is converted in place - a conditional or a match of array references stays a
 # conversion of its own, so returning one through a borrowed result is not "returns String&, found String&"
 fn pickc(k I64, a Array<Char>&) String&a {

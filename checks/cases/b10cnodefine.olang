@@ -1,5 +1,5 @@
 # check: run
-# B10c: without -D a build constant's default is the declaration's own value - and a condition reading it is
+# B10c: without -define a build constant's default is the declaration's own value - and a condition reading it is
 # configuration, never S8a's dead branch: the build decides it (S8b), and only the branch it chooses is checked
 Profile := "dev"
 Port I64 = 8080

@@ -1,7 +1,7 @@
 # Migrates olang sources to printing through std/io (M19f, 2026-10-17): the prelude's print words are gone and
 # io.Print/Println/PrintErr/PrintErrln take no try.
 #
-#     build/out -b tools/io_print.olang && build/tools_io_print [--dry] PATH...
+#     build/out build tools/io_print.olang && build/tools_io_print [--dry] PATH...
 #
 # Each PATH is an .olang file or a directory searched for them. In code (never inside a string or a character literal):
 #   - print(x) / println(x) / eprint(x) / eprintln(x) become io.Print(x) / io.Println(x) / io.PrintErr(x) / io.PrintErrln(x),

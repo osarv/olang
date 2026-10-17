@@ -10,7 +10,7 @@
 #     %c      a byte, escaped where it does not print: Char
 #     %%      a '%'
 #
-# Run from the repository root: build/out -b compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs (not with -i:
+# Run from the repository root: build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs (not with interpret:
 # the interpreter frees nothing, and this runs out of memory). It rewrites compiler/msgs.olang whole, so it is the source of the
 # generated part until the port's checker (M5) makes %n and %t typed; from then on msgs.olang is edited by hand and
 # checks/checks.olang holds it to errmsg.h's rules (bootstrap/ takes fixes only).

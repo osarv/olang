@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/D16c: a lambda over the receiver's parts, in a generic function and in a trait's default, held in a local that is
 # only ever called - its environment is in the frame, so nothing is built where the parts live
 import "std/io"

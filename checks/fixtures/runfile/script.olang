@@ -1,0 +1,11 @@
+#!/usr/bin/env olang
+# B3g: run as "olang script.olang ARGS" or, executable, as "./script.olang ARGS" - its arguments, its name first, are its
+# own, and so is its status
+import "std/os"
+import "std/io"
+
+fn main() ? io.IoError {
+    args := os.Args()
+    for a in args { try io.Println(a) }
+    if args.Len() > 1 and args[1] == "seven" { os.Exit(7) }
+}

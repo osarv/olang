@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/T25d: a conditional or a match of the receiver's text and constant text, in a Str - the literal is the constant
 # itself (a read-only conditional is a place T25d reaches), so nothing is built where the receiver lives. The same site
 # is one instance however often it is reached, while compiling as at run time (E10, "is")

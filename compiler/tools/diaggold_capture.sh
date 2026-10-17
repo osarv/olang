@@ -1,7 +1,7 @@
 #!/bin/sh
 # Captures stage 0's diagnostics on every checks/cases program that must fail to compile (compiler/DESIGN.md section
 # 4, item 3): compiler/goldens/diag.txt holds, for each such case, a line "=== CASE" and then what the C compiler
-# printed on stdout for "olang -b FLAGS CASE", run in a directory of its own with the case copied in, as the checks
+# printed on stdout for "olang build FLAGS CASE", run in a directory of its own with the case copied in, as the checks
 # run it. The repository's root is written $ROOT, so the file does not depend on where the checkout is.
 # Usage, from the repository root: compiler/tools/diaggold_capture.sh [COMPILER]  (default build/out)
 set -e
@@ -19,7 +19,7 @@ xargs -P 4 -I{} sh -c '
     mkdir -p "$dir"
     cp "{}" "$dir/"
     flags=$(sed -n "s/^# flags: //p" "{}" | head -n 1)
-    (cd "$dir" && "$olang" -b $flags "$name" > out.txt 2> err.txt) || true
+    (cd "$dir" && "$olang" build $flags "$name" > out.txt 2> err.txt) || true
 ' < "$work/cases.txt"
 out="$root/compiler/goldens/diag.txt"
 : > "$out.tmp"

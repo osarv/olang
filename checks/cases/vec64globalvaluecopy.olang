@@ -10,7 +10,7 @@ fn churn() I64 {
     }
     return t
 }
-# F4 via a -D default (B10c): an immutable top-level String global initialized with a borrow of a global's own object
+# F4 via a -define default (B10c): an immutable top-level String global initialized with a borrow of a global's own object
 type Doc struct() {
     title own mut String& = $1 "-title-built-at-run-time"
 }

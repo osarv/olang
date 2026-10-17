@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # Vec phase 2a review vec7 F1: what the same-path move still allows - both reads of the own slot in the one statement,
 # by a variable that is no global and then fields only: through an owner value local, and through a reference local
 # repointed only after the statement (nothing in a statement repoints a local between its reads)

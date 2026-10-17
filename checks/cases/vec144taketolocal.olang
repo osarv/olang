@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # Vec phase 2a review (O26a): a local a 'take' moves from flows where the taker goes - 'w := take l.toks; return w' and
 # 'l.toks = take v; return l' keep what l and v refer to in the result scope, as 'return take l.toks' did
 type Tok struct(text String&, n I64) {
