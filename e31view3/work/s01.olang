@@ -1,0 +1,28 @@
+# a handle a call gives, lent to a spawned callee from a loop body inside the join: the handle's own copy is built in
+# the loop body's block (codegen), which closes before the task reads it
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn slowPush(l mut List<I64>&, x I64) {
+    t := 0
+    for k in range 2000000 { t = t + k }
+    if t == 1 { println("never") }
+    l.Push(x)
+}
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    m.Put(2, List<I64>())
+    m.Put(3, List<I64>())
+    join {
+        for i in range 3 {
+            spawn slowPush(try m.Get(i + 1), i + 7)
+            churn()
+        }
+    }
+    churn()
+    for i in range 3 { for s in try m.Get(i + 1) { println("for " $s) } }
+}
