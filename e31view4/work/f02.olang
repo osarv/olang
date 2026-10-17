@@ -1,0 +1,15 @@
+import "std/io"
+# Str reads w.ll[0] (handle via x[i]) and stores a reference out through it - this escapes into the receiver's list
+type W struct(ll List<List<I64>>&) {
+    ll
+}
+fn (w W&) Str() String {
+    w.ll[0].Push(7)
+    return "W" $w.ll[0].Len()
+}
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    w := W(ll)
+    try io.Println($w)
+}
