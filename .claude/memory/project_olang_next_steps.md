@@ -52,6 +52,9 @@ overrated".
 - QUEUED after wt-errors: a SYNTAX batch - QY (one listing rule: `,` on a line, a line break between lines, `+` gone from
   error sets/catch) and QW (function type-parameter lists, the before/after examples from the 2026-10-17 talk) - then
   arrays phase 2 (semantics only). Both compilers; migration tools in olang; oann after.
+- SMALL, after the errors and syntax batches land (they edit SPEC.md): SPEC §5's section numbers are broken - no 5.6, two
+  5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
+  section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.
