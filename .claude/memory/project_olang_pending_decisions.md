@@ -203,7 +203,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   offered generators (`yield`, lowered to an iterator struct), compile-time reflection (unlocks serialization), units
   of measure (F#), portable SIMD vectors, arbitrary-width ints and fixed point (FPGA), embed a file, errdefer,
   contracts (requires/ensures), doc tests; declined async, exceptions, macros, |>, ?. chaining. Recommended top 3:
-  generators, reflection, units. Ideas only - nothing built until the user picks.
+  generators, reflection, units. Ideas only - nothing built until the user picks. Written out one per section in
+  docs/ideas.md (the user: "Record all the new languages so I can work through them one by one").
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
