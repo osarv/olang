@@ -2758,6 +2758,10 @@ struct str instantiationNameFor(struct str base, struct list* typeParams, struct
     return sbufTake(&b);
 }
 
+//R8/R14 in generic code: whether the body being checked is a generic's instantiation. A "try" covering nothing that
+//can fail, or a clause naming an error not produced, may be so in one instantiation and not in another - an inferred
+//set (R1a) differs between them - so neither is an error there; in a body written once, both are
+static bool inInstanceBody;
 //"instantiated here, with T = I32, U = String" - the note an error inside an instantiation's body carries
 void DiagSpellType(struct type t, char* buf, size_t n);
 static char* instantiationNote(struct list* typeParams, struct list* bindings) {
@@ -16957,7 +16961,7 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         rt = callOp->readVar->type.hasRetType ? callOp->readVar->type.retType : NULL;
     if (errors.len == 0) {
         //what failed to build was reported already, and a callee whose set is not known has said why in its body
-        if (!callOp->type.unknown && !unknown)
+        if (!callOp->type.unknown && !unknown && !inInstanceBody)
             Err(tok, checked ? ERR_TRY_NOTHING_FAILS : tryWouldCheck(callOp) ? ERR_TRY_ONLY_CHECKS : ERR_TRY_NOTHING_FAILS);
         return callOp;
     }
@@ -26727,7 +26731,7 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
             struct type* e = *(struct type**)ListGetIdx(errors, j);
             if (TypeIsSame(*e, *errType)) { produces = true; break; }
         }
-        if (!produces) { Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
+        if (!produces) { if (!inInstanceBody) Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
 
         struct catchMatch cm = (struct catchMatch){0};
         cm.errType = *errType;
@@ -26848,7 +26852,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
     out.sType = STATEMENT_EXPR;
     out.op = root;
     if (!errors.len) {
-        if (!unknown) Err(tok, checked ? ERR_TRY_NOTHING_FAILS : ERR_TRY_ONLY_CHECKS);
+        if (!unknown && !inInstanceBody) Err(tok, checked ? ERR_TRY_NOTHING_FAILS : ERR_TRY_ONLY_CHECKS);
         return out;
     }
     root->isTried = true;
@@ -26909,7 +26913,7 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     bool unknown = false;
     struct list errors = tryErrors(callOp, &cover, checked, &checkWords, &unknown);
     if (!errors.len) {
-        if (!callOp->type.unknown && !unknown)
+        if (!callOp->type.unknown && !unknown && !inInstanceBody)
             Err(tok, checked ? ERR_TRY_NOTHING_FAILS : tryWouldCheck(callOp) ? ERR_TRY_ONLY_CHECKS : ERR_TRY_NOTHING_FAILS);
         return stmt;
     }
@@ -27011,7 +27015,10 @@ void checkInstantiationBody(struct instantiation* inst) {
     instChain = inst->chain; //G17
     int savedHelper = protocolHelperDepth;
     protocolHelperDepth = isElementwiseHelper(inst->generic) ? 1 : 0; //M6b: judged where it is used, not here
+    bool savedInst = inInstanceBody;
+    inInstanceBody = true;
     checkInstantiationBodyIn(inst, spec);
+    inInstanceBody = savedInst;
     protocolHelperDepth = savedHelper;
     instChain = prevChain;
     ErrMsgPopContext();
@@ -27128,7 +27135,10 @@ void drainTypeInstantiations(void) {
             ErrMsgPushContext(p->site, tps ? instantiationNote(tps, &p->bindings) : NULL); //G16
             int prevChain = instChain;
             instChain = p->chain; //G17
+            bool savedInst = inInstanceBody;
+            inInstanceBody = true;
             buildTypeBodies(p->spec->owner, p->spec);
+            inInstanceBody = savedInst;
             instChain = prevChain;
             ErrMsgPopContext();
             currentBindings = saved; //restored, not nulled: instantiations can nest
@@ -27953,7 +27963,10 @@ static void checkInstOnDemand(void* arg) { checkInstantiationBody(arg); }
 static void checkFuncOnDemand(void* arg) {
     struct var* func = arg;
     SemanticMethodScope = func->type.owner;
+    bool savedInst = inInstanceBody;
+    inInstanceBody = false;
     checkFuncBody(func->type.owner, func);
+    inInstanceBody = savedInst;
 }
 
 static void ensureBodyChecked(struct var* func) {
@@ -27985,7 +27998,10 @@ static void buildTypeBodiesOnDemand(void* arg) {
     ErrMsgPushContext(p->site, instantiationNote(&t->ctorTwinOf->ctorFunc->type.typeParams, &p->bindings)); //G16
     int prevChain = instChain;
     instChain = p->chain; //G17
+    bool savedInst = inInstanceBody;
+    inInstanceBody = true;
     buildTypeBodies(t->owner, t);
+    inInstanceBody = savedInst;
     instChain = prevChain;
     ErrMsgPopContext();
 }
@@ -28002,7 +28018,10 @@ static void buildInstBodiesOnDemand(void* arg) {
     ErrMsgPushContext(p->site, instantiationNote(&p->spec->genericOrigin->typeParams, &p->bindings)); //G16
     int prevChain = instChain;
     instChain = p->chain; //G17
+    bool savedInst = inInstanceBody;
+    inInstanceBody = true;
     buildTypeBodies(p->spec->owner, p->spec);
+    inInstanceBody = savedInst;
     instChain = prevChain;
     ErrMsgPopContext();
 }

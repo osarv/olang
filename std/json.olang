@@ -73,7 +73,7 @@ fn (p Position&) Str() String { return $p.Line ":" $p.Col }
 # "try doc[0]". Only under try - a JSON text can always lack what is asked of it - and a "try" over a chain of them
 # checks each: "try doc["users"][0]["name"]". Fails with MISSING when there is no such member or item, WRONG_KIND
 # when the value is not an object (a name asked) or an array (an index).
-fn (j Json&) TryAt(key <K>) Json&j ? JsonError {
+fn (j Json&) At(key <K>) Json&j ? JsonError {
     match K {
         case String {
             match j {
@@ -173,7 +173,7 @@ fn (j Json&) AsObj() Object&j ? JsonError {
 fn (o Object&) Len() I64 { return o.Keys.Len() }
 
 # the value of the member named key - the last, when several are - failing with MISSING when there is none
-fn (o Object&) TryAt(key String&) Json&o ? JsonError {
+fn (o Object&) At(key String&) Json&o ? JsonError {
     return o.Values[try o.find(key) catch { error JsonError.MISSING }]
 }
 
@@ -416,7 +416,7 @@ fn (r mut reader&) close() {
         names mut Array<String&>&r = Array<String&>(n)
         for i in range n { names[i] = r.names[namesFrom + i] }
         r.nn = namesFrom
-        r.push(Json.Obj(Object(names, items)))
+        r.push(Json.Obj(try Object(names, items) catch { unreachable }))
     }
     r.pos++
 }
@@ -1081,8 +1081,10 @@ if TestBuild {
     }
 
     test "values built in code" {
-        o := Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null]),
-            Json.Bool(true)])
+        o := try Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null]),
+            Json.Bool(true)]) catch { fail }
+        uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch JsonError.UNEVEN default -1 catch { fail }
+        assert uneven == -1
         doc Json& = Json.Obj(o)
         assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
         assert doc == (try Parse("{\"ok\": true, \"tags\": [1, null], \"name\": \"olang\"}") catch { fail })

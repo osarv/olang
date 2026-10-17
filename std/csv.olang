@@ -202,6 +202,8 @@ fn show(text String&, sep Char = ',') String& {
         return "after"
     } catch CsvError.UNCLOSED_QUOTE {
         return "open"
+    } catch CsvError.BAD_SEPARATOR {
+        return "separator"
     }
     return b.ToString()
 }
@@ -256,12 +258,13 @@ test "fields borrow the text unless a doubled quote must be made one" {
 }
 
 test "Record quotes what must be, and Rows reads it back" {
-    assert Record(String&["a", "b c", "say \"hi\""]) == "a,b c,\"say \"\"hi\"\"\"\n"
-    assert Record(String&["x,y", "two\nlines", "", "cr\r"]) == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
-    assert Record(String&["a;b", "c,d"], ';') == "\"a;b\";c,d\n"
-    assert Record(Array<String&>(0)) == "\n"
+    assert try Record(String&["a", "b c", "say \"hi\""]) catch { fail } == "a,b c,\"say \"\"hi\"\"\"\n"
+    assert try Record(String&["x,y", "two\nlines", "", "cr\r"]) catch { fail } == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
+    assert try Record(String&["a;b", "c,d"], ';') catch { fail } == "\"a;b\";c,d\n"
+    assert try Record(Array<String&>(0)) catch { fail } == "\n"
     fields := String&["", "\"", "a,\"b\"\r\nc", " lead", "x"]
-    for row in try Rows(Record(fields)) {
+    text := try Record(fields) catch { fail }
+    for row in try Rows(text) {
         assert row.Len() == 5
         for k in range 5 { assert row[k] == fields[k] }
     } catch CsvError { fail }

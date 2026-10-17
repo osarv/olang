@@ -4150,7 +4150,10 @@ value, or nothing.
 operator whose method can (E31). A fallible call or operator not under a `try` is a compile-time error. One `try`
 covers **every** such call and operator in its operand (E24) - the arguments, a chain (`try f().g()` covers both
 calls), a parenthesized expression (`try (a.Get(k) + b.Get(k))`) - but not inside a lambda written there, which is a
-function of its own. A `try` covering nothing that can fail is a compile-time error. `try` never turns a check on:
+function of its own. A `try` covering nothing that can fail is a compile-time error - except in a generic's body
+(G16), where what a call can fail with may differ between instantiations (R1a): there a `try`, and a clause naming
+an error, may cover nothing in one instantiation and something in another, and covers nothing where it covers
+nothing. `try` never turns a check on:
 an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; `checked` (E15a) is
 `try` plus every check the language can make. A spawned call (§6.8 P4) and a `join` block (P4c) are tried on the same
 terms: whatever can fail is written with `try`, and nothing else is.
