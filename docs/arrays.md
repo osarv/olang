@@ -1,7 +1,11 @@
 # Arrays: one constructor, lengths inferred, arrays by value - design and plan
 
-Status: phase 1 (spec and plan), 2026-10-17. The normative rules are in `SPEC.md`: T7-T7e, T8, T10-T12, D8e, D9a,
-D9c, D13, D15, E12, E13a, E16, E16a, E20, E21, S8a, S18d, C2e, X3a, G29-G31 and K1. This note says how the user's
+Status: phase 1 (spec and plan), 2026-10-17. The normative rules are in `SPEC.md`: T7-T7d, T8, T10-T12, D8e,
+D9a-D9c, D13, D15/D15a, E12/E12b, E13a, E16/E16a, E19-E21, S8/S8a, S13f, S18a, S18c, S18d, C2e, X3/X3a, G1-G17 (no
+constant parameters), G29-G31 and K1; E32b and G20-G28 are gone. The spec states them now; the compiler does not
+implement them yet (SPEC.md's Status says so), and SPEC.md cannot reach master before phase 2 does, since
+`checks/checks.olang` holds every rule `errmsg.h` and `compiler/msgs.olang` name to the spec, and G20-G28 and E32b
+are still named there. This note says how the user's
 decisions are specified, what was decided on the way, what has to move in the repository, and how phase 2 builds it.
 
 ## 1. What was decided (ledger QP1-QP4)
@@ -160,8 +164,10 @@ Numbered for reference. Each is within QP1-QP4 and the principles, and is the sp
 15. **A by-value array parameter** (`a Array<F32>`, a declared array type such as `s String` included) takes its
     length from the argument. The function is compiled once per distinct known length (G29). An argument of run-time
     length is a compile-time error naming `a Array<F32>&` and the explicit copy, a slice with constant bounds (`r[0:3]`).
-    This is QP3's "A". Its meaning is D9's: the callee's own copy, copied only when the body writes it (D9b's
-    `paramWritten`), else read in place.
+    This is QP3's "A". Its meaning is D9's: the callee's own copy of the argument **as it was at the call** - always a
+    copy, never the caller's array read in place, since the cap makes it at most 128 bytes and an in-place read would
+    see a write another reference makes during the call (D9b's in-place reading stays for a type variable bound to a
+    run-time-length array, item 17, where a copy would cost the array's length).
 16. **An element held by value under a reference** - `m Array<Array<F64>>&` - is a by-value array level too: the
     function is instanced per element length, though the outer array is a reference and makes none. Without this an
     array of inline rows could not be passed at all, since its row length would have to be written. QP3's "a reference
@@ -415,8 +421,8 @@ evaluator's handling), and phase 2 removes its spelling and adds inference that 
 8. **S18d (`comptime.c`)**: a partial-knowledge mode - an argument known by length only, a struct by some fields, an
    unknown part making the evaluation undecided; leading asserts evaluated at every call; the false-assert error at the
    call. Separable: it can land last without blocking the rest.
-9. **Codegen (`codegen.c`)**: by-value fixed array parameters (an aggregate in registers up to 128 bytes, D9b's
-   sharing otherwise); instances emitted by the root object; the adapter of item 18. Most of the rest exists for
+9. **Codegen (`codegen.c`)**: by-value fixed array parameters (an aggregate copied at the call, at most 128 bytes,
+   in registers where it fits); instances emitted by the root object; the adapter of item 18. Most of the rest exists for
    `Array<T, N>`.
 10. **Diagnostics (`errmsg.h`)**: the G2x, E32b and T7d entries go or are reworded; new entries for D9a, D9c, T7a
     (field, element, payload), T7d (stores), S18d; `checks.olang`'s table checks hold every message to its rule.
