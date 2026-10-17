@@ -7267,7 +7267,7 @@ test "join and spawn: targets, failing tasks, clauses on the task, try join (P1,
     l := testLoad(dir, "error E {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
                        "fn work(n I64) { }\n"
                        "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n"
-                       "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { x = -1 }\n"
+                       "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { return }\n"
                        "    assert out[2] + x > 0\n}\n")
     r := names.Resolver(l)
     r.Resolve()
