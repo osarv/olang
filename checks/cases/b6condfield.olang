@@ -3,6 +3,7 @@
 # E28/O12 (the batch 6 review): a conditional of references from different scopes stored into a field is judged value by
 # value - "x" lives in this call's block, and the field lives where the caller's bag does. It was taken for a temporary,
 # judged against nothing, and the caller read freed text
+import "std/io"
 type Bag struct() {
     last String& = ""
 }
@@ -13,5 +14,5 @@ fn set(b mut Bag&, i I64) {
 fn main() ? {
     b mut Bag& = Bag()
     set(b, 1)
-    println(b.last)
+    try io.Println(b.last)
 }

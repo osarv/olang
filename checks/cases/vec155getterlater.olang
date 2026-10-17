@@ -1,6 +1,7 @@
 # check: fail note: this object is reached through a call's result, a borrow of an owned object whose region is not known here
 # vec7 F2 through a local assigned the getter's result after the take, on a later turn of the loop - what a variable may
 # hold is read off the whole of its function
+import "std/io"
 type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
     next mut Lexer& = null
@@ -30,5 +31,5 @@ fn main() ? {
     }
     p.lx = null
     churn()
-    println(d.lx.toks[0])
+    try io.Println(d.lx.toks[0])
 }

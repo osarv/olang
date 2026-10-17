@@ -19,9 +19,9 @@ fn main() ? os.OsError + io.IoError + json.JsonError {
 }
 
 # X6: a directory to run in, a deadline that kills, and programs started and waited for - the same either way
-fn processes() ? os.OsError {
+fn processes() ? os.OsError + io.IoError {
     w := try os.Exec(String&["pwd"], default, default, "/")
-    try io.Print("in " $w.Stdout) catch { }
+    try io.Print("in " $w.Stdout)
     late := "no"
     try os.ExecUntil(String&["sleep", "5"], cancel.After(50)) catch cancel.Stopped { late = "yes" }
     p := try os.Start(String&["cat"], "started")
@@ -29,5 +29,5 @@ fn processes() ? os.OsError {
     q.Kill()
     a := try p.Wait()
     b := try q.Wait()
-    try io.Print("late " $late " [" $a.Stdout "] " $b.Status "\n") catch { }
+    try io.Print("late " $late " [" $a.Stdout "] " $b.Status "\n")
 }

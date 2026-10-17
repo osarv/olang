@@ -1,5 +1,6 @@
-# check: fail error[O39]: calling 'bump' may release the Array<I64> borrowed on line 11, which is used after it
+# check: fail error[O39]: calling 'bump' may release the Array<I64> borrowed on line 12, which is used after it
 # Vec phase 2a (O31/O39): a global struct holding a Vec - a function pushing to it may release a view's buffer
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
@@ -10,5 +11,5 @@ fn main() ? {
     for i in range 3 { GL.toks.Push(i) }
     d := GL.toks.View()
     bump()
-    println($d[0])
+    try io.Println($d[0])
 }

@@ -263,8 +263,8 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   top-level if (it calls `Decide`, then enters and resolves the branch's declarations). What was decided while
   building it:
   - **Names reports the rules about declarations and imports only**: D2, D3 (declared twice), D3a (shadowing a
-    global, a function, a build constant, a type, a prelude name; a for-in name, E29), D8c (`_`), M10 (an unknown
-    alias, naming the std module where one exists), M14, M19f, M20, B10/B10c (an unknown or redeclared build
+    global, a function, a build constant, a type; a for-in name, E29), D8c (`_`), M10 (an unknown
+    alias, naming the std module where one exists), M14, M20, B10/B10c (an unknown or redeclared build
     constant, a `mut` default) and G22's constant names. **An unknown name is recorded as `None` and left to the
     checker** (M5), which knows a type's members and reports one error per name with its suggestion - two passes
     reporting it would say it twice, and only the checker can tell `x.f` on a value from `alias.f`.

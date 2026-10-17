@@ -28,7 +28,7 @@ fn main() ? {
     args := os.Args()
     mode := args[1] if args.Len() >= 2 else ""
     if (mode != "-f" and mode != "-l" and mode != "-p" and mode != "-v") or args.Len() < 3 {
-        eprintln("usage: fmt -f|-l|-p|-v FILE...")
+        try io.PrintErrln("usage: fmt -f|-l|-p|-v FILE...") catch io.IoError { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { os.Exit(run(mode, args)) })

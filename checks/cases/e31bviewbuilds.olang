@@ -2,6 +2,7 @@
 # E31b/O17: x[i] lent to a callee that writes only through the element's references, with no write-back - but the
 # callee builds text and pushes it through the copy's List, which would build it where the copy is (the statement's
 # block), not where the collection's list lives
+import "std/io"
 type R struct(l mut List<String&>&, n I64) {
     l
     n
@@ -15,5 +16,5 @@ fn f(r mut R&) { r.l.Push($r.n) }
 fn main() ? {
     s := Rs(List<String&>())
     for k in range 3 { f(s[k]) }
-    println($s.l)
+    try io.Println($s.l)
 }

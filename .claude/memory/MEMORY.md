@@ -24,3 +24,5 @@
 - [Times in CEST](user_timezone.md) — the user is in Gothenburg: report times as Swedish local time (CEST, CET after 2026-10-25)
 - [Agent model and effort per task](feedback_agent_effort.md) — pick model AND effort per agent: opus/xhigh soundness, opus/high compiler, sonnet/medium std/docs/migrations, haiku/low searches
 - [Contract work and outreach](project_outreach.md) — fixed-price measured speedups; outreach doc, 14 targets, 8 letters; I send from the company Gmail once set up; QL pending
+- [README per folder](feedback_folder_readmes.md) — every top-level folder that is its own thing has a README.md; add it when the folder appears, keep it current
+- [Everything in olang](feedback_olang_only.md) — no Python/shell scripts in the repos; tools, migrations, test servers, drivers are olang

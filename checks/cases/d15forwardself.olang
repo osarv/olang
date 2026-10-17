@@ -1,4 +1,5 @@
 # check: fail error[B5a]: A's initializer reads A, which is not set until the initializer is done
 # D15/B5a: a ':=' global reading itself, as a typed one is reported
+import "std/io"
 A := A + 1
-fn main() ? { println($A) }
+fn main() ? { try io.Println($A) }

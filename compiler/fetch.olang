@@ -12,6 +12,7 @@
 # sorted. -u resolves every repository the build reaches as if unlocked, once each.
 import "std/os"
 import "std/filepath"
+import "std/io"
 
 error FetchError {
     BAD_NAME        # M23a: a part of the path git and the cache cannot be trusted with
@@ -56,7 +57,7 @@ fn IsCommit(c String&) Bool {
 
 fn (f mut Fetcher&) say(line String&) {
     f.Said.Push($line)
-    if not f.Quiet { eprintln(line) }
+    if not f.Quiet { try io.PrintErrln(line) catch io.IoError { } }
 }
 
 fn (f mut Fetcher&) load() {

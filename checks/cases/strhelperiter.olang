@@ -1,6 +1,7 @@
 # check: run
 # flags: -sanitize
 # E11c/O18c: a helper counting a List handed the receiver's list through 'xs.Iter().Count(f)' runs, as written in Str's body
+import "std/io"
 type Bag struct(l List<I64>) {
     l
 }
@@ -12,5 +13,5 @@ fn (b Bag&) Str() String {
 fn main() ? {
     l := List<I64>()
     for i in range 10 { l.Push(i) }
-    println($Bag(l))
+    try io.Println($Bag(l))
 }

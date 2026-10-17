@@ -1,2 +1,4 @@
 # B3h: built where -output says
-fn main() ? { println("written where -output said") }
+import "std/io"
+
+fn main() ? io.IoError { try io.Println("written where -output said") }

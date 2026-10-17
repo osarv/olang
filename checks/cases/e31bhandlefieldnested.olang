@@ -1,14 +1,15 @@
 # check: run
 # flags: -debug -sanitize
 # E31b/O18c (F2): a handle in a value field of the element's value field, "f.Blocks[b].inner.S.Push(x)"
+import "std/io"
 type Blk struct() {
     S List<I64>
     t I64 = 0
 }
-fn churn() {
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 type In struct() {
@@ -28,6 +29,6 @@ fn main() ? {
     f := F(1)
     f.Blocks.Push(Blk2())
     add(f, 0, 7)
-    churn()
+    try churn()
     assert f.Blocks[0].inner.S.Len() == 1 and f.Blocks[0].inner.S[0] == 7, $f.Blocks[0].inner.S
 }

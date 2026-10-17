@@ -1,6 +1,7 @@
 # check: run
 # vec2 over-rejection 1: Clone of a Vec whose elements are references - the clone's elements refer where the original's
 # do, and it owns a buffer of its own, so the original may grow while the clone is used (no loan on its buffer)
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -18,11 +19,11 @@ fn main() ? {
     c.Push("x")
     for i in range 100 { w.Push("y") }
     churn()
-    println($c)
+    try io.Println($c)
     ns := Vec<N&>()
     ns.Push(N(4))
     m := ns.Clone()
     ns.Push(N(5))
     churn()
-    println($m.Len() " " $m[0].k " " $ns.Len())
+    try io.Println($m.Len() " " $m[0].k " " $ns.Len())
 }

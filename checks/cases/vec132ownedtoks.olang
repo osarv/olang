@@ -1,5 +1,6 @@
 # check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
 # R1: a Vec<Tok>, Tok holding its text
+import "std/io"
 type Tok struct(text String&, n I64) {
     text
     n
@@ -28,5 +29,5 @@ fn main() ? {
     g.lx.toks = take h.lx.toks
     h.lx = null
     churn()
-    println(g.lx.toks[0].text)
+    try io.Println(g.lx.toks[0].text)
 }

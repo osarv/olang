@@ -1,5 +1,6 @@
 # check: fail x[i] gives a copy of the element, which this call would write
 # E31b/R9a (T1h): the evaluator wrote the element where the run time wrote a temporary (baked 1, run 0)
+import "std/io"
 type Pt struct() {
     X I64 = 0
 }
@@ -18,5 +19,5 @@ Baked := f()
 V mut I64 = 0
 fn main() ? {
     V = f()
-    println("baked " $Baked " run " $V)
+    try io.Println("baked " $Baked " run " $V)
 }

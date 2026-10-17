@@ -2,20 +2,21 @@
 # flags: -debug -sanitize
 # E31b/O18c (the second review of the view lend, F2): "bs[0].S.Push(x)" in a loop - the hidden copy of the field is held
 # where the call it is read out of lands, so the push builds where the list lives; read back after a churn
+import "std/io"
 type Blk struct() {
     S List<I64>
     t I64 = 0
 }
-fn churn() {
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 fn main() ? {
     bs := List<Blk>()
     bs.Push(Blk())
     for i in range 3 { bs[0].S.Push(i + 7) }
-    churn()
+    try churn()
     assert bs[0].S.Len() == 3 and bs[0].S[0] == 7 and bs[0].S[2] == 9, $bs[0].S
 }

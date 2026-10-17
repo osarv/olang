@@ -1,6 +1,7 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c: a self-recursive function passing its recursive call a building callback - taken to build where it calls its
 # callback (C1b)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -25,7 +26,7 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     b := Bag(Node(1))
-    println($b)
+    try io.Println($b)
     t := churn(100)
-    println($b.head.next.v " " $t)
+    try io.Println($b.head.next.v " " $t)
 }

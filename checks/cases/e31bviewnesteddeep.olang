@@ -1,5 +1,6 @@
 # check: fail x[i] gives a copy of the element, which this call would write
 # E31b (r1's converse): the field lent on through two more calls to one that repoints its parameter - judged all the way
+import "std/io"
 type M struct(d mut Array<I64>&, off I64) {
     d
     off
@@ -24,5 +25,5 @@ fn step(c mut Layer&) {
 fn main() ? {
     s := Layers(Array<I64>(4))
     step(s[1])
-    println($s.d)
+    try io.Println($s.d)
 }

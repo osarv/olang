@@ -1,6 +1,7 @@
 # check: fail a conditional or a match gives a copy of the value it chooses
 # E28/S12b (C1): two locals chosen by a conditional, and by a match, for a writable reference parameter and a "mut"
 # receiver - each a copy the call would write and drop
+import "std/io"
 type Pt struct() {
     X I64 = 0
 }
@@ -23,5 +24,5 @@ fn main() ? {
     l.Push(Acc())
     (l[0] if k > 0 else x).Bump()
     n := show(x if k > 0 else y) # read-only: a copy is fine
-    println("" $x.N $n)
+    try io.Println("" $x.N $n)
 }

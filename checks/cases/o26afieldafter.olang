@@ -2,6 +2,7 @@
 # O26a/O13a: a value built with no constructor arguments, then given this function's own text in a field, returned by
 # value - the text flows into the returned local, so it lives in the result scope too and the field stays valid (it was
 # accepted with the text in the dying block, then refused with O20); read back after the arena has been churned
+import "std/io"
 type Holder struct() {
     name mut String& = null
 }
@@ -24,5 +25,5 @@ fn main() ? {
     h := make()
     assert churn() > 0
     assert h.name == "alpha3"
-    println($h.name)
+    try io.Println($h.name)
 }

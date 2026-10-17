@@ -1,6 +1,7 @@
 # check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
 # Vec phase 2a review R1 (O33): a Vec field of an owned object keeps what its elements refer to in that object's region -
 # moved into another owned object's field, it would outlive the region 'p.lx = null' frees
+import "std/io"
 type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
 }
@@ -24,5 +25,5 @@ fn main() ? {
     d.lx.toks = take p.lx.toks
     p.lx = null
     churn()
-    println(d.lx.toks[0])
+    try io.Println(d.lx.toks[0])
 }

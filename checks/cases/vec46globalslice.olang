@@ -1,5 +1,6 @@
 # check: fail error[O1b]: a global holds only what lives as long as the program
 # vec3 F4: a slice of a global own array kept in a global
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -14,5 +15,5 @@ fn main() ? {
     Head = Buf[0:2]              # a slice of a global own array kept in a global
     Buf = Array<I64>(64, 9)      # releases the old buffer
     churn()
-    println($Head[0] " " $Head[1])
+    try io.Println($Head[0] " " $Head[1])
 }

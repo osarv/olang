@@ -1,6 +1,7 @@
-# check: fail error[O39]: calling 'f' may release the In3 borrowed on line 20
+# check: fail error[O39]: calling 'f' may release the In3 borrowed on line 21
 # O39 (own7 F1): an inline field of an owned object lent where it is - to a reference parameter (E12c) - borrows the
 # object, whatever the field's type holds: the callee releasing the owner under it is refused
+import "std/io"
 type Plain struct(k I64) {
     k
 }
@@ -17,5 +18,5 @@ fn f(h mut H3&, p mut Plain&) I64 {
 fn main() ? {
     h mut H3& = H3()
     h.cur = In3(5)
-    println($f(h, h.cur.pl))
+    try io.Println($f(h, h.cur.pl))
 }

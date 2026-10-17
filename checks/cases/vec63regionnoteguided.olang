@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 'c.box' may release the Box borrowed on line
 # vec4 (r1e_o20_note_guided): the review's repro
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -26,5 +27,5 @@ fn main() ? {
     }
     c.box = Box()
     churn()
-    println(last)
+    try io.Println(last)
 }

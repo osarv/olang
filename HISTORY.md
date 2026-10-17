@@ -18971,6 +18971,18 @@ the later operands that run code. Owners made in a conditional get O34's "gives 
 tightens; one new over-rejection, a part borrowed after a releasing call in one statement. Fuzzer: d8c942b 13 findings
 in 60 own seeds (all own7 shapes), now none.
 
+### One printing pathway, `std/io` (M19f, 2026-10-17)
+
+The user's decision: printing has one home. `std/io` gained `Print`, `Println(t = "")`, `PrintErr` and `PrintErrln`,
+each failing with `IoError` (built on `Write`) and written with `try`; no function in std ends the program on its own.
+(A first version ended the program on a failed write, as a failed check does; the user's final call was an error.)
+Removed: `std/prelude/print.olang`, the lowercase words' special cases in the checker (the bare-name exception to M6,
+the D3a/G22 name bans) and the `m19fredeclared` check. The repository was migrated by `tools/io_print.py`, then
+`tools/io_try.py` (a `try` before every call) and `tools/io_fix.py` (drives a file to compile from the compiler's own
+errors: `? io.IoError` on a function whose try lets it escape, `try` on a call of a function that became fallible,
+`catch io.IoError { }` in a test block, a deferred block or a task). The scope fuzzer's generated programs import
+`std/io` and write `try io.Println`. SPEC M19f rewritten; D3a and G22 no longer mention the prelude's writing functions.
+
 ### The command line in words, running a file, `-output`, and a formatter (B1, B3g, B3h, B13, 2026-10-17; the user's decisions, details mine)
 
 **What the user decided.** (1) `olang main.olang [args...]` with no mode builds the program as `build` does and runs it,

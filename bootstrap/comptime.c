@@ -911,7 +911,7 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
 //without end there, and here stops where a recursion would, with the same message. 1 equal, 0 not, -1 stopped
 static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struct ctVal* y, int depth) {
     if (st->depth + depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
-        ctFail(st, tok, ctRun ? "the comparison recurses deeper than -i allows"
+        ctFail(st, tok, ctRun ? "the comparison recurses deeper than interpret allows"
                               : "the comparison recurses deeper than compile-time evaluation allows");
         return -1;
     }
@@ -1562,7 +1562,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
 static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFrame* fr) {
     struct var* func = op->readVar;
     if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
-        ctFail(st, op->tok, ctRun ? "it builds a value whose type declares a destructor, which -i does not run yet" : CT_WHY_DESTRUCTOR);
+        ctFail(st, op->tok, ctRun ? "it builds a value whose type declares a destructor, which interpret does not run yet" : CT_WHY_DESTRUCTOR);
         return false;
     }
     if (!func || func->type.isExtern) { ctFail(st, op->tok, "it calls an external function"); return false; }
@@ -1593,7 +1593,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
     if (func->codeBlock.len == 0 && func->type.hasRetType) { ctFail(st, op->tok, "it calls a function whose body is not available"); return false; }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd())
     {
-        ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+        ctFail(st, op->tok, ctRun ? "it recurses deeper than interpret allows" : "the computation recurses deeper than compile-time evaluation allows");
         return false;
     }
 
@@ -1881,7 +1881,7 @@ static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, str
         if (why) { ctFail(st, whyTok, why); return false; }
     }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
-        ctFail(st, tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+        ctFail(st, tok, ctRun ? "it recurses deeper than interpret allows" : "the computation recurses deeper than compile-time evaluation allows");
         return false;
     }
     struct var* p = ListGetIdx(&m->type.vars, 0);
@@ -3189,20 +3189,20 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
         if (!libm) libm = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL);
         if (libm) sym = dlsym(libm, name);
     }
-    if (!sym && !own) { ctFail(st, op->tok, "it calls an external function -i cannot find in this process"); return NULL; }
+    if (!sym && !own) { ctFail(st, op->tok, "it calls an external function interpret cannot find in this process"); return NULL; }
     int n = func->type.vars.len;
     ffi_type** at = MallocOrCrash(sizeof(ffi_type*) * (size_t)(n ? n : 1));
     for (int i = 0; i < n; i++) {
         struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
         at[i] = pt.bType == BASETYPE_ARRAY ? &ffi_type_pointer : ctFfiType(pt.bType);
         if (pt.bType == BASETYPE_ARRAY && !PrimInfo(pt.arrElem->bType)) at[i] = NULL; //X3: any number's bytes, F16 too
-        if (!at[i]) { ctFail(st, op->tok, "it calls an external function with a parameter type -i cannot pass"); return NULL; }
+        if (!at[i]) { ctFail(st, op->tok, "it calls an external function with a parameter type interpret cannot pass"); return NULL; }
     }
     ffi_type* rt = func->type.hasRetType ? ctFfiType(func->type.retType->bType) : &ffi_type_void;
-    if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type -i cannot receive"); return NULL; }
+    if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type interpret cannot receive"); return NULL; }
     struct ctExternCall c = { func, sym, own, {0} };
     if (ffi_prep_cif(&c.cif, FFI_DEFAULT_ABI, (unsigned)n, rt, at) != FFI_OK) {
-        ctFail(st, op->tok, "it calls an external function -i cannot call");
+        ctFail(st, op->tok, "it calls an external function interpret cannot call");
         return NULL;
     }
     ListAdd(&ctExternCalls, &c);
@@ -3217,7 +3217,7 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
     struct str fname = func->name;
     bool untimed = StrCmp(fname, StrFromCStr("pthread_cond_wait"));
     if (ctRun && (untimed || StrCmp(fname, StrFromCStr("pthread_cond_timedwait"))) && (untimed || ctTasksPending || ctTaskRunning)) {
-        const char* why = "it waits for another task, and -i runs a join's tasks one after another, never beside each other";
+        const char* why = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other";
         if (ctTaskRunning && ctTaskRunning->op->tok.owner) {
             struct str f = TokenGetFileName(ctTaskRunning->op->tok.owner);
             why = StrFmt("%s - here in the task spawned at %.*s:%d", why, f.len, f.ptr, ctTaskRunning->op->tok.lineNr);

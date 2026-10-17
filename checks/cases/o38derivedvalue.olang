@@ -1,5 +1,6 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38: a callee keeping an '&p' field of a by-value argument (O23a's derived scope) keeps the argument (own5 F1)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -24,5 +25,5 @@ fn main() ? {
     w := W(b)
     keepVal(l, w)
     v.o = null
-    println($l[0].o.k)
+    try io.Println($l[0].o.k)
 }
