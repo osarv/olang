@@ -250,6 +250,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   The user then: "What does .Hash do on a number? 2.0.Sqrt reads really bad because 2.0 is a float with a dot
   already. Math stuff isn't supposed to be defined on numbers tho right?" Answered (Hash is Map's protocol; math stays
   free functions); recommendation changed to (2): refuse methods on number literals, keep them on text/array literals.
+  DECIDED (the user: "Do that, disallow for numbers, allow for array and text"): a method call on a number literal is a
+  compile-time error (written through a variable); text, array literals and comprehensions keep methods. Both
+  compilers, queued after the syntax batch with the Pair move.
 - QL1 (company name): the user, 2026-10-17: "don't worry about the name" - dropped.
 - QJ1/QJ2/QF explained again 2026-10-17 (the user asked "tell me about 2-4"); recommendations unchanged (QJ1 keep -
   or a bare `b := a` on a Vec an error; QJ2 keep; QF open until Vec phase 2b's move-aware collections, closed with a
