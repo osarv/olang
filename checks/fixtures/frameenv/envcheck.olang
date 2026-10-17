@@ -1,0 +1,92 @@
+# envcheck FILE.ll - counts the capturing lambdas of an emitted module whose environment is a stack slot: a
+# "{ ptr @..lambda$N, ptr undef }" pair whose environment operand is an alloca of the same function. Prints
+# "ONSTACK ELSEWHERE": the pairs whose environment is an alloca, and the pairs whose environment is not.
+
+import "std/os"
+import "std/io"
+
+fn main() {
+    args := os.Args()
+    if args.Len() != 2 {
+        try io.PrintErr("usage: envcheck FILE.ll\n") catch io.IoError { }
+        os.Exit(2)
+    }
+    text := try os.ReadFile(args[1]) catch os.OsError {
+        try io.PrintErr("envcheck: cannot read " $args[1] "\n") catch io.IoError { }
+        os.Exit(2)
+    }
+    r := count(text)
+    try io.Println($r.First " " $r.Second) catch io.IoError { }
+}
+
+# the pairs whose environment is an alloca of their function, and the others
+fn count(text String&) Pair<I64, I64> {
+    allocas := Map<String&, Bool>()
+    onstack I64 = 0
+    heap I64 = 0
+    at I64 = 0
+    for at < text.Len() {
+        nl := try text[at:].FindByte('\n') catch default (text.Len() - at)
+        line := text[at:at + nl]
+        at += nl + 1
+        if line.StartsWith("define ") { allocas.Clear() }
+        if line.Contains("= alloca ") {
+            sp := firstField(line)
+            allocas.Put($sp, true)
+        }
+        env := environmentOf(line)
+        if env != "" {
+            if env in allocas { onstack++ } else { heap++ }
+        }
+    }
+    return Pair(onstack, heap)
+}
+
+# the line's first word, as awk's $1
+fn firstField(line String&) String&line {
+    i I64 = 0
+    for i < line.Len() and (line[i] == ' ' or line[i] == '\t') { i++ }
+    s := i
+    for i < line.Len() and line[i] != ' ' and line[i] != '\t' { i++ }
+    return line[s:i]
+}
+
+# for a line making a lambda's closure pair, the value its environment is: the word after the last "ptr ", up to a
+# comma; "" for any other line
+fn environmentOf(line String&) String {
+    marker := "insertvalue { ptr, ptr } { ptr @"
+    m := try line.Find(marker) catch default -1
+    if m < 0 { return "" }
+    rest := line[m + marker.Len():]
+    comma := try rest.FindByte(',') catch default -1
+    if comma < 0 { return "" }
+    callee := rest[0:comma]
+    lam := try callee.FindLast("lambda$") catch default -1
+    if lam < 0 or not isNumber(callee[lam + 7:]) { return "" }
+    if not rest[comma:].StartsWith(", ptr undef }, ptr %") { return "" }
+    last := try line.FindLast("ptr ") catch default -1
+    v := line[last + 4:]
+    end := try v.FindByte(',') catch default v.Len()
+    return $v[0:end]
+}
+
+fn isNumber(t String&) Bool {
+    if t.Len() == 0 { return false }
+    for c in t {
+        if not c.IsDigit() { return false }
+    }
+    return true
+}
+
+test "a closure pair whose environment is an alloca of the function is on the stack" {
+    ir := "define void @f() {\n  %env = alloca i64\n  %p = insertvalue { ptr, ptr } { ptr @a.lambda$3, ptr undef }, ptr %env, 0\n  %q = insertvalue { ptr, ptr } { ptr @a.lambda$4, ptr undef }, ptr %other\n}\ndefine void @g() {\n  %r = insertvalue { ptr, ptr } { ptr @a.lambda$5, ptr undef }, ptr %env\n}\n"
+    r := count(ir)
+    assert r.First == 1
+    assert r.Second == 2
+}
+
+test "other lines make no pair" {
+    assert environmentOf("  %x = insertvalue { ptr, ptr } { ptr @f, ptr undef }, ptr %e") == ""
+    assert environmentOf("  call void @a.lambda$3(ptr %e)") == ""
+    assert firstField("  %slot = alloca ptr") == "%slot"
+}

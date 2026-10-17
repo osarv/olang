@@ -2,7 +2,7 @@
 # item 3).
 #
 # compiler/goldens/diag.txt is what stage 0 (build/out) printed for every checks/cases program that must fail to
-# compile, captured by compiler/tools/diaggold_capture.sh. Each row there - "path:line:col: error[RULE]: text", a note,
+# compile, captured by compiler/tools/diaggold_capture.olang. Each row there - "path:line:col: error[RULE]: text", a note,
 # a file's or the compilation's - is read back into a record (the span from its line, column and caret, the rule, the
 # text) and reported to diag again, and what diag renders must be the case's output byte for byte: the rows, their
 # order, the source lines, the carets and the summary. -e is held to stage 0 the same way, for every rule msgs.olang
@@ -161,7 +161,7 @@ fn check(c golden&) String {
 
 test "diag renders stage 0's diagnostics on every checks/cases program byte for byte" {
     all := try os.ReadFile("compiler/goldens/diag.txt") catch default ""
-    assert all.Len() > 0, "no compiler/goldens/diag.txt - run compiler/tools/diaggold_capture.sh"
+    assert all.Len() > 0, "no compiler/goldens/diag.txt - run make diaggold"
     bad := 0
     count := 0
     for c in cases(all) {

@@ -1,0 +1,22 @@
+# bench/runfused.olang - std/linalg's batched, fused and implicit products (GemmBatch, GemmAct, GemmPatches) against the
+# products, passes and im2col they replace: bench/fused.olang, built for this machine, every comparison timed
+# interleaved inside the program and given as medians. Not part of "make verify". Run from the repository root:
+#
+#   build/out build bench/runfused.olang && build/bench_runfused [attention|epilogue|conv|all] [repetitions]
+#   BENCH_LOCK=FILE         take this flock while timing, as run.olang does
+#   OLANG=PATH              the compiler to build with (default build/out)
+
+import "std/os"
+import "benchlib"
+
+fn main() {
+    args := os.Args()
+    olang := benchlib.Compiler()
+    try os.MkDirAll($benchlib.Dir "/build/fused") catch os.OsError { benchlib.Fail("cannot make bench/build/fused", 1) }
+    benchlib.MustQuietly(String&[olang, "build", "../../fused.olang"], $benchlib.Dir "/build/fused")
+    benchlib.TakeLock()
+    which := $args[1] if args.Len() > 1 else "all"
+    reps := $args[2] if args.Len() > 2 else "15"
+    status := benchlib.Run(String&["build/fused/build/fused", which, reps], benchlib.Dir)
+    os.Exit(status)
+}
