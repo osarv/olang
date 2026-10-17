@@ -221,7 +221,16 @@ design. Do what you want") - nothing to decide until a GUI is written.
   types and language protocols need (prelude names are reserved everywhere under D3a; every build parses and checks it;
   imports show what a file touches; ffi/http carry link and tool needs; only the prelude may add methods to built-in
   types). Asked: move std/math into the prelude as methods on the floats (`x.Sqrt()` instead of `math.Sqrt(x)`)?
-  Recommended yes (reserves no type names). In effect: `math.Sqrt(x)`.
+  Recommended yes (reserves no type names). ANSWERED YES ("Yes move math into the prelude"). Details mine: functions
+  become methods on the numbers (`x.Sqrt()`, `a.Min(b)`, integer `x.Abs()`); the constants stay `math.Pi`/`math.E` in
+  std/math (a bare prelude `E` would be reserved everywhere - a common type-parameter and enum name). Queued after
+  wt-errors2 merges (std files).
+- QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
+  Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
+  and `a.ToList()` build Lists (M19d: methods on built-ins live only in the prelude) and for convenience. Options: (a)
+  keep all three; (b) minimal prelude - helpers return `Array<T>`, List/Map/Vec move to std/list, std/map, std/vec,
+  `a.ToList()` becomes `List(a)`; (c) keep Vec and Map, move List out once Vec can be a type argument (Vec phase 2b) so
+  the helpers return Vec. Recommended (c). In effect: (a).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
