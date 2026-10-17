@@ -240,6 +240,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stays as it is - free functions and constants; nothing built. QZ is closed.
   Queued after
   wt-errors2 merges (std files).
+- QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
+  Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
+  things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
+  Pair, each use a small named struct (`type Span struct(Start I64, End I64) { Start End }`) - it is the tuple olang
+  chose not to have, `First`/`Second` naming nothing; (2) move it to std/pair. Recommended 1. In effect: Pair in the
+  prelude. (The prelude line otherwise: Vec, Map, String, StringBuilder in; List and future containers to std.)
+  ANSWERED (2): "Pair goes in Std not prelude" - std/pair (`pair.Pair<A, B>`), uses gaining the import. Queued after
+  the syntax batch (it touches the port and tests, as that batch does).
 - QZ3 ASKED 2026-10-17 (the user: "Do we have traits that only integers satisfy? Floats? Signed unsigned?"): no -
   only Hashable, Iterator, Indexable; std/math limits types by `match T` exhaustiveness (an error at the call, worded as
   a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
@@ -267,6 +275,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   out means `map.Map<K, V>` everywhere (imports are whole modules, names qualified), so keep Map in the prelude (as Go
   and Python build it in). Recommended now: prelude = methods on built-ins, protocol traits/errors, Vec, Map,
   String, StringBuilder, Pair; std = List and every future container (Set starts in std). After Vec phase 2b.
+  ANSWERED ("I think that is good yes", after Pair went to std): prelude = methods on built-in types, protocol traits
+  and errors, Vec, Map, StringBuilder (String and Array are built in); std = List (std/list), Pair (std/pair) and
+  every future container (Set, Deque, Heap, a sorted map). The iterator helpers and StringBuilder move onto Vec
+  (`a.ToVec()`). List moves after Vec phase 2b; Pair after the syntax batch. QZ2 closed.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
