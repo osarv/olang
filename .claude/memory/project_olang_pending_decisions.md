@@ -191,12 +191,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   program as a failed assert does (in a test, failing it; `FILE:LINE: Type.WORD`); never turns on a check; `!` on
   nothing fallible is an error; the enclosing function needs no `?` for it; `!` before `=` still lexes `!=`. Hello
   world: `fn main() { io.Println("Hello World!")! }`. Part of the errors batch. Option 1 (compile-time) loses `!`.
-- QW ASKED 2026-10-17 (the user: "nested generics produce really ugly code <<<T>>, G> is a mess"). Proposed: a
+- QW DECIDED 2026-10-17 (the user: "nested generics produce really ugly code <<<T>>, G> is a mess"). Proposed: a
   function introduces its type variables in a list after its name (`fn max<T>(a T, b T) T`, constraints in the list
   `fn area<T Shape>(x T)`, order free within it); a method on a generic type gets the type's parameters from its
   receiver's type arguments (Go's rule: `fn (l List<T>&) Push(x T)`), a list only for variables of its own (`fn (l
   List<T>&) Map<U>(...)`); type arguments at calls stay inferred. Reverses G8b and G3's no-list rule; ~860 sites by an
   olang tool; folded into arrays phase 2 (it drops constant generics). In effect: G8b.
+  DECIDED (the user: "I don't really understand what would change if we do this. I think I want the change tho" -
+  explained with std's own lines; signatures only, bodies/calls/type declarations unchanged). In arrays phase 2.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
