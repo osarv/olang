@@ -19,6 +19,6 @@ fn churn() I64 {
 fn main() ? {
     h := H(P(42))
     h2 := H(P(7))
-    if churn() != 2016 { fail }
-    if h.keep.v != 42 or h2.keep.v != 7 or h.q.v != 42 { fail }
+    assert churn() == 2016
+    assert not (h.keep.v != 42 or h2.keep.v != 7 or h.q.v != 42)
 }

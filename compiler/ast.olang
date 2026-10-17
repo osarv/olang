@@ -34,13 +34,14 @@ type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef&, Dflt Expr&) {
     Dflt
 }
 
-# a signature: parameters, results (none, one or several), and the error set - hasErrors with no names is the default
-# error ("?" alone, R15)
-type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&) {
+# a signature: parameters, results (none, one or several), and the error set - HasErrors with no names is an inferred
+# set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
+type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false) {
     Params
     Results
     HasErrors
     Errors
+    NoReturn
 }
 
 # a dotted name: alias.Type.word - an error set's or a catch clause's item, an error statement's word
@@ -54,7 +55,7 @@ type Expr enum {
     Lit(sp source.Span, kind token.Tok)                # IntLit, FloatLit, CharLit, StrLit, BoolLit, NullLit: its text
     Paren(sp source.Span, x Expr&)                     # kept: "try (x)" checks x (E15a), "(x.f)(a)" calls a field (E13b)
     Unary(sp source.Span, op token.Tok, x Expr&)       # - ~ $ not take ++ --
-    Postfix(sp source.Span, op token.Tok, x Expr&)     # x++ x--
+    Postfix(sp source.Span, op token.Tok, x Expr&)     # x++ x-- x! (E35)
     Binary(sp source.Span, op token.Tok, a Expr&, b Expr&)
     NotIn(sp source.Span, a Expr&, b Expr&)            # a not in b (E29)
     Chain(sp source.Span, c Chain&)                    # a < b <= c (E30)
@@ -76,7 +77,7 @@ type Expr enum {
     Row(sp source.Span, items Array<Expr&>&)           # "[...]" nested in a literal: no 2-D arrays (E21), kept to report
     Compr(sp source.Span, c Compr&)                    # T[e for x in s if c] (E27)
     Join(sp source.Span, parts Array<Expr&>&)          # "a" $b "c" (E11b)
-    Try(sp source.Span, x Expr&, clauses Array<Catch&>&)
+    Try(sp source.Span, x Expr&, clauses Array<Catch&>&, isChecked Bool)   # try, or checked (E15a)
     Lambda(sp source.Span, f Func&)
     MatchE(sp source.Span, m Match&)
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
@@ -199,7 +200,7 @@ type Stmt enum {
     Var(sp source.Span, v VarDecl&)
     Multi(sp source.Span, m Multi&)
     Assign(sp source.Span, op token.Tok, target Expr&, value Expr&)
-    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&)   # try x[i] = v / try x++ (R21)
+    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&, isChecked Bool)   # try/checked x[i] = v, x++ (R21)
     If(sp source.Span, i If&)
     Forever(sp source.Span, body Array<Stmt&>&)
     While(sp source.Span, cond Expr&, body Array<Stmt&>&)
@@ -208,9 +209,9 @@ type Stmt enum {
     DoFor(sp source.Span, body Array<Stmt&>&, cond Expr&)
     MatchS(sp source.Span, m Match&)
     Return(sp source.Span, values Array<Expr&>&)
-    Jump(sp source.Span, kind token.Tok)               # break continue done fail abort unreachable
+    Jump(sp source.Span, kind token.Tok)               # break continue unreachable
     Assert(sp source.Span, cond Expr&, msg Expr&)
-    Raise(sp source.Span, word Path&)                  # error T.WORD, or the default error (null)
+    Raise(sp source.Span, word Path&)                  # error T.WORD
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
     Join(sp source.Span, j JoinS&)
     Defer(sp source.Span, s Stmt&)
@@ -300,7 +301,7 @@ fn (e Expr&) Span() source.Span {
         case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _) => sp
         case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _) => sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
-        case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
+        case Expr.Join(sp, _), Expr.Try(sp, _, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
         case Expr.Default(sp), Expr.TypeVar(sp, _) => sp
     }
 }
@@ -315,7 +316,7 @@ fn (t TypeRef&) Span() source.Span {
 fn (s Stmt&) Span() source.Span {
     return match s {
         case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _) => sp
-        case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
+        case Stmt.TryStore(sp, _, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
         case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _) => sp
         case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _) => sp
         case Stmt.Block(sp, _) => sp

@@ -1,0 +1,4 @@
+# check: fail error[B4]: main takes no parameters and returns no value
+# D8e, B4: main may not be noreturn
+import "std/os"
+fn main() noreturn { os.Exit(0) }

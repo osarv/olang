@@ -32,6 +32,14 @@
 # Everything a List allocates lives where the List was made (its record and the record's fields are bare "&", C2d), so
 # it is reclaimed with that scope like anything else, and costs no destructor.
 
+# what a List's operations fail with: a First, Last or Pop of an empty list (EMPTY), an IndexOf finding nothing
+# (NOT_FOUND), and a position outside the list given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
+error ListError {
+    EMPTY
+    NOT_FOUND
+    OUT_OF_RANGE
+}
+
 type List<T> struct() {
     s mut listState<T>& = listState<T>()             # the list itself; every copy of this value names the same one
 }
@@ -168,17 +176,17 @@ fn (l mut List<<T>>&) SetAt(i I64, x T) {
     l.s.chunks[k][p - (firstChunk << k)] = x
 }
 
-# the first element - failing with the default error when there is none, as Map.Get fails on a missing key:
+# the first element - failing with EMPTY when there is none, as Map.Get fails on a missing key:
 # "try l.First() catch default 0" gives a fallback
-fn (l List<<T>>&) First() T ? {
-    if l.s.count == 0 { error }
+fn (l List<<T>>&) First() T ? ListError {
+    if l.s.count == 0 { error ListError.EMPTY }
     return l.s.first[0]
 }
 
-# the last element - failing with the default error when there is none
-fn (l List<<T>>&) Last() T ? {
+# the last element - failing with EMPTY when there is none
+fn (l List<<T>>&) Last() T ? ListError {
     s := l.s
-    if s.count == 0 { error }
+    if s.count == 0 { error ListError.EMPTY }
     if s.used == 0 {
         c := s.chunk(s.nChunks - 2)
         return c[c.Len() - 1]
@@ -186,11 +194,11 @@ fn (l List<<T>>&) Last() T ? {
     return s.tail[s.used - 1]
 }
 
-# removes the last element and gives it - failing with the default error when there is none, so a list used as a stack
-# or a work list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
-fn (l mut List<<T>>&) Pop() T ? {
+# removes the last element and gives it - failing with EMPTY when there is none, so a list used as a stack or a work
+# list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
+fn (l mut List<<T>>&) Pop() T ? ListError {
     s := l.s
-    if s.count == 0 { error }
+    if s.count == 0 { error ListError.EMPTY }
     s.dropLast()
     return s.tail[s.used]
 }
@@ -222,14 +230,13 @@ fn (l mut List<<T>>&) Clear() {
 }
 
 # keeps the first n elements and removes the rest - nothing changes when the list holds n or fewer, so "l.Truncate(k)"
-# after a Sort leaves the top k whatever the length (Rust's Vec::truncate). Moves nothing; the chunks it empties are
-# kept for the Pushes that follow, as Pop's are. A negative n is a mistake in the program, which stops it. (A copy of
-# the first k is "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
+# after a Sort leaves the top k whatever the length (Rust's Vec::truncate), and none is kept for an n of 0 or less.
+# Moves nothing; the chunks it empties are kept for the Pushes that follow, as Pop's are. (A copy of the first k is
+# "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
 fn (l mut List<<T>>&) Truncate(n I64) {
-    assert n >= 0, "List.Truncate: a count, 0 or more"
     s := l.s
     if n >= s.count { return }
-    if n == 0 {
+    if n <= 0 {
         l.Clear()
         return
     }
@@ -244,14 +251,14 @@ fn (l mut List<<T>>&) Truncate(n I64) {
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
-fn (l mut List<<T>>&) RemoveAt(i I64) { l.TakeAt(i) }
+fn (l mut List<<T>>&) RemoveAt(i I64) ? ListError { try l.TakeAt(i) }
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
-# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
-# checked once per call, and stops it as a slice out of range does
-fn (l mut List<<T>>&) TakeAt(i I64) T {
+# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
+# checked once per call
+fn (l mut List<<T>>&) TakeAt(i I64) T ? ListError {
     s := l.s
-    assert i >= 0 and i < s.count
+    if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
@@ -274,11 +281,11 @@ fn (l mut List<<T>>&) TakeAt(i I64) T {
 }
 
 # puts x at position i, the elements from i on each moving up one place - so it costs the number of elements after i,
-# and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not is a mistake in the program, checked once
-# per call, and stops it as a slice out of range does
-fn (l mut List<<T>>&) Insert(i I64, x T) {
+# and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not fails with OUT_OF_RANGE, checked once
+# per call
+fn (l mut List<<T>>&) Insert(i I64, x T) ? ListError {
     s := l.s
-    assert i >= 0 and i <= s.count
+    if i < 0 or i > s.count { error ListError.OUT_OF_RANGE }
     if i == s.count {
         l.Push(x)
         return
@@ -559,32 +566,32 @@ fn (l List<<T>>&) Has(x T) Bool {
     return false
 }
 
-# the position of the first element equal to x, compared with "==" - failing with the default error when there is
-# none, as Find does: "try l.IndexOf(x) catch default -1" gives a fallback
-fn (l List<<T>>&) IndexOf(x T) I64 ? {
+# the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none, as
+# Find does: "try l.IndexOf(x) catch default -1" gives a fallback
+fn (l List<<T>>&) IndexOf(x T) I64 ? ListError {
     for i, y in l {
         if y == x { return i }
     }
-    error
+    error ListError.NOT_FOUND
 }
 
 # removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
 # moves them - and says whether there was one, as Map's Remove does
 fn (l mut List<<T>>&) Remove(x T) Bool {
     i := try l.IndexOf(x) catch { return false }
-    l.RemoveAt(i)
+    try l.RemoveAt(i) catch { unreachable }   # a position IndexOf found
     return true
 }
 
 # removes the element at position i as SwapTake does, giving nothing
-fn (l mut List<<T>>&) SwapRemove(i I64) { l.SwapTake(i) }
+fn (l mut List<<T>>&) SwapRemove(i I64) ? ListError { try l.SwapTake(i) }
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
 # the length, where TakeAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
-# one that is not is a mistake in the program, checked once per call, as TakeAt checks it
-fn (l mut List<<T>>&) SwapTake(i I64) T {
+# one that is not fails with OUT_OF_RANGE, checked once per call, as TakeAt checks it
+fn (l mut List<<T>>&) SwapTake(i I64) T ? ListError {
     s := l.s
-    assert i >= 0 and i < s.count
+    if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
     x := l.At(i)
     s.dropLast()
     if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
@@ -820,21 +827,21 @@ if TestBuild {
         assert one[0] == 6 and one.Len() == 1
     }
 
-    # E31a: a List has no TryAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
+    # E31a: a List has no CheckedAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
     # with OUT_OF_BOUNDS as an array index does; "try l[i] = x" checks a store the same way (R21)
     test "a checked index into a List" {
         l mut List<I32>& = List<I32>()
         for i in range 20 { l.Push(I32(i)) }
-        assert (try l[19] catch default -1) == 19
-        assert (try l[20] catch default -1) == -1
-        assert (try l[-1] catch default -1) == -1
+        assert (checked l[19] catch default -1) == 19
+        assert (checked l[20] catch default -1) == -1
+        assert (checked l[-1] catch default -1) == -1
         missed := false
-        try l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
+        checked l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
         assert missed and l.Len() == 20
-        try l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
+        checked l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
         assert l[3] == 30
         e List<I32>& = List<I32>()
-        assert (try e[0] catch default 7) == 7
+        assert (checked e[0] catch default 7) == 7
     }
 
     # a List of structs and of references indexes like any other
@@ -928,7 +935,7 @@ if TestBuild {
         s I64 = 0
         for i in range l.Len() { s += l[i] }
         for x in l { s += x }
-        return s + (try l[42] catch default 7)
+        return s + (checked l[42] catch default 7)
     }
 
     listIndexedBaked := listIndexed()
@@ -970,7 +977,7 @@ if TestBuild {
         for x in l {
             if x > limit { return x }
         }
-        error
+        error ListError.NOT_FOUND
     }
 
     listRunsBaked := listRuns(40)
@@ -1022,13 +1029,13 @@ if TestBuild {
         for f in l {
             if f.First == key { return f.Second }
         }
-        error
+        error ListError.NOT_FOUND
     }
     fn listFindIter(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
         for f in l.Iter() {
             if f.First == key { return f.Second }
         }
-        error
+        error ListError.NOT_FOUND
     }
     test "S9f: a List of references, walked by every route" {
         bags := List<listBag&>()

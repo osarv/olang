@@ -24,6 +24,21 @@ error ParseError {
     EMPTY
     INVALID
     OVERFLOW
+    BAD_BASE
+}
+
+# what text's other operations fail with: a Find, FindLast or FindByte finding nothing (NOT_FOUND), a Format given a base
+# outside 2 to 36 (BAD_BASE), and ShortestDecimal given a NaN or an infinity, which no digits write (NOT_FINITE)
+error TextError {
+    NOT_FOUND
+    BAD_BASE
+    NOT_FINITE
+}
+
+# where Eisel and Lemire's algorithm cannot settle a rounding, or the value is outside what it decides - the slower way
+# decides it (toF64)
+error undecided {
+    NO
 }
 
 # FNV-1a over the bytes: text that SAYS the same thing hashes the same, whatever storage holds it
@@ -85,24 +100,24 @@ fn (a String&) EndsWith(suffix String&) Bool {
     return a[a.Len() - suffix.Len():].Eq(suffix)
 }
 
-# the index of the first occurrence of c - failing with the default error when there is none, so a miss is never read
-# as a position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
-fn (a String&) FindByte(c U8) I64 ? {
+# the index of the first occurrence of c - failing with NOT_FOUND when there is none, so a miss is never read as a
+# position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
+fn (a String&) FindByte(c U8) I64 ? TextError {
     for i in range a.Len() {
         if a[i] == c { return i }
     }
-    error
+    error TextError.NOT_FOUND
 }
 
-# the index of the first occurrence of sub, failing with the default error when there is none. An empty sub is found
+# the index of the first occurrence of sub, failing with NOT_FOUND when there is none. An empty sub is found
 # at 0. Compared where it stands - each candidate's first byte, then the rest one byte at a time - so nothing is
 # sliced per position
-fn (a String&) Find(sub String&) I64 ? {
+fn (a String&) Find(sub String&) I64 ? TextError {
     return try a.findFrom(sub, 0)
 }
 
 # the index of the first occurrence of sub at or after from
-fn (a String&) findFrom(sub String&, from I64) I64 ? {
+fn (a String&) findFrom(sub String&, from I64) I64 ? TextError {
     n I64 = sub.Len()
     if n == 0 { return from }
     first := sub[0]
@@ -113,7 +128,7 @@ fn (a String&) findFrom(sub String&, from I64) I64 ? {
             if j == n { return i }
         }
     }
-    error
+    error TextError.NOT_FOUND
 }
 
 # (Contains - whether sub occurs in it - is every array's, std/prelude/array.olang: text is an array of bytes)
@@ -220,9 +235,9 @@ fn (t String&) ToLower() String {
     return out
 }
 
-# the index of the last occurrence of sub, failing with the default error when there is none, as Find does. An empty
-# sub is found at Len()
-fn (a String&) FindLast(sub String&) I64 ? {
+# the index of the last occurrence of sub, failing with NOT_FOUND when there is none, as Find does. An empty sub is
+# found at Len()
+fn (a String&) FindLast(sub String&) I64 ? TextError {
     n I64 = sub.Len()
     i I64 = a.Len() - n
     for i >= 0 {
@@ -231,7 +246,7 @@ fn (a String&) FindLast(sub String&) I64 ? {
         if j == n { return i }
         i--
     }
-    error
+    error TextError.NOT_FOUND
 }
 
 # bytewise lexicographic order, as Compare gives it - what "<" asks of two texts (E31), and with it ">", "<=" and ">=":
@@ -336,35 +351,39 @@ fn padNumber(digits String&, width I64, fill Char) String {
 
 # ---- integers as text, in any base ----
 
-# the integer written in "base" - 2 to 36, the digits past 9 being the letters, lowercase: (255).Format(16) is "ff" -
-# with a '-' before a negative one's digits, and nothing else: no prefix, no padding ("n.Format(16).PadStart(8, '0')"),
-# no separators. It is what ParseInt and ParseUint read back in the same base: "x.Format(b).ParseInt(b)" is x for every
+# a base integers are written and read back in: 2 to 36. A literal is checked while compiling ("n.Format(16)", and 40
+# is a compile-time error, T29d); a base computed while the program runs is made one with Radix(b), which fails with
+# TextError.BAD_BASE for another number
+type Radix I64(v I64) ? TextError {
+    if v < 2 or v > 36 { error TextError.BAD_BASE }
+}
+
+# the integer written in "base", the digits past 9 being the letters, lowercase: (255).Format(16) is "ff" - with a '-'
+# before a negative one's digits, and nothing else: no prefix, no padding ("n.Format(16).PadStart(8, '0')"), no
+# separators. It is what ParseInt and ParseUint read back in the same base: "x.Format(b).ParseInt(b)" is x for every
 # I64 x, and the unsigned types' for ParseUint - so U64(x).Format(16) is x's bits, two's complement. Base 10 is "$n".
-# Every integer type, U8 included, so a Char's is its code: 'A'.Format(16) is "41". A base outside 2 to 36 is a mistake
-# in the program, stopped as a failed assert is - 0 included, which ParseInt reads as an olang literal of any of three
-# forms, where writing one needs a choice
-fn (n I8) Format(base I64 = 10) String { return formatSigned(n, base) }
-fn (n I16) Format(base I64 = 10) String { return formatSigned(n, base) }
-fn (n I32) Format(base I64 = 10) String { return formatSigned(n, base) }
-fn (n I64) Format(base I64 = 10) String { return formatSigned(n, base) }
-fn (n U8) Format(base I64 = 10) String { return formatDigits(n, false, base) }
-fn (n U16) Format(base I64 = 10) String { return formatDigits(n, false, base) }
-fn (n U32) Format(base I64 = 10) String { return formatDigits(n, false, base) }
-fn (n U64) Format(base I64 = 10) String { return formatDigits(n, false, base) }
+# Every integer type, U8 included, so a Char's is its code: 'A'.Format(16) is "41"
+fn (n I8) Format(base Radix = 10) String { return formatSigned(n, base) }
+fn (n I16) Format(base Radix = 10) String { return formatSigned(n, base) }
+fn (n I32) Format(base Radix = 10) String { return formatSigned(n, base) }
+fn (n I64) Format(base Radix = 10) String { return formatSigned(n, base) }
+fn (n U8) Format(base Radix = 10) String { return formatDigits(n, false, base) }
+fn (n U16) Format(base Radix = 10) String { return formatDigits(n, false, base) }
+fn (n U32) Format(base Radix = 10) String { return formatDigits(n, false, base) }
+fn (n U64) Format(base Radix = 10) String { return formatDigits(n, false, base) }
 
 # a signed integer's digits: its magnitude, which for I64's most negative is one more than I64 holds - U64 holds it
-fn formatSigned(n I64, base I64) String {
+fn formatSigned(n I64, base Radix) String {
     if n < 0 { return formatDigits(U64(0) - U64(n), true, base) }
     return formatDigits(U64(n), false, base)
 }
 
 # v's digits in base, last first into room for the longest (64 binary digits and a sign), behind a '-' when neg
-fn formatDigits(v U64, neg Bool, base I64) String {
-    assert base >= 2 and base <= 36, "a base is 2 to 36, found " $base
+fn formatDigits(v U64, neg Bool, base Radix) String {
     letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
     room Array<Char, 65>
     at I64 = 65
-    b := U64(base)
+    b := U64(I64(base))
     for {
         at -= 1
         room[at] = letters[I64(v % b)]
@@ -389,8 +408,7 @@ fn formatDigits(v U64, neg Bool, base I64) String {
 # between any two digits ("1_000", "0xFF_FF") - and, as in a program, a hexadecimal or binary literal is a bit pattern,
 # read as an I64 (L10a): "0xFFFFFFFFFFFFFFFF".ParseInt(0) is -1, and a '-' before one negates that reading (wrapping,
 # E6c). Fails with EMPTY for no text, INVALID for anything else that is not such a number - a sign with no digits after
-# it included - and OVERFLOW for a number beyond I64's range. A base other than 0 or 2 to 36 is a mistake in the
-# program, stopped as a failed assert is
+# it included - OVERFLOW for a number beyond I64's range, and BAD_BASE for a base other than 0 or 2 to 36
 fn (t String&) ParseInt(base I64 = 10) I64 ? ParseError {
     if t.Len() == 0 { error ParseError.EMPTY }
     neg := t[0] == '-'
@@ -433,7 +451,7 @@ fn digitWorth(c Char) I64 {
 # and OVERFLOW above "most". Base 0 is an olang literal's digits (L10, L10a, L10b): a prefix choosing the base, and a '_'
 # allowed between two digits
 fn readDigits(digits String&, base I64, most U64) U64 ? ParseError {
-    assert base == 0 or (base >= 2 and base <= 36), "a base is 0 or 2 to 36, found " $base
+    if base != 0 and (base < 2 or base > 36) { error ParseError.BAD_BASE }
     b I64 = base
     from I64 = 0
     if base == 0 {
@@ -548,7 +566,7 @@ fn (t String&) ParseFloat() F64 ? ParseError {
         dp += e * esign
     }
     if i < body.Len() { error ParseError.INVALID }
-    return try toF64(man, dp - taken, trunc, neg, body) catch { error ParseError.OVERFLOW }
+    return try toF64(man, dp - taken, trunc, neg, body)
 }
 
 # whether t is the lower-case letters "lower", in any case
@@ -565,13 +583,13 @@ exactPow10 := F64[1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 
     1e17, 1e18, 1e19, 1e20, 1e21, 1e22]
 
 # the F64 nearest man * 10^exp10 - the number "text" writes, its sign aside (neg), man holding its first 19 significant
-# digits and trunc saying whether any later one is nonzero - correctly rounded (to nearest, a tie to even), failing with the default
-# error when that is too large for an F64 (one too small is zero). Three ways, each taken only when it is exact:
+# digits and trunc saying whether any later one is nonzero - correctly rounded (to nearest, a tie to even), failing with
+# OVERFLOW when that is too large for an F64 (one too small is zero). Three ways, each taken only when it is exact:
 # Clinger's (man and a power of ten both exactly F64s, so one rounding); Eisel and Lemire's (man times a 128-bit power
 # of ten, decided whenever the bits it keeps settle the rounding, which is nearly always); and failing both, the
 # number's own digits, shifted by powers of two until the integer part is the mantissa (Go's strconv's "simple
 # decimal conversion").
-fn toF64(man U64, exp10 I64, trunc Bool, neg Bool, text String&) F64 ? {
+fn toF64(man U64, exp10 I64, trunc Bool, neg Bool, text String&) F64 ? ParseError {
     if man == 0 { return -0.0 if neg else 0.0 }
     if not trunc and man >> 52 == 0 {
         f := F64(man)
@@ -639,10 +657,9 @@ fn leadingZeros(x U64) I64 {
 }
 
 # the bits of the F64 nearest man * 10^exp10 (man not 0), by Eisel and Lemire's algorithm as Go's strconv has it -
-# failing, with the default error, where the bits it keeps cannot settle the rounding, or the value is subnormal or
-# too large
-fn eiselLemire(man U64, exp10 I64) U64 ? {
-    if exp10 < -348 or exp10 > 347 { error }
+# failing where the bits it keeps cannot settle the rounding, or the value is subnormal or too large
+fn eiselLemire(man U64, exp10 I64) U64 ? undecided {
+    if exp10 < -348 or exp10 > 347 { error undecided.NO }
     clz := leadingZeros(man)
     man <<= U64(clz)
     exp2 I64 = ((217706 * exp10) >> 16) + 64 + 1023 - clz
@@ -653,26 +670,26 @@ fn eiselLemire(man U64, exp10 I64) U64 ? {
         mHi U64 = xHi
         mLo U64 = xLo + yHi
         if mLo < xLo { mHi++ }
-        if (mHi & 0x1FF) == 0x1FF and mLo + 1 == 0 and yLo + man < man { error }
+        if (mHi & 0x1FF) == 0x1FF and mLo + 1 == 0 and yLo + man < man { error undecided.NO }
         xHi = mHi
         xLo = mLo
     }
     msb U64 = xHi >> 63
     mant U64 = xHi >> (msb + 9)
     exp2 -= I64(1 ^ msb)
-    if xLo == 0 and (xHi & 0x1FF) == 0 and (mant & 3) == 1 { error }    # exactly halfway: not decided here
+    if xLo == 0 and (xHi & 0x1FF) == 0 and (mant & 3) == 1 { error undecided.NO }    # exactly halfway: not decided here
     mant += mant & 1
     mant >>= 1
     if mant >> 53 > 0 {
         mant >>= 1
         exp2++
     }
-    if exp2 <= 0 or exp2 >= 0x7FF { error }
+    if exp2 <= 0 or exp2 >= 0x7FF { error undecided.NO }
     return (U64(exp2) << 52) | (mant & 0xFFFFFFFFFFFFF)
 }
 
 # the F64 nearest the number text writes, its sign aside (neg), from its own digits
-fn slowF64(text String&, neg Bool) F64 ? {
+fn slowF64(text String&, neg Bool) F64 ? ParseError {
     a := decimal()
     a.set(text)
     b := try a.bits()
@@ -850,10 +867,10 @@ fn (a decimal&) roundedInteger() U64 {
 
 decimalShifts := I64[1, 3, 6, 9, 13, 16, 19, 23, 26]       # 2^decimalShifts[i] < 10^i, for 0 <= i < 9
 
-# the bits of the nearest F64, its sign aside - failing, with the default error, when it is too large for one
-fn (a mut decimal&) bits() U64 ? {
+# the bits of the nearest F64, its sign aside - failing with OVERFLOW when it is too large for one
+fn (a mut decimal&) bits() U64 ? ParseError {
     if a.nd == 0 or a.dp < -330 { return 0 }
-    if a.dp > 310 { error }
+    if a.dp > 310 { error ParseError.OVERFLOW }
     exp I64 = 0
     for a.dp > 0 {
         n I64 = 27 if a.dp >= 9 else decimalShifts[a.dp]
@@ -871,13 +888,13 @@ fn (a mut decimal&) bits() U64 ? {
         a.shift(-n)
         exp += n
     }
-    if exp + 1023 >= 0x7FF { error }
+    if exp + 1023 >= 0x7FF { error ParseError.OVERFLOW }
     a.shift(53)
     mant := a.roundedInteger()
     if mant == U64(1) << 53 {
         mant >>= 1
         exp++
-        if exp + 1023 >= 0x7FF { error }
+        if exp + 1023 >= 0x7FF { error ParseError.OVERFLOW }
     }
     biased I64 = exp + 1023
     if (mant & (U64(1) << 52)) == 0 { biased = 0 }
@@ -967,12 +984,12 @@ fn schubfach(q I64, c U64, dk I64) (U64, I64) {
 
 # the fewest decimal digits that read back as x, and where the point goes: d and e with |x| = d * 10^e and no zero at
 # d's end - of those, the closest to x. 0 and 0 for a zero: x's sign is its own ("x < 0", or "x.Bits() >> 63" for a
-# negative zero). Fails with the default error for a NaN or an infinity, which no digits write. The digits are those of
+# negative zero). Fails with NOT_FINITE for a NaN or an infinity, which no digits write. The digits are those of
 # Python's repr and JavaScript's toString, and those "$x" writes (E11a: the runtime and the evaluator compute them by the
 # same algorithm, in IR and in C) - worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
-fn (x F64) ShortestDecimal() (U64, I64) ? {
+fn (x F64) ShortestDecimal() (U64, I64) ? TextError {
     b := x.Bits()
-    if ((b >> 52) & 0x7FF) == 0x7FF { error }
+    if ((b >> 52) & 0x7FF) == 0x7FF { error TextError.NOT_FINITE }
     if b << 1 == 0 { return 0, 0 }
     f, e := shortest(x)
     for f % 10 == 0 {

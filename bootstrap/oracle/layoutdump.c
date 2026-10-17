@@ -64,7 +64,7 @@ static void canon(struct buf* b, struct type t);
 static bool namedDecl(struct type t) { return t.owner && t.name.len > 0 && t.bType != BASETYPE_TYPEVAR; }
 
 static void errorText(struct buf* b, struct type* e) {
-    if (e == SemanticGenericErrorType() || !e->owner || !e->name.len) {
+    if (!e->owner || !e->name.len) {
         adds(b, "default");
         return;
     }
@@ -144,8 +144,7 @@ static void canonInner(struct buf* b, struct type t) {
             }
             if (t.errors.len) {
                 adds(b, " ?");
-                bool onlyDefault = t.errors.len == 1 && *(struct type**)ListGetIdx(&t.errors, 0) == SemanticGenericErrorType();
-                for (int i = 0; !onlyDefault && i < t.errors.len; i++) {
+                for (int i = 0; i < t.errors.len; i++) {
                     adds(b, i ? " + " : " ");
                     errorText(b, *(struct type**)ListGetIdx(&t.errors, i));
                 }

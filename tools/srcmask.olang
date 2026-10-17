@@ -232,12 +232,12 @@ fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.OsError
 
 # a line to the standard output
 fn Say(t String&) {
-    try io.Write(io.Stdout, $t "\n") catch io.IoError { fail }
+    io.Write(io.Stdout, $t "\n")!
 }
 
 # a line to the standard error
 fn SayErr(t String&) {
-    try io.Write(io.Stderr, $t "\n") catch io.IoError { fail }
+    io.Write(io.Stderr, $t "\n")!
 }
 
 # ---- the module std/io is imported as ----
@@ -247,8 +247,13 @@ fn lineAfter(text String&, at I64) I64 {
     return at + (try text[at:].FindByte('\n') catch default (text.Len() - at)) + 1
 }
 
+# what IoAlias fails with: the text does not import std/io
+error NoIoImport {
+    NONE
+}
+
 # the name the olang source "text", read from "path", imports std/io by - "io", or the alias written - and fails
-# (the default error) when it does not import it. An import is a line whose first word is import, then optionally an
+# (NoIoImport.NONE) when it does not import it. An import is a line whose first word is import, then optionally an
 # alias, then a quoted path; it names std/io when the path is "std/io" or resolves to .../std/io from the file's own
 # directory
 fn IoAlias(text String&, path String&) String ? {
@@ -286,7 +291,7 @@ fn IoAlias(text String&, path String&) String ? {
         }
         at = next
     }
-    error
+    error NoIoImport.NONE
 }
 
 test "Mask tells code from comments and literals" {

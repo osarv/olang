@@ -1,4 +1,5 @@
-# E11b/E11c: done inside a Str reached through a List element and a struct field, in a test
+# E11b/E11c: a test failing inside a Str reached through a List element and a struct field - what the Str made is
+# destructed on the way out
 import "std/io"
 type Res struct(k I64) {
     k
@@ -8,14 +9,14 @@ type Bag struct(n I64) {
 }
 fn (b Bag&) Str() String {
     r Res&return = Res(b.n)
-    if b.n == 7 { done }
+    assert b.n != 7, "a Str stops its test"
     return "b-" $b.n
 }
 type Outer struct(a Bag, b Bag) {
     a
     b
 }
-test "done inside a List element's Str" {
+test "failing inside a List element's Str" {
     l := List<Bag>()
     l.Push(Bag(1))
     l.Push(Bag(7))
@@ -23,7 +24,7 @@ test "done inside a List element's Str" {
     s := $l
     try io.Println("not reached " $s) catch io.IoError { }
 }
-test "done inside a field's Str" {
+test "failing inside a field's Str" {
     o := Outer(Bag(2), Bag(7))
     s := "x" $o "y"
     try io.Println("not reached " $s) catch io.IoError { }

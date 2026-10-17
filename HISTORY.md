@@ -19041,6 +19041,147 @@ before round 4 the copy was built where it survived). Also through a call cycle 
 - Fuzzer: `boxOp` keeps a box's copy in a returned lambda read after a churn (`keepBox`), and lends one to a callee
   calling its own local lambda (`useBox`). Seeds 1-120: 906e292 one finding (this shape), this branch none; own 1-40 none.
 - Checks: must-fail `o17templambda{keep,cond,cycle}`, `o17blambdakeep`; run under `-d -s` `o17templambda{local,arg}`.
+
+### The errors batch: inferred sets, `checked`, operators that fail, std's own errors, `!` (R1a, R1b, R8, R20, R22, E15a, E24, E31, E31a, E35, B4, 2026-10-17; the user's decisions QO1, QO4, QO6, QQ1, QV, details mine)
+
+**What the user decided.** QO1: a bare `?` is the set the body can produce, as Zig infers it ("Do 2. This fits nicely
+with main cleanliness and also olang decisions made so far"), and "error should always require an actual error" - the
+default error, the bare `error` statement and R17's generalization go. QO4/QO3: no built-in error set beyond the
+compiler's carve-outs (`BuiltinError`, raised only by checks, and `Exhausted`); std declares its own errors and "no std
+function may ever exit". QO6: `INVALID` keeps IEEE's meaning, a shift amount out of range is `OUT_OF_BOUNDS`, a failed
+`as` is the new `WRONG_CASE`, and `<<` shifting out a set bit, every float narrowing to infinity and every integer
+conversion changing the value are checked. QQ1: `try` is for what fails as written and covers every fallible call in
+its operand ("try f().g() should bind to both" - E24's one-call reading was an artifact, never a decision); `checked`
+is `try` plus every check; a plain operator method may declare errors, and its checked form - renamed from `Try...` to
+`Checked...`, reversing the user's own TryAt of 2026-10-07 - must fail with a superset of its errors, "anything else is
+a compile error". No `try { block }`. QV (late in the batch): a postfix `!` ends the program on what fails as written,
+`try`'s reach, so `fn main() { io.Println("Hello World!")! }` is a program.
+
+**How it is built.**
+- *Inferred sets.* A bare-`?` function's set is computed from its checked body: the types of its `error` statements and
+  what its tries let through. A call reading a set before it is final (a cycle, a body not checked yet, a global
+  initializer) records the length it saw; after every body is checked the sets are settled to a fixed point, and if any
+  observation was short the program is checked again with the settled sets preset (keyed by the function's declaration
+  place), as B9c's attempts already are - a least fixed point, usually one attempt. The order is canonical (the owner
+  module's identity, then the name), sorted in place in the shared list buffers, so every compilation of a module
+  agrees on the codes (§10's separate objects). Generic functions infer per instantiation, which is what lets
+  `Plus(b <U>)` fail for a matrix operand and not for a scalar.
+- *Function values.* A named function used as a value fits a function type whose list holds its errors in any order;
+  its value is an adapter (`f.fvt.<hash of the list>`) re-encoding the codes. A trait method is met on the same terms.
+- *`try` covering an operand.* The checker collects every fallible call built under a try (`tryCover`) and points each
+  at the try's root (`checkRoot`); codegen and the evaluator dispatch each call's failure to the root's clauses with
+  that call's own error list. An error a call's own clauses take whole (a loop's `Next` taking `Exhausted`) is not the
+  try's. A statement form with more than one covered call is a SEQ root, as R21's stores were.
+- *`checked`.* A new keyword token; `markChecked` turns on E15a's checks and selects `Checked` forms. New checks: `<<`
+  (shift back and compare), the amount (`OUT_OF_BOUNDS`), every integer conversion that changes the value, F16/BF16
+  narrowing, `as` (`WRONG_CASE`) - in codegen and identically in the evaluator.
+- *Operators.* The shape table gives every operator role but `Len`, `Eq` and `Str` permission to fail; an operator
+  calling a fallible method outside a try is E31's error naming it; `checkCheckedForms` holds each checked form's set
+  to a superset of its plain form's, per instantiation for inferred generic ones.
+- *`!`.* A token (`!` alone; `!=` stays one token), a postfix node, and a try whose one clause takes everything and
+  `ends`: codegen picks the message by the code among the failing call's words and calls `__olang_check_failed`, so a
+  test fails and a program aborts; the evaluator stops there (K1's abort class), and `-i` writes the same line.
+
+**Decided by me (numbered, for the user to object to):**
+1. A generic's body may hold a `try`, a `!` or a clause naming an error that covers nothing in one instantiation: the
+   sets differ between instantiations (R1a), so R8's "nothing here can fail" is reported only in a body written once.
+   Without this a generic over an inferred callee could not be written at all.
+2. The canonical order of an inferred set is owner module identity, then type name.
+3. A named function value fits a superset error list (any order); a lambda or a variable of function type does not -
+   its type is exact.
+4. `main` may declare no `?` at all (B4), since `!` lets it handle failures without one.
+5. `!`'s message names the error type by the base name of its module's path where it is another module's
+   (`io.IoError.FAILED`), bare for the prelude's and the program's own.
+6. std's errors, one type per module beside its functions: `ListError`, `VecError` (`EMPTY`, `NOT_FOUND`,
+   `OUT_OF_RANGE`), `MapError.MISSING`, `TextError` (`NOT_FOUND`, `BAD_BASE`, `NOT_FINITE`), `ParseError.BAD_BASE`,
+   `ArrayError.NOT_FOUND`, `ChanError.CLOSED` for a Send on a closed channel, `StatsError` (`TOO_FEW`, `OUT_OF_RANGE`,
+   `BAD_EDGES`), `RandError.ZERO_STATE`, `CsvError.BAD_SEPARATOR`, `JsonError.UNEVEN`, `PathError.UNRELATED`,
+   `FfiError.BAD_ARGUMENTS`. `n.Format(base)` takes a `Radix` (`type Radix I64` with a constructor failing with
+   `TextError.BAD_BASE` outside 2 to 36), so a literal base is checked while compiling (T29d) and `Format` cannot
+   fail; a computed base is `Radix(b)`, written with `try`. (First built as a fallible `Format`, which put `try` on
+   every hexadecimal rendering in the port's sources for a base that is always a literal.)
+7. linalg: every shape check is `ShapeError.MISMATCH`, so the destination forms, the products, `View`, the range views
+   and the matrix operators can fail; an operation with nothing to mismatch (`Fill`, `Scale`, `Clamp`, `Clone`,
+   `Mapped`, a matrix and a scalar) cannot - private unchecked kernels (`mapInto`, ...) serve the operations that
+   build their own destination. An integer matrix asked for GELU, tanh or the sigmoid fails with
+   `ActivationError.NOT_FOR_INTEGERS`, checked once per operation; the activation functions are inferred (`?`), so a
+   float instantiation cannot fail.
+8. The Matrix constructor stays infallible: what it is given is taken as a slice and an array length are - new storage
+   of a negative size is an array length out of range, data holding less than the matrix a slice out of range (D14b,
+   E16b, language guarantees) - and `View` is the form that checks and fails with `ShapeError`. Making the constructor
+   fallible would have put `try` on every matrix a program makes; the check it made is the language's own anyway.
+9. A for-in over a type with only `CheckedAt` walks it under `in try`, as before (S9e), now as the loop's own call.
+10. The migration tool is an olang program (`tools/errors_migrate.olang`), the repository's no-scripts rule: it renames
+    the Try forms, turns a `try` that only checked into `checked`, and tries what now fails - `try CALL catch { fail }`
+    in a test, else `try CALL` with the error added to the function's `?`.
+
+**Found on the way.** A comprehension under `try` counted its own `Next`'s `Exhausted` as the try's error (fixed in
+`tryErrors`); a for-in's own `At` on a checked-only type was refused as an unhandled fallible operator (fixed:
+`loopOwnCall`).
+
+### Tests end by ending, `done`/`fail`/`abort` removed, `noreturn`, the error return trace (S15, S16, S16d, S18d, D8e, D10a, T22, B4, B5, B5b, B6, E35, 2026-10-17; the user's decisions QU, confirmed "the QU design stands as sent"; the trace decided by the coordinator for the user, who asked that an error escaping a test print as much as a failed assert)
+
+**What changed.** `done`, `fail` and `abort` were three statements ending "the innermost thing that can end" - the
+running test, else the process - with a pass, a failure and an abort. The user removed them: a test passes by reaching
+its end or `return`, which is now allowed in a test body (S15 used to reject it, naming `done`), and fails by a failed
+assert, `unreachable`, a `!`, or an error a `try` lets out of its body - so a test may use `try` without catching
+everything, an escaping error failing that one test. A program ends by returning from `main`, an error escaping it, or
+`os.Exit`, which is process-wide in tests too. `unreachable` stays (the user: kept, not renamed). The three words are
+ordinary names now. Beside that, `noreturn` (D8e): a result marker - `fn Exit(code I32) noreturn`, `fn(I32) noreturn` -
+whose body is checked never to return; a call to one leaves for D10a and fits wherever a value of any type is expected,
+which is what lets `catch default os.Exit(2)` and a conditional's `else die()` be written. `os.Exit` is the first one.
+This replaces the special case `catch` clauses had for a last statement calling `Exit` or `exit` (ERR_CATCH_EXIT_NOT_LEAVE,
+which told the program to write `unreachable` after it).
+
+**The error return trace** (Zig's): test and `-d` builds record, per thread, the last 32 places an error went -
+`raised here` at an `error` statement or a check failing under `checked`, `try passed it on` at each propagating try,
+`a task failed, and its join passed it on` at a failing join, `left the test` where it escaped a test - cleared by any
+clause that takes the error; nothing is recorded on the success path, and other builds emit no recording at all. It is
+printed after `FAIL - name: Type.WORD` when an error ends a test, after `unhandled error:` when one escapes `main`, and
+after a `!`'s message. In other builds those two print `(build with -d to see where it came from)` (today's flag; the
+CLI is to move to words later). `-i` keeps the same trace from its own frames.
+
+**Decided (mine), numbered.**
+1. An error leaving a test is reported on the harness's FAIL line - `FAIL - NAME: Type.WORD` - followed by the trace,
+   its last line `FILE:LINE: left the test` at the try that let it out; other failures keep `FAIL - NAME` after their
+   own message.
+2. `error T.W` stays invalid in a test body (R3): an assert says a test's own failure better, and an error a test raises
+   itself has no caller.
+3. A `noreturn` function declares no error set (an error is a way back to its caller, D8e); lambdas, constructors,
+   operator methods and `main` may not be `noreturn`; `:=` from a noreturn call is an error; `noreturn` is not a type,
+   so it is written only where a result stands.
+4. A noreturn function value fits a function type with the same parameters and no result (T22): never returning, it
+   keeps every promise such a type makes; the representation is the same (`void`).
+5. In a conditional, a noreturn call gives way to the other value's type (E28).
+6. In codegen a noreturn call is followed by `unreachable` and a block nothing reaches, where its value - of whatever type
+   it was fitted to - is `poison`.
+7. The trace holds pointers to constant `FILE:LINE: what` lines in a thread-local ring, so recording is two stores and
+   an add; a join records the task's failure as a raise at the join, since the task's own trace is its thread's.
+8. A test whose failure the evaluator can prove - a `try` there whose error certainly escapes, an assert reading what it
+   gives - is a compile-time error, as a false assert is (S18c, K1's abort class: "an error leaves the test").
+
+**Migration.** `tools/donefail_migrate.olang` (olang, re-runnable): `try X catch { fail }` is `try X` in a test body and
+`X!` elsewhere; `catch E { fail }` ending a try in a test is dropped; `if C { fail }` is `assert` of the negation (a
+single `==`/`!=` turned round, else `not`, parenthesized past `and`/`or`); `{ done }`/`done` in a test or `main` is
+`return`; what is left of `fail` in a test, and `abort`, is `unreachable` (`assert false` would be decided while
+compiling, S18c). It changed 429 lines and listed 16 for a person: helpers ending in `fail` (std/io's test helpers now
+use `!` and `unreachable`; fuzz's mains `os.Exit(1)`), and the tests whose subject was an early exit through a helper,
+a lambda, RunOnStack, a Str or a destructor - which became the checks scenario `testends`: a fixture whose tests fail on
+purpose (inside a join, two frames down, in a helper with deferred code, in a Str, in a destructor, on another stack, by
+an escaping error, by a `!`), each read back by the test after it, the whole output compared with a `.want`, plus
+programs whose escaping error and `!` traces are compared built, built `-d` and interpreted. Bare `error` statements left
+in checks cases and fixtures were given an `error Stop { HERE }` of their own.
+The `if C { fail }` rule is wrong for one kind of program: a must-fail check whose subject is the `if` itself (S8a's
+dead branches). Four such cases were turned into asserts and stopped failing; they now end their branch with `return`.
+
+**Found on the way: inferred sets made the corpus checks run twice as often.** R1a's fixed point redoes an attempt when
+a set grows, and a global initializer that calls a function read its set before the body had been checked - always
+empty, so every program with such a global took a second attempt (shared.olang's test build was OOM-killed under it).
+Two changes, neither visible to a program: a global whose type is written is built after the bodies, as its type
+does not depend on it (one whose type comes from its initializer still comes first); and the sets settled by one
+attempt seed the next whenever that attempt only adds - every condition still pending is a top-level one or a
+skipped branch - so a condition attempt never starts the fixed point again. shared.olang's `-c` is 4 attempts and
+4.2GB again, as before the batch.
 ### No Python in the repository: the scripts are olang programs (2026-10-17)
 
 The user's rule: a permanent script that ends up in source is never Python (a short script run once while developing may be,

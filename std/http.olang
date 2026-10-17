@@ -42,13 +42,18 @@ type Response struct(Status I32, Headers Array<Header>&, Body String&) {
     Body
 }
 
+# what a response's Header fails with: no field by that name
+error HeaderError {
+    MISSING
+}
+
 # the value of the response's first header field named "name", compared without regard to case as HTTP has it -
-# failing with the default error when it has none
-fn (r Response&) Header(name String&) String&r ? {
+# failing with MISSING when it has none
+fn (r Response&) Header(name String&) String&r ? HeaderError {
     for h in r.Headers {
         if sameName(h.Name, name) { return h.Value }
     }
-    error
+    error HeaderError.MISSING
 }
 
 fn sameName(a String&, b String&) Bool {
@@ -192,7 +197,7 @@ if TestBuild {
     }
 
     test "the response is the last of what curl received" {
-        plain := try response("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Two:  a b \r\n\r\n", "body") catch { fail }
+        plain := try response("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Two:  a b \r\n\r\n", "body")
         assert plain.Status == 200 and plain.Body == "body" and plain.Headers.Len() == 2
         assert plain.Headers[1].Name == "X-Two" and plain.Headers[1].Value == "a b"
         assert (try plain.Header("content-type") catch default "") == "text/plain"
@@ -201,7 +206,7 @@ if TestBuild {
         try plain.Header("X-None") catch { missing = true }
         assert missing
         chain := "HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n" "HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\nHTTP/2 404 \r\nserver: x\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n"
-        last := try response(chain, "") catch { fail }
+        last := try response(chain, "")
         assert last.Status == 404 and last.Headers.Len() == 3 and (try last.Header("Set-Cookie") catch default "") == "a=1"
         assert last.Headers[2].Value == "b=2" and "Location" != last.Headers[0].Name
         bad := false
@@ -275,8 +280,8 @@ if TestBuild {
 
     test "requests against a local server" {
         port := startServer()
-        if port == -1 { done }
+        if port == -1 { return }
         assert port > 0, "the test server did not start"
-        try live(port) catch { fail }
+        try live(port)
     }
 }

@@ -693,7 +693,9 @@ fn (p mut Parser&) sig(lambda Bool) ast.Sig&p ? Fail {
     params := try p.params(lambda)
     results Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
     k := p.peek()
-    if k == token.Tok.LParen {
+    noReturn := p.accept(token.Tok.Noreturn)      # D8e: where a result would stand
+    if noReturn {
+    } else if k == token.Tok.LParen {
         p.advance()
         from := p.tys.Len()
         for {
@@ -707,7 +709,7 @@ fn (p mut Parser&) sig(lambda Bool) ast.Sig&p ? Fail {
         results = ast.TypeRef&[t]
     }
     errs := try p.errorSet()
-    return ast.Sig(params, results, errs.HasErrors, errs.Errors)
+    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn)
 }
 
 # whether a signature's result type follows its parameters
@@ -1064,8 +1066,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             try p.endStmt()
             return ast.Stmt.Return(sp, values)
         }
-        case token.Tok.Break, token.Tok.Continue, token.Tok.Done, token.Tok.Fail, token.Tok.Abort,
-             token.Tok.Unreachable {
+        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable {
             k := p.peek()
             p.advance()
             sp := p.from(at)
@@ -1083,8 +1084,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         }
         case token.Tok.Error {
             p.advance()
-            word ast.Path&p = null
-            if p.sees(token.Tok.Iden) { word = try p.path() }
+            word := try p.path()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Raise(sp, word)
@@ -1135,7 +1135,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.Block(sp, body)
         }
-        case token.Tok.Try { return try p.tryStmt() }
+        case token.Tok.Try, token.Tok.Checked { return try p.tryStmt() }
         case token.Tok.Iden { return try p.idenStmt() }
         nomatch { return try p.exprStmt() }
     }
@@ -1145,8 +1145,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
 # L9a: the keywords a field may be named by
 fn keywordNamesField(k token.Tok) Bool {
     return match k {
-        case token.Tok.Done, token.Tok.Fail, token.Tok.Break, token.Tok.Continue, token.Tok.Abort => true
-        case token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or => true
+        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or => true
         case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Nomatch, token.Tok.Type, token.Tok.Struct => true
         case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test => true
         case token.Tok.Extern, token.Tok.Default => true
@@ -1396,12 +1395,13 @@ fn (p mut Parser&) namesOf(targets Array<ast.Expr&>&) NameList&p ? Fail {
 # than two levels left the limit is said at X first; a store's target and a call with clauses are read at one level, a
 # try with no clause (an expression) at two
 fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
-    at := try p.want(token.Tok.Try)
+    isChecked := p.sees(token.Tok.Checked)
+    at := p.advance()
     if p.depth + 2 > MaxNesting { p.tooDeepAt(p.pos) }
     was := p.limitAt
     defer { p.limitAt = was }
     p.limitAt = -1
-    if p.sees(token.Tok.Join) {
+    if not isChecked and p.sees(token.Tok.Join) {
         j := try p.joinRest(true)
         return ast.Stmt.Join(p.from(at), j)
     }
@@ -1411,7 +1411,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         cl := try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
-        return ast.Stmt.TryStore(sp, inner, cl)
+        return ast.Stmt.TryStore(sp, inner, cl, isChecked)
     }
     x := try p.postfix()
     k := p.peek()
@@ -1422,7 +1422,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         cl := try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
-        return ast.Stmt.TryStore(sp, inner, cl)
+        return ast.Stmt.TryStore(sp, inner, cl, isChecked)
     }
     match x {
         case ast.Expr.Postfix(_, op, _) {
@@ -1431,7 +1431,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
                 cl := try p.clauses(false)
                 sp := p.from(at)
                 try p.endStmt()
-                return ast.Stmt.TryStore(sp, inner, cl)
+                return ast.Stmt.TryStore(sp, inner, cl, isChecked)
             }
         }
         nomatch { }
@@ -1442,7 +1442,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         p.tooDeepAt(reached)
         error Fail.SYNTAX
     }
-    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
+    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl, isChecked)
     if cl.Len() == 0 {
         e = try p.postfixFrom(e)
         e = try p.binaryFrom(e, 1)
@@ -1987,7 +1987,7 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                 args := try p.args()
                 x = ast.Expr.Call(p.from(start), x, args)
             }
-            case token.Tok.Inc, token.Tok.Dec {
+            case token.Tok.Inc, token.Tok.Dec, token.Tok.Bang {
                 k := p.peek()
                 p.advance()
                 x = ast.Expr.Postfix(p.from(start), k, x)
@@ -2155,12 +2155,13 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             try p.want(token.Tok.RParen)
             return ast.Expr.Paren(p.from(at), x)
         }
-        case token.Tok.Try {
+        case token.Tok.Try, token.Tok.Checked {
             listOk := at == p.listTry
+            isChecked := p.sees(token.Tok.Checked)
             p.advance()
             x := try p.postfix()
             cl := try p.clauses(listOk)
-            return ast.Expr.Try(p.from(at), x, cl)
+            return ast.Expr.Try(p.from(at), x, cl, isChecked)
         }
         case token.Tok.Fn {
             p.advance()
@@ -2358,7 +2359,7 @@ fn (p mut Parser&) hint(want String&) Bool {
     pr := f - 1
     pk := p.kindAt(pr)
     pl := p.lineAt(pr)
-    # L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
+    # L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
     if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Arrow {
         p.reportAt(f, msgs.KeywordFieldRead(p.named(f)))
         return true
@@ -2367,18 +2368,16 @@ fn (p mut Parser&) hint(want String&) Bool {
         p.reportAt(f, msgs.MatchValueOne())
         return true
     }
-    # "done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
+    # "range mut Bool = false" - a keyword beginning a line as a name would ("range" ended the statement there)
     if p.isKw(pr) and pl == fl and p.lineAt(pr - 1) < pl and
        (fk == token.Tok.Mut or fk == token.Tok.Define or fk == token.Tok.Assign or fk == token.Tok.Comma or
-        (fk == token.Tok.Iden and (pk == token.Tok.Done or pk == token.Tok.Fail or pk == token.Tok.Break or
-                                   pk == token.Tok.Continue or pk == token.Tok.Abort or pk == token.Tok.Unreachable or
+        (fk == token.Tok.Iden and (pk == token.Tok.Break or pk == token.Tok.Continue or pk == token.Tok.Unreachable or
                                    pk == token.Tok.Join))) {
         p.reportAt(pr, msgs.KeywordAsName(p.named(pr)))
         return true
     }
     # S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
-    if pk == token.Tok.Arrow and (fk == token.Tok.Unreachable or fk == token.Tok.Abort or fk == token.Tok.Return or
-                                  fk == token.Tok.Fail or fk == token.Tok.Done or fk == token.Tok.Break or
+    if pk == token.Tok.Arrow and (fk == token.Tok.Unreachable or fk == token.Tok.Return or fk == token.Tok.Break or
                                   fk == token.Tok.Continue or fk == token.Tok.Error) {
         from := I64(p.ts.Toks[f].Start)
         end := from

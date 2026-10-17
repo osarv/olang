@@ -18,7 +18,7 @@ fn churn(d I64) I64 {
 }
 fn g(v I64) mut Node& { return Node(v) }
 fn (b Bag&) Str() String {
-    b.arr[0].next = try b.arr[b.k] catch default g(5)
+    b.arr[0].next = checked b.arr[b.k] catch default g(5)
     return "b" $b.k
 }
 fn main() ? {

@@ -80,7 +80,7 @@ Tests String& = (
     "    m := Expected(\"'}'\", Tok(\"South\"))\n"
     "    assert m.Text == \"expected '}', found 'South'\" and m.Rule == \"\" and m.Kind == Diag.Expected\n"
     "    assert UnknownChar('@').Rule == \"L16\"\n"
-    "    assert NoMain().Text == \"no main function - a program starts at 'fn main() ? { }'\"\n"
+    "    assert NoMain().Text == \"no main function - a program starts at 'fn main() { }'\"\n"
     "}\n"
     "\n"
     "test \"a byte that does not print is escaped, in a character and in a token\" {\n"
@@ -115,20 +115,25 @@ fn skipSpace(t String&, i I64) I64 {
     return j
 }
 
-# the position after the C string literal starting at i (a quote), or the default error when it is none: a quote, then
+# what literalEnd and readEntry fail with: the text is no C string literal, or the line no entry
+error notEntry {
+    TEXT
+}
+
+# the position after the C string literal starting at i (a quote), or notEntry.TEXT when it is none: a quote, then
 # any bytes but a quote or a backslash and any backslash with the byte after it, then a quote
 fn literalEnd(t String&, i I64) I64 ? {
-    if i >= t.Len() or t[i] != '"' { error }
+    if i >= t.Len() or t[i] != '"' { error notEntry.TEXT }
     j := i + 1
     for j < t.Len() and t[j] != '"' {
         if t[j] == '\\' {
-            if j + 1 >= t.Len() { error }
+            if j + 1 >= t.Len() { error notEntry.TEXT }
             j += 2
         } else {
             j++
         }
     }
-    if j >= t.Len() { error }
+    if j >= t.Len() { error notEntry.TEXT }
     return j + 1
 }
 
@@ -172,19 +177,19 @@ fn decode(lit String&) String {
 }
 
 # one entry of the table, X(ID, "RULE", "FORMAT"...): its id, its rule and its format with the literals joined and
-# decoded - or the default error when the line is no entry
+# decoded - or notEntry.TEXT when the line is no entry
 fn readEntry(line String&) (String, String, String) ? {
     i := skipSpace(line, 0)
-    if not line[i:].StartsWith("X(") { error }
+    if not line[i:].StartsWith("X(") { error notEntry.TEXT }
     i += 2
     start := i
     for i < line.Len() and isWord(line[i]) { i++ }
-    if i == start or i >= line.Len() or line[i] != ',' { error }
+    if i == start or i >= line.Len() or line[i] != ',' { error notEntry.TEXT }
     id := $line[start:i]
     i = skipSpace(line, i + 1)
     ruleEnd := try literalEnd(line, i)
     rule := decode(line[i:ruleEnd])
-    if ruleEnd >= line.Len() or line[ruleEnd] != ',' { error }
+    if ruleEnd >= line.Len() or line[ruleEnd] != ',' { error notEntry.TEXT }
     i = skipSpace(line, ruleEnd + 1)
     format := StringBuilder()
     count I64 = 0
@@ -194,7 +199,7 @@ fn readEntry(line String&) (String, String, String) ? {
         i = skipSpace(line, e)
         count++
     }
-    if count == 0 or i >= line.Len() or line[i] != ')' { error }
+    if count == 0 or i >= line.Len() or line[i] != ')' { error notEntry.TEXT }
     return id, rule, format.ToString()
 }
 
@@ -349,7 +354,7 @@ fn main() ? {
     try os.WriteFile("compiler/msgs.olang", out.ToString()) catch {
         die("genmsgs: cannot write compiler/msgs.olang")
     }
-    try io.Println("genmsgs: " $ids.Len() " diagnostics written to compiler/msgs.olang") catch io.IoError { fail }
+    io.Println("genmsgs: " $ids.Len() " diagnostics written to compiler/msgs.olang")!
 }
 
 test "names, literals and functions are written as the Python script wrote them" {

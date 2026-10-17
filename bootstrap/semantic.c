@@ -20,32 +20,22 @@
 static struct list allModules; //list of struct semaModule*
 static struct semaModule* rootModule;
 
-//the bare error (see the report): a single, program-wide BASETYPE_ERROR singleton with no owning
-//module and exactly one synthetic word, standing in for "an error occurred, no further detail is
-//tracked." Represented as an ordinary error type (with one word) specifically so it needs zero special
-//casing anywhere ordinal encoding (errorTypeOrdinal/errorCode in codegen.c), try/catch coverage
-//(checkTrySuperset/StatementCatchCoversType), or propagation (cgPropagateError) already handle any
-//declared error type generically - TypeIsSame's own owner+name identity check already treats every use
-//of this one shared instance as the same type, since it's always the exact same struct, never per-module
-//like a real declared error type. Initialized once, in SemanticAnalyzeFile, before any module is loaded.
-static struct type bareErrorType;
 
-struct type* SemanticGenericErrorType(void) {
-    return &bareErrorType;
+struct type* resolveErrorTypeName(struct semaModule* mod, struct syntax* nameNode);
+static struct list allSyntaxParts(struct syntax* s);
+static void presetInferredErrs(struct var* f);
+//R1/R1a: a signature's error list - the error types written after "?", into out. True for "?" alone, whose set is
+//inferred from the body (R1a); false for a written list, or none
+static bool resolveErrorList(struct semaModule* mod, struct syntax* errListNode, struct list* out) {
+    if (!errListNode) return false;
+    struct list items = allSyntaxParts(errListNode);
+    for (int i = 0; i < items.len; i++) {
+        struct type* errType = resolveErrorTypeName(mod, *(struct syntax**)ListGetIdx(&items, i));
+        if (errType) ListAdd(out, &errType);
+    }
+    return items.len == 0;
 }
 
-//R15: "?" alone is the default error - a function that can fail without saying how. One that names its errors
-//fails with those and nothing else, so the default error is added only to an empty list
-static void addDefaultError(struct list* errors) {
-    if (errors->len != 0) return;
-    struct type* d = &bareErrorType;
-    ListAdd(errors, &d);
-}
-
-//R17: a bare "?" function lets any error through as its own unnamed failure
-static bool funcIsBareFallible(struct var* f) {
-    return f && f->type.errors.len == 1 && *(struct type**)ListGetIdx(&f->type.errors, 0) == &bareErrorType;
-}
 
 static int lambdaCounter; //D16: names lambdas and the closures spawned ones are held in
 struct checkCtx;
@@ -560,7 +550,7 @@ bool TypeIsSame(struct type a, struct type b) {
                 struct var* vb = ListGetIdx(&b.vars, i);
                 if (va->mut != vb->mut || !typeSameNested(va->type, vb->type)) return false;
             }
-            if (a.hasRetType != b.hasRetType) return false;
+            if (a.hasRetType != b.hasRetType || a.noReturn != b.noReturn) return false;
             if (a.hasRetType && !typeSameNested(*a.retType, *b.retType)) return false;
             //T22: the same errors in the same order - a fallible call reports an error by its position
             if (a.errors.len != b.errors.len) return false;
@@ -2714,8 +2704,7 @@ static void typeSpell(struct sbuf* b, struct type t) {
         for (int i = 0; i < t.errors.len; i++) {
             struct type* e = *(struct type**)ListGetIdx(&t.errors, i);
             sbufStr(b, "E-");
-            if (e->owner && e->name.len) typeSpell(b, *e);
-            else sbufStr(b, "default"); //R15: the default error, which has no name
+            typeSpell(b, *e);
             sbufStr(b, "-x");
         }
         sbufStr(b, "-f");
@@ -2768,6 +2757,10 @@ struct str instantiationNameFor(struct str base, struct list* typeParams, struct
     return sbufTake(&b);
 }
 
+//R8/R14 in generic code: whether the body being checked is a generic's instantiation. A "try" covering nothing that
+//can fail, or a clause naming an error not produced, may be so in one instantiation and not in another - an inferred
+//set (R1a) differs between them - so neither is an error there; in a body written once, both are
+static bool inInstanceBody;
 //"instantiated here, with T = I32, U = String" - the note an error inside an instantiation's body carries
 void DiagSpellType(struct type t, char* buf, size_t n);
 static char* instantiationNote(struct list* typeParams, struct list* bindings) {
@@ -2876,6 +2869,8 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
         finishTypeVarResult(&spec->type, spec->tok);
     spec->origin = spec;
     spec->codeBlock = ListInit(sizeof(struct statement));
+    spec->errsUnsettled = false;
+    presetInferredErrs(spec); //R1a: each instantiation's set is its own
     //T25c: what a read-only reference parameter reaches is as read-only as its argument - copies out of it are judged
     //per call (roByArg), since the generic's declaration cannot say "mut" for some instantiations and not others
     for (int i = 0; i < spec->type.vars.len; i++) {
@@ -3126,7 +3121,9 @@ static struct type* instantiateCtorTwin(struct type* t, struct list* bindings) {
     ctor->type.retType = spec;
     ctor->origin = ctor;
     ctor->codeBlock = ListInit(sizeof(struct statement));
+    ctor->errsUnsettled = false;
     spec->ctorFunc = ctor;
+    presetInferredErrs(ctor); //R1a
     ListAdd(&ctorTwins, &spec);
     struct pendingTypeInst p = (struct pendingTypeInst){0};
     p.spec = spec;
@@ -3221,7 +3218,9 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
         //construction. Mirrors resolveStructCtorInto's own "the same stable slot" for the non-generic case.
         if (ctor->type.hasRetType) ctor->type.retType = spec;
         ctor->origin = ctor;
+        ctor->errsUnsettled = false;
         spec->ctorFunc = ctor;
+        presetInferredErrs(ctor); //R1a
     }
     //and so is its destructor, for the same reason - its ".self" parameter is the generic type itself,
     //which every substituted field type has to follow (C7)
@@ -4813,6 +4812,7 @@ struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, s
         v.mut = hasTokOfType(m, TOK_MUT); //"needs a mutable receiver", not "this entry is writable"
         ownSigTrait = true; //"own" in a trait's method: not supported yet (T25e)
         v.type = resolveFuncSig(mod, firstPartOfType(m, SNTX_FUNC_SIG));
+        if (v.type.errsInferred) { Err(mTok, ERR_TRAIT_ERRS_UNWRITTEN); v.type.errsInferred = false; } //R1b
         //T35: a method signature may not be generic in a type of its own - a type satisfies a trait with one method
         //per name. T35a: a variable the TRAIT declares ("type Iterator<T> trait") is fixed per application.
         int own = 0;
@@ -4902,21 +4902,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
     }
 
     struct list ctorErrors = ListInit(sizeof(struct type*));
-    struct syntax* errListNode = firstPartOfType(ctorNode, SNTX_ERROR_LIST);
-    if (errListNode) {
-        //each item is either an ordinary SNTX_NAME or the bare bare-error marker (SNTX_BARE_ERROR,
-        //see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME), mirroring resolveFuncSig's
-        //own identical fix
-        struct list items = allSyntaxParts(errListNode);
-        for (int i = 0; i < items.len; i++) {
-            struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
-            struct type* errType = itemNode->type == SNTX_BARE_ERROR
-                ? &bareErrorType : resolveErrorTypeName(mod, itemNode);
-            if (!errType) continue;
-            ListAdd(&ctorErrors, &errType);
-        }
-        addDefaultError(&ctorErrors);
-    }
+    bool ctorErrsInferred = resolveErrorList(mod, firstPartOfType(ctorNode, SNTX_ERROR_LIST), &ctorErrors);
 
     t->vars = ListInit(sizeof(struct var));
     t->ctorFieldSyntax = ListInit(sizeof(struct syntax*));
@@ -5006,6 +4992,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
     ctorFuncVar->type.scopeVars = t->scopeVars;
     ctorFuncVar->type.scopeObligations = t->scopeObligations;
     ctorFuncVar->type.errors = ctorErrors;
+    ctorFuncVar->type.errsInferred = ctorFuncVar->inferErrs = ctorErrsInferred; //R1a
     ctorFuncVar->type.hasRetType = true;
     ctorFuncVar->type.retType = t; //the same stable slot resolveTypeDecl was called with - never a copy
     ctorFuncVar->type.placeholder = false;
@@ -5014,6 +5001,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
     ctorFuncVar->type.typeConstraints = ListInit(sizeof(struct type));
     if (ctorVars.len) TypeCollectConstraints(ctorFuncVar->type, &ctorFuncVar->type.typeConstraints);
     t->ctorFunc = ctorFuncVar;
+    if (!t->typeParams.len && !ctorVars.len) presetInferredErrs(ctorFuncVar); //R1a
 
     struct syntax* destructNode = firstPartOfType(ctorNode, SNTX_DESTRUCT);
     if (destructNode) {
@@ -5518,20 +5506,10 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     scopeTagParams = &t.vars; //O3c: the result may name a parameter ("Node&l")
 
     t.errors = ListInit(sizeof(struct type*));
-    struct syntax* errListNode = firstPartOfType(sigNode, SNTX_ERROR_LIST);
-    if (errListNode) {
-        //each item is either an ordinary SNTX_NAME (resolveErrorTypeName) or the bare bare-error
-        //marker (SNTX_BARE_ERROR, see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_NAME),
-        //since this list can now genuinely mix both node shapes
-        struct list items = allSyntaxParts(errListNode);
-        for (int i = 0; i < items.len; i++) {
-            struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
-            struct type* errType = itemNode->type == SNTX_BARE_ERROR
-                ? &bareErrorType : resolveErrorTypeName(mod, itemNode);
-            if (!errType) continue;
-            ListAdd(&t.errors, &errType);
-        }
-        addDefaultError(&t.errors);
+    t.errsInferred = resolveErrorList(mod, firstPartOfType(sigNode, SNTX_ERROR_LIST), &t.errors);
+    if (hasTokOfType(sigNode, TOK_NORETURN)) { //D8e
+        t.noReturn = true;
+        if (firstPartOfType(sigNode, SNTX_ERROR_LIST)) Err(firstTokOfType(sigNode, TOK_NORETURN), ERR_NORETURN_ERRORS);
     }
 
     //G3: this function is generic exactly when a type variable appears anywhere in its signature - there
@@ -5659,6 +5637,7 @@ struct type resolveExternFuncSig(struct semaModule* mod, struct syntax* declNode
     bool runtimeFn = name.len > 8 && !strncmp(name.ptr, "__olang_", 8);
     resolveExternParamList(mod, firstPartOfType(declNode, SNTX_EXTERN_PARAM_LIST), &t.vars, runtimeFn);
     t.errors = ListInit(sizeof(struct type*));
+    t.noReturn = hasTokOfType(declNode, TOK_NORETURN); //D8e: "extern fn exit(code I32) noreturn"
 
     struct syntax* retTypeNode = firstPartOfType(declNode, SNTX_RET_TYPE);
     if (retTypeNode) {
@@ -5772,6 +5751,11 @@ static struct type resolveTypeExprShape(struct semaModule* mod, struct syntax* t
         //from the surrounding context - nothing outside it could resolve a scope tag against it anyway
         case SNTX_FUNC_TYPE: {
             struct type ft = resolveFuncSig(mod, firstPartOfType(actual, SNTX_FUNC_SIG));
+            //R1b: a function value's set is the one its type writes - no body says what it is
+            if (ft.errsInferred) {
+                Err(firstTokAnywhere(actual), ERR_FUNC_TYPE_ERRS_UNWRITTEN);
+                ft.errsInferred = false;
+            }
             //G3 marks a function generic by the type variables appearing in its signature, which is right
             //for a DECLARATION and wrong for a function TYPE: a "<T>" written in a callback parameter's
             //type ("cmp func(a <T>, b <T>) bool") names the ENCLOSING declaration's own variable and
@@ -5806,22 +5790,16 @@ static void resolvePrimCtor(struct semaModule* mod, struct type* t, struct synta
     if (f->type.vars.len != 1 || !TypeIsSame((*(struct var*)ListGetIdx(&f->type.vars, 0)).type, underlying))
         Err(at, ERR_PRIM_CTOR_PARAM, &underlying);
     f->type.errors = ListInit(sizeof(struct type*));
-    struct syntax* errListNode = firstPartOfType(node, SNTX_ERROR_LIST);
-    if (errListNode) {
-        struct list items = allSyntaxParts(errListNode);
-        for (int i = 0; i < items.len; i++) {
-            struct syntax* itemNode = *(struct syntax**)ListGetIdx(&items, i);
-            struct type* errType = itemNode->type == SNTX_BARE_ERROR ? &bareErrorType : resolveErrorTypeName(mod, itemNode);
-            if (errType) ListAdd(&f->type.errors, &errType);
-        }
-        addDefaultError(&f->type.errors);
-    }
+    f->type.errsInferred = resolveErrorList(mod, firstPartOfType(node, SNTX_ERROR_LIST), &f->type.errors);
+    f->inferErrs = f->type.errsInferred; //R1a
+    if (!f->tok.owner) f->tok = t->tok;
     f->type.hasRetType = true;
     f->type.retType = t; //the type's own stable slot, as a struct constructor's is
     f->type.placeholder = false;
     t->hasCtor = true;
     t->ctorFunc = f;
     t->ctorBodySyntax = firstPartOfType(node, SNTX_BLOCK);
+    presetInferredErrs(f); //R1a
 }
 
 static void resolveTypeDeclIn(struct type* t);
@@ -6199,22 +6177,24 @@ static bool eqWellShaped(struct var* m) {
 
 //E31: the operator methods, by capitalized name, with how many operands each takes besides the receiver and
 //whether it gives a result. The same name with a lowercase first letter is the module's private operator.
-struct operatorShape { const char* name; int operands; bool result; bool mayFail; bool mustFail; };
+struct operatorShape { const char* name; int operands; bool result; bool mayFail; };
 static const struct operatorShape operatorShapes[] = {
-    {"Plus", 1, true, false, false}, {"Minus", 1, true, false, false}, {"Mul", 1, true, false, false},
-    {"Div", 1, true, false, false}, {"Rem", 1, true, false, false}, {"MatMul", 1, true, false, false},
-    {"Neg", 0, true, false, false}, {"Less", 1, true, false, false}, {"At", 1, true, false, false},
-    {"SetAt", 2, false, false, false}, {"Slice", 2, true, false, false}, {"BitAnd", 1, true, false, false},
-    {"BitOr", 1, true, false, false}, {"BitXor", 1, true, false, false}, {"ShiftLeft", 1, true, false, false},
-    {"ShiftRight", 1, true, false, false}, {"BitNot", 0, true, false, false}, {"Inc", 0, true, false, false},
-    {"Dec", 0, true, false, false}, {"Len", 0, true, false, false},
-    {"Eq", 1, true, false, false}, {"Str", 0, true, false, false}, //E10a/E11c: what "==" and "$" consult
-    //the checked forms, which "try" calls (TryAt and TrySlice are derived from At/Slice and Len when not declared)
-    {"TryPlus", 1, true, true, true}, {"TryMinus", 1, true, true, true}, {"TryMul", 1, true, true, true},
-    {"TryDiv", 1, true, true, true}, {"TryRem", 1, true, true, true}, {"TryMatMul", 1, true, true, true},
-    {"TryNeg", 0, true, true, true}, {"TryAt", 1, true, true, true}, {"TrySetAt", 2, false, true, true},
-    {"TrySlice", 2, true, true, true}, {"TryShiftLeft", 1, true, true, true}, {"TryShiftRight", 1, true, true, true},
-    {"TryInc", 0, true, true, true}, {"TryDec", 0, true, true, true},
+    //QQ1: a plain operator may fail, declaring its errors - "try (a + b)" handles them as for a call
+    {"Plus", 1, true, true}, {"Minus", 1, true, true}, {"Mul", 1, true, true},
+    {"Div", 1, true, true}, {"Rem", 1, true, true}, {"MatMul", 1, true, true},
+    {"Neg", 0, true, true}, {"Less", 1, true, true}, {"At", 1, true, true},
+    {"SetAt", 2, false, true}, {"Slice", 2, true, true}, {"BitAnd", 1, true, true},
+    {"BitOr", 1, true, true}, {"BitXor", 1, true, true}, {"ShiftLeft", 1, true, true},
+    {"ShiftRight", 1, true, true}, {"BitNot", 0, true, true}, {"Inc", 0, true, true},
+    {"Dec", 0, true, true}, {"Len", 0, true, false},
+    {"Eq", 1, true, false}, {"Str", 0, true, false}, //E10a/E11c: what "==" and "$" consult
+    //E31a: the checked forms, which "checked" calls (CheckedAt, CheckedSlice and CheckedSetAt are derived from the plain
+    //form and Len when not declared) - each a superset of its plain form's errors (checkCheckedForms)
+    {"CheckedPlus", 1, true, true}, {"CheckedMinus", 1, true, true}, {"CheckedMul", 1, true, true},
+    {"CheckedDiv", 1, true, true}, {"CheckedRem", 1, true, true}, {"CheckedMatMul", 1, true, true},
+    {"CheckedNeg", 0, true, true}, {"CheckedAt", 1, true, true}, {"CheckedSetAt", 2, false, true},
+    {"CheckedSlice", 2, true, true}, {"CheckedShiftLeft", 1, true, true},
+    {"CheckedShiftRight", 1, true, true}, {"CheckedInc", 0, true, true}, {"CheckedDec", 0, true, true},
 };
 
 //M6b: while the prelude's Equal and HashElements are checked for an instantiation - the element-wise "==" and the
@@ -6259,7 +6239,7 @@ static int protocolArity(const char* cap, bool* atLeast) {
     for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++) {
         const struct operatorShape* sh = &operatorShapes[k];
         if (strcmp(sh->name, cap) != 0) continue;
-        *atLeast = !strcmp(cap, "At") || !strcmp(cap, "SetAt") || !strcmp(cap, "TryAt") || !strcmp(cap, "TrySetAt");
+        *atLeast = !strcmp(cap, "At") || !strcmp(cap, "SetAt") || !strcmp(cap, "CheckedAt") || !strcmp(cap, "CheckedSetAt");
         return sh->operands;
     }
     if (!strcmp(cap, "Call")) return -1;
@@ -6314,20 +6294,10 @@ static void checkOperatorMethod(struct semaModule* mod, struct var* a, struct ty
         if (!strcmp(operatorShapes[k].name, cap)) sh = &operatorShapes[k];
     int before = ErrMsgGetNErrors();
     if (sh) {
-        if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
+        if (a->type.noReturn) Err(a->tok, ERR_NORETURN_HERE, "an operator's method"); //D8e
+        else if (sh->result && (!a->type.hasRetType || a->type.retType->isTuple)) Err(a->tok, ERR_OPERATOR_RESULT, sh->name);
         else if (!sh->result && a->type.hasRetType) Err(a->tok, ERR_SETAT_RESULT);
-        else if (a->type.errors.len > 0 && !sh->mayFail) {
-            //E31a: the operations that can fail have a checked form; the rest - Less, the bitwise ones, Len, Eq, Str -
-            //have none, so no "Try" to point at
-            char tn[32];
-            snprintf(tn, sizeof(tn), "Try%s", sh->name);
-            bool hasTry = false;
-            for (size_t k = 0; k < sizeof(operatorShapes) / sizeof(operatorShapes[0]); k++)
-                hasTry = hasTry || !strcmp(operatorShapes[k].name, tn);
-            if (hasTry) Err(a->tok, ERR_OPERATOR_FALLIBLE, sh->name, sh->name);
-            else Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
-        }
-        else if (a->type.errors.len == 0 && sh->mustFail) Err(a->tok, ERR_TRY_FORM_MUST_FAIL, sh->name);
+        else if (a->type.errors.len > 0 && !sh->mayFail) Err(a->tok, ERR_METHOD_CANNOT_FAIL, sh->name);
         else if (!strcmp(sh->name, "Less") && a->type.retType->bType != BASETYPE_BOOL) Err(a->tok, ERR_LESS_NOT_BOOL);
         else if (!strcmp(sh->name, "Len") && a->type.retType->bType != BASETYPE_INT64) Err(a->tok, ERR_LEN_SHAPE);
         else if (!strcmp(sh->name, "Eq") || !strcmp(sh->name, "Str")) {
@@ -6603,6 +6573,7 @@ void semaResolveModule(struct semaModule* mod) {
             ownSigAllowed = true; //O36/O37
             ownSigReceiver = firstPartOfType(actual, SNTX_RECEIVER) != NULL;
             v->type = resolveFuncSig(mod, sigNode);
+            v->inferErrs = v->type.errsInferred; //R1a
             writtenAgainInBody(&v->type, sigNode, firstPartOfType(actual, SNTX_BLOCK));
             //G16: kept here, in the SIGNATURE pass, and not where the body is checked - an instantiation
             //copies the generic var wholesale, so if the copy is made before the generic's own declaration
@@ -6616,6 +6587,7 @@ void semaResolveModule(struct semaModule* mod) {
             v->bodyUnparsed = firstPartOfType(actual, SNTX_BODY_UNPARSED) != NULL;
             v->type.owner = mod;
             v->type.tok = nameTok;
+            if (!v->type.typeParams.len) presetInferredErrs(v); //R1a: a generic's own set is never its instantiations'
         } else if (actual->type == SNTX_EXTERN_FUNC_DECL) {
             struct token nameTok = firstTokOfType(actual, TOK_IDEN);
             struct var* v = varForDecl(mod, nameTok);
@@ -6676,6 +6648,10 @@ struct checkCtx {
                       //operator, index or slice on a declared type calls its Try form here
     bool allowFallibleCall; //true only while building the one primary node directly under a `try` -
                              //see buildTryExpr/buildTryCatchStmnt and buildPrimary's call branch
+    //R8/E24 (QQ1): while a "try" or "checked" operand is built, every fallible call in it not directly under the keyword -
+    //a chain's, an argument's, a parenthesized operand's, an operator's whose method can fail - collected here (struct
+    //operand*), handled by that try. NULL elsewhere, and inside a lambda's or a block's body
+    struct list* tryCover;
     //D8a: building a parameter's default for one call - a lambda in it is made for the code the call stands in: emitted
     //with that host (and in that module's object), and shared by every call there (paramDefault's lambdas)
     struct paramDefault* defaultFor;
@@ -6706,6 +6682,118 @@ struct checkCtx {
     bool inAssertMsg; //S17: building an assert's message, evaluated only when the assert fails - it may not leave
     bool inTaskClause; //P4a: checking a clause of a spawned try - code of the task, which it may not leave
 };
+
+// ---- R1a: inferred error sets ----
+//A function written "?" alone fails with what its body can produce: its own "error T.WORD" statements and whatever its
+//tried calls let through. Its set grows while its body is checked (inferError), and a call checks its callee's body
+//first (ensureBodyChecked) - so a set is read before it is final only through a cycle of calls, or from where bodies are
+//not checked yet (a global's initializer). Every such read is recorded (noteErrsRead); when the attempt is over and a
+//set read early turned out larger, the program is checked again with every set preset to what it was found to be
+//(errDecisions, kept across attempts) - a least fixed point reached in as many attempts as the deepest cycle needs, and
+//none at all where nothing is recursive. Once settled each set is put in a canonical order - by the error types'
+//modules, then names - so a function's error codes (R6) are the same in every compilation that infers them
+struct errObs { struct var* f; int len; };
+static struct list errObs;          //this attempt's early reads
+struct errKey { struct str mod; struct str name; };
+struct errDecision { struct str key; struct list errs; }; //struct errKey
+static struct list errDecisions;    //what each inferred set was found to be, by the attempt before
+static bool errsRedo;               //this attempt read a set that later grew
+static struct list inferredFuncs;   //this attempt's functions with an inferred set (struct var*)
+
+static void ensureBodyChecked(struct var* func);
+static void ensureCtorBodyBuilt(struct type* t);
+
+//a function's identity across attempts: where it is declared and, for an instantiation, its name
+static struct str errFuncKey(struct var* f) {
+    struct str file = f->tok.owner ? TokenGetFileName(f->tok.owner) : (struct str){0};
+    struct str extra = (struct str){0};
+    if (f->type.hasRetType && f->type.retType && f->type.retType->ctorFunc == f) extra = f->type.retType->name;
+    return StrFromCStr(StrFmt("%.*s:%d:%.*s:%.*s", file.len, file.ptr, f->tok.owner ? TokenGetStrStart(f->tok) : -1,
+                              f->name.len, f->name.ptr, extra.len, extra.ptr));
+}
+
+static int errTypeCmp(const void* pa, const void* pb) {
+    struct type* a = *(struct type**)pa;
+    struct type* b = *(struct type**)pb;
+    struct str ma = a->owner ? a->owner->identity : (struct str){0}, mb = b->owner ? b->owner->identity : (struct str){0};
+    int n = ma.len < mb.len ? ma.len : mb.len;
+    int c = n ? memcmp(ma.ptr, mb.ptr, (size_t)n) : 0;
+    if (c || ma.len != mb.len) return c ? c : ma.len - mb.len;
+    n = a->name.len < b->name.len ? a->name.len : b->name.len;
+    c = n ? memcmp(a->name.ptr, b->name.ptr, (size_t)n) : 0;
+    return c ? c : a->name.len - b->name.len;
+}
+
+//an inferred set as the attempt before found it, put in place before the body is checked
+static void presetInferredErrs(struct var* f) {
+    if (!f->inferErrs || f->isLambda) return;
+    ListAdd(&inferredFuncs, &f);
+    f->type.errors = ListInit(sizeof(struct type*));
+    struct str key = errFuncKey(f);
+    for (int i = 0; i < errDecisions.len; i++) {
+        struct errDecision* d = ListGetIdx(&errDecisions, i);
+        if (!StrCmp(d->key, key)) continue;
+        for (int k = 0; k < d->errs.len; k++) {
+            struct errKey* ek = ListGetIdx(&d->errs, k);
+            for (int m = 0; m < allModules.len; m++) {
+                struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, m);
+                if (!StrCmp(mod->identity, ek->mod)) continue;
+                struct type* t = TypeGetList(&mod->types, ek->name);
+                if (t && t->bType == BASETYPE_ERROR) ListAdd(&f->type.errors, &t);
+                break;
+            }
+        }
+        return;
+    }
+}
+
+//whether f's body has been checked
+static bool errsBodyDone(struct var* f) {
+    if (f->type.hasRetType && f->type.retType && f->type.retType->ctorFunc == f && f->type.retType->hasCtor
+            && f->type.retType->bType == BASETYPE_STRUCT)
+        return f->type.retType->ctorBodyState == 2;
+    return f->bodyState == 2;
+}
+
+//R1a: a read of f's error set by code being checked in ctx - its body checked first where it can be, and the read
+//recorded where the set is not final yet, the reading function's own set then not final either
+static void noteErrsRead(struct checkCtx* ctx, struct var* f) {
+    if (!f || !f->inferErrs || f->isLambda) return;
+    if (f->type.hasRetType && f->type.retType && f->type.retType->ctorFunc == f && f->type.retType->hasCtor
+            && f->type.retType->bType == BASETYPE_STRUCT) ensureCtorBodyBuilt(f->type.retType);
+    else ensureBodyChecked(f);
+    if (errsBodyDone(f) && !f->errsUnsettled) return;
+    struct errObs o = { f, f->type.errors.len };
+    ListAdd(&errObs, &o);
+    if (ctx && ctx->func) ctx->func->errsUnsettled = true;
+}
+
+//R1a: whether f's set cannot be known - its body did not parse, or had errors and found nothing - so a call of it is
+//neither required nor refused a "try": what is wrong was reported in the body
+static bool errsUnknown(struct var* f) {
+    if (!f || !f->inferErrs || f->isLambda) return false;
+    return f->bodyUnparsed || f->type.sigUninferable || (f->bodyHadErrors && f->type.errors.len == 0);
+}
+
+//R1a: once every body is checked - whether a set read early grew (then the attempt is redone with every inferred set
+//preset), else every inferred set in its canonical order
+static void settleInferredErrs(void);
+
+//E31 (QQ1): the operator a call being built stands for, for what a fallible one says - NULL for a call written by name
+static const char* operatorBeingCalled;
+
+//E15/R8: a call that can fail is handled - directly under a "try" (allowed), or anywhere in a try's operand (tryCover,
+//which takes it), else it is an error
+static void checkCallFallible(struct checkCtx* ctx, struct operand* call, bool allowed, struct token tok) {
+    if (!call || call->opType != OPERATION_FUNCCALL || !call->readVar) return;
+    struct var* f = call->readVar;
+    if (errsUnknown(f) || f->type.errors.len == 0) return;
+    //under a try every one is its cover's, the one directly under the keyword included (tryErrors tells them apart)
+    if (ctx->tryCover) { ListAdd(ctx->tryCover, &call); return; }
+    if (allowed) return;
+    if (operatorBeingCalled) Err(tok, ERR_OPERATOR_CALL_FAILS, operatorBeingCalled);
+    else Err(tok, ERR_UNHANDLED_FALLIBLE_CALL);
+}
 
 struct scope scopePush(struct scope* parent) {
     struct scope s = {0};
@@ -7761,10 +7849,13 @@ struct var* InterfaceMethodImpl(struct type concrete, struct var* m) {
     }
     if (f->type.hasRetType != m->type.hasRetType) return NULL;
     if (m->type.hasRetType && !TypeIsSameStrict(*f->type.retType, *m->type.retType)) return NULL;
-    //the error lists must agree in order, as T31 states
-    if (f->type.errors.len != m->type.errors.len) return NULL;
-    for (int i = 0; i < m->type.errors.len; i++) {
-        if (*(struct type**)ListGetIdx(&f->type.errors, i) != *(struct type**)ListGetIdx(&m->type.errors, i)) return NULL;
+    //T31/R1b: every error the method can fail with is one the trait names - a constrained call is a direct call, and its
+    //errors are the method's own (an inferred set, in its order, is one the trait's need not repeat)
+    for (int i = 0; i < f->type.errors.len; i++) {
+        bool named = false;
+        for (int k = 0; k < m->type.errors.len && !named; k++)
+            named = TypeIsSame(**(struct type**)ListGetIdx(&f->type.errors, i), **(struct type**)ListGetIdx(&m->type.errors, k));
+        if (!named) return NULL;
     }
     //M6: a private method name belongs to the module that wrote it, so only a type in THAT module can supply it - which
     //makes a trait with a private method a sealed one: no outside module's type can satisfy it
@@ -8388,6 +8479,7 @@ static bool funcFitsByPermission(struct type want, struct type have) {
         if ((!refs && va->mut != vb->mut) || !TypeIsSameStrict(va->type, b)) return false;
     }
     if (want.hasRetType != have.hasRetType) return false;
+    if (want.noReturn && !have.noReturn) return false; //D8e: a noreturn function fits a type with no result too
     if (want.hasRetType) {
         struct type b = *have.retType;
         if (TypeIsPermRef(*want.retType) && TypeIsPermRef(b) && !want.retType->refMut) b.refMut = false;
@@ -8401,6 +8493,8 @@ static bool funcFitsByPermission(struct type want, struct type have) {
 }
 
 enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type target) {
+    //D8e: control never arrives where a noreturn call's value would be used, so it fits whatever is expected
+    if (OperandIsNoReturnCall(op) && op->type.bType == BASETYPE_VOID && !target.unknown) { op->type = target; return TYPE_FIT_OK; }
     if (target.unknown || op->type.unknown) return TYPE_FIT_OK; //already reported as an unknown type
     if (target.bType == BASETYPE_INTERFACE) return TYPE_FIT_OK; //T30: reported where the trait was written as a type
     //E28: whichever value is chosen lands in the target, so each must fit it on its own - scopes included
@@ -8549,6 +8643,20 @@ enum typeFit OperandFitsType(struct var* func, struct operand* op, struct type t
         if (!op->isLiteral && !TypeIsSame(target, op->type) && numericFamilyRank(op->type, &fs) >= 0
                 && numericFamilyRank(target, &fd) >= 0 && !(op->type.owner && !target.owner && op->type.bType == target.bType))
             return TYPE_FIT_NUMBER;
+    }
+    //R1b: a named function's value fits a function type naming every error it can fail with, in any order - its codes
+    //re-encoded for the type where they differ (codegen's adapter): it takes the type's list
+    if (target.bType == BASETYPE_FUNC && op->type.bType == BASETYPE_FUNC && op->opType == OPERATION_READ_VAR
+            && op->readVar && op->readVar->isFuncDecl && !op->readVar->isLambda && !TypeIsSame(target, op->type)) {
+        struct type have = op->type;
+        bool within = true;
+        for (int i = 0; i < have.errors.len && within; i++) {
+            struct type* e = *(struct type**)ListGetIdx(&have.errors, i);
+            within = false;
+            for (int k = 0; k < target.errors.len && !within; k++) within = TypeIsSame(*e, **(struct type**)ListGetIdx(&target.errors, k));
+        }
+        have.errors = target.errors;
+        if (within && (TypeIsSame(target, have) || funcFitsByPermission(target, have))) op->type.errors = target.errors;
     }
     if (TypeIsSame(target, op->type) || funcFitsByPermission(target, op->type)) {
         //a struct or compile-time-length array is reference-shaped only when explicitly "&"-marked (structMAlloc) - a
@@ -8913,7 +9021,8 @@ static bool inferOwnValue;
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     FinalizeLambda(rhs, NULL); //D16b
-    if (rhs->isNullLiteral || rhs->type.bType == BASETYPE_NULL) Err(rhs->tok, ERR_DECL_FROM_NULL);
+    if (OperandIsNoReturnCall(rhs)) Err(rhs->tok, ERR_DECL_FROM_NORETURN); //D8e
+    else if (rhs->isNullLiteral || rhs->type.bType == BASETYPE_NULL) Err(rhs->tok, ERR_DECL_FROM_NULL);
     else if (!operandHasDeclType(rhs) && !rhs->type.unknown) Err(rhs->tok, ERR_TYPE_NOT_INFERABLE);
     //...and an expression of numeric literals alone (E4a), computed while compiling, declares what its value written
     //as one literal would (T6a): "x := 1 + 2" an I32, "x := 2147483647 + 1" an I64, as "x := 2147483648" is
@@ -13398,6 +13507,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     struct operand* op = operandNew(tok, OPERATION_FUNCCALL, ret);
     op->readVar = func;
     op->args = args;
+    noteErrsRead(ctx, func); //R1a: what it can fail with is read from here on
 
     //E14: the count is a range once parameters may declare defaults (D8a) - at least the undefaulted
     //ones, at most all of them. Every slot the caller left off, and every one written as the "default"
@@ -14988,6 +15098,7 @@ static const char* eqMethodName(struct checkCtx* ctx, struct type t) {
     return m && eqWellShaped(m) ? StrDupStr(m->name) : NULL;
 }
 
+static bool loopOwnCall; //S9e: the operator call being built is a for-in's own (its At), which the loop tries itself
 static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* recv, struct list args, const char* name,
                                         struct token tok) {
     //M6b: a protocol method by its private spelling is called only from its own module - where it is not, what stands
@@ -15007,11 +15118,15 @@ static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* re
     bool reported = false;
     //a Try form is fallible, and only ever called for what a "try" checks (E31) - and Call, the one plain form that may
     //fail (E31a: it stands for a function), wherever the call it stands for may: "try c(4)", "spawn try c(3)"
+    //an operator whose method can fail is handled as any call is (QQ1): directly under "try" only as "try c(4)", the
+    //Call it stands for, else as one of the calls in the try's operand (tryCover), else it is an error naming it
     bool prevAllow = ctx->allowFallibleCall;
     bool callForm = (name[0] == 'C' || name[0] == 'c') && !strcmp(name + 1, "all");
-    ctx->allowFallibleCall = ((name[0] == 'T' || name[0] == 't') && name[1] == 'r' && name[2] == 'y'
-                              && name[3] >= 'A' && name[3] <= 'Z') || (callForm && prevAllow);
+    ctx->allowFallibleCall = (callForm || loopOwnCall) && prevAllow;
+    const char* prevOp = operatorBeingCalled;
+    operatorBeingCalled = name;
     struct operand* call = buildMethodCall(ctx, recv, mTok, NULL, ListInit(sizeof(struct syntax*)), &reported);
+    operatorBeingCalled = prevOp;
     ctx->allowFallibleCall = prevAllow;
     prebuiltMethodArgs = prev;
     if (call && call->opType == OPERATION_FUNCCALL) call->isOperatorCall = true;
@@ -15020,8 +15135,8 @@ static struct operand* operatorCallArgs(struct checkCtx* ctx, struct operand* re
 
 //E31: the checked form of an operator on t - "TryX", or its private "tryX" - when t declares it
 static const char* tryOperatorName(struct checkCtx* ctx, struct type t, const char* capName) {
-    char* tn = MallocOrCrash(strlen(capName) + 4);
-    sprintf(tn, "Try%s", capName);
+    char* tn = MallocOrCrash(strlen(capName) + 8);
+    sprintf(tn, "Checked%s", capName);
     return operatorMethodName(ctx, t, tn);
 }
 
@@ -15573,6 +15688,11 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
         t.arrLen = NULL;
         reportTypeFit(OperandFitsType(ctx->func, a, t), a->tok, a, t);
         reportTypeFit(OperandFitsType(ctx->func, b, t), b->tok, b, t);
+    } else if (OperandIsNoReturnCall(b) && b->type.bType == BASETYPE_VOID) { //D8e: a noreturn call gives way to the other value
+        b->type = a->type;
+    } else if (OperandIsNoReturnCall(a) && a->type.bType == BASETYPE_VOID) {
+        a->type = b->type;
+        t = b->type;
     } else if (!TypeIsSame(a->type, b->type)) {
         if (TypeIsNumeric(a->type) && TypeIsNumeric(b->type) && operandAdaptsAsLiteral(a) && operandAdaptsAsLiteral(b)) {
             t = numericTypeRank(a->type) >= numericTypeRank(b->type) ? a->type : b->type;
@@ -15760,7 +15880,8 @@ static struct operand* buildMembership(struct checkCtx* ctx, struct syntax* xNod
     prebuiltMethodArgs = NULL;
     if (call->opType == OPERATION_FUNCCALL) {
         call->isOperatorCall = true;
-        if (call->readVar && call->readVar->type.errors.len && !ctx->checkingTry) Err(tok, ERR_MEMBERSHIP_NEEDS_TRY, mName);
+        if (call->readVar && call->readVar->type.errors.len && !ctx->tryCover && !errsUnknown(call->readVar))
+            Err(tok, ERR_MEMBERSHIP_NEEDS_TRY, mName);
     }
     if (!OperandIsBool(call)) Err(tok, ERR_MEMBERSHIP_NOT_BOOL, mName);
     struct operand* result = call;
@@ -15951,7 +16072,6 @@ static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* 
         else Err(tok, ERR_NOT_CALLABLE, &callee->type);
         return unknownPlaceholder(tok); //no value - nothing more is said about it
     }
-    if (callee->type.errors.len > 0 && !allowed) Err(tok, ERR_UNHANDLED_FALLIBLE_CALL);
     struct var* fv = MallocOrCrash(sizeof(struct var));
     *fv = (struct var){0};
     fv->name = StrFromCStr("$callee");
@@ -15963,6 +16083,7 @@ static struct operand* buildValueCallArgs(struct checkCtx* ctx, struct operand* 
     atWriteBackArgs(ctx, fv, &args, tok, &wbPre);
     struct operand* call = OperandFuncCall(ctx, fv, args, tok, ListInit(sizeof(struct syntax*)));
     call->callee = callee;
+    checkCallFallible(ctx, call, allowed, tok);
     return call;
 }
 
@@ -16266,9 +16387,9 @@ static struct operand* buildIndexCall(struct checkCtx* ctx, struct operand* base
     const char* atName = operatorFor(ctx, base->type, "At", sq);
     if (!atName) return unknownPlaceholder(sq); //reported: what is read from it says nothing more
     struct operand* seq = NULL;
-    bool derived = ctx->checkingTry && strcmp(atName + 1, "ryAt") != 0;
+    bool derived = ctx->checkingTry && strcmp(atName + 1, "heckedAt") != 0;
     if (derived && idxs.len > 1) { //reported once: the "try" around it has nothing more to say (R20)
-        Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TryAt");
+        Err(sq, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "CheckedAt");
         return unknownPlaceholder(sq);
     }
     if (derived) {
@@ -16295,7 +16416,7 @@ static struct operand* buildSliceCall(struct checkCtx* ctx, struct operand* base
     if (!slName) return unknownPlaceholder(sq);
     const char* lenName = operatorMethodName(ctx, base->type, "Len");
     struct operand* seq = NULL;
-    bool derived = ctx->checkingTry && strcmp(slName + 1, "rySlice") != 0;
+    bool derived = ctx->checkingTry && strcmp(slName + 1, "heckedSlice") != 0;
     if ((derived || !hi) && !lenName) {
         Err(sq, derived ? ERR_TRY_SLICE_NEEDS_LEN : ERR_SLICE_NEEDS_LEN, &base->type);
         derived = false;
@@ -16561,6 +16682,21 @@ void rejectDefaultArgs(struct list args) {
     }
 }
 
+//S16: set where what a try lets through would leave a test body, which has no error union - the try then takes it with
+//a clause of its own that fails the test (ends == 2), added by its builder through takeTestEscape
+static bool testEscapes;
+static void takeTestEscape(struct list* clauses, struct token tok) {
+    if (!testEscapes) return;
+    testEscapes = false;
+    struct catchClause cc = (struct catchClause){0};
+    cc.tok = tok;
+    cc.catchAll = true;
+    cc.ends = 2;
+    cc.matches = ListInit(sizeof(struct catchMatch));
+    if (!clauses->elemSize) *clauses = ListInit(sizeof(struct catchClause));
+    ListAdd(clauses, &cc);
+}
+
 //every error type a `try`'d call can produce must appear in the enclosing function's own declared error
 //list, so an unhandled/uncaught error always has somewhere valid to propagate to. Required even for error
 //types a catch clause fully handles, not just the ones that actually escape - see the report, this is a
@@ -16569,8 +16705,7 @@ void checkTrySuperset(struct checkCtx* ctx, struct token tok, struct type callee
     if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
     if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
-    if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
-    if (funcIsBareFallible(ctx->func)) return; //R17: whatever fails here is this function's own failure
+    if (!ctx->func) { if (ctx->inTest) { testEscapes = true; return; } Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
     for (int i = 0; i < calleeType.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&calleeType.errors, i);
         bool found = false;
@@ -16720,7 +16855,7 @@ static bool catchMatchCovered(struct list* seen, struct catchMatch* m) {
 }
 
 //R9b: the catch clauses after a tried operand, in order. errors: what the operand can produce (struct type*:
-//a call's declared errors, or the bare error alone for a checked index or slice). In value position (valuePos)
+//a call's errors, or BuiltinError alone for a checked index or slice). In value position (valuePos)
 //each clause ends one of two ways - its block provably leaves (D10a, counting break and continue), or it
 //gives the value with its own default - and never both, since a default after a block that always leaves
 //could never be used. rt is the value's type there (NULL when there is none). In a statement a clause simply
@@ -16774,17 +16909,7 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
         } else {
             bool leaves = blk && blockLeavesValue(&cc.block);
             if (hasDefault && leaves) Err(firstTokOfType(cn, TOK_DEFAULT), ERR_DEFAULT_DEAD);
-            if (!hasDefault && !leaves && !valueLeft) {
-                //B5b: "os.Exit(2)" ends the program, but as an ordinary call - D10a cannot see it leave
-                struct statement* lastSt = cc.block.len ? ListGetIdx(&cc.block, cc.block.len - 1) : NULL;
-                struct var* lf = lastSt && lastSt->sType == STATEMENT_EXPR && lastSt->op && lastSt->op->opType == OPERATION_FUNCCALL
-                                 ? lastSt->op->readVar : NULL;
-                bool exits = lf && (StrCmp(lf->name, StrFromCStr("Exit"))
-                                    || (lf->type.isExtern && (StrCmp(lf->name, StrFromCStr("exit"))
-                                                              || StrCmp(lf->name, StrFromCStr("_exit"))
-                                                              || StrCmp(lf->name, StrFromCStr("abort")))));
-                Err(exits ? lastSt->op->tok : cc.tok, exits ? ERR_CATCH_EXIT_NOT_LEAVE : ERR_CATCH_MUST_LEAVE);
-            }
+            if (!hasDefault && !leaves && !valueLeft) Err(cc.tok, ERR_CATCH_MUST_LEAVE);
             if (hasDefault && !leaves) {
                 if (!rt) {
                     Err(cc.tok, ERR_DEFAULT_NO_VALUE);
@@ -16804,21 +16929,27 @@ static void buildCatchClauses(struct checkCtx* ctx, struct syntax* s, struct ope
         ListAdd(out, &cc);
     }
     if (!sawAll) checkUncaughtPropagate(ctx, tok, errors, &seen);
+    takeTestEscape(out, tok);
 }
 
 //R20: marks every operation in a tried expression that can fail a check as checked by root, and returns the
 //BuiltinError words they can produce. Not through a call (which has its own signature) or a nested try.
-static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs);
+static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs, bool checks);
 //E31: an operator, index or slice a declared type implements is a call the compiler made, and is reached through as the
-//built-in operation would be; one that is a Try form can fail, so it is checked by root too, its errors added to errs.
-static unsigned markChecked(struct operand* op, struct operand* root, struct list* errs) {
+//built-in operation would be; one that is a Checked form, or a plain one that can fail, is checked by root too, its
+//errors added to errs. checks (QQ1, "checked"): the built-in operations are checked too - without it only the calls
+//fail through root. A call written by name is the try's cover's (tryErrors); its arguments are reached through.
+static unsigned markChecked(struct operand* op, struct operand* root, struct list* errs, bool checks) {
     //a call with clauses of its own that is also under root (a comprehension's Next, S9a): root takes what they do not
     bool ownAndRoot = op && op->isTried && op->isOperatorCall && op->opType == OPERATION_FUNCCALL;
-    if (!op || (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) || (op != root && !ownAndRoot && (op->isTried || op->checkRoot)))
-        return 0;
+    if (!op || (op != root && !ownAndRoot && (op->isTried || op->checkRoot))) return 0;
     unsigned w = 0;
+    if (op->opType == OPERATION_FUNCCALL && !op->isOperatorCall) {
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
+        return w;
+    }
     //held operands, an increment; a comprehension's loop, whose own calls a "try" around it covers (S9e)
-    if (op->opType == OPERATION_SEQ || op->opType == OPERATION_COMPREHENSION) w |= markCheckedStmts(&op->comprBody, root, errs);
+    if (op->opType == OPERATION_SEQ || op->opType == OPERATION_COMPREHENSION) w |= markCheckedStmts(&op->comprBody, root, errs, checks);
     if (op->opType == OPERATION_FUNCCALL) {
         struct list* es = &op->readVar->type.errors;
         if (es->len) {
@@ -16837,7 +16968,11 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
                 if (!seen) ListAdd(errs, &e);
             }
         }
-        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs);
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
+        return w;
+    }
+    if (!checks) {
+        for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
         return w;
     }
     unsigned dbz = 1u << SemanticBuiltinErrorWord("DIVIDE_BY_ZERO"), ovf = 1u << SemanticBuiltinErrorWord("OVERFLOW");
@@ -16857,7 +16992,8 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
             if (isInt) w = dbz | (TypeIsUnsigned(a0->type) ? 0 : ovf);
             break;
         case OPERATION_MINUS: if (isInt) w = ovf; break;
-        case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: w = inv; break;
+        case OPERATION_BTSFT_L: w = oob | (isInt ? ovf : 0); break; //QO6: an amount out of range; set bits shifted out
+        case OPERATION_BTSFT_R: w = oob; break;
         case OPERATION_NUMERIC_CONVERT:
             //T4: whatever the target cannot hold of the source - nothing where the source flows into it (T6b); an integer
             //into a float overflows only into F16, whose range is small
@@ -16866,39 +17002,101 @@ static unsigned markChecked(struct operand* op, struct operand* root, struct lis
                 w = TypeIsFloat(t) && !TypeIsFloat(a0->type) ? (t.bType == BASETYPE_F16 ? ovf : 0) : ovf;
             break;
         case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_SLICE: case OPERATION_BOUNDS: w = oob; break;
-        case OPERATION_AS: w = inv; break; //E32: the value is not what "as" names
+        case OPERATION_AS: w = op->castEnum ? 1u << SemanticBuiltinErrorWord("WRONG_CASE") : oob; break; //E32, E32b
         case OPERATION_INDEX: if (!op->noCheck) w = oob; break;
         default: break;
     }
     if (w) op->checkRoot = root;
-    for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs);
+    for (int i = 0; i < op->args.len; i++) w |= markChecked(*(struct operand**)ListGetIdx(&op->args, i), root, errs, checks);
     return w;
 }
 
-//E31: whether a try's operand is, as written, a call - "try f(x)", "try a.b().c()" - whose own signature says what
-//can fail; anything else is what "try" checks (R20), its operators calling their Try forms
-static bool tryOperandIsWrittenCall(struct syntax* n) {
-    if (!n) return false;
-    if (n->type == SNTX_EXPR_POSTFIX && n->parts.len > 1) {
-        struct syntaxPart* last = partAt(n, n->parts.len - 1);
-        if (last->isToken) return false;
-        if (last->sntx->type == SNTX_EXPR_VALUE_CALL) return true;
-        return last->sntx->type == SNTX_EXPR_MEMBR && firstPartOfType(last->sntx, SNTX_EXPR_ARGS);
+
+//QQ1: every operation in op's tree failing through from fails through to instead
+static void reRootChecks(struct operand* op, struct operand* from, struct operand* to) {
+    if (!op) return;
+    if (op->checkRoot == from) op->checkRoot = to;
+    if (op != from && op->isTried) return;
+    for (int i = 0; i < op->args.len; i++) reRootChecks(*(struct operand**)ListGetIdx(&op->args, i), from, to);
+    for (int i = 0; i < op->comprBody.len; i++) {
+        struct statement* st = ListGetIdx(&op->comprBody, i);
+        reRootChecks(st->op, from, to);
+        reRootChecks(st->target, from, to);
     }
-    if (n->type == SNTX_EXPR_POSTFIX) return tryOperandIsWrittenCall(partSntx(n, 0));
-    return n->type == SNTX_EXPR_PRIMARY && firstPartOfType(n, SNTX_EXPR_CALL);
+}
+
+//QQ1: the keyword of a try node - "try" or "checked"
+static struct token tryKwOf(struct syntax* s, bool* checked) {
+    *checked = !hasTokOfType(s, TOK_TRY);
+    return firstTokOfType(s, *checked ? TOK_CHECKED : TOK_TRY);
+}
+
+//R8/E24/E15a (QQ1): what a try - or checked - operand built as callOp, with cover holding the fallible calls built in it
+//below the keyword, can fail with: each call's errors (every call in a chain, an argument or a parenthesized operand -
+//cover's, which take callOp as the try they fail through), and under "checked" BuiltinError's words for the operations
+//it checks (*checkWords), and a Checked form's errors. None when nothing in it can fail
+static struct list tryErrors(struct operand* callOp, struct list* cover, bool checked, unsigned* checkWords, bool* unknown) {
+    struct list errors = ListInit(sizeof(struct type*));
+    struct list opErrs = ListInit(sizeof(struct type*));
+    *unknown = false;
+    //markChecked first: it stops at a call already taken by a try, and a covered call's arguments are what it checks too
+    *checkWords = markChecked(callOp, callOp, &opErrs, checked);
+    if (*checkWords) {
+        struct type* builtin = SemanticBuiltinErrorType();
+        if (builtin) ListAdd(&errors, &builtin);
+    }
+    struct list calls = ListInit(sizeof(struct operand*));
+    if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar) ListAdd(&calls, &callOp);
+    for (int i = 0; i < cover->len; i++)
+        if (*(struct operand**)ListGetIdx(cover, i) != callOp) ListAdd(&calls, ListGetIdx(cover, i));
+    for (int i = 0; i < calls.len; i++) {
+        struct operand* c = *(struct operand**)ListGetIdx(&calls, i);
+        if (errsUnknown(c->readVar)) *unknown = true;
+        if (c != callOp) c->checkRoot = callOp;
+        struct list* es = &c->readVar->type.errors;
+        for (int k = 0; k < es->len; k++) {
+            //what the call's own clauses take whole - a loop's Next taking Exhausted (S9a) - never reaches the try
+            struct type* e = *(struct type**)ListGetIdx(es, k);
+            bool own = false;
+            for (int q = 0; q < c->catchClauses.len && !own; q++) {
+                struct catchClause* cc = ListGetIdx(&c->catchClauses, q);
+                for (int m = 0; m < cc->matches.len && !own; m++) {
+                    struct catchMatch* cm = ListGetIdx(&cc->matches, m);
+                    own = !cm->hasWord && TypeIsSame(cm->errType, *e);
+                }
+            }
+            if (!own) ListAdd(&opErrs, ListGetIdx(es, k));
+        }
+    }
+    for (int i = 0; i < opErrs.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
+        bool seen = false;
+        for (int k = 0; k < errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&errors, k), *e);
+        if (!seen) ListAdd(&errors, &e);
+    }
+    return errors;
+}
+
+//QQ1: a "try" on what can fail only where checked - what it once checked is now written "checked"
+static bool tryWouldCheck(struct operand* callOp) {
+    return !(callOp->opType == OPERATION_FUNCCALL && !callOp->isOperatorCall);
 }
 
 struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
-    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool checked = false;
+    struct token tok = tryKwOf(s, &checked);
     bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
     ctx->allowFallibleCall = true;
+    ctx->tryCover = &cover;
     struct syntax* operandNode = firstPartOfType(s, SNTX_EXPR_POSTFIX);
     if (!operandNode) operandNode = firstPartOfType(s, SNTX_EXPR_PRIMARY);
-    ctx->checkingTry = !tryOperandIsWrittenCall(operandNode);
+    ctx->checkingTry = checked;
     struct operand* callOp = buildExprFromSyntax(ctx, operandNode);
     ctx->allowFallibleCall = prevAllow;
     ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
     bool hasClauses = firstPartOfType(s, SNTX_CATCH_CLAUSE) != NULL;
     //R9a's catch-everything shorthand, retired by R9b: a default belongs to a clause, and handling every
     //error is written as one - so what a default covers is always what is written to its left
@@ -16907,34 +17105,16 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         callOp->isTried = true;
         return callOp;
     }
-
-    //E16c: "try a[lo:hi]" makes the slice fallible instead of aborting on an out-of-range bound (E16b) - the
-    //ordinary try expression, on the ordinary terms: it propagates, and the enclosing signature must cover
-    //what it can produce. The error it produces is the BARE error (R16): out-of-range is one fact with no
-    //further detail worth tracking, and reusing it means no new error type and no new machinery - "? error"
-    //and "catch error { }" already compose with everything. A slice with no "try" keeps E16b's abort, so a
-    //slice whose bounds provably hold costs nothing and forces no signature change on its caller.
-    //E16d: "try a[i]" is the opt-IN to a bounds check, where E16c is a slice's opt-out of the abort. An
-    //ordinary index is unchecked (E16), so "try" is what asks for the check at all - and it reports the
-    //failure the same way a slice does, by propagating the bare error.
-    struct list errors;
-    struct type* rt;
-    struct list opErrs = ListInit(sizeof(struct type*));
-    bool writtenCall = callOp->opType == OPERATION_FUNCCALL && !callOp->isOperatorCall;
-    unsigned checkWords = writtenCall ? 0 : markChecked(callOp, callOp, &opErrs);
-    if (checkWords || opErrs.len) {
-        //R20: "try a[i]", "try (a + b)" - the checks inside, each failing with a word of BuiltinError, and (E31) the
-        //errors of the Try forms of a declared type's operators
-        errors = ListInit(sizeof(struct type*));
-        struct type* builtin = SemanticBuiltinErrorType();
-        if (builtin && checkWords) ListAdd(&errors, &builtin);
-        for (int i = 0; i < opErrs.len; i++) ListAdd(&errors, ListGetIdx(&opErrs, i));
-        rt = &callOp->type;
-    } else if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar->type.errors.len > 0) {
-        errors = callOp->readVar->type.errors;
+    unsigned checkWords = 0;
+    bool unknown = false;
+    struct list errors = tryErrors(callOp, &cover, checked, &checkWords, &unknown);
+    struct type* rt = &callOp->type;
+    if (callOp->opType == OPERATION_FUNCCALL && callOp->readVar && !callOp->isOperatorCall)
         rt = callOp->readVar->type.hasRetType ? callOp->readVar->type.retType : NULL;
-    } else {
-        if (!callOp->type.unknown) Err(tok, ERR_TRY_NOTHING_FAILS); //what failed to build was reported already
+    if (errors.len == 0) {
+        //what failed to build was reported already, and a callee whose set is not known has said why in its body
+        if (!callOp->type.unknown && !unknown && !inInstanceBody)
+            { if (checked || !tryWouldCheck(callOp)) Err(tok, ERR_TRY_NOTHING_FAILS, checked ? "checked" : "try"); else Err(tok, ERR_TRY_ONLY_CHECKS); }
         return callOp;
     }
     callOp->isTried = true;
@@ -16947,7 +17127,41 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
         struct type et = (struct type){0};
         et.errors = errors;
         checkTrySuperset(ctx, tok, et);
+        takeTestEscape(&callOp->catchClauses, tok);
     }
+    return callOp;
+}
+
+//E35: "x!" - what fails in x as written (R8: every fallible call and operator in it, a chain's and a parenthesized
+//expression's included) ends the test, or the program, as a failed check does, naming the error; no check is turned
+//on, and nothing leaves the function, so it needs no "?" for it
+struct operand* buildBangExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct token tok = firstTokOfType(s, TOK_BANG);
+    bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
+    ctx->allowFallibleCall = true;
+    ctx->tryCover = &cover;
+    ctx->checkingTry = false;
+    struct operand* callOp = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR_POSTFIX));
+    ctx->allowFallibleCall = prevAllow;
+    ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
+    unsigned checkWords = 0;
+    bool unknown = false;
+    struct list errors = tryErrors(callOp, &cover, false, &checkWords, &unknown);
+    if (errors.len == 0) {
+        if (!callOp->type.unknown && !unknown && !inInstanceBody) Err(tok, ERR_BANG_NOTHING_FAILS);
+        return callOp;
+    }
+    callOp->isTried = true;
+    struct catchClause cc = (struct catchClause){0};
+    cc.tok = tok;
+    cc.matches = ListInit(sizeof(struct catchMatch));
+    cc.catchAll = true;
+    cc.ends = true;
+    callOp->catchClauses = ListInit(sizeof(struct catchClause));
+    ListAdd(&callOp->catchClauses, &cc);
     return callOp;
 }
 
@@ -17345,10 +17559,10 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
     struct list withRecv = ListInit(sizeof(struct operand*));
     ListAdd(&withRecv, &recvOp);
     for (int i = 0; i < mArgs.len; i++) ListAdd(&withRecv, ListGetIdx(&mArgs, i));
-    if (m->type.errors.len > 0 && !allowedM) Err(mTok, ERR_UNHANDLED_FALLIBLE_CALL);
     struct list wbPre = ListInit(sizeof(struct statement)); //E31b: "x[i].M()" with a "mut" receiver - a handle's copy held
     atWriteBackArgs(ctx, m, &withRecv, mTok, &wbPre);
     struct operand* call = OperandFuncCall(ctx, m, withRecv, mTok, scopeArgNodes);
+    checkCallFallible(ctx, call, allowedM, mTok);
     atHandleThrough(call);
     //T29f: an array method a declared type inherits gives the declared type where it gives its receiver's own type -
     //a String's Filter is a String. Same representation, so only the type changes.
@@ -17701,10 +17915,10 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
             else Err(nameTok, ERR_NOT_CALLABLE, &func->type);
             return unknownPlaceholder(nameTok); //no value - nothing more is said about it
         }
-        if (func->type.errors.len > 0 && !allowed) Err(nameTok, ERR_UNHANDLED_FALLIBLE_CALL);
         struct list wbPre = ListInit(sizeof(struct statement)); //E31b: "f(x[i])" for a "mut &" parameter - a handle's copy
         atWriteBackArgs(ctx, func, &args, nameTok, &wbPre);
         struct operand* call = OperandFuncCall(ctx, func, args, nameTok, scopeArgNodes);
+        checkCallFallible(ctx, call, allowed, nameTok);
         atHandleThrough(call);
         //a constructor is exactly the function a struct type points at as its own - true for an
         //instantiation's monomorphized constructor too, since that points at the instantiation
@@ -17744,6 +17958,7 @@ static struct operand* buildExprFromSyntaxIn(struct checkCtx* ctx, struct syntax
         }
         case SNTX_EXPR_UNARY: return buildUnary(ctx, s);
         case SNTX_EXPR_IS: case SNTX_EXPR_AS: return buildIsAs(ctx, s);
+        case SNTX_EXPR_BANG: return buildBangExpr(ctx, s);
         case SNTX_EXPR_IS_SAME: return buildIsSame(ctx, s);
         case SNTX_EXPR_TEXT: return buildText(ctx, s);
         case SNTX_EXPR_POSTFIX: return buildPostfix(ctx, s);
@@ -17770,6 +17985,7 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     innerCtx.scope = &inner;
     innerCtx.blockDepth = ctx->blockDepth + 1;
     innerCtx.checkingTry = false; //a lambda's or a clause's block is no part of what a "try" checks
+    innerCtx.tryCover = NULL; //...nor of what it handles
     innerCtx.inTextJoin = false;
     innerCtx.assignPlaces = (struct list){0}; //S4d: a block's statements are its own, not the value of an assignment
 
@@ -21184,8 +21400,8 @@ static struct statement buildSetAt(struct checkCtx* ctx, struct operand* target,
             Err(opTok, ERR_SETAT_UNDECLARED, &base->type);
         return (struct statement){0};
     }
-    bool derived = ctx->checkingTry && strcmp(setName + 1, "rySetAt") != 0;
-    if (derived && idxs.len > 1) { Err(opTok, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "TrySetAt"); derived = false; }
+    bool derived = ctx->checkingTry && strcmp(setName + 1, "heckedSetAt") != 0;
+    if (derived && idxs.len > 1) { Err(opTok, ERR_TRY_MULTI_INDEX_NEEDS_TRYAT, &base->type, "CheckedSetAt"); derived = false; }
     const char* lenName = derived ? operatorMethodName(ctx, base->type, "Len") : NULL;
     if (derived && !lenName) { Err(opTok, ERR_TRY_SETAT_NEEDS_LEN, &base->type); derived = false; }
     bool isCompound = false;
@@ -23123,6 +23339,7 @@ static void forInTryFinish(struct forInTry* ft) {
         if (!p->isToken && p->sntx->type == SNTX_CATCH_CLAUSE) bad = clauseLoopExit(p->sntx);
     }
     if (bad.type != TOK_NONE) Err(bad, ERR_FOR_IN_CLAUSE_EXIT);
+    bool escapesTest = false;
     for (int c = 0; c < ft->calls.len; c++) {
         struct operand* call = *(struct operand**)ListGetIdx(&ft->calls, c);
         struct checkCtx* cctx = &ft->ctxs[c];
@@ -23131,7 +23348,10 @@ static void forInTryFinish(struct forInTry* ft) {
                 struct type et = (struct type){0};
                 et.errors = ft->errors;
                 checkTrySuperset(cctx, ft->kw, et);
+                escapesTest = testEscapes;
             }
+            testEscapes = escapesTest; //S16: each of the loop's calls lets it out of the test
+            takeTestEscape(&call->catchClauses, ft->kw);
             continue;
         }
         //built once per call, each in its own place - a clause's block is code, emitted where the call is; reported once
@@ -23430,14 +23650,14 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct operand* nextCall = NULL;
     struct forInTry ft = (struct forInTry){0};
     ft.on = hasTokOfType(s, TOK_TRY);
-    ft.inExpr = spec && ctx->checkingTry; //S9e: "try T[e for x in c]"
+    ft.inExpr = spec && (ctx->checkingTry || ctx->tryCover); //S9e: "try T[e for x in c]", "checked T[...]"
     ft.isCompr = spec != NULL;
     if (ft.inExpr) ft.on = true;
     ft.s = s;
     ft.kw = kw;
     ft.errors = ListInit(sizeof(struct type*));
     ft.calls = ListInit(sizeof(struct operand*));
-    if (rangeNode && ft.on) Err(firstTokOfType(s, TOK_TRY), ERR_FOR_IN_TRY_NOTHING);
+    if (rangeNode && hasTokOfType(s, TOK_TRY)) Err(firstTokOfType(s, TOK_TRY), ERR_FOR_IN_TRY_NOTHING);
     if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok, spec);
 
     //the block the whole lowering lives in, so its hidden names end with the loop
@@ -23646,8 +23866,17 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     landKeptAll = spec != NULL;
     if (isArray || indexable) {
         if (idxTok) { struct statement d = buildVarDeclFromOperand(&lctx, *idxTok, OperandReadVar(counter, kw)); ListAdd(&body, &d); }
+        //S9e: the loop's own At is its to try - forInTryNote below says whether "in try" was written
+        bool prevAllow = lctx.allowFallibleCall;
+        struct list* prevCover = lctx.tryCover;
+        lctx.allowFallibleCall = true;
+        lctx.tryCover = NULL;
+        loopOwnCall = true;
         struct operand* elem = indexable ? operatorCall(&lctx, OperandReadVar(arr, kw), OperandReadVar(counter, kw), atName, kw)
                                          : OperandIndex(OperandReadVar(arr, kw), OperandReadVar(counter, kw), kw);
+        loopOwnCall = false;
+        lctx.allowFallibleCall = prevAllow;
+        lctx.tryCover = prevCover;
         if (!indexable) elem->noCheck = true;
         if (indexable) forInTryNote(&ft, &lctx, elem, NULL);
         if (indexable && split) forInSplitCall(elem, splitSrc, kw);
@@ -25157,7 +25386,8 @@ static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, s
         ownValueGiven(ctx, val, *ctx->func->type.retType, ctx->func->type.resultScope, 0, false);
     }
     if (ctx->inCtor) Err(tok, ERR_RETURN_IN_CTOR);
-    else if (ctx->inTest && !ctx->func) Err(tok, ERR_RETURN_IN_TEST); //S15: a test is not a function
+    else if (ctx->inTest && !ctx->func) { if (val) Err(tok, ERR_RETURN_IN_TEST); } //S15: a test passes by a bare return
+    else if (ctx->func && ctx->func->type.noReturn) Err(tok, ERR_RETURN_IN_NORETURN); //D8e
     else if (val && ctx->func && !ctx->func->type.hasRetType) Err(tok, ERR_RETURN_VALUE_IN_VOID);
     else if (!val && ctx->func && ctx->func->type.hasRetType) Err(tok, ERR_RETURN_NEEDS_VALUE, ctx->func->type.retType);
     else if (val && ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->refOwn) {
@@ -25235,22 +25465,6 @@ struct statement buildErrorStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return stmt; } //P4a
     if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return stmt; } //S17
     if (!ctx->func) { Err(tok, ERR_ERROR_OUTSIDE_FUNCTION); return stmt; }
-
-    //bare "error" - the bare error (see the report on §7.6 R16), no TYPE.word operand at all;
-    //parseStmntError's own bare-form grammar guarantees idens is empty exactly when this is the case
-    if (idens.len == 0) {
-        lambdaInferError(ctx->func, &bareErrorType); //D16b
-        bool declared = false;
-        for (int i = 0; i < ctx->func->type.errors.len; i++) {
-            if (*(struct type**)ListGetIdx(&ctx->func->type.errors, i) == &bareErrorType) {
-                declared = true;
-                break;
-            }
-        }
-        if (!declared) { Err(tok, ctx->func->type.errors.len ? ERR_DEFAULT_ERROR_NAMED_SIG : ERR_DEFAULT_ERROR_UNDECLARED); return stmt; }
-        stmt.op = OperandErrorLiteral(bareErrorType, tok);
-        return stmt;
-    }
 
     //"alias...TYPE.word" - originating a foreign module's own error type directly, not just declaring/
     //catching one already reachable through a signature - see the report. Always ends in exactly
@@ -25978,6 +26192,12 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//D8e: a call to a "noreturn" function, or through a "noreturn" function value
+bool OperandIsNoReturnCall(struct operand* op) {
+    return op && op->opType == OPERATION_FUNCCALL && op->readVar && op->readVar->type.bType == BASETYPE_FUNC
+           && op->readVar->type.noReturn;
+}
+
 //D10a: does control definitely leave this block, rather than running off its end? A conservative,
 //purely structural answer - no dataflow, no constant folding - so it says "no" for some bodies that in
 //fact always return, which is exactly what "unreachable" is for.
@@ -25992,10 +26212,9 @@ static bool stmntAlwaysExits(struct statement* s) {
         case STATEMENT_BREAK: case STATEMENT_CONTINUE: return exitsCountLoopJumps;
         //every way out of a function body: a return, an error (which returns), and the four that end the
         //test or the process outright
-        case STATEMENT_RET: case STATEMENT_ERROR:
-        case STATEMENT_DONE: case STATEMENT_FAIL:
-        case STATEMENT_ABORT: case STATEMENT_UNREACHABLE:
+        case STATEMENT_RET: case STATEMENT_ERROR: case STATEMENT_UNREACHABLE:
             return true;
+        case STATEMENT_EXPR: return OperandIsNoReturnCall(s->op); //D8e
         case STATEMENT_IF:
             //G15: a selected "match <T>" arm collapses to an "if" whose condition is a literal true, with
             //no else - the arm IS the statement. Such an if always runs its block, so it exits when the
@@ -26281,14 +26500,13 @@ void lambdaInferResult(struct var* f, struct list* vals, struct token tok) {
     finishResultScope(&f->type, tok);
 }
 
-//D16b: an inferring lambda takes on an error it lets through. False where it cannot - a function naming its
-//errors cannot also fail with the default error, which then reports as it would anywhere else
+//D16b/R1a: an inferring lambda, or a function written "?" alone, takes on an error it lets through. False where f names
+//its errors, which then reports as it would anywhere else
 bool lambdaInferError(struct var* f, struct type* e) {
     if (!f || !f->inferErrs) return false;
     for (int i = 0; i < f->type.errors.len; i++) {
         if (TypeIsSame(**(struct type**)ListGetIdx(&f->type.errors, i), *e)) return true;
     }
-    if (e == &bareErrorType ? f->type.errors.len != 0 : funcIsBareFallible(f)) return false;
     ListAdd(&f->type.errors, &e);
     return true;
 }
@@ -26436,13 +26654,10 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
     }
 
     struct syntax* errNode = firstPartOfType(sig, SNTX_ERROR_LIST);
+    //R1a: "?" alone written on a lambda says what no list says - its set is the expected type's, or its body's
+    if (errNode && !allSyntaxParts(errNode).len) errNode = NULL;
     if (errNode) {
-        struct list items = allSyntaxParts(errNode);
-        for (int i = 0; i < items.len; i++) {
-            struct type* errType = resolveErrorTypeName(octx->mod, *(struct syntax**)ListGetIdx(&items, i));
-            if (errType) ListAdd(&t.errors, &errType);
-        }
-        addDefaultError(&t.errors);
+        resolveErrorList(octx->mod, errNode, &t.errors);
         if (exp) {
             bool same = exp->errors.len == t.errors.len;
             for (int i = 0; same && i < t.errors.len; i++) {
@@ -26491,6 +26706,7 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
     bodyEnd(c.bodyId, L->codeBlock);
     L->bodyHadErrors = ErrMsgGetNErrors() != errsBefore;
     if (L->type.hasRetType && !blockAlwaysExits(&L->codeBlock)) Err(kw, ERR_MISSING_RETURN, L->type.retType); //D10a
+    if (L->type.noReturn) Err(kw, ERR_NORETURN_HERE, "a lambda"); //D8e
     L->inferRet = false;
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
@@ -26603,18 +26819,12 @@ struct statement buildBreakStmnt(struct checkCtx* ctx, struct syntax* s, enum st
     return (struct statement){.sType = kind};
 }
 
-//S16c/S16d: no operand and nothing to check - the difference between them is entirely what they claim,
-//which is why both exist: "abort" says stop now, "unreachable" says control was never supposed to be here.
+//S16d: no operand and nothing to check - it says control was never supposed to be here
 struct statement buildAbortLikeStmnt(struct checkCtx* ctx, struct syntax* s, enum statementType kind) {
     (void)ctx;
     struct statement st = (struct statement){.sType = kind};
     st.var.tok = firstTokAnywhere(s); //K1: where an evaluation that reaches it says it stopped
     return st;
-}
-
-struct statement buildDoneStmnt(struct checkCtx* ctx, struct syntax* s) {
-    (void)ctx; (void)s;
-    return (struct statement){.sType = STATEMENT_DONE};
 }
 
 //"assert EXPR" - a statement, not a function call (see the report); reuses the exact same condition-check
@@ -26683,39 +26893,15 @@ struct statement buildAssertStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
-struct statement buildFailStmnt(struct checkCtx* ctx, struct syntax* s) {
-    (void)ctx; (void)s;
-    return (struct statement){.sType = STATEMENT_FAIL};
-}
-
 //"try f(...) catch A || B.word { ... }" - pure control flow, the caught error is never bound to a value.
 //An error not fully caught here propagates per the normal try rules (see StatementCatchCoversType below)
 //the catch items of one clause, resolved against what callOp can produce - shared by the statement form
 //and a catch in value position (R9b)
 static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, struct list* errors,
                               struct list* out) {
-    //each item is either an ordinary SNTX_CATCH_ERR or the bare bare-error marker (SNTX_BARE_ERROR,
-    //see the report) - allSyntaxParts, not allPartsOfType(..., SNTX_CATCH_ERR), since this list can now
-    //genuinely mix both node shapes
     struct list matchNodes = allSyntaxParts(errListNode);
     for (int i = 0; i < matchNodes.len; i++) {
         struct syntax* m = *(struct syntax**)ListGetIdx(&matchNodes, i);
-
-        //the bare error - matches only itself, never a further ".word" (it has no addressable word of
-        //its own - parseCatchErr's own grammar guarantees this shape never carries one)
-        if (m->type == SNTX_BARE_ERROR) {
-            struct token genericTok = firstTokOfType(m, TOK_ERROR);
-            bool produces = false;
-            for (int j = 0; j < errors->len; j++) {
-                struct type* e = *(struct type**)ListGetIdx(errors, j);
-                if (e == &bareErrorType) { produces = true; break; }
-            }
-            if (!produces) { Err(genericTok, ERR_CATCH_DEFAULT_NOT_PRODUCED); continue; }
-            struct catchMatch cm = (struct catchMatch){0};
-            cm.errType = bareErrorType;
-            ListAdd(out, &cm);
-            continue;
-        }
 
         struct list idens = allTokOfType(m, TOK_IDEN);
 
@@ -26745,7 +26931,7 @@ static void buildCatchMatches(struct checkCtx* ctx, struct syntax* errListNode, 
             struct type* e = *(struct type**)ListGetIdx(errors, j);
             if (TypeIsSame(*e, *errType)) { produces = true; break; }
         }
-        if (!produces) { Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
+        if (!produces) { if (!inInstanceBody) Err(typeTok, ERR_CATCH_NOT_PRODUCED, errType); continue; }
 
         struct catchMatch cm = (struct catchMatch){0};
         cm.errType = *errType;
@@ -26775,8 +26961,7 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
         if (ctx->inDefer) { Err(tok, ERR_DEFER_ERROR_ESCAPES); return; } //S19b
         if (ctx->inTaskClause) { Err(tok, ERR_TASK_CLAUSE_ERROR); return; } //P4a
         if (ctx->inAssertMsg) { Err(tok, ERR_ASSERT_MSG_ERROR); return; } //S17
-        if (!ctx->func) { Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
-        if (funcIsBareFallible(ctx->func)) return; //R17: what is left uncaught leaves as this function's own failure
+        if (!ctx->func) { if (ctx->inTest) { testEscapes = true; return; } Err(tok, ERR_TRY_NOWHERE_TO_GO); return; }
         bool found = false;
         for (int j = 0; j < ctx->func->type.errors.len; j++) {
             struct type* fe = *(struct type**)ListGetIdx(&ctx->func->type.errors, j);
@@ -26788,22 +26973,23 @@ static void checkUncaughtPropagate(struct checkCtx* ctx, struct token tok, struc
 }
 
 //R20/E31: marks every check in statements built under "try" by root, as markChecked does for an expression
-static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs) {
+static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struct list* errs, bool checks) {
     unsigned w = 0;
     for (int i = 0; i < stmts->len; i++) {
         struct statement* st = ListGetIdx(stmts, i);
-        w |= markChecked(st->target, root, errs) | markChecked(st->op, root, errs) | markChecked(st->fillValue, root, errs);
-        w |= markChecked(st->forInit, root, errs);
+        w |= markChecked(st->target, root, errs, checks) | markChecked(st->op, root, errs, checks)
+             | markChecked(st->fillValue, root, errs, checks);
+        w |= markChecked(st->forInit, root, errs, checks);
         if (st->forPost) {
             struct list one = ListInit(sizeof(struct statement));
             ListAdd(&one, st->forPost);
-            w |= markCheckedStmts(&one, root, errs);
+            w |= markCheckedStmts(&one, root, errs, checks);
         }
-        w |= markCheckedStmts(&st->block, root, errs);
+        w |= markCheckedStmts(&st->block, root, errs, checks);
         if (st->elseStmnt) {
             struct list one = ListInit(sizeof(struct statement));
             ListAdd(&one, st->elseStmnt);
-            w |= markCheckedStmts(&one, root, errs);
+            w |= markCheckedStmts(&one, root, errs, checks);
         }
     }
     return w;
@@ -26813,13 +26999,17 @@ static unsigned markCheckedStmts(struct list* stmts, struct operand* root, struc
 //store (TrySetAt, or SetAt after a check against Len(); an array's bounds), the value, and an operator it implies
 //(the Try forms, or the built-in checks). An error a clause takes continues after the statement.
 struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool checked = false;
+    struct token tok = tryKwOf(s, &checked);
     struct syntax* inner = partSntx(s, 1);
     struct operand* root = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_VOID));
     root->comprBody = ListInit(sizeof(struct statement));
     root->isTryStmt = true;
     bool prevChecking = ctx->checkingTry;
-    ctx->checkingTry = true;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
+    ctx->checkingTry = checked;
+    ctx->tryCover = &cover;
     struct statement st;
     if (inner->type == SNTX_STMNT_ASSIGN) st = buildAssignStmnt(ctx, inner);
     else {
@@ -26833,6 +27023,7 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         ctx->incDecRoot = prevRoot;
     }
     ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
     //a hidden-locals wrapper ("if true { ... }") is flattened, so a clause's jump to after the statement leaves no
     //block of its own behind
     if (st.sType == STATEMENT_IF && !st.elseStmnt && st.op && st.op->isLiteral && st.op->opType == OPERATION_NONE
@@ -26840,15 +27031,30 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         for (int i = 0; i < st.block.len; i++) ListAdd(&root->comprBody, ListGetIdx(&st.block, i));
     } else ListAdd(&root->comprBody, &st);
     struct list opErrs = ListInit(sizeof(struct type*));
-    unsigned w = markCheckedStmts(&root->comprBody, root, &opErrs);
-    struct statement out = (struct statement){0};
-    out.sType = STATEMENT_EXPR;
-    out.op = root;
-    if (!w && !opErrs.len) { Err(tok, ERR_TRY_NOTHING_FAILS); return out; }
+    unsigned w = markCheckedStmts(&root->comprBody, root, &opErrs, checked);
     struct list errors = ListInit(sizeof(struct type*));
     struct type* builtin = SemanticBuiltinErrorType();
     if (builtin && w) ListAdd(&errors, &builtin);
-    for (int i = 0; i < opErrs.len; i++) ListAdd(&errors, ListGetIdx(&opErrs, i));
+    bool unknown = false;
+    for (int i = 0; i < cover.len; i++) {
+        struct operand* c = *(struct operand**)ListGetIdx(&cover, i);
+        if (errsUnknown(c->readVar)) unknown = true;
+        c->checkRoot = root;
+        for (int k = 0; k < c->readVar->type.errors.len; k++) ListAdd(&opErrs, ListGetIdx(&c->readVar->type.errors, k));
+    }
+    for (int i = 0; i < opErrs.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&opErrs, i);
+        bool seen = false;
+        for (int k = 0; k < errors.len && !seen; k++) seen = TypeIsSame(**(struct type**)ListGetIdx(&errors, k), *e);
+        if (!seen) ListAdd(&errors, &e);
+    }
+    struct statement out = (struct statement){0};
+    out.sType = STATEMENT_EXPR;
+    out.op = root;
+    if (!errors.len) {
+        if (!unknown && !inInstanceBody) { if (checked) Err(tok, ERR_TRY_NOTHING_FAILS, "checked"); else Err(tok, ERR_TRY_ONLY_CHECKS); }
+        return out;
+    }
     root->isTried = true;
     if (firstPartOfType(s, SNTX_CATCH_CLAUSE)) {
         unsigned prevMask = builtinWordMask;
@@ -26859,12 +27065,14 @@ struct statement buildTryStoreStmnt(struct checkCtx* ctx, struct syntax* s) {
         struct type et = (struct type){0};
         et.errors = errors;
         checkTrySuperset(ctx, tok, et);
+        takeTestEscape(&root->catchClauses, tok);
     }
     return out;
 }
 
 struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct token tok = firstTokOfType(s, TOK_TRY);
+    bool checked = false;
+    struct token tok = tryKwOf(s, &checked);
     //parseStmntTryCatch takes a POSTFIX expression (so "try a[lo:hi] catch" reaches here at all rather than
     //stopping at the bare name); the PRIMARY fallback is for nothing in particular now, but costs nothing
     //and keeps this independent of which node shape the parser happened to build.
@@ -26874,11 +27082,15 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
     stmt.sType = STATEMENT_TRY_CATCH;
 
     bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
     ctx->allowFallibleCall = true;
-    ctx->checkingTry = !tryOperandIsWrittenCall(primaryNode);
+    ctx->checkingTry = checked;
+    ctx->tryCover = &cover;
     struct operand* callOp = buildExprFromSyntax(ctx, primaryNode);
     ctx->allowFallibleCall = prevAllow;
     ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
     stmt.op = callOp;
 
     //the catch-STATEMENT form handles a fallible call. A tried slice (E16c) is deliberately not accepted
@@ -26890,13 +27102,47 @@ struct statement buildTryCatchStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(tok, ERR_TRY_CATCH_ON_SLICE);
         return stmt;
     }
-    if (callOp->opType != OPERATION_FUNCCALL || callOp->readVar->type.errors.len == 0) {
-        Err(tok, ERR_TRY_NOTHING_FAILS);
+    //the plain shape - one call written by name, nothing else in it failing and nothing checked: its clauses, as R10 has
+    if (!checked && (!cover.len || (cover.len == 1 && *(struct operand**)ListGetIdx(&cover, 0) == callOp)) && callOp->opType == OPERATION_FUNCCALL && callOp->readVar && !callOp->isOperatorCall
+            && callOp->readVar->type.errors.len) {
+        buildCatchClauses(ctx, s, callOp, &callOp->readVar->type.errors, false, NULL, tok, &stmt.catchClauses);
         return stmt;
     }
-
-    buildCatchClauses(ctx, s, callOp, &callOp->readVar->type.errors, false, NULL, tok, &stmt.catchClauses);
-    return stmt;
+    //QQ1: anything else - several calls, an operator, what "checked" checks - is held as a checked statement is (R21),
+    //its clauses a statement's, every failure inside running them
+    unsigned checkWords = 0;
+    bool unknown = false;
+    struct list errors = tryErrors(callOp, &cover, checked, &checkWords, &unknown);
+    if (!errors.len) {
+        if (!callOp->type.unknown && !unknown && !inInstanceBody)
+            { if (checked || !tryWouldCheck(callOp)) Err(tok, ERR_TRY_NOTHING_FAILS, checked ? "checked" : "try"); else Err(tok, ERR_TRY_ONLY_CHECKS); }
+        return stmt;
+    }
+    struct operand* root = operandNew(tok, OPERATION_SEQ, TypeVanilla(BASETYPE_VOID));
+    root->comprBody = ListInit(sizeof(struct statement));
+    root->isTryStmt = true;
+    root->isTried = true;
+    struct statement es = (struct statement){0};
+    es.sType = STATEMENT_EXPR;
+    es.op = callOp;
+    ListAdd(&root->comprBody, &es);
+    //what failed through callOp fails through root, the statement's try - a call itself, an operation only where it was
+    //checked (reRootChecks: its checkRoot was callOp)
+    if (callOp->opType == OPERATION_FUNCCALL) callOp->checkRoot = root;
+    callOp->isTried = false;
+    for (int i = 0; i < cover.len; i++) {
+        struct operand* c = *(struct operand**)ListGetIdx(&cover, i);
+        if (c != callOp) c->checkRoot = root;
+    }
+    reRootChecks(callOp, callOp, root);
+    unsigned prevMask = builtinWordMask;
+    if (checkWords) builtinWordMask = checkWords;
+    buildCatchClauses(ctx, s, root, &errors, false, NULL, tok, &root->catchClauses);
+    builtinWordMask = prevMask;
+    struct statement out = (struct statement){0};
+    out.sType = STATEMENT_EXPR;
+    out.op = root;
+    return out;
 }
 
 static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax* s);
@@ -26942,10 +27188,7 @@ static struct statement buildStatementInner(struct checkCtx* ctx, struct syntax*
         case SNTX_STMNT_DEFER: return buildDeferStmnt(ctx, actual);
         case SNTX_STMNT_BREAK: return buildBreakStmnt(ctx, actual, STATEMENT_BREAK);
         case SNTX_STMNT_CONTINUE: return buildBreakStmnt(ctx, actual, STATEMENT_CONTINUE);
-        case SNTX_STMNT_ABORT: return buildAbortLikeStmnt(ctx, actual, STATEMENT_ABORT);
         case SNTX_STMNT_UNREACHABLE: return buildAbortLikeStmnt(ctx, actual, STATEMENT_UNREACHABLE);
-        case SNTX_STMNT_DONE: return buildDoneStmnt(ctx, actual);
-        case SNTX_STMNT_FAIL: return buildFailStmnt(ctx, actual);
         case SNTX_STMNT_ASSERT: return buildAssertStmnt(ctx, actual);
         case SNTX_STMNT_ERROR: return buildErrorStmnt(ctx, actual);
         case SNTX_STMNT_TRY_CATCH: return buildTryCatchStmnt(ctx, actual);
@@ -26970,7 +27213,10 @@ void checkInstantiationBody(struct instantiation* inst) {
     instChain = inst->chain; //G17
     int savedHelper = protocolHelperDepth;
     protocolHelperDepth = isElementwiseHelper(inst->generic) ? 1 : 0; //M6b: judged where it is used, not here
+    bool savedInst = inInstanceBody;
+    inInstanceBody = true;
     checkInstantiationBodyIn(inst, spec);
+    inInstanceBody = savedInst;
     protocolHelperDepth = savedHelper;
     instChain = prevChain;
     ErrMsgPopContext();
@@ -27033,6 +27279,7 @@ static void checkInstantiationBodyIn(struct instantiation* inst, struct var* spe
     if (spec->type.hasRetType && !blockAlwaysExits(&spec->codeBlock)) { //D10a, per instantiation (G18)
         Err(spec->tok, ERR_MISSING_RETURN, spec->type.retType);
     }
+    if (spec->type.noReturn && !blockAlwaysExits(&spec->codeBlock)) Err(spec->tok, ERR_NORETURN_FALLS_OFF); //D8e
     roSettleResults(spec); //T25c: what its calls' results copy out of their arguments, known before any caller asks
     roBodyFunc = savedRoBody;
     currentBindings = savedBindings; //restored, not nulled: instantiations can nest
@@ -27087,7 +27334,10 @@ void drainTypeInstantiations(void) {
             ErrMsgPushContext(p->site, tps ? instantiationNote(tps, &p->bindings) : NULL); //G16
             int prevChain = instChain;
             instChain = p->chain; //G17
+            bool savedInst = inInstanceBody;
+            inInstanceBody = true;
             buildTypeBodies(p->spec->owner, p->spec);
+            inInstanceBody = savedInst;
             instChain = prevChain;
             ErrMsgPopContext();
             currentBindings = saved; //restored, not nulled: instantiations can nest
@@ -27121,7 +27371,9 @@ static void buildPrimCtorBody(struct semaModule* mod, struct type* t) {
     ctx.hasOwnScope = true;
     ctx.inCtor = true;
     ctx.bodyId = bodyBegin();
+    f->bodyState = 1; //R1a: a read of its error set before this is an early one
     f->codeBlock = buildBlock(&ctx, t->ctorBodySyntax);
+    f->bodyState = 2;
     struct operand* val = OperandReadVar(local, param->tok);
     val->type = *t;
     struct statement ret = (struct statement){0};
@@ -27609,14 +27861,34 @@ static bool ensureGlobalBuilt(struct var* v) {
     return !v->type.unknown && v->type.bType != BASETYPE_VOID;
 }
 
+//R1a: a global whose type is written is built once every body has been checked - its type is all a body reads of it -
+//so what its initializer calls has its error set known when the initializer is checked: built before them, it read a
+//set still being inferred, and the whole program was checked again for it. A ":=" global is built first, its type being
+//its initializer's, and so is one owning what it holds (O31, O34)
+static struct list laterGlobals; //struct globalInitArg, in initialization order
 void semaBuildGlobalInits(struct semaModule* mod) {
     SemanticMethodScope = mod;
     for (int i = 0; i < mod->syn.decls.len; i++) {
         struct syntax* decl = ListGetIdx(&mod->syn.decls, i);
         struct syntax* actual = partSntx(decl, 0);
         if (actual->type != SNTX_VAR_DECL) continue;
+        struct var* v = VarGetList(&mod->vars, strFromTok(firstTokOfType(actual, TOK_IDEN)));
+        if (v && firstPartOfType(actual, SNTX_TYPE_EXPR) && firstPartOfType(actual, SNTX_EXPR) && !v->type.refOwn
+                && !TypeIsOwnValue(v->type) && !v->type.unknown) {
+            struct globalInitArg a = { mod, actual };
+            ListAdd(&laterGlobals, &a);
+            continue;
+        }
         buildGlobalInit(mod, actual);
     }
+}
+static void buildLaterGlobals(void) {
+    for (int i = 0; i < laterGlobals.len; i++) {
+        struct globalInitArg* a = ListGetIdx(&laterGlobals, i);
+        SemanticMethodScope = a->mod;
+        buildGlobalInit(a->mod, a->actual);
+    }
+    laterGlobals.len = 0;
 }
 static void buildGlobalInit(struct semaModule* mod, struct syntax* actual) {
     {
@@ -27845,6 +28117,7 @@ static void checkFuncBody(struct semaModule* mod, struct var* func) {
         if (func->type.hasRetType && !blockAlwaysExits(&func->codeBlock)) {
             Err(func->tok, ERR_MISSING_RETURN, func->type.retType);
         }
+        if (func->type.noReturn && !blockAlwaysExits(&func->codeBlock)) Err(func->tok, ERR_NORETURN_FALLS_OFF); //D8e
     }
     roBodyFunc = savedRoBody;
     flushRegionLocalStores(func); //O17
@@ -27910,7 +28183,10 @@ static void checkInstOnDemand(void* arg) { checkInstantiationBody(arg); }
 static void checkFuncOnDemand(void* arg) {
     struct var* func = arg;
     SemanticMethodScope = func->type.owner;
+    bool savedInst = inInstanceBody;
+    inInstanceBody = false;
     checkFuncBody(func->type.owner, func);
+    inInstanceBody = savedInst;
 }
 
 static void ensureBodyChecked(struct var* func) {
@@ -27942,7 +28218,10 @@ static void buildTypeBodiesOnDemand(void* arg) {
     ErrMsgPushContext(p->site, instantiationNote(&t->ctorTwinOf->ctorFunc->type.typeParams, &p->bindings)); //G16
     int prevChain = instChain;
     instChain = p->chain; //G17
+    bool savedInst = inInstanceBody;
+    inInstanceBody = true;
     buildTypeBodies(t->owner, t);
+    inInstanceBody = savedInst;
     instChain = prevChain;
     ErrMsgPopContext();
 }
@@ -27959,7 +28238,10 @@ static void buildInstBodiesOnDemand(void* arg) {
     ErrMsgPushContext(p->site, instantiationNote(&p->spec->genericOrigin->typeParams, &p->bindings)); //G16
     int prevChain = instChain;
     instChain = p->chain; //G17
+    bool savedInst = inInstanceBody;
+    inInstanceBody = true;
     buildTypeBodies(p->spec->owner, p->spec);
+    inInstanceBody = savedInst;
     instChain = prevChain;
     ErrMsgPopContext();
 }
@@ -30201,6 +30483,83 @@ static void settleOwnBorrows(void) {
     ownForEachBody(ownBodyWalk);
 }
 
+static void settleInferredErrs(void) {
+    errsRedo = false;
+    for (int i = 0; i < errObs.len && !errsRedo; i++) {
+        struct errObs* o = ListGetIdx(&errObs, i);
+        errsRedo = o->f->type.errors.len != o->len;
+    }
+    //what each set was found to be - where the next attempt starts, whether this one is redone for it or for a condition
+    errDecisions = ListInit(sizeof(struct errDecision));
+    for (int i = 0; i < inferredFuncs.len; i++) {
+        struct var* f = *(struct var**)ListGetIdx(&inferredFuncs, i);
+        struct errDecision d = { errFuncKey(f), ListInit(sizeof(struct errKey)) };
+        struct list sorted = ListInit(sizeof(struct type*));
+        ListAddList(&sorted, f->type.errors);
+        if (sorted.len) qsort(sorted.ptr, (size_t)sorted.len, sizeof(struct type*), errTypeCmp);
+        for (int k = 0; k < sorted.len; k++) {
+            struct type* e = *(struct type**)ListGetIdx(&sorted, k);
+            struct errKey ek = { e->owner ? e->owner->identity : (struct str){0}, e->name };
+            ListAdd(&d.errs, &ek);
+        }
+        ListAdd(&errDecisions, &d);
+    }
+    if (errsRedo) return;
+    //settled: each in its canonical order, in place, so every copy of its type made since reads it so too
+    for (int i = 0; i < inferredFuncs.len; i++) {
+        struct var* f = *(struct var**)ListGetIdx(&inferredFuncs, i);
+        if (f->type.errors.len > 1) qsort(f->type.errors.ptr, (size_t)f->type.errors.len, sizeof(struct type*), errTypeCmp);
+    }
+}
+
+//E31a (QQ1): a Checked form fails with every error its plain form can - "checked" only adds checks. Judged once every
+//set is known (an inferred one, R1a), on each method named for a Checked form beside its plain form on one receiver
+static void checkCheckedFormIn(struct var* m) {
+    if (!m || !m->isMethod || m->type.bType != BASETYPE_FUNC) return;
+    //E31: Len, Eq and Str may not fail - and one written "?" alone is known to only once its set is inferred
+    if (m->type.errsInferred && m->type.errors.len) {
+        bool priv = false;
+        const char* cap = protocolOf(m->name, &priv);
+        struct type* r = SemanticMethodReceiver(m);
+        if (cap && r && protocolShaped(*r, m, cap) && (!strcmp(cap, "Len") || !strcmp(cap, "Eq") || !strcmp(cap, "Str")))
+            Err(m->tok, ERR_METHOD_CANNOT_FAIL, cap);
+    }
+    if (m->name.len < 8) return;
+    bool priv = m->name.ptr[0] == 'c';
+    if (strncmp(m->name.ptr, priv ? "checked" : "Checked", 7) != 0 || m->name.ptr[7] < 'A' || m->name.ptr[7] > 'Z') return;
+    struct type* recv = SemanticMethodReceiver(m);
+    if (!recv) return;
+    char* plain = MallocOrCrash((size_t)m->name.len);
+    snprintf(plain, (size_t)m->name.len, "%.*s", m->name.len - 7, m->name.ptr + 7);
+    if (priv) plain[0] = (char)(plain[0] - 'A' + 'a');
+    struct var* p = VarGetMethod(m->owner, StrFromCStr(plain), *recv);
+    if (!p || p == m || p->type.bType != BASETYPE_FUNC) return;
+    for (int i = 0; i < p->type.errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&p->type.errors, i);
+        bool has = false;
+        for (int k = 0; k < m->type.errors.len && !has; k++) has = TypeIsSame(**(struct type**)ListGetIdx(&m->type.errors, k), *e);
+        if (!has) {
+            char* nm = StrFmt("%.*s", m->name.len, m->name.ptr);
+            Err(m->tok, ERR_CHECKED_NOT_SUPERSET, nm, plain, plain, e);
+            return;
+        }
+    }
+}
+static void checkCheckedForms(void) {
+    for (int i = 0; i < allModules.len; i++) {
+        struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, i);
+        for (int k = 0; k < mod->vars.len; k++) {
+            struct var* m = ListGetIdx(&mod->vars, k);
+            if (m->inferErrs && m->type.typeParams.len) continue; //an instantiation's set is its own, judged below
+            checkCheckedFormIn(m);
+        }
+    }
+    for (int i = 0; i < instantiations.len; i++) {
+        struct instantiation* in = ListGetIdx(&instantiations, i);
+        if (in->specialized->inferErrs) checkCheckedFormIn(in->specialized);
+    }
+}
+
 static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     int errsAtStart = ErrMsgGetNErrors();
     ErrMsgSetLibraryTest(isLibraryFile);
@@ -30208,6 +30567,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     fixedCacheReset();
     bodiesPhase = false; //O10b
     assertRecs = ListInit(sizeof(struct assertRec)); //S18c
+    laterGlobals = ListInit(sizeof(struct globalInitArg)); //R1a
     defaultRecs = ListInit(sizeof(struct defaultRec)); //D8a
     paramDefaults = ListInit(sizeof(struct paramDefault*));
     litCtorRecs = ListInit(sizeof(struct litCtorRec)); //T29d
@@ -30228,14 +30588,9 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     roDeepNeeds = ListInit(sizeof(struct operand*));
     roDeepResults = ListInit(sizeof(struct roDeepResult));
     roCallAdapters = ListInit(sizeof(struct roFuncValue));
-    bareErrorType = (struct type){0};
-    bareErrorType.bType = BASETYPE_ERROR;
-    bareErrorType.name = StrFromCStr("error");
-    bareErrorType.words = ListInit(sizeof(struct token));
-    struct token bareErrorWord = (struct token){0};
-    bareErrorWord.type = TOK_IDEN;
-    bareErrorWord.str = StrFromCStr("error");
-    ListAdd(&bareErrorType.words, &bareErrorWord);
+    errObs = ListInit(sizeof(struct errObs)); //R1a
+    inferredFuncs = ListInit(sizeof(struct var*));
+    errsRedo = false;
 
     instantiations = ListInit(sizeof(struct instantiation));
     allLambdas = ListInit(sizeof(struct var*)); //D16
@@ -30334,6 +30689,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     for (int i = 0; i < inits.len; i++) semaBuildGlobalInits(*(struct semaModule**)ListGetIdx(&inits, i));
     buildParamDefaults(); //D8a: every global's type is known now
     for (int i = 0; i < allModules.len; i++) semaCheckBodies(*(struct semaModule**)ListGetIdx(&allModules, i));
+    buildLaterGlobals(); //R1a: the globals whose types are written, once what they call is known
     //every instantiation discovered while checking those bodies, plus everything those discover in turn
     //one fixed point over both queues, not two in sequence: a function copy's body can instantiate a
     //generic type and a type copy's constructor body can call a generic function, in either order
@@ -30341,6 +30697,9 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         semaDrainInstantiations();
         drainTypeInstantiations();
     }
+    settleInferredErrs(); //R1a: every body's error set is known now - or one read early grew, and this attempt is redone
+    if (errsRedo) return rootModule;
+    checkCheckedForms(); //E31a
     dischargeLateObligations(); //O10c: every body's obligations are known now
     settleRegions(); //O17: and what each stores where
     settleHandleLends(); //O17b: and the handles lent while a body they rested on was being checked
@@ -30496,7 +30855,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) { if (!ErrMsgGetNSyntaxErrors()) ErrFile(rootModule->fileName, ERR_NO_MAIN); }
         //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to
         //stderr) - no other success type is meaningful as a process exit code, so none is allowed
-        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType || mainFunc->type.errors.len == 0) {
+        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType || mainFunc->type.noReturn) {
             ErrFile(rootModule->fileName, ERR_MAIN_SIGNATURE);
         }
     }
@@ -30586,12 +30945,21 @@ static bool decidePendingConditions(void) {
 struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
     SyntaxResetConditionDecisions();
     constArgDecisions = ListInit(sizeof(struct constArgDecision)); //G21
+    errDecisions = ListInit(sizeof(struct errDecision)); //R1a
+    int errAttempts = 0;
     for (int attempt = 0; ; attempt++) {
         SyntaxClearPendingConditions();
         ErrMsgBufferStart();
         unknownSeen = ListInit(sizeof(struct unknownSeen)); //B11: what this attempt has said
         int constBefore = constArgDecisions.len;
         struct semaModule* root = analyzeOnce(fileName, requireMain);
+        //R1a: an error set read before it was final grew - checked again with every set as found, conditions untouched
+        if (errsRedo && errAttempts++ < 64) {
+            ErrMsgBufferDiscard();
+            SyntaxClearPendingConditions();
+            attempt--;
+            continue;
+        }
         //G21: a constant argument computed this attempt changes the types written with it, so the program is checked again
         bool layoutChanged = constArgDecisions.len > constBefore;
         struct list* pending = SyntaxPendingConditions();
@@ -30605,8 +30973,17 @@ struct semaModule* SemanticAnalyzeFile(char* fileName, bool requireMain) {
         }
         //S8b: an attempt whose local conditions all turned out runtime - already parsed as ordinary ifs - is
         //the final one, so a program with no compile-time conditions pays for no second attempt
+        //R1a: an attempt whose decisions only add code - a top-level condition, or a local one whose branches were skipped -
+        //keeps the sets found as where the next one starts, since its sets can only grow; one that may take code away (a
+        //local if parsed whole and now decided) finds them again from nothing
+        bool onlyAdds = true;
+        for (int i = 0; i < pending->len; i++) {
+            struct pendingCond* pc = ListGetIdx(pending, i);
+            if (pc->local && !pc->skipped) onlyAdds = false;
+        }
         bool decided = pending->len && decidePendingConditions();
         if (!decided && !layoutChanged) { ErrMsgBufferFlush(); return root; }
         ErrMsgBufferDiscard();
+        if (!onlyAdds) errDecisions = ListInit(sizeof(struct errDecision));
     }
 }

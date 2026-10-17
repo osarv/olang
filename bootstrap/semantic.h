@@ -142,7 +142,10 @@ struct type {
     bool sigUninferable; //G4: a variable the result names that no parameter's type does - reported at the declaration,
                          //whose body is then never checked (one error, not one per use of the variable)
     struct type* retType; //heap-allocated, valid when hasRetType
-    struct list errors; //list of struct type*: error types declared in the signature's error list
+    struct list errors; //list of struct type*: error types declared in the signature's error list - or, for one written
+                        //"?" alone (errsInferred, R1a), the set its body can produce, in a canonical order once settled
+    bool errsInferred;  //R1a: the signature wrote "?" with no error types - the set is the body's
+    bool noReturn;      //D8e: "noreturn" - the function never returns to its caller
     //BASETYPE_FUNC, O13: the result scope of a BUILT result - a scope variable no parameter names, bound where
     //the call's result lands (O18a) or by a scope argument (E25). NULL for a borrowed result (T&p) and for a
     //result that neither is nor holds a reference.
@@ -441,7 +444,10 @@ struct var {
     struct semaModule* lambdaObject; //D8a: a parameter default's lambda, made for calls in this module's code - the
                                      //object emitting it, with no host (NULL: its owner's)
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
-    bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through
+    bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through; R1a: a
+                              //function or constructor declared with "?" alone - its error set is what its body can produce
+    bool errsUnsettled;       //R1a: its body read the error set of a function whose set was not final yet (a cycle, an
+                              //unchecked body) - so its own set is not final either until the attempt is judged
     int bodyState;            //O10b: 0 while this function's body is unchecked, 1 while it is being checked, 2 once
                               //it has been - its obligations are part of its signature, so a call checks the
                               //callee's body first (ensureBodyChecked) and only a cycle sees a partial set
@@ -544,10 +550,7 @@ enum statementType {
     STATEMENT_DEFER, //S19: block is the deferred code, run on every way out of the block this statement is in
     STATEMENT_BREAK,    //S11: leaves the innermost enclosing loop
     STATEMENT_CONTINUE, //S11: ends the current iteration
-    STATEMENT_ABORT,       //S16c
     STATEMENT_UNREACHABLE, //S16d
-    STATEMENT_DONE,  //process exit, OS-standard success (0) - never takes a value
-    STATEMENT_FAIL, //process exit, OS-standard failure (1) - never takes a value
     STATEMENT_ASSERT,
     STATEMENT_ERROR,
     STATEMENT_TRY_CATCH
@@ -576,6 +579,8 @@ struct catchClause {
     struct var* taskFn;
     struct operand* taskCall;
     bool givesValue;
+    unsigned char ends;      //E35: 1 for "x!" - the error ends the test or the program, naming itself, as a failed check;
+                             //2 (S16) - an error a try lets out of a test body, which fails the test
 };
 
 //D16: one variable a lambda captured - as the body around it sees it, and the lambda's own copy
@@ -980,6 +985,7 @@ void VarListAddSetOrigin(struct list* l, struct var v);
 
 void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
+bool OperandIsNoReturnCall(struct operand* op); //D8e
 
 //requireMain: only "-b" (§10 B3) needs a "main" - "-c" compiles a plain module and "-t" runs tests,
 //neither of which has or wants one
@@ -1015,11 +1021,8 @@ struct list* SemanticAllTypeInstantiations(void);
 struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its constructor's instantiation
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
-struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
-int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this
-                                              //only to print a cleaner "unhandled error: error" message,
-                                              //never for ordinal encoding (already generic, see the report)
+int SemanticBuiltinErrorWord(char* word); //R20: the ordinal of BuiltinError's word, which a check fails with
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticParamTransient(struct var* func, int j);

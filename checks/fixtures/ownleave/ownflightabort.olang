@@ -6,6 +6,9 @@ import "std/io"
 Made mut I64 = 0
 Dropped mut I64 = 0
 Boom mut Bool = false
+error Stop {
+    HERE
+}
 type Res struct(n I64) {
     n
     Made = Made + 1
@@ -23,7 +26,7 @@ type Bomb struct() {
 } destruct {
     assert not Boom
 }
-fn failing() ? { error }
+fn failing() ? { error Stop.HERE }
 fn mkOwned(a Array<I64>&, lo I64) own mut Res& {
     defer { try io.Println($a[lo:1].Len()) catch io.IoError { } }
     return Res(1)

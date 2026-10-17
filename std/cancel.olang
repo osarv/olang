@@ -86,7 +86,7 @@ test "a token fires on Cancel, and not before" {
     assert not t.Cancelled()
     t.Cancel()
     assert t.Cancelled()
-    try t.Reason() catch Stopped.CANCELLED { done } catch { fail }
+    try t.Reason() catch Stopped.CANCELLED { return }
 }
 
 # timed from before the token is made, so the bounds hold however long this thread is kept off a core: it has not
@@ -97,7 +97,7 @@ test "a token with a deadline fires by itself" {
     assert not t.Cancelled() or NowNs() - start >= 20000000
     for not t.Cancelled() { }
     assert NowNs() - start >= 20000000
-    try t.Reason() catch Stopped.TIMED_OUT { done } catch { fail }
+    try t.Reason() catch Stopped.TIMED_OUT { return }
 }
 
 # a task doing work checks the token itself, at points where stopping is safe. It counts atomically, so the spawner
@@ -149,7 +149,7 @@ fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
 
 test "a deferred Cancel lets a join block's tasks stop, on an error too" {
     n mut stopCount& = stopCount()
-    try cancelOnExit(false, n) catch { fail }
+    try cancelOnExit(false, n)
     assert n.why == 1
     m mut stopCount& = stopCount()
     try cancelOnExit(true, m) catch stepFailed { }

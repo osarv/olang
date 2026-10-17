@@ -23,7 +23,7 @@ fn looped(n Node&) I64 {
 }
 fn tried(n Node&) I64 ? {
     h := fn() I64 ? {
-        if n.v < 0 { error }
+        if n.v < 0 { error Bad.NO }
         return n.v
     }
     return try h()

@@ -1,6 +1,9 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line
 # vec4 (f1h_spawn_target_index_write): the review's repro
 import "std/io"
+error Stop {
+    HERE
+}
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -12,7 +15,7 @@ fn churn() I64 {
 # F1: the local's assignment hidden in a spawn target's index expression (ownFreshStmtWrites checks only the target itself)
 fn pick(c Bool, x <T>, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
-    if k < 5 { error }
+    if k < 5 { error Stop.HERE }
     return k
 }
 fn fz() I64 { return 3 }

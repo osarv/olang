@@ -59,7 +59,12 @@ fn build(olang String&, path String&, src String&) String {
     }
 }
 
-# a compiler error row "PATH:LINE:COL: error[RULE]: MESSAGE" as its parts, or the default error for any other row
+# what parseDiag fails with: the row is no compiler error
+error notDiag {
+    ROW
+}
+
+# a compiler error row "PATH:LINE:COL: error[RULE]: MESSAGE" as its parts, or notDiag.ROW for any other row
 fn parseDiag(row String&) (String, I64, I64, String, String) ? {
     n := row.Len()
     for k in range 1, n {
@@ -79,7 +84,7 @@ fn parseDiag(row String&) (String, I64, I64, String, String) ? {
         if f == e or not row[f:].StartsWith("]: ") { continue }
         return $row[:k], (try row[a:b].ParseInt()), (try row[c:d].ParseInt()), $row[e:f], $row[f + 3:]
     }
-    error
+    error notDiag.ROW
 }
 
 # the index of the line that opens the top-level item containing line ln: one starting fn, test, type or extern

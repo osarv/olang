@@ -314,8 +314,8 @@ type PrimOp enum {
     Bitcast    # a value's bits as ty, of its width (E33)
     Len        # an array's length (E23)
     IsCase     # args [x, tag]: whether an enum value holds the case (E32, S13)
-    InRange    # args [v, lo, hi]: v, once lo <= v < hi - a derived TryAt's check (E31)
-    InRangeIncl     # the same, hi itself allowed - a derived TrySlice's
+    InRange    # args [v, lo, hi]: v, once lo <= v < hi - a derived CheckedAt's check (E31)
+    InRangeIncl     # the same, hi itself allowed - a derived CheckedSlice's
     AtomicLoad      # args[0] a Borrow of the integer place (P9)
     AtomicStore
     AtomicAdd

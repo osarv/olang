@@ -1,6 +1,9 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/O12: a catch default for a call borrowing from the receiver, built where the call's result lives (R9a): refused
 import "std/io"
+error Stop {
+    HERE
+}
 type Node struct(v I64, next Node&) {
     v
     next
@@ -10,7 +13,7 @@ type Bag struct(head Node&) {
 }
 fn find(n Node&, k I64) Node&n ? {
     for c := n, c != null, c = c.next { if c.v == k { return c } }
-    error
+    error Stop.HERE
 }
 fn (b Bag&) Str() String {
     x := try find(b.head, 9) catch default Node(0, null)

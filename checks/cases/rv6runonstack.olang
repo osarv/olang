@@ -40,6 +40,6 @@ fn main() ? {
         spawn s1 = relay(f, 500)
         for i in range 50000 { z += f(i) }
     }
-    if got.Len() != 1001 or got[999] != 999 or got[1000] != 19900 + 44850 { fail }
-    if s1 != 124750 or z != 1249975000 { fail }
+    assert not (got.Len() != 1001 or got[999] != 999 or got[1000] != 19900 + 44850)
+    assert not (s1 != 124750 or z != 1249975000)
 }

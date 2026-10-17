@@ -45,13 +45,18 @@ DeclarePrefix String& = "' is declared read-only here - declare it '"
 
 # ---- the text pass: puns ----
 
+# what punAt fails with: no pun starts there
+error noPun {
+    HERE
+}
+
 # the end of the names and of the "mut" after them, when a pun's names start at q: [ \t]*NAMES[ \t]+mut followed only by
 # spaces and a "}", a "#" or the end of the line - NAMES being NAME(\s*,\s*NAME)*. Fails when there is none
 fn punAt(src String&, q I64) (I64, I64) ? {
     n := src.Len()
     p := q
     for p < n and (src[p] == ' ' or src[p] == '\t') { p++ }
-    if p >= n or not srcmask.IsIdStart(src[p]) { error }
+    if p >= n or not srcmask.IsIdStart(src[p]) { error noPun.HERE }
     ends List<I64>
     for p < n and srcmask.IsWord(src[p]) { p++ }
     ends.Push(p)
@@ -77,7 +82,7 @@ fn punAt(src String&, q I64) (I64, I64) ? {
         for r < n and (src[r] == ' ' or src[r] == '\t') { r++ }
         if r >= n or src[r] == '\n' or src[r] == '}' or src[r] == '#' { return e, w }
     }
-    error
+    error noPun.HERE
 }
 
 # src with the "mut" of every pun removed, and how many

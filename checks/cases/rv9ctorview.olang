@@ -26,5 +26,5 @@ fn churn() I64 {
 fn main() ? {
     k := K(7)
     x := churn()
-    if k.view[1] != 8 or k.w[1] != 8 or k.c[1] != 8 or k.h.a[1] != 8 or x != 190 { fail }
+    assert not (k.view[1] != 8 or k.w[1] != 8 or k.c[1] != 8 or k.h.a[1] != 8 or x != 190)
 }

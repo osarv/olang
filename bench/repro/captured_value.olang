@@ -12,13 +12,13 @@ import "std/io"
 
 fn gelu(x <A>) A { return 0.5 * x * (1.0 + linalg.FastTanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) }
 
-fn captured(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) {
+fn captured(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) ? {
     like T
-    y.Map(x, fn(s) { return linalg.Cast(gelu(linalg.Cast(s, z)), like) })
+    try y.Map(x, fn(s) { return linalg.Cast(gelu(linalg.Cast(s, z)), like) })
 }
 
-fn declared(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) {
-    y.Map(x, fn(s) {
+fn declared(y mut linalg.Matrix<<T>>&, x linalg.Matrix<T>&, z <A>) ? {
+    try y.Map(x, fn(s) {
         w A
         like T
         return linalg.Cast(gelu(linalg.Cast(s, w)), like)
@@ -34,17 +34,17 @@ type Op enum {
     Neg
 }
 
-fn run(c mut linalg.Matrix<F32>&, a linalg.Matrix<F32>&, b linalg.Matrix<F32>&, op Op) {
+fn run(c mut linalg.Matrix<F32>&, a linalg.Matrix<F32>&, b linalg.Matrix<F32>&, op Op) ? {
     match op {
-        case Op.Captured { captured(c, a, F32(0)) }
-        case Op.Declared { declared(c, a, F32(0)) }
-        case Op.Add { c.Map2(a, b, fn(p, q) { return p + q }) }
-        case Op.Mul { c.Map2(a, b, fn(p, q) { return p * q }) }
+        case Op.Captured { try captured(c, a, F32(0)) }
+        case Op.Declared { try declared(c, a, F32(0)) }
+        case Op.Add { try c.Map2(a, b, fn(p, q) { return p + q }) }
+        case Op.Mul { try c.Map2(a, b, fn(p, q) { return p * q }) }
         case Op.Scale(k) {
             kk F32 = F32(k)
-            c.Map(a, fn(p) { return kk * p })
+            try c.Map(a, fn(p) { return kk * p })
         }
-        case Op.Neg { c.Map(a, fn(p) { return -p }) }
+        case Op.Neg { try c.Map(a, fn(p) { return -p }) }
     }
 }
 
@@ -56,11 +56,11 @@ fn main() ? {
     ops := Op[Op.Captured, Op.Declared, Op.Add, Op.Mul, Op.Scale(2.0), Op.Neg]
     for round in range 3 {
         t0 := time.Now()
-        for i in range 10 { run(c, a, b, ops[0]) }
+        for i in range 10 { try run(c, a, b, ops[0]) }
         t1 := time.Now()
-        for i in range 10 { run(c, a, b, ops[1]) }
+        for i in range 10 { try run(c, a, b, ops[1]) }
         t2 := time.Now()
-        for k in range 2, 6 { run(c, a, b, ops[k]) }
+        for k in range 2, 6 { try run(c, a, b, ops[k]) }
         try io.Println("captured " $(F64(t1 - t0) / 5242880.0).Fixed(2) " ns an element, declared " $(F64(t2 - t1) / 5242880.0).Fixed(2))
     }
 }

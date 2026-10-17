@@ -53,9 +53,6 @@ enum syntaxType {
     SNTX_TEST_DECL,
     SNTX_ERROR_DECL,
     SNTX_ERROR_LIST,
-    SNTX_BARE_ERROR,   //bare "error" keyword, standing in for a real name - see the report on "the
-                          //bare error": valid as an error-list item, an error-stmnt's own bare form
-                          //(where it's the whole SNTX_STMNT_ERROR node, not a child of it), and a catch-item
     SNTX_RET_TYPE,
     SNTX_PARAM,
     SNTX_RECEIVER,          //M19: "( param )" between "fn" and the name - marks a METHOD, and is the only
@@ -102,10 +99,7 @@ enum syntaxType {
     SNTX_STMNT_DEFER, //S19: "defer" followed by a block - "defer STATEMENT" arrives as a block holding it
     SNTX_STMNT_BREAK,
     SNTX_STMNT_CONTINUE,
-    SNTX_STMNT_ABORT,
     SNTX_STMNT_UNREACHABLE,
-    SNTX_STMNT_DONE,
-    SNTX_STMNT_FAIL,
     SNTX_STMNT_ASSERT,
     SNTX_STMNT_ERROR,
     SNTX_CATCH_ERR,
@@ -142,6 +136,7 @@ enum syntaxType {
     SNTX_EXPR_IS,   //E32: [operand, "is", TYPE_EXPR]
     SNTX_EXPR_IS_SAME, //E10c: [operand, "is", operand] - identity, when what follows "is" names no type
     SNTX_EXPR_AS,   //E32: [operand, "as", TYPE_EXPR]
+    SNTX_EXPR_BANG, //E35: [operand (a POSTFIX), "!"]
     SNTX_EXPR_MATCH, //S12b: a match used as a value - laid out as SNTX_STMNT_MATCH is
     SNTX_EXPR_UNARY,
     SNTX_EXPR_TEXT, //E11b: adjacent text pieces - string literals and "$x" renderings - joined into one

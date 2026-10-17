@@ -534,7 +534,7 @@ static int runTestFile(char* file, char* clang) {
 //Returns 0 if this file's tests all passed, nonzero otherwise.
 static int runTestFileApart(char* file, char* clang) {
     fflush(NULL); //what this process has written is not written again by the child
-    pid_t pid = fork();
+    pid_t pid = getenv("OLANG_NOFORK_DEBUG") ? -1 : fork();
     if (pid < 0) return runTestFile(file, clang); //no process to spare: built in this one, as before
     if (pid == 0) exit(runTestFile(file, clang));
     int st;

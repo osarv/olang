@@ -395,7 +395,7 @@ fn operator(t String&, i I64) (token.Tok, I64) {
         }
         case '!' {
             if d == '=' { return token.Tok.NotEq, i + 2 }
-            return token.Tok.Eof, i + 1
+            return token.Tok.Bang, i + 1
         }
         case '<' {
             if d == '<' {
@@ -686,11 +686,14 @@ test "a semicolon is reported and ends a statement where one could end" {
 }
 
 test "bytes that begin no token are reported once a run and passed over" {
-    ts := Scan("a !! b\r\nc\r\nd")
-    assert spelled("a !! b\r\nc\r\nd", ts) == "a b ; c ; d ;"
+    ts := Scan("a `` b\r\nc\r\nd")
+    assert spelled("a `` b\r\nc\r\nd", ts) == "a b ; c ; d ;"
     assert ts.Diags.Len() == 2 and ts.Diags[0].Kind == LexError.UnknownChar and ts.Diags[0].End - ts.Diags[0].Start == 2
     assert ts.Diags[1].Kind == LexError.CarriageReturn
-    u := "x\n!\ny"
+    u := "x\n`\ny"
+    assert spelled(u, Scan(u)) == "x ; y ;"
+    v := "f(x)!\ny != z!"                   # E35: a postfix '!' ends a statement at a line's end, and "!=" is one token
+    assert spelled(v, Scan(v)) == "f ( x ) ! ; y != z ! ;"
     assert spelled(u, Scan(u)) == "x ; y ;"
 }
 

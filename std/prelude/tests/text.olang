@@ -91,7 +91,7 @@ fn float(text String&) F64 {
 # the word ParseFloat fails with, or "ok"
 fn floatProblem(text String&) String& {
     try text.ParseFloat() catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" } catch ParseError.BAD_BASE { return "BAD_BASE" }
     return "ok"
 }
 
@@ -192,14 +192,14 @@ test "ParseFloat and ShortestDecimal, evaluated while compiling as at run time" 
 # what ParseInt makes of t in base, or the word it fails with
 fn intIn(t String&, base I64) String {
     v := try t.ParseInt(base) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" } catch ParseError.BAD_BASE { return "BAD_BASE" }
     return $v
 }
 
 # what ParseUint makes of t in base, or the word it fails with
 fn uintIn(t String&, base I64) String {
     v := try t.ParseUint(base) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" } catch ParseError.BAD_BASE { return "BAD_BASE" }
     return $v
 }
 
@@ -303,15 +303,15 @@ test "Format writes an integer in any base from 2 to 36, read back by ParseInt a
     u U16 = 65535
     assert b.Format(16) == "-80" and h.Format(10) == "-300" and w.Format(16) == "ee6b2800" and u.Format(2) == "1".Repeat(16)
     c Char = 'A'
-    assert c.Format(16) == "41" and c.Format() == "65"           # a Char's is its code: U8's method, inherited
+    assert c.Format(16) == "41" and c.Format() == "65" # a Char's is its code: U8's method, inherited
     m U64 = U64(least)
-    assert m.Format(16) == "8000000000000000"                   # an I64's bits, read unsigned
+    assert m.Format(16) == "8000000000000000" # an I64's bits, read unsigned
     for base in range 2, 37 {
         for v in I64[0, 1, -1, 35, -36, 1000003, -987654321, big, least] {
-            assert (try v.Format(base).ParseInt(base) catch default 0) == v
+            assert (try v.Format(Radix(base)).ParseInt(base) catch default 0) == v
         }
         for v in U64[0, 7, 18446744073709551615, 12345678901234567890] {
-            assert (try v.Format(base).ParseUint(base) catch default 1) == v
+            assert (try v.Format(Radix(base)).ParseUint(base) catch default 1) == v
         }
     }
 }
@@ -321,9 +321,9 @@ fn formattedAll(start I64) String {
     b := StringBuilder()
     for base in I64[2, 8, 10, 16, 36] {
         for v in I64[start, -start, start * 1000003, -9223372036854775807 - 1] {
-            b.Push(v.Format(base))
+            b.Push(v.Format(Radix(base)!))
             b.PushChar(' ')
-            b.Push(U64(v).Format(base))
+            b.Push(U64(v).Format(Radix(base)!))
             b.PushChar(';')
         }
     }
@@ -335,7 +335,9 @@ formatStart mut I64 = 255
 test "Format, evaluated while compiling as at run time" {
     assert formattedAll(formatStart) == formatBaked
     assert formatBaked.StartsWith("11111111 11111111;-11111111 ")
-    assert (255).Format(16) == "ff"                               # an assert the evaluator decides (S18c)
+    assert (255).Format(16) == "ff"          # an assert the evaluator decides (S18c)
+    bad I64 = 40
+    assert (try I64(Radix(bad)) catch TextError default 0) == 0   # a base computed while running, made a Radix
 }
 
 # E11c: "$" renders a StringBuilder as the text it holds, as ToString gives it - not as the List it keeps it in

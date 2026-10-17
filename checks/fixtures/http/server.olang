@@ -106,12 +106,17 @@ fn receive(fd I32) String {
     return got.ToString()
 }
 
-# the request in text, or the default error when it is not one
+# what parse fails with: the text is no request
+error badRequest {
+    LINE
+}
+
+# the request in text, or badRequest.LINE when it is not one
 fn parse(text String&) Request ? {
     end := try text.Find("\r\n\r\n")
     lines := text[:end].Split("\r\n")
     parts := lines[0].Split(" ")
-    if parts.Len() < 2 { error }
+    if parts.Len() < 2 { error badRequest.LINE }
     names List<String&>
     values List<String&>
     for k in range 1, lines.Len() {

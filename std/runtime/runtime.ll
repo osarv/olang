@@ -22,7 +22,7 @@
 ; from this text, so a name defined here is a declaration in every module, and an "extern fn" naming one refers to it
 ; (X7). Under LTO - every build but -d and -r - the allocator still inlines into the code calling it.
 ;
-; What follows first: a check the language guarantees failing, "done" and "fail". A failed check either longjmps back
+; What follows first: a check the language guarantees failing, and the error return trace. A failed check either longjmps back
 ; to a test harness's recovery point (when @__olang_jmp_target is set) or hard-aborts (outside a test, where it is
 ; always null).
 ; P9: the target is thread_local, so it is null on every task thread and a failing assert there aborts rather than
@@ -34,6 +34,7 @@
 
 declare i32 @printf(ptr, ...)
 declare i32 @fputs(ptr, ptr)
+declare i32 @fprintf(ptr, ptr, ...)
 declare i32 @fflush(ptr)
 declare i32 @snprintf(ptr, i64, ptr, ...)
 declare double @strtod(ptr, ptr)
@@ -107,29 +108,110 @@ declare void @longjmp(ptr, i32) noreturn
 @__olang_msg_spawn = unnamed_addr constant [22 x i8] c"could not start task\0A\00"
 @__olang_msg_stack = unnamed_addr constant [42 x i8] c"could not start a thread with that stack\0A\00"
 
-; S16a: "done" and "fail" end the innermost thing that can end - the current test if one is
-; running, the process otherwise. status 0 is done, 1 is fail; under a test they become setjmp
-; values 2 (passed) and 1 (failed), which is the same channel a failed check uses for the latter.
-define void @__olang_end(i32 %status) {
+; S18d: the error return trace, kept in test builds and -d builds only - each place the error being returned went, its
+; raise first: an "error" statement or a check failing under "checked" raises it (the trace starts again), each "try"
+; that passes it on adds its place, and a clause that takes it clears the trace. The last 32 places are kept, as
+; pointers to constant "FILE:LINE: what\n" lines; nothing is recorded on the success path.
+@__olang_ert = thread_local(initialexec) global [32 x ptr] zeroinitializer
+@__olang_ert_n = thread_local(initialexec) global i64 0
+; S16: the error that ended the running test, "Type.WORD", for the harness's FAIL line (null for any other failure)
+@__olang_fail_error = thread_local(initialexec) global ptr null
+@__olang_ert_dropped = unnamed_addr constant [32 x i8] c"(%lld earlier places not kept)\0A\00"
+
+define void @__olang_ert_raise(ptr %site) {
 entry:
-  %etgt = load ptr, ptr @__olang_jmp_target
-  %enull = icmp eq ptr %etgt, null
-  br i1 %enull, label %process, label %intest
-process:
-  call void @exit(i32 %status)
-  unreachable
-intest:
-  %isok = icmp eq i32 %status, 0
-  %jv = select i1 %isok, i32 2, i32 1
-  ; "done"/"fail" leave a test the same way a failed check does, so they unwind the same way
-  %emk = load ptr, ptr @__olang_unwind_mark
-  call void @__olang_unwind_to(ptr %emk)
-  call void @longjmp(ptr %etgt, i32 %jv)
+  store i64 0, ptr @__olang_ert_n
+  call void @__olang_ert_pass(ptr %site)
+  ret void
+}
+
+define void @__olang_ert_pass(ptr %site) {
+entry:
+  %n = load i64, ptr @__olang_ert_n
+  %i = and i64 %n, 31
+  %p = getelementptr [32 x ptr], ptr @__olang_ert, i64 0, i64 %i
+  store ptr %site, ptr %p
+  %n1 = add i64 %n, 1
+  store i64 %n1, ptr @__olang_ert_n
+  ret void
+}
+
+define void @__olang_ert_clear() {
+entry:
+  store i64 0, ptr @__olang_ert_n
+  ret void
+}
+
+; the trace, oldest first, to the stream given
+define void @__olang_ert_print(ptr %stream) {
+entry:
+  %n = load i64, ptr @__olang_ert_n
+  %over = icmp ugt i64 %n, 32
+  br i1 %over, label %drop, label %start
+drop:
+  %d = sub i64 %n, 32
+  call i32 (ptr, ptr, ...) @fprintf(ptr %stream, ptr @__olang_ert_dropped, i64 %d)
+  br label %start
+start:
+  %from = phi i64 [ 0, %entry ], [ %d, %drop ]
+  br label %loop
+loop:
+  %i = phi i64 [ %from, %start ], [ %i1, %body ]
+  %more = icmp ult i64 %i, %n
+  br i1 %more, label %body, label %done
+body:
+  %k = and i64 %i, 31
+  %p = getelementptr [32 x ptr], ptr @__olang_ert, i64 0, i64 %k
+  %line = load ptr, ptr %p
+  call i32 @fputs(ptr %line, ptr %stream)
+  %i1 = add i64 %i, 1
+  br label %loop
+done:
+  store i64 0, ptr @__olang_ert_n
+  ret void
+}
+
+; E35: a "!" took an error - its message ("FILE:LINE: Type.WORD\n"), then the trace that led there, then the end a failed
+; check makes
+define void @__olang_bang_failed(ptr %msg) {
+entry:
+  %stream = call ptr @__olang_check_stream()
+  call i32 @fputs(ptr %msg, ptr %stream)
+  call void @__olang_ert_print(ptr %stream)
+  call void @__olang_check_end()
   unreachable
 }
 
+; S16: an error left a test body - the test fails, its FAIL line naming the error ("Type.WORD") and the trace following
+define void @__olang_test_error(ptr %name) {
+entry:
+  store ptr %name, ptr @__olang_fail_error
+  call void @__olang_check_end()
+  unreachable
+}
+
+; S16: the harness's FAIL line for a test an error ended: "FAIL - name: Type.WORD", then the trace; else "FAIL - name"
+@__olang_fail_fmt = unnamed_addr constant [11 x i8] c"FAIL - %s\0A\00"
+@__olang_fail_err_fmt = unnamed_addr constant [15 x i8] c"FAIL - %s: %s\0A\00"
+define void @__olang_test_failed(ptr %desc) {
+entry:
+  %e = load ptr, ptr @__olang_fail_error
+  %none = icmp eq ptr %e, null
+  br i1 %none, label %plain, label %witherr
+plain:
+  call i32 (ptr, ...) @printf(ptr @__olang_fail_fmt, ptr %desc)
+  call void @__olang_ert_clear()
+  ret void
+witherr:
+  call i32 (ptr, ...) @printf(ptr @__olang_fail_err_fmt, ptr %desc, ptr %e)
+  store ptr null, ptr @__olang_fail_error
+  %out = load ptr, ptr @stdout
+  call void @__olang_ert_print(ptr %out)
+  ret void
+}
+
 ; a runtime check the language guarantees has failed: a failed assert, an out-of-range slice bound,
-; an array length out of range. Distinct from "fail", which is the program's own orderly decision -
+; an array length out of range. Distinct from os.Exit, which is the program's own orderly decision -
 ; this one aborts, so it leaves a core dump and skips atexit, which is what you want for a broken
 ; invariant. Under a test it is recoverable, exactly as S18 says.
 define void @__olang_check_failed(ptr %msg) {
@@ -2485,7 +2567,7 @@ failed:
 ; S1, S2 (§11 X6): a call on a stack of a given size, and a message for a crash. os.RunOnStack runs a function value
 ; - its code, taking its environment as its one argument (X3) - on a thread of its own made with that stack, and waits
 ; for it, so it is the call f() would be, on a bigger stack: nothing runs beside it. In a test the thread has a
-; recovery point of its own, and a check failing, a "done" or a "fail" on it ends there and is passed on to the
+; recovery point of its own, and a check failing, an "unreachable" or a "!" on it ends there and is passed on to the
 ; caller's, which unwinds and jumps as it would have had f run on its own thread; so f behaves as it would called
 ; directly. The thread's chunk pool goes where every thread reuses it (O8b) when it ends, and the rest back to the
 ; system.

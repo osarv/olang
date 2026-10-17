@@ -1,5 +1,8 @@
 # E11b/E11c: joins reaching a Str left by continue and by a propagated error leave nothing behind
 import "std/io"
+error Stop {
+    HERE
+}
 type Big struct(n I64) {
     n
 }
@@ -9,7 +12,7 @@ fn (b Big&) Str() String {
     return sb.ToString()
 }
 fn g(i I64) I64 ? {
-    if i % 2 == 0 { error }
+    if i % 2 == 0 { error Stop.HERE }
     return i
 }
 fn h(b Big&, i I64) I64 ? {

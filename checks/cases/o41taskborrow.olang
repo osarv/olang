@@ -12,7 +12,7 @@ type Holder struct() {
 }
 fn work(h Holder&, a mut chan.Chan<I64>&, b mut chan.Chan<I64>&) {
     c := h.cur
-    chan.Send(a, 1)
+    try chan.Send(a, 1) catch { return }
     k := try chan.Recv(b) catch { return }
     try io.Println(c.name) catch io.IoError { }
 }
@@ -27,6 +27,6 @@ fn main() ? {
         spawn work(s, a, b)
         k := try chan.Recv(a) catch { return }
         s.cur = null
-        chan.Send(b, 1)
+        try chan.Send(b, 1) catch { return }
     }
 }

@@ -202,7 +202,7 @@ fn addImport(text String&) String {
 }
 
 # migrates one file; whether it changed
-fn migrateFile(path String&, dry Bool) Bool ? {
+fn migrateFile(path String&, dry Bool) Bool {
     if path == "std/io.olang" or path.EndsWith("/std/io.olang") { return false }
     text := try srcmask.ReadText(path) catch { srcmask.SayErr("io_print: cannot read " $path)
                                                os.Exit(1)
@@ -248,7 +248,7 @@ fn main() ? {
     changed I64 = 0
     for k, f in files {
         if k > 0 and f == files[k - 1] { continue }
-        if try migrateFile(f, dry) { changed++ }
+        if migrateFile(f, dry) { changed++ }
     }
     srcmask.Say($changed " files " $("would change" if dry else "changed"))
 }

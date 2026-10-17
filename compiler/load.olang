@@ -478,6 +478,11 @@ fn (l mut Loader&) loadImports(mi I64) {
     }
 }
 
+# resolve's failure, already reported: an import that names no file it may reach
+error unresolved {
+    IMPORT
+}
+
 # where an import's file is, and the identity of its module (M23, M22a); what is wrong is reported
 fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
     m := l.Mods[mi]
@@ -485,11 +490,11 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
     spec := imp.Spec
     if spec.Len() >= 4096 {
         l.Diags.Error(at, msgs.ImportPathTooLong())
-        error
+        error unresolved.IMPORT
     }
     if spec.EndsWith(".olang") {
         l.Diags.Error(at, msgs.ImportHasExtension())
-        error
+        error unresolved.IMPORT
     }
     slash := try spec.FindByte('/') catch default spec.Len()
     first := spec[:slash]
@@ -500,21 +505,21 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
         identity = $Normalize(spec)
         if not identity.StartsWith("std/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot("std"))
-            error
+            error unresolved.IMPORT
         }
     } else if first.Contains(".") and first != "." and first != ".." {
         # host/owner/repo[@ref]/path - a host always has a dot, which a relative path's first element never does
         parts := spec.Split("/")
         if parts.Len() < 4 {
             l.Diags.Error(at, msgs.ImportRemoteNeedsFile())
-            error
+            error unresolved.IMPORT
         }
         dir := try l.Fetch.Fetch(parts[0], parts[1], parts[2])
             catch fetch.FetchError.BAD_NAME { l.Diags.Error(at, msgs.ImportRemoteBadName()) } default ""
             catch fetch.FetchError.NOT_A_COMMIT { l.Diags.Error(at, msgs.ImportLockNotACommit(key(parts))) } default ""
             catch fetch.FetchError.FAILED { l.Diags.Error(at, msgs.ImportFetchFailed(key(parts))) } default ""
             catch fetch.FetchError.LOCKED_FAILED { l.Diags.Error(at, msgs.ImportLockedFetchFailed(key(parts))) } default ""
-        if dir == "" { error }
+        if dir == "" { error unresolved.IMPORT }
         b := StringBuilder()
         b.Push(dir)
         for i in range 3, parts.Len() {
@@ -527,7 +532,7 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
         root := key(parts)
         if not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
-            error
+            error unresolved.IMPORT
         }
     } else {
         rel := moduleDir(m.Path)
@@ -548,12 +553,12 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
         }
         if root != "" and not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
-            error
+            error unresolved.IMPORT
         }
     }
     if not os.Exists(path) or os.IsDir(path) {
         l.Diags.Error(at, msgs.ImportFileNotFound(path))
-        error
+        error unresolved.IMPORT
     }
     return path, identity
 }
@@ -886,7 +891,7 @@ test "a remote import is fetched, locked, and its relative imports stay inside i
           git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
           git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit",
                             "-q", "-m", "x"])
-    if not ok { done }   # no git here: nothing to fetch with
+    if not ok { return }   # no git here: nothing to fetch with
     write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)

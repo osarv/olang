@@ -1,6 +1,9 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec3 F2: in one return - the try a recorded source (Array<Char>), its catch default a String
 import "std/io"
+error Stop {
+    HERE
+}
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -15,7 +18,7 @@ type CB struct() {
 }
 fn (c CB&) Text() String&c { return c.text }
 fn (c CB&) Raw(n I64) String&c ? {
-    if n > 0 { error }
+    if n > 0 { error Stop.HERE }
     return String(c.data)
 }
 fn f(c CB&, n I64) String&c {

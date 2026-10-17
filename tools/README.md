@@ -20,12 +20,16 @@ tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. 
 | `io_print.olang` | M19f: the prelude's `print` words became `io.Print` and friends | `build/tools_io_print [--dry] PATH...` |
 | `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `build/tools_io_try PATH...` |
 | `io_fix.olang` | after `io_try`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `build/tools_io_fix OLANG FILE...` |
+| `errors_migrate.olang` | the errors batch: Try forms renamed Checked, `try` that only checked made `checked`, `try` on calls that now fail | `build/tools_errors_migrate OLANG FILE\|DIR...` |
+| `donefail_migrate.olang` | S16: `done`, `fail` and `abort` removed - `!`, `try`, `assert`, `return`, `unreachable` | `build/tools_donefail_migrate FILE\|DIR...` |
 | `cli_words.olang` | B1: the command line in words (`-b` -> `build`, `-d` -> `-debug`, ...), in commands and `# flags:` | `build/tools_cli_words FILE...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
 - `perm_mut` and `int_literal_i64` are driven by the compiler's own diagnostics: they compile each file with
   `--olang` (default `build/out`) and apply what it reports, repeating until nothing changes.
+- `errors_migrate` is driven by the compiler's diagnostics too (its first argument, the compiler); `donefail_migrate`
+  works on the text alone. Both list at the end what they leave for a person.
 - `io_fix` needs the compiler path as its first argument (an absolute path; a relative one is made absolute).
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 

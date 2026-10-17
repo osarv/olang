@@ -62,7 +62,7 @@ struct type;
     X(ERR_CANNOT_OPEN,                  "",      "cannot open this file") \
     X(ERR_NOT_REGULAR,                  "",      "not a regular file") \
     X(ERR_IS_DIRECTORY,                 "M1",    "a directory - a module is one .olang file") \
-    X(ERR_NO_MAIN,                      "B4",    "no main function - a program starts at 'fn main() ? { }'") \
+    X(ERR_NO_MAIN,                      "B4",    "no main function - a program starts at 'fn main() { }'") \
     X(ERR_NO_CLANG,                     "",      "clang not found on PATH - install clang-20 (the IR is in %s)") \
     X(ERR_CLANG_FAILED,                 "",      "clang could not compile %s") \
     X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
@@ -98,7 +98,7 @@ struct type;
     X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
     X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
     X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
-    X(ERR_ERROR_AFTER_QUESTION,         "R15",   "'?' alone is the default error - write '?', or name the types: '? IoError'") \
+    X(ERR_ERROR_AFTER_QUESTION,         "R1a",   "'?' alone is what the body can fail with - write '?', or name the types: '? IoError'") \
     X(ERR_VALUE_AFTER_EQ,               "D12",   "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \
     /* ---- top-level conditions (each message takes the token it is about) ---- */ \
     X(ERR_COND_NAME,                    "B9a",   "%n is not a build constant or an immutable global of this module") \
@@ -136,6 +136,8 @@ struct type;
     X(ERR_UNKNOWN_FUNCTION,             "",      "unknown function or type %n") \
     X(ERR_UNKNOWN_FUNCTION_MEANT,       "",      "unknown function or type %n - did you mean '%S'?") \
     X(ERR_UNKNOWN_ERROR_TYPE,           "R1",    "unknown error type %n") \
+    X(ERR_FUNC_TYPE_ERRS_UNWRITTEN,     "R1b",   "a function type writes its error set - '? IoError' - since no body says what it is") \
+    X(ERR_TRAIT_ERRS_UNWRITTEN,         "R1b",   "a trait's method writes its error set - '? IoError' - since no body says what it is") \
     X(ERR_TYPE_IS_PRIVATE,              "M6",    "type %n is private to its module") \
     X(ERR_TYPE_NAME_IN_USE,             "D2",    "type %n is already declared in this module") \
     X(ERR_BUILTIN_TYPE_REDECLARED,      "D3a",   "%n is a built-in type's name - choose another") \
@@ -260,13 +262,12 @@ struct type;
     X(ERR_DECLARED_OVER_AGGREGATE,      "T29",   "a type is declared over a number or an array, not over %t - hold it in a struct's field instead") \
     /* ---- methods and operators ---- */ \
     X(ERR_NOT_THE_OPERATOR,             "E31",   "%t's %S takes %s besides its receiver - an ordinary method, not the one %s calls, which takes %s") \
-    X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'try' on several indices needs %t to declare %s - a check derived from Len checks one position") \
+    X(ERR_TRY_MULTI_INDEX_NEEDS_TRYAT,  "E31a",  "'checked' on several indices needs %t to declare %s - a check derived from Len checks one position") \
     X(ERR_ARRAY_ONE_INDEX,              "E31",   "%t takes one index - several are passed to a type's At or SetAt") \
     X(ERR_OPERATOR_RESULT,              "E31",   "%s gives one result") \
     X(ERR_SETAT_RESULT,                 "E31",   "SetAt gives no result") \
-    X(ERR_OPERATOR_FALLIBLE,            "E31a",  "%s cannot fail - its checked form is a method of its own, Try%s, which 'try' calls") \
-    X(ERR_TRY_FORM_MUST_FAIL,           "E31a",  "%s is a checked form, so it declares the errors it fails with") \
-    X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to write 'try'") \
+    X(ERR_CHECKED_NOT_SUPERSET,         "E31a",  "%s is %s's checked form, so it fails with every error %s can - add %t after its '?'") \
+    X(ERR_METHOD_CANNOT_FAIL,           "E31",   "%s cannot fail - the operation calling it has nowhere to handle an error") \
     X(ERR_LESS_NOT_BOOL,                "E31",   "Less, which '<' calls, gives a Bool") \
     X(ERR_LEN_SHAPE,                    "E31",   "Len gives an I64") \
     X(ERR_EQ_SHAPE,                     "E10a",  "Eq takes one parameter of its receiver's own type and gives a Bool") \
@@ -368,7 +369,7 @@ struct type;
     X(ERR_MEMBER_IS_PRIVATE,            "M6a",   "member '%S' of %t is private to its module") \
     /* ---- operators and literals ---- */ \
     X(ERR_NOT_ASSIGNABLE,               "S4",    "this cannot be written - a variable, an element or a member can") \
-    X(ERR_ASSIGN_INTO_TRIED,            "R9a",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store") \
+    X(ERR_ASSIGN_INTO_TRIED,            "R9a",   "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store") \
     X(ERR_INCDEC_NOT_NUMBER,            "S3a",   "%n takes a number, found %t") \
     X(ERR_CAPTURE_READ_ONLY,            "D16c",  "a lambda's captures are read-only - capture a reference to change what is outside it") \
     X(ERR_READ_ONLY_REF_WRITE,          "T25b",  "this writes through a read-only reference - one with no 'mut' in its type") \
@@ -419,7 +420,7 @@ struct type;
     X(ERR_NO_SUCH_CASE,                 "T17",   "%t has no case %n") \
     X(ERR_NO_SUCH_CASE_MEANT,           "T17",   "%t has no case %n - did you mean '%S'?") \
     X(ERR_SCOPE_ARG_COUNT,              "E25",   "a call takes at most one scope argument") \
-    X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'try'") \
+    X(ERR_ONLY_TRY_FORM,                "E31a",  "%t has only the checked form of this operation, %s - write it under 'checked'") \
     X(ERR_MATMUL_UNDECLARED,            "E31",   "'@' has no built-in meaning, and %t declares no MatMul") \
     X(ERR_NOT_EXTENDED_OP,              "T29f",  "%t does not extend its base, so it takes no %n - declare its method %s, or declare it with 'extends'") \
     X(ERR_COND_NOT_BOOL_TYPE,           "",      "a condition is a Bool, found %t") \
@@ -431,6 +432,7 @@ struct type;
     X(ERR_NOT_CALLABLE,                 "E13b",  "%t is not a function, and declares no Call") \
     X(ERR_JOIN_PIECE_CALLED,            "E11b",  "'(' after a piece of text calls it - to join the value inside, write '$(...)'") \
     X(ERR_UNHANDLED_FALLIBLE_CALL,      "E15",   "this call can fail - write 'try', and catch or pass on its errors") \
+    X(ERR_OPERATOR_CALL_FAILS,          "E31",   "this operator calls %s, which can fail - write 'try' before the expression") \
     X(ERR_IS_NOT_REFERENCES,            "E10c",  "'a is b' asks whether two references name one instance, and %t and %t are not both references") \
     X(ERR_IS_NOT_ONE_TYPE,              "E10c",  "%t and %t are different types, so they never name one instance") \
     X(ERR_AS_NEEDS_CASE,                "E32",   "after 'is' or 'as' comes a case of %t, found %s") \
@@ -439,8 +441,8 @@ struct type;
     X(ERR_IS_AS_MARKER,                 "E32",   "'&%S' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x %s T) & %S'") \
     X(ERR_AS_NOTHING,                   "E32",   "case %S carries nothing for 'as' to give - ask with 'is'") \
     X(ERR_IS_AS_NOT_ENUM,               "E32",   "'is' and 'as' ask which case an enum value is, and this is %t") \
-    X(ERR_TRY_INDEX_NEEDS_LEN,          "E31a",  "'try c[i]' checks against Len, and %t has neither TryAt nor Len") \
-    X(ERR_TRY_SLICE_NEEDS_LEN,          "E31a",  "'try c[lo:hi]' checks against Len, and %t has neither TrySlice nor Len") \
+    X(ERR_TRY_INDEX_NEEDS_LEN,          "E31a",  "'checked c[i]' checks against Len, and %t has neither CheckedAt nor Len") \
+    X(ERR_TRY_SLICE_NEEDS_LEN,          "E31a",  "'checked c[lo:hi]' checks against Len, and %t has neither CheckedSlice nor Len") \
     X(ERR_SLICE_NEEDS_LEN,              "E31",   "a slice with no end runs to Len(), and %t has none") \
     X(ERR_AT_UNDECLARED,                "E31",   "%t declares SetAt but not At, which reading x[i] calls") \
     X(ERR_SETAT_UNDECLARED,             "E31",   "%t declares At but not SetAt, which x[i] = v calls") \
@@ -465,11 +467,12 @@ struct type;
     X(ERR_DEFAULT_IN_STATEMENT,         "R11",   "a try written as a statement gives no value, so it takes no default") \
     X(ERR_DEFAULT_DEAD,                 "R11",   "this clause's block always leaves, so its default is never the value - remove it") \
     X(ERR_CATCH_MUST_LEAVE,             "R11",   "a clause here leaves, or gives the value with 'default v'") \
-    X(ERR_CATCH_EXIT_NOT_LEAVE,         "R11, B5b", "a call that ends the program is not a leave - write 'unreachable' after it") \
     X(ERR_CLAUSE_LAST_VALUE,            "R11",   "a block's last value is not the clause's value - write '} default %S' after the block") \
     X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
-    X(ERR_TRY_NOTHING_FAILS,            "R20",   "'try' needs something that can fail - a fallible call, or an operation it can check") \
+    X(ERR_TRY_NOTHING_FAILS,            "R8",    "nothing here can fail - write it without '%s'") \
+    X(ERR_BANG_NOTHING_FAILS,           "E35",   "nothing here can fail - write it without '!'") \
+    X(ERR_TRY_ONLY_CHECKS,              "E15a",  "nothing here fails as written - write 'checked' to check it") \
     /* ---- literals and constructions ---- */ \
     X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") \
     X(ERR_ARRAY_OF_ERRORS,              "T20",   "%t has no values to put in an array") \
@@ -501,7 +504,7 @@ struct type;
     /* ---- statements ---- */ \
     X(ERR_MUT_ON_LOCAL,                 "D11a",  "a local is always writable - 'mut' is for a reference, and %t is none") \
     X(ERR_MUT_ON_INFERRED_LOCAL,        "D11a",  "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") \
-    X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'try c[i] = v' checks against Len, and %t has neither TrySetAt nor Len") \
+    X(ERR_TRY_SETAT_NEEDS_LEN,          "E31a",  "'checked c[i] = v' checks against Len, and %t has neither CheckedSetAt nor Len") \
     X(ERR_NOT_A_STATEMENT,              "S3",    "this computes a value and discards it - only a call, '++' or '--' stands alone") \
     X(ERR_JOIN_NEXT_LINE,               "S3, E11b", "text on a line of its own does nothing - a join continues onto the next line only inside parentheses") \
     X(ERR_CONDITION_CONSTANT,           "S8a",   "this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it") \
@@ -541,12 +544,15 @@ struct type;
     X(ERR_DEFER_RETURNS,                "S19b",  "deferred code may not return - it runs while its block is left") \
     X(ERR_RETURN_COUNT,                 "D8c",   "this function returns %d value%s, found %d") \
     X(ERR_RETURN_IN_CTOR,               "C2b",   "a constructor gives no value - its fields are the instance; fail with 'error'") \
-    X(ERR_RETURN_IN_TEST,               "S15",   "a test has nothing to return to - end it with 'done' or 'fail'") \
+    X(ERR_RETURN_IN_TEST,               "S15",   "a test has no result - a bare 'return' ends it as passed") \
+    X(ERR_RETURN_IN_NORETURN,           "D8e",   "a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'") \
+    X(ERR_NORETURN_FALLS_OFF,           "D8e",   "a 'noreturn' function may not reach its end - end every path with a noreturn call, 'unreachable' or 'for { }'") \
+    X(ERR_NORETURN_ERRORS,              "D8e",   "a 'noreturn' function never returns to its caller, so it fails with nothing - drop the '?'") \
+    X(ERR_NORETURN_HERE,                "D8e",   "%s cannot be 'noreturn'") \
+    X(ERR_DECL_FROM_NORETURN,           "D8e",   "a 'noreturn' call gives no value, so ':=' has no type to take") \
     X(ERR_RETURN_VALUE_IN_VOID,         "D8",    "this function returns no value") \
     X(ERR_RETURN_NEEDS_VALUE,           "D8",    "this function returns %t, so 'return' needs a value") \
     X(ERR_ERROR_OUTSIDE_FUNCTION,       "R3",    "'error' fails a function, and this is not inside one") \
-    X(ERR_DEFAULT_ERROR_NAMED_SIG,      "R16",   "this function names its errors, so it fails with one of them: 'error T.WORD'") \
-    X(ERR_DEFAULT_ERROR_UNDECLARED,     "R16",   "this function declares no errors - add '?' to fail with the default error") \
     X(ERR_ERROR_WORD_IS_PRIVATE,        "M6a",   "error word %n is private to its module") \
     X(ERR_ERROR_UNDECLARED,             "R3",    "this function does not declare %n - add it after '?'") \
     /* ---- join and spawn ---- */ \
@@ -590,7 +596,6 @@ struct type;
     X(ERR_MISSING_RETURN,               "D10a",  "the end can be reached without returning %t - return on every path, or end it with 'unreachable'") \
     X(ERR_BREAK_OUTSIDE_LOOP,           "S11",   "%n acts on the innermost loop, and there is none here") \
     X(ERR_DEFER_LOOP_JUMP,              "S19b",  "%n may not leave deferred code - it runs while its block is left") \
-    X(ERR_CATCH_DEFAULT_NOT_PRODUCED,   "R18",   "the call does not fail with the default error") \
     X(ERR_CATCH_NOT_PRODUCED,           "R14",   "the call does not fail with %t") \
     X(ERR_TRY_CATCH_ON_SLICE,           "R10",   "a try statement discards its value, leaving a slice nothing - write 's := try a[lo:hi]' and catch where it is used") \
     /* ---- decided while compiling ---- */ \
@@ -609,7 +614,7 @@ struct type;
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
     /* ---- the program as a whole ---- */ \
-    X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \
+    X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters and returns no value: 'fn main() { }', or 'fn main() ? { }'") \
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
     X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
     X(NOTE_REFILL_KEPT,                 "",      "or refill the one kept - '%S.Clear()', then put the elements in: one made where '%S' lives stays there, beside every one made before it, until that scope closes") \
