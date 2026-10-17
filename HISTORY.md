@@ -18982,3 +18982,77 @@ the D3a/G22 name bans) and the `m19fredeclared` check. The repository was migrat
 errors: `? io.IoError` on a function whose try lets it escape, `try` on a call of a function that became fallible,
 `catch io.IoError { }` in a test block, a deferred block or a task). The scope fuzzer's generated programs import
 `std/io` and write `try io.Println`. SPEC M19f rewritten; D3a and G22 no longer mention the prelude's writing functions.
+
+### The errors batch: inferred sets, `checked`, operators that fail, std's own errors, `!` (R1a, R1b, R8, R20, R22, E15a, E24, E31, E31a, E35, B4, 2026-10-17; the user's decisions QO1, QO4, QO6, QQ1, QV, details mine)
+
+**What the user decided.** QO1: a bare `?` is the set the body can produce, as Zig infers it ("Do 2. This fits nicely
+with main cleanliness and also olang decisions made so far"), and "error should always require an actual error" - the
+default error, the bare `error` statement and R17's generalization go. QO4/QO3: no built-in error set beyond the
+compiler's carve-outs (`BuiltinError`, raised only by checks, and `Exhausted`); std declares its own errors and "no std
+function may ever exit". QO6: `INVALID` keeps IEEE's meaning, a shift amount out of range is `OUT_OF_BOUNDS`, a failed
+`as` is the new `WRONG_CASE`, and `<<` shifting out a set bit, every float narrowing to infinity and every integer
+conversion changing the value are checked. QQ1: `try` is for what fails as written and covers every fallible call in
+its operand ("try f().g() should bind to both" - E24's one-call reading was an artifact, never a decision); `checked`
+is `try` plus every check; a plain operator method may declare errors, and its checked form - renamed from `Try...` to
+`Checked...`, reversing the user's own TryAt of 2026-10-07 - must fail with a superset of its errors, "anything else is
+a compile error". No `try { block }`. QV (late in the batch): a postfix `!` ends the program on what fails as written,
+`try`'s reach, so `fn main() { io.Println("Hello World!")! }` is a program.
+
+**How it is built.**
+- *Inferred sets.* A bare-`?` function's set is computed from its checked body: the types of its `error` statements and
+  what its tries let through. A call reading a set before it is final (a cycle, a body not checked yet, a global
+  initializer) records the length it saw; after every body is checked the sets are settled to a fixed point, and if any
+  observation was short the program is checked again with the settled sets preset (keyed by the function's declaration
+  place), as B9c's attempts already are - a least fixed point, usually one attempt. The order is canonical (the owner
+  module's identity, then the name), sorted in place in the shared list buffers, so every compilation of a module
+  agrees on the codes (§10's separate objects). Generic functions infer per instantiation, which is what lets
+  `Plus(b <U>)` fail for a matrix operand and not for a scalar.
+- *Function values.* A named function used as a value fits a function type whose list holds its errors in any order;
+  its value is an adapter (`f.fvt.<hash of the list>`) re-encoding the codes. A trait method is met on the same terms.
+- *`try` covering an operand.* The checker collects every fallible call built under a try (`tryCover`) and points each
+  at the try's root (`checkRoot`); codegen and the evaluator dispatch each call's failure to the root's clauses with
+  that call's own error list. An error a call's own clauses take whole (a loop's `Next` taking `Exhausted`) is not the
+  try's. A statement form with more than one covered call is a SEQ root, as R21's stores were.
+- *`checked`.* A new keyword token; `markChecked` turns on E15a's checks and selects `Checked` forms. New checks: `<<`
+  (shift back and compare), the amount (`OUT_OF_BOUNDS`), every integer conversion that changes the value, F16/BF16
+  narrowing, `as` (`WRONG_CASE`) - in codegen and identically in the evaluator.
+- *Operators.* The shape table gives every operator role but `Len`, `Eq` and `Str` permission to fail; an operator
+  calling a fallible method outside a try is E31's error naming it; `checkCheckedForms` holds each checked form's set
+  to a superset of its plain form's, per instantiation for inferred generic ones.
+- *`!`.* A token (`!` alone; `!=` stays one token), a postfix node, and a try whose one clause takes everything and
+  `ends`: codegen picks the message by the code among the failing call's words and calls `__olang_check_failed`, so a
+  test fails and a program aborts; the evaluator stops there (K1's abort class), and `-i` writes the same line.
+
+**Decided by me (numbered, for the user to object to):**
+1. A generic's body may hold a `try`, a `!` or a clause naming an error that covers nothing in one instantiation: the
+   sets differ between instantiations (R1a), so R8's "nothing here can fail" is reported only in a body written once.
+   Without this a generic over an inferred callee could not be written at all.
+2. The canonical order of an inferred set is owner module identity, then type name.
+3. A named function value fits a superset error list (any order); a lambda or a variable of function type does not -
+   its type is exact.
+4. `main` may declare no `?` at all (B4), since `!` lets it handle failures without one.
+5. `!`'s message names the error type by the base name of its module's path where it is another module's
+   (`io.IoError.FAILED`), bare for the prelude's and the program's own.
+6. std's errors, one type per module beside its functions: `ListError`, `VecError` (`EMPTY`, `NOT_FOUND`,
+   `OUT_OF_RANGE`), `MapError.MISSING`, `TextError` (`NOT_FOUND`, `BAD_BASE`, `NOT_FINITE`), `ParseError.BAD_BASE`,
+   `ArrayError.NOT_FOUND`, `ChanError.CLOSED` for a Send on a closed channel, `StatsError` (`TOO_FEW`, `OUT_OF_RANGE`,
+   `BAD_EDGES`), `RandError.ZERO_STATE`, `CsvError.BAD_SEPARATOR`, `JsonError.UNEVEN`, `PathError.UNRELATED`,
+   `FfiError.BAD_ARGUMENTS`; `n.Format(base)` can fail, since a base is a caller's argument.
+7. linalg: every shape check is `ShapeError.MISMATCH`, so the destination forms, the products, `View`, the range views
+   and the matrix operators can fail; an operation with nothing to mismatch (`Fill`, `Scale`, `Clamp`, `Clone`,
+   `Mapped`, a matrix and a scalar) cannot - private unchecked kernels (`mapInto`, ...) serve the operations that
+   build their own destination. An integer matrix asked for GELU, tanh or the sigmoid fails with
+   `ActivationError.NOT_FOR_INTEGERS`, checked once per operation; the activation functions are inferred (`?`), so a
+   float instantiation cannot fail.
+8. The Matrix constructor stays infallible: what it is given is taken as a slice and an array length are - new storage
+   of a negative size is an array length out of range, data holding less than the matrix a slice out of range (D14b,
+   E16b, language guarantees) - and `View` is the form that checks and fails with `ShapeError`. Making the constructor
+   fallible would have put `try` on every matrix a program makes; the check it made is the language's own anyway.
+9. A for-in over a type with only `CheckedAt` walks it under `in try`, as before (S9e), now as the loop's own call.
+10. The migration tool is an olang program (`tools/errors_migrate.olang`), the repository's no-scripts rule: it renames
+    the Try forms, turns a `try` that only checked into `checked`, and tries what now fails - `try CALL catch { fail }`
+    in a test, else `try CALL` with the error added to the function's `?`.
+
+**Found on the way.** A comprehension under `try` counted its own `Next`'s `Exhausted` as the try's error (fixed in
+`tryErrors`); a for-in's own `At` on a checked-only type was refused as an unhandled fallible operator (fixed:
+`loopOwnCall`).
