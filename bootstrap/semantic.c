@@ -7252,12 +7252,12 @@ void scopeObligationAdd(struct var* func, struct var* longer, struct var* shorte
     //transitive closure: anything shorter already outlived by "shorter", and anything already outliving
     //"longer", compose across the edge just added. Re-entrant through scopeObligationAdd, terminating
     //because the pair space is this one signature's own finite scopeVars squared.
-    struct list snapshot = func->type.scopeObligations;
-    for (int i = 0; i < snapshot.len; i++) {
-        struct scopeObligation* e = ListGetIdx(&snapshot, i);
-        if (e->shorterViaParam) continue; //O22
-        if (canonicalVar(e->longer) == shorter) scopeObligationAdd(func, longer, canonicalVar(e->shorter));
-        if (canonicalVar(e->shorter) == longer) scopeObligationAdd(func, canonicalVar(e->longer), shorter);
+    int n = func->type.scopeObligations.len;
+    for (int i = 0; i < n; i++) {
+        struct scopeObligation e = *(struct scopeObligation*)ListGetIdx(&func->type.scopeObligations, i);
+        if (e.shorterViaParam) continue; //O22
+        if (canonicalVar(e.longer) == shorter) scopeObligationAdd(func, longer, canonicalVar(e.shorter));
+        if (canonicalVar(e.shorter) == longer) scopeObligationAdd(func, canonicalVar(e.longer), shorter);
     }
 }
 
