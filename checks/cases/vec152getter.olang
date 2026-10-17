@@ -1,0 +1,29 @@
+# check: fail note: this object is reached through a call's result, a borrow of an owned object whose region is not known here
+# vec7 F2: a Vec taken through a getter giving a borrowed own result (O37) - which region the object is in is not known
+# where the take is checked, so the take is refused (O34)
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    d := Parser()
+    d.lx = Lexer()
+    d.lx.toks = take p.Lx().toks
+    p.lx = null
+    churn()
+    println(d.lx.toks[0])
+}

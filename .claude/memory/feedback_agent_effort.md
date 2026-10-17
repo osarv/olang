@@ -18,3 +18,13 @@ explicit request the Agent tool's `effort` parameter needs, so I set it per agen
   ([[feedback-usage-and-agents]]).
 
 My own turns' effort is the user's session setting. I cannot change it, and I said so.
+
+**Model too (the user, 2026-10-17: "consider using cheaper models for easier tasks and remember to set an appropriate
+effort for them").** Pick the Agent tool's `model` and `effort` together, per task:
+- opus, xhigh: soundness reviews, section 8 and own/borrow design, hard debugging.
+- opus, high: compiler features and fixes from review findings (semantic.c, the port's checker/scope pass).
+- sonnet, medium: std/library code, mechanical-but-careful migrations with a script, records and docs (like slimming
+  CLAUDE.md), benchmarks, port pieces with a clear contract and an oracle to diff against.
+- haiku, low: searches, counting, listing, running a known command and reporting its output.
+When unsure between two, take the cheaper one for a first pass only where a review or a test oracle will catch its
+mistakes; never for soundness work.

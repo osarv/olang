@@ -1,0 +1,14 @@
+# check: fail error[O1b]: a global holds only what lives as long as the program
+# Vec phase 2a (O1b/O38): a global does not keep a view of a field's Vec
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+G mut Array<I64>& = null
+fn main() ? {
+    l := Lexer(3)
+    for i in range 3 { l.toks.Push(i) }
+    G = l.toks.View()
+    l.toks.Push(4)
+    println($G[0])
+}

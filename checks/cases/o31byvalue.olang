@@ -1,6 +1,7 @@
-# check: fail error[O31]: 
-# an owning type is held by value only as a local or a result - a field holds a reference, owning or not
-# also: only a local or a result holds one by value
+# check: fail error[O31]: Server owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value
+# an owning type is held by value as a local, a field, a global or a result - an element or a type argument holds a
+# reference, owning or not (a copy of the element would be a second owner of what it owns)
+# also: Array<Server>
 type Sock struct(n I64) {
     n
 }
@@ -15,6 +16,7 @@ type Server struct() {
 }
 type Shop struct() {
     s Server
+    xs Array<Server>& = null
 }
 fn main() ? {
     h := Shop()

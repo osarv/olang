@@ -8,6 +8,7 @@
 #     dump roundtrip FILE...
 #     dump modules [-D NAME=VALUE]... [-t] FILE...
 #     dump names [-D NAME=VALUE]... [-t] FILE...
+#     dump layout GOLDEN
 #
 # For each file, "== FILE", then:
 #
@@ -29,6 +30,11 @@
 #   compiler/tools/modgraph.sh compares the two. -D defines build constants, -t makes TestBuild true.
 # - names: the program loaded and its names resolved (names): the diagnostics both said, rendered as the compiler
 #   renders them. compiler/tools/namesdiff.sh compares their load and names rules with stage 0's goldens.
+# - layout: GOLDEN is bootstrap/oracle/layoutdump's output for many programs (compiler/goldens/layout.txt), a group per
+#   program, "== ROOT [FLAGS]" and then one line per type the C checker held. For each group the program is loaded and
+#   its names resolved, and each line's type read back from its canonical text (generic) and laid out (types), then
+#   printed as the oracle prints it: "CANON\tSIZE ALIGN\tLLVM\tBODY\tPARTS". A type the text names no type of is
+#   "TEXT\tunparsed", one with no layout yet "TEXT\tdeferred". compiler/tools/layoutdiff.sh compares the two.
 
 import "std/os"
 import "std/io"
@@ -44,6 +50,8 @@ import "../cond"
 import "../fetch"
 import "../load"
 import resolver "../names"
+import ty "../types"
+import "../generic"
 import "unparse"
 import "std/filepath"
 
@@ -51,8 +59,8 @@ fn main() ? {
     args := os.Args()
     mode := args[1] if args.Len() >= 3 else ""
     if mode != "tokens" and mode != "speed" and mode != "ast" and mode != "parse" and mode != "roundtrip" and
-       mode != "modules" and mode != "names" {
-        eprintln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names FILE...")
+       mode != "modules" and mode != "names" and mode != "layout" {
+        eprintln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(mode, args) })
@@ -61,6 +69,11 @@ fn main() ? {
 fn run(mode String&, args Array<String&>&) {
     out := io.Writer(1)
     std := try os.Env("OLANG_STD") catch default "std"
+    if mode == "layout" {
+        layout(out, std, args[2])
+        try out.Flush() catch io.IoError { os.Exit(1) }
+        return
+    }
     if mode == "modules" or mode == "names" {
         program(out, mode, std, args)
         try out.Flush() catch io.IoError { os.Exit(1) }
@@ -117,6 +130,109 @@ fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) 
         r.Resolve()
         out.Write(d.Render())
     }
+}
+
+# ---- layouts ----
+
+# every group of a golden file of layouts, its program loaded and each type read back and laid out
+fn layout(out mut io.Writer&, std String&, golden String&) {
+    text := try os.ReadFile(golden) catch os.OsError {
+        eprintln("dump: cannot read " $golden)
+        os.Exit(2)
+        unreachable
+    }
+    lines := text.Split("\n")
+    i I64 = 0
+    for i < lines.Len() {
+        if not lines[i].StartsWith("== ") {
+            i++
+            continue
+        }
+        end := i + 1
+        for end < lines.Len() and not lines[end].StartsWith("== ") { end++ }
+        layoutGroup(out, std, lines, i, end)
+        i = end
+    }
+}
+
+# one program: "== ROOT [-t] [-D NAME=VALUE]...", then its types
+fn layoutGroup(out mut io.Writer&, std String&, lines Array<String&>&, from I64, end I64) {
+    out.Write(lines[from])
+    out.WriteChar('\n')
+    words := lines[from][3:].Split(" ")
+    root := words[0]
+    testBuild := false
+    d := diag.Diagnostics(false)
+    consts := cond.Consts()
+    for k in range 1, words.Len() {
+        if words[k] == "-t" { testBuild = true }
+    }
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, testBuild)
+    for k in range 1, words.Len() {
+        if words[k] == "-D" and k + 1 < words.Len() { try consts.Define(words[k + 1], d) catch { } }
+    }
+    f := fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), false, true)
+    l := load.Loader(std, consts, f, source.Names(), d)
+    l.Load(root)
+    r := resolver.Resolver(l)
+    r.Resolve()
+    prog := generic.Program(l, r)
+    for k in range from + 1, end {
+        line := lines[k]
+        if line == "" { continue }
+        tab := try line.FindByte('\t') catch default line.Len()
+        key := line[:tab]
+        id := try prog.ParseCanon(key) catch {
+            # a type only a branch the checker decides declares (B9c) is not there yet: deferred, as a layout is
+            why String& = "deferred" if l.PendingIfs().Len() > 0 else "unparsed"
+            out.Write($key "\t" $why "\n")
+            continue
+        }
+        out.Write(layoutLine(prog, id, key))
+        out.WriteChar('\n')
+    }
+}
+
+# a type's layout as the oracle prints it: "CANON\tSIZE ALIGN\tLLVM\tBODY\tPARTS"
+fn layoutLine(prog mut generic.Program&, id ty.TypeId, key String&) String {
+    if not prog.Layout(id) { return $key "\tdeferred" }
+    k := prog.T.KindOf(id)
+    if k == ty.Kind.Func {
+        for x in prog.T.Items(prog.T.Params(id)) {
+            if not prog.Layout(x) { return $key "\tdeferred" }
+        }
+        if prog.T.Result(id) != ty.VoidT and not prog.Layout(prog.T.Result(id)) { return $key "\tdeferred" }
+    }
+    isStruct := k == ty.Kind.Named and prog.T.DeclKindOf(prog.T.DeclOf(id)) == ty.DeclKind.Struct
+    body := prog.T.StructBody(id) if isStruct else "-"
+    parts := "-"
+    if isStruct or k == ty.Kind.Tuple or k == ty.Kind.Record {
+        parts = "fields " $joinOffsets(prog.T.Offsets(id))
+    } else if k == ty.Kind.Func {
+        parts = "ret " $prog.T.RetLlvm(id) " pass " $prog.T.Passing(id)
+    } else if (k == ty.Kind.Named and prog.T.DeclKindOf(prog.T.DeclOf(id)) == ty.DeclKind.Enum) or k == ty.Kind.AnonEnum {
+        cases := prog.T.Cases(id) if k == ty.Kind.Named else prog.T.ShapeCases(id)
+        if prog.T.HasPayload(cases) {
+            b := StringBuilder()
+            b.Push("cases ")
+            xs := prog.T.Items(cases)
+            for i in range xs.Len() {
+                if i > 0 { b.PushChar(';') }
+                if xs[i] != ty.UnknownT { b.Push(joinOffsets(prog.T.Offsets(xs[i]))) }
+            }
+            parts = b.ToString()
+        }
+    }
+    return $prog.T.Canon(id) "\t" $prog.T.Size(id) " " $prog.T.Align(id) "\t" $prog.T.Llvm(id) "\t" $body "\t" $parts
+}
+
+fn joinOffsets(xs Array<I64>&) String {
+    b := StringBuilder()
+    for i in range xs.Len() {
+        if i > 0 { b.PushChar(',') }
+        b.Push($xs[i])
+    }
+    return b.ToString()
 }
 
 # a file's tokens and lexical errors, as "dump tokens" prints them

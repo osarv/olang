@@ -1,0 +1,30 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# R1: a struct holding the Vec, held by value in the owned object
+type Lex3 struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Mid struct() {
+    l Lex3 = Lex3()
+}
+type H struct() {
+    m own mut Mid& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    g := H()
+    h.m = Mid()
+    g.m = Mid()
+    for i in range 3 { h.m.l.toks.Push($i "-built-into-h-region") }
+    g.m.l = take h.m.l
+    h.m = null
+    churn()
+    println(g.m.l.toks[0])
+}

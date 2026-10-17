@@ -106,10 +106,14 @@ fn (v Vec<<T>>&) RunFrom(at I64) Array<T>&v ? Exhausted {
     return v.data[at:v.n]
 }
 
+# removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
+# moving down one place as TakeAt moves them
+fn (v mut Vec<<T>>&) RemoveAt(i I64) { v.TakeAt(i) }
+
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
 # checked once per call, and stops it as a slice out of range does
-fn (v mut Vec<<T>>&) RemoveAt(i I64) T {
+fn (v mut Vec<<T>>&) TakeAt(i I64) T {
     assert i >= 0 and i < v.n
     x := v.data[i]
     for k in range i, v.n - 1 { v.data[k] = v.data[k + 1] }
@@ -117,9 +121,12 @@ fn (v mut Vec<<T>>&) RemoveAt(i I64) T {
     return x
 }
 
+# removes the element at position i as SwapTake does, giving nothing
+fn (v mut Vec<<T>>&) SwapRemove(i I64) { v.SwapTake(i) }
+
 # removes the element at position i and gives it, the last element taking its place - so it moves one element, and the
 # order is not kept. i must be a position, checked once per call
-fn (v mut Vec<<T>>&) SwapRemove(i I64) T {
+fn (v mut Vec<<T>>&) SwapTake(i I64) T {
     assert i >= 0 and i < v.n
     x := v.data[i]
     v.n--

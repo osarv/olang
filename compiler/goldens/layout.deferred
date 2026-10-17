@@ -1,0 +1,17 @@
+# the types compiler/tools/layoutdiff.sh lets the self-hosted type table leave unlaid ("deferred"), one key per line
+# as compiler/goldens/layout.txt writes it, with why. Each needs what M5a does not have yet; when the milestone that
+# brings it lands, its lines go and layoutdiff holds those types to stage 0's layouts too.
+#
+# an array length a call computes (G21): the constant argument needs the compile-time evaluator (M8)
+shared:C2eBlock
+shared:C2eBuf<F64>
+shared:C2eBuf<I32>
+shared:KBlock
+shared:KfCalled<3>
+fn() shared:C2eBuf<F64>
+fn() shared:C2eBuf<I32>
+fn() shared:KBlock
+fn() shared:KfCalled<3>
+fn(I32) shared:C2eBlock
+# a type only a top-level if a call decides declares (B9c): the branch is chosen by the evaluator (M8)
+checks/cases/b9scanbranch:Mode

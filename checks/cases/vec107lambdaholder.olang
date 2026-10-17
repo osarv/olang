@@ -1,0 +1,12 @@
+# check: fail error[O32]: a lambda does not capture the owner local 'l'
+# Vec phase 2a (O31/O32): a struct holding a Vec is an owner value local, which a lambda does not capture
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn main() ? {
+    l := Lexer(3)
+    l.toks.Push(1)
+    f := fn() I64 { return l.toks.Len() }
+    println($f())
+}
