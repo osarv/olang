@@ -10,12 +10,25 @@ p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 hwm = peak = 0; last = {}
 while p.poll() is None:
     try:
-        with open(f"/proc/{p.pid}/status") as f:
-            for l in f:
-                if l.startswith(("VmHWM", "VmPeak", "VmRSS", "VmSize")):
-                    k, v = l.split(":"); last[k] = int(v.split()[0])
-        hwm = max(hwm, last.get("VmHWM", 0)); peak = max(peak, last.get("VmPeak", 0))
-        if last.get("VmRSS", 0) > LIMIT and not killed: p.kill(); killed = True
+        # the compiler and every descendant named like it (-t forks a child per file); clang children are left out
+        pids = [p.pid]; i = 0
+        while i < len(pids):
+            try:
+                for c in open(f"/proc/{pids[i]}/task/{pids[i]}/children").read().split():
+                    if open(f"/proc/{c}/comm").read().strip() == os.path.basename(cmd[0])[:15]: pids.append(int(c))
+            except Exception: pass
+            i += 1
+        for q in pids:
+            last = {}
+            try:
+                with open(f"/proc/{q}/status") as f:
+                    for l in f:
+                        if l.startswith(("VmHWM", "VmPeak", "VmRSS", "VmSize")):
+                            k, v = l.split(":"); last[k] = int(v.split()[0])
+            except Exception: continue
+            hwm = max(hwm, last.get("VmHWM", 0)); peak = max(peak, last.get("VmPeak", 0))
+            if last.get("VmRSS", 0) > LIMIT and not killed:
+                os.kill(q, 9); p.kill(); killed = True
     except Exception: pass
     time.sleep(0.05)
 err = p.stderr.read().decode(errors="replace")
