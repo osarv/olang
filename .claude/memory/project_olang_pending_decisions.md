@@ -223,7 +223,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   types). Asked: move std/math into the prelude as methods on the floats (`x.Sqrt()` instead of `math.Sqrt(x)`)?
   Recommended yes (reserves no type names). ANSWERED YES ("Yes move math into the prelude"). Details mine: functions
   become methods on the numbers (`x.Sqrt()`, `a.Min(b)`, integer `x.Abs()`); the constants stay `math.Pi`/`math.E` in
-  std/math (a bare prelude `E` would be reserved everywhere - a common type-parameter and enum name). Queued after
+  std/math (a bare prelude `E` would be reserved everywhere - a common type-parameter and enum name). The user then:
+  "don't move math as much as move the math stuff onto the types themselves" - same plan, and the free functions
+  `math.Sqrt(x)` go (one way to write it); std/math keeps only its constants. Queued after
   wt-errors2 merges (std files).
 - QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
   Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
