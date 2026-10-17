@@ -1042,8 +1042,9 @@ fn typereview(r mut report&) ? Failed {
 }
 
 # vec2 N2: a function made a value through an import alias ("f := lib.F") is checked as one named bare is - G12, T22a,
-# O36, O37 (a borrowed own result is called by name only) and O40 - where it once skipped them all; one error each, and
-# what stays legal through an alias the same built and interpreted
+# O36 and O40 - where it once skipped them all; one error each, and what stays legal through an alias the same built and
+# interpreted. (A Vec's View() is an ordinary borrowed result since Vec is a handle, so a function handing one back is a
+# value like any other.)
 test "a function value through an import alias is checked as one named bare" { assert passed("vecalias") }
 
 fn vecalias(r mut report&) ? Failed {
@@ -1052,13 +1053,10 @@ fn vecalias(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "30 60 7 9\n", "good output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7 9\n", "good under -i", dir)
-    try oneError(r, dir, "n2", "error[O37]: 'View2' gives a borrowed own result")
     try oneError(r, dir, "p1", "error[T22a]: 'Stash' relates its arguments' scopes")
     try oneError(r, dir, "p2", "error[O40]: 'Drop' releases owned objects")
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
     try oneError(r, dir, "p4", "error[O36]: 'Eat' owns a parameter")
-    try oneError(r, dir, "p5", "error[O37]: 'View2' gives a borrowed own result")
-    try oneError(r, dir, "f3", "error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it")
 }
 
 # P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land
