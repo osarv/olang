@@ -1,0 +1,272 @@
+# Migrates olang sources to printing through std/io (M19f, 2026-10-17): the prelude's print words are gone and
+# io.Print/Println/PrintErr/PrintErrln take no try.
+#
+#     build/out -b tools/io_print.olang && build/tools_io_print [--dry] PATH...
+#
+# Each PATH is an .olang file or a directory searched for them. In code (never inside a string or a character literal):
+#   - print(x) / println(x) / eprint(x) / eprintln(x) become io.Print(x) / io.Println(x) / io.PrintErr(x) / io.PrintErrln(x),
+#     through the alias the file imports std/io as, and `import "std/io"` is added where the file has no such import;
+#   - try io.Print(x) and try io.PrintErr(x), with any catch clauses after them, become io.Print(x) / io.PrintErr(x) when
+#     every clause's block is empty or only fail, abort or unreachable (the print stops the program itself now); a clause
+#     doing anything else is real handling, kept as try io.Write(io.Stdout, x) catch ... (io.Stderr for PrintErr).
+# In comments a call written as one is renamed the same way (the check headers "# check:", "# also:", "# flags:" are left
+# alone). Text inside string literals - programs a generator writes, expected outputs - is not touched; those are migrated by
+# hand. Running it again changes nothing: it is idempotent. std/io.olang itself is skipped.
+#
+# A port of the Python script of the same name (same arguments, same edits, same output); the files it reads and writes get
+# Python's text-mode newlines ("\r\n" and "\r" become "\n"). Called with no PATH it prints the usage line and exits 2.
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+# the four print words, and what each becomes in std/io
+Words Array<String&>& = String&["eprintln", "eprint", "println", "print"]
+Renamed Array<String&>& = String&["PrintErrln", "PrintErr", "Println", "Print"]
+
+# whether text has s at position i
+fn hasAt(text String&, i I64, s String&) Bool {
+    return i + s.Len() <= text.Len() and text[i:i + s.Len()] == s
+}
+
+# whether the text before a call, on its line, ends in a function's declaration - "fn" and an optional receiver clause:
+# regex \bfn\s*(\([^()]*\)\s*)?$
+fn endsInDecl(prefix String&) Bool {
+    n := prefix.Len()
+    for p in range n {
+        if not hasAt(prefix, p, "fn") or (p > 0 and srcmask.IsWord(prefix[p - 1])) { continue }
+        q := p + 2
+        for q < n and srcmask.IsPySpace(prefix[q]) { q++ }
+        if q == n { return true }
+        if prefix[q] != '(' { continue }
+        r := q + 1
+        for r < n and prefix[r] != '(' and prefix[r] != ')' { r++ }
+        if r == n or prefix[r] != ')' { continue }
+        r++
+        for r < n and srcmask.IsPySpace(prefix[r]) { r++ }
+        if r == n { return true }
+    }
+    return false
+}
+
+# whether a comment line is one of the check headers: after its "#", "check:", "also:" or "flags:"
+fn isHeader(text String&, lineStart I64) Bool {
+    n := text.Len()
+    j := lineStart
+    for j < n and srcmask.IsPySpace(text[j]) { j++ }
+    if j >= n or text[j] != '#' { return false }
+    j++
+    for j < n and srcmask.IsPySpace(text[j]) { j++ }
+    return hasAt(text, j, "check:") or hasAt(text, j, "also:") or hasAt(text, j, "flags:")
+}
+
+# the start of the line that position i is on
+fn lineStartOf(text String&, i I64) I64 {
+    s := i
+    for s > 0 and text[s - 1] != '\n' { s-- }
+    return s
+}
+
+# print(...) and its three siblings, in code and in comments, renamed into io's: the new text and how many calls in code
+fn migrateBare(text String&, alias String&) (String, I64) {
+    mask := srcmask.Mask(text, false)
+    out := StringBuilder()
+    last I64 = 0
+    count I64 = 0
+    for i in range text.Len() {
+        if i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.' or text[i - 1] == '$') { continue }
+        w I64 = -1
+        for k in range Words.Len() {
+            if w < 0 and hasAt(text, i, Words[k]) and hasAt(text, i + Words[k].Len(), "(") { w = k }
+        }
+        if w < 0 { continue }
+        kind := mask[i]
+        if kind == 's' { continue }
+        lineStart := lineStartOf(text, i)
+        if kind == 'm' and isHeader(text, lineStart) { continue }
+        if endsInDecl(text[lineStart:i]) { continue }
+        out.Push(text[last:i])
+        out.Push($alias "." $Renamed[w] "(")
+        last = i + Words[w].Len() + 1
+        if kind == 'c' { count++ }
+    }
+    out.Push(text[last:])
+    return out.ToString(), count
+}
+
+# whether a catch block's text is one of the trivial ones: nothing, fail, abort or unreachable
+fn trivial(body String&) Bool {
+    return body == "" or body == "fail" or body == "abort" or body == "unreachable"
+}
+
+# the end of the catch clause that starts at k (just after a call), or -1; its block's text is added to bodies
+fn catchClause(text String&, mask String&, k I64, bodies mut List<String&>&) I64 {
+    n := text.Len()
+    p := k
+    for p < n and (text[p] == ' ' or text[p] == '\t') { p++ }
+    if p < n and text[p] == '\n' {
+        p++
+        for p < n and (text[p] == ' ' or text[p] == '\t') { p++ }
+    }
+    if not hasAt(text, p, "catch") { return -1 }
+    q := p + 5
+    if q < n and srcmask.IsWord(text[q]) { return -1 }
+    for q < n and text[q] != '{' and text[q] != '}' and text[q] != '\n' { q++ }
+    if q >= n or text[q] != '{' or mask[q] != 'c' { return -1 }
+    bend := srcmask.CloseOf(text, mask, q)
+    if bend < 0 { return -1 }
+    bodies.Push($srcmask.Strip(text[q + 1:bend - 1]))
+    return bend
+}
+
+# text[lo:hi] with each "try ALIAS.Print(" and "try ALIAS.PrintErr(" in code migrated, written to out. The arguments of a
+# migrated call are migrated the same way, since a call inside them is one too
+fn migrateTries(text String&, mask String&, alias String&, lo I64, hi I64, out mut StringBuilder&) {
+    n := text.Len()
+    last := lo
+    i := lo
+    for i < hi {
+        # try, whitespace, alias.Print( or alias.PrintErr(
+        if not hasAt(text, i, "try") or (i > 0 and srcmask.IsWord(text[i - 1])) or mask[i] != 'c' {
+            i++
+            continue
+        }
+        p := i + 3
+        for p < n and srcmask.IsPySpace(text[p]) { p++ }
+        name := ""
+        if p > i + 3 and hasAt(text, p, alias) and hasAt(text, p + alias.Len(), ".") {
+            q := p + alias.Len() + 1
+            if hasAt(text, q, "Print(") { name = "Print" } else if hasAt(text, q, "PrintErr(") { name = "PrintErr" }
+        }
+        if name == "" {
+            i++
+            continue
+        }
+        paren := p + alias.Len() + 1 + name.Len()
+        end := srcmask.CloseOf(text, mask, paren)
+        if end < 0 {
+            i++
+            continue
+        }
+        bodies List<String&>
+        k := end
+        for {
+            bend := catchClause(text, mask, k, bodies)
+            if bend < 0 { break }
+            k = bend
+        }
+        allTrivial := true
+        for b in bodies {
+            if not trivial(b) { allTrivial = false }
+        }
+        out.Push(text[last:i])
+        if allTrivial {
+            out.Push($alias "." $name "(")
+            migrateTries(text, mask, alias, paren + 1, end - 1, out)
+            out.Push(")")
+            last = k
+            i = k
+        } else {
+            stream := "Stdout" if name == "Print" else "Stderr"
+            out.Push("try " $alias ".Write(" $alias "." $stream ", ")
+            migrateTries(text, mask, alias, paren + 1, end - 1, out)
+            out.Push(")")
+            last = end
+            i = end
+        }
+    }
+    out.Push(text[last:hi])
+}
+
+# the line after the last "import " line - or after the leading comment lines when there is none - gets the import
+fn addImport(text String&) String {
+    starts List<I64>
+    starts.Push(0)
+    for i in range text.Len() {
+        if text[i] == '\n' { starts.Push(i + 1) }
+    }
+    count := starts.Len()
+    lineIs := fn(k I64, prefix String&) Bool { return text[starts[k]:].StartsWith(prefix) }
+    last I64 = -1
+    for k in range count {
+        if lineIs(k, "import ") { last = k }
+    }
+    if last < 0 {
+        for k in range count {
+            if not lineIs(k, "#") { break }
+            last = k
+        }
+    }
+    if last + 1 < count { return $text[:starts[last + 1]] "import \"std/io\"\n" $text[starts[last + 1]:] }
+    return $text "\nimport \"std/io\""
+}
+
+# migrates one file; whether it changed
+fn migrateFile(path String&, dry Bool) Bool ? {
+    if path == "std/io.olang" or path.EndsWith("/std/io.olang") { return false }
+    text := try srcmask.ReadText(path) catch { srcmask.SayErr("io_print: cannot read " $path)
+                                               os.Exit(1)
+                                               unreachable }
+    alias := try srcmask.IoAlias(text, path) catch default ""
+    changed, count := migrateBare(text, alias if alias.Len() > 0 else "io")
+    result := $changed
+    if alias.Len() > 0 {
+        mask := srcmask.Mask(result, false)
+        out := StringBuilder()
+        migrateTries(result, mask, alias, 0, result.Len(), out)
+        result = $out.ToString()
+    } else if count > 0 {
+        result = $addImport(result)
+    }
+    if result == text { return false }
+    if not dry {
+        try os.WriteFile(path, result) catch {
+            srcmask.SayErr("io_print: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    srcmask.Say($("would migrate " if dry else "migrated ") $path)
+    return true
+}
+
+fn main() ? {
+    dry := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        if args[i] == "--dry" { dry = true } else { paths.Push($args[i]) }
+    }
+    if paths.Len() == 0 {
+        srcmask.Say("Migrates olang sources to printing through std/io (M19f, 2026-10-17).\n\n    build/tools_io_print [--dry] PATH...\n\nsee the header of tools/io_print.olang")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    files.Sort(fn(a, b) { return a < b })
+    changed I64 = 0
+    for k, f in files {
+        if k > 0 and f == files[k - 1] { continue }
+        if try migrateFile(f, dry) { changed++ }
+    }
+    srcmask.Say($changed " files " $("would change" if dry else "changed"))
+}
+
+test "print words become io's, except in headers, declarations and strings" {
+    out, n := migrateBare("fn print(x String&) { }\nprint(\"a\")\n# check: fail println(x)\n# println(x) here\nx := \"print(1)\"\ny.print(2)\n", "io")
+    assert n == 1
+    assert out == "fn print(x String&) { }\nio.Print(\"a\")\n# check: fail println(x)\n# io.Println(x) here\nx := \"print(1)\"\ny.print(2)\n"
+}
+
+test "try io.Print loses its try unless a clause handles the error" {
+    text := "try io.Print(\"a\") catch io.IoError { fail }\ntry io.PrintErr(\"b\") catch { x++ }\ntry io.Println(\"c\")\n"
+    out := StringBuilder()
+    migrateTries(text, srcmask.Mask(text, false), "io", 0, text.Len(), out)
+    assert out.ToString() == "io.Print(\"a\")\ntry io.Write(io.Stderr, \"b\") catch { x++ }\ntry io.Println(\"c\")\n"
+}
+
+test "the import goes after the last import, else after the leading comments" {
+    assert addImport("import \"std/os\"\nfn f() { }\n") == "import \"std/os\"\nimport \"std/io\"\nfn f() { }\n"
+    assert addImport("# c\n# d\nfn f() { }\n") == "# c\n# d\nimport \"std/io\"\nfn f() { }\n"
+}

@@ -7883,7 +7883,7 @@ static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, lon
             if (v->kind != CT_AGG) return true;
             struct type c = ((struct var*)ListGetIdx(&t.vars, (int)v->i))->type;
             struct ctVal shape = *v;
-            shape.type = c;
+            shape.type = CtType(c);
             return cgConstBytes(&shape, c, buf + 8, ChoicePayloadSize(t));
         }
         case BASETYPE_STRUCT: {

@@ -145,11 +145,83 @@ design. Do what you want") - nothing to decide until a GUI is written.
   -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
   test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
   are good"). Being built in wt-runfmt after its current work.
+- QT ASKED 2026-10-17 (after "Write everything in Olang"): should the makefile also become an olang program
+  (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
+  incremental part). In effect: the makefile stays.
+- QU DECIDED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
+  done fail abort as keywords? This runs against the no-duplicates rule which is held very strongly"). No os.Abort exists.
+  Proposed: (1) remove `abort` (`assert false, "why"`); (2) remove `done`/`fail`, os.Exit test-aware (in a test 0 ends it
+  passed, else failed; else the process) - reverses B5b; (3) a prelude result type `Never` (fn Exit(code I32) Never) -
+  D10a counts a call to one as leaving, its body checked never to return (Zig noreturn, Rust !); (4) keep `unreachable`
+  (the checker inserts and needs it). Asked: all four, or unreachable gone too. In effect: the four keywords stay.
+  REVISED after the user: "I think a test structure where every test is a rejection is both exhaustive and more
+  natural right? ... we pass the test when we don't fail any asserts". Counted: fail ~180 (125 `catch { fail }`, 51
+  `if c { fail }`), done ~20 (expected error, skips, done's own tests), abort 5. Proposed: (1) remove done/fail/abort;
+  (2) a test passes by reaching its end or `return` (S15's error reversed), fails on a failed assert, unreachable, `!`,
+  or an error leaving it (tests may `try` without catching); (3) programs: main normal 0, error 1, os.Exit(code) -
+  os.Exit stays process-wide (B5b kept); (4) keep unreachable; (5) Never result type for os.Exit (recommended). Early
+  exits from helpers (P1d unwinding tests) move to checks/ cases. ~200 sites, in the errors batch. Awaiting the user.
+  The user then asked: os.Abort? main without ?? why exit/abort library but assert not? free done/fail as names;
+  Never vs a keyword (exits/leaves). Answered: (1) no os.Abort - `assert false, "why"`/unreachable cover it; (2) main may
+  omit `?`; (3) the line: language = what the compiler understands (assert is decided while compiling, its message
+  evaluated only on failure, reports its line, test-aware); library = OS calls (Exit) - so the language keeps assert and
+  unreachable only; done/fail/abort freed as names; (4) Never as a type (Swift Never, Kotlin Nothing, Zig noreturn, Rust
+  !): fits result positions, function types and generics, a call to one fits where a value is expected. Awaiting OK.
+  The user: "Not final shape yet. Still thinking"; Never as a type allows `n Never` (nonsense) - agreed: a marker in
+  the result position, lowercase `never` (fn Exit(code I32) never; also in function types; a call to one fits where a
+  value is expected). Asked how os.Exit differs from halting: in a program done/fail are os.Exit(0/1) exactly; in a
+  test they end the test, unwinding its scopes; an unwinding halt in production (defers, destructors) would need
+  open-scope tracking on every block (2.4x measured in test builds) - principle 2 says no. Options: keep halting
+  (differs only in tests) or tests-pass-by-ending (recommended). THE USER IS STILL THINKING - do not build.
+  DECIDED (the user: "noreturn is a lot better for this keyword than never. Do 2) I want to free up fail and done.
+  Also don't have abort."): `noreturn` result marker (functions and function types; a call to one leaves the path and
+  fits where a value is expected); done/fail/abort removed, free as names; tests pass by reaching their end or `return`,
+  fail on a failed assert, unreachable, `!` or an error leaving them; main may omit `?`; os.Exit(code) noreturn stays
+  process-wide. Part of the errors batch. ASKED: keep `unreachable` (recommended - a checked claim the checker inserts
+  and requires; `abort` would read as a fourth way to stop) or rename it `abort`. In effect: unreachable. ANSWERED (the user: "the abort fail done unreachable
+  logic is all good the way you proposed. Build it"): `unreachable` kept. Plus the error return trace (test and -d
+  builds). All in the errors batch (wt-errors), being built.
+- QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
+  must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
+  no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
+  errors / no std exits, rejected; (4) non-null assertion - unneeded (T2b). Recommended 1; `!` directly before `=`
+  lexes as `!=`. In effect: `!` unused.
+  DECIDED (the user: "I like it as a 'don't fail or abort' thing. This way we can call io.Print()! without try"):
+  postfix `!` handles what fails as written (a call, a chain, a parenthesized expression - try's reach) by ending the
+  program as a failed assert does (in a test, failing it; `FILE:LINE: Type.WORD`); never turns on a check; `!` on
+  nothing fallible is an error; the enclosing function needs no `?` for it; `!` before `=` still lexes `!=`. Hello
+  world: `fn main() { io.Println("Hello World!")! }`. Part of the errors batch. Option 1 (compile-time) loses `!`.
+- QW DECIDED 2026-10-17 (the user: "nested generics produce really ugly code <<<T>>, G> is a mess"). Proposed: a
+  function introduces its type variables in a list after its name (`fn max<T>(a T, b T) T`, constraints in the list
+  `fn area<T Shape>(x T)`, order free within it); a method on a generic type gets the type's parameters from its
+  receiver's type arguments (Go's rule: `fn (l List<T>&) Push(x T)`), a list only for variables of its own (`fn (l
+  List<T>&) Map<U>(...)`); type arguments at calls stay inferred. Reverses G8b and G3's no-list rule; ~860 sites by an
+  olang tool; folded into arrays phase 2 (it drops constant generics). In effect: G8b.
+  DECIDED (the user: "I don't really understand what would change if we do this. I think I want the change tho" -
+  explained with std's own lines; signatures only, bodies/calls/type declarations unchanged). In arrays phase 2.
+- QX ASKED 2026-10-17 (the user: "Any other really cool language features from other languages I should consider?"):
+  offered generators (`yield`, lowered to an iterator struct), compile-time reflection (unlocks serialization), units
+  of measure (F#), portable SIMD vectors, arbitrary-width ints and fixed point (FPGA), embed a file, errdefer,
+  contracts (requires/ensures), doc tests; declined async, exceptions, macros, |>, ?. chaining. Recommended top 3:
+  generators, reflection, units. Ideas only - nothing built until the user picks. Written out one per section in
+  docs/ideas.md (the user: "Record all the new languages so I can work through them one by one").
+- QY DECIDED 2026-10-17 (the user: "in general 'listing' is done with commas on the same line and newline marker on a
+  new line. This should go for struct members, error set members, function arguments. Return types and error types too.
+  Anywhere we list things. Literal lists too. Change error set unions in return types from '+' to normal listing rules
+  ... Migrate the corpus"). One listing rule everywhere a list appears - parameters, arguments, results, error sets,
+  error words, enum cases, constructor fields, type parameter/argument lists, array literals, catch items: items on one
+  line are separated by `,`, items on different lines by the line break. Details mine: a line break separates where it
+  would end a statement (L18's test), so a line ending in an operator continues the item; a comma directly before a line
+  break is an error (one way to write it; reverses L18a's trailing comma and T17/T19/C2's comma-is-an-error); `+` in
+  error sets and catch items is gone (`? IoError, ParseError`, `catch A, B.X`); in a function TYPE inside another list a
+  multi-item error set is parenthesized (`f fn(I64) ? (A, B)`); `x, y I64` (D12b several names, one declaration) is
+  unchanged. Core syntax: both compilers. Planned as a syntax batch after the errors batch, together with QW (moved out
+  of arrays phase 2); migration by an olang tool, then oann.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
   PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
-  print/println/eprint/eprintln and M19f's exception removed; tools/io_print.py migrates (wt-ioprint, started).
+  print/println/eprint/eprintln and M19f's exception removed; tools/io_print (now olang) migrates (wt-ioprint, started).
 - QO3 WITHDRAWN 2026-10-17. The user first chose bare `?` = the built-in errors (BuiltinError + the default error,
   named errors on top), then, told the cost (every callee may fail with the built-ins, so a complete `catch Named` in a
   function without `?` needs another catch), said "Ok nvm. Let's just not have built in errors". Reading taken: the

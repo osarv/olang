@@ -4594,8 +4594,9 @@ static bool typeHasBareDestructStructAt(struct type t, int depth) {
     //"Handle[3]&s" is still three Handle *values* sharing one allocation, exactly what C11 forbids
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
-        if (typeHasBareDestructStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) return true;
+        if (typeHasBareDestructStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool typeHasBareDestructStruct(struct type t) { return typeHasBareDestructStructAt(t, 0); }
@@ -4642,8 +4643,9 @@ static int typeHasBareOwningStructAt(struct type t, int depth) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         int r = typeHasBareOwningStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1);
-        if (r) return r;
+        if (r) { ListDestroy(kids); return r; }
     }
+    ListDestroy(kids);
     return 0;
 }
 
@@ -7250,12 +7252,12 @@ void scopeObligationAdd(struct var* func, struct var* longer, struct var* shorte
     //transitive closure: anything shorter already outlived by "shorter", and anything already outliving
     //"longer", compose across the edge just added. Re-entrant through scopeObligationAdd, terminating
     //because the pair space is this one signature's own finite scopeVars squared.
-    struct list snapshot = func->type.scopeObligations;
-    for (int i = 0; i < snapshot.len; i++) {
-        struct scopeObligation* e = ListGetIdx(&snapshot, i);
-        if (e->shorterViaParam) continue; //O22
-        if (canonicalVar(e->longer) == shorter) scopeObligationAdd(func, longer, canonicalVar(e->shorter));
-        if (canonicalVar(e->shorter) == longer) scopeObligationAdd(func, canonicalVar(e->longer), shorter);
+    int n = func->type.scopeObligations.len;
+    for (int i = 0; i < n; i++) {
+        struct scopeObligation e = *(struct scopeObligation*)ListGetIdx(&func->type.scopeObligations, i);
+        if (e.shorterViaParam) continue; //O22
+        if (canonicalVar(e.longer) == shorter) scopeObligationAdd(func, longer, canonicalVar(e.shorter));
+        if (canonicalVar(e.shorter) == longer) scopeObligationAdd(func, canonicalVar(e.longer), shorter);
     }
 }
 
@@ -18115,9 +18117,9 @@ static bool typeHoldsReferencesAt(struct type t, int depth) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc) return true;
-        if (typeHoldsReferencesAt(k, depth + 1)) return true;
+        if (k.structMAlloc || typeHoldsReferencesAt(k, depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool TypeHoldsReferences(struct type t) { return typeHoldsReferencesAt(t, 0); }
@@ -18184,8 +18186,9 @@ static bool valueRefsAdmitStoresAt(struct type t, int depth) {
     struct list kids = TypeValueChildren(t);
     for (int i = 0; i < kids.len; i++) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStoresAt(k, depth + 1)) return true;
+        if (k.structMAlloc ? RefNarrowingMatters(k) : valueRefsAdmitStoresAt(k, depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool valueRefsAdmitStores(struct type t) { return valueRefsAdmitStoresAt(t, 0); }
@@ -18208,11 +18211,12 @@ static bool typeHoldsWritableRefsAt(struct type t, int depth) {
         struct type k = *(struct type*)ListGetIdx(&kids, i);
         if (k.bType == BASETYPE_FUNC) continue; //nothing is written through a function value (D16d)
         if (k.structMAlloc) {
-            if (k.refMut) return true;
+            if (k.refMut) { ListDestroy(kids); return true; }
             continue;
         }
-        if (typeHoldsWritableRefsAt(k, depth + 1)) return true;
+        if (typeHoldsWritableRefsAt(k, depth + 1)) { ListDestroy(kids); return true; }
     }
+    ListDestroy(kids);
     return false;
 }
 bool TypeHoldsWritableRefs(struct type t) {
@@ -22477,6 +22481,8 @@ static int bodyBegin(void) {
     return ++nextBodyId;
 }
 
+//stmts is kept as a copy of the body's list header, so bodyEnd comes after the last statement is added to it - an add
+//that grows the list frees the storage the copy points at
 static void bodyEnd(int id, struct list stmts) {
     struct bodyRec* r = ListGetIdx(&bodyRecs, id - 1);
     if (r->ended) return; //the first recorded is the one kept
@@ -25966,7 +25972,7 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         blk.block = pre;
         ListAdd(&blk.block, &stmt);
         blk.line = tok.lineNr;
-        blk.file = ((struct statement*)ListGetIdx(&pre, 0))->file;
+        blk.file = ((struct statement*)ListGetIdx(&blk.block, 0))->file;
         return blk;
     }
     return stmt;
@@ -27116,13 +27122,13 @@ static void buildPrimCtorBody(struct semaModule* mod, struct type* t) {
     ctx.inCtor = true;
     ctx.bodyId = bodyBegin();
     f->codeBlock = buildBlock(&ctx, t->ctorBodySyntax);
-    bodyEnd(ctx.bodyId, f->codeBlock);
     struct operand* val = OperandReadVar(local, param->tok);
     val->type = *t;
     struct statement ret = (struct statement){0};
     ret.sType = STATEMENT_RET;
     ret.op = val;
     StatementAdd(&f->codeBlock, ret);
+    bodyEnd(ctx.bodyId, f->codeBlock);
 }
 
 //C2d: which of a constructor's parameters its instance may hold - what the argument refers to, or a part of it. Read off

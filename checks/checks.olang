@@ -1428,7 +1428,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
         if line.StartsWith("    X(") { entries++ }
     }
     if twins != entries {
-        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.py\n") catch io.IoError { }
+        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.olang\n") catch io.IoError { }
         bad++
     }
     assert twins > 0

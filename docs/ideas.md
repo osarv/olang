@@ -1,0 +1,228 @@
+# Language ideas to work through
+
+Features from other languages that could suit olang, gathered 2026-10-17 for the user to go through one at a time.
+None of them is decided or built. Each entry says what it is, what it would look like, why it fits, what it costs, and
+the questions to settle. They are ordered by my estimate of value, highest first. They are extras, so under the
+compiler rule each would be built in the self-hosted compiler only, unless that compiler itself needs it.
+
+When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `HISTORY.md` like any other decision.
+
+| # | Feature | From | Status |
+|---|---|---|---|
+| 1 | Generators (`yield`) | C#, Python | open |
+| 2 | Compile-time reflection | Zig, Rust derive | open |
+| 3 | Units of measure | F# | open |
+| 4 | Portable SIMD vectors | Zig, Rust | open |
+| 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
+| 6 | Embedding a file | Zig, Rust | open |
+| 7 | `errdefer` | Zig | open |
+| 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
+| 9 | Doc tests | Rust | open |
+
+## 1. Generators (`yield`)
+
+**What:** a function that produces a sequence by `yield`ing values from ordinary code. The compiler turns it into an
+iterator: a struct holding the function's locals and a `Next() T ? Exhausted` method that resumes where it stopped.
+
+```
+fn evens(n I64) Iterator<I64> {
+    for i in range n {
+        if i % 2 == 0 { yield i }
+    }
+}
+
+for e in evens(10) { try io.Println($e) }
+```
+
+Today the same takes a struct, a constructor, a `Next` method and state kept by hand.
+
+**Why it fits:** principle 3 (it reads like the sentence it means), and it lowers to code the program could write, so
+scopes, errors and the evaluator apply unchanged. It costs nothing at run time: the iterator is a plain struct with a
+state number, as C#'s and Rust's are, and needs no heap or coroutine stack.
+
+**Costs:** a state-machine transformation in the compiler, the hardest part being locals that live across a `yield`
+and `defer` blocks open across one.
+
+**Questions:**
+1. Is `Iterator<T>` the right result spelling, or a word like `fn evens(n I64) yields I64`?
+2. May a generator fail (`? E`), its errors coming out of `Next`?
+3. Does `yield` inside a `join` make sense, or is it an error?
+
+## 2. Compile-time reflection
+
+**What:** generic code that walks a type's fields and enum cases while compiling, with no run-time type information.
+
+```
+fn Encode<T>(v T, w mut io.Writer&) {
+    match T {
+        case struct {
+            for f in fields(T) { w.Write(f.Name)  Encode(v.(f), w) }
+        }
+        ...
+    }
+}
+```
+
+**Why it fits:** JSON and binary serialization, debug printing, equality, hashing and comparison can be written once
+in std instead of per type. The compiler already supplies `Hash` and `$` for plain data by hand; reflection would make
+those ordinary library code. It also gives back what removing struct literals lost: rebuilding a valid value from its
+parts. Serialization is already on the recorded future-work list, waiting for this.
+
+**Costs:** a new generic form (iterating fields is a compile-time loop, unrolled per type), and naming a field
+generically (`v.(f)` above is only a placeholder spelling).
+
+**Questions:**
+1. Syntax for "for each field" and "this field of v".
+2. Do private fields show to reflection outside their module (M6a)? I would say no.
+3. Are attributes on fields wanted (a JSON name, "skip")? That is a second feature, and it could wait.
+
+## 3. Units of measure
+
+**What:** numbers carry a unit in their type, checked while compiling and erased afterwards.
+
+```
+d F64<m> = 100.0
+t F64<s> = 9.58
+v := d / t                 # F64<m/s>
+x := d + t                 # error: m and s cannot be added
+```
+
+**Why it fits:** it catches a whole class of bugs in data work, robotics and physics (the Mars Climate Orbiter's), and
+costs nothing at run time. Declared types (`type Meters F64`) exist today, but without arithmetic between units:
+`Meters / Seconds` cannot give a speed.
+
+**Costs:** unit arithmetic in the type checker (products and powers of base units), generics over units, and how
+conversions are written.
+
+**Questions:**
+1. Spelling: `F64<m/s>`, or units as declared types that compose?
+2. Are units declared by the program (`unit m`), or a fixed SI set in std?
+3. How does a plain literal meet a unit: does `2.0 * d` stay `F64<m>`?
+
+## 4. Portable SIMD vectors
+
+**What:** a value type of N lanes with element-wise operators, compiled to the machine's vector instructions.
+
+```
+a := Vec<F32, 8>(1.0)
+b := Vec<F32, 8>.Load(xs, i)
+c := a * b + a             # one vector multiply and add
+s := c.Sum()
+```
+
+**Why it fits:** principle 2, for when the auto-vectorizer gives up: kernels in std/linalg and oann could say what
+they mean instead of relying on the optimizer. It serves AI and data work directly.
+
+**Costs:** after the arrays batch there are no constant generic parameters, so the lane count needs a spelling of its
+own (perhaps from `TargetVectorBits`); there are also masks, shuffles and loads from arrays.
+
+**Questions:**
+1. The lane count: written, or always the machine's natural width for T?
+2. Is it a prelude type built on compiler support, or language syntax?
+
+## 5. Arbitrary-width integers and fixed point
+
+**What:** integer types of any bit width, and fixed-point numbers with saturating arithmetic.
+
+```
+x U12 = 4000
+p Q4.12 = 1.5              # 4 integer bits, 12 fraction bits
+q := p * p                 # saturates instead of wrapping, if declared so
+```
+
+**Why it fits:** the FPGA target for spiking neural networks needs exactly these (membrane potentials, Q formats), and
+they help with packed binary data on any target.
+
+**Costs:** the numeric lattice (T6b) grows from 12 types to an unbounded family, plus saturation semantics and how
+they meet `checked`.
+
+**Questions:**
+1. Spelling: `U12`/`I24` as names, or `UInt<12>`?
+2. Saturation as a type property, or an operation (`a.SatPlus(b)`)?
+3. Part of the FPGA work, or useful before it?
+
+## 6. Embedding a file
+
+**What:** a file's bytes become constant data in the binary, read while compiling.
+
+```
+Weights := embed("model.bin")          # an Array<U8>, in the binary's read-only data
+Help := embedText("help.txt")          # a String
+```
+
+**Why it fits:** "the compiler runs what it can"; it removes a run-time file read and a missing-file failure mode for
+assets and models. It is tiny to build: the evaluator reads the file and baking already writes constant arrays.
+
+**Costs:** the path rule (relative to the source file, and checked against escaping the repository?), and rebuilding
+when the file changes (B3 staleness has to include it).
+
+**Questions:**
+1. A builtin word, or a std function the evaluator understands?
+2. Can it read a directory, or files only?
+
+## 7. `errdefer`
+
+**What:** a deferred block that runs only when its block is left by an error.
+
+```
+f := try os.Create(path)
+errdefer { os.Remove(path)! }
+try write(f, data)                      # if this fails, the half-written file is removed
+```
+
+**Why it fits:** cleanup of half-built state is otherwise written in every catch clause. It was noted as cheap when
+`defer` was built (2026-10-08): one flag where errors leave a block.
+
+**Costs:** small. Is there an `errdefer` in tests, where an error fails the test?
+
+**Questions:**
+1. The name: `errdefer` (Zig's), or something more like a sentence, e.g. `defer on error { }`?
+
+## 8. Contracts (`requires` / `ensures`)
+
+**What:** pre- and postconditions on a function's signature, decided at compile time at each call where the arguments
+are known, checked under `checked` where they are not.
+
+```
+fn sqrt(x F64) F64 requires x >= 0.0 ensures result >= 0.0 {
+    ...
+}
+
+y := sqrt(4.0)             # decided while compiling
+z := sqrt(-1.0)            # compile-time error at the call
+w := checked sqrt(v)       # run-time check, fails with a named error
+```
+
+**Why it fits:** it states a function's assumptions where a caller reads them, and the arrays batch's call-site
+asserts (S18d) already go halfway: a function's leading asserts are decided at each call.
+
+**Costs:** where the checks run, the error a failed contract gives, and `ensures` needing a name for the result.
+
+**Questions:**
+1. Are leading asserts enough (they already work this way after the arrays batch), or is signature syntax wanted?
+2. Is an unchecked call allowed when the compiler cannot decide the contract (principle 2 says yes, with no check)?
+
+## 9. Doc tests
+
+**What:** examples in a function's comment are compiled and run as tests.
+
+```
+# Splits text at sep.
+#     assert "a,b".Split(",").Len() == 2
+fn (t String&) Split(sep String&) Array<String&>&t { ... }
+```
+
+**Why it fits:** the documentation in std stays true, since a wrong example fails `olang test`.
+
+**Costs:** the comment syntax for an example, and where its imports come from.
+
+**Questions:**
+1. Which marker sets an example apart from prose (indentation, as above, or a fenced block)?
+
+## Considered and not proposed
+
+- **async/await:** it colours functions and needs a run-time scheduler; olang chose threads with `join` and `spawn`.
+- **Exceptions:** hidden control flow (principles).
+- **Macros:** principle 4; compile-time evaluation and generics cover the uses.
+- **Pipelines (`x |> f |> g`):** methods already chain left to right.
+- **Optional chaining (`a?.b`):** possible, but `?` already means error sets, and a null read already traps.
