@@ -1,0 +1,338 @@
+# srcmask - what the source-migration tools (tools/*.olang) share: telling code from comments and literals in olang
+# source text, finding the closing bracket in code, reading and writing a source file the way Python's text mode did
+# (newlines translated to "\n"), and listing the .olang files under a path.
+#
+# A mask is a text of the same length as the source with one letter for each byte of it: 'c' for code, 's' inside a
+# string or character literal (its quotes included) and 'm' in a comment. Nothing here parses olang: it reads "#" to
+# the end of the line, "##" to the next "##", and a literal to its closing quote or the end of its line, which is all
+# the migrations need to know about where code is.
+#
+# Test it with: build/out -t tools/srcmask.olang
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+import "std/cancel"
+
+# a letter, a digit or an underscore (Python's \w, for ASCII)
+fn IsWord(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# a letter or an underscore: what a name starts with
+fn IsIdStart(c Char) Bool { return c.IsLetter() or c == '_' }
+
+# a space, a tab, a line break, a vertical tab or a form feed (Python's \s, for ASCII)
+fn IsPySpace(c Char) Bool { return c == ' ' or (c >= 9 and c <= 13) or (c >= 28 and c <= 31) }
+
+# where the mask of text puts each byte: 'c' code, 's' a literal, 'm' a comment. A line break inside a comment or an
+# unterminated literal belongs to it, unless newlinesCode - then it is code, as the tools that only asked "is this
+# code?" counted it
+fn Mask(text String&, newlinesCode Bool) String {
+    n := text.Len()
+    out := Array<Char>(n, 'c')
+    i I64 = 0
+    for i < n {
+        c := text[i]
+        j I64 = i
+        kind Char = 'c'
+        if c == '#' {
+            kind = 'm'
+            if text[i:].StartsWith("##") {
+                j = n
+                if text[i + 2:].Contains("##") { j = i + 2 + (try text[i + 2:].Find("##") catch default 0) + 2 }
+            } else {
+                j = try text[i:].FindByte('\n') catch default (n - i)
+                j += i
+            }
+        } else if c == '"' or c == '\'' {
+            kind = 's'
+            j = i + 1
+            for j < n and text[j] != c and text[j] != '\n' {
+                if text[j] == '\\' { j += 2 } else { j++ }
+            }
+            j = j + 1
+            if j > n { j = n }
+        } else {
+            i++
+            continue
+        }
+        for k in range i, j {
+            if text[k] != '\n' or not newlinesCode { out[k] = kind }
+        }
+        i = j
+    }
+    return String(out)
+}
+
+# the index just past the bracket closing the one at start, counting only the brackets mask calls code - or -1
+fn CloseOf(text String&, mask String&, start I64) I64 {
+    depth I64 = 0
+    for i in range start, text.Len() {
+        if mask[i] != 'c' { continue }
+        c := text[i]
+        if c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == ')' or c == ']' or c == '}' {
+            depth--
+            if depth == 0 { return i + 1 }
+        }
+    }
+    return -1
+}
+
+# ---- text, as Python's str methods treat it ----
+
+# t without the whitespace at its start
+fn StripStart(t String&) String&t {
+    i I64 = 0
+    for i < t.Len() and IsPySpace(t[i]) { i++ }
+    return t[i:]
+}
+
+# t without the whitespace at its end
+fn StripEnd(t String&) String&t {
+    e := t.Len()
+    for e > 0 and IsPySpace(t[e - 1]) { e-- }
+    return t[:e]
+}
+
+# t without the whitespace at either end
+fn Strip(t String&) String&t { return StripEnd(StripStart(t)) }
+
+# the first n characters of t - code points, not bytes - or all of t when it is shorter
+fn Prefix(t String&, n I64) String&t {
+    count I64 = 0
+    for i in range t.Len() {
+        if U8(t[i]) < 128 or U8(t[i]) >= 192 {
+            if count == n { return t[:i] }
+            count++
+        }
+    }
+    return t
+}
+
+# whether t is valid UTF-8, as Python's strict decoder reads it: no overlong forms, no surrogates, nothing above U+10FFFF
+fn ValidUtf8(t String&) Bool {
+    n := t.Len()
+    i I64 = 0
+    for i < n {
+        c := U32(U8(t[i]))
+        if c < 128 {
+            i++
+            continue
+        }
+        need I64 = 0
+        lo U32 = 0x80
+        hi U32 = 0xBF
+        if c >= 0xC2 and c <= 0xDF {
+            need = 1
+        } else if c >= 0xE0 and c <= 0xEF {
+            need = 2
+            if c == 0xE0 { lo = 0xA0 }
+            if c == 0xED { hi = 0x9F }
+        } else if c >= 0xF0 and c <= 0xF4 {
+            need = 3
+            if c == 0xF0 { lo = 0x90 }
+            if c == 0xF4 { hi = 0x8F }
+        } else {
+            return false
+        }
+        if i + need >= n { return false }
+        for k in range 1, need + 1 {
+            d := U32(U8(t[i + k]))
+            if k == 1 {
+                if d < lo or d > hi { return false }
+            } else if d < 0x80 or d > 0xBF {
+                return false
+            }
+        }
+        i += need + 1
+    }
+    return true
+}
+
+# ---- files ----
+
+# raw, newlines translated as Python's text mode does: "\r\n" and "\r" become "\n"
+fn Translate(raw String&) String {
+    if not ("\r" in raw) { return $raw }
+    b := StringBuilder()
+    i I64 = 0
+    for i < raw.Len() {
+        if raw[i] == '\r' {
+            b.PushChar('\n')
+            if i + 1 < raw.Len() and raw[i + 1] == '\n' { i++ }
+        } else {
+            b.PushChar(raw[i])
+        }
+        i++
+    }
+    return b.ToString()
+}
+
+# the text of a file, read as Python's text mode reads it
+fn ReadText(path String&) String ? os.OsError {
+    return Translate(try os.ReadFile(path))
+}
+
+# a and b made one path: b below a, with one "/" between - and nothing else changed, "./x" staying "./x"
+fn PathJoin(a String&, b String&) String {
+    if a.Len() == 0 { return $b }
+    if a.EndsWith("/") { return $a $b }
+    return $a "/" $b
+}
+
+# "path" made absolute and cleaned, as Python's os.path.abspath does
+fn AbsPath(path String&) String {
+    if filepath.IsAbs(path) { return $filepath.Clean(path) }
+    cwd := try os.Cwd() catch default ""
+    return $filepath.Clean(filepath.Join(cwd, path))
+}
+
+# the .olang files under dir, depth first: a directory's own files in byte order, then each subdirectory, also in byte
+# order. A directory named build or .git is not entered, nor a symbolic link to one
+fn Walk(dir String&, out mut List<String&>&) {
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    subs List<String&>
+    for name in names {
+        path := PathJoin(dir, name)
+        if os.IsDir(path) {
+            linked := true
+            try os.ReadLink(path) catch { linked = false }
+            if name != "build" and name != ".git" and not linked { subs.Push($path) }
+        } else if name.EndsWith(".olang") {
+            out.Push($path)
+        }
+    }
+    for sub in subs { Walk(sub, out) }
+}
+
+# the repository this program is in: the directory above the one it sits in (build/ once built, tools/ when run with -i),
+# found from the program's own path
+fn RepoRoot() String {
+    arg0 := os.Args()[0]
+    exe := $arg0
+    if not ("/" in arg0) {
+        real := try os.RealPath("/proc/self/exe") catch default ""
+        if real.Len() > 0 { exe = $real }
+    }
+    return $filepath.Dir(filepath.Dir(AbsPath(exe)))
+}
+
+# ---- running the compiler ----
+
+# what the program args[0] writes to its standard output and then its standard error when run with args in the directory
+# dir, killed when it has run for timeoutMs milliseconds - fails with the OsError when it cannot be started and with
+# cancel.Stopped when the time ran out
+fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.OsError + cancel.Stopped {
+    out := try os.ExecUntil(args, cancel.After(timeoutMs), "", true, dir)
+    return $out.Stdout $out.Stderr
+}
+
+# ---- output ----
+
+# a line to the standard output
+fn Say(t String&) {
+    io.Write(io.Stdout, $t "\n")!
+}
+
+# a line to the standard error
+fn SayErr(t String&) {
+    io.Write(io.Stderr, $t "\n")!
+}
+
+# ---- the module std/io is imported as ----
+
+# the index of the first line start after position at: just past the next line break, or the end of the text
+fn lineAfter(text String&, at I64) I64 {
+    return at + (try text[at:].FindByte('\n') catch default (text.Len() - at)) + 1
+}
+
+# what IoAlias fails with: the text does not import std/io
+error NoIoImport {
+    NONE
+}
+
+# the name the olang source "text", read from "path", imports std/io by - "io", or the alias written - and fails
+# (NoIoImport.NONE) when it does not import it. An import is a line whose first word is import, then optionally an
+# alias, then a quoted path; it names std/io when the path is "std/io" or resolves to .../std/io from the file's own
+# directory
+fn IoAlias(text String&, path String&) String ? {
+    n := text.Len()
+    dir := filepath.Dir(AbsPath(path))
+    at I64 = 0
+    for at < n {
+        j := at
+        for j < n and text[j] != '\n' and IsPySpace(text[j]) { j++ }
+        next := lineAfter(text, at)
+        if text[j:].StartsWith("import") and j + 6 < n and IsPySpace(text[j + 6]) {
+            k := j + 6
+            for k < n and IsPySpace(text[k]) { k++ }
+            alias := ""
+            w := k
+            for w < n and IsWord(text[w]) { w++ }
+            v := w
+            for v < n and IsPySpace(text[v]) { v++ }
+            if w > k and v > w and v < n and text[v] == '"' {
+                alias = $text[k:w]
+                k = v
+            }
+            if k < n and text[k] == '"' {
+                close := k + 1
+                for close < n and text[close] != '"' { close++ }
+                if close < n and close > k + 1 {
+                    target := text[k + 1:close]
+                    resolved := $filepath.Clean(target) if filepath.IsAbs(target) else $filepath.Clean(filepath.Join(dir, target))
+                    if target == "std/io" or resolved.EndsWith("/std/io") {
+                        return alias if alias.Len() > 0 else "io"
+                    }
+                    next = lineAfter(text, close)
+                }
+            }
+        }
+        at = next
+    }
+    error NoIoImport.NONE
+}
+
+test "Mask tells code from comments and literals" {
+    assert Mask("a # b\nc", false) == "ccmmmcc"
+    assert Mask("x \"a#b\" y", false) == "ccssssscc"
+    assert Mask("a ## b\n c ## d", false) == "ccmmmmmmmmmmcc"
+    assert Mask("a ## b\n c ## d", true) == "ccmmmmcmmmmmcc"
+    assert Mask("'a' b 'c\nd", false) == "ssscccsssc"
+    assert Mask("'a' b 'c\nd", true) == "ssscccsscc"
+}
+
+test "Strip and Prefix work as Python's str methods do" {
+    assert Strip(" \t a b \n") == "a b"
+    assert StripStart("  x ") == "x "
+    assert StripEnd(" x  ") == " x"
+    assert Prefix("héllo", 2) == "hé"
+    assert Prefix("abc", 5) == "abc"
+}
+
+test "ValidUtf8 refuses what Python's decoder refuses" {
+    assert ValidUtf8("plain and héllo")
+    assert not ValidUtf8(String(U8[0xE9]))
+    assert not ValidUtf8(String(U8[0xC0, 0x80]))
+    assert not ValidUtf8(String(U8[0xED, 0xA0, 0x80]))
+    assert not ValidUtf8(String(U8[0x61, 0x62, 0xE2, 0x82]))
+    assert ValidUtf8(String(U8[0xE2, 0x82, 0xAC]))
+}
+
+test "CloseOf counts only brackets in code" {
+    text := "f(a, \")\", (b)) x"
+    assert CloseOf(text, Mask(text, false), 1) == 14
+    assert CloseOf("f(a", Mask("f(a", false), 1) == -1
+}
+
+test "IoAlias finds the name std/io is imported by" {
+    assert (try IoAlias("# c\nimport \"std/os\"\nimport  \"std/io\"\n", "x.olang") catch default "none") == "io"
+    assert (try IoAlias("import q \"std/io\"\n", "x.olang") catch default "none") == "q"
+    assert (try IoAlias("import \"std/os\"\n", "x.olang") catch default "none") == "none"
+    assert (try IoAlias("  import\n    \"std/io\"", "x.olang") catch default "none") == "io"
+}
+
+test "Translate gives line breaks as Python reads them" {
+    assert Translate("a\r\nb\rc\n") == "a\nb\nc\n"
+}

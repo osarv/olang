@@ -1,0 +1,553 @@
+# G8b (2026-10-09): a type variable is introduced by its first "<T>" and written bare, "T", after it. This rewrites
+# olang sources written under the old rule ("<T>" everywhere) to the new one:
+#   - in a "type" item (a struct or a trait) the header's parameter list introduces every variable, so every
+#     "<X ...>" naming one of them anywhere in the item - its header's constraints included ("Map<K Hashable<<K>>, V>")
+#     - becomes "X";
+#   - in a function (a method's receiver included) the first "<X ...>" read left to right introduces X and keeps its
+#     spelling; every later one becomes "X". A constraint written on a later one moves to the introduction.
+# Comments and string literals are left alone. Files are rewritten in place; with --check nothing is written and the
+# exit status says whether anything would change.
+#
+#     build/out -b tools/bare_typevars.olang && build/tools_bare_typevars [--check] [-v] FILE|DIR...
+#
+#   A type a file declares, std's (the std directory of the repository this tool is in) and the built-in ones are known
+#   types: "a<X>" right after a parameter's name is a type variable only when X is none of them.
+#
+# A port of the Python script of the same name (same arguments, same edits, same output); the files it writes get Python's
+# text-mode newlines ("\r\n" and "\r" become "\n"). The std directory is found from the program's own path: the repository
+# above the directory it is built into or run from (tools/ or build/).
+
+import "std/os"
+import "std/filepath"
+import "srcmask"
+
+# words that are never a type variable's name
+Keywords Array<String&>& = String&["mut", "fn", "and", "or", "not", "in", "is", "as", "if", "else", "for", "range", "try",
+                                   "null", "true", "false", "default", "return", "match", "case"]
+# the built-in types' names
+BuiltinTypes Array<String&>& = String&["Array", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16",
+                                       "F32", "F64"]
+# words that, in a constraint's place, show it is no constraint
+NotConstraint Array<String&>& = String&["and", "or", "not", "in", "is", "as", "if", "else", "for", "range"]
+# the cstart of an occurrence written without a constraint
+NoC I64 = -2
+
+# one "<X [constraint]>" written in code: start (the "<"), end (past its ">"), the name's span, the constraint's span
+type Occ struct(start I64, end I64, nameAt I64, nameEnd I64, cstart I64, cend I64) {
+    start
+    end
+    nameAt
+    nameEnd
+    cstart
+    cend
+}
+
+# one edit: the span start..end of the source replaced by the text numbered rep in a list of them
+type Edit struct(start I64, end I64, rep I64) {
+    start
+    end
+    rep
+}
+
+# whether a character may appear in a constraint: [A-Za-z0-9_., <>&]
+fn constraintChar(c Char) Bool {
+    return srcmask.IsWord(c) or c == '.' or c == ',' or c == ' ' or c == '<' or c == '>' or c == '&'
+}
+
+# whether the text holds one of the words that show it is no constraint, as a whole word
+fn notAConstraint(text String&) Bool {
+    for w in NotConstraint {
+        for p in range text.Len() - w.Len() + 1 {
+            if (text[p:p + w.Len()] == w and (p == 0 or not srcmask.IsWord(text[p - 1]))
+                    and (p + w.Len() == text.Len() or not srcmask.IsWord(text[p + w.Len()]))) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+# the end of the name that starts at i
+fn identEnd(src String&, i I64) I64 {
+    j := i
+    for j < src.Len() and srcmask.IsWord(src[j]) { j++ }
+    return j
+}
+
+# whether the name ending at i is a parameter's ("(a<T>, b<T>)"): written after "(" or ",", and no type's name - neither
+# "x List<I32> = ..." nor "f(Box<T>(x))" in code already written the new way
+fn paramNameBefore(src String&, i I64, known Map<String&, Bool>&) Bool {
+    k := i
+    for k > 0 and srcmask.IsWord(src[k - 1]) { k-- }
+    if known.Has(src[k:i]) { return false }
+    for k > 0 and (src[k - 1] == ' ' or src[k - 1] == '\t') { k-- }
+    return k > 0 and (src[k - 1] == '(' or src[k - 1] == ',')
+}
+
+# what occurrenceAt fails with: no type variable is written there
+error notVariable {
+    HERE
+}
+
+# the type variable written with its "<" at i, else notVariable.HERE. names: the variables of the item when known (then
+# only those are taken) - hasNames says whether it is. A "<" right after a name is one only after a parameter's name
+# ("a<T>"), never after a type's ("Box<T>" is type arguments) and never for a name a type has
+fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names Map<String&, Bool>&,
+                known Map<String&, Bool>&) Occ ? {
+    if src[i] != '<' or mask[i] != 'c' or i + 1 >= hi or not srcmask.IsIdStart(src[i + 1]) { error notVariable.HERE }
+    prev := ' '
+    if i > 0 { prev = src[i - 1] }
+    if prev == ')' or prev == ']' or prev.IsDigit() { error notVariable.HERE }
+    j := identEnd(src, i + 1)
+    name := src[i + 1:j]
+    if name in Keywords or (hasNames and not names.Has(name)) { error notVariable.HERE }
+    if srcmask.IsWord(prev) and (known.Has(name) or not paramNameBefore(src, i, known)) { error notVariable.HERE }
+    if j < hi and src[j] == '>' { return Occ(i, j + 1, i + 1, j, NoC, NoC) }
+    if j >= hi or src[j] != ' ' { error notVariable.HERE }
+    # a constraint, or a constant variable's type: up to the ">" closing this "<", on this line
+    depth I64 = 1
+    k := j
+    for k < hi and src[k] != '\n' {
+        ch := src[k]
+        if mask[k] != 'c' or not constraintChar(ch) { error notVariable.HERE }
+        if ch == '<' {
+            depth++
+        } else if ch == '>' {
+            depth--
+            if depth == 0 {
+                cs := j + 1
+                if srcmask.Strip(src[cs:k]).Len() == 0 or notAConstraint(src[cs:k]) { error notVariable.HERE }
+                return Occ(i, k + 1, i + 1, j, cs, k)
+            }
+        }
+        k++
+    }
+    error notVariable.HERE
+}
+
+# every type variable written between lo and hi, in order
+fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names Map<String&, Bool>&,
+               known Map<String&, Bool>&) List<Occ> {
+    out List<Occ>
+    for i in range lo, hi {
+        if src[i] == '<' {
+            o := try occurrenceAt(src, mask, i, hi, hasNames, names, known) catch { continue }
+            out.Push(o)
+        }
+    }
+    return out
+}
+
+# ---- items ----
+
+# the pieces of code in src: kind 'w' a word, 'p' one punctuation character, 'n' a line end; and where each starts
+fn tokens(src String&, mask String&) (List<Char>, List<String&>, List<I64>) {
+    kinds List<Char>
+    texts List<String&>
+    starts List<I64>
+    i I64 = 0
+    n := src.Len()
+    for i < n {
+        c := src[i]
+        if c == '\n' {
+            kinds.Push('n')
+            texts.Push(src[i:i + 1])
+            starts.Push(i)
+            i++
+        } else if mask[i] != 'c' or c == ' ' or c == '\t' or c == '\r' {
+            i++
+        } else if srcmask.IsIdStart(c) {
+            j := identEnd(src, i)
+            kinds.Push('w')
+            texts.Push(src[i:j])
+            starts.Push(i)
+            i = j
+        } else {
+            kinds.Push('p')
+            texts.Push(src[i:i + 1])
+            starts.Push(i)
+            i++
+        }
+    }
+    return kinds, texts, starts
+}
+
+# the top-level items as (kind, start, end): "fn", "type" or "other" - those inside a top-level "if"/"else" included. An
+# item starts with a word at the start of a line outside every block, bracket and parenthesis ("destruct" continues the
+# type before it) and runs to the next one. Returned as three lists: kinds ('f', 't', 'o'), starts, ends
+fn items(src String&, mask String&) (List<Char>, List<I64>, List<I64>) {
+    kinds, texts, starts := tokens(src, mask)
+    stack List<Bool>        # one entry per open "{": true for a top-level "if"/"else" block, whose contents are items
+    paren I64 = 0
+    outKinds List<Char>
+    outStarts List<I64>
+    outEnds List<I64>
+    cur Char = ' '
+    curStart I64 = 0
+    lineStart := true
+    pending := false
+    afterClose := false
+    for t in range kinds.Len() {
+        kind := kinds[t]
+        text := texts[t]
+        pos := starts[t]
+        if kind == 'n' {
+            lineStart = true
+            continue
+        }
+        itemLevel := paren == 0
+        for s in stack {
+            if not s { itemLevel = false }
+        }
+        if kind == 'w' and itemLevel and text == "else" and afterClose {
+            if cur != ' ' {
+                outKinds.Push(cur)
+                outStarts.Push(curStart)
+                outEnds.Push(pos)
+            }
+            cur = 'o'
+            curStart = pos
+            pending = true
+        } else if kind == 'w' and itemLevel and lineStart and text != "destruct" {
+            if cur != ' ' {
+                outKinds.Push(cur)
+                outStarts.Push(curStart)
+                outEnds.Push(pos)
+            }
+            cur = 'o'
+            if text == "fn" { cur = 'f' } else if text == "type" { cur = 't' }
+            curStart = pos
+            pending = text == "if"
+        }
+        afterClose = false
+        lineStart = false
+        if kind != 'p' { continue }
+        if text == "(" or text == "[" {
+            paren++
+        } else if text == ")" or text == "]" {
+            if paren > 0 { paren-- }
+        } else if text == "{" {
+            stack.Push(pending and itemLevel)
+            pending = false
+        } else if text == "}" and stack.Len() > 0 {
+            if try stack.Pop() catch default false {
+                if cur != ' ' {
+                    outKinds.Push(cur)
+                    outStarts.Push(curStart)
+                    outEnds.Push(pos)
+                }
+                cur = ' '
+                afterClose = true
+            }
+        }
+    }
+    if cur != ' ' {
+        outKinds.Push(cur)
+        outStarts.Push(curStart)
+        outEnds.Push(src.Len())
+    }
+    return outKinds, outStarts, outEnds
+}
+
+# ---- rewriting ----
+
+# the parameter names of "type NAME<params> ..." as the text of the item, in the list given; and where they start (past
+# the list's own "<"), else 0
+fn typeParams(src String&, mask String&, start I64, end I64, names mut Map<String&, Bool>&) I64 {
+    if not src[start:].StartsWith("type") { return 0 }
+    i := start + 4
+    ws := i
+    for i < src.Len() and srcmask.IsPySpace(src[i]) { i++ }
+    if i == ws or i >= src.Len() or not srcmask.IsIdStart(src[i]) { return 0 }
+    i = identEnd(src, i)
+    if i >= src.Len() or src[i] != '<' { return 0 }
+    i++
+    after := i
+    depth I64 = 1
+    expectName := true
+    for i < end and depth > 0 {
+        c := src[i]
+        if mask[i] != 'c' {
+            i++
+            continue
+        }
+        if c == '<' {
+            depth++
+        } else if c == '>' {
+            depth--
+        } else if c == ',' and depth == 1 {
+            expectName = true
+        } else if depth == 1 and expectName and srcmask.IsIdStart(c) {
+            j := identEnd(src, i)
+            names.Put($src[i:j], true)
+            expectName = false
+            i = j
+            continue
+        }
+        i++
+    }
+    return after
+}
+
+# the occurrences not written inside another's constraint
+fn outermost(occs List<Occ>&) List<Occ> {
+    out List<Occ>
+    lastEnd I64 = -1
+    for o in occs {
+        if o.start >= lastEnd {
+            out.Push(o)
+            lastEnd = o.end
+        }
+    }
+    return out
+}
+
+# what "<X ...>" becomes: "X", spaced from a name it would otherwise run into ("b<T>" -> "b T")
+fn bare(src String&, o Occ&) String {
+    name := src[o.nameAt:o.nameEnd]
+    left := ""
+    right := ""
+    if o.start > 0 and srcmask.IsWord(src[o.start - 1]) { left = " " }
+    if o.end < src.Len() and srcmask.IsWord(src[o.end]) { right = " " }
+    return $left $name $right
+}
+
+# the line a position is on, from 1
+fn lineOf(src String&, pos I64) I64 {
+    n I64 = 1
+    for i in range pos {
+        if src[i] == '\n' { n++ }
+    }
+    return n
+}
+
+# the edits of one item, added to edits and reps; what was changed that deserves a word is added to report
+fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known Map<String&, Bool>&,
+               edits mut List<Edit>&, reps mut List<String&>&, report mut List<String&>&, path String&) {
+    none Map<String&, Bool>
+    if kind == 't' {
+        names Map<String&, Bool>
+        after := typeParams(src, mask, start, end, names)
+        if names.Len() == 0 { return }
+        for o in outermost(occurrences(src, mask, after, end, true, names, known)) {
+            if o.cstart != NoC {
+                report.Push($path ":" $lineOf(src, o.start) ": constraint on '" $src[o.nameAt:o.nameEnd]
+                            "' dropped (the header carries it): " $src[o.cstart:o.cend])
+            }
+            edits.Push(Edit(o.start, o.end, reps.Len()))
+            reps.Push(bare(src, o))
+        }
+        return
+    }
+    if kind != 'f' { return }
+    all := occurrences(src, mask, start, end, false, none, known)
+    names Map<String&, Bool>
+    for o in all { names.Put($src[o.nameAt:o.nameEnd], true) }
+    if names.Len() == 0 { return }
+    # the first of each name, by its index in occs
+    occs := occurrences(src, mask, start, end, true, names, known)
+    firstIdx Map<String&, I64>
+    skipUntil I64 = -1
+    for k in range occs.Len() {
+        o := occs[k]
+        name := src[o.nameAt:o.nameEnd]
+        if o.start < skipUntil { continue }
+        if not firstIdx.Has(name) {
+            firstIdx.Put($name, k)
+            continue
+        }
+        if o.cstart != NoC {
+            fi := try firstIdx.Get(name) catch default 0
+            f := occs[fi]
+            if f.cstart == NoC {
+                edits.Push(Edit(f.start, f.end, reps.Len()))
+                reps.Push("<" $name " " $src[o.cstart:o.cend] ">")
+                occs[fi].cstart = -1        # moved: a further one is a second constraint
+                report.Push($path ":" $lineOf(src, o.start) ": constraint on '" $name "' moved to its introduction")
+            } else {
+                report.Push($path ":" $lineOf(src, o.start) ": a second constraint on '" $name "' dropped: "
+                            $src[o.cstart:o.cend])
+            }
+            skipUntil = o.end
+        }
+        edits.Push(Edit(o.start, o.end, reps.Len()))
+        reps.Push(bare(src, o))
+    }
+}
+
+# the spaces to put before a trailing comment on each line an edit shortened, so comments aligned in a column stay so
+fn keepCommentColumns(src String&, mask String&, edits List<Edit>&, reps mut List<String&>&, out mut List<Edit>&) {
+    lineStarts List<I64>
+    removedBy List<I64>
+    lastBy List<I64>
+    for e in edits {
+        ls := 0
+        for i in range e.start {
+            if src[i] == '\n' { ls = i + 1 }
+        }
+        removed := e.end - e.start - reps[e.rep].Len()
+        at := -1
+        for k in range lineStarts.Len() {
+            if lineStarts[k] == ls { at = k }
+        }
+        if at < 0 {
+            lineStarts.Push(ls)
+            removedBy.Push(removed)
+            lastBy.Push(e.end)
+        } else {
+            removedBy[at] = removedBy[at] + removed
+            if e.end > lastBy[at] { lastBy[at] = e.end }
+        }
+    }
+    for at in range lineStarts.Len() {
+        last := lastBy[at]
+        le := last + (try src[last:].FindByte('\n') catch default (src.Len() - last))
+        k := last
+        for k < le and not (src[k] == '#' and mask[k] != 'c') { k++ }
+        if removedBy[at] > 0 and k < le and src[k - 1] == ' ' {
+            spaces := StringBuilder()
+            for count in range removedBy[at] { spaces.PushChar(' ') }
+            out.Push(Edit(k, k, reps.Len()))
+            reps.Push(spaces.ToString())
+        }
+    }
+}
+
+# src migrated, and how many edits that took (not counting the comment columns kept)
+fn migrate(src String&, path String&, known Map<String&, Bool>&, report mut List<String&>&) (String, I64) {
+    mask := srcmask.Mask(src, true)
+    edits List<Edit>
+    reps List<String&>
+    kinds, starts, ends := items(src, mask)
+    for k in range kinds.Len() {
+        rewriteItem(src, mask, kinds[k], starts[k], ends[k], known, edits, reps, report, path)
+    }
+    n := edits.Len()
+    extra List<Edit>
+    keepCommentColumns(src, mask, edits, reps, extra)
+    for e in extra { edits.Push(e) }
+    edits.Sort(fn(a, b) {
+        if a.start != b.start { return a.start < b.start }
+        if a.end != b.end { return a.end < b.end }
+        return reps[a.rep] < reps[b.rep]
+    })
+    out := StringBuilder()
+    last I64 = 0
+    for e in edits {
+        if e.start < last { continue }
+        out.Push(src[last:e.start])
+        out.Push(reps[e.rep])
+        last = e.end
+    }
+    out.Push(src[last:])
+    return out.ToString(), n
+}
+
+# whether the text's first line is a checks case whose point is "<X>" written again, or "X" before "<X>"
+fn keepsOldSpelling(src String&) Bool {
+    if not src.StartsWith("# check: fail ") { return false }
+    first := src[:(try src.FindByte('\n') catch default src.Len())]
+    return first.Contains("was introduced already") or first.Contains("is introduced later")
+}
+
+# the names of the types a text declares: a line's first word "type", then a name
+fn typeDecls(text String&, out mut Map<String&, Bool>&) {
+    n := text.Len()
+    at I64 = 0
+    for at < n {
+        j := at
+        for j < n and text[j] != '\n' and srcmask.IsPySpace(text[j]) { j++ }
+        next := at + (try text[at:].FindByte('\n') catch default (n - at)) + 1
+        if text[j:].StartsWith("type") {
+            k := j + 4
+            ws := k
+            for k < n and srcmask.IsPySpace(text[k]) { k++ }
+            if k > ws and k < n and srcmask.IsIdStart(text[k]) {
+                e := identEnd(text, k)
+                out.Put($text[k:e], true)
+                next = e + (try text[e:].FindByte('\n') catch default (n - e)) + 1
+            }
+        }
+        at = next
+    }
+}
+
+# the type names std declares, and the built-in ones - the prelude's are named bare in every module
+fn stdTypes(known mut Map<String&, Bool>&) {
+    for b in BuiltinTypes { known.Put($b, true) }
+    std := $srcmask.RepoRoot() "/std"
+    files List<String&>
+    srcmask.Walk(std, files)
+    for f in files {
+        text := try srcmask.ReadText(f) catch { continue }
+        typeDecls(text, known)
+    }
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        if args[i] == "--check" { check = true } else if args[i] == "-v" { verbose = true } else { paths.Push($args[i]) }
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    std Map<String&, Bool>
+    stdTypes(std)
+    totalEdits I64 = 0
+    totalFiles I64 = 0
+    totalLines I64 = 0
+    report List<String&>
+    for path in files {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("bare_typevars: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        if keepsOldSpelling(src) { continue }
+        known := std.Clone()
+        typeDecls(src, known)
+        changedText, n := migrate(src, path, known, report)
+        if changedText == src { continue }
+        oldLines := src.Split("\n")
+        newLines := changedText.Split("\n")
+        changed I64 = 0
+        for k in range oldLines.Len() {
+            if k < newLines.Len() and oldLines[k] != newLines[k] { changed++ }
+        }
+        totalEdits += n
+        totalFiles++
+        totalLines += changed
+        if verbose { srcmask.Say($path ": " $n " rewritten on " $changed " lines") }
+        if not check {
+            try os.WriteFile(path, changedText) catch {
+                srcmask.SayErr("bare_typevars: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    for r in report { srcmask.Say(r) }
+    srcmask.Say($("would rewrite " if check else "rewrote ") $totalEdits " occurrences on " $totalLines " lines in " $totalFiles
+                " files")
+    if check and totalEdits > 0 { os.Exit(1) }
+}
+
+test "a function's later <T> and a type's whole item become T" {
+    known Map<String&, Bool>
+    report List<String&>
+    out, n := migrate("fn max(a <T>, b <T>) <T> { return a }\ntype Box<T> struct(x <T>) { x }\n", "x.olang", known, report)
+    assert n == 3
+    assert out == "fn max(a <T>, b T) T { return a }\ntype Box<T> struct(x T) { x }\n"
+}
+
+test "a constraint written later moves to the introduction" {
+    known Map<String&, Bool>
+    report List<String&>
+    out, n := migrate("fn pick(a <T>, b <T Ord>) { }\n", "x.olang", known, report)
+    assert n == 2 and out == "fn pick(a <T Ord>, b T) { }\n"
+    assert report.Len() == 1
+}

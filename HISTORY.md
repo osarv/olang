@@ -19123,3 +19123,21 @@ does not depend on it (one whose type comes from its initializer still comes fir
 attempt seed the next whenever that attempt only adds - every condition still pending is a top-level one or a
 skipped branch - so a condition attempt never starts the fixed point again. shared.olang's `-c` is 4 attempts and
 4.2GB again, as before the batch.
+### No Python in the repository: the scripts are olang programs (2026-10-17)
+
+The user's rule: a permanent script that ends up in source is never Python (a short script run once while developing may be,
+in the scratch area). The eight committed Python scripts were ported, each checked to give what the Python one gave:
+`tools/bare_typevars`, `perm_mut`, `int_literal_i64`, `io_print`, `io_try`, `io_fix`, `compiler/tools/genmsgs` and
+`checks/fixtures/http/server`. Ported on the same arguments, edits and output, so oann can still be migrated with them. They are
+hand-written scanners where Python used regexes (usually clearer: the regexes' backtracking is spelled as the loops it was), over
+a shared `tools/srcmask.olang` (the code/comment/literal mask all of them had copies of, files read as Python's text mode read
+them, a directory walk, running a program with a deadline) and `tools/diagedit.olang` (what the two driven by the compiler's
+diagnostics share: a diagnostic row, compiling many files side by side by tasks pulling indexes off an atomic counter, keeping a
+comment's column). Each has a few tests (run by `make test`) and was compared with the Python original on copies of the repository
+at the commits before each migration (hundreds of files, 800-odd edits) and on synthetic files for the corners.
+Differences, all deliberate: a usage line where Python printed its docstring; a relative compiler path made absolute; each
+compile worker has a directory of its own (Python numbered them by file, so two files compiling together could share one); the
+std directory is found from the program's own path. The HTTP test server is over `extern fn` socket calls (one task per
+connection, `Connection: close`), built by `std/http`'s test with the compiler running the tests; a server that does not build or
+start now fails that test, where a missing `python3` skipped it. A `-i` run of a tool is fine for a few files only: the
+interpreter frees nothing, and `genmsgs` runs out of memory under it.

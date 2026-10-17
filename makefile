@@ -19,9 +19,10 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # the prelude),
 # geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
-# in olang like the rest
+# in olang like the rest; tools/ (the migration tools and what they share) and compiler/tools/genmsgs.olang have tests too
 OLANG_TESTS = $(filter-out usertest.olang, $(wildcard *.olang)) $(wildcard geom/*.olang) $(wildcard std/*.olang) \
-	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) checks/checks.olang
+	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) \
+	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
 # OLANG=build/stage1". What it runs - checks/checks.olang, fuzz/, bench/ - reads it from the environment, as an absolute
 # path, and falls back to build/out when it is unset
