@@ -81,6 +81,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   evaluator knows (S18c at the call), so a shape mismatch is still a compile-time error there, and LLVM folds the check
   after inlining otherwise. Cost: small fixed data crossing a signature by value becomes a struct (Vec3, RandState).
   Recommended yes; the user leaning yes.
+  Then the user: "We can even lax the rule that says arrays can't be passed by value, then we get the Vec3 case
+  naturally ... I have been thinking to do this for a long time" (the ON HOLD item). My answer: by-value arrays pay off
+  only with the length in the type - `fn cross(a Array<F32, 3>, b Array<F32, 3>) Array<F32, 3>` passes in registers,
+  its copy's size written in the signature; a by-value run-time `Array<T>` is a hidden O(n) copy per call (D9a's
+  reason) and still goes through storage. So QP2 now offers: (a) drop both, structs for small fixed data; (b) keep
+  both and allow by-value parameters for `Array<T, N>` only, run-time arrays staying by reference. Recommended (b).
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
