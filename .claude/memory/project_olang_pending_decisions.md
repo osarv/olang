@@ -62,6 +62,10 @@ self-hosted compiler is done.
   version did and the user reverted on 2026-10-05 ("it is the presence of error"; 51 `catch { unreachable }` removed).
   Options: (a) keep closed; (b) named sets open; (c) closed by default plus an explicit open form `? IoError + error`
   ("these, and anything else"). Recommended: (a), with (c) as an addition if mixed cases come up.
+- PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
+  to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
+  PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
+  print/println/eprint/eprintln and M19f's exception removed; tools/io_print.py migrates (wt-ioprint, started).
 - QO2. Too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
   replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
   Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
