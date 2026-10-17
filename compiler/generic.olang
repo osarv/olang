@@ -518,6 +518,9 @@ fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) type
 
 # the constant no fold reaches: a pattern of its own, which never folds
 fn (p mut Program&) UnknownConst() types.TypeId { return p.T.ConstExpr("?") }
+# an expression folded as a constant argument of type want is (G21): a Const where it folds, a pattern where it reads a
+# variable not bound yet, the unknown constant where it needs evaluating
+fn (p mut Program&) FoldConst(c Context&, e ast.Expr&, want types.TypeId) types.TypeId { return p.fold(c, e, want) }
 
 # a fold's outcome: Folded, its value (in Ty's width, Ty Unknown for a literal's exact value, which adapts - T6, E4a);
 # Pending, it reads a variable not bound yet; Unfolded, it needs evaluating

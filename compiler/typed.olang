@@ -266,7 +266,8 @@ type MakeKind enum {
     Tuple      # several results (D8c), Items its parts
     Case       # an enum case, Tag the case, Items its payload (T17)
     Array      # an array literal, Items its elements (E19)
-    Fill       # Array<T>(n, fill) (D14, T8): Length the length, Items the one fill (or none: the zero value, D13c)
+    Fill       # Array<T>(n, fill) (D14, T8): Length the length, Items the one fill (or none: the zero value, D13c); its
+               # type an Array<T, n> where n is a compile-time constant (QP1), else a run-time Array<T>
 }
 
 type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr&, Site SiteId, Checked Check) {
