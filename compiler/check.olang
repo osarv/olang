@@ -443,11 +443,17 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     ps := c.P.T.Items(c.P.T.Params(sig))
     k I64 = 0
     if fd.Recv != null {
-        if ps.Len() > 0 { c.param(fd.Recv.Name, fd.Recv.Sp, ps[0], 0) }
+        if ps.Len() > 0 {
+            c.param(fd.Recv.Name, fd.Recv.Sp, ps[0], 0)
+            c.mutParam(fd.Recv.Ty, ps[0])
+        }
         k = 1
     }
     for prm in fd.S.Params {
-        if k < ps.Len() { c.param(prm.Name, prm.Sp, ps[k], k) }
+        if k < ps.Len() {
+            c.param(prm.Name, prm.Sp, ps[k], k)
+            c.mutParam(prm.Ty, ps[k])
+        }
         k++
     }
     c.cur().SetVars(c.P.ScopeVarsOf(sig))
@@ -457,6 +463,13 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
     }
     c.pop()
+}
+
+# D9: a by-value parameter is the callee's own copy - "mut" is for a reference (only on the generic's own check: an
+# instance binds T, which says nothing of what was written)
+fn (c mut Checker&) mutParam(tr ast.TypeRef&, t types.TypeId) {
+    msp := c.mutBefore(tr, t)
+    if msp.Start >= 0 { c.err(msp, msgs.MutOnValueParam(c.ty(t))) }
 }
 
 fn (c mut Checker&) param(n source.NameId, sp source.Span, t types.TypeId, i I64) {
@@ -857,6 +870,47 @@ fn (c mut Checker&) bracketIn(sp source.Span) source.Span {
         }
     }
     return sp
+}
+
+# a written "mut" before what is no reference (D9, D11a, C3): the keyword's span, or none (Start -1). A type variable's
+# "mut" says it is writable when bound to a reference (T2); with no type known (":="), any "mut" is one
+fn (c mut Checker&) mutBefore(tr ast.TypeRef&, t types.TypeId) source.Span {
+    match tr {
+        case ast.TypeRef.Perm(psp, of, writable, owned) {
+            if not writable or owned { return source.Span(-1, -1) }
+            if c.namesTypeVar(of) { return source.Span(-1, -1) }
+            if t != types.UnknownT and (c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Var or c.P.T.KindOf(t) == types.Kind.Func) { return source.Span(-1, -1) }
+            if t == types.UnknownT and tr.Span().End > psp.Start + 3 and c.writtenRefOrVar(tr) { return source.Span(-1, -1) }
+            return source.Span(psp.Start, psp.Start + 3)
+        }
+        nomatch { return source.Span(-1, -1) }
+    }
+}
+
+# whether a written type is a type variable, bare (G8b) or introduced: "mut T" is writable when T is bound to a
+# reference (T2), whatever an instance binds it to
+fn (c mut Checker&) namesTypeVar(t ast.TypeRef&) Bool {
+    if t == null { return false }
+    match t {
+        case ast.TypeRef.Var(_, _, _) { return true }
+        case ast.TypeRef.Named(sp, path, args) {
+            if path.Len() != 1 or args.Len() > 0 { return false }
+            return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar
+        }
+        nomatch { return false }
+    }
+}
+
+# whether a "mut T" written with no type resolved names a reference or a variable: its type after "mut"
+fn (c mut Checker&) writtenRefOrVar(tr ast.TypeRef&) Bool {
+    match tr {
+        case ast.TypeRef.Perm(_, of, _, _) {
+            if of == null { return false }
+            t := c.resolve(of)
+            return c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Var or t == types.UnknownT
+        }
+        nomatch { return false }
+    }
 }
 
 # where a write into a place is written (T25b, S6): a member's name, an index's "[", else the whole target
@@ -4333,6 +4387,14 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
     if v.Ty != null {
         declared = c.resolve(v.Ty)
         mark = c.markOf(v.Ty)
+        # D11a, C3: "mut" says what a reference reaches - a local and a field are writable themselves
+        if v.Infer and not v.Field {
+            msp := c.mutBefore(v.Ty, types.UnknownT)
+            if msp.Start >= 0 { c.err(msp, msgs.MutOnInferredLocal()) }
+        } else if not v.Infer {
+            msp := c.mutBefore(v.Ty, declared)
+            if msp.Start >= 0 { c.err(msp, msgs.MutOnValueField(c.ty(declared)) if v.Field else msgs.MutOnLocal(c.ty(declared))) }
+        }
     }
     kind := typed.LocalKind.Field if v.Field else typed.LocalKind.Var
     for i in range v.Names.Len() {
@@ -4341,8 +4403,13 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         x typed.Expr&c = null
         if i < v.Values.Len() {
             x = c.exprTo(v.Values[i], declared)
-                if v.Ty == null {
+            if v.Ty == null or v.Infer {
                 t = c.inferred(v.Values[i], x)
+                if v.Field and v.Ty != null {
+                    # C3: a ":=" field's "mut" says what its inferred reference permits
+                    msp := c.mutBefore(v.Ty, t)
+                    if msp.Start >= 0 { c.err(msp, msgs.MutOnValueField(c.ty(t))) }
+                }
                 if c.P.T.KindOf(t) == types.Kind.Array and not c.P.T.Same(t, typeOf(x)) { x = c.fit(x, t, v.Values[i].Span()) }
             }
         } else {
