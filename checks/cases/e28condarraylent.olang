@@ -1,5 +1,6 @@
 # check: fail a conditional or a match gives a copy of the value it chooses
 # E28 (C1): the built-in array spelling, "bump(a[0] if k > 0 else a[1])"
+import "std/io"
 type Pt struct() {
     X I64 = 0
 }
@@ -13,5 +14,5 @@ fn main() ? {
     a := Acc[Acc(), Acc()]
     k := a.Len()
     bump(a[0] if k > 0 else a[1])
-    println("array N " $a[0].N)
+    try io.Println("array N " $a[0].N)
 }

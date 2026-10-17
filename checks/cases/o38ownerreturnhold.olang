@@ -1,5 +1,6 @@
 # check: fail error[O38, O26a]: this result reaches the owner value local 'v' by reference
 # O38: ...nor a value holding one (own5 F2)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -23,5 +24,5 @@ fn mk() Hold {
 }
 fn main() ? {
     h := mk()
-    println($h.x.o.k)
+    try io.Println($h.x.o.k)
 }

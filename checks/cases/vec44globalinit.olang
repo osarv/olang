@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec3 F4: the same in a global's initializer, walked as the declaration it is
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -16,5 +17,5 @@ T := G.text                    # a global holding a borrow of G's own slot direc
 fn main() ? {
     G.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(T)
+    try io.Println(T)
 }

@@ -1,5 +1,6 @@
 # check: fail error[P4a]: a task's clause runs on the task and may not return - it ends where its block does
 # P4a: a task's clause is code of the task, a function of its own - a return there would leave the task, not the spawner
+import "std/io"
 error E {
     BAD
 }
@@ -12,4 +13,4 @@ fn run() I32 {
     }
     return 0
 }
-fn main() ? { println($run()) }
+fn main() ? { try io.Println($run()) }

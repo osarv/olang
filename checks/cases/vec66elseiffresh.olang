@@ -1,6 +1,7 @@
 # check: run
 # vec4 F1': an else-if condition's catch block returning new storage keeps the proof - the result is fresh, the loan on
 # the Vec's buffer is spared, and the buffer may change while the result is used
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -22,5 +23,5 @@ fn main() ? {
     for i in range 1000 { v.Push(i) }
     churn()
     assert d.Len() == 5 and d[0] == 2
-    println($d[0])
+    try io.Println($d[0])
 }

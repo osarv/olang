@@ -1,6 +1,6 @@
 #!/bin/sh
 # namesdiff.sh [CASE...] - M4's acceptance for diagnostics (compiler/DESIGN.md section 4): on every checks/cases program,
-# the errors load and names say - their rules are loading's and names' (M1-M23b, M19f, D2, D3a, B9a, B10, B10a, B10c) -
+# the errors load and names say - their rules are loading's and names' (M1-M23b, D2, D3a, B9a, B10, B10a, B10c) -
 # are the errors of those rules stage 0 said (compiler/goldens/diag.txt), at the same file, line and column. A case whose
 # golden has none of those rules must get none: no error where stage 0 found the program right. Prints the differences
 # and exits 1 if there are any.
@@ -22,7 +22,7 @@ rows() {
         /^== / { c = $2; next }
         /^[^ ]*: error\[/ || /^[^ ]*:[0-9]+:[0-9]+: error\[/ {
             match($0, /error\[[^]]*\]/); rule = substr($0, RSTART + 6, RLENGTH - 7)
-            if (rule !~ /^(M1|M4|M5|M10|M14|M16|M17|M19f|M20|M22|M22a|M23|M23a|M23b|D2|D3a|D3a, E29|B9a|B10|B10a|B10c)$/) next
+            if (rule !~ /^(M1|M4|M5|M10|M14|M16|M17|M20|M22|M22a|M23|M23a|M23b|D2|D3a|D3a, E29|B9a|B10|B10a|B10c)$/) next
             match($0, /^[^ ]*: error/); at = substr($0, 1, RLENGTH - 7)
             print c "\t" at " " rule
         }

@@ -94,6 +94,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   generic's parameter checked per instantiation - holds at most 128 bytes as laid out (padding included); a larger one
   is a compile-time error naming its size and `&`. Results are not capped. Part of the arrays batch; the corpus and std
   migrated by the compiler's own errors.
+- Arrays phase 1 (wt-arrays f43feae..61603a4, docs/arrays.md, SPEC rewritten - merges only with phase 2, since checks
+  require errmsg's rules to exist in SPEC). Its two questions DECIDED by me (details within QP2/QP4): (1) a struct's
+  inline array never takes its length from a constructor argument - no inferred constant generics; the field declares
+  its length or holds a reference; (2) QP4's cap applies to parameters whose WRITTEN type is an aggregate (struct,
+  enum, array, by-value receiver); a bare type variable `x T` is exempt, so List/Map/Sort over big structs keep
+  working - the container's own semantics, not a copy the caller wrote. Phase 2 (3-4 rounds) after the errors batch.
 - QQ1 DECIDED 2026-10-17 (the user: "try (...) should cover all of ..."; "try f().g() should bind to both. Why did we
   decide against that?" - answered: never decided, an artifact of the one-call allowance, E13b/E24 2026-10-07/09).
   Proposed and confirmed in substance ("So try is for calls and checked for operators and calls?" - yes): `try` covers
@@ -115,6 +121,30 @@ design. Do what you want") - nothing to decide until a GUI is written.
   The Try forms are renamed to match (the user: "So then tryAt etc becomes checkedAt?" - yes): CheckedAt, CheckedPlus,
   CheckedSetAt, CheckedSlice, ... (private checkedAt), reversing the user's own TryAt pick of 2026-10-07. `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
   built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
+- QR DECIDED 2026-10-17 (the user: "We need two more modes. One 'build and run' mode and a formatter"). Proposed:
+  (1) `olang main.olang [args...]` with NO mode flag builds as -b (cached objects), runs the binary with the remaining
+  arguments and exits with its status; modifiers apply; makes `#!/usr/bin/env olang` scripts work (`#` is a comment);
+  alternative a flag like `-x`. (2) `olang -f files...` formats in place, gofmt-style with no options: 4-space indent,
+  spaces around binary operators/after commas, blank lines kept (max one), comments kept, no automatic wrapping;
+  meaning-preserving and idempotent, tested over the corpus; `-f -c` to only check (CI) if wanted. Build-and-run goes
+  into the C driver now (tiny) and the port's; the formatter is written in olang on the port's scanner/parser
+  (compiler/), the C `-f` handing files to it until self-hosting. Asked: 1. no flag or a flag; 2. 4 spaces, no wrap.
+  DECIDED (the user: "1) and 2) are good. Is -f unused today?" - yes, free): no flag runs; `-f` formats, 4 spaces,
+  no wrapping. Being built (wt-runfmt). And (the user: "add an option to decide output file for building and compiling"): `-o PATH`
+  names the executable (-b) or object (-c); default unchanged. Being built in wt-runfmt.
+  ASKED: the user objected to `-f -c` (clashes with -c) and suggested `-fc`; proposed `-l` instead (gofmt's name, one
+  character, no clash). DECIDED (the user: "Do that for now yes"): `olang -l files...`.
+- QS DECIDED 2026-10-17 (the user: "Is there any reason why we should not have longer option names really? Could you
+  give me some alternatives"): reverses B1 (the user's 2026-10-08 one-character rule) if taken. Options: (1) keep one
+  character; (2) GNU short+long; (3) Go-style single-dash words; (4) subcommands for modes (`olang build/compile/test/
+  interpret/format/explain`, bare `olang FILE` runs) with single-dash word modifiers (-debug -race -sanitize -target
+  -define -update -o). Recommended 4. In effect: one-character flags (B1).
+  The user chose 4 ("mutually exclusive options like build compile interpret etc have their own branches ... Full
+  names are readable"). Proposed list (awaiting OK): modes - bare FILE (run, new), build (-b), compile (-c), test (-t),
+  interpret (-i), format (-f), explain (-e), help (new); options - -output (-o: build, compile), -debug (-d), -race (-r),
+  -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
+  test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
+  are good"). Being built in wt-runfmt after its current work.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/

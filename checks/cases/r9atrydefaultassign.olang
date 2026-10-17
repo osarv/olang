@@ -1,5 +1,6 @@
 # check: fail a 'try ... catch' value is the element or what a clause gives
 # R9a (T1h): an assignment, and an increment, through a field of "try a[i] catch default v" - no place (baked 51, run 0)
+import "std/io"
 type Pt struct() {
     X I64 = 0
 }
@@ -19,5 +20,5 @@ Baked := f()
 V mut I64 = 0
 fn main() ? {
     V = f()
-    println("baked " $Baked " run " $V)
+    try io.Println("baked " $Baked " run " $V)
 }

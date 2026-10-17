@@ -1,6 +1,7 @@
-# check: fail error[O39]: assigning 'b.data' may release the Array<Q> borrowed on line 15, which is used after it
+# check: fail error[O39]: assigning 'b.data' may release the Array<Q> borrowed on line 16, which is used after it
 # Vec phase 2a (O38): a value element read out of an own array borrows nothing of its buffer - a slice of a part of it
 # borrows it where it is, in the buffer
+import "std/io"
 type Q struct(n I64, s String&) {
     n
     s
@@ -14,5 +15,5 @@ fn main() ? {
     b.data = Array<Q>(2)
     sl := b.data[0].arr[0:2]
     b.data = Array<Q>(1)
-    println($sl[0])
+    try io.Println($sl[0])
 }

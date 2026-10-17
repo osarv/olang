@@ -1,5 +1,6 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38: ...or a Map's copy (own4 N5)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -23,5 +24,5 @@ fn main() ? {
     }
     v.o = null
     x := try m.Get(1) catch default null
-    println($x.o.k)
+    try io.Println($x.o.k)
 }

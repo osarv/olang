@@ -1,5 +1,6 @@
 # check: fail error[O38, O26a]: this result reaches the owner value local 'o' by reference
 # D (own5 F2): a reference to an owner value local carries its owners' loans 8 levels down too
+import "std/io"
 type L0 struct() {
     toks Vec<I64> = Vec<I64>()
 }
@@ -44,8 +45,8 @@ fn mkHold() Hold {
 fn first() I64 { return mk().x.x.x.x.x.x.x.x.toks[0] }
 Baked I64 = first()
 fn main() ? {
-    println("baked " $Baked)
+    try io.Println("baked " $Baked)
     r := mk()
     h := mkHold()
-    println($r.x.x.x.x.x.x.x.x.toks[0] " " $h.x.x.x.x.x.x.x.x.x.toks[0])
+    try io.Println($r.x.x.x.x.x.x.x.x.toks[0] " " $h.x.x.x.x.x.x.x.x.x.toks[0])
 }

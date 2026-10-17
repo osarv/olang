@@ -1,6 +1,7 @@
 # check: fail note: this object is reached through a call's result, a borrow of an owned object whose region is not known here
 # vec7 F2: a Vec taken through a getter giving a borrowed own result (O37) - which region the object is in is not known
 # where the take is checked, so the take is refused (O34)
+import "std/io"
 type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
 }
@@ -25,5 +26,5 @@ fn main() ? {
     d.lx.toks = take p.Lx().toks
     p.lx = null
     churn()
-    println(d.lx.toks[0])
+    try io.Println(d.lx.toks[0])
 }

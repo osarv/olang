@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 's.cur' may release the Sock borrowed on line
 # releasing an owned object releases what its own fields own
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -18,5 +19,5 @@ fn main() ? {
     s.cur.sock = Sock(5)
     k := s.cur.sock
     s.cur = null
-    println($k.n)
+    try io.Println($k.n)
 }

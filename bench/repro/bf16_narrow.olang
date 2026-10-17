@@ -6,6 +6,7 @@
 # repro/opt.sh bf16_narrow, and look for "__truncsfbf2" in build/bf16_narrow.opt.ll (none now)
 import "std/rand"
 import "std/time"
+import "std/io"
 
 fn main() ? {
     n I64 = 1 << 22
@@ -20,6 +21,6 @@ fn main() ? {
         t1 := time.Now()
         for i in range n { d[i] = b[i] * b[i] + b[i] }
         t2 := time.Now()
-        println("ns an element: BF16(x) " $(F64(t1 - t0) / F64(n)).Fixed(2) ", BF16 multiply-add " $(F64(t2 - t1) / F64(n)).Fixed(2))
+        try io.Println("ns an element: BF16(x) " $(F64(t1 - t0) / F64(n)).Fixed(2) ", BF16 multiply-add " $(F64(t2 - t1) / F64(n)).Fixed(2))
     }
 }

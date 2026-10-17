@@ -2,6 +2,7 @@
 # also: note: this borrows a value made here
 # E16a/E32b (tonight9's review): an "as" view of a temporary is a slice of it, made in the block it is written in -
 # here a new array, built in set's own scope and viewed past its return
+import "std/io"
 type H struct(k I64) {
     k
     r Array<I64, 4>& = null
@@ -12,5 +13,5 @@ fn set(h mut H&, n I64) {
 fn main() ? {
     h mut H& = H(1)
     set(h, 7)
-    println($h.r[1])
+    try io.Println($h.r[1])
 }

@@ -1,4 +1,5 @@
 # E11b/E11c: a later '==' reaching a declared Eq that writes a global struct an earlier piece holds
+import "std/io"
 type Cnt struct(n I64) {
     n
 }
@@ -18,7 +19,7 @@ fn main() ? {
     p1 := P(K(1))
     p2 := P(K(1))
     s := $G " " $(p1 == p2)
-    println(s)
+    try io.Println(s)
     t := $G " " $(K(1) == K(2))
-    println(t)
+    try io.Println(t)
 }

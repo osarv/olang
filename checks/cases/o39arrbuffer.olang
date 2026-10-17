@@ -1,5 +1,6 @@
-# check: fail error[O39]: assigning 'b.data' may release the Array<I64> borrowed on line 9, which is used after it
+# check: fail error[O39]: assigning 'b.data' may release the Array<I64> borrowed on line 10, which is used after it
 # a whole-buffer borrow used after a release: must fail (O39)
+import "std/io"
 type B struct() {
     data own mut Array<I64>& = null
 }
@@ -8,5 +9,5 @@ fn main() ? {
     b.data = Array<I64>(4)
     y := b.data
     b.data = Array<I64>(8)
-    println($y[0])
+    try io.Println($y[0])
 }

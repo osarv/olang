@@ -2,6 +2,7 @@
 # E31b/O17 (the second review of the view lend, F1): a struct value field of x[i] lent to a view callee that builds
 # through a reference of it - its hidden copy's references are where the collection's are, so it is O17's split lend, as
 # the whole element is
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -15,16 +16,16 @@ type Layer struct(w M, n I64) {
     n
 }
 fn g(m mut M&, v I64) { m.r.next = Node(v, null) }
-fn churn() {
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 fn main() ? {
     l := List<Layer>()
     l.Push(Layer(M(Node(1, null), 0), 0))
     for i in range 3 { g(l[0].w, i + 10) }
-    churn()
-    println($l[0].w.r.next.v)
+    try churn()
+    try io.Println($l[0].w.r.next.v)
 }

@@ -1,5 +1,6 @@
 # check: fail error[E11c, O12]
 # E11c/O12: the same through a read-only local a lambda captures ('w Wr&b')
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -21,6 +22,6 @@ fn main() ? {
     s := $b
     keep := List<Node&>()
     for i in range 2000 { keep.Push(Node(-7, null)) }
-    println(s)
-    println($b.head.next.v)
+    try io.Println(s)
+    try io.Println($b.head.next.v)
 }

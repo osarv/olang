@@ -1,7 +1,8 @@
-# check: fail vec30sortmut.olang:12:7: error[O17, O33]
+# check: fail vec30sortmut.olang:13:7: error[O17, O33]
 # also: note: instantiated here, with T = Node&
 # vec2 (B11): O17's deferred split-lend error inside the prelude is reported at the program's use. Recorded
 # over-rejection: Sort of a Vec of writable references is refused (docs/own.md 21.3)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -10,5 +11,5 @@ fn main() ? {
     s := Vec<mut Node&>()
     for i in range 5 { s.Push(Node(9 - i)) }
     s.Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })
-    println($s[0].v)
+    try io.Println($s[0].v)
 }

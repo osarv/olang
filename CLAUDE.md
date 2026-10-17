@@ -459,9 +459,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Update`, ordered walks by
   insertion of slot), `Vec<T>` (above), `StringBuilder`, `Pair`. Iterators have `Any All Count Fold Map Filter
   ToList`.
-- **Printing:** the prelude's `print`/`println`/`eprint`/`eprintln` (M19f) are being replaced by `io.Print`/`Println`/
-  `PrintErr`/`PrintErrln` - one print pathway, in std/io, no `try`, stopping on a failed write (the user's decision,
-  2026-10-17). `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
+- **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
+  `io.PrintErr`, `io.PrintErrln` fail with `IoError` and are written with `try`; no std function ends the program on
+  its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
   `std/math` (generic over the floats, libm calls), `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
@@ -478,7 +478,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
   captures through memory files; `chan.Send` on a closed channel stops the program; `std/csv` is RFC 4180 strict;
   `std/stats` uses the sample variance and numpy's percentiles. `Array.Sort` is a stable O(n log n) merge.
-- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `TryAt`, `extends`, `own`, `print`.
+- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `TryAt`, `extends`, `own`.
 
 ### Codegen and runtime
 

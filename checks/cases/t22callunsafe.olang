@@ -3,6 +3,7 @@
 # T22/E31: a function value - or a value whose type declares Call - fits a function type whose reference parameter is
 # writable when its own is read-only, never the other way: one writing through the parameter cannot stand for a type
 # promising to only read it
+import "std/io"
 type P struct(v I64) { v }
 fn w(n mut P&) I64 {
     n.v = 9
@@ -16,5 +17,5 @@ fn (r R&) Call(n mut P&) I64 {
 }
 fn main() ? {
     p P& = P(4)
-    println($applyRo(w, p) " " $applyRo(R(3), p))
+    try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
 }
