@@ -217,6 +217,56 @@ design. Do what you want") - nothing to decide until a GUI is written.
   multi-item error set is parenthesized (`f fn(I64) ? (A, B)`); `x, y I64` (D12b several names, one declaration) is
   unchanged. Core syntax: both compilers. Planned as a syntax batch after the errors batch, together with QW (moved out
   of arrays phase 2); migration by an olang tool, then oann.
+- QZ ASKED 2026-10-17 (the user: "Should std be part of prelude?"): answered no - the prelude stays what built-in
+  types and language protocols need (prelude names are reserved everywhere under D3a; every build parses and checks it;
+  imports show what a file touches; ffi/http carry link and tool needs; only the prelude may add methods to built-in
+  types). Asked: move std/math into the prelude as methods on the floats (`x.Sqrt()` instead of `math.Sqrt(x)`)?
+  Recommended yes (reserves no type names). ANSWERED YES ("Yes move math into the prelude"). Details mine: functions
+  become methods on the numbers (`x.Sqrt()`, `a.Min(b)`, integer `x.Abs()`); the constants stay `math.Pi`/`math.E` in
+  std/math (a bare prelude `E` would be reserved everywhere - a common type-parameter and enum name). The user then:
+  "don't move math as much as move the math stuff onto the types themselves" - same plan, and the free functions
+  `math.Sqrt(x)` go (one way to write it). The user then: "a bunch of repeated code? a module with just math constants
+  is kinda lame". Plan given (in effect unless they object): one generic method per operation over a sealed prelude
+  trait only the four floats satisfy (`fn (x T) Sqrt() T`, the match T inside as today); std/math removed; `Pi`, `Inf`,
+  `NaN` prelude constants; the rest computed in place and folded while compiling (`1.0.Exp()`, `2.0.Sqrt()`,
+  `2.0.Log()`); E4a extended: an immutable global whose value is literal-only adapts like that literal (so `f F32 = Pi`).
+  The user then: "calling methods on literals makes zero sense" - so no `1.0.Exp()` constants. ASKED: (1) prelude
+  constants `Pi Euler Sqrt2 Ln2 Ln10 Inf NaN` (no bare `E` - a common type-parameter/enum name), or (2) std/math kept
+  with constants only (`math.Pi`, `math.E`). Recommended 1, with the E4a extension either way. Also offered: a method
+  call on a number literal as a compile error (text literals keep methods). In effect: nothing built.
+  The user then proposed both: std/math's functions back, and methods on the types calling them. Answered: two
+  spellings per operation (against one-way) and the prelude importing std. ASKED: (1) std/math as today - free
+  functions + constants, nothing built (recommended); (2) methods only. ANSWERED (1) ("Yes drop the move"): std/math
+  stays as it is - free functions and constants; nothing built. QZ is closed.
+  Queued after
+  wt-errors2 merges (std files).
+- QZ3 ASKED 2026-10-17 (the user: "Do we have traits that only integers satisfy? Floats? Signed unsigned?"): no -
+  only Hashable, Iterator, Indexable; std/math limits types by `match T` exhaustiveness (an error at the call, worded as
+  a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
+  (maybe `Number`), sealed by a private method so only the primitives satisfy them (and declared types extending one),
+  used as `fn Sqrt(x <T Float>) T`. Reverses the user's 2026-10-07 deferral. Recommended yes. In effect: none.
+  ANSWERED ("Yes, add those traits in the prelude. Do one for Float Integer Number. Are SignedInteger and
+  UnsignedInteger worth it?"): Float, Integer, Number built (wt-numtraits); Signed/UnsignedInteger not now - no std
+  function splits them (only inside math.Abs, which takes both); additive later, named SignedInteger/UnsignedInteger.
+- QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
+  Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
+  and `a.ToList()` build Lists (M19d: methods on built-ins live only in the prelude) and for convenience. Options: (a)
+  keep all three; (b) minimal prelude - helpers return `Array<T>`, List/Map/Vec move to std/list, std/map, std/vec,
+  `a.ToList()` becomes `List(a)`; (c) keep Vec and Map, move List out once Vec can be a type argument (Vec phase 2b) so
+  the helpers return Vec. Recommended (c). In effect: (a).
+  The user then: "do we run into a lot of problems if we remove them from the prelude and only have array? I don't
+  want the stdlib quality to drop". Answered (measured): no compiler knows the names; ~250/110/70/45 files use
+  List/Vec/Map/StringBuilder (an import line each, by a tool); the real cost is the prelude needing a growable buffer
+  (iterator Map/Filter/ToList and StringBuilder grow as they go) - with Array only it would be a hidden second Vec.
+  Recommended: keep Vec in the prelude, rebuild the helpers and StringBuilder on it (`a.ToVec()`), move List and Map
+  to std/list and std/map; after Vec phase 2b (Vec as a type argument, in tasks/lambdas), benchmarks before/after.
+  ASKED: plan it that way? In effect: (a).
+  The user then: "will there be more very basic data types like vec and map ... or will these stay the four main
+  ones?" Answered: a rule keeps the prelude fixed - only what the language and built-in types need plus the
+  everyday containers; future containers (Set, Deque, Heap, ordered map, Utf8 text) go to std. Revised: moving Map
+  out means `map.Map<K, V>` everywhere (imports are whole modules, names qualified), so keep Map in the prelude (as Go
+  and Python build it in). Recommended now: prelude = methods on built-ins, protocol traits/errors, Vec, Map,
+  String, StringBuilder, Pair; std = List and every future container (Set starts in std). After Vec phase 2b.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
