@@ -28,3 +28,7 @@ effort for them").** Pick the Agent tool's `model` and `effort` together, per ta
 - haiku, low: searches, counting, listing, running a known command and reporting its output.
 When unsure between two, take the cheaper one for a first pass only where a review or a test oracle will catch its
 mistakes; never for soundness work.
+
+**Reviews at high, not xhigh (the user, 2026-10-17: "running review agents with Opus 5.5 XUltra might be a bit
+overkill no?").** Routine soundness reviews of fix rounds and batch relaxations: opus, high (the fuzzer runs beside as
+the mechanical check). xhigh only for NEW design in section 8 / ownership (a new borrow or region rule).
