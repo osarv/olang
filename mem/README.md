@@ -229,3 +229,21 @@ together with the ASan sweep. Fix 3 matters for test builds.
   - `agg.py`: folds heaptrack stacks.
   - `irsame.sh`: IR identity between two builds.
   - `asanloop.sh`, `asanm.sh`: ASan sweeps.
+
+## Phase 2: landed on wt-memfix (448bc51..0bb46a6, not pushed)
+
+- **What landed:** fix 1 (the walkers), bugs a/b/c, fix 2 (min capacity 1) and fix 3 (`ctVal` holds an interned
+  `const struct type*`; the K1 memory budget still counts a value at 704 bytes, so the same evaluations are admitted).
+- **The ASan sweep found nothing beyond a/b/c.** It covered:
+  - all 1,253 checks/cases programs, each built as checks.olang builds it, and each did what its header says;
+  - every `make test` file but checks.olang;
+  - `-c` of fuzz, bench, both repro directories and the port's tools.
+
+  Run ASan with `use_sigaltstack=0`: the compiler's own crash-handler alt stack makes ASan abort at thread exit, which
+  loses the output and the exit status.
+- **IR identity:** `irsame-memfix.txt`. The diagnostics of all 1,051 must-fail cases are identical (base against the
+  fixed compiler).
+- **make verify** fails at make test on `compiler/tools/diaggold.olang` alone: 18 of 1051 cases render otherwise. That
+  is pre-existing on master; master's own compiler fails it the same way. The goldens' line numbers predate the
+  `import "std/io"` lines that wt-ioprint added. The rest of verify passes.
+- **Peaks:** `peaks-final.tsv`.
