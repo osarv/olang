@@ -17,13 +17,13 @@ still the Python scripts, run as `python3 tools/NAME.py`.
 | `int_literal_i64.py` | T6a: an integer literal's own type is `I64` | `tools/int_literal_i64.py [--olang PATH] [-j N] FILE\|DIR...` |
 | `io_print.olang` | M19f: the prelude's `print` words became `io.Print` and friends | `build/tools_io_print [--dry] PATH...` |
 | `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `build/tools_io_try PATH...` |
-| `io_fix.py` | after `io_try.py`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `python3 tools/io_fix.py OLANG FILE...` |
+| `io_fix.olang` | after `io_try`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `build/tools_io_fix OLANG FILE...` |
 
 - `bare_typevars.py` works on the text alone. `--check` writes nothing and the exit status says whether anything
   would change.
 - `perm_mut.py` and `int_literal_i64.py` are driven by the compiler's own diagnostics: they compile each file with
   `--olang` (default `build/out`) and apply what it reports, repeating until nothing changes.
-- `io_fix.py` needs the compiler path as its first argument.
+- `io_fix` needs the compiler path as its first argument (an absolute path; a relative one is made absolute).
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 
 The compiler's own tools are in `compiler/tools/`.
