@@ -942,3 +942,8 @@ on sight per [[feedback-surface-and-fix-bugs]].
   reached through x[i]) builds the chunk in the call's frame (scratchpad/mirbug/m.olang; HISTORY has it). Handed to the
   e31view review (e31view2) for diagnosis; fix it in e31view's next round. Running: vecp2 fix (vec7 F1/F2), e31view2
   review (15841b0, r1 relaxation), check (M5b/M5c).
+- 08:30 CEST (2026-10-17): the weekly limit (hit ~2026-10-12) stopped all agents and the container restarted; files
+  survived (worktrees, commits, uncommitted eval.olang/target.olang, PROGRESS.md). vecp2's fix round committed
+  cc555ed with verify passed. Resumed by SendMessage after the reset: vecp2 fix (report), check (M5b), drv (M10),
+  eval (M8), e31view2 review. LESSON: agents should commit coherent pieces as they go - a restart keeps files, but a
+  lost container would not.
