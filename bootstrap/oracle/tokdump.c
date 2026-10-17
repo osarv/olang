@@ -1,5 +1,5 @@
 // tokdump FILE... - the C tokenizer's stream, the oracle the self-hosted scanner is compared with (compiler/DESIGN.md
-// section 4, compiler/tools/tokdiff.sh). For each file: "== FILE", one line per token - its line and its text, ";" for a
+// section 4, compiler/tools/tokdiff.olang). For each file: "== FILE", one line per token - its line and its text, ";" for a
 // statement end - then the diagnostics the tokenizer reported, as the compiler writes them, after "-- diagnostics".
 #include <stdio.h>
 #include "../token.h"

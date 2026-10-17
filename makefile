@@ -22,7 +22,10 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # in olang like the rest; tools/ (the migration tools and what they share) and compiler/tools/genmsgs.olang have tests too
 OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) \
-	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang
+	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang \
+	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
+	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
+	compiler/tools/diaggold_capture.olang checks/fixtures/frameenv/envcheck.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
 # OLANG=build/stage1". What it runs - checks/checks.olang, fuzz/, bench/ - reads it from the environment, as an absolute
 # path, and falls back to build/out when it is unset
@@ -47,26 +50,31 @@ build/tokdump: bootstrap/oracle/tokdump.c build/obj/token.o build/obj/util.o bui
 	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm
 
 # the structure oracle (compiler/DESIGN.md section 4): every declaration and statement the C parser finds, with its span,
-# which the self-hosted parser's must equal (compiler/tools/astdiff.sh)
+# which the self-hosted parser's must equal (compiler/tools/astdiff.olang)
 build/astdump: bootstrap/oracle/astdump.c build/obj/syntax.o build/obj/token.o build/obj/util.o build/obj/errmsg.o
 	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm -lpthread
 
 # the module-graph oracle (compiler/DESIGN.md section 4): the modules and import edges the C compiler's loader reaches
-# from a root, with its build-decided branches decided, which the self-hosted loader's must equal (compiler/tools/modgraph.sh)
+# from a root, with its build-decided branches decided, which the self-hosted loader's must equal (compiler/tools/modgraph.olang)
 build/modgraph: bootstrap/oracle/modgraph.c $(filter-out build/obj/main.o,$(OBJ))
 	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
 
 # the layout oracle (compiler/DESIGN.md section 4): every type the C checker holds for a program, with its size,
-# alignment, LLVM spelling and offsets, which the self-hosted type table's must equal (compiler/tools/layoutdiff.sh)
+# alignment, LLVM spelling and offsets, which the self-hosted type table's must equal (compiler/tools/layoutdiff.olang)
 build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(OBJ))
 	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
-build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
+build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/dump.olang compiler/tools/unparse.olang
 	$(OLANG) build compiler/tools/dump.olang
 
+# the acceptance tools (compiler/tools/NAME.olang, which share toolkit.olang): tokdiff, astdiff, namesdiff, layoutdiff,
+# layoutgold, modgraph, diaggold_capture - each an olang program built by the compiler under test
+build/compiler_tools_%: compiler/tools/%.olang compiler/tools/toolkit.olang $(OLANG)
+	$(OLANG) build $<
+
 # the formatter (SPEC.md B13): "olang format" builds it into its own cache; this is the copy the tests use
-build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) $(wildcard compiler/tools/*.olang)
+build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/fmt.olang compiler/tools/unparse.olang
 	$(OLANG) build compiler/tools/fmt.olang
 
 # B13's acceptance: every file of the repository formatted reads back as the same tree, keeps its comments, and is its
@@ -75,33 +83,33 @@ fmtdiff: build/compiler_tools_fmt
 	OLANG_STD=std build/compiler_tools_fmt -v $$(git ls-files '*.olang')
 
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
-tokdiff: build/tokdump build/compiler_tools_dump
-	compiler/tools/tokdiff.sh
+tokdiff: build/tokdump build/compiler_tools_dump build/compiler_tools_tokdiff
+	build/compiler_tools_tokdiff
 
 # M3's acceptance: the self-hosted parser's tree and syntax errors are the C parser's on every file of the repository,
-# and each tree written back as source and read again is the same tree (compiler/tools/astdiff.sh)
-astdiff: build/astdump build/compiler_tools_dump
-	compiler/tools/astdiff.sh
+# and each tree written back as source and read again is the same tree (compiler/tools/astdiff.olang)
+astdiff: build/astdump build/compiler_tools_dump build/compiler_tools_astdiff
+	build/compiler_tools_astdiff
 
 # M4's acceptance: on every checks case the self-hosted loader and name resolver report the errors of their rules that
-# stage 0 reported, at the same position (compiler/tools/namesdiff.sh, against compiler/goldens/diag.txt)
-namesdiff: build/compiler_tools_dump
-	compiler/tools/namesdiff.sh
+# stage 0 reported, at the same position (compiler/tools/namesdiff.olang, against compiler/goldens/diag.txt)
+namesdiff: build/compiler_tools_dump build/compiler_tools_namesdiff
+	build/compiler_tools_namesdiff
 
 # M5a's acceptance: every type stage 0 holds for every root program has the self-hosted type table's layout - size,
-# alignment, LLVM spelling, offsets (compiler/tools/layoutdiff.sh, against compiler/goldens/layout.txt)
-layoutdiff: build/compiler_tools_dump
-	compiler/tools/layoutdiff.sh
+# alignment, LLVM spelling, offsets (compiler/tools/layoutdiff.olang, against compiler/goldens/layout.txt)
+layoutdiff: build/compiler_tools_dump build/compiler_tools_layoutdiff
+	build/compiler_tools_layoutdiff
 
 # captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
 # (minutes: stage 0 checks each root program whole)
-layoutgold: build/layoutdump
-	compiler/tools/layoutgold.sh
+layoutgold: build/layoutdump build/compiler_tools_layoutgold
+	build/compiler_tools_layoutgold
 
 # M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's
-# (compiler/tools/modgraph.sh)
-modgraph: build/modgraph build/compiler_tools_dump
-	compiler/tools/modgraph.sh
+# (compiler/tools/modgraph.olang)
+modgraph: build/modgraph build/compiler_tools_dump build/compiler_tools_modgraph
+	build/compiler_tools_modgraph
 
 build/stage0.obj/%.o: bootstrap/%.c
 	mkdir -p build/stage0.obj
@@ -210,8 +218,8 @@ DIAG_TESTS = compiler/msgs.olang compiler/diag.olang compiler/tools/diaggold.ola
 OLANG_TESTS += compiler/tools/diaggold.olang  # msgs and diag are already in compiler/*.olang
 diagtest: build/out
 	build/out test $(DIAG_TESTS)
-diaggold: build/out
-	compiler/tools/diaggold_capture.sh build/out
+diaggold: build/out build/compiler_tools_diaggold_capture
+	build/compiler_tools_diaggold_capture build/out
 
 all: clean build run
 

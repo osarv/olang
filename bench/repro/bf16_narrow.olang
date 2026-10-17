@@ -3,7 +3,7 @@
 # so a narrowing was a call per element that no loop vectorized (10-14 ns an element against ~1 for widening), and a
 # BF16 multiply-add 23-30 ns. FIXED 2026-10-09: the code generator narrows in integers on the F32's bits (cgNarrowBF16),
 # the same bits, and BF16 arithmetic widens, computes and narrows that way - 0.7-1.0 ns an element, vectorized. Run:
-# repro/opt.sh bf16_narrow, and look for "__truncsfbf2" in build/bf16_narrow.opt.ll (none now)
+# bench/repro/opt.olang (build/bench_repro_opt bf16_narrow), and look for "__truncsfbf2" in build/bf16_narrow.opt.ll (none now)
 import "std/rand"
 import "std/time"
 import "std/io"
