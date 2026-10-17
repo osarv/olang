@@ -88,8 +88,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   Array? Since they are all known at comptime it's always checkable"). Recommended: 128 bytes per by-value array
   parameter - a 4x4 F64 transform fits, it is the size at which a by-value struct already goes through memory, two
   cache lines; checked per instance, the error naming the size and `&`. Parameters only (a result is built where it
-  lands, no copy). Open beside it: the same cap for by-value structs? Recommended no for now. In effect: 128, part of
-  the arrays batch.
+  lands, no copy). The user, the same day: "That is pass as values" (the cap is for by-value parameters only; a
+  reference has none) and "Let's do a cap for structs as well the same one 128 bytes" -> DECIDED: every by-value
+  parameter of an aggregate type - struct, enum, array, a by-value receiver, a constructor's or lambda's parameter, a
+  generic's parameter checked per instantiation - holds at most 128 bytes as laid out (padding included); a larger one
+  is a compile-time error naming its size and `&`. Results are not capped. Part of the arrays batch; the corpus and std
+  migrated by the compiler's own errors.
 - (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
 - PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
   to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
