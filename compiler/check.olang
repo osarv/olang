@@ -57,6 +57,10 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b)
     leaks List<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
     captures List<typed.Capture&>
+    InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
+    joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
+    joinMarks List<I64>        # where each one's errors start in joinErrs
+    joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
 }
 
 # a construct met and not checked yet: where, and what (the acceptance's "gap")
@@ -83,6 +87,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
+    lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     textT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
 }
@@ -2418,6 +2423,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     }
     if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.gap(nsp, "a fallible call outside a try (R8)") }
     c.leak(c.P.T.Errors(sig))
+    c.lastErrs = c.P.T.Errors(sig)
     r := c.P.T.Result(sig)
     # a built result is new storage only the caller holds: writable (T25c)
     if c.isRef(r) and c.P.T.ResultFrom(sig, 0) == types.OwnScope {
@@ -2892,6 +2898,39 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId) typed.Clause&c {
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
 }
 
+# whether clauses take every word of error type e: an item-less clause, an item naming the type, or items naming each
+# of its words
+fn (c mut Checker&) taken(e types.TypeId, cls List<typed.Clause&>&) Bool {
+    words List<I64>
+    for cl in cls {
+        if cl.All { return true }
+        for it in cl.Items {
+            if it.Err == e {
+                if it.Word < 0 { return true }
+                if not words.Has(it.Word) { words.Push(it.Word) }
+            }
+        }
+    }
+    if words.Len() == 0 or e == types.DefaultErrT { return false }
+    return words.Len() >= c.wordCount(e)
+}
+
+# how many words an error type declares (T19)
+fn (c mut Checker&) wordCount(e types.TypeId) I64 {
+    d := c.P.T.DeclOf(e)
+    ds := c.P.L.Mods[c.P.T.DeclModule(d)].Decls
+    if ds == null { return 1 << 40 }
+    for x in ds {
+        match x {
+            case ast.Decl.Errors(_, n, words) {
+                if n == c.P.T.DeclName(d) { return words.Len() }
+            }
+            nomatch { }
+        }
+    }
+    return 1 << 40
+}
+
 # what a lambda's errors are taken from (D16b): a call's errors, in order
 fn (c mut Checker&) leak(es types.ListId) {
     fr := c.fr()
@@ -2907,14 +2946,7 @@ fn (c mut Checker&) caught(mark I64, cls List<typed.Clause&>&) {
     keep List<types.TypeId>
     for i in range mark, fr.leaks.Len() {
         e := fr.leaks[i]
-        taken := false
-        for cl in cls {
-            if cl.All { taken = true }
-            for it in cl.Items {
-                if it.Word < 0 and it.Err == e { taken = true }
-            }
-        }
-        if not taken { keep.Push(e) }
+        if not c.taken(e, cls) { keep.Push(e) }
     }
     fr.leaks.Truncate(mark)
     for e in keep { fr.leaks.Push(e) }
@@ -3021,6 +3053,8 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
             c.emit(typed.Stmt.Defer(sp, b))
         }
         case ast.Stmt.Block(sp, body) { c.emit(typed.Stmt.Block(sp, c.blockOf(body, typed.BlockKind.Plain, sp))) }
+        case ast.Stmt.Join(sp, j) { c.joinStmt(sp, j) }
+        case ast.Stmt.Spawn(sp, targets, call) { c.spawnStmt(sp, targets, call) }
         nomatch { c.gap(s.Span(), "a statement of this kind") }
     }
 }
@@ -3059,6 +3093,213 @@ fn (c mut Checker&) notStmtSpan(x ast.Expr&) source.Span {
         case ast.Expr.Member(sp, _, n) { return memberSpan(sp, c.text(n).Len()) }
         nomatch { return x.Span() }
     }
+}
+
+# ---- join and spawn (P1, P1g, P4) ----
+
+# join { } / try join { } catch ... (P1, P4c): a block waiting for the tasks spawned directly in it; "try join" fails with
+# what they let out, its clauses taking some of it as a try statement's do
+fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
+    fr := c.fr()
+    fr.joins.Push(0)
+    fr.joinMarks.Push(fr.joinErrs.Len())
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Join, sp)
+    if j.Body != null {
+        for st in j.Body { c.stmt(st) }
+    }
+    b := c.close(id, outer, mark, from)
+    fr = c.fr()
+    spawns := fr.joins[fr.joins.Len() - 1]
+    em := fr.joinMarks[fr.joinMarks.Len() - 1]
+    try fr.joins.Pop() catch { }
+    try fr.joinMarks.Pop() catch { }
+    if spawns == 0 { c.err(sp, msgs.JoinWithoutSpawn()) }
+    errs List<types.TypeId>
+    for i in range em, fr.joinErrs.Len() {
+        e := fr.joinErrs[i]
+        dup := false
+        for x in errs {
+            if x == e { dup = true }
+        }
+        if not dup { errs.Push(e) }
+    }
+    fr.joinErrs.Truncate(em)
+    cls mut List<typed.Clause&>&c = List<typed.Clause&>()
+    if j.Clauses != null and j.Clauses.Len() > 0 and not j.Tried {
+        if errs.Len() == 0 { c.err(sp, msgs.JoinCatchNeedsTry()) }
+    }
+    if j.Tried {
+        if errs.Len() == 0 { c.err(sp, msgs.JoinCannotFail()) }
+        lm := fr.leaks.Len()
+        if fr.InferErrors {
+            for e in errs { fr.leaks.Push(e) }
+        }
+        if j.Clauses != null {
+            for cl in j.Clauses { cls.Push(c.clause(cl, types.VoidT)) }
+        }
+        c.caught(lm, cls)
+    } else if errs.Len() > 0 {
+        c.err(sp, msgs.JoinNotTried(c.ty(errs[0])))
+    }
+    c.emit(typed.Stmt.Join(sp, typed.Join(b, j.Tried, cls.ToArray())))
+}
+
+# spawn f(a) / spawn x, y = try f(a) catch E ... / spawn fn() { } (P1, P1g, P4, D16e): a call run as a task of the
+# innermost join; what its clauses do not take reaches the join (P4b)
+fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call ast.Expr&) {
+    fr := c.fr()
+    if fr.joins.Len() == 0 {
+        c.err(sp, msgs.SpawnOutsideJoin())
+        return
+    }
+    fr.joins[fr.joins.Len() - 1] = fr.joins[fr.joins.Len() - 1] + 1
+    # the targets' places first, left to right (P1g)
+    places mut List<typed.Place&>&c = List<typed.Place&>()
+    for t in targets { places.Push(c.discardOr(t)) }
+    tried := false
+    inner := call
+    clauses Array<ast.Catch&>&call = null
+    match call {
+        case ast.Expr.Try(_, y, cl) {
+            tried = true
+            inner = y
+            clauses = cl
+        }
+        nomatch { }
+    }
+    lm := fr.leaks.Len()
+    c.lastErrs = types.ListId(0)
+    fr.Tries++
+    task typed.Expr&c = null
+    match inner {
+        case ast.Expr.Lambda(lsp, lf) {
+            if lf.S.Params.Len() > 0 { c.err(lsp, msgs.SpawnLambdaParams()) }
+            lam := c.lambda(lsp, lf, types.UnknownT)
+            if typeOf(lam) != types.UnknownT {
+                task = c.callBody(lsp, lsp, typeOf(lam), typed.Callee.Value(lam), -1, null, Array<ast.Expr&>(0), null)
+            }
+        }
+        case ast.Expr.Call(_, _, _) { task = c.expr(inner, types.UnknownT) }
+        nomatch {
+            c.err(inner.Span(), msgs.SpawnNotCall())
+            c.expr(inner, types.UnknownT)
+        }
+    }
+    fr = c.fr()
+    fr.Tries--
+    fr.leaks.Truncate(lm)
+    if task == null { return }
+    errs := c.P.T.Items(c.lastErrs)
+    if errs.Len() > 0 and not tried { c.err(inner.Span(), msgs.SpawnFallible()) }
+    if errs.Len() == 0 and tried { c.err(call.Span(), msgs.SpawnTryInfallible()) }
+    # the clauses: what each takes, and the code it runs on the task (P4a)
+    tcs mut List<typed.TaskClause&>&c = List<typed.TaskClause&>()
+    taken List<typed.Clause&>
+    if clauses != null {
+        for cl in clauses {
+            items List<typed.Item>
+            if cl.Items != null {
+                for p in cl.Items { c.catchItem(p, items) }
+            }
+            all := cl.Items == null or cl.Items.Len() == 0
+            tcs.Push(typed.TaskClause(cl.Sp, items.ToArray(), all, c.clauseHandler(cl, typeOf(task), places.Len())))
+            taken.Push(typed.Clause(cl.Sp, items.ToArray(), all, null, Array<typed.Expr&>(0)))
+        }
+    }
+    # what no clause takes reaches the join
+    em := fr.joinErrs.Len()
+    if tried {
+        for e in errs { fr.joinErrs.Push(e) }
+    }
+    c.dropTaken(fr.joinErrs, em, taken)
+    # the targets: exactly the call's result (P1g)
+    rt := typeOf(task)
+    if places.Len() > 0 {
+        if rt == types.VoidT {
+            c.err(call.Span(), msgs.SpawnResultVoid())
+        } else {
+            parts := Array<types.TypeId>(1)
+            parts[0] = rt
+            if places.Len() > 1 and c.P.T.KindOf(rt) == types.Kind.Tuple { parts = c.P.T.Items(c.P.T.Parts(rt)) }
+            if parts.Len() != places.Len() {
+                c.err(sp, msgs.DestructCount(places.Len(), parts.Len()))
+            } else {
+                for i in range places.Len() {
+                    pt := places[i].Type() if places[i] != null else types.UnknownT
+                    same := c.P.T.Same(pt, parts[i]) or
+                            (c.isRef(pt) and c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), c.deref(parts[i])))
+                    if places[i] != null and not same {
+                        c.err(targets[i].Span(), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
+                    }
+                }
+            }
+        }
+    }
+    c.emit(typed.Stmt.Spawn(sp, typed.Spawn(places.ToArray(), task, tcs.ToArray(), c.site(typed.SiteKind.Task, sp))))
+}
+
+# a task's clause as a lambda run on the task's thread (P4a): its block, then its default - the targets' value, a tuple
+# of them for several; null for "catch E { }". Its captures are a spawned lambda's (D16c, D16e)
+fn (c mut Checker&) clauseHandler(cl ast.Catch&, rt types.TypeId, nt I64) typed.Expr&c {
+    hasBody := cl.Body != null and cl.Body.Len() > 0
+    hasDef := cl.Defaults != null and cl.Defaults.Len() > 0
+    if not hasBody and not hasDef and nt == 0 { return null }
+    if hasDef and nt == 0 {
+        c.err(cl.Defaults[0].Span(), msgs.TaskDefaultInStatement())
+        return null
+    }
+    result := rt if nt > 0 else types.VoidT
+    ty := c.P.T.Func(types.ListId(0), result, types.ListId(0))
+    parent := c.fr()
+    pfi := c.frames.Len() - 1
+    id := c.newBody(typed.BodyOf.Lambda(typed.BodyId(I32(parent.Body))), ty, parent.Mi, cl.Sp)
+    c.state[id] = 1
+    fr := c.push(id, parent.Mi, result, types.ListId(0))
+    fr.Ctx = parent.Ctx
+    fr.Parent = pfi
+    fr.InTaskClause = true
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, cl.Sp)
+    c.cur().SetVars(c.P.ScopeVarsOf(ty))
+    from := c.stmts.Len()
+    if hasBody {
+        for st in cl.Body { c.stmt(st) }
+    }
+    if hasDef {
+        if nt == 1 or cl.Defaults.Len() == 1 {
+            c.emit(typed.Stmt.Return(cl.Sp, c.exprTo(cl.Defaults[0], rt)))
+        } else {
+            parts := c.P.T.Items(c.P.T.Parts(rt)) if c.P.T.KindOf(rt) == types.Kind.Tuple else Array<types.TypeId>(0)
+            if parts.Len() != cl.Defaults.Len() {
+                c.err(cl.Sp, msgs.DestructCount(parts.Len(), cl.Defaults.Len()))
+            } else {
+                xf := c.exprs.Len()
+                for i in range parts.Len() { c.exprs.Push(c.exprTo(cl.Defaults[i], parts[i])) }
+                xs := gather(c.exprs, xf)
+                c.emit(typed.Stmt.Return(cl.Sp, typed.Expr.Make(cl.Sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null,
+                                                                                      typed.SiteId(-1), typed.Check.None))))
+            }
+        }
+    }
+    root := typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.cur().Root = root
+    if nt > 0 and not hasDef and not c.fr().Gapped and not leavesBlock(root) { c.err(cl.Sp, msgs.TaskClauseNeedsDefault()) }
+    caps := c.fr().captures.ToArray()
+    c.pop()
+    c.state[id] = 2
+    return typed.Expr.Fn(cl.Sp, ty, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, cl.Sp)))
+}
+
+# what the clauses take out of errs from mark on: everything for an item-less one, a whole type for an item naming it or
+# items naming each of its words (R14)
+fn (c mut Checker&) dropTaken(errs mut List<types.TypeId>&, mark I64, cls List<typed.Clause&>&) {
+    keep List<types.TypeId>
+    for i in range mark, errs.Len() {
+        e := errs[i]
+        if not c.taken(e, cls) { keep.Push(e) }
+    }
+    errs.Truncate(mark)
+    for e in keep { errs.Push(e) }
 }
 
 # x++ / x--: x = x + 1, the place evaluated once (S5)
@@ -4053,6 +4294,10 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.gap(sp, "'return' in a test or constructor (S15, C2)")
         return
     }
+    if fr.InTaskClause {
+        c.err(sp, msgs.TaskClauseReturns())
+        return
+    }
     if fr.InferResult {
         c.inferReturn(sp, values)
         return
@@ -4129,6 +4374,10 @@ fn (c mut Checker&) inferReturn(sp source.Span, values Array<ast.Expr&>&) {
 fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
     if kind == token.Tok.Break or kind == token.Tok.Continue {
         fr := c.fr()
+        if fr.loops.Len() == 0 and fr.InTaskClause {
+            c.err(sp, msgs.TaskClauseLoopJump(msgs.Tok(kind.Text())))
+            return
+        }
         if fr.loops.Len() == 0 {
             c.err(sp, msgs.BreakOutsideLoop(msgs.Tok(kind.Text())))
             return
@@ -4147,6 +4396,10 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
 
 # error E.WORD, or error alone for the default error (R3, R15)
 fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
+    if c.fr().InTaskClause {
+        c.err(sp, msgs.TaskClauseError())
+        return
+    }
     if word == null {
         if c.fr().InferErrors { c.fr().leaks.Push(types.DefaultErrT) }
         c.emit(typed.Stmt.Raise(sp, types.DefaultErrT, 0))
@@ -4503,6 +4756,14 @@ fn leaves(s typed.Stmt&) Bool {
         case typed.Stmt.Exit(_, _) { return true }
         case typed.Stmt.If(_, i) { return i.Else != null and leavesBlock(i.Then) and leavesBlock(i.Else) }
         case typed.Stmt.Block(_, b) { return leavesBlock(b) }
+        case typed.Stmt.Join(_, j) {
+            # a join leaves when its block does and every clause of its "try join" does (D10a)
+            if not leavesBlock(j.Code) { return false }
+            for cl in j.Clauses {
+                if not leavesBlock(cl.Code) { return false }
+            }
+            return true
+        }
         case typed.Stmt.Loop(_, body, _) { return not breaks(body, body.Id) }
         case typed.Stmt.Eval(_, x) {
             match x {
@@ -4677,4 +4938,36 @@ test "x[i] through At and SetAt: reads, stores, compound stores and increments w
     c.CheckProgram()
     assert rootRules(l) == "", rootRules(l)
     assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
+}
+
+test "join and spawn: targets, failing tasks, clauses on the task, try join (P1, P1a, P1g, P4, P4a-P4c)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "error E {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
+                       "fn work(n I64) { }\n"
+                       "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n"
+                       "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { x = -1 }\n"
+                       "    assert out[2] + x > 0\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "", rootRules(l)
+    assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
+}
+
+test "join and spawn errors (P1, P1a, P4, P4c)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, "error E {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
+                       "fn main() ? {\n    spawn g()\n    join { g() }\n    join {\n        spawn f()\n    }\n    join {\n        spawn try f()\n    }\n}\n")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    c.CheckProgram()
+    assert rootRules(l) == "P1 P1a P4 P4c ", rootRules(l)
 }
