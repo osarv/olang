@@ -180,8 +180,6 @@ struct type;
     X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
     X(ERR_AS_ARRAY_SHAPE,               "E32b",  "an array is viewed with 'as' only as a reference to one of a known length and the same element type - %t is not %t") \
     X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
-    X(ERR_VAR_WRITTEN_AGAIN,            "G22",   "%S was introduced already - write it '%S', not '<%S>'") \
-    X(ERR_VAR_BEFORE_INTRO,             "G22",   "%n is introduced later in this signature - its first use is written '<%S>'") \
     X(ERR_CONST_VAR_SHADOWED,           "G22, D3a", "%n is a constant variable of this declaration - a name means one thing, so name this apart") \
     X(ERR_CONST_ARG_PAREN,              "G21",   "%n in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") \
     X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "%S is a type variable, so its cases are types") \
@@ -191,8 +189,6 @@ struct type;
     X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a, T7c", "an array inside an array or a struct is held by reference - write %t&, or a length, Array<T, N>, to hold it in place") \
     X(ERR_LAMBDA_RESULT_HELD,           "T7a",   "this result binds %S to %t, which the call holds in an array, where an array is held by reference - write the result as %t&") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
-    X(ERR_TYPE_VAR_WRITTEN_AGAIN,       "G8b",   "%S was introduced already - write it '%S', not '<%S>'") \
-    X(ERR_TYPE_VAR_BEFORE_INTRO,        "G8b",   "%n is introduced later in this signature - its first use is written '<%S>'") \
     X(ERR_TYPE_ARG_NAMED_SCOPE,         "G11",   "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") \
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
@@ -402,7 +398,6 @@ struct type;
     X(NOTE_LITERAL_LOCAL,               "",      "'%S' is %t, its literal's own type - declare the type it should have, '%S %t = ...'") \
     X(NOTE_LITERAL_RANGE,               "",      "the range's literals make '%S' %t - write '%t(%S)' here for %t values") \
     X(NOTE_LITERAL_RANGE_EXPR,          "",      "the range's literals make '%S' %t - convert its end, '%t(...)', for %t values") \
-    X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
     X(ERR_NEG_LITERAL_TOO_LARGE,        "L10",   "-%n is below I64's minimum") \

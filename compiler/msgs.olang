@@ -197,8 +197,6 @@ type Diag enum {
     ArrayLengthRange
     AsArrayShape
     AsArrayLength
-    VarWrittenAgain
-    VarBeforeIntro
     ConstVarShadowed
     ConstArgParen
     TypeMatchValueCase
@@ -208,8 +206,6 @@ type Diag enum {
     ArrayNestedByValue
     LambdaResultHeld
     ConstraintNotTrait
-    TypeVarWrittenAgain
-    TypeVarBeforeIntro
     TypeArgNamedScope
     InvalidReferenceTarget
     DoubleReferenceMarker
@@ -414,7 +410,6 @@ type Diag enum {
     NoteLiteralLocal
     NoteLiteralRange
     NoteLiteralRangeExpr
-    NoteIntroducedHere
     StrOfNothing
     IntLiteralTooLarge
     NegLiteralTooLarge
@@ -1093,10 +1088,8 @@ fn AsArrayShape(ty1 String&, ty2 String&) Msg { return Msg(Diag.AsArrayShape, "E
 fn AsArrayLength(n1 I64, n2 I64) Msg { return Msg(Diag.AsArrayLength, "E32b", "this array's length is " $n1 ", not " $n2) }
 
 # ERR_VAR_WRITTEN_AGAIN
-fn VarWrittenAgain(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.VarWrittenAgain, "G22", $text1 " was introduced already - write it '" $text2 "', not '<" $text3 ">'") }
 
 # ERR_VAR_BEFORE_INTRO
-fn VarBeforeIntro(tok String&, text String&) Msg { return Msg(Diag.VarBeforeIntro, "G22", $tok " is introduced later in this signature - its first use is written '<" $text ">'") }
 
 # ERR_CONST_VAR_SHADOWED
 fn ConstVarShadowed(tok String&) Msg { return Msg(Diag.ConstVarShadowed, "G22, D3a", $tok " is a constant variable of this declaration - a name means one thing, so name this apart") }
@@ -1126,10 +1119,8 @@ fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Dia
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G19", $ty " is not a trait, so it cannot constrain a type variable") }
 
 # ERR_TYPE_VAR_WRITTEN_AGAIN
-fn TypeVarWrittenAgain(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.TypeVarWrittenAgain, "G8b", $text1 " was introduced already - write it '" $text2 "', not '<" $text3 ">'") }
 
 # ERR_TYPE_VAR_BEFORE_INTRO
-fn TypeVarBeforeIntro(tok String&, text String&) Msg { return Msg(Diag.TypeVarBeforeIntro, "G8b", $tok " is introduced later in this signature - its first use is written '<" $text ">'") }
 
 # ERR_TYPE_ARG_NAMED_SCOPE
 fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") }
@@ -1744,7 +1735,6 @@ fn NoteLiteralRange(text1 String&, ty1 String&, ty2 String&, text2 String&, ty3 
 fn NoteLiteralRangeExpr(text String&, ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.NoteLiteralRangeExpr, "", "the range's literals make '" $text "' " $ty1 " - convert its end, '" $ty2 "(...)', for " $ty3 " values") }
 
 # NOTE_INTRODUCED_HERE
-fn NoteIntroducedHere(text String&) Msg { return Msg(Diag.NoteIntroducedHere, "", $text " is introduced here") }
 
 # ERR_STR_OF_NOTHING
 fn StrOfNothing() Msg { return Msg(Diag.StrOfNothing, "E11a", "'$' has nothing to render - this call returns no value") }

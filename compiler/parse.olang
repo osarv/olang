@@ -63,6 +63,8 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
                                        # clause may give one default a result (R9a)
     ItemStarts List<I32>               # where each top-level item begins, in order - nested ones in an if's branches too
     ItemKept List<Bool>                # beside ItemStarts: whether the item parsed whole (an L21 may be said in one that did)
+    SaidIn Map<I32, I64>               # where each syntax error said starts: the item it was said in (an item may read past
+                                       # its own lines before it fails - into the declaration its recovery then reads)
     vars List<source.NameId>           # the current item's introduced type variables (G8b), which "match T" takes
     exprs List<ast.Expr&>              # nodes being gathered into lists, nested lists on top
     stmts List<ast.Stmt&>
@@ -177,6 +179,7 @@ fn (p Parser&) found() String {
 
 fn (p mut Parser&) report(start I32, end I32, m msgs.Msg) {
     p.diags.Error(diag.Where.Span(p.file, I64(start), I64(end)), m)
+    if not p.SaidIn.Has(start) { p.SaidIn.Put(start, p.ItemStarts.Len() - 1) }
 }
 
 # what was wanted is not here: said at the next token, in the words of a hint where one fits
@@ -377,6 +380,13 @@ fn (p mut Parser&) syncItem(start I64) {
             return
         }
     }
+}
+
+# whether the token at i begins a declaration: "type", "test", "import", "extern", or "fn" and a name
+fn (p Parser&) declStarts(i I64) Bool {
+    k := p.ts.Toks[i].Kind
+    if k == token.Tok.Type or k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern { return true }
+    return k == token.Tok.Fn and i + 1 < p.ts.Toks.Len() and p.ts.Toks[i + 1].Kind == token.Tok.Iden
 }
 
 # whether the next token starts a declaration where a statement was wanted - an unclosed block's end
@@ -2125,7 +2135,7 @@ fn (p mut Parser&) index(x ast.Expr&p) ast.Expr&p ? Fail {
         lo ast.Expr&p = null
         if not p.sees(token.Tok.Colon) {
             lo = try p.elem()
-            if p.accept(token.Tok.For) {
+            if p.comprehends() {
                 elem := try p.exprAsType(x)
                 return try p.comprehension(start, elem, lo)
             }
@@ -2338,7 +2348,7 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&p) ast.Expr&p ? Fail {
     from := p.exprs.Len()
     if not p.sees(token.Tok.RBrack) {
         first := try p.elem()
-        if p.accept(token.Tok.For) { return try p.comprehension(at, elem, first) }
+        if p.comprehends() { return try p.comprehension(at, elem, first) }
         p.exprs.Push(first)
         for try p.sep(token.Tok.RBrack) { p.exprs.Push(try p.elem()) }
     }
@@ -2348,6 +2358,17 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&p) ast.Expr&p ? Fail {
     }
     p.advance()
     return ast.Expr.ArrayLit(p.from(at), elem, gather(p.exprs, from))
+}
+
+# after a bracket's first item, the "for" of a comprehension, read - on its line or a later one, since a comprehension
+# is one item, not a list (L18a)
+fn (p mut Parser&) comprehends() Bool {
+    i := p.pos
+    for p.ts.Toks[i].Kind == token.Tok.StmtEnd and i < p.ts.Toks.Len() - 1 { i++ }
+    if p.half != token.Tok.Eof or p.ts.Toks[i].Kind != token.Tok.For { return false }
+    p.pos = i
+    p.advance()
+    return true
 }
 
 # a comprehension after its value and "for": "[key,] name in source [if filter] ]" - one item, not a list: a line's end
