@@ -62,14 +62,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   QO4 - how std's misuse checks (RemoveAt out of range, Send on a closed channel, a bad base) report without exiting:
   (a) a named error on each such function, (b) keep them as aborts, since they are the caller's bug like an assert.
   Recommended (b), with Try forms (TryRemoveAt) where a caller wants an error.
-- QO5 (2026-10-17). The user: "What I want is easy scripting and prototyping without excessive writing, I want
-  fn main() { io.Print("Hello World!") } to look appealing. Try and ?IOError kinda makes it not". Proposed: (1) main may
-  declare no errors (today it must declare at least one); (2) io.Print/Println/PrintErr/PrintErrln never fail and never
-  stop the program: as io.Writer does, the first failed write is remembered and later output dropped, and when main
-  returns the program ends with status 1 and one stderr line saying standard output could not be written (GNU
-  coreutils' close_stdout convention); a program wanting to know sooner calls `try io.CheckOutput()` (name mine),
-  failing with IoError. Hello world is then `import "std/io"` + `fn main() { io.Println("Hello World!") }`. In effect
-  until answered: wt-ioprint's provisional stop-the-program.
+- QO5 ANSWERED 2026-10-17: the user, after the no-try proposal: "I guess try for Print isn't that bad after all". So
+  io.Print/Println/PrintErr/PrintErrln fail with IoError and are written `try io.Print(...)`; nothing stops the program;
+  main keeps its rule. Hello world: `fn main() ? { try io.Println("Hello World!") }`. wt-ioprint changed course to this.
 - QO2. Too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
   replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
   Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
