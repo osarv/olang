@@ -26844,6 +26844,8 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
         L->type.noReturn = true;
     }
     L->inferRet = false;
+    //R1a/D16b: a set found from the body is in the canonical order an inferred set is, whatever order it appeared in
+    if (L->inferErrs && L->type.errors.len > 1) qsort(L->type.errors.ptr, (size_t)L->type.errors.len, sizeof(struct type*), errTypeCmp);
     L->inferErrs = false;
     ListAdd(&allLambdas, &L);
     lambdaMakeValue(octx, op, L, kw, exp);

@@ -1471,7 +1471,9 @@ lambda's result is then inferred from it, as from any argument (G9).
 none - every parameter's type must be written, and the result and errors not
 written are taken from the body: the result is the type of the first `return`'s value - text is a `String`
 (T29c) and a numeric literal its own type - or none when the body returns no value; the errors are those its
-`error` statements and uncaught `try`s produce, in the order they first appear.
+`error` statements and uncaught `try`s produce - inferred as a function written `?` alone infers its set (R1a), with
+nothing written: a lambda's type is taken from its body as its parameters' and result's may be, and its set is in R1a's
+canonical order, whatever order its errors appear in.
 
 **D16c (captures).** A lambda's body may use the variables - locals and parameters - of the body it is
 written in. Each one it uses is **captured** when the lambda is made, as though passed to a parameter of its
@@ -4233,7 +4235,7 @@ nothing. `try` never turns a check on:
 an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; `checked` (E15a) is
 `try` plus every check the language can make. A spawned call (§6.8 P4) and a `join` block (P4c) are tried on the same
 terms: whatever can fail is written with `try`, and nothing else is. Where nothing names what a `try` lets
-through - a function with no `?`, a lambda whose type writes no errors - its clauses must take all of it, except in a `test`
+through - a function with no `?`, a lambda whose expected type (D16a) writes no errors - its clauses must take all of it, except in a `test`
 body, where what is let through fails the test (S16).
 
 **R9.** As an **expression** (`try-expr`, §5.1 E24, only where a value is expected): evaluates the
