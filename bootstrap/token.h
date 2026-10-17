@@ -93,6 +93,7 @@ enum tokenType {
     TOK_ARROW, //S12b: "=>" - a match case's value
     TOK_NOT,
     TOK_NEQ,
+    TOK_BANG, //E35: a postfix '!' - what fails here ends the program
     TOK_AND,
     TOK_OR,
     TOK_XOR,

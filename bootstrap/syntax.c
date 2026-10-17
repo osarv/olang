@@ -3079,6 +3079,15 @@ static struct syntax* parseExprPostfixUncached(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token t = TokenFeed(sc->tc);
         if (t.type == TOK_INC || t.type == TOK_DEC) { addTok(s, t); continue; }
+        //E35: "x!" - what fails in the chain so far ends the program; the chain may go on after it
+        if (t.type == TOK_BANG) {
+            struct syntax* b = newNode(SNTX_EXPR_BANG);
+            addSntx(b, s);
+            addTok(b, t);
+            s = newNode(SNTX_EXPR_POSTFIX);
+            addSntx(s, b);
+            continue;
+        }
         TokenSetCursor(sc->tc, before);
         break;
     }

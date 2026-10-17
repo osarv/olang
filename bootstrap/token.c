@@ -98,6 +98,7 @@ struct tokRule tokRules[] = {
     {TOK_ARROW, "=>", NULL},
     {TOK_NOT, "not", NULL},
     {TOK_NEQ, "!=", NULL},
+    {TOK_BANG, "!", NULL},
     {TOK_AND, "and", NULL},
     {TOK_OR, "or", NULL},
     {TOK_XOR, "xor", NULL},
@@ -604,7 +605,7 @@ bool stmntEndTriggerType(enum tokenType type) {
     switch (type) {
         case TOK_IDEN: case TOK_INT_LIT: case TOK_FLOAT_LIT: case TOK_CHAR_LIT:
         case TOK_STR_LIT: case TOK_BOOL_LIT: case TOK_NULL_LIT:
-        case TOK_INC: case TOK_DEC:
+        case TOK_INC: case TOK_DEC: case TOK_BANG:
         case TOK_PAREN_C: case TOK_SQUARE_C:
         case TOK_RET: case TOK_DONE: case TOK_FAIL: case TOK_ERROR:
         case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:

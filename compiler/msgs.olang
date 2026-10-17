@@ -18,10 +18,10 @@ type Msg struct(Kind Diag, Rule String&, Text String&) {
 }
 
 # a token as a reader sees it: its text in quotes, each byte that does not print escaped
-fn Tok(text String&) String {
+fn Tok(text String&) String ? TextError {
     b := StringBuilder()
     b.PushChar('\'')
-    for c in text { b.Push(Esc(c)) }
+    for c in text { b.Push(try Esc(c)) }
     b.PushChar('\'')
     return b.ToString()
 }
@@ -31,13 +31,13 @@ EndOfLine := "end of line"
 EndOfFile := "end of file"
 
 # a byte as a message shows it: itself where it prints, else escaped - \t, \n, \r, \0, or \xHH
-fn Esc(c Char) String {
+fn Esc(c Char) String ? TextError {
     if c == '\t' { return "\\t" }
     if c == '\n' { return "\\n" }
     if c == '\r' { return "\\r" }
     if c == '\0' { return "\\0" }
     if U8(c) < 32 or U8(c) >= 127 {
-        hex := U8(c).Format(16)
+        hex := try U8(c).Format(16)
         return "\\x" $(hex.PadStart(2, '0'))
     }
     b := StringBuilder()
@@ -718,13 +718,13 @@ fn ClangFailed(text String&) Msg { return Msg(Diag.ClangFailed, "", "clang could
 fn LinkFailed(text String&) Msg { return Msg(Diag.LinkFailed, "", "linking " $text " failed") }
 
 # ERR_UNKNOWN_CHAR
-fn UnknownChar(ch Char) Msg { return Msg(Diag.UnknownChar, "L16", "unexpected character '" $Esc(ch) "'") }
+fn UnknownChar(ch Char) Msg { return Msg(Diag.UnknownChar, "L16", "unexpected character '" $try Esc(ch) "'") }
 
 # ERR_SEMICOLON
 fn Semicolon() Msg { return Msg(Diag.Semicolon, "L18", "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") }
 
 # ERR_NON_ASCII
-fn NonAscii(ch Char) Msg { return Msg(Diag.NonAscii, "L1", "non-ASCII byte '" $Esc(ch) "' - olang source is ASCII") }
+fn NonAscii(ch Char) Msg { return Msg(Diag.NonAscii, "L1", "non-ASCII byte '" $try Esc(ch) "' - olang source is ASCII") }
 
 # ERR_CARRIAGE_RETURN
 fn CarriageReturn() Msg { return Msg(Diag.CarriageReturn, "L3", "carriage return - save the file with LF line endings") }
@@ -754,7 +754,7 @@ fn EmptyChar() Msg { return Msg(Diag.EmptyChar, "L13", "empty character literal"
 fn LongChar() Msg { return Msg(Diag.LongChar, "L13", "character literal holds more than one character - text is written in \"\"") }
 
 # ERR_BAD_ESCAPE
-fn BadEscape(ch Char) Msg { return Msg(Diag.BadEscape, "L15", "unknown escape '\\" $Esc(ch) "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\"") }
+fn BadEscape(ch Char) Msg { return Msg(Diag.BadEscape, "L15", "unknown escape '\\" $try Esc(ch) "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\"") }
 
 # ERR_HEX_NO_DIGITS
 fn HexNoDigits() Msg { return Msg(Diag.HexNoDigits, "L10a", "'0x' needs hexadecimal digits") }
@@ -763,10 +763,10 @@ fn HexNoDigits() Msg { return Msg(Diag.HexNoDigits, "L10a", "'0x' needs hexadeci
 fn BinNoDigits() Msg { return Msg(Diag.BinNoDigits, "L10c", "'0b' needs binary digits") }
 
 # ERR_HEX_DIGIT
-fn HexDigit(ch Char) Msg { return Msg(Diag.HexDigit, "L10a", "'" $Esc(ch) "' is not a hexadecimal digit") }
+fn HexDigit(ch Char) Msg { return Msg(Diag.HexDigit, "L10a", "'" $try Esc(ch) "' is not a hexadecimal digit") }
 
 # ERR_BIN_DIGIT
-fn BinDigit(ch Char) Msg { return Msg(Diag.BinDigit, "L10c", "'" $Esc(ch) "' is not a binary digit") }
+fn BinDigit(ch Char) Msg { return Msg(Diag.BinDigit, "L10c", "'" $try Esc(ch) "' is not a binary digit") }
 
 # ERR_DIGIT_SEPARATOR
 fn DigitSeparator() Msg { return Msg(Diag.DigitSeparator, "L10b", "'_' in a number must stand between two digits") }
@@ -2354,7 +2354,7 @@ test "a message is its C twin's text, its arguments in their places" {
 
 test "a byte that does not print is escaped, in a character and in a token" {
     assert UnknownChar('\t').Text == "unexpected character '\\t'"
-    assert Esc(Char(1)) == "\\x01" and Esc(Char(200)) == "\\xc8" and Esc('a') == "a"
+    assert Esc(Char(1)) == "\\x01" and (try Esc(Char(200)) catch { fail }) == "\\xc8" and (try Esc('a') catch { fail }) == "a"
     assert Tok("a\nb") == "'a\\nb'"
     assert Expected("a name", EndOfLine).Text == "expected a name, found end of line"
 }

@@ -90,6 +90,7 @@ type Tok enum {
     EqEq
     Arrow
     NotEq
+    Bang
     Lt
     Le
     Gt
@@ -128,7 +129,7 @@ fn (t Token) Has(flag U8) Bool { return (t.Flags & flag) != 0 }
 fn (k Tok) EndsStatement() Bool {
     return match k {
         case Tok.Iden, Tok.IntLit, Tok.FloatLit, Tok.CharLit, Tok.StrLit, Tok.BoolLit, Tok.NullLit => true
-        case Tok.Inc, Tok.Dec, Tok.RParen, Tok.RBrack => true
+        case Tok.Inc, Tok.Dec, Tok.Bang, Tok.RParen, Tok.RBrack => true
         case Tok.Return, Tok.Done, Tok.Fail, Tok.Error, Tok.Break, Tok.Continue, Tok.Abort, Tok.Unreachable => true
         nomatch => false
     }
@@ -210,6 +211,7 @@ fn (k Tok) Text() String& {
         case Tok.EqEq => "=="
         case Tok.Arrow => "=>"
         case Tok.NotEq => "!="
+        case Tok.Bang => "!"
         case Tok.Lt => "<"
         case Tok.Le => "<="
         case Tok.Gt => ">"

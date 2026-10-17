@@ -1968,7 +1968,7 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                 args := try p.args()
                 x = ast.Expr.Call(p.from(start), x, args)
             }
-            case token.Tok.Inc, token.Tok.Dec {
+            case token.Tok.Inc, token.Tok.Dec, token.Tok.Bang {
                 k := p.peek()
                 p.advance()
                 x = ast.Expr.Postfix(p.from(start), k, x)

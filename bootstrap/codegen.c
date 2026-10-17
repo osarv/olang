@@ -6040,6 +6040,41 @@ static void cgTryDefaultStore(struct cgCtx* ctx, struct operand* op, struct oper
     cgBr(ctx, join);
 }
 
+//E35: "x!" took an error - the test, or the program, ends as a failed check does, its message the place and the error
+//("main.olang:4: io.IoError.FAILED"), picked by the code among the words of what failed (funcType's list; a bounds
+//check, which "!" never turns on, has no code)
+static char* cgCheckMsg(struct cgCtx* ctx, struct operand* op, const char* what);
+static void cgBangEnd(struct cgCtx* ctx, struct operand* op, char* code, struct type* funcType) {
+    char* msg = cgCheckMsg(ctx, op, "unhandled error");
+    for (int i = 0; code && funcType && i < funcType->errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&funcType->errors, i);
+        int ord = errorTypeOrdinal(*funcType, *e);
+        //a type of another module is named by its alias's base name, as a program writes it - the prelude's bare
+        struct str q = (struct str){0};
+        if (e->owner && e->owner->identity.len && ctx->curMod && e->owner != ctx->curMod
+                && !(e->owner->identity.len >= 11 && !strncmp(e->owner->identity.ptr, "std/prelude", 11))) {
+            q = e->owner->identity;
+            for (int k = q.len - 1; k >= 0; k--)
+                if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
+        }
+        for (int w = 0; w < e->words.len; w++) {
+            struct token wt = *(struct token*)ListGetIdx(&e->words, w);
+            char text[400];
+            snprintf(text, sizeof(text), "%.*s%s%.*s.%.*s", q.len, q.ptr, q.len ? "." : "", e->name.len, e->name.ptr,
+                     wt.str.len, wt.str.ptr);
+            char* candidate = cgCheckMsg(ctx, op, text);
+            char* cmp = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp eq i32 %s, %lld\n", cmp, code, ((long long)ord << 16) | w);
+            char* next = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = select i1 %s, ptr %s, ptr %s\n", next, cmp, candidate, msg);
+            msg = next;
+        }
+    }
+    fprintf(ctx->fnOut, "  call void @__olang_check_failed(ptr %s)\n", msg);
+    fputs("  unreachable\n", ctx->fnOut);
+    ctx->terminated = true;
+}
+
 //R9b: the failure path of a try with catch clauses, tried in order. code is the error code, or NULL for a
 //failed bounds check, whose one possible error (the bare error) makes every match static. Each clause runs
 //its block; one with a default then stores it as the try's value (value position), and a statement's clause
@@ -6116,6 +6151,7 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
             ctx->blockJoins.len = op->cgSlots;
             ctx->blockDepth = op->cgDepth;
         }
+        if (cc->ends) cgBangEnd(ctx, op, code, funcType);
         if (cc->hasBlock) cgBlock(ctx, &cc->block);
         if (cc->dflt) cgTryDefaultStore(ctx, op, cc->dflt);
         else if (endLbl) cgBr(ctx, endLbl);

@@ -119,7 +119,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (S13a, Maranget). Binding alternatives bind the same names and types. `match T` dispatches on a type variable (G15).
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x is T`/`x is E.Case` and `x as T`
-  (fails with `INVALID` under `try`, else aborts). `a is b`/`a is not b` is identity (E10c; `same` removed).
+  (fails with `WRONG_CASE` under `checked`, else aborts). `a is b`/`a is not b` is identity (E10c; `same` removed).
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
 - **Error words and enum cases are one per line; a separating comma is an error (T17/T19/C2, the user's call).**
@@ -157,10 +157,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   literal another operand cannot hold meets it at its own type (E6d).
 - **Numbers widen implicitly toward their base, never narrow (T6b, the user's design).** Lattice: wider within a
   signedness, unsigned into strictly wider signed, F16/BF16 -> F32 -> F64; a declared type into its base. Narrowing is
-  written (`I32(x)`), unchecked, `try` checks it (R20) - never a per-operation check (the user: "It's not even a
+  written (`I32(x)`), unchecked, `checked` checks it (R20) - never a per-operation check (the user: "It's not even a
   question").
 - **Integer arithmetic wraps (E6c, the user's call, re-confirmed 2026-10-09 knowing its `nsw` cost).** Division by
-  zero and MIN / -1 are undefined (E6a); `try (expr)` checks every operation inside (E15a).
+  zero and MIN / -1 are undefined (E6a); `checked (expr)` checks every operation inside (E15a).
 - **Value or reference is decided by the `&` marker alone (T11, T25a).** `&` is scope-tagged heap indirection, not an
   address-of: no pointer type, no unary `&`, no reference to a reference. Reference-shape is part of type identity;
   value<->reference conversion is assignability at the outermost level only (E12): an lvalue into a reference borrows
@@ -184,7 +184,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
-  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `try a[i]` checks; an out-of-range index, a
+  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `checked a[i]` checks; an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
 - **Equality (E10, E10a, E10b).** `==` on values is structural; on an array reference it compares contents; on a
   struct or enum reference it is identity unless the type declares `Eq` (then `==` calls it at every depth, the user's
@@ -207,8 +207,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
   method is the operator only in the operator's shape - another shape is an ordinary method. Checked forms are
-  `Try...` (E31a); only `Call` may fail. `x[i, j]` calls `At(i, j)`. A store through `x[i]` reads, writes and writes
-  back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle. No user-declared
+  `Checked...` (E31a); any operator but `Len`/`Eq`/`Str` may fail. `x[i, j]` calls `At(i, j)`. A store through `x[i]`
+  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle. No user-declared
   operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
   (`ll[0][0]`), is lent as its reference where its call landed (O17b/O18c); a field of a try-default (R9a) and a
   conditional or match choosing a place (E28) are values, never lent writably or assigned.
@@ -280,28 +280,50 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 ### Errors
 
 - **Error sets and `?` (R1-R8).** `fn f(params) Ret ? ErrA + ErrB`: result first, error set after `?` (the user's
-  call). `error T.WORD` raises; a bare unhandled fallible call is a compile error; `try f()` propagates; coverage is
-  judged at the callee's declared signature. Locally scoped codes: `{i32 code, T}`, the code packing (type ordinal <<
-  16) | word ordinal from the function's own list, so no whole-program numbering exists and propagation re-encodes.
-- **`?` alone is the default error (R15-R20, the user's design).** A named set is closed (the user: "it is the
-  presence of error"); only an untyped `catch` takes the default error; a bare-`?` function generalizes what passes
-  through. `BuiltinError` (`OUT_OF_BOUNDS DIVIDE_BY_ZERO OVERFLOW INVALID`) is what `try` checks report.
+  call). `error T.WORD` raises; a bare unhandled fallible call is a compile error; coverage is judged at the callee's
+  set. Locally scoped codes: `{i32 code, T}`, the code packing (type ordinal << 16) | word ordinal from the function's
+  own list, so no whole-program numbering exists and propagation re-encodes.
+- **`?` alone infers the set (R1a, the user's call 2026-10-17: "Do 2", Zig's); every error has a type (R3, R22).**
+  A bare `?` is what the body can fail with - a least fixed point over calls, cycles included, ordered canonically
+  (owner module, then name) so separately compiled modules agree; it may come out empty, and in a generic differ per
+  instantiation. `? E` is a promise the body is held to. A function type and a trait method write their set (R1b); a
+  named function fits a superset list, re-encoded. The default error, bare `error`, R15-R19 and generalization are
+  gone (the user: "error should always require an actual error"). `main` may have no `?` at all (B4).
+- **`try` handles what fails as written; `checked` is try plus every check (R8, E15a, E24, QQ1, the user's design).**
+  One `try` covers every fallible call and operator in its operand - arguments, a chain (`try f().g()`, reversing
+  E24's one-call reading), a parenthesized expression - and never turns a check on; a `try` covering nothing is an
+  error (not in a generic's body, where instantiations differ). `checked (e)`, `checked a[i]`, `checked a[lo:hi]`,
+  `checked x[i] = v`, `checked T[e for ...]`: overflow, zero divisors, `<<` shifting a set bit out, shift amounts
+  (`OUT_OF_BOUNDS`), any integer conversion changing the value (signs too), float narrowing to infinity, NaN from
+  non-NaN (`INVALID`, IEEE's meaning), `as` of another case (`WRONG_CASE`), indexes, slices, lengths. `for x in try c`
+  and `try join` stay `try`. No `try { block }` (declined: hides exits).
+- **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `a.F().G()!`,
+  `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.IoError.W`
+  and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class.
+- **Operators may fail; checked forms add checks (E31, E31a, QQ1, the user's calls).** A plain operator method (all
+  but `Len`, `Eq`, `Str`) may declare errors, making the operator fallible as written (`try (a - b)`). Its checked form
+  is `CheckedAt`, `CheckedPlus` ... (the Try forms renamed - the user, reversing their own TryAt), what `checked`
+  calls, and must fail with every error the plain one can (a compile error at the declaration otherwise).
+  `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared.
+- **`BuiltinError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE`) is raised only by `checked` (R20);**
+  `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
+- **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
+  may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
+  (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format(base)` can fail), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
+  `StatsError`, `RandError`, `JsonError.UNEVEN`, linalg's `ShapeError.MISMATCH` and `ActivationError` (an operation
+  with nothing to mismatch cannot fail; a float matrix never fails an activation). A `Matrix` built directly takes its
+  data as a slice and an array length do (D14b, E16b); `View` is the checked form. Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
-- **`try` on stores and loops (R21, S9e)**: `try x[i] = v`, `try x++`, `for x in try c`.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
-  (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with the default error.
-- **`main` is `fn main() ? SomeError`**, no parameters or result; an escaping error prints `unhandled error: T.W` and
+  (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
+- **`main`**: no parameters or result, any error set or none; an escaping error prints `unhandled error: T.W` and
   exits 1. `os.Args()`/`os.Env()` give the command line (B4a).
-- **Open (ledger QO1/QO2):** whether a named error set should be open, and too many `try`s.
-- **Where errors may be raised (R3, R10, R14, R17).** `error` is valid in an ordinary function and a constructor (a
-  constructor's own error set), never in a `test` or `destruct`; the `try ... catch { }` statement discards the value;
-  a bare-`?` function's errors are re-encoded at each boundary. A constructor field that fails produces no instance.
-- **Checked computations (E15a, E16c, E16d).** `try (expr)` checks overflow, zero divisors, shift widths, conversions,
-  float overflow/NaN, negative lengths, indexes and slices inside it, not through a call; `try a[lo:hi]` turns a
-  slice's abort into an error; a run-time array length that is negative or overflows aborts (D14b), out of memory
-  aborts (D14c).
+- **Where errors may be raised (R3, R10, R14).** `error` is valid in an ordinary function and a constructor, never in
+  a `test` or `destruct`; the `try ... catch { }` statement discards the value. A constructor field that fails
+  produces no instance. A run-time array length out of range aborts outside `checked` (D14b), out of memory aborts
+  (D14c). `tools/errors_migrate.olang` migrates code (Try forms renamed, `try` to `checked`, `try` for what now fails).
 
 ### Memory and scopes (§8)
 
@@ -471,14 +493,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   pointer; only the runtime's `__olang_` functions take a function value (X2). C math functions with their exact
   prototypes are known and evaluated while compiling (X8).
 - **std API details.** `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt SwapRemove IndexOf Remove
-  Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `try l[i]` checked, first chunk held on its own. `Map`: `Put Get
+  Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `checked l[i]` checked, first chunk held on its own. `Map`: `Put Get
   Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
   the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
   reads olang literal syntax; `x.Fixed(n)` as `%.*f`, exact; `n.Format(base)`. `io.Writer` never fails on Write - the
   first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
   captures through memory files; `chan.Send` on a closed channel stops the program; `std/csv` is RFC 4180 strict;
   `std/stats` uses the sample variance and numpy's percentiles. `Array.Sort` is a stable O(n log n) merge.
-- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `TryAt`, `extends`, `own`.
+- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`, `own`, `checked`.
 
 ### Codegen and runtime
 

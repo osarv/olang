@@ -139,6 +139,7 @@ static const char* CT_WHY_ASSERT = "an assertion in it fails, which aborts the p
 static const char* CT_WHY_SLICE = "it slices out of range, which aborts the program";
 static const char* CT_WHY_LENGTH = "it makes an array of a length out of range, which aborts the program";
 static const char* CT_WHY_FIXED = "it copies an array of another length into fixed storage, which aborts the program";
+static const char* CT_WHY_BANG = "an error reaches '!', which ends the program";
 //B12a: the target is another architecture or system than this machine's - so its C math library is not the one this
 //process calls, and a function IEEE 754 does not pin down may give another result there
 static bool ctForeignTarget;
@@ -146,7 +147,7 @@ static bool ctForeignTarget;
 static const char* CT_WHY_FOREIGN_MATH = "it calls a function of the C math library whose result is the target's own library's, and the target is another machine";
 bool CtWhyAborts(const char* why) {
     return why == CT_WHY_UNREACHABLE || why == CT_WHY_ABORT || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
-           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED;
+           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED || why == CT_WHY_BANG;
 }
 
 //immutable globals already evaluated, or being evaluated (a cycle is a failure, not a hang). writable: its value reaches
@@ -1695,6 +1696,30 @@ static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
             match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
         }
         if (!match) continue;
+        if (cc->ends) { //E35: the program ends, naming the error, as a failed check does - while compiling, K1's abort
+            if (ctRun) {
+                fflush(NULL);
+                if (op->tok.owner && op->tok.lineNr > 0) {
+                    struct str f = TokenGetFileName(op->tok.owner);
+                    fprintf(stderr, "%.*s:%d: ", f.len, f.ptr, op->tok.lineNr);
+                }
+                struct str q = (struct str){0};
+                struct semaModule* o = st->errType.owner;
+                if (o && o->identity.len && !(o->identity.len >= 11 && !strncmp(o->identity.ptr, "std/prelude", 11))
+                        && o != st->mod) {
+                    q = o->identity;
+                    for (int k = q.len - 1; k >= 0; k--)
+                        if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
+                }
+                struct token w = st->errWord >= 0 && st->errWord < st->errType.words.len
+                                 ? *(struct token*)ListGetIdx(&st->errType.words, st->errWord) : (struct token){0};
+                fprintf(stderr, "%.*s%s%.*s.%.*s\n", q.len, q.ptr, q.len ? "." : "", st->errType.name.len,
+                        st->errType.name.ptr, w.str.len, w.str.ptr);
+                abort();
+            }
+            ctFail(st, op->tok, CT_WHY_BANG);
+            return NULL;
+        }
         st->flow = CF_NORMAL;
         if (cc->hasBlock) {
             size_t mark = (size_t)st->locals->len;

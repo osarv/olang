@@ -212,7 +212,7 @@ valid token starting at the current position):
 ```
 +  -  *  /  %  ,  .  ?  =  :=
 +=  -=  *=  /=  %=  <<=  >>=  &=  |=  ^=
-++  --
+++  --  !
 ==  !=  =>
 <  <=  >  >=
 &  |  ^  ~  <<  >>
@@ -234,7 +234,7 @@ tokenizer under L18.
 
 ```
 IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, NULL_LIT,
-++, --, ), ], return, done, fail, error, break, continue, abort, unreachable
+++, --, !, ), ], return, done, fail, error, break, continue, abort, unreachable
 ```
 
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
@@ -2110,7 +2110,7 @@ unary    ::= "not" binary | text | "take" postfix | { unary-op } postfix   ("tak
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
-postfix  ::= primary { index | member | call-on | "++" | "--" }
+postfix  ::= primary { index | member | call-on | "++" | "--" | "!" }
 primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
 ```
@@ -3158,6 +3158,23 @@ In a generic, `take` on a place whose type is a type variable that an instantiat
 owning gives the place's value and leaves the place as it was - so a generic container moves its elements with `take`,
 and the same code copies them for other element types. On any other place of a type that is not owning, `take` is a
 compile-time error. A `take` standing as a statement (S3) releases what it takes (O35).
+
+### 5.19 `!`
+
+**E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles
+what can fail in the postfix expression before it **as written**, exactly what a `try` there would cover (R8: every
+fallible call and operator in it, arguments and every link of a chain included), by **ending the program**: an error
+reaching it ends it as a failed `assert` does (S18) - while a test runs it fails that test, and otherwise the program
+writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
+of its path (`io.IoError.FAILED`), and its word - to standard error and aborts. Its value is the expression's on
+success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; `checked`
+asks for checks, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
+`fn main() { io.Println("Hello World!")! }` is a program. `!` on an expression that cannot fail as written is a
+compile-time error, as `try` there is (R8), with the same exception in a generic's body. It binds as a postfix
+operator, tighter than any prefix one: `-f(x)!` is `-(f(x)!)`; the chain may go on after it (`f()!.g()`, `g` then not
+covered). A `!` directly followed by `=` is the `!=` token (L16), which a postfix `!` never needs to stand before.
+While compiling, an error reaching `!` is in K1's abort class: where a value is required it is a compile-time error,
+and elsewhere evaluation stops there.
 
 ## 6. Statements
 
@@ -5924,9 +5941,9 @@ covers every change to the instantiation set. Copies a `-c` object of another mo
 ### 10.2 Program entry
 
 **B4.** In `-b` and `-i` modes, the root module must declare a function named `main` with exactly this shape:
-no parameters, no success type, and an error set - written (`fn main() ? SomeError [+ ...] { ... }`) or inferred
-(`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters, a `ret-type`, or no `?` at
-all) is a compile-time error. There is no
+no parameters and no success type - with no error set (`fn main() { ... }`), or one written (`fn main() ? SomeError
+[+ ...] { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
+a `ret-type`) is a compile-time error. There is no
 other valid `main` signature; in particular, there is no "return an int/bool status" convention.
 
 **B4a (the command line and the environment).** A program's command line and environment are not passed to `main`.

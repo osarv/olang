@@ -17692,3 +17692,134 @@ test "O37: a borrow two own fields deep handed back - while compiling and at run
     assert sbChurn() > 0
     assert d.text == "leaf10" and d.n == 10
 }
+
+# ---- the errors batch: inferred sets (R1a), what try covers (R8), checked (E15a), checked forms (E31a), "!" (E35) ----
+# each computation baked into a global while compiling (K2) and asserted beside the same computation at run time
+
+error ebA {
+    X
+}
+error ebB {
+    Y
+}
+fn ebLeaf(n I64) I64 ? {
+    if n < 0 { error ebA.X }
+    return n
+}
+fn ebBoth(n I64) I64 ? {
+    if n > 100 { error ebB.Y }
+    return try ebLeaf(n)
+}
+# R1a: a cycle of calls infers its sets together - ebOdd fails with what ebEven can, and so does ebEven
+fn ebEven(n I64) Bool ? {
+    if n < 0 { error ebA.X }
+    if n == 0 { return true }
+    return try ebOdd(n - 1)
+}
+fn ebOdd(n I64) Bool ? {
+    if n == 0 { return false }
+    return try ebEven(n - 1)
+}
+# R1a: a set that comes out empty - called without try
+fn ebNever(n I64) I64 ? { return n + 1 }
+# R1b: a named function fits a function type whose list holds its errors, in another order - re-encoded
+fn ebApply(f fn(n I64) I64 ? ebB + ebA, n I64) I64 ? ebB + ebA { return try f(n) }
+fn ebInferred() I64 {
+    a := try ebBoth(-1) catch ebA default 10 catch ebB default 20
+    b := try ebBoth(200) catch ebA default 10 catch ebB default 20
+    c := try ebEven(4) catch ebA default false
+    d := try ebOdd(-1) catch ebA default true
+    e := try ebApply(ebLeaf, -5) catch ebA default 300 catch ebB default 400
+    return a + b + (1000 if c else 0) + (2000 if d else 0) + ebNever(1) * 10000 + e
+}
+EbInferredBaked := ebInferred()
+test "R1a, R1b: an inferred set is what the body can fail with, through cycles and function values" {
+    assert EbInferredBaked == 10 + 20 + 1000 + 2000 + 20000 + 300
+    assert ebInferred() == EbInferredBaked
+}
+
+# R8/E24: one try covers every fallible call in its operand - the arguments, a chain, a parenthesized expression
+type ebBox struct(v I64) {
+    v
+}
+fn (b ebBox&) Twice() I64 ? {
+    if b.v > 50 { error ebB.Y }
+    return b.v * 2
+}
+fn ebMake(v I64) ebBox ? {
+    if v < 0 { error ebA.X }
+    return ebBox(v)
+}
+fn ebCovered(v I64) I64 {
+    chain := try ebMake(v).Twice() catch ebA default -1 catch ebB default -2
+    sum := try (ebLeaf(v) + ebMake(v + 1).Twice()) catch default -3
+    return chain * 100 + sum
+}
+EbCoveredBaked := ebCovered(3) * 1000000 + ebCovered(-1) * 1000 + ebCovered(60)
+test "R8: try covers a chain, its arguments and a parenthesized expression" {
+    assert ebCovered(3) == 6 * 100 + 3 + 8 and ebCovered(-1) == -100 - 3 and ebCovered(60) == -200 - 3
+    assert EbCoveredBaked == ebCovered(3) * 1000000 + ebCovered(-1) * 1000 + ebCovered(60)
+}
+
+# E15a: checked is try with every check - "<<" shifting a set bit out, a conversion changing the value, a float
+# narrowing to infinity, an amount out of range, "as" of another case (QO6)
+type ebShape enum {
+    Circle(r I64)
+    Square(s I64)
+}
+ebShiftBy mut I64 = 31
+fn ebChecked(k I64) I64 {
+    one I32 = 1
+    big I64 = 5000000000
+    neg I64 = -1
+    huge F64 = 1e300
+    s := ebShape.Square(4)
+    shl := checked (one << I32(k)) catch BuiltinError.OVERFLOW default -1 catch BuiltinError.OUT_OF_BOUNDS default -2
+    conv := checked I32(big) catch BuiltinError.OVERFLOW default -3
+    sign := checked U64(neg) catch BuiltinError.OVERFLOW default 0
+    narrow := checked F32(huge) catch BuiltinError.OVERFLOW default -4.0
+    wrong := checked (s as ebShape.Circle) catch BuiltinError.WRONG_CASE default -5
+    right := checked (s as ebShape.Square) catch BuiltinError.WRONG_CASE default -5
+    return I64(shl) * 1000000 + I64(conv) * 10000 + I64(sign) * 1000 + I64(narrow) * 100 + wrong * 10 + right
+}
+EbCheckedBaked := ebChecked(31) * 10 + ebChecked(40)
+test "E15a: checked reports a shifted-out bit, a changed conversion, an infinite narrowing and the wrong case" {
+    assert ebChecked(30) == 1073741824 * 1000000 - 30000 - 400 - 50 + 4
+    assert ebChecked(31) == -1000000 - 30000 - 400 - 50 + 4
+    assert ebChecked(I64(ebShiftBy) + 9) == -2000000 - 30000 - 400 - 50 + 4
+    assert EbCheckedBaked == ebChecked(31) * 10 + ebChecked(40)
+}
+
+# E31/E31a: a plain operator method may fail - "try (a - b)" handles it as a call - and its checked form, which
+# "checked" calls, fails with every error the plain one can and more
+error ebMoneyError {
+    NEGATIVE
+}
+type ebMoney struct(c I64) {
+    c
+}
+fn (a ebMoney&) Minus(b ebMoney&) ebMoney ? ebMoneyError {
+    if b.c > a.c { error ebMoneyError.NEGATIVE }
+    return ebMoney(a.c - b.c)
+}
+fn (a ebMoney&) CheckedMinus(b ebMoney&) ebMoney ? ebMoneyError + BuiltinError {
+    if b.c > a.c { error ebMoneyError.NEGATIVE }
+    return ebMoney(checked (a.c - b.c))
+}
+fn ebOps(a I64, b I64) I64 {
+    x := try (ebMoney(a) - ebMoney(b)) catch ebMoneyError default ebMoney(-1)
+    y := checked (ebMoney(a) - ebMoney(b)) catch ebMoneyError default ebMoney(-2) catch BuiltinError default ebMoney(-3)
+    return x.c * 1000 + y.c
+}
+EbOpsBaked := ebOps(10, 3) + ebOps(3, 10) * 10
+test "E31, E31a: a fallible operator, and its checked form" {
+    assert ebOps(10, 3) == 7007 and ebOps(3, 10) == -1002
+    assert EbOpsBaked == 7007 - 10020
+}
+
+# E35: "!" ends the program on what fails as written, needing no "?"; here nothing fails
+fn ebBang(n I64) I64 { return ebBoth(n)! + ebMake(n).Twice()! }
+EbBangBaked := ebBang(5)
+test "E35: a postfix '!' gives the value where nothing fails" {
+    assert ebBang(5) == 15 and EbBangBaked == 15
+}

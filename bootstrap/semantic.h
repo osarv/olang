@@ -581,6 +581,7 @@ struct catchClause {
     struct var* taskFn;
     struct operand* taskCall;
     bool givesValue;
+    bool ends;               //E35: "x!" - the error ends the test or the program, naming itself, as a failed check
 };
 
 //D16: one variable a lambda captured - as the body around it sees it, and the lambda's own copy

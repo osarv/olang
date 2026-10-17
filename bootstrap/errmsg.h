@@ -462,6 +462,7 @@ struct type;
     X(ERR_DEFAULT_NO_VALUE,             "R11",   "this call returns no value, so there is nothing for a default to stand in for") \
     X(ERR_DEFAULT_NEEDS_CATCH,          "R11",   "a default belongs to a catch clause: 'catch default v'") \
     X(ERR_TRY_NOTHING_FAILS,            "R8",    "nothing here can fail - write it without 'try'") \
+    X(ERR_BANG_NOTHING_FAILS,           "E35",   "nothing here can fail - write it without '!'") \
     X(ERR_TRY_ONLY_CHECKS,              "E15a",  "nothing here fails as written - write 'checked' to check it") \
     /* ---- literals and constructions ---- */ \
     X(ERR_NESTED_ARRAY_LITERAL,         "E21",   "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") \
@@ -599,7 +600,7 @@ struct type;
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \
     /* ---- the program as a whole ---- */ \
-    X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters, returns no value and declares '?': 'fn main() ? { }'") \
+    X(ERR_MAIN_SIGNATURE,               "B4",    "main takes no parameters and returns no value: 'fn main() { }', or 'fn main() ? { }'") \
     X(NOTE_OBLIGATION_ORIGIN,           "",      "the callee requires it because of this statement") \
     X(NOTE_MAKE_WHERE,                  "",      "'%S' is made here, in a block that closes first - make it where '%S' lives: '%S&%S(...)'") \
     X(NOTE_REFILL_KEPT,                 "",      "or refill the one kept - '%S.Clear()', then put the elements in: one made where '%S' lives stays there, beside every one made before it, until that scope closes") \

@@ -16992,6 +16992,39 @@ struct operand* buildTryExpr(struct checkCtx* ctx, struct syntax* s) {
     return callOp;
 }
 
+//E35: "x!" - what fails in x as written (R8: every fallible call and operator in it, a chain's and a parenthesized
+//expression's included) ends the test, or the program, as a failed check does, naming the error; no check is turned
+//on, and nothing leaves the function, so it needs no "?" for it
+struct operand* buildBangExpr(struct checkCtx* ctx, struct syntax* s) {
+    struct token tok = firstTokOfType(s, TOK_BANG);
+    bool prevAllow = ctx->allowFallibleCall, prevChecking = ctx->checkingTry;
+    struct list* prevCover = ctx->tryCover;
+    struct list cover = ListInit(sizeof(struct operand*));
+    ctx->allowFallibleCall = true;
+    ctx->tryCover = &cover;
+    ctx->checkingTry = false;
+    struct operand* callOp = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR_POSTFIX));
+    ctx->allowFallibleCall = prevAllow;
+    ctx->checkingTry = prevChecking;
+    ctx->tryCover = prevCover;
+    unsigned checkWords = 0;
+    bool unknown = false;
+    struct list errors = tryErrors(callOp, &cover, false, &checkWords, &unknown);
+    if (errors.len == 0) {
+        if (!callOp->type.unknown && !unknown && !inInstanceBody) Err(tok, ERR_BANG_NOTHING_FAILS);
+        return callOp;
+    }
+    callOp->isTried = true;
+    struct catchClause cc = (struct catchClause){0};
+    cc.tok = tok;
+    cc.matches = ListInit(sizeof(struct catchMatch));
+    cc.catchAll = true;
+    cc.ends = true;
+    callOp->catchClauses = ListInit(sizeof(struct catchClause));
+    ListAdd(&callOp->catchClauses, &cc);
+    return callOp;
+}
+
 struct operand* buildArrLiteralLevel(struct checkCtx* ctx, struct type elemType, struct syntax* argsNode, struct token tok);
 
 //one item of an array literal's own SNTX_ARR_LIT_ARGS - either a nested bracket group (recursed into with
@@ -17785,6 +17818,7 @@ static struct operand* buildExprFromSyntaxIn(struct checkCtx* ctx, struct syntax
         }
         case SNTX_EXPR_UNARY: return buildUnary(ctx, s);
         case SNTX_EXPR_IS: case SNTX_EXPR_AS: return buildIsAs(ctx, s);
+        case SNTX_EXPR_BANG: return buildBangExpr(ctx, s);
         case SNTX_EXPR_IS_SAME: return buildIsSame(ctx, s);
         case SNTX_EXPR_TEXT: return buildText(ctx, s);
         case SNTX_EXPR_POSTFIX: return buildPostfix(ctx, s);
@@ -30647,8 +30681,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
         if (!mainFunc || mainFunc->type.bType != BASETYPE_FUNC) { if (!ErrMsgGetNSyntaxErrors()) ErrFile(rootModule->fileName, ERR_NO_MAIN); }
         //main is either "nothing" (success, exit 0) or one of its declared errors (exit 1, printed to
         //stderr) - no other success type is meaningful as a process exit code, so none is allowed
-        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType
-                 || (mainFunc->type.errors.len == 0 && !mainFunc->type.errsInferred)) {
+        else if (mainFunc->type.vars.len != 0 || mainFunc->type.hasRetType) {
             ErrFile(rootModule->fileName, ERR_MAIN_SIGNATURE);
         }
     }

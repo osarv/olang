@@ -142,6 +142,7 @@ enum syntaxType {
     SNTX_EXPR_IS,   //E32: [operand, "is", TYPE_EXPR]
     SNTX_EXPR_IS_SAME, //E10c: [operand, "is", operand] - identity, when what follows "is" names no type
     SNTX_EXPR_AS,   //E32: [operand, "as", TYPE_EXPR]
+    SNTX_EXPR_BANG, //E35: [operand (a POSTFIX), "!"]
     SNTX_EXPR_MATCH, //S12b: a match used as a value - laid out as SNTX_STMNT_MATCH is
     SNTX_EXPR_UNARY,
     SNTX_EXPR_TEXT, //E11b: adjacent text pieces - string literals and "$x" renderings - joined into one
