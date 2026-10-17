@@ -2242,7 +2242,15 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     xt := typeOf(x)
     et := c.deref(xt)
     k I64 = -1
+    # a reference marker on a case reads the same payload (E32: the case is what is asked)
+    named := tr
     match tr {
+        case ast.TypeRef.Ref(_, of, _) {
+            if c.isEnum(et) { named = of }
+        }
+        nomatch { }
+    }
+    match named {
         case ast.TypeRef.Named(_, path, targs) {
             if c.isEnum(et) and path.Len() >= 2 and (targs == null or targs.Len() == 0) {
                 cn := c.P.T.CaseNames(et)
@@ -2738,7 +2746,8 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
             return c.unknown(sp)
         }
         base := c.P.T.Base(t)
-        x := c.value(c.expr(args[0], t), args[0].Span())
+        # a literal adapts to the type (T6, T29a); any other value keeps its own, converted by representation
+        x := c.value(c.expr(args[0], t if c.litLike(args[0]) else types.UnknownT), args[0].Span())
         xt := typeOf(x)
         if xt == t or xt == types.UnknownT { return x }
         if c.isNumber(xt) and c.isNumber(t) { return c.convert(sp, x, t) }
