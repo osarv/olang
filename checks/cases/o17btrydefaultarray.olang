@@ -1,0 +1,39 @@
+# check: run
+# flags: -d -s
+# O17b (U2): "(try a[0] catch default Bag()).Sneak(v)" on a built-in array, Bag a handle and Sneak a read-only method
+# building through its reference - lent as its reference where the element's are (the default built there too), as the
+# List spelling already was; it was built in the loop body. Read back after a churn
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type BagState struct() {
+    head mut Node& = null
+}
+type Bag struct() {
+    s mut BagState& = BagState()
+}
+fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
+fn (b Bag&) Sum() I64 {
+    t I64 = 0
+    for n := b.s.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn main() ? {
+    a := Array<Bag>(1, Bag())
+    l := List<Bag>()
+    l.Push(Bag())
+    for i in range 3 {
+        (try a[0] catch default Bag()).Sneak(i + 1)
+
+        churn()
+    }
+    churn()
+    assert a[0].Sum() == 321, $a[0].Sum()
+}

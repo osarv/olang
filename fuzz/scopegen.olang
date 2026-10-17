@@ -350,6 +350,10 @@ Prelude := (
     "}\n"
     "fn mkList2(v I64) List<mut Node&> { return mkList(v) }\n"
     "fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
+    "fn idBox(b mut Box&) Box { return b }\n"
+    "fn addVia(b Box&, v I64) { b.head.next = Node(v) }\n"
+    "fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }\n"
+    "fn readBox(b Box&) I64 { return chain(b.head) }\n"
     "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
     "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
     "# fallible: growF and mkF succeed, failF fails after building, mkFail fails\n"
@@ -805,7 +809,7 @@ fn (g mut SG&) dtorOp(a String&, ind String&) String& {
 
 # a statement storing a new node through the box b (a writable Box place)
 fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
-    k := g.r(13)
+    k := g.r(14)
     if AvoidKnown {
         if g.boxKind == 2 or k == 3 or k == 7 { k = 0 }
         if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11) { k = 0 }
@@ -839,6 +843,15 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
         return $ind $x " := E.A(" $b ") as E.A\n" $ind $x ".head.next = " $g.newNode() "\n"
     }
     if k == 9 { return g.nodeOp($b ".head", ind, d) }
+    if k == 12 {    # a copy with no storage of its own - a call's result, a conditional of the box - lent to a reference
+        v := g.val() # parameter that builds through its shallow "mut" field, in a loop (O17: refused), or only reads it
+        i := g.name("i")
+        m := g.r(4)
+        if m == 0 { return $ind "for " $i " in range 3 { addVia(idBox(" $b "), " $v " + " $i ") }\n" }
+        if m == 1 { return $ind "for " $i " in range 3 { addVia(" $b " if Run > 0 else " $b ", " $v " + " $i ") }\n" }
+        if m == 2 { return $ind "for " $i " in range 3 { addViaMut(idBox(" $b "), " $v " + " $i ") }\n" }
+        return $ind "for " $i " in range 3 { readBox(idBox(" $b ")) }\n"
+    }
     if k == 10 and d > 0 {    # a helper taking the box by reference
         f := g.name("opBox")
         was := g.boxKind

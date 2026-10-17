@@ -1,0 +1,14 @@
+# check: run
+# E11c/O17b (the third review): a Str reading a two-level List field through x[i] - the handle "w.ll[0]" is copied into
+# the block it is lent from, nothing built where the receiver lives; it was refused
+type W struct(ll List<List<I64>>&) {
+    ll
+}
+fn (w W&) Str() String { return "W" $w.ll[0].Len() }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(5)
+    w := W(ll)
+    assert $w == "W1", $w
+}
