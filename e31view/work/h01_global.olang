@@ -1,0 +1,22 @@
+# x[i] of an immutable global collection lent as a view: the callee writes through the element's writable reference
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = v.d[v.n] + x
+    return v.d[v.n]
+}
+G := Vs(Array<I64>(4))
+fn twice() I64 { return put(G[1], 5) + put(G[1], 5) }
+Baked I64 = twice()
+M mut I64 = 0
+fn main() ? {
+    M = put(G[2], 3)
+    assert G.d[2] == 3
+    println($G.d " " $Baked " " $M)
+}

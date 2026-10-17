@@ -1,0 +1,19 @@
+type Expr enum {
+    Num(v F64)
+    Neg(e Expr&)
+    Bin(op Char, a Expr&, b Expr&)
+}
+fn simplifyBin(op Char, a Expr&, b Expr&a) Expr&a {
+    return Expr.Bin(op, a, b)
+}
+fn simplify(e Expr&) Expr&e {
+    return match e {
+        case Expr.Bin(op, a, b) => simplifyBin(op, simplify(a), simplify(b))
+        nomatch => e
+    }
+}
+fn main() ? {
+    t Expr& = Expr.Bin('+', Expr.Num(1.0), Expr.Num(2.0))
+    s := simplify(t)
+    assert s == s
+}

@@ -1,0 +1,33 @@
+# HELD (N6/P1): conditional and match temporaries passed to calls that keep them (Wrap, generic id, Push into outer Lists)
+# live where the kept value does - -b -s matches -i: "2997040 0".
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Wrap struct(n mut Node&) {
+    n
+}
+fn id(x <T>) T { return x }
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    l := List<Wrap>()
+    l2 := List<mut Node&>()
+    l3 := List<mut Node&>()
+    for i in range 5 {
+        l.Push(Wrap(Node(i) if i > 2 else Node(i + 10)))
+        l2.Push(id(Node(i) if i > 2 else Node(i + 20)))
+        l3.Push(match i { case 1 => Node(50) case _ => id(Node(i + 60)) })
+    }
+    t := churn(100)
+    s I64 = 0
+    for w in l { s += w.n.v }
+    for n in l2 { s += n.v * 100 }
+    for n in l3 { s += n.v * 10000 }
+    println($s " " $t)
+}

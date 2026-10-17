@@ -1,0 +1,15 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn main() ? {
+    t := Two()
+    c := t
+    for i := 0, i < 100000, c.a = Lexer(i) {
+        i += 1
+    }
+    println($t.a.n)
+}

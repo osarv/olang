@@ -1,0 +1,12 @@
+# x1 for a call giving a fixed-length array reference: the baked global (evaluator) and the run time disagree
+fn view(a Array<Char, 4>&) Array<Char, 4>&a { return a }
+fn named() I64 {
+    b Array<Char, 4> = Char['a', 'a', 'a', 'a']
+    w String& = String(view(b))
+    b[0] = 'z'
+    return 1 if w[0] == 'z' else 0
+}
+Baked I64 = named()
+fn main() ? {
+    println($Baked " " $named())
+}

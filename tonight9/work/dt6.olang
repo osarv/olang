@@ -1,0 +1,31 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Res struct(n mut Node&, k I64) {
+    n
+    k
+} destruct {
+    if n.next != null { println("reads " $n.next.v) }
+    n.next = Node(k)
+    for j in range 20 { t := Node(j) }
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        u := Node(j + 1)
+        s = s + t.v + u.v
+    }
+    return s
+}
+fn f() {
+    a mut Node& = Node(0)
+    r1 Res&a = Res(a, 11)
+    r2 Res&a = Res(a, 22)
+    r3 Res&a = Res(a, 33)
+}
+fn main() ? {
+    f()
+    println("done")
+}

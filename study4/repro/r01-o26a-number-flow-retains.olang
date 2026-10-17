@@ -1,0 +1,34 @@
+# r01 BUG (unbounded memory) - O26a: a per-iteration local is moved into the RESULT scope when only a NUMBER computed
+# from it reaches the returned value, so every iteration's allocation is kept until the caller's scope closes.
+# O26a says a local moves when "a returned value reads it where what is built from it can be handed back ... never a
+# rendering, a field holding no reference, or a call that cannot keep it" - here the call returns an I64 and the
+# field it reaches is an I64. It needs the returned struct to hold a reference somewhere (S.names).
+# The IR shows it: scan passes its own result scope (%sarg0) to mk where the variant below passes the loop's block.
+#
+# Found in a log tailer (../tailer.olang): following 1,000,000 lines retained 630 MB while it kept three of them.
+#
+# expected: constant memory (the line dies with each turn), as when the number only feeds a condition (variant B)
+# actual  (-b, measured with -D N=...): N=1,000,000 25 MB, N=4,000,000 96 MB; variant B at N=4,000,000: 11 MB
+#   olang -b -D N=4000000 r01-o26a-number-flow-retains.olang
+type S struct() {
+    best I64 = 0
+    names List<String&> = List<String&>()        # any reference-holding field; without it there is no retention
+}
+
+fn mk(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
+
+fn measure(t String&) I64 { return t.Len() }
+
+fn scan(n I64) S {
+    s := S()
+    for i in range n {
+        line := mk(i)
+        v := measure(line)
+        if v > s.best { s.best = v }               # variant B: "if v > 1000000 { s.best = 5 }" - no retention
+    }
+    return s
+}
+
+fn main() ? {
+    println($scan(N).best)
+}

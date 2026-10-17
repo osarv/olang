@@ -1,0 +1,8 @@
+# enum payload holding a Tag
+import "lib/pv"
+type E enum { One(t pv.Tag) }
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($(E.One(a) == E.One(b)))
+}

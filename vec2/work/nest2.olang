@@ -1,0 +1,26 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Inner struct() {
+    sub own mut Array<I64>& = Array<I64>(2, 7)
+    text own mut String& = "inner-text"
+}
+type Outer struct() {
+    in own mut Inner& = Inner()
+}
+fn (o Outer&) Txt() String&o { return o.in.text }
+fn use1(o mut Outer&) {
+    t := o.Txt()
+    o.in = Inner()
+    churn()
+    println(t)
+}
+fn main() ? {
+    o := Outer()
+    use1(o)
+}

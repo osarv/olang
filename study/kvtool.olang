@@ -1,0 +1,123 @@
+# kvtool - a command-line tool keeping key=value pairs in a file.
+#   kvtool [-f FILE] get KEY        prints the value; exit status 1 when the key is missing
+#   kvtool [-f FILE] set KEY VALUE  adds or replaces a pair
+#   kvtool [-f FILE] del KEY        removes a pair
+#   kvtool [-f FILE] list           prints every pair, in file order
+# The file defaults to $KVTOOL_FILE, else ./kv/store.txt. Usage errors exit with status 2.
+import "std/io"
+import "std/map"
+import "std/os"
+
+type Store struct(path String&) {
+    path
+    keys mut List<String&>& = List<String&>()
+    values mut map.Map<String&, String&>& = map.Map<String&, String&>()
+    removed mut I64 = 0
+}
+
+error StoreError {
+    BAD_LINE
+}
+
+fn load(path String&) Store& ? StoreError + os.OsError {
+    st Store&return = Store(path)
+    if not os.Exists(path) { return st }
+    text := try os.ReadFile&st(path)
+    lineNo I64 = 0
+    for line in text.Split("\n") {
+        lineNo++
+        t := line.Trim()
+        if t.Len() == 0 or t[0] == '#' { continue }
+        eq := t.FindByte('=')
+        if eq <= 0 {
+            try io.PrintErr($path ":" $lineNo ": not a key=value line\n") catch { }
+            error StoreError.BAD_LINE
+        }
+        st.put(t[:eq].Trim(), t[eq + 1:].Trim())
+    }
+    return st
+}
+
+fn (s mut Store&) put(k String&s, v String&s) {
+    if k not in s.values { s.keys.Push(k) }
+    s.values.Put(k, v)
+}
+
+fn (s mut Store&) del(k String&) Bool {
+    if not s.values.Remove(k) { return false }
+    s.removed++
+    return true
+}
+
+fn (s Store&) render() String& {
+    b := StringBuilder()
+    b.Push("# written by kvtool\n")
+    for k in s.keys {
+        v := try s.values.Get(k) catch { continue }
+        b.Push($k "=" $v "\n")
+    }
+    return b.ToString()
+}
+
+fn (s Store&) save() ? os.OsError {
+    dir := dirOf(s.path)
+    if dir.Len() > 0 { try os.MkDirAll(dir) }
+    tmp := $s.path ".tmp"
+    try os.WriteFile(tmp, s.render())
+    try os.Rename(tmp, s.path)
+}
+
+fn dirOf(path String&) String&path {
+    for i I64 = path.Len() - 1, i >= 0, i-- {
+        if path[i] == '/' { return path[:i] }
+    }
+    return path[:0]
+}
+
+fn usage() {
+    try io.PrintErr("usage: kvtool [-f FILE] get KEY | set KEY VALUE | del KEY | list\n") catch { }
+    os.Exit(2)
+}
+
+fn main() ? StoreError + os.OsError + io.IoError {
+    args := os.Args()
+    envFile := try os.Env("KVTOOL_FILE") catch default "kv/store.txt"
+    hasF Bool = args.Len() > 2 and args[1] == "-f"
+    # (not "file := envFile" then "file = args[2]": a writable local cannot take a read-only value)
+    file String& = args[2] if hasF else envFile
+    at I64 = 1
+    if hasF { at = 3 }        # ("at I64 = 3 if hasF else 1": invalid IR, min/i5.olang)
+    if at >= args.Len() { usage() }
+    cmd := args[at]
+    rest := args[at + 1:]
+    st := try load(file)
+    match cmd {
+        case "get" if rest.Len() == 1 {
+            v := try st.values.Get(rest[0]) catch {
+                try io.PrintErr("no key " $rest[0] "\n")
+                os.Exit(1)
+                unreachable
+            }
+            try io.Print($v "\n")
+        }
+        case "set" if rest.Len() == 2 {
+            st.put($rest[0], $rest[1])
+            try st.save()
+        }
+        case "del" if rest.Len() == 1 {
+            if not st.del(rest[0]) {
+                try io.PrintErr("no key " $rest[0] "\n")
+                os.Exit(1)
+            }
+            try st.save()
+        }
+        case "list" if rest.Len() == 0 {
+            for k in st.keys {
+                if k in st.values { try io.Print($k " = " $(try st.values.Get(k) catch default "?") "\n") }
+            }
+            info := try os.Stat(file) catch { return }
+            try io.Print("(" $st.values.Len() " keys, " $info.Size " bytes)\n")
+        }
+        nomatch { usage() }
+    }
+}

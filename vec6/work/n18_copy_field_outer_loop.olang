@@ -1,0 +1,32 @@
+type X struct(k I64) {
+    k
+    text String& = "x" $k "-text-of-x-object"
+}
+type Lexer struct(n I64) {
+    n
+    o own mut X& = X(n)
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    t := Two()
+    c := t
+    for i in range 3 {
+        c.a = Lexer(7 + i)
+
+    }
+    churn()
+    z := Vec<I64>()
+    for i in range 5 { z.Push(777) }
+    println($c.a.o.text " " $c.a.toks.Len())
+}

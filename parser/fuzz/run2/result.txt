@@ -1,0 +1,2 @@
+bug found 6 ['crash_bug_found_142b23fa.olang', 'crash_bug_found_9a3f536e.olang', 'crash_bug_found_50d8e125.olang', 'crash_bug_found_653731ad.olang', 'crash_bug_found_4d5e69ef.olang']
+signal/exit -11 1 ['crash_signal_exit_-11_827a7f35.olang']

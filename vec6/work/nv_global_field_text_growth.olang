@@ -1,0 +1,16 @@
+# older, outside own (QF's class): each 'G.lx = Named(7)' grows the program's scope ~8 bytes (Named has a text default);
+# 800,000 assignments peak at ~7.0MB on d5ddcda and on f743da5 alike
+type Named struct(k I64) {
+    k
+    name String& = "nm-text"
+}
+type Host struct() {
+    lx Named = Named(0)
+}
+G mut Host = Host()
+fn main() ? {
+    for i in range 800000 {
+        G.lx = Named(7)
+    }
+    println("ok")
+}

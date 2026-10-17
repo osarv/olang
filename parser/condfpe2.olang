@@ -1,0 +1,10 @@
+fn f() I32 {
+    if (-9223372036854775807 - 1) / M == 0 {
+        return 1
+    }
+    return 2
+}
+
+test "x" {
+    assert f() == 2
+}

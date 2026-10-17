@@ -1,0 +1,27 @@
+type Coll struct() {
+    n I64 = 0
+}
+type It struct(c mut Coll&) {
+    c
+    i I64 = 0
+}
+fn (it mut It&) Next() I64 ? Exhausted {
+    if it.i >= 3 { error Exhausted.END }
+    it.i++
+    it.c.n++
+    return it.i
+}
+fn (c mut Coll&) Iter() It { return It(c) }
+type Bag struct(c mut Coll&) {
+    c
+}
+fn (b Bag&) Str() String {
+    s I64 = 0
+    for x in b.c { s += x }
+    return "b" $s "/" $b.c.n
+}
+fn main() ? {
+    b := Bag(Coll())
+    println($b)
+    println($b)
+}

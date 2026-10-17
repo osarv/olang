@@ -1,0 +1,36 @@
+# (r08 also: the T25c message says "drop the 'mut'" where no mut is written.)
+# r08 FRICTION (ledger Q4): a local's reference permission cannot be written. "x mut Node&p = ..." is D11a ("a local is
+# always writable"), though here "mut" is the reference's permission, not the binding's; and a local initialized with
+# null, an empty array or text ("x Node&p = null", "s String& = \"\"") is writable, so it can never later take a
+# read-only reference (T25c). A parser's optional children and "name starts empty" locals hit it everywhere: 25 sites
+# in parse.olang, worked around by making every parse function return "mut ...&p" and a p.none() empty borrow.
+type Node enum {
+    Leaf(v I64)
+}
+type P struct(src String&) {
+    src
+    pos mut I64 = 0
+}
+fn (p mut P&) leaf() Node&p {
+    p.pos++
+    return Node.Leaf(p.pos)
+}
+fn (p P&) word() String&p { return p.src[0:2] }
+fn (p mut P&) a(b Bool) Node&p {
+    x Node&p = null
+    if b { x = p.leaf() }        # T25c
+    return x
+}
+fn (p mut P&) c(b Bool) String&p {
+    s String& = ""
+    if b { s = p.word() }        # T25c and O25
+    return s
+}
+fn (p mut P&) d() Node&p {
+    x mut Node&p = p.leaf()      # D11a
+    return x
+}
+fn main() ? {
+    p := P("hello")
+    println($p.a(true) " " $p.c(true) " " $p.d())
+}

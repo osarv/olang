@@ -1,0 +1,47 @@
+error PErr { BAD }
+type Diag struct() {
+    what String& = ""
+}
+type Tok struct(text String&) {
+    text
+}
+type E enum {
+    Name(n String&)
+    Group(e E&)
+}
+type P struct(toks List<Tok>&, diag mut Diag&) {
+    toks
+    diag
+    at I64 = 0
+}
+fn (p mut P&) bail(t Tok) ? PErr {
+    p.diag.what = t.text
+    error PErr.BAD
+}
+fn (p mut P&) expect(s String&) ? PErr {
+    t := p.toks[p.at]
+    p.at++
+    if t.text != s { try p.bail(t) }
+}
+fn (p mut P&) atom() E& ? PErr {
+    t := p.toks[p.at]
+    p.at++
+    if t.text == "(" {
+        e mut E&return = try p.atom()
+        try p.expect(")")
+        return E.Group(e)
+    }
+    return E.Name(t.text)
+}
+fn main() ? {
+    src := "((x]"
+    toks := List<Tok>()
+    for i in range src.Len() { toks.Push(Tok(src[i:i + 1])) }
+    d := Diag()
+    p := P(toks, d)
+    e := try p.atom() catch PErr {
+        println("bad: " $d.what)
+        return
+    }
+    println($e)
+}

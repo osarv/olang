@@ -1,0 +1,14 @@
+# HELD (G9d meet): a writable callback (named) beside a read-only argument is refused with E12 in both orders
+type Q struct(k I64) {
+    k
+}
+fn wr(x mut Q&) { x.k = 5 }
+fn ap(f fn(x <T>), a T) { f(a) }
+fn ap2(a <T>, f fn(x T)) { f(a) }
+G mut I64 = 0
+fn main() ? {
+    ro Q& = Q(7)
+    ap(wr, ro)
+    ap2(ro, wr)
+    println($ro.k)
+}

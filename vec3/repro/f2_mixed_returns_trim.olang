@@ -1,0 +1,31 @@
+# F2 (older, since 2d1aabf): a marked borrowed-own-result function whose other return is not a recorded source
+# (here a pass-through, Trim). The O38 return check skips its loan (rooted at a parameter in ownBorrowParams), but the
+# settled type is the other return's (Array<Char>), so the caller's loan never meets the release of the String.
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+fn h(c CB&) String&c { return c.text }
+
+fn f(c CB&, n I64) String&c {
+    if n == 0 { return String(c.data) }
+    return h(c).Trim()
+}
+fn use(c mut CB&) {
+    t := f(c, 1)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

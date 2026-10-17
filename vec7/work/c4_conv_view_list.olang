@@ -1,0 +1,19 @@
+# pushed into a List declared before the Vec, then the Vec released at its block's end
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    l := List<String&>()
+    for k in range 3 {
+        v := Vec<Char>()
+        for i in range 10 { v.Push('a') }
+        l.Push(String(v.View()))
+    }
+    churn()
+    println(l[0])
+}

@@ -1,0 +1,12 @@
+# check: fail error[R11a]: a catch with no error types takes every error left, so no clause can follow it
+error E {
+    A
+    B
+}
+error F { C }
+fn f() I32 ? E + F { error E.A }
+fn main() ? E { }
+fn t() I32 ? E {
+    try f() catch { } catch E { }
+    return 0
+}

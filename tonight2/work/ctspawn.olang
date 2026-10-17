@@ -1,0 +1,25 @@
+fn run() I64 {
+    out mut Array<I64>& = Array<I64>(6, 0)
+    join {
+        for i in range 6 {
+            j := i * 10
+            spawn fn(k I64) { out[k] = k * 100 + i }(j / 10)
+        }
+    }
+    acc mut Array<I64>& = Array<I64>(6, 0)
+    v I64 = 3
+    join {
+        for i in range 6 {
+            spawn acc[i] = fn(a I64, b I64) I64 { return a * b }(i, v)
+            v = v + 1
+        }
+    }
+    t I64 = 0
+    for x in out { t = t * 1000 + x }
+    for x in acc { t = t * 7 + x }
+    return t
+}
+B := run()
+fn main() ? {
+    println($B " " $run())
+}

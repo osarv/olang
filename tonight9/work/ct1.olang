@@ -1,0 +1,41 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Inner struct(k I64) {
+    k
+    l List<I64>
+}
+type A struct(n I64) {
+    l List<I64>
+    m Map<I64, I64>
+    sb StringBuilder
+    inner Inner
+    fixed Array<I64, 2>
+    arrs Array<Node&, 3>
+}
+type B struct(n mut Node&) {
+    n
+    x := n.v
+}
+type C struct(n I64) {
+    s String& = $n
+}
+type D struct(n I64) {
+    s String& = "abc"
+    t Array<I64>& = I64[1, 2]
+}
+type E struct(n mut Node&) {
+    n
+    m := n.next if n.v < 0 else n
+}
+fn main() ? {
+    a := A(1)
+    a.l.Push(3)
+    nn mut Node& = Node(4)
+    b := B(nn)
+    c := C(5)
+    d := D(6)
+    e := E(nn)
+    println($a.l.Len() " " $b.x " " $c.s " " $d.s " " $e.m.v " " $a.fixed[1])
+}

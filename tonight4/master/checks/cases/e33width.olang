@@ -1,0 +1,5 @@
+# check: fail error[E33]: 'F64FromBits' is a method of the unsigned type of its float's width
+error E { X }
+fn main() ? E {
+    f := U32(1).F64FromBits()
+}

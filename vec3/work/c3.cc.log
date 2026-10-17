@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/c3.olang:11:12: error[O38, O26a]: this result reaches the owner value local 'o' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('OB'), where 'return o' moves it
+   11 |     return o }
+      |            ^
+compilation failed with 1 error

@@ -1,0 +1,13 @@
+fn get(e E) Box& {
+    keep Box& = Box(0)
+    match e {
+        case E.A(y) { keep = borrow(y) }
+        case _ { }
+    }
+    return keep
+}
+fn main() ? {
+    r := get(E.A(Box(3)))
+    churn()
+    println($r.v)
+}

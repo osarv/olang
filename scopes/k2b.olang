@@ -1,0 +1,14 @@
+# K2b: a baked immutable global whose referent holds a writable reference ('mut' field) - shallow permission (T25b)
+# allows writing through it; and a second global sharing the instance
+import "std/io"
+type Node struct(v0 I32, nx mut Node&) {
+    v mut I32 = v0
+    next mut Node& = nx
+}
+fn idr(n Node&) Node&n { return n }
+G0 Node& = Node(1, Node(2, null))
+G1 Node& = idr(G0)
+fn main() ? {
+    G0.next.v = 99
+    try io.Print($G0.next.v " " $G1.next.v "  (expected 99 99)\n")
+}

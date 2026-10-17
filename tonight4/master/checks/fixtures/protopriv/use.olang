@@ -1,0 +1,5 @@
+import "kk"
+fn main() ? {
+    assert kk.Inside() and kk.Baked
+    assert kk.Same(kk.Key(1), kk.Key(11))    # kk's generic sees kk's eq, though instantiated here
+}

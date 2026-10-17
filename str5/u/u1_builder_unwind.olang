@@ -1,0 +1,57 @@
+type Bag struct(k I64) {
+    k
+}
+Flag mut I64 = 0
+fn (b Bag&) Str() String {
+    s := "bag-" $b.k " with a fairly long rendering that goes well past sixty-four bytes of room"
+    if b.k == 7 { assert Flag != 0, "inner fail" }
+    if b.k == 8 { done }
+    if b.k == 9 { fail }
+    return s
+}
+type Two struct(a Bag&, b Bag&) {
+    a
+    b
+}
+fn noise(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return Flag }
+    return noise(d - 1) + a[3] - d
+}
+fn rend(k I64) String { return "x" $Bag(k) "y" $Bag(k + 1) "z" }
+test "fails inside Str after growth" {
+    s := $Two(Bag(1), Bag(7))
+    assert Flag != 0, "after"
+}
+test "after 1" {
+    s := $Bag(2)
+    t := noise(40)
+    assert s.Len() > 64 and t == 0
+}
+test "done inside Str" {
+    s := $Two(Bag(1), Bag(8))
+    assert Flag != 0, "after"
+}
+test "after 2" {
+    s := rend(3)
+    t := noise(40)
+    assert s.Len() > 64 and t == 0
+}
+test "fail inside Str" {
+    s := $Two(Bag(1), Bag(9))
+}
+test "grown in helper then fail later" {
+    s := rend(3)
+    for i in range 3 { s = rend(i) }
+    t := noise(50)
+    assert t != 0, "expected"
+}
+test "deferred render then fail" {
+    defer { s := rend(4) }
+    t := noise(50)
+    assert t != 0, "expected2"
+}
+test "last" {
+    s := rend(5)
+    assert s.Len() > 100
+}

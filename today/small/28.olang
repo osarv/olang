@@ -1,0 +1,12 @@
+# M19: a method call next to a same-named local function value - baked, compiled, interpreted
+type P struct(v I64) { v }
+fn (p P&) bump(k I64) I64 { return p.v + k }
+fn run() I64 {
+    p := P(5)
+    bump := fn(k I64) I64 { return -1000 }
+    return p.bump(1) * 10000 + bump(0)
+}
+Baked I64 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

@@ -1,0 +1,18 @@
+# OVER-REJECTION, a regression: "try x[i]" (derived from Len) lent to a VIEW-only callee - base built it and the write
+# reached the collection (I64[0, 0, 9, 0]); c9d14a7 refuses it (E31b), as it now refuses a writing callee
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn (s Vs&) Len() I64 { return s.d.Len() }
+fn put(v mut V&, x I64) { v.d[v.n] = x }
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    put(try s[2] catch default V(Array<I64>(1), 0), 9)
+
+    println($s.d)
+}

@@ -1,0 +1,32 @@
+# C9a: a destructor building through a '&p' field of its instance into a list that outlives the instance
+type Node struct(v I64) {
+    v
+}
+type Res struct(o mut List<Node&>&, k I64) {
+    owner mut List<Node&>&o = o
+    k
+} destruct {
+    l := owner
+    l.Push(Node(k * 10))
+    l.Push(Node(k * 10 + 1))
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i)
+        t = t + nn.v
+    }
+    return t
+}
+fn main() ? {
+    keep mut List<Node&>& = List<Node&>()
+    for i in range 3 {
+        r Res& = Res(keep, i + 1)
+        churn()
+    }
+    churn()
+    for n in keep { print($n.v " ") }
+    println("")
+}

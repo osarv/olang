@@ -1,0 +1,17 @@
+fn sum(ls List<I32>&) I64 {
+  t I64 = 0
+  for x in ls.Iter() { t += x }
+  return t
+}
+fn sum2(ls List<List<I32>>&) I64 {
+  t I64 = 0
+  for x in ls.Iter() { t += x.Len() }
+  return t
+}
+fn main() ? {
+  a := I32[1, 2].ToList()
+  println($sum(a))
+  o := List<List<I32>>()
+  o.Push(a)
+  println($sum2(o))
+}

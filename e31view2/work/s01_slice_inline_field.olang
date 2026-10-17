@@ -1,0 +1,16 @@
+type V struct() {
+    arr Array<I64, 4> = I64[4, 3, 2, 1]
+}
+fn fill(s mut Array<I64>&) { s[0] = 7 }
+fn main() ? {
+    l := List<V>()
+    l.Push(V())
+    fill(l[0].arr[0:2])
+    println("slice fill " $l[0].arr)
+    l[0].arr[0:2].Sort(fn(x I64, y I64) Bool { return x < y })
+    println("slice sort " $l[0].arr)
+    a := V[V()]
+    fill(a[0].arr[0:2])
+    a[0].arr[0:2].Sort(fn(x I64, y I64) Bool { return x < y })
+    println("array " $a[0].arr)
+}

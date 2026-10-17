@@ -1,0 +1,13 @@
+# check: fail error[R11]: a default for a value holding references builds all it holds
+# R11: a by-value default holding references is admitted only when it built all it holds - here the fallback list is
+# existing storage, whose references would have to agree with every scope the result's live in
+error Bad { NO }
+fn validate(text String&) List<String&> ? Bad {
+    if text.Len() == 0 { error Bad.NO }
+    return List<String&>()
+}
+fn main() ? {
+    empty := List<String&>()
+    n := (try validate("x") catch default empty).Len()
+    println($n)
+}

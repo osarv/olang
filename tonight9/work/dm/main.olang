@@ -1,0 +1,9 @@
+import "lib"
+fn one() I64 { return lib.Apply(1) }
+fn two() I64 { return lib.Apply(2) }
+fn main() ? {
+    r lib.Node& = lib.Node(1)
+    p := lib.Pick(r)
+    g := fn(i I64) I64 { return lib.Apply(i) + lib.Pick(r).V }
+    println($one() " " $two() " " $p.V " " $g(3) " " $lib.Label(1) " " $lib.Label(2))
+}

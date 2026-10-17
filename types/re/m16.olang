@@ -1,0 +1,7 @@
+# M16: the same file reachable two ways from one module (directly, and through b's re-export)
+import "b"
+import "c"
+fn main() ? {
+  x := c.Make()
+  y := b.C.Make()
+}

@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# a global initialized with a reference read through a global's own object's plain field
+type Body struct(n I64) {
+    name String& = $n "-body-text-built-at-run-time"
+}
+type Doc struct() {
+    body own mut Body& = Body(7)
+}
+Docs own mut Doc& = Doc()
+Current := Docs.body.name
+fn main() ? {
+    Docs.body = Body(9)
+    churn()
+    println(Current)
+}

@@ -1,0 +1,15 @@
+# over-rejection (new in 98b7c74?): an assert message in a constructor calling a function with a text parameter and a
+# number field joins them in C2d's hold walk, so the instance is taken to hold the text
+fn show(s String&, k I64) String { return $s ": " $k }
+type Rec struct(name String&, n I64) {
+    n
+    assert n >= 0, show(name, n)
+}
+fn mk(k I64) Rec {
+    t := $k "-local-text"
+    return Rec(t, k)
+}
+fn main() ? {
+    r := mk(5)
+    println($r.n)
+}

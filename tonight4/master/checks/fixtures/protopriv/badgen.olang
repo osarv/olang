@@ -1,0 +1,8 @@
+import "gen"
+type Mine struct(n I32) {
+    N I32 = n
+}
+fn (a Mine) eq(b Mine) Bool { return a.N == b.N }
+fn main() ? {
+    assert gen.Equal2(Mine(1), Mine(1))      # gen's code cannot call this module's eq
+}

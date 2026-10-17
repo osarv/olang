@@ -1,0 +1,31 @@
+extern fn usleep(us U32) I32
+type P struct(v I64) { v }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(8, 0)
+    p := P(5)
+    join {
+        base := Array<I64>(8, 100)
+        q mut P& = P(7)
+        for i in range 8 {
+            spawn fn(k I64) {
+                usleep(U32(2000 * (8 - k)))
+                out[k] = base[k] + p.v + q.v * k
+            }(i)
+            churn()
+        }
+        churn()
+    }
+    sb := StringBuilder()
+    for x in out { sb.Push($x " ") }
+    println(sb.ToString())
+}

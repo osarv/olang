@@ -1,0 +1,31 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+type Inner struct(k I64) {
+    k
+    pt Pt = Pt(k, k + 1)
+}
+type Outer struct() {
+    in own mut Inner&
+}
+fn (o Outer&) P() Pt&o { return o.in.pt }
+fn use(o mut Outer&) {
+    p := o.P()
+    o.in = Inner(50)
+    churn()
+    println($p.x " " $p.y)
+}
+fn main() ? {
+    o := Outer()
+    o.in = Inner(7)
+    use(o)
+}

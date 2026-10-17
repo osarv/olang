@@ -1,0 +1,25 @@
+# conversions retyped in place: a try, a conditional and a match of array references, compared built and interpreted
+fn mk(n I64, c Char) Array<Char>& {
+    return Array<Char>(n, c)
+}
+fn may(n I64) Array<Char>& ? {
+    if n < 0 { error }
+    return Array<Char>(n, 'm')
+}
+fn pick(k I64, a Array<Char>&, b Array<Char>&) String&a {
+    return String(a if k > 0 else a[0:1])
+}
+fn text(k I64) String& {
+    a := String(try may(k) catch default mk(2, 'd'))
+    b := String(mk(3, 'x') if k > 0 else mk(4, 'y'))
+    c := String(match k { case 1 => mk(1, 'p') nomatch => mk(5, 'q') })
+    return a " " b " " c
+}
+Baked String& = text(-1)
+fn main() ? {
+    println(text(1))
+    println(text(-1))
+    println(Baked)
+    w := mk(3, 'w')
+    println(pick(1, w, w))
+}

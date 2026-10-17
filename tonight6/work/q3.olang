@@ -1,0 +1,26 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+GL List<List<I64>> = mkGL()
+GM Map<I64, List<I64>> = mkGM()
+fn mkGL() List<List<I64>> {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    return l
+}
+fn mkGM() Map<I64, List<I64>> {
+    m := Map<I64, List<I64>>()
+    m.Put(0, List<I64>())
+    return m
+}
+fn pushFn(l mut List<I64>&) { l.Push(1) }
+fn main() ? {
+    GL[0].Push(5)
+    (try GM.Get(0)).Push(6)
+    GL[0][0] = 9
+    pushFn(GL[0])
+    println($GL[0].Len())
+}

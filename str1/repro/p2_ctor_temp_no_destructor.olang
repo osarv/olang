@@ -1,0 +1,20 @@
+# PRE-EXISTING, CONFIRMED (C11). A destructor-bearing constructor call used as a value temporary - an expression
+# statement, a member read, a '$' operand - never runs its destructor (only 'w := Wrap(local)' does).
+type Node struct(v I64) {
+    v
+}
+type Wrap struct(a Node&) {
+    a
+} destruct { println("destruct sees " $a.v) }
+fn main() ? {
+    local := Node(42)
+    {
+        Wrap(local)
+        println("after stmt")
+        k := Wrap(local).a.v
+        println("after member " $k)
+        s := $Wrap(local)
+        println("after render")
+    }
+    println("end")
+}

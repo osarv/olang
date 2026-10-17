@@ -1,0 +1,9 @@
+import "std/io"
+import "std/os"
+
+fn main() ? io.IoError {
+    x F64 = F64(os.Args().Len()) + 6.5
+    y F64 = 2.0
+    z := x % y
+    try io.Print($z "\n")
+}

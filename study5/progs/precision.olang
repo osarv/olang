@@ -1,0 +1,76 @@
+# precision - the same matrix computations in F64, F32, F16 and BF16: products, power iteration for the largest
+# eigenvalue, row softmax, and the error each precision makes against F64.
+import "std/linalg"
+import "std/rand"
+import "std/math"
+
+Size I64 = 256
+
+fn maxRelErr(a linalg.Matrix<F64>&, b linalg.Matrix<F64>&) F64 {
+    worst := 0.0
+    for r in range a.Rows {
+        for c in range a.Cols {
+            d := math.Abs(a.Get(r, c) - b.Get(r, c)) / math.Max(math.Abs(a.Get(r, c)), 1e-12)
+            worst = math.Max(worst, d)
+        }
+    }
+    return worst
+}
+
+# the largest eigenvalue of a symmetric matrix, by power iteration in the matrix's own precision
+fn powerIteration(a linalg.Matrix<<T>>&, iters I64) F64 {
+    x := linalg.Matrix<T>(a.Rows, 1)
+    one T = 1                         # T(1) is "unknown function or type 'T'"
+    x.Fill(one)
+    y := linalg.Matrix<T>(a.Rows, 1)
+    lambda := 0.0
+    for it in range iters {
+        linalg.Gemm(y, a, false, x, false)
+        norm := F64(y.Norm())
+        lambda = norm / F64(x.Norm())
+        x.Copy(y)
+        like T
+        x.Scale(linalg.Cast(1.0 / norm, like))
+    }
+    return lambda
+}
+
+fn main() ? {
+    r := rand.Rand(11)
+    n := Size
+    b := linalg.Matrix<F64>(n, n)
+    b.FillNormal(r, 0.0, 1.0)
+    a := b.T() @ b                     # symmetric positive semi-definite
+    a.Scale(1.0 / F64(n))
+
+    # products a @ a in each precision, compared against F64
+    ref := a @ a
+    p32 := a.ToF32() @ a.ToF32()
+    p16 := a.ToF16() @ a.ToF16()
+    pbf := a.ToBF16() @ a.ToBF16()
+    println("a@a max relative error  F32 " $maxRelErr(ref, p32.ToF64()) "  F16 " $maxRelErr(ref, p16.ToF64()) "  BF16 " $maxRelErr(ref, pbf.ToF64()))
+
+    println("largest eigenvalue  F64 " $powerIteration(a, 100).Fixed(6) "  F32 " $powerIteration(a.ToF32(), 100).Fixed(6) "  F16 " $powerIteration(a.ToF16(), 100).Fixed(6) "  BF16 " $powerIteration(a.ToBF16(), 100).Fixed(6))
+
+    # row softmax with a temperature, and its rows' sums
+    logits := linalg.Matrix<F32>(4, 6)
+    logits.FillUniform(r, -3.0, 3.0)
+    probs := linalg.Matrix<F32>(4, 6)
+    probs.RowSoftmax(logits, F32(1))
+    sums := Array<F32>(4)
+    probs.RowSums(sums)
+    println("softmax row sums " $sums)
+
+    # scalar half precision: accumulating 0.1 ten thousand times
+    h F16 = 0.0
+    g BF16 = 0.0
+    f F32 = 0.0
+    for i in range 10000 {
+        h += 0.1
+        g += 0.1
+        f += 0.1
+    }
+    println("sum of 0.1 x 10000  F16 " $h "  BF16 " $g "  F32 " $f)
+    println("F16 max " $F16(65504.0) "  1/3 in F16 " $(F16(1.0) / F16(3.0)) "  in BF16 " $(BF16(1.0) / BF16(3.0)))
+    println("exp(1) F16 " $math.Exp(F16(1.0)) " BF16 " $math.Exp(BF16(1.0)) " F32 " $math.Exp(F32(1.0)))
+}

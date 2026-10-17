@@ -1,0 +1,3 @@
+test "syn" {
+    assert (1 == 
+}

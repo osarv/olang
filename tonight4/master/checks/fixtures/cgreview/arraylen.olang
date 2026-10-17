@@ -1,0 +1,10 @@
+# D14b: a length whose byte count does not fit an I64 is out of range, and aborts as a negative one does
+import "std/io"
+import "std/os"
+
+fn main() ? io.IoError {
+    n I64 = 2305843009213693952 + os.Args().Len()
+    a := Array<I64>(n)
+    a[3] = 77
+    try io.Print("reached " $a.Len() "\n")
+}

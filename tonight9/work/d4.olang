@@ -1,0 +1,26 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn find2(n mut Node&) Node&n ? {
+    if n.v >= 0 { error }
+    return n
+}
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    fa := fn(i I64) { x := try find2(a) catch default Node(i)
+        a.v = x.v }
+    fb := fn(i I64) { x := try find2(b) catch default Node(i)
+        b.v = x.v }
+    c mut Node& = Node(0)
+    join {
+        spawn work(fa, 300000)
+        spawn work(fb, 300000)
+        for i in range 300000 { c.next = Node(i) }
+    }
+    println($a.next.v " " $b.next.v " " $c.next.v)
+}

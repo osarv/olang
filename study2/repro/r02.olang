@@ -1,0 +1,23 @@
+# r02 BUG (use-after-free accepted): a local List/Map built by its constructor and returned by value compiles;
+# its chunks/buckets live in the callee's block and dangle. Segfaults here (u4 variant: Map.Get silently returns 0).
+# A struct holding a List (u2) IS rejected with O26 - only a bare generic container value slips through.
+fn mk() List<I64> {
+    l := List<I64>()
+    for i in range 100 { l.Push(i) }
+    return l
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 100 {
+        a := Array<I64>(64, 7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    l := mk()
+    x := churn()
+    s I64 = 0
+    for v in l { s += v }
+    println($x " " $s)
+}

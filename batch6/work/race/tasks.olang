@@ -1,0 +1,155 @@
+# P4-P4d: tasks that fail, the same built, built -d -s (a use of storage after its scope closed would stop it), and under
+# -i, which runs a join's tasks one after another: each line printed by each, and the three the same
+error E {
+    NEG
+    BIG
+}
+error F {
+    SEVEN
+}
+type Node struct(v I64) {
+    v
+}
+run mut I64 = 1
+fn sq(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    if n > 1000 { error E.BIG }
+    return n * n
+}
+fn seven(n I64) ? F {
+    if n == 7 { error F.SEVEN }
+}
+fn spin(n I64, k I64) I64 ? E {
+    t I64 = 0
+    for i in range k { t = t + i }
+    if t < 0 { return 0 }
+    return try sq(n)
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.NEG }
+    return Node(n * 10)
+}
+fn text(n I64) String ? E {
+    if n < 0 { error E.NEG }
+    return "n=" $n
+}
+fn many(n I64) List<I64> ? E {
+    if n < 0 { error E.NEG }
+    l := List<I64>()
+    for i in range n { l.Push(i * i) }
+    return l
+}
+fn divmod(a I64, b I64) (I64, I64) ? E {
+    if b == 0 { error E.NEG }
+    return a / b, a % b
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        s := $i $i "-" $(i * 3)
+        t = t + s.Len()
+    }
+    return t
+}
+# the earliest-spawned failure, whatever finishes first
+fn earliest() I64 {
+    try join {
+        spawn try spin(-run, 20000)
+        spawn try spin(2000 * run, 0)
+        for i in range 10 { spawn try sq(5000 + i) }
+    } catch E.NEG { return 1 } catch E.BIG { return 2 }
+    return 0
+}
+fn mixed(a I64, b I64) I64 ? E + F {
+    try join {
+        spawn try seven(a)
+        spawn try sq(b)
+    }
+    return 0
+}
+fn classify(a I64, b I64) I64 {
+    return try mixed(a, b) catch F default 70 catch E.NEG default 80 catch E.BIG default 90
+}
+fn sumSq(a Array<I64>&) I64 ? E {
+    out := Array<I64>(a.Len())
+    try join {
+        for i in range a.Len() { spawn out[i] = try sq(a[i]) }
+    }
+    t I64 = 0
+    for x in out { t = t + x }
+    return t
+}
+fn defaulted(a Array<I64>&) String {
+    out := Array<I64>(a.Len())
+    join {
+        for i in range a.Len() { spawn out[i] = try sq(a[i]) catch E.NEG default -1 catch E.BIG default -2 }
+    }
+    return $out
+}
+fn counted() String {
+    tally mut Array<I64>& = Array<I64>(2)
+    join {
+        for i in range 12 { spawn try sq(I64(i) - 6) catch E.NEG { tally[0].AtomicAdd(1) } catch E.BIG { } }
+        spawn try seven(7 * run) catch { tally[1].AtomicAdd(1) }
+    }
+    return $tally
+}
+fn returned() I64 ? E {
+    try join {
+        spawn try sq(-run)
+        return 1
+    }
+    return 2
+}
+fn broken() I64 {
+    n I64 = 0
+    for i in range 3 {
+        try join {
+            spawn try sq((I64(i) - 1) * run)
+            if i < 5 { break }
+        } catch E { n = n + 10 }
+        n = n + 1
+    }
+    return n
+}
+fn nested() I64 {
+    try join {
+        spawn try fn() {
+            try join {
+                spawn try sq(-run)
+            }
+        }
+    } catch E.NEG { return 5 } catch E { return 4 }
+    return 6
+}
+fn main() ? E {
+    println($earliest())
+    println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
+    println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))
+    println(defaulted(I64[3, -3, 3000, 4]))
+    println(counted())
+    println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
+    a, b String
+    p, q Node&
+    l1, l2 List<I64>
+    d1, d2, d3, d4 I64
+    join {
+        spawn a = try text(5 * run) catch default "none"
+        spawn b = try text(-5 * run) catch default "none"
+        spawn p = try mk(4 * run) catch default Node(-1)
+        spawn q = try mk(-4 * run) catch default Node(-1)
+        spawn l1 = try many(3 * run) catch default List<I64>()
+        spawn l2 = try many(-3 * run) catch default List<I64>()
+        spawn d1, d2 = try divmod(17, 5 * run) catch default -1, -2
+        spawn d3, d4 = try divmod(17, 0 * run) catch default -1, -2
+    }
+    churn()
+    println($a " " $b " " $p.v " " $q.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
+    #...and the earliest failure of a join no clause takes leaves main, reported as an unhandled error
+    try join {
+        spawn try sq(4 * run)
+        spawn try sq(-4 * run)
+        spawn try sq(4000 * run)
+    }
+    println("not reached")
+}

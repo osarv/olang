@@ -1,0 +1,6 @@
+# M6a: "is" naming a private case of another module's enum
+import "lib"
+fn main() ? {
+  d := lib.Dir.North
+  b Bool = d is lib.Dir.south
+}

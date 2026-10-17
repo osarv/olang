@@ -1,0 +1,30 @@
+import "std/io"
+type Node struct(v I32, nx Node&) {
+    v
+    next Node& = nx
+}
+type Walk struct(of Node&) { at mut Node&of = of }
+fn (w mut Walk&) Next() Node&w ? Exhausted {
+    if w.at == null { error Exhausted.END }
+    c := w.at
+    w.at = c.next
+    return c
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i), null)
+    }
+}
+fn ro(n Node&) Node&n { return n }
+fn main() ? {
+    head Node& = Node(1, Node(2, Node(3, null)))
+    keep := ro(head)
+    for x in Walk(head) { if x.v == 2 { keep = x } }
+    for i in range 2 {
+        h2 Node& = Node(41, Node(42, null))
+        for y in Walk(h2) { if y.v == 42 { keep = y } }
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

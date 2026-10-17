@@ -1,0 +1,12 @@
+fn main() ? {
+    c := churn() < 0
+    a1 := Array<Box>(1)
+    k1 := a1[0].head
+    {
+        a2 := Array<Box>(1)
+        h := (a1 if c else a2)[0]
+        growv(h)
+    }
+    churn()
+    println($rd(k1))
+}

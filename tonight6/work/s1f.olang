@@ -1,0 +1,28 @@
+type Rec struct(name String&, n I64) {
+    name
+    n
+}
+fn (r mut Rec&) SetName(s String&) { r.name = s }
+fn setName(r mut Rec&, s String&) { r.name = s }
+fn setNameG(r mut <T>&, s T) { r = s }
+fn (r mut Rec&) Self() mut Rec&r { return r }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn main() ? {
+    l := List<Rec>()
+    l.Push(Rec("start", 0))
+    rows := List<List<Rec>>()
+    rows.Push(l)
+    f := fn(r mut Rec&, s String&) { r.name = s }
+    for k in range 3 {
+        t := $k "-loop-body-text-of-moderate-length"
+        setNameG(l[0], Rec(t, 1))
+    }
+    println($churn() " " $l[0].name)
+}

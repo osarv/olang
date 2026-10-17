@@ -1,0 +1,21 @@
+# a module whose enum has a private case, whose error type has a private word, with a private method and type
+import Other "other"
+type Dir enum {
+  North
+  south
+  Hold(v I32)
+}
+error Err {
+  Loud
+  quiet
+}
+type Rec struct(id I32) {
+  Id I32 = id
+}
+fn (r Rec) peek() I32 { return r.Id }
+type hid struct(x I32) { x }
+fn Fail(n I32) ? Err {
+  if n == 1 { error Err.quiet }
+  error Err.Loud
+}
+fn South() Dir { return Dir.south }

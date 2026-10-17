@@ -1,0 +1,35 @@
+type Rule struct(Target String&, Deps List<String&>) {
+    Target
+    Deps
+}
+type Mk struct() {
+    rules Map<String&, Rule> = Map<String&, Rule>()
+}
+fn (m mut Mk&) parseB(text String&) {
+    for line in text.Lines() {
+        deps := List<String&>()
+        m.rules.Put(line, Rule(line, deps))
+    }
+}
+fn (m mut Mk&) parseC(text String&) {
+    for line in text.Lines() {
+        m.rules.Put(line, Rule(line, List<String&>()))
+        r mut Rule&m = try m.rules.Get(line) catch { unreachable }
+        for d in line.Split(" ") { r.Deps.Push(d) }
+    }
+}
+fn build(text String&) Map<String&, Rule> {
+    rules := Map<String&, Rule>()
+    for line in text.Lines() {
+        deps := List<String&>()
+        for d in line.Split(" ") { deps.Push(d) }
+        rules.Put(line, Rule(line, deps))
+    }
+    return rules
+}
+fn main() ? {
+    m := Mk()
+    m.parseB("a b\nc d e")
+    m.parseC("a b\nc d e")
+    println($m.rules.Len() " " $build("x y\nz").Len())
+}

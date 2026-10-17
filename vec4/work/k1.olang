@@ -1,0 +1,29 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F2: a marked function whose unrecorded return borrows an object of the SAME type below the same parameter
+type CB struct() {
+    a own mut String& = $1 "-aaaaaaaaaaaaaaaa"
+    b own mut String& = $2 "-bbbbbbbbbbbbbbbb"
+}
+fn (c CB&) TextB() String&c { return c.b }
+fn (c CB&) Pick(raw Bool) String&c {
+    if raw { return c.a }
+    t := c.TextB()
+    return t
+}
+fn use(c mut CB&) {
+    t := c.Pick(false)
+    c.b = $3 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

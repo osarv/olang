@@ -1,0 +1,26 @@
+import "std/io"
+type K struct(a I32, b String&, c Col) {
+    a
+    b
+    c
+}
+type Col enum {
+    Red
+    Green
+    Blue(n I64, s String&)
+}
+type W struct(u U8, i I16, e Col) {
+    u
+    i
+    e
+}
+fn h1(m I32) I64 { return K(m, "k" $m, Col.Blue(I64(m), "z")).Hash() }
+fn h2(m I32) I64 { return Col.Blue(I64(m), "x").Hash() }
+fn h3(m I32) I64 { return I32[m, 2].Hash() }
+fn h4(m I32) I64 { return W(U8(m), I16(-m), Col.Green).Hash() }
+fn h5(m I32) I64 { return Pair(m, I64(m)).Hash() }
+fn h6(m I32) I64 { return ("abc" $m).Hash() }
+M mut I32 = 13
+fn main() ? io.IoError {
+    try io.Print($h1(M) "\n")
+}

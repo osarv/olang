@@ -1,0 +1,8 @@
+import "std/os"
+fn main() ? {
+    x mut Array<I64>& = Array<I64>(1)
+    for sz in I64[65536, 32768, 24576, 20000, 16384, 0] {
+        os.RunOnStack(sz, fn() { x[0] = x[0] + 1 })
+        println("ok " $sz)
+    }
+}

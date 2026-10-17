@@ -1,0 +1,4 @@
+fn main() ? {
+    a := I32[1, 2, 3]
+    println($a)
+}

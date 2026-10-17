@@ -1,0 +1,4 @@
+step 0: alive 7 food 6 eaters 1 sparks 0
+final: alive 210 food 180 eaters 30 sparks 0
+carried 0 log 0 last: -
+born 210 died 0 eaten 0 pairs 896

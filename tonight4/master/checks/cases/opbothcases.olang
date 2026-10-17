@@ -1,0 +1,8 @@
+# check: fail error[M6b]: V declares Plus twice, public and private
+# M6b: a method the compiler calls is public or private, never both
+type V struct(x I32) {
+    x
+}
+fn (a V) Plus(b V) V { return a }
+fn (a V) plus(b V) V { return b }
+fn main() ? { }

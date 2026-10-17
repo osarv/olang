@@ -1,0 +1,15 @@
+# r14 PERF (memory): an instance held by reference is allocated at its full size rounded to O8a's alignment class - 8
+# below 32 bytes, 32 from 32, 64 from 64 - so a 40-byte struct takes 64 bytes and a 72-byte one 128. An enum held by
+# reference is sized by its largest case, so every node of an AST enum pays for it: in the study's AST (largest case
+# 7 words + tag) an Expr.Name(at, name) or Expr.Default(at) costs 128 bytes. Measured with 1M nodes kept in a List
+# (peak RSS minus the list's own): max payload 1 word 16 B, 2 words 24 B, 3 words 32 B, 4-7 words 64 B, 8-9 words 128 B;
+# a struct of 4 words 32 B, of 5 words 64 B. O8a's alignment is for SIMD arrays; structs and enums need only theirs.
+type E enum {
+    A(at I64)
+    Big(f0 I64, f1 I64, f2 I64, f3 I64, f4 I64, f5 I64, f6 I64, f7 I64)
+}
+fn main() ? {
+    keep := List<E&>()
+    for i in range 1000000 { keep.Push(E.A(i)) }
+    println($keep.Len())        # ~143 MB peak RSS; with Big at 3 fields, ~49 MB
+}

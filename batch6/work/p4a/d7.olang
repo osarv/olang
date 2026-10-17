@@ -1,0 +1,36 @@
+# P4a: a default that is a conditional or a match of a new instance and existing storage
+error E {
+    NEG
+}
+type Node struct(v I64) {
+    v
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.NEG }
+    return Node(n)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i)
+        t = t + nn.v
+    }
+    return t
+}
+fn fill(out mut Array<Node&>&, k I64) {
+    for i in range 2 {
+        local Node& = Node(100 + i)
+        join {
+            spawn out[i] = try mk(-1) catch default (match k { case 9 => Node(-1) case _ => local })
+        }
+        churn()
+    }
+}
+fn main() ? {
+    out := Array<Node&>(2)
+    fill(out, 1)
+    churn()
+    println($out[0].v " " $out[1].v)
+}

@@ -1,0 +1,10 @@
+# G20: a constant parameter's type may not declare Eq - checked whatever order the declarations come in
+type Box<N K> struct() { x mut I32 }
+type K extends I32
+fn (a K) Eq(b K) Bool { return true }
+fn (a K) Hash() I64 { return 0 }
+fn main() ? {
+    a := Box<1>()
+    b := Box<2>()
+    println($a.x $b.x)
+}

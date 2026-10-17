@@ -1,0 +1,32 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+}
+
+type Box struct() {
+    next mut Node& = null
+}
+
+G mut Box = Box()
+GL mut List<Node&> = List<Node&>()
+
+fn setIt(n I64) {
+    G.next = Node(n)
+    GL.Push(Node(n + 1))
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 10 {
+        b := Array<I64>(16, 99)
+        t = t + b[0]
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    setIt(7)
+    k := churn()
+    try io.Print($G.next.v " " $GL[0].v " " $k "\n")
+}

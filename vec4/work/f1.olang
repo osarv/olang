@@ -1,0 +1,23 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F1: a "fresh" local - declared once from new text, never assigned - but typed to live where the parameter lives
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(a mut String&, n I64) mut String& {
+    out mut String&a = $n "-new-text-built-where-a-lives"
+    return out
+}
+fn main() ? {
+    c := CB()
+    d := mk(c.text, 5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}

@@ -1,0 +1,31 @@
+# a callee judged view-only stores a borrow of the hidden copy's VALUE part (c.inner) into what the copy's reference
+# names (c.ref, the collection's R) - the copy is a stack slot of the caller's frame, which returns
+type Inner struct(x I64) {
+    x
+}
+type R struct() {
+    i Inner& = null
+}
+type V struct(ref mut R&, inner Inner) {
+    ref
+    inner
+}
+type Vs struct(r mut R&) {
+    r
+}
+fn (s Vs&) At(i I64) V { return V(s.r, Inner(i)) }
+fn keep(r mut R&, i Inner&) { r.i = i }
+fn f(c mut V&) { keep(c.ref, c.inner) }
+fn step(s Vs&) { f(s[42]) }
+fn clobber(n I64) I64 {
+    a := Array<I64, 64>()
+    for k in range 64 { a[k] = n * 1000 + k }
+    if n > 0 { return clobber(n - 1) + a[3] }
+    return a[5]
+}
+fn main() ? {
+    s := Vs(R())
+    step(s)
+    println($clobber(20))
+    println($s.r.i.x)
+}

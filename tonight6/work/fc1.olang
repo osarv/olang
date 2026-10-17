@@ -1,0 +1,37 @@
+# forgetCall: the At built for "m[key] = v" is set aside; does SetAt's key still land where SetAt keeps it?
+type TMap struct() {
+    keys List<String&> = List<String&>()
+    vals List<I64> = List<I64>()
+}
+fn (m TMap&) At(k String&) I64 {
+    for i in range m.keys.Len() {
+        if m.keys[i] == k { return m.vals[i] }
+    }
+    return -1
+}
+fn (m mut TMap&) SetAt(k String&, v I64) {
+    m.keys.Push(k)
+    m.vals.Push(v)
+}
+fn (m TMap&) Len() I64 { return m.keys.Len() }
+fn mkKey(k I64) String { return $k "-a-key-of-moderate-length-xxxxxxxxxxxxxxxx" }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn main() ? {
+    m := TMap()
+    for k in range 3 {
+        m[$k "-joined-key-of-moderate-length-yyyyyyyyyyyyyyyy"] = k
+        m[mkKey(k)] = k + 10
+    }
+    println($churn())
+    for i in range m.Len() {
+        println(m.keys[i])
+        println($m.vals[i])
+    }
+}

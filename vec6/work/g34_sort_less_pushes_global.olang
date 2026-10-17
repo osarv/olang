@@ -1,0 +1,21 @@
+G mut Vec<I64> = Vec<I64>()
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    for i in range 5 { G.Push(5 - i) }
+    v := Vec<I64>()
+    for i in range 5 { v.Push(i) }
+    d := G.View()
+    v.Sort(fn(a I64, b I64) Bool {
+        G.Push(a)
+        return a < b
+    })
+    churn()
+    println($d[0])
+}

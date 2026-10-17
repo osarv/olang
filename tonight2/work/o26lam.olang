@@ -1,0 +1,51 @@
+type E enum {
+    Lit(v I64)
+    Add(a E&, b E&)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Add(a, b) => eval(a) + eval(b)
+    }
+}
+fn lit(v I64) E& { return E.Lit(v) }
+fn build(n I64) E& {
+    lhs mut E& = E.Lit(1)
+    for i in range n {
+        rhs := lit(i)
+        lhs = E.Add(lhs, rhs)
+    }
+    return lhs
+}
+fn pair(n I64) (E&, I64) {
+    acc mut E& = E.Lit(0)
+    x := lit(n)
+    k I64 = 0
+    acc, k = E.Add(acc, x), 5
+    return acc, k
+}
+fn main() ? {
+    mk := fn(n I64) E& {
+        lhs mut E& = E.Lit(100)
+        for i in range n {
+            r := lit(i)
+            lhs = E.Add(r, lhs)
+        }
+        return lhs
+    }
+    e := build(10)
+    f := mk(10)
+    p, k := pair(7)
+    churn()
+    println($eval(e) " " $eval(f) " " $eval(p) " " $k)
+}

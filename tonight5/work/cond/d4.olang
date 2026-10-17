@@ -1,0 +1,16 @@
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    k1 := outer.head
+    {
+        inner mut Box& = Box()
+        x := 1
+        d Box = match x {
+            case 1 => outer
+            case _ => inner
+        }
+        growv(d)
+    }
+    churn()
+    println($rd(k1))
+}

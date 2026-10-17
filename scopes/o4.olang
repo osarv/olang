@@ -1,0 +1,25 @@
+# a by-value parameter holding references, stored by the callee into a longer-lived container
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n }
+type HBox struct(h0 Holder) { h mut Holder = h0 }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn setH(b mut HBox&, h Holder) { b.h = h }
+fn put(l mut List<Holder>&, h Holder) { l.Push(h) }
+fn main() ? {
+    outer Node& = Node(1)
+    b HBox& = HBox(Holder(outer))
+    l List<Holder>& = List<Holder>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        setH(b, Holder(inner))
+        put(l, Holder(inner))
+    }
+    churn()
+    try io.Print($b.h.n.v " " $l[0].n.v "\n")
+}

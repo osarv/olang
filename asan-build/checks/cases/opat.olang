@@ -1,0 +1,6 @@
+# check: fail '@' has no built-in meaning
+# E31: @ means only what a type declares
+fn main() ? {
+    a := 1
+    b := a @ a
+}

@@ -1,0 +1,28 @@
+# a local given takes from two locals, one in a branch - both flow into the result
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk(c Bool) Vec<String&> {
+    a := Lex()
+    b := Lex()
+    for i in range 3 { a.toks.Push($i "-word-in-a") }
+    for i in range 3 { b.toks.Push($i "-word-in-b") }
+    w := take a.toks
+    if c { w = take b.toks }
+    return w
+}
+fn main() ? {
+    x := mk(true)
+    y := mk(false)
+    churn()
+    println(x[0])
+    println(y[0])
+}

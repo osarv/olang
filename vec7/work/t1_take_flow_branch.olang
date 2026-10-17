@@ -1,0 +1,24 @@
+# O26a follows take: a take in a branch, into a local declared before
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk(c Bool) Vec<String&> {
+    w := Vec<String&>()
+    l := Lex()
+    for i in range 3 { l.toks.Push($i "-word-in-l's-storage") }
+    if c { w = take l.toks }
+    return w
+}
+fn main() ? {
+    a := mk(true)
+    churn()
+    println(a[0])
+}

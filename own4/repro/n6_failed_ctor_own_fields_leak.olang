@@ -1,0 +1,38 @@
+# own4 N6: a constructor that fails after making an own field leaves that field's region (and the destructors of what
+# it holds) released by nobody. cgOwnDecl/cgVarDecl register no release for a ctorField owner - the instance releases
+# it once assembled (cgOwnDropFn) - so when the body fails first, by its own `error` or by an uncaught `try`, the
+# region is never released. O35 says a frame's owners are released on every way out; a constructor's are not.
+# Expected: made 2 dropped 2. Got (-b, -b -s): made 2 dropped 0; valgrind (-a x86-64-v3): 88 bytes x2 definitely lost
+# in __olang_own_new; -i refuses destructors (stage 1). Same on 079921e (pre-existing in phase 2a's sense: F4 did not
+# reach constructors).
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Leaf struct(n I64) {
+    n
+    Made = Made + 1
+} destruct { Dropped = Dropped + 1 }
+fn check(n I64) I64 ? {
+    if n > 2 { error }
+    return n
+}
+type C struct(n I64) ? {
+    n
+    a own mut Leaf& = Leaf(n)          # an own field, made
+    k := try check(n)                  # fails: no instance - 'a' is released by nobody
+}
+type D struct(n I64) ? {
+    n
+    a own mut Leaf& = Leaf(n)
+    if n > 2 { error }                 # the constructor's own error
+}
+fn mkC(n I64) ? {
+    c := try C(n)
+}
+fn mkD(n I64) ? {
+    d := try D(n)
+}
+fn main() ? {
+    try mkC(5) catch { }
+    try mkD(5) catch { }
+    println("made " $Made " dropped " $Dropped)
+}

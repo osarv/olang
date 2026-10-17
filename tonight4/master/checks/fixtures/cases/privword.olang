@@ -1,0 +1,5 @@
+# M6a: a private error word in a catch is one error - not also an error left uncaught
+import "lib"
+fn main() ? {
+  try lib.Fail(1) catch lib.Err.quiet { } catch lib.Err.Loud { }
+}

@@ -1,0 +1,6 @@
+# DIAGNOSTIC (study 4's r14, still so): std/json's own comments write "Json.Obj(...)"; from an importer the type is
+# json.Json, and "Json&" / "Json.Num" give "unknown type 'Json'" and "'Json' is no import here" at every use (10 errors
+# for one cause in the report program), never "did you mean json.Json".
+import "std/json"
+fn wrap(x F64) Json& { return Json.Num(x) }
+fn main() ? { println($wrap(1.0)) }

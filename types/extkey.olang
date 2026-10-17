@@ -1,0 +1,10 @@
+# T29f/G19: a type extending I64 has I64's Hash (T29f's own example) - so it meets Hashable and is a Map key
+import "std/io"
+import "std/map"
+type Id extends I64
+fn main() ? {
+  x := Id(5).Hash()
+  m := map.Map<Id, I32>()
+  m.Put(Id(105), 1)
+  try io.Print($x " " $(try m.Get(Id(105)) catch default -1) "\n")
+}

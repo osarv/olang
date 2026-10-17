@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/k16.olang:9:97: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    9 | fn k(a mut Array<Char>&) mut Array<Char>& { return I64[1, 2].Iter().Fold(a, fn(acc, x) { return acc }) }
+      |                                                                                                 ^~~
+compilation failed with 1 error

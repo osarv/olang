@@ -1,0 +1,24 @@
+type Reading struct(Sensor String&, Value F64) {
+    Sensor
+    Value
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+
+fn main() ? {
+    keep := fn() { println("none") }
+    for k in range 3 {
+        t := $k "-text-built-in-loop-of-moderate-length"
+        r := Reading(t, 1.0)
+        keep = fn() { println(r.Sensor) }
+    }
+    c := churn()
+    println($c)
+    keep()
+}

@@ -1,0 +1,23 @@
+== mixed, keep going
+  job 0: done 1834604
+  job 1: done 5
+  job 2: done 387940
+  job 3: timed out
+  job 4: failed with 7
+  job 5: done 215015
+  totals: done=4 failed=1 timed=1
+== fail fast
+  job 0: cancelled
+  job 1: failed with 3
+  job 2: cancelled
+  job 3: cancelled
+  job 4: cancelled
+  job 5: cancelled
+  totals: cancelled=5 failed=1
+== run deadline
+  job 0: done 100
+  job 1: cancelled
+  job 2: cancelled
+  job 3: cancelled
+  totals: cancelled=3 done=1
+started 15, finished 15

@@ -1,0 +1,22 @@
+# C2d (no own): the same through a plain function returning the instance by value
+type H struct(x String&, n I64) {
+    y String&x = $n "-new-text-in-x's-scope"
+}
+fn mk(p String&) H { return H(p, 5) }
+fn main() ? {
+    h := mk("outer")
+    for i in range 2 {
+        t := $i "-inner-block-text"
+        h = mk(t)
+    }
+    churn()
+    println(h.y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

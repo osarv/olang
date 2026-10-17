@@ -1,0 +1,13 @@
+import "std/io"
+fn rec(n I32) I32 {
+    if n == 0 { return 0 }
+    x I32 = n
+    for i in range 1 {
+        x = x + 0
+    }
+    return rec(n - 1) + 1
+}
+N mut I32 = 99990
+fn main() ? io.IoError {
+    try io.Print($rec(N) "\n")
+}

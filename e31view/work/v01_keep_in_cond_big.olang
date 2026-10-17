@@ -1,0 +1,45 @@
+# a01 with the call in a loop's condition and the element over 64KB (its hidden copy in an arena): the callee keeps a
+# borrow of the copy's value part in the collection's R, which lives in main's block - read after a churn under -s
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+    x I64 = 0
+}
+type R struct() {
+    i Big& = null
+}
+type V struct(ref mut R&, n I64) {
+    ref
+    n
+    big Big = Big()
+}
+type Vs struct(r mut R&) {
+    r
+}
+fn (s Vs&) At(i I64) V {
+    v := V(s.r, i)
+    v.big.x = 1000 + i
+    return v
+}
+fn keep(r mut R&, b Big&) { r.i = b }
+fn f(c mut V&) I64 {
+    keep(c.ref, c.big)
+    return c.n
+}
+fn churn() {
+    for k in range 50 {
+        a := Array<I64>(20000, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    s := Vs(R())
+    k := 0
+    for f(s[k]) < 2 { k++ }
+    churn()
+    println($s.r.i.x)
+    {
+        f(s[7])
+    }
+    churn()
+    println($s.r.i.x)
+}

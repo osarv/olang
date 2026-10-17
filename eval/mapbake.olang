@@ -1,0 +1,45 @@
+import "std/io"
+import "std/map"
+type K struct(a I32, b String&) {
+    a
+    b
+}
+type Col enum {
+    Red
+    Green
+    Blue(n I64)
+}
+fn mk() map.Map<K, I64>& {
+    m map.Map<K, I64>&return = map.Map<K, I64>()
+    for i in range 20 { m.Put(K(I32(i), "k" $i), i * 10) }
+    return m
+}
+fn mk2() map.Map<Col, I32>& {
+    m map.Map<Col, I32>&return = map.Map<Col, I32>()
+    m.Put(Col.Red, 1)
+    m.Put(Col.Blue(5), 2)
+    m.Put(Col.Blue(6), 3)
+    return m
+}
+fn mk3() map.Map<Pair<I32, String&>, I32>& {
+    m map.Map<Pair<I32, String&>, I32>&return = map.Map<Pair<I32, String&>, I32>()
+    m.Put(Pair(1, "x"), 7)
+    return m
+}
+fn mk4() map.Map<Array<I32>, I32>& {
+    m map.Map<Array<I32>, I32>&return = map.Map<Array<I32>, I32>()
+    m.Put(I32[1, 2, 3], 9)
+    return m
+}
+G map.Map<K, I64>& = mk()
+G2 map.Map<Col, I32>& = mk2()
+G3 map.Map<Pair<I32, String&>, I32>& = mk3()
+G4 map.Map<Array<I32>, I32>& = mk4()
+M mut I32 = 13
+fn main() ? io.IoError {
+    v := try G.Get(K(M, "k" $M)) catch default -1
+    w := try G2.Get(Col.Blue(I64(M) - 7)) catch default -1
+    x := try G3.Get(Pair(M - 12, "x")) catch default -1
+    y := try G4.Get(I32[M - 12, 2, 3]) catch default -1
+    try io.Print($v " " $w " " $x " " $y " " $K(M, "q").Hash() " " $Col.Blue(I64(M)).Hash() " " $I32[M].Hash() "\n")
+}

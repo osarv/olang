@@ -1,0 +1,11 @@
+type Two struct() {
+    v Vec<I64> = Vec<I64>()
+}
+fn main() ? {
+    t := Two()
+    for i in range 100000 {
+        c := t
+        c.v = Vec<I64>(8)
+    }
+    println($t.v.Len())
+}

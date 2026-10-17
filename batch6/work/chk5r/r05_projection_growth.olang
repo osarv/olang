@@ -1,0 +1,30 @@
+# CONFIRMED, NEW (771a922): unbounded memory growth. "t := lx.next().text" in a loop: r05 lands next() by its
+# obligations (lx outlives its result scope) because a field is read off its result, so everything next() builds fresh -
+# here the rendered "fresh" text of every other token - is built where the lexer lives (main's block) and kept until
+# main returns. 30M tokens: new peak RSS 206-239 MB, c2a38f0 1.5 MB (it kept the call in the loop body). See run.sh.
+# Output (both): 2454444445
+type Token struct(kind I64, text String&) {
+    kind
+    text
+}
+type Lexer struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (lx mut Lexer&) next() Token {
+    lx.at++
+    if lx.at % 2 == 0 { return Token(1, lx.src[0:3]) }  # a slice of the source: lives where the lexer's text does
+    return Token(2, "n" $lx.at)                          # fresh text, built in the result scope
+}
+fn count(lx mut Lexer&, n I64) I64 {
+    total I64 = 0
+    for k in range n {
+        t := lx.next().text
+        total += t.Len() + I64(t[t.Len() - 1])
+    }
+    return total
+}
+fn main() ? {
+    lx := Lexer("abcdef")
+    println($count(lx, 30000000))
+}

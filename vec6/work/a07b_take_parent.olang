@@ -1,0 +1,23 @@
+type In struct() {
+    v Vec<I64> = Vec<I64>()
+}
+type Out struct() {
+    i In = In()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    o := Out()
+    for k in range 3 { o.i.v.Push(k + 1) }
+    d := o.i.v.View()
+    m := take o.i
+    for k in range 100 { m.v.Push(k) }
+    churn()
+    println($d[0])
+}

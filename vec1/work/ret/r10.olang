@@ -1,0 +1,25 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn id(a Array<I64>&) Array<I64>&a { return a }
+
+fn f(v Vec<I64>&, c Bool) Array<I64>&v { defer println("x")
+    return v.View() }
+
+fn grow(w mut Vec<I64>&) {
+    d := f(w, true)
+    for i in range 1000 { w.Push(i + 100) }
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    grow(v)
+}

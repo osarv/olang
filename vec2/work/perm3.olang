@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<String&>& = Array<String&>(2)
+}
+fn mk(x String&) String&x { return $x "-built-where-x-lives" }
+fn perm(a mut Array<String&>&) {
+    t := mk(a[1])
+    u := a[0]
+    u = t
+    a[0] = u
+}
+fn main() ? {
+    c := CB()
+    c.data[0] = "p"
+    c.data[1] = "q"
+    perm(c.data)
+    s := c.data[0]
+    c.data = Array<String&>(4)
+    churn()
+    println(s)
+}

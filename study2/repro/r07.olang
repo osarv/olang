@@ -1,0 +1,32 @@
+# r07 OVER-REJECTION: a conditional of two references borrowed from the same parameter (both Box&p) has no scope of its
+# own: passed into an enum case that is returned (c), or held by ":=" first (e), it is O26 "refers to this function's own
+# storage". Returning it directly (d) and a typed local "x Box&p = ..." (f) work. Same with String&p (the parser's case).
+type Node enum {
+    Leaf(s Box&)
+}
+type Box struct(v I64) { v }
+type P struct() {
+    a Box& = Box(1)
+    b Box& = Box(2)
+    pos mut I64 = 0
+}
+fn (p P&) one() Box&p { return p.a }
+fn (p P&) two() Box&p { return p.b }
+fn (p mut P&) d() Box&p {
+    return p.one() if p.pos == 0 else p.two()
+}
+fn (p mut P&) e() Node&p {
+    x := p.one() if p.pos == 0 else p.two()
+    return Node.Leaf(x)
+}
+fn (p mut P&) f() Node&p {
+    x Box&p = p.one() if p.pos == 0 else p.two()
+    return Node.Leaf(x)
+}
+fn (p mut P&) c() Node&p {
+    return Node.Leaf(p.one() if p.pos == 0 else p.two())
+}
+fn main() ? {
+    p := P()
+    println($p.d() " " $p.e() " " $p.f())
+}

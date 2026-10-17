@@ -1,0 +1,13 @@
+import "std/io"
+type N struct(v I32) {
+    v
+}
+fn (a N) Less(b N) Bool {
+    if a.v < 50 { return a.v < b.v and chain(a.v + 100) }
+    return a.v < b.v
+}
+fn chain(base I32) Bool { return N(base) < N(base + 10) < N(base + 20) }
+M mut I32 = 0
+fn main() ? io.IoError {
+    try io.Print($chain(M) "\n")
+}

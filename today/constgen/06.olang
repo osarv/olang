@@ -1,0 +1,9 @@
+# G21/E28/E7: a conditional chooses one value and 'and' short-circuits, so the branch not taken is never computed;
+# the constant-argument fold computes both and fails on the one not taken
+type Box<N I64> struct() {
+    a mut Array<I32, (10 / N if N != 0 else 1)>
+}
+fn main() ? {
+    b := Box<0>()
+    println($b.a.Len())
+}

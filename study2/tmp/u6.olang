@@ -1,0 +1,14 @@
+fn mk() List<I64> {
+    l := List<I64>&return()
+    for i in range 100 { l.Push(i) }
+    return l
+}
+fn mk2() List<I64> {
+    l List<I64>&return = List<I64>()
+    for i in range 100 { l.Push(i) }
+    return l
+}
+fn main() ? {
+    l := mk()
+    println($l.Len())
+}

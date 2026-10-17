@@ -1,0 +1,4 @@
+N U8 = 3
+fn F(x U8 = N + 1) I64 {
+    return I64(x)
+}

@@ -1,0 +1,35 @@
+# escape: a lambda capturing the handle parameter and storing its address into a long-lived field
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() { c mut Cell& = Cell() }
+fn stash(h mut Box&) {
+    f := fn() { h.c.kept = h }
+    f()
+}
+fn run(m mut Map<I64, Box>&) ? {
+    for i in range 3 {
+        c := try m.Get(1)
+        c.c.v = 40 + i
+        stash(c)
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 5000 {
+        a := Array<I64>(8, i)
+        p := Box()
+        p.c.v = i
+        t += a[0] + p.c.v
+    }
+    return t
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try run(m)
+    churn()
+    h := try m.Get(1)
+    println($h.c.kept.c.v)
+}

@@ -1,0 +1,39 @@
+type Ctr struct(n I64) { n }
+fn (c mut Ctr&) Call(f fn(x I64) I64, k I64) I64 {
+    c.n = f(c.n + k)
+    return c.n
+}
+fn twice(f fn(x I64) I64, x I64) I64 { return f(f(x)) }
+fn applyG(f fn(x <T>) T, v T) T { return f(v) }
+fn compose(f fn(x I64) I64, g fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return f(g(x)) }
+}
+fn useDef(f fn(x I64) I64 = null, x I64 = 3) I64 {
+    if f == null { return -x }
+    return f(x)
+}
+fn hof(h fn(f fn(x I64) I64, x I64) I64) I64 {
+    return h(fn(x I64) I64 { return x * 7 }, 2)
+}
+fn run() I64 {
+    base := 10
+    add := fn(x I64) I64 { return x + base }
+    c mut Ctr& = Ctr(1)
+    cf fn(f fn(x I64) I64, k I64) I64 = c
+    r1 := cf(add, 1)
+    r2 := twice(add, 1)
+    r3 := applyG(fn(f fn() I64) fn() I64 { return f }, fn() I64 { return 5 })()
+    r4 := compose(add, fn(x I64) I64 { return x * 2 })(3)
+    r5 := useDef() + useDef(add)
+    r6 := hof(twice)
+    out mut Array<I64>& = Array<I64>(2, 0)
+    join {
+        spawn out[0] = twice(add, 4)
+        spawn out[1] = hof(twice)
+    }
+    return r1 + r2 * 10 + r3 * 100 + r4 * 1000 + r5 * 10000 + r6 * 100000 + out[0] * 1000000 + out[1] * 10000000
+}
+Baked := run()
+fn main() ? {
+    println($Baked " " $run())
+}

@@ -1,0 +1,12 @@
+# check: fail error[E31a]: 'try' on several indices needs Grid to declare TryAt
+# E31a: a checked index derived from Len checks one position, so "try g[i, j]" needs a TryAt of the type's own
+type Grid struct(cols I64) {
+    cols
+    cells Array<I64>& = Array<I64>(cols * cols)
+}
+fn (g Grid&) At(i I64, j I64) I64 { return g.cells[i * g.cols + j] }
+fn (g Grid&) Len() I64 { return g.cells.Len() }
+fn main() ? {
+    g := Grid(2)
+    v := try g[1, 1] catch default 0
+}

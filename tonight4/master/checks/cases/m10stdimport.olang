@@ -1,0 +1,6 @@
+# check: fail error[M10]: 'math' is no import here - std has it: 'import "std/math"'
+# M10/B11: a module std has, used with no import, gets the import to write
+fn main() ? {
+    m := math.Min(1, 2)
+    println($m)
+}

@@ -1,0 +1,7 @@
+# check: run
+# L12: a "." before a name is no decimal point - "7.Hash()" calls a method on the integer 7
+fn main() ? {
+    assert 7.Hash() == I32(7).Hash()
+    x := 7.5
+    assert x > 7.0
+}

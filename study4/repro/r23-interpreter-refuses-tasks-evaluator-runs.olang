@@ -1,0 +1,27 @@
+# r23 FRICTION (-i, B3e/K1) - the compile-time evaluator runs a join's tasks one after another (K1), so a global
+# computed with join/spawn is baked as a constant (here "@...Baked = constant double ..."), but "olang -i" refuses the
+# same initializer: "olang -i: ...: it starts tasks, which -i does not run yet". Every concurrent program of this study
+# (pgrep, jobrun, tailer, fetch, dedup, pipeline, pmat, sandbox) stops there under -i, even where - as here - running
+# the tasks in sequence gives the answer. (A channel between two tasks would deadlock in sequence; a fan-out does not.)
+#
+# expected: -i prints what -b prints: "true -14.200000000"
+# actual:   -b prints it; -i: "olang -i: r23-...olang:12: it starts tasks, which -i does not run yet", status 1
+fn bands(n I64, tasks I64) F64 {
+    sums := Array<F64>(tasks)
+    join {
+        for t in range tasks { spawn sums[t] = band(n, t * (n / tasks), (t + 1) * (n / tasks)) }
+    }
+    return sums.Fold(0.0, fn(s F64, x F64) F64 { return s + x })
+}
+
+fn band(n I64, lo I64, hi I64) F64 {
+    s := 0.0
+    for i in range lo, hi { s += F64(i * i % 7) - 3.1 }
+    return s
+}
+
+Baked := bands(12, 3)
+
+fn main() ? {
+    println($(Baked == bands(12, 3)) " " $Baked.Fixed(9))
+}

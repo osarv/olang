@@ -1,0 +1,29 @@
+# own3 F1: a callee given a whole own-array borrow builds an element's referent in the buffer's region; an index read
+# of that element is retagged to the slot's reach (E), so it outlives the buffer it lives in.
+# -b -s: "use after scope closed"; -b: prints churned bytes; -i: "7built-by-callee"
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type B struct() {
+    names own mut Array<String&>& = Array<String&>(3)
+}
+fn fill(a mut Array<String&>&) { a[0] = $7 "built-by-callee" }   # built in &a - bound to the buffer's region
+fn setFirst(a mut Array<<T>>&, v T) { a[0] = v }                  # (the same through a generic: v made for &a)
+fn main() ? {
+    b := B()
+    fill(b.names)
+    e := b.names[0]                     # read through the retag: said to live where b does
+    b.names = Array<String&>(1)         # the old buffer's region released - and the text with it
+    churn()
+    println(e)
+    setFirst(b.names, $5 "via-generic")
+    f := b.names[0]
+    b.names = Array<String&>(1)
+    churn()
+    println(f)
+}

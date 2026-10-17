@@ -1,0 +1,11 @@
+# a local named like a method makes "a.count()" call the local as a function value (codegen's cgNamedTarget looks the
+# callee up among locals by name, methods included): a segfault, or garbage
+type box struct() {
+    n mut I64 = 0
+}
+fn (a box&) count() I64 { return 1 }
+fn main() ? {
+    a := box()
+    count := a.count()
+    assert count == 1
+}

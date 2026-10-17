@@ -1,0 +1,42 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type E enum {
+    A(n mut Node&)
+    Z
+}
+type Box struct() {
+    head mut Node& = Node()
+    items Array<mut Node&, 2>
+    e E = E.Z
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type K struct(b mut Box&) {
+    b.head.next = Node()
+    b.head.next.v = 42
+    k := 1
+}
+fn bump(src mut W&) {
+    b := src.b
+    q := K(b)
+}
+fn main() ? {
+    w := W(Box())
+    w.b.items[0] = Node()
+    w.b.items[1] = Node()
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

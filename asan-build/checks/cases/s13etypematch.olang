@@ -1,0 +1,11 @@
+# check: fail a type match chooses its case while compiling, so it takes no guard
+# S13e: nothing is left at run time for a guard to decide
+fn f(v <T>) I32 {
+    match <T> {
+        case I32 if v > 0 { return 1 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? {
+    assert f(3) == 1
+}

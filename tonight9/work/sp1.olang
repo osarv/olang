@@ -1,0 +1,21 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn put(n mut Node&, m mut Node&n = Node(7)) {
+    for i in range 1000 { n.v = n.v + m.v }
+    n.next = m
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    c mut Node& = Node(0)
+    for r in range 50 {
+        join {
+            spawn put(a)
+            spawn put(b)
+            for i in range 1000 { c.next = Node(i) }
+        }
+    }
+    println($a.v " " $b.v " " $a.next.v " " $c.next.v)
+}

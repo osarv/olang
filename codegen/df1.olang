@@ -1,0 +1,28 @@
+import "std/io"
+
+type P struct(s I64) {
+    a mut I64 = s
+}
+
+fn f() I64 {
+    x I64 = 1
+    defer { x = 2 }
+    return x
+}
+
+fn g() P {
+    p := P(1)
+    defer { p.a = 9 }
+    return p
+}
+
+fn h() Array<I64> {
+    a := Array<I64>(3, 1)
+    defer { a[0] = 9 }
+    return a
+}
+
+
+fn main() ? io.IoError {
+    try io.Print($f() " " $g().a " " $h() "\n")
+}

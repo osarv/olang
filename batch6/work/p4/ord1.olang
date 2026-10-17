@@ -1,0 +1,39 @@
+# P4b: the earliest-spawned failure, when later tasks fail first and earlier ones fail after a long computation; under -r
+error E {
+    W0
+    W1
+    W2
+    W3
+    W4
+    W5
+    W6
+    W7
+}
+fn slowFail(k I64, spin I64) ? E {
+    t I64 = 0
+    for i in range spin { t = t + i % 13 }
+    if t < 0 { return }
+    match k {
+        case 0 { error E.W0 }
+        case 1 { error E.W1 }
+        case 2 { error E.W2 }
+        case 3 { error E.W3 }
+        case 4 { error E.W4 }
+        case 5 { error E.W5 }
+        case 6 { error E.W6 }
+        case _ { error E.W7 }
+    }
+}
+fn which(first I64, n I64) I64 {
+    try join {
+        for i in range n {
+            k := (first + i) % 8
+            spawn try slowFail(k, (n - i) * 400000)
+        }
+    } catch E.W0 { return 0 } catch E.W1 { return 1 } catch E.W2 { return 2 } catch E.W3 { return 3 } catch E.W4 { return 4 } catch E.W5 { return 5 } catch E.W6 { return 6 } catch E.W7 { return 7 }
+    return -1
+}
+fn main() ? {
+    for f in range 8 { print($which(f, 6) " ") }
+    println("")
+}

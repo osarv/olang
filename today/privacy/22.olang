@@ -1,0 +1,8 @@
+# comptime: lib generic result baked
+import "lib/pv"
+G Bool = pv.GenEq(pv.Make(3), pv.Make(13))
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($G)
+}

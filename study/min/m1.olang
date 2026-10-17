@@ -1,0 +1,25 @@
+type Rect struct(x I32, y I32, w I32, h I32) {
+    x
+    y
+    w
+    h
+}
+type Widget struct(id I32) {
+    id
+    children mut List<mut Widget&>& = List<mut Widget&>()
+    bounds mut Rect = Rect(0, 0, 0, 0)
+}
+fn layout(w mut Widget&, y I32) {
+    w.bounds = Rect(0, y, 10, 10)
+    cy I32 = y
+    for c in w.children {
+        layout(c, cy)
+        cy += c.bounds.h
+    }
+}
+fn main() ? {
+    root Widget& = Widget(1)
+    root.children.Push(Widget(2))
+    layout(root, 0)
+    assert root.children[0].bounds.h == 10
+}

@@ -1,0 +1,30 @@
+import "std/os"
+type R struct(n I64) {
+    n
+} destruct {
+    println("dtor " $n)
+}
+type Holder struct() {
+    res mut R& = null
+}
+fn pass(f fn()) fn() { return f }
+fn run() {
+    h mut Holder& = Holder()
+    c mut List<I64>& = List<I64>()
+    g := fn() {
+        c.Push(1)
+        h.res = R(c.Len())
+    }
+    k fn() = g
+    join {
+        spawn k = pass(g)
+    }
+    os.RunOnStack(1 << 20, k)
+    k()
+    g()
+    println("end of run")
+}
+fn main() ? {
+    run()
+    println("after run")
+}

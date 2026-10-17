@@ -1,0 +1,17 @@
+# NEW in 7345ff9, CONFIRMED over-rejection. The same for a List: 'xs.Iter().Count(f)' in a helper is refused when the
+# helper is given the receiver's List; written in Str's body it compiles. Every Iterator default (Fold, Any, All,
+# Map, Filter, ToList) the same.
+# new -b: error[E11c, O12] at b.l in walk(b.l). d6c7f52: 6 6. d0abfe8: refused by its purity rule (Iter writes).
+type Bag struct(l List<I64>) {
+    l
+}
+fn walk(xs List<I64>&) I64 { return xs.Iter().Count(fn(x) { return x > 3 }) }
+fn (b Bag&) Str() String {
+    direct := b.l.Iter().Count(fn(x) { return x > 3 })
+    return $direct " " $walk(b.l)
+}
+fn main() ? {
+    l := List<I64>()
+    for i in range 10 { l.Push(i) }
+    println($Bag(l))
+}

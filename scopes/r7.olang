@@ -1,0 +1,12 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn mkNodes(v I32) Array<mut Node&>& { return Array<mut Node&>(2, Node(v)) }
+fn main() ? {
+    k2 Node& = Node(1)
+    for i in range 1 {
+        k2 = mkNodes(43)[0]
+        try io.Print($k2.v " inside\n")
+    }
+    v := k2.v
+    try io.Print($v " after\n")
+}

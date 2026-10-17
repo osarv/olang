@@ -1,0 +1,162 @@
+# json2csv - turns a JSON array of objects into CSV.
+#
+#   json2csv [-c col,col,...] [-o OUT] [IN]
+#
+# Each object is one row. Nested objects are flattened with dotted names ("address.city"); arrays become their items
+# joined by ";" when they hold only scalars, and their JSON text otherwise. The columns are every name seen, in the
+# order first seen, unless -c picks them. Fields are quoted as RFC 4180 says: when they hold a comma, a quote, or a
+# line break, with quotes doubled. Numbers that are whole print without a fraction. With no input file, a built-in
+# sample is converted. Errors in the input are reported with their line and column.
+
+import "std/os"
+import "std/io"
+import "std/json"
+
+Sample := ("[\n"
+    "  {\"id\": 1, \"name\": \"Ada Lovelace\", \"tags\": [\"math\", \"poetry\"], \"address\": {\"city\": \"London\", \"zip\": null}},\n"
+    "  {\"id\": 2, \"name\": \"Grace \\\"Amazing\\\" Hopper\", \"active\": true, \"score\": 97.5},\n"
+    "  {\"id\": 3, \"name\": \"Linus, T.\", \"address\": {\"city\": \"Portland\", \"geo\": {\"lat\": 45.5, \"lon\": -122.7}}},\n"
+    "  {\"id\": 4, \"name\": \"Multi\\nLine\", \"tags\": [{\"k\": 1}], \"score\": 1e21}\n"
+    "]\n")
+
+error CsvError {
+    NOT_AN_ARRAY
+    NOT_AN_OBJECT
+}
+
+type Table struct() {
+    columns List<String&> = List<String&>()
+    known Map<String&, Bool> = Map<String&, Bool>()
+    rows List<Map<String&, String&>> = List<Map<String&, String&>>()
+}
+
+fn (t mut Table&) column(name String&) {
+    if t.known.Has(name) { return }
+    t.known.Put(name, true)
+    t.columns.Push(name)
+}
+
+fn scalar(j Json&) String {
+    return match j {
+        case Json.Null => ""
+        case Json.Bool(b) => "true" if b else "false"
+        case Json.Num(v) => $I64(v) if v == math.Trunc(v) and v < 1e18 and v > -1e18 else $v
+        case Json.Str(s) => $s
+        nomatch => json.Encode(j)
+    }
+}
+
+fn allScalars(items Array<Json&>&) Bool {
+    for it in items {
+        if it is Json.Arr or it is Json.Obj { return false }
+    }
+    return true
+}
+
+# the fields of one object, flattened under prefix
+fn flatten(j Json&, prefix String&, row mut Map<String&, String&>&, t mut Table&) {
+    match j {
+        case Json.Obj(o) {
+            for i in range o.Len() {
+                name := o.Keys[i] if prefix.Len() == 0 else $prefix "." $o.Keys[i]
+                flatten(o.Values[i], name, row, t)
+            }
+        }
+        case Json.Arr(items) {
+            t.column(prefix)
+            if allScalars(items) {
+                row.Put(prefix, items.Map(fn(x Json&) String { return scalar(x) }).Join(";"))
+            } else {
+                row.Put(prefix, json.Encode(j))
+            }
+        }
+        nomatch {
+            t.column(prefix)
+            row.Put(prefix, scalar(j))
+        }
+    }
+}
+
+fn load(text String&, t mut Table&) ? json.JsonError + CsvError {
+    at := json.Position()
+    doc := try json.Parse(text, at) catch json.JsonError {
+        eprintln("json2csv: not JSON, at " $at)
+        error CsvError.NOT_AN_ARRAY
+    }
+    items := try doc.AsArr() catch json.JsonError { error CsvError.NOT_AN_ARRAY }
+    for it in items {
+        if not (it is Json.Obj) { error CsvError.NOT_AN_OBJECT }
+        row := Map<String&, String&>()
+        flatten(it, "", row, t)
+        t.rows.Push(row)
+    }
+}
+
+fn quote(field String&) String {
+    needs := false
+    for c in field {
+        if c == ',' or c == '"' or c == '\n' or c == '\r' {
+            needs = true
+            break
+        }
+    }
+    if not needs { return $field }
+    return "\"" $field.Replace("\"", "\"\"") "\""
+}
+
+fn write(t Table&, cols List<String&>&, fd I32) ? io.IoError {
+    out := io.Writer(fd)
+    out.Write(cols.ToArray().Map(fn(c String&) String { return quote(c) }).Join(",") "\n")
+    for row in t.rows {
+        line := StringBuilder()
+        for i, c in cols.ToArray() {
+            if i > 0 { line.PushChar(',') }
+            line.Push(quote(try row.Get(c) catch default ""))
+        }
+        line.PushChar('\n')
+        out.Write(line.ToString())
+    }
+    try out.Flush()
+}
+
+fn main() ? {
+    args := os.Args()
+    input := ""
+    output := ""
+    picked := ""
+    i := 1
+    for i < args.Len() {
+        if args[i] == "-o" and i + 1 < args.Len() {
+            output = args[i + 1]
+            i += 2
+        } else if args[i] == "-c" and i + 1 < args.Len() {
+            picked = args[i + 1]
+            i += 2
+        } else {
+            input = args[i]
+            i++
+        }
+    }
+    text := Sample
+    if input.Len() > 0 {
+        text = try os.ReadFile(input) catch os.OsError {
+            eprintln("json2csv: cannot read " $input)
+            os.Exit(2)
+        }
+    }
+    t := Table()
+    try load(text, t) catch CsvError.NOT_AN_ARRAY {
+        eprintln("json2csv: the input must be a JSON array")
+        os.Exit(1)
+    } catch CsvError.NOT_AN_OBJECT {
+        eprintln("json2csv: every item must be an object")
+        os.Exit(1)
+    }
+    cols := t.columns
+    if picked.Len() > 0 { cols = picked.Split(",").ToList() }
+    fd := io.Stdout
+    if output.Len() > 0 { fd = try os.Create(output) }
+    try write(t, cols, fd)
+    if output.Len() > 0 { try os.Close(fd) }
+    eprintln("json2csv: " $t.rows.Len() " rows, " $cols.Len() " columns")
+}

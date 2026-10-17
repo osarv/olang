@@ -1,0 +1,2 @@
+type P struct(x F64) { X F64 = x }
+fn Mk() P { return P(2.5) }

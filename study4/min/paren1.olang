@@ -1,0 +1,6 @@
+fn main() ? {
+    c := true
+    i := 3
+    rec := $i "," (("stop" if c else $i))
+    println(rec)
+}

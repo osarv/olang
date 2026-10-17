@@ -1,0 +1,5 @@
+import "a"
+type Other struct(W I32, Back a.Node&) {
+  W
+  Back
+}

@@ -1,0 +1,20 @@
+# S4/E31: "l[G] += bumpG()" - the index G is read for the At read and again for the SetAt write.
+G mut I64 = 0
+fn bumpG() I64 {
+    G = 1
+    return 7
+}
+
+fn main() ? {
+    l := List<I64>()
+    l.Push(10)
+    l.Push(50)
+    l[G] += bumpG()
+    println("list: " $l[0] " " $l[1])
+    a := Array<I64>(2)
+    a[0] = 10
+    a[1] = 50
+    G = 0
+    a[G] += bumpG()
+    println("array: " $a[0] " " $a[1])
+}

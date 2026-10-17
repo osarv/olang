@@ -1,0 +1,12 @@
+# PRE-EXISTING (decision 44): the handle analogue of s1 - a List element of a List, replaced through another path, then
+# pushed through the hidden copy; the push lands in the replaced list. Base builds it too.
+fn work(c mut List<I64>&, l mut List<List<I64>>&) {
+    l[0] = List<I64>()
+    c.Push(5)
+}
+fn main() ? {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    work(l[0], l)
+    println("list:  element len " $l[0].Len())
+}

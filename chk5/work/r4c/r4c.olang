@@ -1,0 +1,45 @@
+# O4b/r04: a Map value reaching an environment - the environment a loop-local one, put into a longer-lived map
+type Fn enum {
+    Nil
+    F(c Closure&)
+}
+type Closure struct(env Env&) { env }
+type Env struct() {
+    vars mut Map<I64, Fn>& = Map<I64, Fn>()
+    n I64 = 0
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn fill(outer mut Env&) {
+    for i in range 3 {
+        inner := Env()
+        inner.n = i + 40
+        outer.vars.Put(I64(i), Fn.F(Closure(inner)))
+    }
+}
+fn fill2(outer mut Env&) {
+    for i in range 3 {
+        inner := Env()
+        inner.n = i + 50
+        f := Fn.F(Closure(inner))
+        outer.vars.Put(I64(i + 10), f)
+    }
+}
+fn main() ? {
+    outer := Env()
+    fill(outer)
+    fill2(outer)
+    churn()
+    for e in outer.vars {
+        match e.Value {
+            case Fn.F(c) { println($c.env.n) }
+            nomatch { }
+        }
+    }
+}

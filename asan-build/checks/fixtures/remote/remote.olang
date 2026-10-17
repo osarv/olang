@@ -1,0 +1,7 @@
+import "example.com/me/tools/mathx/add"
+import old "example.com/me/tools@v1/mathx/add"
+error E { X }
+fn main() ? E {
+    assert add.Add1(1) == 101
+    assert old.Add1(1) == 2
+}

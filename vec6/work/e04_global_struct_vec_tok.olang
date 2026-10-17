@@ -1,0 +1,22 @@
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+GL mut Lex2 = Lex2()
+fn add(k I64) { for i in range k { GL.toks.Push(Tok($i "-global-field-text", i)) } }
+fn main() ? {
+    add(4)
+    churn()
+    println(GL.toks[2].text)
+}

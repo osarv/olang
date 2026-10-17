@@ -1,0 +1,38 @@
+# X8: the C math library's functions, computed while compiling (the baked globals), by the built program at -O3 and at
+# -O0, and under -i - every line printed by each of the three, and all three the same
+import "std/io"
+import "std/math"
+
+x mut F64 = 0.7
+y mut F64 = -2.25
+
+SqrtTwo F64 = math.Sqrt(2.0)
+ExpSeven F64 = math.Exp(0.7)
+PowBaked F64 = math.Pow(0.7, -2.25)
+TanhBaked F32 = math.Tanh(F32(0.7))
+ErfBaked F16 = math.Erf(F16(0.7))
+FmaBaked F64 = math.Fma(0.1, 10.0, -1.0)
+RoundBaked BF16 = math.RoundEven(BF16(2.5))
+
+fn line(t String&) ? io.IoError { try io.Print($t "\n") }
+
+fn main() ? io.IoError {
+    try line($SqrtTwo " " $ExpSeven " " $PowBaked " " $TanhBaked " " $ErfBaked " " $FmaBaked " " $RoundBaked)
+    try line($math.Sqrt(x) " " $math.Cbrt(y) " " $math.Exp(x) " " $math.Exp2(y) " " $math.Expm1(x) " " $math.Log(x))
+    try line($math.Log2(x) " " $math.Log10(x) " " $math.Log1p(y) " " $math.Pow(x, y) " " $math.Hypot(x, y))
+    try line($math.Sin(y) " " $math.Cos(y) " " $math.Tan(y) " " $math.Asin(x) " " $math.Acos(x) " " $math.Atan(y))
+    try line($math.Atan2(y, x) " " $math.Sinh(y) " " $math.Cosh(y) " " $math.Tanh(y) " " $math.Erf(y) " " $math.Erfc(y))
+    try line($math.Floor(y) " " $math.Ceil(y) " " $math.Trunc(y) " " $math.Round(y) " " $math.RoundEven(y))
+    try line($math.Fma(x, y, x) " " $math.Abs(y) " " $math.CopySign(x, y) " " $math.Min(x, y) " " $math.Max(x, y))
+    f F32 = F32(x)
+    g F32 = F32(y)
+    try line($math.Sqrt(f) " " $math.Exp(f) " " $math.Pow(f, g) " " $math.Sin(g) " " $math.Fma(f, g, f) " " $math.Log1p(f))
+    h F16 = F16(x)
+    k F16 = F16(y)
+    try line($math.Sqrt(h) " " $math.Exp(h) " " $math.Pow(h, k) " " $math.Atan2(k, h) " " $math.Fma(h, k, h) " " $math.Cbrt(k))
+    b BF16 = BF16(x)
+    c BF16 = BF16(y)
+    try line($math.Sqrt(b) " " $math.Exp(b) " " $math.Log(b) " " $math.Tanh(c) " " $math.Fma(b, c, b) " " $math.Round(c))
+    try line($math.IsNan(math.Sqrt(y)) " " $math.IsInf(math.Exp(-y * 1000.0)) " " $math.Log(0.0) " " $math.Sqrt(-0.0))
+    try line($math.Clamp(y, -1.0, 1.0) " " $math.Min(math.NaN, x) " " $math.Max(-0.0, 0.0) " " $math.Min(-0.0, 0.0))
+}

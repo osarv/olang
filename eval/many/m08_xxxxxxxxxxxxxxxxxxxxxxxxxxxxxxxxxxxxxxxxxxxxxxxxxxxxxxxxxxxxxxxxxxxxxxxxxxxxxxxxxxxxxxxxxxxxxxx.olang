@@ -1,0 +1,1 @@
+fn F8() I32 { return 8 }

@@ -1,0 +1,9 @@
+# M19f: names print/println - a method and a field so named
+type P struct() {
+    println mut I64
+}
+fn (p P&) print() I64 { return 5 }
+fn main() ? {
+    p := P()
+    println($p.print() " " $p.println)
+}

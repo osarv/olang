@@ -1,0 +1,25 @@
+# stress: tasks allocate chunks of many sizes, park (sharing), others take from the shared pool concurrently
+fn work(seed I64, n I64) I64 {
+    s I64 = 0
+    for r in range 6 {
+        a := Array<I64>(n + r * 3000, seed + r)
+        for i in range 0, a.Len(), 512 { s = s + a[i] }
+        b := Array<I64>(300000 + seed * 1000, 1)
+        s = s + b[b.Len() - 1]
+    }
+    return s
+}
+fn main() ? {
+    total I64 = 0
+    for round in range 30 {
+        out := Array<I64>(8)
+        join {
+            for t in range 8 { spawn out[t] = work(t + round, 20000 + t * 50000) }
+            # main allocates while workers share
+            x := work(round, 70000)
+            total = total + x
+        }
+        for v in out { total = total + v }
+    }
+    println($total)
+}

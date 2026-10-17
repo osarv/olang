@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/r13_take_via_payload_as.olang:28:40: error[O10]: this reference lives in a scope that may not outlive where it is put
+   28 |     for i in range 3 { (p.lx.e as E.A).toks.Push($i "-word-in-the-sub-in-the-lexer's-region") }
+      |                                        ^~~~
+compilation failed with 1 error

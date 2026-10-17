@@ -1,0 +1,7 @@
+# G22: a constant named like a function of the module
+fn foo() I64 { return 1 }
+type B<foo I64> struct() { x mut I64 }
+fn main() ? {
+    b := B<3>()
+    println($b.x)
+}

@@ -1,0 +1,12 @@
+# realistic: checked index into a List field of a struct, passed to a function
+import "std/io"
+type Node struct(v I32) { v mut }
+type World struct() { items mut List<Node&>& = List<Node&>() }
+fn show(n Node&) I32 { return n.v }
+fn main() ? {
+    w World& = World()
+    w.items.Push(Node(5))
+    x := show(try w.items[0])
+    y := try w.items[0]
+    try io.Print($x " " $y.v "\n")
+}

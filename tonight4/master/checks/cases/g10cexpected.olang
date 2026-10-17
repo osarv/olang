@@ -1,0 +1,7 @@
+# check: fail error[E12]: expected String&, found I32
+# also: compilation failed with 1 error
+# G10c: a generic constructor where a type is expected takes that type's arguments, so an argument not fitting them is
+# the error, at the argument
+fn main() ? {
+    p Pair<String&, I64> = Pair(3, 4)
+}

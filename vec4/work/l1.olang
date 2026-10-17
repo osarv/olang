@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# a call's built result landed by its obligations (O18c) where its argument lives - an own object's region - with
+# no loan: the callee stores the new text into the argument, so its result must outlive the argument's scope
+type Box struct() {
+    s mut String& = "none"
+}
+type CB struct() {
+    box own mut Box& = Box()
+}
+fn stash(p mut Box&, n I64) mut String& {
+    out mut String&return = $n "-new-text-stashed-in-the-box"
+    p.s = out
+    return out
+}
+fn main() ? {
+    c := CB()
+    d := stash(c.box, 5)
+    c.box = Box()
+    churn()
+    println(d)
+}

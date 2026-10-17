@@ -1,0 +1,12 @@
+import "b"
+import "std/io"
+type Node struct(v I32, o b.Other&) {
+  v
+  o
+}
+fn main() ? {
+  x := b.Other(5, null)
+  n := Node(1, x)
+  y := b.Other(6, n)
+  try io.Print($n.o.W " " $y.Back.v " " $y.Back.o.W "\n")
+}

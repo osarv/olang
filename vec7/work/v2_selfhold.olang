@@ -1,0 +1,10 @@
+type S struct() {
+    s S = S()
+    v Vec<I64> = Vec<I64>()
+}
+fn main() ? {
+    x := S()
+    c := x
+    x.v.Push(1)
+    println($c.v.Len())
+}

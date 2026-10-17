@@ -1,0 +1,31 @@
+type Inner struct(x I64) {
+    x
+}
+type R struct() {
+    i mut Inner& = null
+}
+type V struct(ref mut R&, n I64) {
+    ref
+    n
+}
+type Vs struct(r mut R&) {
+    r
+}
+fn (s Vs&) At(i I64) V { return V(s.r, i) }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn f(c mut V&) V { return V(c.ref, 0) }
+fn main() ? {
+    s := Vs(R())
+    for k in range 3 {
+        q := Inner(k + 40)
+        x := f(s[k])
+        x.ref.i = q
+    }
+    churn()
+    println($s.r.i.x)
+}

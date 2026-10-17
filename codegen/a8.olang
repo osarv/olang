@@ -1,0 +1,12 @@
+import "std/io"
+
+fn label(n I64) String {
+    s := "  item-" $n "  "
+    return s
+}
+
+fn main() ? io.IoError {
+    t := label(42).Trim()
+    junk := Array<I64>(64, 7)
+    try io.Print("[" $t "] " $junk.Len() "\n")
+}

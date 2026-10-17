@@ -1,0 +1,13 @@
+k2b.olang:18:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 17, which is used after it
+   18 |     for i in range 1000 { v.Push(i) } # frees the buffer: not refused
+      |                             ^~~~
+k2b.olang:17:19: note: borrowed here
+   17 |     d := longer(v.ViewMut(), other)   # the Vec's own buffer - and no loan on it
+      |                   ^~~~~~~
+k2b.olang:20:14: note: used here, after it
+   20 |     println($d[0] " " $d[1])
+      |              ^
+/home/user/wt/rvvec2/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error

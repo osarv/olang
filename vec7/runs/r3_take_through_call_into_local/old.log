@@ -1,0 +1,10 @@
+/home/user/review/vec7/work/r3_take_through_call_into_local.olang:22:7: error[O39]: assigning 'p.lx' may release the Lexer borrowed on line 21, which is used after it
+   22 |     p.lx = null
+      |       ^~
+/home/user/review/vec7/work/r3_take_through_call_into_local.olang:21:15: note: borrowed here
+   21 |     w := take lexOf(p).toks
+      |               ^~~~~
+/home/user/review/vec7/work/r3_take_through_call_into_local.olang:24:13: note: used here, after it
+   24 |     println(w[0])
+      |             ^
+compilation failed with 1 error

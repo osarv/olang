@@ -1,0 +1,20 @@
+# r10 OVER-REJECTION (a recorded limit, hit at once by a compiler's module table): a lookup chained through a List
+# element whose type holds a mut reference field - "r.mods[0].top.Get(n)" - is O10c + O10d. Holding the element in a
+# local first ("m := r.mods[0]; m.top.Get(n)") compiles (m8 in the notes).
+type Sym struct(name String&) { name }
+type Mod struct() {
+    top mut Map<String&, Sym&>
+
+}
+type R struct() {
+    mods mut List<mut Mod&>
+}
+fn (r R&) find(n String&) Sym&r {
+    t := try r.mods[0].top.Get(n) catch default null
+    return t
+}
+fn main() ? {
+    r := R()
+    r.mods.Push(Mod())
+    println($r.find("a"))
+}

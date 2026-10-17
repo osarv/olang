@@ -1,0 +1,21 @@
+# r09 MISSING: no way to say a function never returns normally. A parser's "bail" helper records a diagnostic and always
+# fails, but "catch { try p.bail(...) }" in value position is R11 ("a clause here leaves, or gives the value") - the
+# caller must restate "error SyntaxError.BAD" after it. Rust has "!", Zig "noreturn", C "_Noreturn"; here only error,
+# return, done, fail, abort and unreachable leave (D10a).
+error SyntaxError { BAD }
+type P struct() {
+    msgs mut List<String&>
+}
+fn (p mut P&) bail(msg String&) ? SyntaxError {
+    p.msgs.Push(msg)
+    error SyntaxError.BAD
+}
+fn parseNum(t String&) I64 ? { return try t.ParseInt() catch { error } }
+fn (p mut P&) num(t String&) I64 ? SyntaxError {
+    n := try parseNum(t) catch { try p.bail("not a number") }
+    return n
+}
+fn main() ? {
+    p := P()
+    println($(try p.num("12") catch default -1))
+}

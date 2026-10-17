@@ -1,0 +1,5 @@
+fn keep(v <T>) T {
+    x mut T = v
+    return x
+}
+fn main() ? { println($keep(3)) }

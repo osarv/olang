@@ -1,0 +1,51 @@
+# HELD (T25d): identity of static literals through conditionals and matches agrees between -b, -b -d, -i and the
+# baked constant globals: "false false false false true false false" twice.
+fn eqId(a String&, b String&) Bool { return a is b }
+fn loopSame(c Bool) Bool {
+    r := false
+    for i in range 2 {
+        s String& = "a" if c else "b"
+        r = eqId(s, "a" if c else "b")
+    }
+    return r
+}
+fn two(c Bool) Bool {
+    a String& = "a" if c else "b"
+    b String& = "a" if c else "b"
+    return a is b
+}
+fn twoM(k I64) Bool {
+    a String& = match k { case 1 => "one" case _ => "x" }
+    b String& = match k { case 1 => "one" case _ => "x" }
+    return a is b
+}
+fn lit(c Bool) Bool {
+    a String& = "a"
+    b String& = "a" if c else "b"
+    return a is b
+}
+fn mixed(t String&, c Bool) Bool {
+    a := t if c else "zz"
+    b := t if c else "zz"
+    return a is b
+}
+fn selfSite(c Bool) Bool {
+    r := false
+    first := true
+    keep := List<String&>()
+    for i in range 2 {
+        keep.Push("a" if c else "b")
+    }
+    return keep[0] is keep[1]
+}
+G1 := loopSame(true)
+G3 := two(true)
+G4 := lit(true)
+G5 := mixed("q", false)
+G6 := mixed("q", true)
+G7 := twoM(1)
+G8 := selfSite(true)
+fn main() ? {
+    println($G1 " " $G3 " " $G4 " " $G5 " " $G6 " " $G7 " " $G8)
+    println($loopSame(true) " " $two(true) " " $lit(true) " " $mixed("q", false) " " $mixed("q", true) " " $twoM(1) " " $selfSite(true))
+}

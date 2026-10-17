@@ -1,0 +1,6 @@
+# check: fail doesn't ma# D8d: each result is checked against its parameter as any argument is
+fn named() (I32, String&) { rurn 1, "x" }
+fn sum(a I32, b I32) I32 { return}
+fn main() ? {
+    n := sum(named())
+}

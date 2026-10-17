@@ -1,0 +1,16 @@
+# x[i] passed for a "mut &" parameter of a function value held in a FIELD (E13b: x.f(args) calls it)
+type Acc struct() {
+    N I64 = 0
+}
+type H struct(fv fn(c mut Acc&)) {
+    fv
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    h := H(fn(c mut Acc&) { c.N++ })
+    h.fv(l[0])
+    a := Acc[Acc()]
+    h.fv(a[0])
+    println("list N " $l[0].N " array N " $a[0].N)
+}

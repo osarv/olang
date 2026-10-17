@@ -1,0 +1,29 @@
+# O8b: a stress of the size-class pool - nested scopes taking arrays of many sizes (crossing the 4KB spare, the classes
+# and the 128KB mmap line), filled and checked after other scopes closed and reopened
+fn fill(n I64, seed I64) I64 {
+    a := Array<I64>(n)
+    for i in range n { a[i] = seed * 1000003 + i }
+    inner I64 = 0
+    if n > 3 {
+        inner = fill(n / 3 + seed % 7, seed + 1)
+    }
+    b := Array<I32>(n / 2 + 1, I32(seed))
+    s I64 = 0
+    for i in range n {
+        if a[i] != seed * 1000003 + i { return -1000000000 }
+    }
+    for x in b { if x != I32(seed) { return -2000000000 } }
+    return s + inner + n
+}
+fn main() ? {
+    total I64 = 0
+    x I64 = 12345
+    for r in range 300 {
+        x = (x * 1103515245 + 12345) % 2147483648
+        n := x % 300000
+        v := fill(n, r)
+        if v < 0 { println("CORRUPT at round " $r " n " $n " v " $v) }
+        total = total + v
+    }
+    println($total)
+}

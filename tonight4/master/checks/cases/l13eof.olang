@@ -1,0 +1,4 @@
+# check: fail error[L13]: unterminated character literal
+# L13: the end of the file inside a character literal
+fn main() ? {
+    x := '

@@ -1,0 +1,2 @@
+fn mk(n I32) <T> { return n }
+fn main() ? { }

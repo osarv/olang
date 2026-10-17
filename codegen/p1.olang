@@ -1,0 +1,8 @@
+import "std/io"
+
+fn main() ? io.IoError {
+    n I64 = 100000000
+    a := Array<I32>(n)
+    a[5] = 3
+    try io.Print($a[5] "\n")
+}

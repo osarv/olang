@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/c2_conv_view_returned.olang:13:12: error[O38, O26a]: this result reaches the owner value local 'v' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('Vec<Char>'), where 'return v' moves it
+   13 |     return String(v.View())
+      |            ^~~~~~
+compilation failed with 1 error

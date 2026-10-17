@@ -1,0 +1,42 @@
+import "std/io"
+
+type Box struct(iv I32) {
+    v mut I32 = iv
+}
+type Pair2 struct(a mut Box&, b mut Box&) {
+    a
+    b
+}
+fn bump(b mut Box&) { b.v = b.v + 1 }
+fn repoint(b mut Box&, other mut Box&) I32 {
+    b = other
+    b.v = 100
+    return b.v
+}
+fn alias(n I32) String {
+    x Box& = Box(n)
+    y Box& = x
+    bump(y)
+    p := Pair2(x, x)
+    p.a.v = p.a.v * 2
+    z Box& = Box(5)
+    r := repoint(x, z)
+    s Bool = same(p.a, p.b)
+    arr := I32[1, 2, 3, 4, 5]
+    sl := arr[1:4]
+    sl[0] = 20
+    sl2 := sl[1:]
+    sl2[1] = 40
+    eq Bool = same(arr[1:3], arr[1:3])
+    eq2 Bool = same(arr[1:3], arr[1:2])
+    eq3 Bool = same(arr[0:0], arr[2:2])
+    bv := Box(1)
+    bv2 Box = bv
+    bv2.v = 9
+    return $x.v " " $y.v " " $z.v " " $r " " $s " " $arr " " $sl " " $sl2 " " $eq " " $eq2 " " $eq3 " " $bv.v " " $bv2.v " " $(x == y)
+}
+B String = alias(3)
+M mut I32 = 3
+fn main() ? io.IoError {
+    try io.Print($B "\n" $alias(M) "\n")
+}

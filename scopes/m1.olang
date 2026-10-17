@@ -1,0 +1,26 @@
+# obligations through a cycle of calls (O10c fixed point)
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn a(l mut List<Node&>&, x Node&, n I64) {
+    if n > 0 { b(l, x, n - 1) }
+}
+fn b(l mut List<Node&>&, x Node&, n I64) {
+    a(l, x, n - 1)
+    if n == 1 { c(l, x) }
+}
+fn c(l mut List<Node&>&, x Node&) { l.Push(x) }
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        a(l, inner, 4)
+    }
+    churn()
+    try io.Print($l.Len() " " $l[0].v "\n")
+}

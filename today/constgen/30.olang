@@ -1,0 +1,6 @@
+# G22: a constant named like a method of the type
+type B<Len I64> struct() { x mut I64 }
+fn main() ? {
+    b := B<3>()
+    println($b.x)
+}

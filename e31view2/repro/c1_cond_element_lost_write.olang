@@ -1,0 +1,19 @@
+# C1 (OLDER, consistent in every mode): a conditional of elements lent for a writable parameter, bump(l[0] if k > 0 else l[1])
+# - a value, the write lost silently (list N 0); on a built-in array too (c1b). T1's own reasoning (a value either way)
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    k := l.Len()
+    bump(l[0] if k > 0 else l[1])
+    println("list N " $l[0].N)
+}

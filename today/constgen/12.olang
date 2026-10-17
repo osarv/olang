@@ -1,0 +1,11 @@
+# E32b/T25b: a view of a read-only array must stay read-only
+fn poke(a Array<I32>&) {
+    v := a as Array<I32, 3>&
+    v[0] = 99
+}
+G Array<I32> = I32[1, 2, 3]
+fn main() ? {
+    x := I32[1, 2, 3]
+    poke(x)
+    println($x)
+}

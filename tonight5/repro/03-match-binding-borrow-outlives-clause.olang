@@ -1,0 +1,28 @@
+# NEW acceptance, pre-existing root. A match binding of a by-value payload is declared with the payload field's type,
+# whose scopeDepth is 0 (patBind sets a depth only for a reference binding) - "the body's top level". The batch's
+# SemanticBoundScopeDepth change ("an argument determining it at depth 0 lives at the body's top level") turns that into
+# a claim the checker acts on: a borrowed result of y ("borrow(y)", P&b) now reads as living at the top level, so
+# keeping it in an outer reference is accepted. Master refuses it (error[O25] at "keep = borrow(y)").
+# The binding's storage is a per-clause slot, so the kept reference reads a dead binding - here overwritten by later
+# iterations.
+#     expected: 10 (as -i prints), or error[O25] (master)
+#     actual:   -b, -d and -d -s print 12
+# Also: "keep = y" written directly (03b) is accepted on master too - the root is pre-existing; in a constructor the
+# same shape keeps a reference to the constructor's dead stack frame (03c, pre-existing: -b prints garbage).
+type P struct(v I64) { v }
+type E enum {
+    A(p P)
+    Z
+}
+fn borrow(b P&) P&b { return b }
+fn main() ? {
+    keep P& = P(0)
+    for i in range 3 {
+        e := E.A(P(i + 10))
+        match e {
+            case E.A(y) { if i == 0 { keep = borrow(y) } }
+            case _ { }
+        }
+    }
+    println($keep.v)
+}

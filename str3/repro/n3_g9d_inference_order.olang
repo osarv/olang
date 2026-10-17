@@ -1,0 +1,22 @@
+# NEW (G9d), CONFIRMED, minor: inference depends on argument order. A destructor value reaching a bare <T> binds T to
+# 'mut Res&' (writable); a read-only reference for the same T then no longer fits, so pick(Res(2), r) is refused where
+# pick(r, Res(2)) is accepted, and addA(Res(4), l) (l a List<Res&>) is refused where addB(l, Res(3)) is accepted.
+# e27b83b: error[T25c] at 'r' in ro2 ('a read-only reference cannot become writable') and error[E12] at 'l' in addA
+# ('expected List<mut Res&>&, found List<Res&>'). With ro2 and addA removed it compiles. 7345ff9 accepts pick both
+# ways (T bound by value) and addB, and refuses addA (G9: "cannot be inferred"). A meet of the permissions would make
+# both orders agree.
+type Res struct(k I64) {
+    k
+} destruct { println("d" $k) }
+fn pick(a <T>, b T, c Bool) T { return a if c else b }
+fn addA(x <T>, l mut List<T>&) { l.Push(x) }
+fn addB(l mut List<<T>>&, x T) { l.Push(x) }
+fn ro(r Res&) I64 { return pick(r, Res(2), true).k }
+fn ro2(r Res&) I64 { return pick(Res(2), r, false).k }
+fn main() ? {
+    r := Res(1)
+    println($ro(r) " " $ro2(r))
+    l := List<Res&>()
+    addB(l, Res(3))
+    addA(Res(4), l)
+}

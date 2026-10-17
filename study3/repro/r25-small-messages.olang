@@ -1,0 +1,15 @@
+# r25 DIAGNOSTIC - small messages that do not say what to write (each line below is its own error):
+#  line 11: "FileKind has no case 'Other'" - no did-you-mean for a case name (os.FileKind's cases are FILE, DIR, OTHER;
+#           the prelude and std mix this style with Json.Str, Status.UpToDate)
+#  line 12: "'math' is no import here" - could say: import "std/math"
+#  line 13: "unknown name 't' - did you mean 'At'?" for an undeclared local - 'At' is a method name, never a value
+#  (r26 has the parse-level ones)
+import "std/os"
+type Ring struct() { n I64 }
+fn (r Ring&) At(i I64) I64 { return i }
+fn main() ? {
+    k := os.FileKind.Other
+    m := math.Min(1, 2)
+    u := t + 1
+    println($k $m $u)
+}

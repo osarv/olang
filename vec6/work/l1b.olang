@@ -1,0 +1,33 @@
+# Vec phase 2a, relaxation a/d (O32/O35): a borrowed copy's field holding an owning type by value ('c.a', a Lexer) is
+# assigned an owner - accepted, where 'c.a.o = X(9)' (an own field of the copy) and 'c = ...' are O32's errors. The
+# copy owns nothing, so nothing ever releases what it was given: every X made here is never released and its
+# destructor never runs (and the memory is never given back - 300,000 turns of the loop below hold 2.6GB).
+#   -b: made 4 dropped 1 (the three given to copies are never released; with t's own released at its block end, 4 4
+#   is the answer for a program where each owner is released); -i refuses destructors (stage 1)
+Made mut I64 = 0
+Dropped mut I64 = 0
+type X struct(k I64) {
+    k
+    Made++
+} destruct { Dropped++ }
+type Lexer struct(n I64) {
+    n
+    o own mut X& = X(n)
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn work() {
+    defer { println("at work end: made " $Made " dropped " $Dropped) }
+    t := Two()                       # one X, released with t at the end of work()
+    for i in range 3 {
+        c := t                       # a borrowed copy of t - owns nothing
+        c.a = Lexer(7 + i)
+        println("turn: made " $Made " dropped " $Dropped)
+    }
+}
+fn main() ? {
+    work()
+    println("made " $Made " dropped " $Dropped)
+}

@@ -1,0 +1,8 @@
+import "lib"
+fn g(a Array<I64, <N>>&) I64 {
+    return lib.F()
+}
+fn main() ? {
+    b := Array<I64, 5>()
+    println($g(b) " " $lib.F())
+}

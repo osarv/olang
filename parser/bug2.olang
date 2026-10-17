@@ -1,0 +1,7 @@
+fn f(t String&) I64 {
+    return I64(s[0])
+}
+Baked := f("abc")
+test "x" {
+    assert Baked == 97
+}

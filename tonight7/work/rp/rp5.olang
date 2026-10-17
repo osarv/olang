@@ -1,0 +1,26 @@
+type Node struct() {
+    k I64 = 0
+    next mut Node& = null
+}
+type Bag struct(n mut Node&) {
+    n
+}
+fn nx(p mut Node&) (mut Node&p, I64) { return p.next, 1 }
+fn h(p mut Node&) {
+    z I64 = 0
+    defer { z = 1 }
+    p = p.next
+    p.k++
+}
+fn (b Bag&) Str() String {
+    x Node = b.n
+    h(x)
+    return "b" $b.n.next.k
+}
+fn main() ? {
+    nn mut Node& = Node()
+    nn.next = Node()
+    b := Bag(nn)
+    println($b)
+    println($b)
+}

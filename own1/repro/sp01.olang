@@ -1,0 +1,14 @@
+# abuse the same-path exemption: a loan on head.next, then reassign head.next (freeing the old subtree) while live
+type Node struct(v I64) {
+    v
+    name String& = "n" $v
+    next own mut Node&
+}
+fn main() ? {
+    head own mut Node& = Node(1)
+    head.next = Node(2)
+    head.next.next = Node(3)
+    k := head.next                # a loan on the old head.next (the Node(2) subtree)
+    head.next = take head.next.next   # same-path: frees the old head.next (Node 2); k dangles
+    println(k.name)               # UAF: k pointed at Node(2)
+}

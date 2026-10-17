@@ -1,0 +1,13 @@
+0 problems
+9 problems
+  mode: 'production' is not one of String&["dev", "staging", "prod"]
+  servers[0].port: 70000 is outside 1..65535
+  servers[0].tls: expected a boolean, found a string
+  servers[1].host: is required
+  servers[1].port: expected an integer, found 1.5
+  servers[1].weight: 2 is outside 0..1
+  logDir: 'var//log' is not an absolute path
+  retries: matches none of 2 alternatives
+  : unknown member 'colour'
+not JSON
+baked: 0

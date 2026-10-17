@@ -1,0 +1,20 @@
+# (b)+(c) OVER-REJECTION, O10c: 'l[0] = v' on a List taken out of an enum payload is refused with a note at
+# List.At's return (list.olang:138) - a method the statement never calls - while 'l.SetAt(0, v)', which is what
+# 'l[0] = v' means (E31), compiles; so does 'l.Push(v)'.
+# Expected: 'l[0] = v' compiles exactly when 'l.SetAt(0, v)' does.
+type Value enum {
+    Nil
+    Num(n F64)
+    Items(l mut List<Value&>&)
+}
+fn set(t Value&, v Value&t) {
+    l := t as Value.Items
+    l[0] = v
+}
+fn main() ? {
+    xs mut List<Value&>& = List<Value&>()
+    xs.Push(Value.Nil)
+    lv Value& = Value.Items(xs)
+    set(lv, Value.Num(2.0))
+    println($xs.Len())
+}

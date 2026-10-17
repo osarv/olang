@@ -1,0 +1,25 @@
+# PRE-EXISTING over-rejection: the shape HISTORY/SPEC name for calleeThroughDot, "g.infos[k].size(i)" with infos an
+# array field and g a reference parameter, does not compile - the receiver borrow is O10d (20:41) - on 771a922 and
+# c2a38f0 alike, so that branch of calleeThroughDot is reached only through a local or a by-value receiver.
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+fn (i Info&) size(j Info&) I64 { return i.Len + j.Len }
+type View struct(Data Array<F64>&, Off I64, N I64) {
+    Data
+    Off
+    N
+}
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+    infos mut Array<Info>& = Array<Info>(3)
+}
+fn (g G&) view(k I64) View {
+    i := g.infos[k]
+    return View(g.mem, i.Offset, g.infos[k].size(i))
+}
+fn main() ? {
+    g := G(4)
+    println($g.view(1).N)
+}

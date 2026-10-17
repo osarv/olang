@@ -1,0 +1,13 @@
+type Ctr struct() {
+  n I64 = 0
+  arr mut Array<I64>& = Array<I64>(4)
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn val() I64 { return 7 }
+fn main() ? {
+  y := G
+  z := y.c if true else Ctr()
+  z.n = 5
+  println($G.c.n " " $G.c.arr[0])
+}

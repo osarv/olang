@@ -1,0 +1,7 @@
+# check: fail error[E31a]: TryAt is a checked form, so it declares the errors it fails with
+# E31: a Try form declares its errors
+type Bag struct() {
+    n I64 = 2
+}
+fn (b Bag&) TryAt(i I64) I32 { return 1 }
+fn main() ? { }

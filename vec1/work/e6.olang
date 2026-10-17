@@ -1,0 +1,8 @@
+fn asText(v Vec<Char>&) String&v { return String(v.View()) }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    t := asText(v)
+    for i in range 1000 { v.Push('b') }
+    println(t)
+}

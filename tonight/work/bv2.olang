@@ -1,0 +1,22 @@
+# a by-value parameter holding references, reassigned in the callee (now always allowed) - where is the new value built?
+type N struct(v I64) { v }
+type Box struct(n N&) { n }
+fn swapIn(b Box) N&b {
+    b = Box(N(77))
+    return b.n
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        s = s + a[3]
+    }
+    return s
+}
+fn main() ? {
+    root := N(1)
+    bx := Box(root)
+    r := swapIn(bx)
+    c := churn()
+    println("expected 77, got " $r.v " " $c)
+}

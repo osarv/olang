@@ -1,0 +1,5 @@
+# check: fail error[X2]: fn(x I32) cannot cross the C boundary
+# X2: what a runtime function may take is "fn()" - no parameters, no result, no errors - and nothing else function-shaped
+extern fn __olang_run_on_stack(bytes I64, f fn(x I32))
+
+fn main() ? { }

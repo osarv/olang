@@ -1,0 +1,13 @@
+fn setn(n mut Node&, m mut Node&) { n.next = m }
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    {
+        inner mut Box& = Box()
+        d Box = outer if c else inner
+        s mut Node& = Node(9)
+        setn(d.head, s)
+    }
+    churn()
+    println($outer.head.next.v)
+}

@@ -1,0 +1,30 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type View struct(ns Array<mut Node&>&) {
+    at Array<mut Node&>&ns = ns
+}
+fn grow(x mut Node&) { x.next = Node(x.v + 100) }
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+fn first(w View&) mut Node&w { return w.at[0] }
+fn visit(w View&) {
+    grow(first(w))
+}
+fn work(a Array<mut Node&>&) { visit(View(a)) }
+fn main() ? {
+    a := Array<mut Node&>(1, Node(3))
+    work(a)
+    t := churn(100)
+    println($rd(a[0]) " " $t)
+}

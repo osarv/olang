@@ -1,0 +1,37 @@
+import "std/io"
+
+type Ctr struct(start I64) {
+    n mut I64 = start
+}
+
+fn (c mut Ctr&) Next() I64 {
+    c.n = c.n + 1
+    return c.n
+}
+
+fn sub(a I64, b I64) I64 {
+    return a * 10 + b
+}
+
+fn pick(c mut Ctr&) fn(a I64) I64 {
+    k := c.Next()
+    if k == 1 { return fn(a I64) I64 { return a + 100 } }
+    return fn(a I64) I64 { return a + 200 }
+}
+
+fn f() I64 {
+    c Ctr& = Ctr(0)
+    x I64 = c.Next() - c.Next() * 3
+    y := sub(c.Next(), c.Next())
+    arr := I64[c.Next(), c.Next()]
+    z I64 = pick(c)(c.Next())
+    t := $c.Next() $c.Next()
+    return x * 1000000 + y * 10000 + arr[0] * 100 + arr[1] + z * 7 + t.Len()
+}
+
+Baked I64 = f()
+
+fn main() ? io.IoError {
+    r := f()
+    try io.Print($Baked " " $r "\n")
+}

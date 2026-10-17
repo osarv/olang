@@ -1,0 +1,25 @@
+error E { A
+ B }
+fn g(n I64) I64 ? E {
+    if n > 2 { error E.A }
+    return n
+}
+fn h(n I64) I64 ? E {
+    if n == 1 { error E.B }
+    return n * 10
+}
+fn f(n I64) I64 ? E {
+    r I64 = 0
+    try h(try g(n)) catch E.B { r = 7 }
+    try h(n) catch E { r += 100 }
+    return r + 1
+}
+fn outer(n I64) I64 {
+    return try f(n) catch E.A { return -1 } catch E.B { return -2 }
+}
+B0 := outer(0)
+B1 := outer(1)
+B3 := outer(3)
+fn main() ? {
+    println($B0 " " $B1 " " $B3 " | " $outer(0) " " $outer(1) " " $outer(3))
+}

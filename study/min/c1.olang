@@ -1,0 +1,19 @@
+type Item struct(n I64) {
+    n
+}
+type Box struct() {
+    items List<Pair<String&, Item&>>& = List<Pair<String&, Item&>>()
+}
+fn (b Box&) Find(key String&) Item&b ? {
+    for f in b.items {
+        if f.First == key { return f.Second }
+    }
+    error
+}
+fn main() ? {
+    b := Box()
+    k String& = "x"
+    b.items.Push(Pair<String&, Item&>(k, Item(4)))
+    it := try b.Find("x")
+    assert it.n == 4
+}

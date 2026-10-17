@@ -1,0 +1,99 @@
+# csvparse - a CSV reader that handles quoted fields ("a, b", doubled quotes), then per-column type inference
+# (integer, float, text) and a JSON line per record.
+import "std/os"
+import "std/json"
+
+error CsvError {
+    UNTERMINATED_QUOTE
+    RAGGED_ROW
+}
+
+# the fields of one record starting at text[at], and where the next record starts
+fn readRecord(text String&, at I64) (List<String&>, I64) ? CsvError {
+    fields := List<String&>()
+    field := StringBuilder()
+    i := at
+    inQuotes := false
+    for i < text.Len() {
+        c := text[i]
+        if inQuotes {
+            if c == '"' {
+                if i + 1 < text.Len() and text[i + 1] == '"' {
+                    field.PushChar('"')
+                    i++
+                } else {
+                    inQuotes = false
+                }
+            } else {
+                field.PushChar(c)
+            }
+        } else if c == '"' {
+            inQuotes = true
+        } else if c == ',' {
+            fields.Push(field.ToString())
+            field.Clear()
+        } else if c == '\n' {
+            i++
+            break
+        } else if c != '\r' {
+            field.PushChar(c)
+        }
+        i++
+    }
+    if inQuotes { error CsvError.UNTERMINATED_QUOTE }
+    fields.Push(field.ToString())
+    return fields, i
+}
+
+type Kind enum {
+    Int
+    Float
+    Text
+}
+
+fn kindOf(s String&) Kind {
+    if s.Len() == 0 { return Kind.Text }
+    _ := try s.ParseInt() catch {
+        _ := try s.ParseFloat() catch { return Kind.Text }
+        return Kind.Float
+    }
+    return Kind.Int
+}
+
+fn widen(a Kind, b Kind) Kind {
+    if a == Kind.Text or b == Kind.Text { return Kind.Text }
+    if a == Kind.Float or b == Kind.Float { return Kind.Float }
+    return Kind.Int
+}
+
+fn main() ? CsvError + os.OsError + ParseError {
+    path := "/tmp/study5_quoted.csv"
+    try os.WriteFile(path, "name,city,score,visits\n\"Smith, Anna\",Lund,9.5,3\nBo,\"Malm\"\"o\",7,12\n\"Li\",\"New\nYork\",8.25,1\n")
+    text := try os.ReadFile(path)
+    header, at := try readRecord(text, 0)
+    rows := List<List<String&>>()
+    for at < text.Len() {
+        rec, next := try readRecord(text, at)
+        if rec.Len() != header.Len() { error CsvError.RAGGED_ROW }
+        rows.Push(rec)
+        at = next
+    }
+    kinds := Array<Kind>(header.Len())
+    for c in range header.Len() {
+        k := kindOf(rows[0][c])
+        for r in rows { k = widen(k, kindOf(r[c])) }
+        kinds[c] = k
+    }
+    println("columns: " $kinds)
+    for r in rows {
+        values := Array<json.Json&>(header.Len())
+        for c in range header.Len() {
+            values[c] = match kinds[c] {
+                case Kind.Int => json.Json.Num(F64(try r[c].ParseInt()))
+                case Kind.Float => json.Json.Num(try r[c].ParseFloat())
+                case Kind.Text => json.Json.Str(r[c])
+            }
+        }
+        println($json.Json.Obj(json.Object(header.ToArray(), values)))
+    }
+}

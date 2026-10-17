@@ -1,0 +1,36 @@
+fn t1() Bool {
+    r Array<I32>& = I32[]
+    return r == null
+}
+fn t2() Bool {
+    s String& = ""
+    return s == null
+}
+fn t3() Bool {
+    z Array<I32>
+    r Array<I32>& = z[0:0]
+    return r == null
+}
+fn t4() Bool {
+    a mut Array<I32>& = I32[1]
+    a = a[1:]
+    return a == null
+}
+fn t5() Bool {
+    l := List<I32>()
+    return l.ToArray() == null
+}
+fn t6() Bool {
+    w := "abc".Split("b")
+    return w[1] == null
+}
+G1 := t1()
+G2 := t2()
+G3 := t3()
+G4 := t4()
+G5 := t5()
+G6 := t6()
+fn main() ? {
+    println("baked " $G1 " " $G2 " " $G3 " " $G4 " " $G5 " " $G6)
+    println("run   " $t1() " " $t2() " " $t3() " " $t4() " " $t5() " " $t6())
+}

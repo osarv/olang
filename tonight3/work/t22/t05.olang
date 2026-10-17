@@ -1,0 +1,10 @@
+type P struct() {
+    n I64 = 0
+}
+fn w(p mut <T>&) { p.n = 99 }
+fn apply(f fn(p P&), p P&) { f(p) }
+G P = P()
+fn main() ? {
+    apply(w, G)
+    println($G.n)
+}

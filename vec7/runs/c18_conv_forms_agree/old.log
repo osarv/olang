@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/c18_conv_forms_agree.olang:16:12: error[E11b]: a join piece is a text literal or a '$' rendering - write '$a'
+   16 |     return a " " b " " c
+      |            ^
+compilation failed with 1 error

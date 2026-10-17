@@ -1,0 +1,10 @@
+# NEW (91ab3ba), with main.olang and main_bool.olang. D8a's per-call rebuild of a default (defaultArgFor ->
+# buildParamDefault(d, true)) runs inside the caller's check and inherits its constant variables: currentConstVars is
+# never cleared there (currentBindings is set only for a default reading its own declaration's variables), where
+# resolveTypeDecl (semantic.c:5442) saves and clears all four. So 'N' in this default - this module's global - is read as the CALLER's constant variable
+# 'N' when the call is in an instantiation that has one: a silent wrong value (main.olang), or bogus errors reported in
+# this file for a correct program (main_bool.olang). The first build, which K1 judged, still reads the global.
+N I64 = 3
+fn F(x I64 = N + 1) I64 {
+    return x
+}

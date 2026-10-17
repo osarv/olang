@@ -1,0 +1,22 @@
+# views through several locals, returned
+type V struct(xs Array<I64>&) { xs }
+fn mk(n I64) V {
+    a := I64[1, 2, 3, 4, 5, 6]
+    a[0] = n
+    s := a[1:5]
+    t := s[0:3]
+    return V(t)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 6000 {
+        b := Array<I64>(6, i)
+        t += b[0]
+    }
+    return t
+}
+fn main() ? {
+    v := mk(77)
+    churn()
+    println($v.xs.Len() " " $v.xs[0] " " $v.xs[1])
+}

@@ -1,0 +1,17 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type W struct(n mut Node&) {
+    n
+    next mut W& = null
+}
+fn main() ? {
+    o mut W& = W(Node(0))
+    for i in range 3 {
+        loc mut Node& = Node(100 + i)
+        k I64 = 0
+        o.next, k = W(loc), 1
+    }
+    println($o.next.n.v)
+}

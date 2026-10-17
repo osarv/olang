@@ -1,0 +1,17 @@
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    items List<I64> = List<I64>()
+}
+fn bump(c mut V&) Bool {
+    c.n++
+    return true
+}
+fn f(c mut V&) {
+    for i := 0, i < 3 and bump(c), i++ { }
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 1))
+    f(l[0])
+}

@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# class R in a function given the own object as a parameter, the built text stored into a plain field of it
+type Box struct() {
+    s mut String& = "none"
+}
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+    box mut Box& = Box()
+}
+fn fill(c mut CB&, n I64) {
+    x := c.text
+    d mut String&x = $n "-new-text-in-the-field-region"
+    c.box.s = d
+}
+fn main() ? {
+    c := CB()
+    fill(c, 5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(c.box.s)
+}

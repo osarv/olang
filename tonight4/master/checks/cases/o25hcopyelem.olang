@@ -1,0 +1,17 @@
+# check: fail error[O26]: this value refers to this function's own storage
+# O25h: an element of a copy of a local array keeps its references where the array's are - in this block (O26a moves
+# only what the return reads) - so the element returned refers to text that dies at the return
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+fn mk(n I64) WC {
+    a := Array<WC>(1)
+    a[0] = WC($n $n, 1)
+    b := a
+    return b[0]
+}
+fn main() ? {
+    w := mk(12)
+    assert w.count == 1
+}

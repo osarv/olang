@@ -1,0 +1,194 @@
+# ast - the syntax tree of the olang subset the parser reads: recursive enums held by reference (T17d). Every node
+# carries the byte offset it starts at; nothing is written into a node once it is built, so trees are read-only
+# (O25g) and any part may be shared.
+import "scan"
+
+# a type as written
+type TypeRef enum {
+    # alias.Name<args>&marker - path holds the alias chain and the name, last; marker "" bare, "return", or a name
+    Named(at I64, path Array<String&>&, args Array<TypeRef&>&, isRef Bool, marker String&, writable Bool)
+    # <T constraint>&
+    Var(at I64, name String&, constraint TypeRef&, isRef Bool, writable Bool)
+    # fn(params) results ? errors
+    Func(at I64, sig Sig&, writable Bool)
+    # a constant type argument: Array<I32, 4>
+    Const(at I64, value Expr&)
+    # an inline shape (anonymous enum/struct/trait), kept as the declaration it would be
+    Shape(at I64, body TypeBody&)
+}
+
+# a parameter: name [mut] type [= default]
+type Param struct(Name String&, At I64, Mutable Bool, Ty TypeRef&, Dflt Expr&) {
+    Name
+    At
+    Mutable
+    Ty
+    Dflt
+}
+
+# a signature: params, results (0, 1 or several), and the error set (hasErrors with no names: the default error)
+type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&) {
+    Params
+    Results
+    HasErrors
+    Errors
+}
+
+# a dotted name: alias.Type.word
+type Path struct(At I64, Parts Array<String&>&) {
+    At
+    Parts
+}
+
+type Expr enum {
+    Name(at I64, name String&)
+    Lit(at I64, kind scan.Tok, text String&)     # Int/Float/Str/Char/Bool/Null, as written
+    Unary(at I64, op scan.Tok, x Expr&)          # - ~ $ not ++ --
+    Postfix(at I64, op scan.Tok, x Expr&)        # x++ x--
+    Binary(at I64, op scan.Tok, a Expr&, b Expr&)
+    NotIn(at I64, a Expr&, b Expr&)
+    Chain(at I64, ops Array<scan.Tok>&, xs Array<Expr&>&)    # a < b <= c (E30)
+    Cond(at I64, a Expr&, c Expr&, b Expr&)                  # a if c else b
+    Call(at I64, f Expr&, args Array<Expr&>&)
+    ScopeCall(at I64, f Expr&, scope String&, args Array<Expr&>&)   # f&x(args) (E25)
+    Member(at I64, x Expr&, name String&)
+    Index(at I64, x Expr&, idx Array<Expr&>&)
+    Slice(at I64, x Expr&, lo Expr&, hi Expr&)
+    Join(at I64, parts Array<Expr&>&)
+    Try(at I64, x Expr&, clauses Array<Catch&>&)
+    IsType(at I64, x Expr&, t TypeRef&, negated Bool)
+    IsValue(at I64, x Expr&, y Expr&, negated Bool)
+    As(at I64, x Expr&, t TypeRef&)
+    ArrayLit(at I64, elem TypeRef&, items Array<Expr&>&)
+    Compr(at I64, elem TypeRef&, value Expr&, key String&, name String&, source Expr&, filter Expr&)
+    Lambda(at I64, f Func&)
+    MatchE(at I64, m Match&)
+    Generic(at I64, x Expr&, args Array<TypeRef&>&)     # Name<args>, before a call: Array<I32>(n)
+    Default(at I64)
+    RangeE(at I64, args Array<Expr&>&)
+}
+
+# catch A + B.word { block } default v, w
+type Catch struct(At I64, Items Array<Path&>&, Body Array<Stmt&>&, HasBody Bool, Defaults Array<Expr&>&) {
+    At
+    Items
+    Body
+    HasBody
+    Defaults
+}
+
+type Match struct(At I64, Subject Expr&, OnType Bool, Cases Array<Case&>&, NoMatch Case&) {
+    At
+    Subject
+    OnType
+    Cases
+    NoMatch
+}
+
+# one case: its alternatives (patterns read as expressions, or types for "match <T>"), its guard, and either a block
+# or a value ("=> v")
+type Case struct(At I64, Alts Array<Expr&>&, Types Array<TypeRef&>&, Guard Expr&, Body Array<Stmt&>&, Value Expr&) {
+    At
+    Alts
+    Types
+    Guard
+    Body
+    Value
+}
+
+type Stmt enum {
+    ExprS(at I64, e Expr&)
+    Var(at I64, names Array<String&>&, mutable Bool, ty TypeRef&, values Array<Expr&>&)
+    Define(at I64, names Array<String&>&, values Array<Expr&>&)
+    Assign(at I64, op scan.Tok, targets Array<Expr&>&, values Array<Expr&>&, tried Bool, clauses Array<Catch&>&)
+    Field(at I64, names Array<String&>&, mutable Bool)        # a constructor's bare pun: x / x mut / x, y mut
+    If(at I64, cond Expr&, then Array<Stmt&>&, els Stmt&)    # els: null, a Block, or an If
+    Forever(at I64, body Array<Stmt&>&)
+    While(at I64, cond Expr&, body Array<Stmt&>&)
+    For3(at I64, init Stmt&, cond Expr&, post Stmt&, body Array<Stmt&>&)
+    ForIn(at I64, key String&, name String&, source Expr&, tried Bool, body Array<Stmt&>&, clauses Array<Catch&>&)
+    DoFor(at I64, body Array<Stmt&>&, cond Expr&)
+    MatchS(at I64, m Match&)
+    Return(at I64, values Array<Expr&>&)
+    Jump(at I64, kind scan.Tok)                                # break continue done fail abort unreachable
+    Assert(at I64, cond Expr&, msg Expr&)
+    Raise(at I64, word Path&)                                   # error T.WORD, or the default error (null)
+    Spawn(at I64, targets Array<Expr&>&, call Expr&)
+    JoinS(at I64, body Array<Stmt&>&)
+    DeferS(at I64, s Stmt&)
+    Block(at I64, body Array<Stmt&>&)
+    Unparsed(at I64, end I64)          # an if's branch that does not parse: decided by its condition (S8b), [at, end)
+}
+
+# a function, method, lambda or extern: receiver (null for none), name ("" for a lambda), signature, body (null for an
+# extern)
+type Func struct(At I64, Recv Param&, Name String&, S Sig&, Body Array<Stmt&>&, HasBody Bool) {
+    At
+    Recv
+    Name
+    S
+    Body
+    HasBody
+}
+
+# an enum case: name and payload
+type CaseDecl struct(At I64, Name String&, Payload Array<Param&>&) {
+    At
+    Name
+    Payload
+}
+
+# the body of a type declaration
+type TypeBody enum {
+    Struct(params Array<Param&>&, errors Sig&, body Array<Stmt&>&, dtor Array<Stmt&>&)
+    Enum(cases Array<CaseDecl&>&)
+    Trait(methods Array<Func&>&)
+    Over(base TypeRef&, ctorParams Array<Param&>&, ctorErrs Sig&, ctorBody Array<Stmt&>&)   # type T I32 / extends
+}
+
+# a type parameter: name and constraint or constant type (null for neither)
+type TypeParam struct(At I64, Name String&, Ty TypeRef&) {
+    At
+    Name
+    Ty
+}
+
+type Decl enum {
+    Fn(f Func&)
+    Extern(f Func&)
+    TypeD(at I64, name String&, params Array<TypeParam&>&, extending Bool, body TypeBody&)
+    Global(at I64, names Array<String&>&, mutable Bool, ty TypeRef&, values Array<Expr&>&)
+    Import(at I64, alias String&, path String&)
+    ErrorD(at I64, name String&, words Array<String&>&)
+    TestD(at I64, name String&, body Array<Stmt&>&)
+    IfD(at I64, cond Expr&, then Array<Decl&>&, els Array<Decl&>&)
+    UnparsedD(at I64, end I64)         # a top-level if's branch that does not parse (B9)
+}
+
+# where a node starts
+fn (e Expr&) Pos() I64 {
+    return match e {
+        case Expr.Name(at, _), Expr.Default(at) => at
+        case Expr.Lit(at, _, _) => at
+        case Expr.Unary(at, _, _), Expr.Postfix(at, _, _) => at
+        case Expr.Binary(at, _, _, _) => at
+        case Expr.NotIn(at, _, _) => at
+        case Expr.Chain(at, _, _) => at
+        case Expr.Cond(at, _, _, _) => at
+        case Expr.Call(at, _, _) => at
+        case Expr.ScopeCall(at, _, _, _) => at
+        case Expr.Member(at, _, _) => at
+        case Expr.Index(at, _, _) => at
+        case Expr.Slice(at, _, _, _) => at
+        case Expr.Join(at, _), Expr.RangeE(at, _) => at
+        case Expr.Try(at, _, _) => at
+        case Expr.IsType(at, _, _, _) => at
+        case Expr.IsValue(at, _, _, _) => at
+        case Expr.As(at, _, _) => at
+        case Expr.ArrayLit(at, _, _) => at
+        case Expr.Compr(at, _, _, _, _, _, _) => at
+        case Expr.Lambda(at, _) => at
+        case Expr.MatchE(at, _) => at
+        case Expr.Generic(at, _, _) => at
+    }
+}

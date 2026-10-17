@@ -1,0 +1,12 @@
+import "std/io"
+
+type P struct(a I64, b I64) {
+    a
+    b
+}
+
+fn main() ? io.IoError {
+    arr := Array<P>(3, P(1, 2))
+    fixed Array<I64> = Array<I64>(4)
+    try io.Print($arr "\n")
+}

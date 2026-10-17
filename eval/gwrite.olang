@@ -1,0 +1,19 @@
+import "std/io"
+type Holder struct(a mut Array<I32>&) {
+    a
+}
+fn mk() Holder {
+    arr Array<I32>&return = Array<I32>(2)
+    return Holder(arr)
+}
+G Holder = mk()
+fn poke() I32 {
+    x := G.a
+    x[0] = 5
+    return 1
+}
+P I32 = poke()
+Q I32 = G.a[0]
+fn main() ? io.IoError {
+    try io.Print("P " $P " Q " $Q " G.a[0] " $G.a[0] "\n")
+}

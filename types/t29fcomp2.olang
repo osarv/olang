@@ -1,0 +1,5 @@
+type Pct I32
+fn main() ? {
+  p Pct = Pct(5)
+  p = p + 1
+}

@@ -1,0 +1,11 @@
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2)
+}
+fn (c CB&) TextRaw() Array<Char>&c { return c.data }
+fn main() ? {
+    o own mut CB& = CB()
+    o.data[0] = 'a'
+    t := o.TextRaw()
+    o.data = Array<Char>(64)
+    println($t)
+}

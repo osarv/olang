@@ -1,0 +1,9 @@
+# T7c: a fixed array local is laid out in the function's frame - one larger than the stack overflows it
+X mut I64 = 5
+fn main() ? {
+    a Array<U8, 64000000> = Array<U8, 64000000>()
+    a[X] = 7
+    s I64 = 0
+    for v in a { s = s + I64(v) }
+    println($s)
+}

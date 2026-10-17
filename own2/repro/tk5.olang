@@ -1,0 +1,21 @@
+Dropped mut I64 = 0
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+} destruct { Dropped++ }
+type Server struct() { cur own mut Conn& }
+type Out struct() { v I64 = 0 }
+fn render(s Server&, o mut Out&) {
+    txt := $s.cur          # renders the owned Conn - borrows it
+    o.v = txt.Len()
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(5)
+    o := Out()
+    join {
+        spawn render(s, o)
+        s.cur = null          # release while the task renders - must conflict
+    }
+    println($o.v)
+}

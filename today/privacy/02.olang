@@ -1,0 +1,8 @@
+# struct of main holding a Tag: part-by-part == must not reach the private eq
+import "lib/pv"
+type W struct(t pv.Tag) { t }
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($(W(a) == W(b)))
+}

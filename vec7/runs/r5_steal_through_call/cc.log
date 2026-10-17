@@ -1,0 +1,13 @@
+/home/user/review/vec7/work/r5_steal_through_call.olang:9:47: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+    9 | fn steal(p mut Parser&) Vec<String&> { return take p.Lx().toks }
+      |                                               ^~~~
+/home/user/review/vec7/work/r5_steal_through_call.olang:23:7: error[O39]: assigning 'p.lx' may release the Lexer borrowed on line 22, which is used after it
+   23 |     p.lx = null
+      |       ^~
+/home/user/review/vec7/work/r5_steal_through_call.olang:22:16: note: borrowed here
+   22 |     w := steal(p)
+      |                ^
+/home/user/review/vec7/work/r5_steal_through_call.olang:25:13: note: used here, after it
+   25 |     println(w[0])
+      |             ^
+compilation failed with 2 errors

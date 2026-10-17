@@ -1,0 +1,2 @@
+[32mbuilt ./build/prog
+[0m

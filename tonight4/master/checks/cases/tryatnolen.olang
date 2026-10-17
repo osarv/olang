@@ -1,0 +1,10 @@
+# check: fail error[E31a]: 'try c[i]' checks against Len, and Bag& has neither TryAt nor Len
+# E31: a derived TryAt checks the position against Len()
+type Bag struct() {
+    n I64 = 2
+}
+fn (b Bag&) At(i I64) I32 { return 1 }
+fn main() ? {
+    b Bag& = Bag()
+    x := try b[0] catch default 0
+}

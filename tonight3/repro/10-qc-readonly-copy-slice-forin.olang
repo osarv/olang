@@ -1,0 +1,35 @@
+# T25c (wt-qc): a read-only copy's own references are read-only - "x := G; x.arr[0].v = 5" is error[T25c] ("this writes
+# through a reference a read-only copy holds") - but a slice or an E32b view of the copy's inline array, and a for-in over
+# it, borrow that array into a reference first, and an element read through a reference keeps its type's permission
+# (shallow), so the same write is accepted three ways. forInElemFrom also gives roFrom only to VALUE elements, so a
+# by-value parameter whose body writes through its for-in's reference elements is not found to need a writable argument
+# (look(G) is accepted, where "x.arr[0].v = 5" in look makes look(G) an error).
+# expected: four errors[T25c] (as for x.arr[0].v = 5)
+# actual:   compiles; prints "G's nodes: 4 2" in -b, -d and -i - an immutable global's nodes written through read-only
+#           copies of it
+type Node struct() {
+    v I64 = 0
+}
+type B struct() {
+    arr Array<mut Node&, 2>
+}
+fn mk() B {
+    b := B()
+    b.arr[0] = Node()
+    b.arr[1] = Node()
+    return b
+}
+G B = mk()
+fn look(x B) {
+    for e in x.arr { e.v += 1 }
+}
+fn main() ? {
+    x := G
+    s := x.arr[0:2]
+    s[0].v += 1
+    w := x.arr as Array<mut Node&, 2>&
+    w[0].v += 1
+    for e in x.arr { e.v += 1 }
+    look(G)
+    println("G's nodes: " $G.arr[0].v " " $G.arr[1].v)
+}

@@ -1,0 +1,29 @@
+type Node enum {
+    Leaf(v I64)
+    Many(items Array<Node&>&)
+}
+# the elements pushed since from, as an array of their own, taken off the stack
+fn gather(stack mut List<<T>>&, from I64) mut Array<<T>>&stack {
+    a Array<<T>>&stack = Array<<T>>(stack.Len() - from)
+    for i in range a.Len() { a[i] = stack[from + i] }
+    for stack.Len() > from { try stack.Pop() catch { } }
+    return a
+}
+type P struct() {
+    nodes mut List<Node&>
+    names mut List<String&>
+    pos mut I64 = 0
+}
+fn (p mut P&) leaf() Node&p {
+    p.pos++
+    return Node.Leaf(p.pos)
+}
+fn (p mut P&) many() Node&p {
+    from := p.nodes.Len()
+    for i in range 3 { p.nodes.Push(p.leaf()) }
+    return Node.Many(gather(p.nodes, from))
+}
+fn main() ? {
+    p := P()
+    println($p.many())
+}

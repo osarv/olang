@@ -1,0 +1,12 @@
+# D13c/T8: Array<T, N>() of a type with no zero value (its constructor has an effect)
+Made mut I64 = 0
+type Ticket struct(n I64) {
+    Made = Made + 1
+    n
+}
+type Holder struct() { ts mut Array<Ticket, 2> }
+fn main() ? {
+    a := Array<Ticket, 3>()
+    h := Holder()
+    println($a.Len() " " $h.ts[0].n " made " $Made)
+}

@@ -1,0 +1,24 @@
+# a struct value holding a Map of itself, put into a longer-lived map from a loop whose inner map dies each turn
+type Value struct(m mut Map<String&, Value>&) {
+    m
+    n I64 = 0
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    outer := Map<String&, Value>()
+    for i in range 3 {
+        inner := Map<String&, Value>()
+        inner.Put("x", Value(Map<String&, Value>()))
+        v := Value(inner)
+        outer.Put("k" $i, v)
+    }
+    churn()
+    for e in outer { println($e.Key " " $e.Value.m.Len()) }
+}

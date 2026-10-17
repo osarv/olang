@@ -1,0 +1,25 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2)
+}
+fn (c CB&) Text() String&c { return String(c.data) }
+fn (c mut CB&) Grow() { c.data = Array<Char>(c.data.Len() * 2) }
+fn use(c mut CB&) {
+    t := c.Text()
+    c.Grow()
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    c.data[0] = 'a'
+    c.data[1] = 'b'
+    use(c)
+}

@@ -1,0 +1,30 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    la := List<mut Node&>()
+    la.Push(a)
+    lb := List<mut Node&>()
+    lb.Push(b)
+    fa := fn(i I64) {
+        x := try la[1] catch default Node(i)
+        if x.v == -1 { println("no") }
+    }
+    fb := fn(i I64) {
+        x := try lb[1] catch default Node(i)
+        if x.v == -1 { println("no") }
+    }
+    c mut Node& = Node(0)
+    join {
+        spawn work(fa, 300000)
+        spawn work(fb, 300000)
+        for i in range 300000 { c.next = Node(i) }
+    }
+    println($a.v " " $b.v " " $c.next.v)
+}

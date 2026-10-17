@@ -1,0 +1,50 @@
+# O17 (wt-s3scope, settleRegions): whether a callee stores into what it is lent is read from regionStored at the call
+# when the callee's body is already checked - but that flag can still change afterwards, when a call inside that body
+# went to a function in a cycle whose body was not yet known (a regionEdge, settled at the end). zs is checked while ys
+# is still in progress: xs (calls ys, unknown) is false at that moment, so zs is recorded as storing nothing, no edge is
+# kept for it, and settleRegions later makes xs true but never revisits zs. bump's lend to zs is then accepted.
+# expected: rejected with error[O17] at zs(b) (the previous compiler, 472373d, rejects it), or else prints 42
+# actual:   compiles; -b and -d print -7 (the node was built in bump's block and overwritten by churn); -i prints 42
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn ys(b mut Box&, n I64) {
+    if n > 100 { xs(b, n - 1) }
+    if n > 200 { zs(b, n - 1) }
+    if n == 0 {
+        b.head.next = Node()
+        b.head.next.v = 42
+    }
+}
+fn xs(b mut Box&, n I64) {
+    if n > 0 { ys(b, n - 1) }
+}
+fn zs(b mut Box&, n I64) {
+    xs(b, n)
+}
+fn bump(src mut W&) {
+    b := src.b
+    zs(b, 1)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

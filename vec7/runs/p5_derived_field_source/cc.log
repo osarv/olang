@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/p5_derived_field_source.olang:23:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   23 |     for i in range 3 { p.lx.sub.more.Push($i "-word-built-through-sub") }
+      |                                 ^~~~
+compilation failed with 1 error

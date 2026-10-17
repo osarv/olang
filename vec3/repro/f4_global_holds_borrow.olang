@@ -1,0 +1,24 @@
+# F4 (older, on master 3a4f5e8 - own first cut): a borrow of a GLOBAL's own object stored in a global. The region of a
+# global's own slot is read as living as long as the program (ownBorrowRead: ru = lu = true), so O1b accepts it, and
+# the O38 store check (ownHoldMore) only looks at 'copied' loans - a direct slot borrow has none.
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Doc struct() {
+    title own mut String& = "bb"
+}
+Docs own mut Doc& = Doc()
+Current mut String& = "none"
+fn remember() { Current = Docs.title }          # stores a borrow of a global's own object in a global
+fn rename() { Docs.title = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" }   # releases it
+fn main() ? {
+    remember()
+    rename()
+    churn()
+    println(Current)
+}

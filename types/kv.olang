@@ -1,0 +1,2 @@
+type KV struct() { x I32 = 0 }
+fn main() ? { }

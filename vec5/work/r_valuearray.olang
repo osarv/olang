@@ -1,0 +1,22 @@
+# R: an array VALUE result built where a scope argument names an own borrow's region - the local's type holds no
+# reference, so ownHold drops the home loan
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mkarr(n I64) Array<I64> { return Array<I64>(n, 7) }
+fn main() ? {
+    c := CB()
+    x := c.text
+    a := mkarr&x(5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println($a[0] " " $a[4])
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

@@ -1,0 +1,18 @@
+# alternatives binding the same name with different reference permissions: write through a read-only payload (T25c)
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    W(a mut Node&)
+    R(n Node&)
+}
+fn poke(b Box) {
+    match b {
+        case Box.R(x) { x.v = 99 }
+    }
+}
+fn pokeR(n Node&) { poke(Box.R(n)) }
+fn main() ? {
+    n Node& = Node(7)
+    pokeR(n)        # pokeR promises not to write n
+    try io.Print($n.v "\n")
+}

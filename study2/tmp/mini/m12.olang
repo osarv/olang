@@ -1,0 +1,6 @@
+fn a(path String&) I64 { return try path[0:3].Find(".") catch default -1 }
+fn b(path String&) I64 { return path[0:3].Count(fn(c Char) Bool { return c == '.' }) }
+fn c(path String&) I64 { return path.Count(fn(c Char) Bool { return c == '.' }) }
+fn main() ? {
+    println($a("a.cd") " " $b("a.cd") " " $c("a.cd"))
+}

@@ -1,0 +1,14 @@
+fn add(ls mut List<List<I64>>&, b I64, x I64) { ls[b].Push(x) }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    ls := List<List<I64>>()
+    ls.Push(List<I64>())
+    add(ls, 0, 7)
+    churn()
+    for s in ls[0] { println("for " $s) }
+}

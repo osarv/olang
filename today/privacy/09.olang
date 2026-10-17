@@ -1,0 +1,8 @@
+# lib generic applied by main (judged in lib: allowed)
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($pv.GenEq(a, b))
+}

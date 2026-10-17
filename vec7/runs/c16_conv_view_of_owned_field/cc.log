@@ -1,0 +1,10 @@
+/home/user/review/vec7/work/c16_conv_view_of_owned_field.olang:13:7: error[O39]: assigning 'p.lx' may release the Array<Char> borrowed on line 12, which is used after it
+   13 |     p.lx = null
+      |       ^~
+/home/user/review/vec7/work/c16_conv_view_of_owned_field.olang:12:28: note: borrowed here
+   12 |     s := String(p.lx.chars.View())
+      |                            ^~~~
+/home/user/review/vec7/work/c16_conv_view_of_owned_field.olang:16:13: note: used here, after it
+   16 |     println(s)
+      |             ^
+compilation failed with 1 error

@@ -1,0 +1,6 @@
+# check: fail error[G21]: a constant argument must be computable while compiling: it reads a mutable global
+# G21: a constant argument is computed while compiling, and a mutable global's value is the running program's
+Size mut I64 = 4
+fn main() ? {
+    a Array<U8, Size>
+}

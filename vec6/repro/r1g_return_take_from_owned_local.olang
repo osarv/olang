@@ -1,0 +1,33 @@
+# Vec phase 2a (R1, see r1a), the natural form: a function builds a parser owning a lexer and hands back the lexer's
+# words with 'return take p.lx.toks'. The words were built in the lexer's region; the take is taken to refer only to
+# p's block (ownReachOfBase gives the region's reach), and O26a/the result scope never hold the region, so p's release
+# at the return frees the words the result names. q's lexer then takes the freed memory.
+#   -b -d -s: "use after scope closed" (134)    -i: 0-word-built-in-the-lexer's-region    -b: churn text (silent)
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn words() Vec<String&> {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    return take p.lx.toks
+}
+fn main() ? {
+    w := words()
+    q := Parser()
+    q.lx = Lexer()                       # takes the freed region's memory
+    for i in range 3 { q.lx.toks.Push($(i + 7) "-another-lexer's-word-overwriting") }
+    churn()
+    println(w[0])
+}

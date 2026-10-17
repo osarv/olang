@@ -1,0 +1,22 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn reset(t Two&) { t.a = Lexer(3) }
+fn main() ? {
+    t := Two()
+    reset(t)
+    println($t.a.n)
+}

@@ -1,0 +1,12 @@
+error E {
+    A
+    B
+}
+type Holder struct(e E) { e }
+fn final(e E) Bool { return true }
+fn main() ? {
+    x E
+    y E
+    h := Holder(x)
+    println($(x == y) " " $final(x))
+}

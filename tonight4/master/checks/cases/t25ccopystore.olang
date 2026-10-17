@@ -1,0 +1,11 @@
+# check: fail error[T25c]: a copy of a read-only Box cannot be stored where it can be written
+# T25c: a copy of a read-only place cannot be stored into writable storage, where it would be written
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+GW mut Box = Box(Array<I64>(1))
+fn main() ? {
+    GW = GB
+}

@@ -1,0 +1,21 @@
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+type W struct(c mut Acc&) {
+    c
+}
+fn poke(w W&) { w.c.N++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    poke(W(l[0]))
+    a := Acc[Acc()]
+    poke(W(a[0]))
+    println("list N " $l[0].N " array N " $a[0].N)
+}

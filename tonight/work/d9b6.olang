@@ -1,0 +1,25 @@
+fn seven() I32 { return 7 }
+fn sp(x <T>) I32 {
+    join { spawn x[0] = seven() }
+    return x[0]
+}
+fn pa(x <T>) I32 {
+    x[0], x[1] = x[1], x[0]
+    return x[0]
+}
+fn inc(x <T>) I32 {
+    x[0]++
+    return x[0]
+}
+fn dfr(x <T>) I32 {
+    defer { x[0] = 5 }
+    return x[1]
+}
+fn main() ? {
+    a := I32[1, 2]
+    println($sp(a) " " $a[0])
+    println($pa(a) " " $a[0])
+    println($inc(a) " " $a[0])
+    println($dfr(a) " " $a[0])
+    println($sp(I32[1, 2]) " " $pa(I32[1, 2]) " " $inc(I32[1, 2]) " " $dfr(I32[1, 2]))
+}

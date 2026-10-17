@@ -1,0 +1,20 @@
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+Docs own mut Doc& = Doc()
+
+G List<String&> = List<String&>()
+fn main() ? {
+    G.Push(Docs.title)
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(G[0])
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

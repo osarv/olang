@@ -1,0 +1,11 @@
+import "lib"
+type Flag<N Bool> struct(k I64) {
+    k
+}
+fn (f Flag<<N>>&) Get() I64 {
+    return lib.F() + f.k
+}
+fn main() ? {
+    f := Flag<true>(2)
+    println($f.Get())
+}

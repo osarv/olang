@@ -1,0 +1,22 @@
+type M struct(v I64) { v }
+fn (a M&) Plus(b I64) M { return M(a.v + b) }
+type C struct(v I64) { v }
+fn (a C&) Inc() C { return C(a.v + 1) }
+Calls mut I64 = 0
+fn next() I64 {
+    Calls++
+    return 1
+}
+fn main() ? {
+    a := Array<M>(3, M(0))
+    a[next()]++
+    println("Plus-derived ++: " $Calls " calls, a[1].v " $a[1].v)
+    Calls = 0
+    c := Array<C>(3, C(0))
+    c[next()]++
+    println("Inc ++: " $Calls " calls, c[1].v " $c[1].v)
+    Calls = 0
+    k := Array<I64>(3, 0)
+    k[next()]++
+    println("I64 ++: " $Calls " calls")
+}

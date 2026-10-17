@@ -1,0 +1,19 @@
+# lambda capturing references from two scopes, stored in an outer variable
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    outer Node& = Node(1)
+    f fn() I32 = fn() { return outer.v }
+    for i in range 2 {
+        inner Node& = Node(42)
+        f = fn() { return outer.v + inner.v }
+    }
+    churn()
+    try io.Print($f() "\n")
+}

@@ -1,0 +1,22 @@
+# T17d: a recursive enum - equality, hashing, rendering, nested patterns, -b against -i
+import "std/io"
+type Expr enum {
+  Lit(v I64)
+  Add(a Expr&, b Expr&)
+  Neg(e Expr&)
+}
+fn eval(e Expr&) I64 {
+  return match e {
+    case Expr.Lit(v) => v
+    case Expr.Add(Expr.Lit(x), Expr.Lit(y)) => x + y
+    case Expr.Add(a, b) => eval(a) + eval(b)
+    case Expr.Neg(n) => -eval(n)
+    nomatch => 0
+  }
+}
+fn main() ? {
+  e Expr& = Expr.Add(Expr.Lit(1), Expr.Neg(Expr.Add(Expr.Lit(2), Expr.Lit(3))))
+  v := Expr.Add(Expr.Lit(1), Expr.Lit(2))
+  w := Expr.Add(Expr.Lit(1), Expr.Lit(2))
+  try io.Print($eval(e) " " $e " " $(v == w) " " $(e is Expr.Add) "\n")
+}

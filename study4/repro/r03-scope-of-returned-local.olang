@@ -1,0 +1,45 @@
+# r03 OVER-REJECTION + DIAGNOSTIC - O26a with a written scope ("&x", O25a/E25): a value local the function returns
+# lives in the result scope (O26a), but "&out" naming that local still means the block it is declared in. So text
+# built "where out lives" ("mk&out(...)", "t String&out = ...") cannot go into out, and the note for the error
+# proposes exactly that spelling. "&return" works. Hit twice: a grep collecting matches whose text is read per file
+# (../pgrep.olang), and a config loader taking environment overrides into the Config it returns (../config.olang,
+# whose note said "make it where 'c' lives: 'Env&c(...)'" with Env&c already written).
+#
+# expected: all three functions compile (out lives in the result scope; so does what is built where out lives)
+# actual:   error[C2d] in viaScopeArgument and viaTypedLocal ("make the argument where the instance goes ...
+#           ('T&x(...)')"); viaReturn compiles
+type M struct(t String&) { t }
+
+fn mk(s String&) String& { return $s }
+
+fn viaScopeArgument(srcs Array<String&>&) List<M> {
+    out := List<M>()
+    for i in range srcs.Len() {
+        text := mk&out(srcs[i])
+        for line in text.Lines() { out.Push(M(line)) }
+    }
+    return out
+}
+
+fn viaTypedLocal(srcs Array<String&>&) List<M> {
+    out := List<M>()
+    for i in range srcs.Len() {
+        text String&out = mk(srcs[i])
+        for line in text.Lines() { out.Push(M(line)) }
+    }
+    return out
+}
+
+fn viaReturn(srcs Array<String&>&) List<M> {
+    out := List<M>()
+    for i in range srcs.Len() {
+        text String&return = mk(srcs[i])
+        for line in text.Lines() { out.Push(M(line)) }
+    }
+    return out
+}
+
+fn main() ? {
+    println($viaScopeArgument(String&["a\nb", "c"]).Len() " " $viaTypedLocal(String&["a"]).Len() " "
+        $viaReturn(String&["a\nb", "c"]).Len())
+}

@@ -1,0 +1,24 @@
+# O26a follows take: the taken field read through a reference to an owner value local's storage
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() Vec<String&> {
+    o := Lex()
+    for i in range 3 { o.toks.Push($i "-word-in-o's-storage") }
+    r mut Lex& = o
+    w := take r.toks
+    return w
+}
+fn main() ? {
+    a := mk()
+    churn()
+    println(a[0])
+}

@@ -1,0 +1,15 @@
+# T29a's in-place retype on a conditional/match of array references in a return - "returns String&, found String&"
+fn pickc(k I64, a Array<Char>&) String&a {
+    return String(a if k > 0 else a[0:1])
+}
+fn pickm(k I64, a Array<Char>&) String&a {
+    return String(match k { case 1 => a nomatch => a[0:1] })
+}
+fn pickt(k I64, a Array<Char>&) String& {
+    return String(a if k > 0 else a[0:1])
+}
+fn main() ? {
+    w := Array<Char>(3, 'w')
+    println(pickc(1, w))
+    println(pickm(1, w))
+}

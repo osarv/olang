@@ -1,0 +1,28 @@
+fn countRange(words Array<String&>&) Map<String&, I64> {
+    m := Map<String&, I64>()
+    for w in words { m.Update(w.ToLower(), 0, fn(n I64) I64 { return n + 1 }) }
+    return m
+}
+fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
+    for e in from {
+        add := e.Value
+        into.Update(e.Key, 0, fn(n I64) I64 { return n + add })
+    }
+}
+fn seq(words Array<String&>&) I64 {
+    parts := Array<Map<String&, I64>>(2)
+    for t in range 2 { parts[t] = countRange(words) }
+    total := Map<String&, I64>()
+    for i in range parts.Len() { merge(total, parts[i]) }
+    return total.Len()
+}
+fn par(words Array<String&>&) I64 {
+    parts := Array<Map<String&, I64>>(2)
+    join {
+        for t in range 2 { spawn parts[t] = countRange(words) }
+    }
+    total := Map<String&, I64>()
+    for i in range parts.Len() { merge(total, parts[i]) }
+    return total.Len()
+}
+fn main() ? { println($seq(String&["X", "y", "x"]) " " $par(String&["X", "y", "x"])) }

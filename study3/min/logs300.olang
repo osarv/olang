@@ -1,0 +1,168 @@
+# logs - writes a synthetic service log, then reads it back line by line and reports: lines per level, per-service
+# request counts and latency percentiles, the slowest requests, and malformed lines. Cross-checks the line count with
+# "wc -l" through os.Exec.
+
+import "std/os"
+import "std/io"
+import "std/rand"
+
+type Level enum {
+    Debug
+    Info
+    Warn
+    Error
+}
+
+fn parseLevel(t String&) Level ? {
+    return match t {
+        case "DEBUG" => Level.Debug
+        case "INFO" => Level.Info
+        case "WARN" => Level.Warn
+        case "ERROR" => Level.Error
+        nomatch { error }
+    }
+}
+
+fn (l Level) Str() String {
+    return match l {
+        case Level.Debug => "debug"
+        case Level.Info => "info"
+        case Level.Warn => "warn"
+        case Level.Error => "error"
+    }
+}
+
+type Entry struct(at I64, level Level, service String&, latency I64, message String&) {
+    at
+    level
+    service
+    latency
+    message
+}
+
+error LogError {
+    FIELDS
+    TIME
+    LEVEL
+    LATENCY
+}
+
+# "SECONDS LEVEL SERVICE LATENCYms MESSAGE..." - the message runs to the end of the line
+fn parse(line String&) Entry ? LogError {
+    parts := line.Split(" ")
+    if parts.Len() < 5 { error LogError.FIELDS }
+    at := try parts[0].ParseInt() catch { error LogError.TIME }
+    level := try parseLevel(parts[1]) catch { error LogError.LEVEL }
+    lat := parts[3]
+    if not lat.EndsWith("ms") { error LogError.LATENCY }
+    ms := try lat[:lat.Len() - 2].ParseInt() catch { error LogError.LATENCY }
+    start := parts[0].Len() + parts[1].Len() + parts[2].Len() + parts[3].Len() + 4
+    return Entry(at, level, parts[2], ms, line[start:])
+}
+
+type Stats struct() {
+    byLevel Map<Level, I64>
+    byService Map<String&, mut List<I64>&>
+    slowest List<Entry>
+    bad List<Pair<I64, String&>>
+    lines I64
+}
+
+fn (s mut Stats&) add(e Entry) {
+    s.byLevel.Update(e.level, 0, fn(n I64) I64 { return n + 1 })
+    if e.service not in s.byService { s.byService.Put($e.service, List<I64>()) }
+    (try s.byService.Get(e.service) catch { unreachable }).Push(e.latency)
+    s.slowest.Push(Entry(e.at, e.level, $e.service, e.latency, $e.message))
+    if s.slowest.Len() > 20 {
+        s.slowest.Sort(fn(a Entry, b Entry) Bool { return a.latency > b.latency })
+        for s.slowest.Len() > 5 { try s.slowest.Pop() catch { break } }
+    }
+}
+
+fn percentile(sorted Array<I64>&, p I64) I64 {
+    if sorted.Len() == 0 { return 0 }
+    i := (sorted.Len() - 1) * p / 100
+    return sorted[i]
+}
+
+Services := String&["auth", "billing", "search", "upload"]
+Words := String&["ok", "retry", "timeout", "cache miss", "slow disk", "user=42", "user=7"]
+
+fn writeLog(path String&, n I64) ? os.OsError {
+    r := rand.Rand(2026)
+    fd := try os.Create(path)
+    defer try os.Close(fd) catch os.OsError { fail }
+    w := io.Writer(fd)
+    defer try w.Flush() catch io.IoError { fail }
+    t I64 = 1760000000
+    for i in range n {
+        t += r.Below(3)
+        if i % 97 == 13 {
+            w.Write("garbage line " $i "\n")
+            continue
+        }
+        lv := match r.Below(20) {
+            case 0 => "ERROR"
+            case 1, 2 => "WARN"
+            case 3, 4, 5, 6 => "DEBUG"
+            nomatch => "INFO"
+        }
+        svc := Services[r.Below(Services.Len())]
+        ms := r.Below(50) + (r.Below(1000) if r.Below(30) == 0 else 0)
+        w.Write($t " " $lv " " $svc " " $ms "ms " $Words[r.Below(Words.Len())] "\n")
+    }
+}
+
+fn analyse(path String&) Stats ? os.OsError + io.IoError {
+    s := Stats()
+    fd := try os.Open(path)
+    defer try os.Close(fd) catch os.OsError { fail }
+    n I64 = 0
+    for line in try io.Lines(fd) {
+        n++
+        e := try parse(line) catch LogError {
+            s.bad.Push(Pair(n, $line))
+            continue
+        }
+        s.add(e)
+    } catch io.IoError { error io.IoError.FAILED }
+    s.lines = n
+    s.slowest.Sort(fn(a Entry, b Entry) Bool { return a.latency > b.latency })
+    for s.slowest.Len() > 5 { try s.slowest.Pop() catch { break } }
+    return s
+}
+
+fn report(s Stats&, w mut io.Writer&) {
+    w.Write("lines: " $s.lines ", malformed: " $s.bad.Len() "\n\n")
+    w.Write("level    count\n")
+    for lv in Level[Level.Debug, Level.Info, Level.Warn, Level.Error] {
+        c := try s.byLevel.Get(lv) catch default 0
+        w.Write($lv.Str().PadEnd(8) " " $c.PadStart(5) "\n")
+    }
+    w.Write("\nservice  count   p50   p90   p99   max\n")
+    names := s.byService.Keys().ToList()
+    names.Sort(fn(a String&, b String&) Bool { return a < b })
+    for name in names {
+        lat := (try s.byService.Get(name) catch { unreachable }).ToArray()
+        lat.Sort(fn(a I64, b I64) Bool { return a < b })
+        cols := I64[lat.Len(), percentile(lat, 50), percentile(lat, 90), percentile(lat, 99), lat[lat.Len() - 1]]
+        w.Write($name.PadEnd(8))
+        for c in cols { w.Write(" " $c.PadStart(5)) }
+        w.Write("\n")
+    }
+    w.Write("\nslowest:\n")
+    for e in s.slowest { w.Write("  " $e.latency.PadStart(5) "ms " $e.service " " $e.message "\n") }
+    w.Write("\nfirst malformed lines: " $I64[p.First for p in s.bad if p.First < 300] "\n")
+}
+
+fn main() ? {
+    path := "build/service.log"
+    try writeLog(path, 300)
+    s := try analyse(path)
+    w := io.Writer(io.Stdout)
+    report(s, w)
+    try w.Flush()
+    out := try os.Exec(String&["wc", "-l", path])
+    counted := try out.Stdout.Trim().Split(" ")[0].ParseInt()
+    println("wc agrees: " $(counted == s.lines))
+}

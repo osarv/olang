@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/k7.olang:9:62: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    9 | fn k(a mut Array<Char>&, c Bool) mut Array<Char>& { return a if c else Array<Char>(2) }
+      |                                                              ^~
+compilation failed with 1 error

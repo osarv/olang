@@ -1,0 +1,28 @@
+type Sub struct() {
+    more Vec<String&> = Vec<String&>()
+}
+type Lexer struct(s mut Sub&) {
+    sub mut Sub& = s
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    s mut Sub& = Sub()
+    p := Parser()
+    p.lx = Lexer(s)
+    for i in range 3 { p.lx.toks.Push($i "-word-in-the-lexer's-region") }
+    p.lx.sub.more = take p.lx.toks
+    p.lx = null
+    churn()
+    println(s.more[0])
+}

@@ -1,0 +1,33 @@
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+type Wrap struct(s String&) { s }
+type Box<T> struct(v T) { v }
+type E enum {
+    S(s String&)
+    N
+}
+type Names extends Array<String&>
+type H struct(x String&) {
+    y String&x = $7 "-new-text-in-the-region"
+}
+fn mklist(p String&) List<String&> {
+    l := List<String&>()
+    l.Push(p)
+    return l
+}
+Docs own mut Doc& = Doc()
+G Pair<String&, I64> = Pair(Docs.title, 1)
+fn main() ? {
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(G.First)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

@@ -1,0 +1,46 @@
+semantic.c:6919:24: runtime error: member access within null pointer of type 'struct operand'
+[32m9 crash_signal_exit_-11_8ddb0801.olang[31m error: [33mthis name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)[0m
+[36mtype [31mChar[36m extends U8
+[0m
+[32m19 crash_signal_exit_-11_8ddb0801.olang[31m error: [33mthis name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)[0m
+[36mtype [31mString[36m extends Array<Char>
+[0m
+[32m21 crash_signal_exit_-11_8ddb0801.olang[31m error: [33mthis name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)[0m
+[36merror [31mParseError[36m {
+[0m
+[32m200 crash_signal_exit_-11_8ddb0801.olang[31m error: [33mthis name belongs to a built-in type visible in every module ('Array', 'Iterator') - choose another (D3a)[0m
+[36mtype [31mStringBuilder[36m struct() {
+[0m
+[32m218 crash_signal_exit_-11_8ddb0801.olang[31m error: [33mthis value's type doesn't match the target's declared type[0m
+[36m    muta String& = [31m"nomatchhello"[36m
+[0m
+[32m226 crash_signal_exit_-11_8ddb0801.olang[31m error: [33munknown namespace[0m
+[36m    assert [31ma[36m.Eq(b)
+[0m
+[32m226 crash_signal_exit_-11_8ddb0801.olang[31m error: [33moperand must be a boolean[0m
+[36m    assert a.[31mEq[36m(b)
+[0m
+[32m227 crash_signal_exit_-11_8ddb0801.olang[31m error: [33munknown namespace[0m
+[36m    assert [31ma[36m.Eq("hello")
+[0m
+[32m227 crash_signal_exit_-11_8ddb0801.olang[31m error: [33moperand must be a boolean[0m
+[36m    assert a.[31mEq[36m("hello")
+[0m
+[32m228 crash_signal_exit_-11_8ddb0801.olang[31m error: [33munknown namespace[0m
+[36m    assert not [31ma[36m.Eq("hell")
+[0m
+[32m228 crash_signal_exit_-11_8ddb0801.olang[31m error: [33moperand must be a boolean[0m
+[36m    assert [31mnot[36m a.Eq("hell")
+[0m
+[32m229 crash_signal_exit_-11_8ddb0801.olang[31m error: [33munknown namespace[0m
+[36m    assert not [31ma[36m.Eq("hellO")
+[0m
+[32m229 crash_signal_exit_-11_8ddb0801.olang[31m error: [33moperand must be a boolean[0m
+[36m    assert [31mnot[36m a.Eq("hellO")
+[0m
+[32m233 crash_signal_exit_-11_8ddb0801.olang[31m error: [33mthis value's type doesn't match the target's declared type[0m
+[36m    d String& = [31m"hello"[36m
+[0m
+[32m234 crash_signal_exit_-11_8ddb0801.olang[31m error: [33munknown name 'a' - nothing of this name is declared here, in this module or in the prelude[0m
+[36m    assert [31ma[36m == c and c == "hello" and "hello" == d and a != "hell"
+[0m

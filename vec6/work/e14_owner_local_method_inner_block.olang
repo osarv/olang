@@ -1,0 +1,25 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+fn (l mut Lex2&) add(i I64) { l.toks.Push(Tok($i "-method-text", i)) }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    l := Lex2()
+    for i in range 5 {
+        l.add(i)
+        churn()
+    }
+    churn()
+    println(l.toks[3].text)
+}

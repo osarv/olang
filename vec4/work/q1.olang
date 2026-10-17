@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F4: a global initialized with a constructor that keeps a borrow of a global's own object
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+type Holder struct(s String&) {
+    s
+}
+Docs own mut Doc& = Doc()
+H := Holder(Docs.title)
+fn main() ? {
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(H.s)
+}

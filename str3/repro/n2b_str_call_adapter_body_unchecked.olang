@@ -1,0 +1,24 @@
+# CONFIRMED (since 7345ff9, not closed by e27b83b): the walk never reads Call's body for an adapter. Call builds a
+# Ctr where its receiver lives ('x Ctr&c = ...'); called directly ('$b.c()', the Variant line below) Str is refused with
+# E11c/O12, but through 'g fn() I64 = b.c; g()' it is accepted. At run time the receiver's scope reaches Call as null.
+# e27b83b -b: exit 139 (first at __olang_scope_escape; guarding that alone leaves __olang_scope_mine(null) in the
+# adapter, then Call's own allocation into null). 7345ff9 -b: exit 139. b6259d1: refused.
+# Variant: replace 'g fn() I64 = b.c' / '$g()' by '$b.c()' - refused by e27b83b, as it should be.
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 {
+    x Ctr&c = Ctr(c.v + 1)
+    return x.v
+}
+type Bag struct(c mut Ctr&) {
+    c
+}
+fn (b Bag&) Str() String {
+    g fn() I64 = b.c
+    return "b" $g()
+}
+fn main() ? {
+    b := Bag(Ctr(2))
+    println($b)
+}

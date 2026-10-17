@@ -1,0 +1,17 @@
+# a defer reading a target after its join failed and a clause returned
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn g(n I64) I64 {
+    x I64 = 7
+    defer { println("defer sees " $x) }
+    try join { spawn x = try f(n) } catch E { return -1 }
+    return x
+}
+fn main() ? {
+    println($g(-1) " " $g(5))
+}

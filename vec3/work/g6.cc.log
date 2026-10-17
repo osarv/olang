@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/g6.olang:7:11: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+    7 |     T = c.text
+      |           ^~~~
+compilation failed with 1 error

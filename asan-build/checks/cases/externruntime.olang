@@ -1,0 +1,15 @@
+# check: run
+# X7: an extern naming a function the runtime itself declares or calls - exit and strlen here - is that same function,
+# not a second declaration of it
+extern fn exit(status I32)
+extern fn strlen(s Array<U8>) I64
+
+error E {
+    X
+}
+
+fn main() ? E {
+    assert strlen("four\0") == 4
+    exit(0)
+    unreachable
+}

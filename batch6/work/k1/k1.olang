@@ -1,0 +1,93 @@
+# K1/P4: globals baked through failing joins, compared with the same calls at run time
+error E {
+    NEG
+    BIG
+}
+error F {
+    BAD
+}
+type Node struct(v I64, s String&) {
+    v
+    s
+}
+fn sq(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    if n > 100 { error E.BIG }
+    return n * n
+}
+fn txt(n I64) String ? E {
+    if n < 0 { error E.NEG }
+    return "t" $n
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.NEG }
+    return Node(n, "n" $n)
+}
+fn bad(n I64) ? F {
+    if n == 3 { error F.BAD }
+}
+fn s1(k I64) String {
+    a String = "a0"
+    b String = "b0"
+    p Node& = Node(0, "p0")
+    join {
+        spawn a = try txt(k) catch default "da" $k
+        spawn b = try txt(k - 5) catch E.NEG default "db" $k catch default "dc" $k
+        spawn p = try mk(k - 2) catch default Node(-k, "dp" $k)
+    }
+    return $a " " $b " " $p.v " " $p.s
+}
+fn s2(k I64) String {
+    r String = ""
+    for i in range 6 {
+        x I64 = 0
+        try join {
+            spawn x = try sq(k * i - 3)
+            spawn try bad(i)
+            if i == 4 { break }
+        } catch E.NEG {
+            r = $r "N" $i
+            continue
+        } catch E.BIG {
+            r = $r "B" $i
+            break
+        } catch F {
+            r = $r "F" $i
+            continue
+        }
+        r = $r "ok" $x
+    }
+    return r
+}
+fn inner(k I64) I64 ? E + F {
+    try join {
+        spawn try bad(k)
+        try join {
+            spawn try sq(k - 10)
+        } catch E.NEG { return 7 }
+        return 9
+    }
+    return 11
+}
+fn s3(k I64) String {
+    return $(try inner(k) catch E default -1 catch F default -2)
+}
+S1a String = s1(4)
+S1b String = s1(1)
+S2a String = s2(1)
+S2b String = s2(30)
+S3a String = s3(3)
+S3b String = s3(4)
+S3c String = s3(12)
+S3d String = s3(500)
+run mut I64 = 1
+fn main() ? {
+    println($s1(4 * run) " | " $S1a)
+    println($s1(1 * run) " | " $S1b)
+    println($s2(1 * run) " | " $S2a)
+    println($s2(30 * run) " | " $S2b)
+    println($s3(3 * run) " | " $S3a)
+    println($s3(4 * run) " | " $S3b)
+    println($s3(12 * run) " | " $S3c)
+    println($s3(500 * run) " | " $S3d)
+}

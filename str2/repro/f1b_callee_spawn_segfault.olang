@@ -1,0 +1,34 @@
+# NEW in 7345ff9, CONFIRMED. A callee bound where Str's receiver lives spawns a call with its parameter: the task's
+# stand-in (P2) is allocated in the scope the parameter is bound to - null - and faults.
+# new -b: Segmentation fault, exit 139 (gdb: __olang_scope_alloc_a in peek). d6c7f52: prints 4 4.
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn show(n Node&) { println($n.v) }
+fn peek(n Node&) I64 {
+    join { spawn show(n) }
+    return n.v
+}
+fn (b Bag&) Str() String {
+    return $peek(b.head)
+}
+fn main() ? {
+    b := Bag(Node(4, null))
+    s := $b
+    churn()
+    println(s)
+}

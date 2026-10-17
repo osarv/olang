@@ -1,0 +1,10 @@
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:24:7: error[O39]: assigning 'c.text' may release the String borrowed on line 23, which is used after it
+   24 |     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:23:10: note: borrowed here
+   23 |     t := f(c, 1)
+      |          ^
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:26:13: note: used here, after it
+   26 |     println(t)
+      |             ^
+compilation failed with 1 error

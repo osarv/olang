@@ -1,0 +1,40 @@
+# D9b: generic by-value array parameters
+fn wIdx(x <T>) I32 {
+    x[0] = 9
+    return x[0]
+}
+fn wSlice(x <T>) I32 {
+    s := x[0:2]
+    s[0] = 7
+    return x[0]
+}
+fn wSort(x <T>) I32 {
+    x.Sort(fn(a, b) { return a > b })
+    return x[0]
+}
+fn wAtomic(x <T>) I32 {
+    x[0].AtomicAdd(5)
+    return x[0]
+}
+fn wLocal(x <T>) I32 {
+    y mut Array<I32>& = x
+    y[0] = 11
+    return x[0]
+}
+fn wRet(x <T>) T { return x }
+fn ro(x <T>) I32 { return x[0] }
+fn main() ? {
+    a := I32[1, 2, 3]
+    println("idx " $wIdx(a) " a0 " $a[0])
+    println("slice " $wSlice(a) " a0 " $a[0])
+    println("sort " $wSort(a) " a0 " $a[0])
+    println("atomic " $wAtomic(a) " a0 " $a[0])
+    println("local " $wLocal(a) " a0 " $a[0])
+    b := wRet(a)
+    b[0] = 100
+    println("ret a0 " $a[0])
+    println("ro " $ro(a))
+    # constant data
+    println("const idx " $wIdx(I32[1, 2, 3]))
+    println("const slice " $wSlice(I32[1, 2, 3]))
+}

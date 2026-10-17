@@ -1,0 +1,26 @@
+type Big struct(n I64) {
+    a Array<I64, 20000>
+    a[0] = n
+    a[1] = n + 1
+}
+type H struct(k I64) {
+    k
+    r Array<I64>& = null
+}
+fn set(h mut H&, n I64) {
+    h.r = Big(n).a[0:2]
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 20 {
+        t := Array<I64>(300, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    h mut H& = H(1)
+    set(h, 7)
+    x := churn()
+    println($h.r[1] " " $x)
+}

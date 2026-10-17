@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn tv(v Vec<Char>&) String&v ? {
+    if v.Len() == 0 { error }
+    return String(v.View())
+}
+fn grow(w mut Vec<Char>&) {
+    d := try tv(w) catch default "none"
+    for i in range 1000 { w.Push('q') }
+    churn()
+    println(d)
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('h')
+    v.Push('i')
+    grow(v)
+}

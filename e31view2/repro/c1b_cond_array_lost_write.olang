@@ -1,0 +1,16 @@
+# C1: the built-in array spelling, bump(a[0] if k > 0 else a[1]) - array N 0 in every mode
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn main() ? {
+    a := Acc[Acc(), Acc()]
+    k := a.Len()
+    bump(a[0] if k > 0 else a[1])
+    println("array N " $a[0].N)
+}

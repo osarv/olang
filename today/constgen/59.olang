@@ -1,0 +1,18 @@
+# E32b: the checked view, baked and run - a failing view under try, a passing one written through
+fn view(a Array<I64>&) I64 {
+    v := try (a as Array<I64, 3>&) catch default null
+    if v == null { return -1 }
+    return v[0] + v[2]
+}
+fn writeThrough() I64 {
+    a := I64[1, 2, 3]
+    v := a as Array<I64, 3>&
+    v[1] = 20
+    return a[1]
+}
+B1 I64 = view(I64[1, 2, 3])
+B2 I64 = view(I64[1, 2])
+B3 I64 = writeThrough()
+fn main() ? {
+    println($view(I64[1, 2, 3]) " " $view(I64[1, 2]) " " $writeThrough() " | " $B1 " " $B2 " " $B3)
+}

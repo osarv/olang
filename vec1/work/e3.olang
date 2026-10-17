@@ -1,0 +1,8 @@
+fn asRaw(v Vec<Char>&) Array<Char>&v { return v.View() }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    r := asRaw(v)
+    v.Push('b')
+    println($r)
+}

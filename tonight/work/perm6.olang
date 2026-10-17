@@ -1,0 +1,11 @@
+fn look(m Map<I32, List<I32>>&) {
+    l := try m.Get(1) catch { return }
+    l.Push(5)
+}
+fn main() ? {
+    m := Map<I32, List<I32>>()
+    m.Put(1, List<I32>())
+    r Map<I32, List<I32>>& = m
+    look(r)
+    println($(try m.Get(1) catch { fail }).Len())
+}

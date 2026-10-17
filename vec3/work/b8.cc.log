@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/b8.olang:9:33: error[O26]: '&return' names the result scope, and this function has none
+    9 | fn mk(v Vec<Char>&) Array<Char>&return { return v.View() }
+      |                                 ^~~~~~
+/home/user/review/vec3/work/b8.olang:9:51: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    9 | fn mk(v Vec<Char>&) Array<Char>&return { return v.View() }
+      |                                                   ^~~~
+compilation failed with 2 errors

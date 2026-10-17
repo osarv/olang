@@ -1,0 +1,26 @@
+type V struct(n I64) {
+    d mut Array<I64>& = Array<I64>(n, 0)
+    ats I64 = 0
+    sets I64 = 0
+}
+fn (v mut V&) At(i I64) I64 {
+    v.ats++
+    return v.d[i]
+}
+fn (v mut V&) SetAt(i I64, x I64) {
+    v.sets++
+    v.d[i] = x
+}
+Calls mut I64 = 0
+fn next() I64 {
+    Calls++
+    return Calls
+}
+fn run() I64 {
+    v := V(8)
+    v[next()]++
+    return Calls * 10000 + v.ats * 1000 + v.sets * 100 + v[1] * 10 + v[2]
+}
+fn main() ? {
+    println($run())
+}

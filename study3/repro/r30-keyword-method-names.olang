@@ -1,0 +1,19 @@
+# r30 FRICTION - L9/M19: keywords cannot be method names, though a method is only ever reached through "." or a
+# receiver clause (M19: methods are called as methods), where no statement keyword can stand. The study hit three of
+# the common verbs: an ECS world's "spawn()", a parser's "fail(tok)", a build's "done" map (a local - that one is
+# fair).
+#
+# expected: 1
+# actual: error[L9] at lines 11, 15 and 18
+type World struct() {
+    next I32 = 0
+}
+fn (w mut World&) spawn() I32 {
+    w.next++
+    return w.next
+}
+fn (w World&) done() Bool { return w.next > 0 }
+fn main() ? {
+    w := World()
+    println($w.spawn())
+}

@@ -1,0 +1,2 @@
+# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() I64" agreeing with "==": the
+# prelude gives it to I32, I64, U8 and String, the compiler supplies one for a struct, enum or arra

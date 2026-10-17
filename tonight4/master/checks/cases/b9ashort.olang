@@ -1,0 +1,9 @@
+# check: run
+# flags: -D X=0
+# E7/B9a: "and" never evaluates its right side when its left decides - so "10 / X" is not a division by zero here
+if X != 0 and 10 / X > 1 {
+    fn pick() I32 { return 1 }
+} else {
+    fn pick() I32 { return 2 }
+}
+fn main() ? { assert pick() == 2 }

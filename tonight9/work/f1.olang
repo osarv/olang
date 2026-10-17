@@ -1,0 +1,36 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Pr struct(a mut Node&, b mut Node&) {
+    a
+    b
+}
+type H struct(k I64) {
+    k
+    p mut Pr& = null
+}
+fn mkp(i I64) Pr { return Pr(Node(i), Node(i + 1)) }
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        u := Node(j + 1)
+        s = s + t.v + u.v
+    }
+    return s
+}
+fn main() ? {
+    h mut H& = H(0)
+    for i in range 3 {
+        h.p = h.p if i < 0 else mkp(i)
+        q := h.p if i < 0 else mkp(i + 10)
+        h.k = q.a.v
+    }
+    x := churn()
+    for i in range 3 {
+        h.p = match i { case -1 => h.p nomatch => mkp(i + 20) }
+    }
+    y := churn()
+    println($h.p.a.v " " $h.p.b.v " " $h.k " " $x " " $y)
+}

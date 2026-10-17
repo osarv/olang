@@ -1,0 +1,8 @@
+type OnlyAt struct() { d mut Array<I64>& = Array<I64>(4, 0) }
+fn (v OnlyAt&) At(i I64) I64 { return v.d[i] }
+fn main() ? {
+    o := OnlyAt()
+    o[1]++
+    q := OnlyAt()
+    q[1] += 2
+}

@@ -1,0 +1,26 @@
+# O13a/O26/C2d: a struct value built here with no constructor arguments, a bare reference field then assigned this
+# function's own text, returned by value - accepted, and the caller reads freed arena memory once it is reused.
+# Expected: O26 at 'return h' (the field's referent dies at the return) - as when the reference is given to the
+# constructor (scopes/02.olang). Pre-existing (also on fa061c3).
+type Holder struct() {
+    name mut String& = null
+}
+fn make() Holder {
+    a := "alpha" $3
+    h := Holder()
+    h.name = a
+    return h
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range 1000 {
+        t := "xxxxxxxxxxxxxxxxxxxxxxxx" $i
+        s = s + t.Len()
+    }
+    return s
+}
+fn main() ? {
+    h := make()
+    println($churn())
+    println($h.name)
+}

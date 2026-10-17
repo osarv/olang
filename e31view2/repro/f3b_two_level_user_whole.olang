@@ -1,0 +1,23 @@
+# F3: e := ll[0][0]; e.S.Push(x)
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn add(ll mut List<List<Blk>>&, x I64) {
+    e := ll[0][0]
+    e.S.Push(x)
+}
+fn main() ? {
+    ll := List<List<Blk>>()
+    ll.Push(List<Blk>())
+    ll[0].Push(Blk())
+    add(ll, 7)
+    churn()
+    for s in ll[0][0].S { println("for " $s) }
+}

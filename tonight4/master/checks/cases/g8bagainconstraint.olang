@@ -1,0 +1,5 @@
+# check: fail error[G8b]: K was introduced already - write it 'K', not '<K>'
+# G8b: the parameter list introduces K before its own constraints, which write it bare - "Keyed<K Hashable<K>>"
+# also: compilation failed with 1 error
+type Keyed<K Hashable<<K>>> struct(k K) { k }
+fn main() ? { x := Keyed<I32>(1) }

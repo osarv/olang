@@ -1,0 +1,10 @@
+import "lib"
+fn g(x <K>) I64 {
+    return lib.Show(1)
+}
+fn h(x <T>) I64 {
+    return lib.Show(2)
+}
+fn main() ? {
+    println($g(3) " " $g("s") " " $h(4))
+}

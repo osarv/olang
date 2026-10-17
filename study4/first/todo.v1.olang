@@ -1,0 +1,144 @@
+# todo - a to-do list kept in a JSON file, driven by the cli module's flags.
+#
+#   todo [-f FILE] [-n LIMIT] [-v] [-a] add TEXT...
+#   todo ... list | done N | undo N | rm N | clear
+#
+# The list is a JSON array of {"id", "text", "done", "created"} objects. Every change is written to FILE.tmp and then
+# renamed over FILE, so the file is never half written. Errors from the flags, the file system and the JSON are kept
+# apart and reported each in their own words.
+
+import "cli"
+import "std/os"
+import "std/json"
+import "std/time"
+
+type Item struct(Id I64, Text String&, Done Bool, Created I64) {
+    Id
+    Text
+    Done
+    Created
+}
+
+error StoreError {
+    CORRUPT
+    NO_SUCH_ITEM
+}
+
+type Store struct(path String&) {
+    path
+    items List<Item> = List<Item>()
+    nextId I64 = 1
+}
+
+fn (s mut Store&) load() ? StoreError + os.OsError {
+    if not os.Exists(s.path) { return }
+    text := try os.ReadFile(s.path)
+    doc := try json.Parse(text) catch json.JsonError { error StoreError.CORRUPT }
+    items := try doc.AsArr() catch json.JsonError { error StoreError.CORRUPT }
+    for j in items {
+        it := try Item(try (try j["id"]).AsInt(), try (try j["text"]).AsStr(), try (try j["done"]).AsBool(),
+            try (try j["created"]).AsInt()) catch json.JsonError { error StoreError.CORRUPT }
+        s.items.Push(it)
+        if it.Id >= s.nextId { s.nextId = it.Id + 1 }
+    }
+}
+
+fn (s Store&) save() ? os.OsError {
+    names := String&["id", "text", "done", "created"]
+    values := List<json.Json&>()
+    for it in s.items {
+        values.Push(json.Json.Obj(json.Object(names, json.Json&[json.Json.Num(F64(it.Id)), json.Json.Str(it.Text),
+            json.Json.Bool(it.Done), json.Json.Num(F64(it.Created))])))
+    }
+    tmp := $s.path ".tmp"
+    try os.WriteFile(tmp, json.Encode(json.Json.Arr(values.ToArray()), "  ") "\n")
+    try os.Rename(tmp, s.path)
+}
+
+fn (s mut Store&) find(id I64) I64 ? StoreError {
+    for i in range s.items.Len() {
+        if s.items[i].Id == id { return i }
+    }
+    error StoreError.NO_SUCH_ITEM
+}
+
+fn age(created I64) String {
+    secs := (time.Wall() - created) / 1000000000
+    if secs < 60 { return "just now" }
+    if secs < 3600 { return $(secs / 60) "m ago" }
+    return $(secs / 3600) "h ago"
+}
+
+fn run(p cli.Parser&) ? StoreError + os.OsError + cli.CliError {
+    s := Store(p.Get("file"))
+    try s.load()
+    if p.Positional.Len() == 0 { error cli.CliError.HELP }
+    cmd := p.Positional[0]
+    rest := p.Positional.ToArray()[1:]
+    match cmd {
+        case "add" {
+            text := rest.Join(" ")
+            s.items.Push(Item(s.nextId, text, false, time.Wall()))
+            if p.On("verbose") { println("added #" $s.nextId) }
+            try s.save()
+        }
+        case "list" {
+            shown := 0
+            for it in s.items {
+                if it.Done and not p.On("all") { continue }
+                if shown == p.Num("limit") { break }
+                mark := "x" if it.Done else " "
+                println("[" $mark "] " $it.Id.PadStart(3) "  " $it.Text $(("  (" $age(it.Created) ")") if p.On("verbose") else ""))
+                shown++
+            }
+        }
+        case "done", "undo" {
+            id := try rest[0].ParseInt() catch { error StoreError.NO_SUCH_ITEM }
+            i := try s.find(id)
+            it := s.items[i]
+            it.Done = cmd == "done"
+            s.items[i] = it
+            try s.save()
+        }
+        case "rm" {
+            id := try rest[0].ParseInt() catch { error StoreError.NO_SUCH_ITEM }
+            s.items.RemoveAt(try s.find(id))
+            try s.save()
+        }
+        case "clear" {
+            s.items.Clear()
+            try s.save()
+        }
+        nomatch { error cli.CliError.UNKNOWN_FLAG }
+    }
+}
+
+fn main() ? {
+    p := cli.Parser("todo", "keeps a list of things to do")
+    p.Text("file", 'f', "todo.json", "where the list is kept")
+    p.Number("limit", 'n', 20, "list at most this many")
+    p.Switch("verbose", 'v', "say more")
+    p.Switch("all", 'a', "list finished items too")
+    try p.Parse(os.Args()) catch cli.CliError.HELP {
+        print(p.Usage())
+        return
+    } catch cli.CliError {
+        eprintln(p.Problem())
+        os.Exit(2)
+    }
+    try run(p) catch cli.CliError.HELP {
+        print(p.Usage())
+    } catch cli.CliError {
+        eprintln("todo: unknown command '" $p.Positional[0] "'")
+        os.Exit(2)
+    } catch StoreError.CORRUPT {
+        eprintln("todo: " $p.Get("file") " is not a to-do list")
+        os.Exit(1)
+    } catch StoreError.NO_SUCH_ITEM {
+        eprintln("todo: no such item")
+        os.Exit(1)
+    } catch os.OsError {
+        eprintln("todo: cannot read or write " $p.Get("file"))
+        os.Exit(1)
+    }
+}

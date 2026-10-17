@@ -1,0 +1,10 @@
+/home/user/review/vec3/repro/f3_spawn_target_view.olang:12:15: error: unknown type 'Vec'
+   12 | fn grow(w mut Vec<I64>&) {
+      |               ^~~
+/home/user/review/vec3/repro/f3_spawn_target_view.olang:15:9: error[P1]: 'spawn' takes a call
+   15 |         spawn d = w.View()          # the task's call gives a borrowed own result into d
+      |         ^~~~~
+/home/user/review/vec3/repro/f3_spawn_target_view.olang:22:19: error: expected an expression, found ')'
+   22 |     v := Vec<I64>()
+      |                   ^
+compilation failed with 3 errors

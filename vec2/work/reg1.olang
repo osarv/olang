@@ -1,0 +1,29 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Foo struct() {
+    arr own mut Array<I64>& = Array<I64>(2, 5)
+}
+type Inner struct() {
+    f mut Foo& = null
+}
+fn (i mut Inner&) Make() { i.f = Foo() }
+type Outer struct() {
+    in own mut Inner& = Inner()
+}
+fn use(o mut Outer&) {
+    o.in.Make()
+    d := o.in.f.arr
+    o.in = Inner()
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    o := Outer()
+    use(o)
+}

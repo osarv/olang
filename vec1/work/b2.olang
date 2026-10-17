@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() Vec<I64> {
+    v := Vec<I64>()
+    v.Push(41)
+    v.Push(42)
+    return v
+}
+fn main() ? {
+    vv := List<mut Vec<I64>&>()
+    vv.Push(mk())
+    churn()
+    x := vv[0]
+    println($x.Len() " " $x.Cap())
+    println($x[1])
+}

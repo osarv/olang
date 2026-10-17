@@ -1,0 +1,18 @@
+# NEW, CONFIRMED: segfault. The same through a by-value receiver holding a reference (its O4b scope variable, null).
+# e27b83b -b, -b -s, -b -d: exit 139. 7345ff9, b6259d1, -i: 'vbag 1'.
+type Node struct(v I64) {
+    v
+}
+type VBag struct(head Node&) {
+    head
+}
+fn (b VBag) Str() String {
+    f := fn() I64 {
+        s := $b.head.v
+        return s.Len()
+    }
+    return "vbag " $f()
+}
+fn main() ? {
+    println($VBag(Node(3)))
+}

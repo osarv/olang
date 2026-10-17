@@ -1,0 +1,35 @@
+import "std/io"
+
+type Mod struct(v I32) {
+    v
+}
+
+fn (a Mod&) Eq(b Mod&) Bool {
+    return a.v % 10 == b.v % 10
+}
+
+fn (a Mod&) Hash() I64 {
+    return I64(a.v % 10)
+}
+
+type Outer struct(m Mod, k I32) {
+    m
+    k
+}
+
+type Sh enum {
+    One(m Mod)
+    Two(k I32)
+}
+
+fn main() ? io.IoError {
+    a := Outer(Mod(3), 1)
+    b := Outer(Mod(13), 1)
+    x Sh = Sh.One(Mod(4))
+    y Sh = Sh.One(Mod(24))
+    p Mod& = Mod(5)
+    q Mod& = Mod(15)
+    arr1 := Mod[Mod(1), Mod(2)]
+    arr2 := Mod[Mod(11), Mod(22)]
+    try io.Print($(a == b) " " $(x == y) " " $(p == q) " " $(arr1 == arr2) " " $(Mod(7) == Mod(17)) "\n")
+}

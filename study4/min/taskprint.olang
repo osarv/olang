@@ -1,0 +1,26 @@
+# tasks printing concurrently, each running a deep recursion on its own big stack, with a crash message set
+import "std/os"
+
+fn depth(n I64, acc mut Array<I64>&) I64 {
+    if n == 0 { return acc[0] }
+    acc[n % acc.Len()] += n
+    return depth(n - 1, acc) + acc[(n * 7) % acc.Len()] % 3
+}
+
+fn task(id I64) I64 {
+    acc mut Array<I64>& = Array<I64>(64)
+    got mut Array<I64>& = Array<I64>(1)
+    os.RunOnStack(256 << 20, fn() { got[0] = depth(200000, acc) })
+    println("task " $id " line one")
+    println("task " $id " line two " $got[0])
+    return got[0]
+}
+
+fn main() ? {
+    os.OnCrash("taskprint: crashed\n")
+    results := Array<I64>(8)
+    join {
+        for t in range 8 { spawn results[t] = task(t) }
+    }
+    println("all equal: " $results.All(fn(r I64) Bool { return r == results[0] }))
+}

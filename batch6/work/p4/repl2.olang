@@ -1,0 +1,33 @@
+# P4b: a return whose value has an effect, replaced by the join's failure - the value is still computed
+error E {
+    NEG
+}
+fn g(n I64) ? E {
+    if n < 0 { error E.NEG }
+}
+fn bump(c mut Array<I64>&) I64 {
+    c[0] = c[0] + 1
+    return 100
+}
+fn f(c mut Array<I64>&, n I64) I64 {
+    for i in range 2 {
+        try join {
+            spawn try g(n)
+            if i == 0 { continue }
+            return bump(c)
+        } catch E { c[1] = c[1] + 1 }
+    }
+    return 7
+}
+fn run(n I64) String {
+    c := Array<I64>(2)
+    r := f(c, n)
+    return $r " " $c
+}
+B1 String = run(-1)
+B2 String = run(1)
+on mut I64 = 1
+fn main() ? {
+    println($run(-on) " | " $B1)
+    println($run(on) " | " $B2)
+}

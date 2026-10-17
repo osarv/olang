@@ -1,0 +1,20 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Cbox struct(f fn() I32) { f }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    keep Cbox& = Cbox(fn() { return 0 })
+    l List<fn() I32>& = List<fn() I32>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        keep = Cbox(fn() { return inner.v })
+        l.Push(fn() { return inner.v + 1 })
+    }
+    churn()
+    try io.Print($(keep.f)() "\n")
+}

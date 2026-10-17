@@ -1,0 +1,9 @@
+fn pick() I32 { return 3 }
+
+if TargetOs == "linux" {
+    import "helper"
+}
+
+test "an import in a branch compile-time evaluation chooses" {
+    assert helper.Seven() == 7
+}

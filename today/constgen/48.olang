@@ -1,0 +1,14 @@
+# G21/G23: a constant argument computed from a U8 constant variable (I64(N)) in a generic struct's field
+type B<N U8> struct() {
+    c mut Array<I32, I64(N)>
+    after mut I64
+}
+fn (b mut B<<N>>&) Fill() {
+    for i in range I64(N) { b.c[i] = 100 + I32(i) }
+}
+fn main() ? {
+    b := B<3>()
+    b.after = 42
+    b.Fill()
+    println($b.c.Len() " after=" $b.after " " $b.c)
+}

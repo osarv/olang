@@ -1,0 +1,23 @@
+# R evasion: a function given the borrow builds a local in its parameter's scope and returns it as a borrowed result
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(p String&) String&p {
+    d String&p = $5 "-new-text-in-the-region"
+    return d
+}
+fn main() ? {
+    c := CB()
+    d := mk(c.text)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

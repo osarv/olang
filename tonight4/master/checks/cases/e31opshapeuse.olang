@@ -1,0 +1,38 @@
+# check: fail error[E31]: Graph's MatMul takes 4 parameters besides its receiver - an ordinary method, not the one '@' calls, which takes one
+# also: note: 'MatMul' is declared here
+# also: error[E31]: Graph's Neg takes one parameter besides its receiver - an ordinary method, not the one '-' calls, which takes none
+# also: error[E31]: Graph's SetAt takes one parameter besides its receiver - an ordinary method, not the one 'x[i] = v' calls, which takes at least 2
+# also: error[E31]: Graph's Slice takes one parameter besides its receiver - an ordinary method, not the one 'x[lo:hi]' calls, which takes 2
+# also: error[E31]: Graph's Has takes 2 parameters besides its receiver - an ordinary method, not the one 'x in c' calls, which takes one
+# also: error[E31]: Graph's Next takes one parameter besides its receiver - an ordinary method, not the one 'for ... in' calls, which takes none
+# also: error[E31]: Graph's Inc takes one parameter besides its receiver - an ordinary method, not the one '++' calls, which takes none
+# also: error[E31]: Graph's Less takes 2 parameters besides its receiver - an ordinary method, not the one '<' calls, which takes one
+# also: compilation failed with 8 errors
+# E31: a method named for an operator but shaped otherwise is an ordinary method - it is declared and called by name
+# freely, and only using the operator on the type is an error, which names the method and the parameters it takes
+type Graph struct() {
+    n I64 = 0
+}
+fn (g mut Graph&) MatMul(a I64, b I64, ta Bool, tb Bool) I64 { return 1 }
+fn (g Graph&) Neg(x I64) I64 { return 3 }
+fn (g Graph&) SetAt(i I64) { }
+fn (g Graph&) Slice(i I64) I64 { return 5 }
+fn (g Graph&) Has(a I64, b I64) Bool { return true }
+fn (g Graph&) Next(k I64) I64 { return 6 }
+fn (g Graph&) Inc(k I64) Graph { return Graph() }
+fn (g Graph&) Less(a Graph&, b Graph&) Bool { return true }
+fn (g Graph&) Eq(a Graph&, b Graph&) Bool { return true }
+fn main() ? {
+    g := Graph()
+    h := Graph()
+    assert g.MatMul(1, 2, true, false) == 1 and g.Neg(4) == 3 and g.Has(1, 2) and g.Less(g, h)
+    a := g @ h
+    c := -g
+    g[1] = 2
+    e := g[1:2]
+    f := 3 in g
+    for z in g { }
+    g++
+    k := g < h
+    assert g == h
+}

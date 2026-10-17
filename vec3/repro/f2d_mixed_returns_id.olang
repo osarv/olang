@@ -1,0 +1,29 @@
+# F2: the unrecorded return is a generic pass-through, id(h(c)).
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+fn h(c CB&) String&c { return c.text }
+fn id(x <T>) T { return x }
+fn f(c CB&, n I64) String&c {
+    if n == 0 { return String(c.data) }
+    return id(h(c))
+}
+fn use(c mut CB&) {
+    t := f(c, 1)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

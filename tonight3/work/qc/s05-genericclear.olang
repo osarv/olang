@@ -1,0 +1,7 @@
+fn wipe(x <T>) { x.Clear() }
+G List<I32> = I32[1, 2].ToList()
+fn main() ? {
+  y := G
+  wipe(y)
+  println($G.Len())
+}

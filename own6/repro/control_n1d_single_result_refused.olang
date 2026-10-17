@@ -1,0 +1,26 @@
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type View struct(x Outer&) {
+    x
+}
+fn (a Outer&) One() View&a { return View(a) }
+fn mkOne() View {
+    v := Outer()
+    v.o = Inner(6)
+    v.o.deep = Leaf(6)
+    a := v.One()
+    return a                      # the single-result form of n1d: refused (O38/O26a)
+}
+fn main() ? {
+    a := mkOne()
+    println($a.x.o.k)
+}

@@ -1,0 +1,20 @@
+import "std/os"
+# depth-first: returns the depth reached; a local array per frame keeps the frames real
+fn dive(n I64, limit I64) I64 {
+    buf Array<I64, 16>
+    buf[n % 16] = n
+    if n >= limit { return buf[n % 16] }
+    return dive(n + 1, limit) + buf[(n + 1) % 16] - buf[(n + 1) % 16]
+}
+Result mut I64 = 0
+fn main() ? {
+    os.OnCrash("deep1: crashed\n")
+    args := os.Args()
+    limit := try args[1].ParseInt() catch default 1000
+    if args.Len() > 2 {
+        os.RunOnStack(1 << 30, fn() { Result = dive(0, limit) })
+        println("on a big stack: " $Result)
+    } else {
+        println("on the main stack: " $dive(0, limit))
+    }
+}

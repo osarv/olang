@@ -1,0 +1,13 @@
+# check: fail error[E29]: Has can fail here
+# E29: a fallible Has is reached under try
+error E {
+    X
+}
+type R struct() {
+    n I32 = 0
+}
+fn (r R&) Has(x I32) Bool ? E { return true }
+fn main() ? {
+    r R& = R()
+    if 3 in r { }
+}

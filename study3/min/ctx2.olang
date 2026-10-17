@@ -1,0 +1,21 @@
+# a parser-like context holding a local token list and the caller's diagnostics sink
+type Diag struct() {
+
+    col I64 = 0
+}
+type Ctx struct(toks List<String&>&, diag mut Diag&) {
+    toks
+    diag
+}
+fn (c mut Ctx&) note(i I64) { c.diag.col = i }
+fn check(src String&, d mut Diag&) {
+    toks := List<String&>()
+    toks.Push(src[0:1])
+    c := Ctx(toks, d)
+    c.note(3)
+}
+fn main() ? {
+    d := Diag()
+    check("ab", d)
+    println($d.col)
+}

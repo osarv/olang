@@ -1,0 +1,28 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type W struct(arr Array<mut Node&>&) { arr }
+fn bump2(src mut W&) {
+    b := src.arr
+    for x in b {
+        x.next = Node()
+        x.next.v = 43
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        q := Array<I64>(64, -7)
+        t += q[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Array<mut Node&>(1, Node()))
+    bump2(w)
+    churn()
+    println($w.arr[0].next.v)
+}

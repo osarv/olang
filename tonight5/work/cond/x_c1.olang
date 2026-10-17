@@ -1,0 +1,35 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn growv(b Box) { b.head.next = Node(44) }
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    keep mut Node& = outer.head
+    {
+        inner mut Box& = Box()
+        d Box = outer if c else inner
+        grow(d)
+    }
+    churn()
+    println($rd(keep))
+}

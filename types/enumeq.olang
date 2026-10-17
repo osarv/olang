@@ -1,0 +1,11 @@
+import "std/io"
+type Tag enum {
+  None
+  Name(s String&)
+}
+fn main() ? {
+  a Tag = Tag.Name("ab")
+  b Tag = Tag.None
+  c Tag = Tag.Name("ab")
+  try io.Print($(a == b) " " $(b == b) " " $(a == c) "\n")
+}

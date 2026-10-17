@@ -1,0 +1,30 @@
+error EvErr { UNKNOWN }
+type Diag struct() {
+    what String& = ""
+}
+type E enum {
+    Num(v I64)
+    Var(name String&)
+    Add(l E&, r E&)
+}
+fn eval(e E&, env Map<String&, I64>&, d mut Diag&) I64 ? EvErr {
+    return match e {
+        case E.Num(v) => v
+        case E.Var(n) => try env.Get(n) catch {
+            d.what = $n
+            error EvErr.UNKNOWN
+        }
+        case E.Add(l, r) => try eval(l, env, d) + try eval(r, env, d)
+    }
+}
+fn run(src String&, env Map<String&, I64>&, d mut Diag&) I64 ? EvErr {
+    tree := E.Add(E.Num(1), E.Var(src))
+    return try eval(tree, env, d)
+}
+fn main() ? {
+    env := Map<String&, I64>()
+    env.Put("x", 41)
+    d := Diag()
+    v := try run("x", env, d) catch EvErr default -1
+    println($v)
+}

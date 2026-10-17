@@ -1,0 +1,21 @@
+# PRE-EXISTING lost write the E31b batch does not cover: a `mut` method returning its receiver hands out a reference to
+# the hidden element copy; writes through it after the statement reach the copy only.
+#   expected: list 99 (as array 99) - or an error
+#   actual (055e97c and a2e2878, all modes): "list 0 x 99 array 99"
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Self() mut Acc&a { return a }
+fn first(a mut Acc&) mut Acc&a { return a }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    x := l[0].Self()
+    x.N = 99
+    y := first(l[0])
+    y.N = 77
+    arr := Array<Acc>(1)
+    p := arr[0].Self()
+    p.N = 99
+    println("list " $l[0].N " x " $x.N " array " $arr[0].N)
+}

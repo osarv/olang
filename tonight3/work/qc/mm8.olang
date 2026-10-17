@@ -1,0 +1,4 @@
+fn main() ? {
+    a := Array<List<I64>>(2, List<I64>())
+    a.Sort(fn(x List<I64>, y List<I64>) Bool { return x.Len() < y.Len() })
+}

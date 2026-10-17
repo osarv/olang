@@ -1,0 +1,17 @@
+mkdir -p build
+mkdir -p build
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c codegen.c -o build/codegen.o
+mkdir -p build
+mkdir -p build
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c comptime.c -o build/comptime.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c errmsg.c -o build/errmsg.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c main.c -o build/main.o
+mkdir -p build
+mkdir -p build
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c semantic.c -o build/semantic.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c syntax.c -o build/syntax.o
+mkdir -p build
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c token.c -o build/token.o
+mkdir -p build
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c util.c -o build/util.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP build/codegen.o build/comptime.o build/errmsg.o build/main.o build/semantic.o build/syntax.o build/token.o build/util.o -o build/out -lm -lffi -ldl -lpthread

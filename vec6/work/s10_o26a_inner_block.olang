@@ -1,0 +1,29 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn add(v mut Vec<Tok>&, t String&) { v.Push(Tok(t, 2)) }
+fn mk() Vec<Tok> {
+    v := Vec<Tok>()
+    {
+        t := "x" $5 "-inner-block-text"
+        v.Push(Tok(t, 1))
+    }
+    return v
+}
+fn main() ? {
+    v := mk()
+    churn()
+    println(v[0].text)
+}

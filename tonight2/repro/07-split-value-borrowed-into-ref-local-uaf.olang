@@ -1,0 +1,38 @@
+# O17/O25a/O25h (pre-existing - 472373d and the rvfix build, 794af4e, give the same): O17 refuses to lend a value whose
+# storage and references live in different scopes (b := src.b: storage in bump's block, references where src's are) to
+# a callee that can store through it - but borrowing the same value into a reference local is not checked at all.
+# br takes b's storage scope (bump's block), so br.head.next = Node() builds the node in bump's block and hangs it off
+# src's node, which outlives it. (The value copy "br := b" builds where its references are and is correct on rvfix.)
+# expected: an error at "br mut Box& = b" (as O17 gives for the same lend to a callee), or 42
+# actual:   compiles; -b and -d print -7 (the node's storage reused by churn); -i prints 42
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn bump(src mut W&) {
+    b := src.b
+    br mut Box& = b
+    br.head.next = Node()
+    br.head.next.v = 42
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

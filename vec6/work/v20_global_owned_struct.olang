@@ -1,0 +1,25 @@
+type Lex3 struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type H struct() {
+    lx own mut Lex3& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+GH mut H = H()
+GG mut H = H()
+fn main() ? {
+    GH.lx = Lex3()
+    GG.lx = Lex3()
+    for i in range 3 { GH.lx.toks.Push($i "-built-into-gh-region") }
+    GG.lx.toks = take GH.lx.toks
+    GH.lx = null
+    churn()
+    println(GG.lx.toks[0])
+}

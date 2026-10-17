@@ -1,0 +1,35 @@
+import "std/io"
+type Node struct(v I32) {
+    v mut
+    next mut Node& = null
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mk(v I32) Node& { return Node(v) }
+fn build(n I32) Node& {
+    head Node&return = Node(0)
+    for i in range n {
+        t Node&head = Node(I32(i) + 1)
+        t.next = head.next
+        head.next = t
+        u Node&head = mk(I32(i) + 100)
+        head.v = head.v + u.v
+    }
+    return head
+}
+fn main() ? {
+    outer Node& = Node(1)
+    for i in range 2 {
+        x Node&outer = Node(42)
+        outer.next = x
+        y Node&outer = mk(43)
+        x.next = y
+    }
+    b := build(3)
+    churn()
+    try io.Print($outer.next.v " " $outer.next.next.v " " $b.v " " $b.next.v "\n")
+}

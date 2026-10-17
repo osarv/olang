@@ -1,0 +1,18 @@
+Dropped mut I64 = 0
+type Node struct(n I64) {
+    n
+    name String& = "node" $n
+    kid mut Node& = null
+} destruct { Dropped++ }
+type Holder struct() {
+    cur own mut Node&
+}
+R mut I64 = 1
+fn main() ? {
+    s := Holder()
+    s.cur = Node(1 * R)
+    s.cur.kid = Node(5 * R)
+    # self-referential overwrite: the new value is built reading the OLD s.cur before it's released
+    s.cur = Node(s.cur.n + s.cur.kid.n)
+    println($s.cur.n $" " $Dropped)   # new Node has n=6; old (and its kid) freed: 2
+}

@@ -1,0 +1,5 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# C3: a field is written only where its instance is reached writably - through a read-only reference it is not
+type P struct(x I32) { x }
+fn set(p P&) { p.x = 5 }
+fn main() ? { }

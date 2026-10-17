@@ -1,0 +1,64 @@
+fn mk() List<List<I64>> {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    return l
+}
+type Box<T> struct(v T) { v }
+fn wrap(l List<<T>>&) Box<T> { return Box(l[0]) }
+fn pick(l List<<T>>&) T {
+    x := l[0]
+    y := x
+    return y
+}
+fn pick2(l List<<T>>&) T {
+    a := Array<T>(1, l[0])
+    return a[0]
+}
+fn pick3(l List<<T>>&) T {
+    for x in l { return x }
+    unreachable
+}
+fn pick4(l List<<T>>&) T {
+    r := try l.RunFrom(0) catch { unreachable }
+    return r[0]
+}
+fn pick5(l List<<T>>&) T {
+    return l[0] if l.Len() > 0 else l[0]
+}
+fn pick6(l List<<T>>&) T {
+    return try l.First() catch { unreachable }
+}
+fn pick7(l List<<T>>&) T {
+    g := fn() T { return l[0] }
+    return g()
+}
+fn pick8(l List<<T>>&) T {
+    b := Box(l[0])
+    return b.v
+}
+fn poke(l List<<T>>&) {
+    match T {
+        case List<I64> {
+            x := l[0]
+            x.Push(9)
+        }
+        nomatch { }
+    }
+}
+fn pick9(l List<<T>>&) T {
+    x := l[0]
+    x = l[0]
+    return x
+}
+fn pick10(l List<<T>>&, out mut List<T>&) {
+    out.Push(l[0])
+}
+fn f(ro List<List<I64>>&) {
+    b := pick7(ro)
+    b.Push(9)
+}
+fn main() ? {
+    l := mk()
+    f(l)
+    println($l[0].Len())
+}

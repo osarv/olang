@@ -1,0 +1,28 @@
+# NEW in 7345ff9 (P2), CONFIRMED. One constructor call of a destructor-bearing type, two destructions: an instance
+# chosen by a conditional or a match, or passed to a generic by-value parameter, is registered where cgFuncCall builds
+# it (promotedOp names the conditional, or nothing, never the call) and again by the promotion that copies it.
+# Each copy is destructed (both print 'destructed before: false'), so a resource is released twice (C11/O16).
+# new -b, -b -s: destruct 6, 6, 4, 4, 2, 2, 1, 1. d6c7f52 and d0abfe8: destruct 6, 4, 2, 1. (-i: refuses destructors)
+type Res struct(k I64) {
+    k
+    gone Bool = false
+} destruct {
+    println("destruct " $k " (this instance destructed before: " $gone ")")
+    gone = true
+}
+fn id(x <T>) T { return x }
+fn take(r Res&) I64 { return r.k }
+fn main() ? {
+    c := true
+    {
+        a := id(Res(1))
+        b := Res(2) if c else Res(3)
+        w := match a.k {
+            case 1 => Res(4)
+            nomatch => Res(5)
+        }
+        t := take(Res(6) if c else Res(7))
+        println("end of block")
+    }
+    println("end")
+}

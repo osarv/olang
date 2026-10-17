@@ -1,0 +1,45 @@
+# HELD (item 4): 'done' and 'fail' inside a Str reached from a join in a test, the destructor rendering a join with
+# Str pieces while the test's scopes are unwound. e27b83b -t: 3 passed, 1 failed (the intended FAIL), Log as asserted.
+Log mut I64 = 0
+type Big struct(n I64) {
+    n
+}
+fn (b Big&) Str() String {
+    sb := StringBuilder()
+    for i in range 30 { sb.Push("0123456789") }
+    return sb.ToString()
+}
+type Res struct(k I64) {
+    k
+} destruct {
+    s := $Big(k) " " $Big(k)
+    Log += s.Len()
+}
+type Bomb struct(k I64) {
+    k
+}
+fn (b Bomb&) Str() String {
+    if b.k == 3 { done }
+    if b.k == 4 { fail }
+    return "ok"
+}
+test "done in destructor-free path" {
+    r := Res(1)
+    s := $Big(1) " " $Bomb(3)
+    unreachable
+}
+test "after" {
+    assert Log == 601
+    r := Res(2)
+}
+test "fail inside str in join" {
+    r := Res(5)
+    for i in range 3 {
+        s := $Big(1) " " $Bomb(i + 4)
+    }
+}
+test "still runs" {
+    assert Log == 1803, $Log
+    s := $Big(1) $Big(2)
+    assert s.Len() == 600
+}

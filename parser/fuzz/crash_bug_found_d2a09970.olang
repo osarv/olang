@@ -1,0 +1,9 @@
+# Imports shared.olang for its types/errors/functions, and imports runner.olang - which imports this
+# file right back, forming a genuine import cycle (see runner.olang for the other half).
+
+import sh "shared"
+
+# unnamed import (see the report) - its own alias is derived from the file name, "Base". Capitalized, so
+# it's re-exported: a THIRD module importing worker.olang can reach Base.olang through it too, two hops
+# away ("wk.Base.Whatever") - see runner.olang's own tests, which exercise exactly that. Declared BEFORE
+# 

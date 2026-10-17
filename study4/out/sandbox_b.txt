@@ -1,0 +1,6 @@
+PASS hello.olang
+PASS exit3.olang
+FAIL wrong.olang - line 1: 'two', expected 'one'
+FAIL broken.olang - does not build: broken.olang:2:23: error: unknown name 'undefinedName'
+PASS loop.olang
+3/5 passed

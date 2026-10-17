@@ -1,0 +1,19 @@
+# A constant index under try into an array whose length is known while compiling is E16's compile-time error, even
+# though try asked for the bounds check (E16d) - and in a function generic over the length, per instantiation, so a
+# generic cannot ask "element 2 if there is one" with try (only with G26's "if N > 2").
+#     expected: compiles; third(x) is 6, third(y) is -1 (OUT_OF_BOUNDS taken by the default), try z[5] gives 9
+#     actual:   error[E16] "index 2 is outside the array's 2 elements" (instantiated with N = 2), and at z[5]
+# Found by the generator (a checked index into a fixed-length array, or a generic's Array<T, N> parameter, with a
+# literal index). Cause: semantic.c's constant-index check for Array<T, N> does not look at whether the index is under
+# try. A question for the rule, not only the code: E16 says a known-out-of-range index is an error, E16d that try is
+# the opt-in check - under try the failure is defined, so the error rejects a well-defined program. The generator now
+# writes a non-literal index there.
+fn third(a Array<I32, <N>>&) I32 { return try a[2] catch default -1 }
+fn main() ? {
+    x Array<I32, 3> = I32[4, 5, 6]
+    y Array<I32, 2> = I32[4, 5]
+    assert third(x) == 6
+    assert third(y) == -1
+    z Array<I32, 2> = I32[1, 2]
+    assert (try z[5] catch default 9) == 9
+}

@@ -1,0 +1,21 @@
+Dropped mut I64 = 0
+type Conn struct(fd I64) { fd } destruct { Dropped++ }
+type Server struct() { cur own mut Conn& }
+type Out struct() { v I64 = 0 }
+fn inner(s Server&, o mut Out&) {
+    c := s.cur
+    o.v = c.fd
+}
+fn outer(s Server&, o mut Out&) {
+    join { spawn inner(s, o) }       # sub-task borrows s.cur
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(5)
+    o := Out()
+    join {
+        spawn outer(s, o)
+        s.cur = null                 # releases while the nested task may borrow it
+    }
+    println($o.v)
+}

@@ -1,0 +1,14 @@
+# E14/D8a: a trailing parameter with a default may be omitted - also when the function is generic
+import "std/io"
+fn pad(x <T>, n I32 = 3) <T> { return x }
+type Box<T> struct(v <T>, n I32 = 7) {
+  v
+  n
+}
+fn main() ? {
+  b := pad(5, default)
+  c := Box<I32>(9)
+  a := pad(5)
+  d := Box(9)
+  try io.Print($a " " $b " " $c.n " " $d.n "\n")
+}

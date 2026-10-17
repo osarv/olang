@@ -1,0 +1,6 @@
+Base I64 = 40
+fn Id(x <T>) T { return x }
+fn Mk(x <T>) Array<T> { return Array<T>(2, x) }
+fn F(a I64 = Id(Base) + 1, n I64 = Mk(Base).Len() + Mk(Base)[0]) I64 {
+    return a + n
+}

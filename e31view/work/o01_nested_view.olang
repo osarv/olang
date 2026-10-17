@@ -1,0 +1,23 @@
+# over-rejection: a struct element holding view structs BY VALUE, whose callee hands a field to a view-only method
+type M struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+fn (m mut M&) Fill(x I64) { m.d[m.off] = x }
+type Layer struct(w M, b M) {
+    w
+    b
+}
+type Layers struct(d mut Array<I64>&) {
+    d
+}
+fn (s Layers&) At(i I64) Layer { return Layer(M(s.d, 2 * i), M(s.d, 2 * i + 1)) }
+fn step(c mut Layer&) {
+    c.w.Fill(3)
+    c.b.Fill(4)
+}
+fn main() ? {
+    s := Layers(Array<I64>(4))
+    step(s[1])
+    println($s.d)
+}

@@ -1,0 +1,49 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn pick(c Bool) I64 {
+    v := Outer()
+    v.o = Inner(3)
+    v.o.deep = Leaf(3)
+    w := Outer()
+    w.o = Inner(4)
+    r mut Outer& = v if c else w   # a borrow of v - or of a copy of it?
+    r.o = null                     # released through the reference
+    churn()
+    if v.o == null { return -1 }
+    return v.o.k + v.o.deep.text.Len()
+}
+fn pickM(k I64) I64 {
+    v := Outer()
+    v.o = Inner(3)
+    v.o.deep = Leaf(3)
+    w := Outer()
+    r mut Outer& = match k {
+        case 1 => v
+        case _ => w
+    }
+    r.o = null
+    churn()
+    if v.o == null { return -1 }
+    return v.o.k + v.o.deep.text.Len()
+}
+fn main() ? {
+    println($pick(true))
+    println($pickM(1))
+}

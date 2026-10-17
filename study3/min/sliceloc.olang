@@ -1,0 +1,6 @@
+fn main() ? {
+    s := "abc"
+    n := s.Len() + 2
+    t := s[1:n]
+    println(t)
+}

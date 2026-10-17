@@ -1,0 +1,36 @@
+# channels: a by-value receiver writing through its reference field; a receiver's own &p field
+type Info struct(n I64) { n }
+type Inner struct() { ref Info& = null }
+type Holder struct() {
+    inner mut Inner& = Inner()
+}
+fn (h Holder) put(i Info&) I64 {
+    h.inner.ref = i
+    return 0
+}
+type PCur struct(p mut Info&) {
+    at mut Info&p = p
+    n I64 = 0
+}
+fn (c mut PCur&) point(i mut Info&) I64 {
+    c.at = i
+    return 0
+}
+fn mkA(k I64) Holder {
+    h := Holder()
+    i := Info(k)
+    h.put(i)
+    return h
+}
+fn mkB(k I64, d mut Info&) PCur {
+    c := PCur(d)
+    i := Info(k)
+    c.point(i)
+    return c
+}
+fn main() ? {
+    d := Info(0)
+    a := mkA(1)
+    b := mkB(2, d)
+    println($a.inner.ref.n " " $b.at.n)
+}

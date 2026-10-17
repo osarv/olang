@@ -1,0 +1,13 @@
+# check: fail error[T25c]: a read-only reference cannot become writable
+# T25b: a "mut" trait method needs a writable receiver - in generic code too, judged where it is instantiated
+type Writer trait { mut Put(n I32) }
+type Box struct() {
+    n I32 = 0
+}
+fn (b mut Box&) Put(n I32) { b.n = n }
+fn feed(w <W Writer>&) { w.Put(1) }
+error E { X }
+fn main() ? E {
+    b Box& = Box()
+    feed(b)
+}

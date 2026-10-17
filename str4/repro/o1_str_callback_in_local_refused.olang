@@ -1,0 +1,18 @@
+# over-rejection (not new: e27b83b refuses it too): a non-building callback held in a local before it is passed is refused in a Str -
+# mbiFnArgBuilds takes any argument that is not a lambda or a named function to build
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn H(g fn(x mut Node&), n mut Node&) { g(n) }
+fn (b Bag&) Str() String {
+    k := fn(x mut Node&) { }
+    H(k, b.head)
+    return "b" $b.head.v
+}
+fn main() ? {
+    println($Bag(Node(1)))
+}

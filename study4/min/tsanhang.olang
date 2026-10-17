@@ -1,0 +1,19 @@
+# under -r, a crash inside ThreadSanitizer's own bookkeeping (a deep recursion, past what its trace can hold) with
+# os.OnCrash set: expected - the message and a crash status; actual - the process hangs, the crash handler blocked
+# in __tsan_atomic64_load
+import "std/os"
+
+fn depth(n I64, acc mut Array<I64>&) I64 {
+    if n == 0 { return acc[0] }
+    acc[n % acc.Len()] += n
+    return depth(n - 1, acc) + acc[(n * 7) % acc.Len()] % 3
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() > 1 { os.OnCrash("tsanhang: crashed\n") }
+    acc mut Array<I64>& = Array<I64>(64)
+    got mut Array<I64>& = Array<I64>(1)
+    os.RunOnStack(1 << 30, fn() { got[0] = depth(400000, acc) })
+    println($got[0])
+}

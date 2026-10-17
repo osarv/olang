@@ -1,0 +1,53 @@
+== held_cond_landing.olang
+  [-b] run exit=0: 2997040 0|
+  [-b -s] run exit=0: 2997040 0|
+  [-i] exit=0: 2997040 0|
+== held_cond_link.olang
+  [-b] run exit=0: 12 32 60 0|
+  [-b -s] run exit=0: 12 32 60 0|
+  [-i] exit=0: 12 32 60 0|
+== held_frame_lambda_generic.olang
+print "11 11 11 0".
+  [-b] run exit=0: 11 11 11 0|
+  [-b -s] run exit=0: 11 11 11 0|
+  [-i] exit=0: 11 11 11 0|
+== held_frame_lambda_returns_closure.olang
+print "10 20 0". The form whose inner closure captures a reference is refused with T22a.
+  [-b] run exit=0: 10 20 0|
+  [-b -s] run exit=0: 10 20 0|
+  [-i] exit=0: 10 20 0|
+== held_frame_lambda_spawns.olang
+Prints "11 1 5 5".
+  [-b] run exit=0: 11 1 5 5|
+  [-b -s] run exit=0: 11 1 5 5|
+  [-i] exit=0: 11 1 5 5|
+== held_frame_lambda_uses.olang
+Prints "5 5 5 5 5 5x 15 5 5" and "5 5 5 0".
+  [-b] run exit=0: 5 5 5 5 5 5x 15 5 5|5 5 5 0|
+  [-b -s] run exit=0: 5 5 5 5 5 5x 15 5 5|5 5 5 0|
+  [-i] exit=0: 5 5 5 5 5 5x 15 5 5|5 5 5 0|
+== held_g9d_meet_callback.olang
+  [-b] REFUSED: /home/user/review/str4/repro/held_g9d_meet_callback.olang:11:8: error[E12]: expected fn(x Q&), found fn(x mut Q&)|/home/user/review/str4/repro/held_g9d_meet_callback.olang:12:13: error[E12]: expected fn(x Q&), found fn(x mut Q&)|
+  [-b -s] REFUSED: /home/user/review/str4/repro/held_g9d_meet_callback.olang:11:8: error[E12]: expected fn(x Q&), found fn(x mut Q&)|/home/user/review/str4/repro/held_g9d_meet_callback.olang:12:13: error[E12]: expected fn(x Q&), found fn(x mut Q&)|
+  [-i] exit=1: /home/user/review/str4/repro/held_g9d_meet_callback.olang:11:8: error[E12]: expected fn(x Q&), found fn(x mut Q&)|   11 |     ap(wr, ro)|      |        ^~|/home/user/review/str4/repro/held_g9d_meet_callback.olang:12:13: 
+== held_g9d_meet_inner.olang
+  [-b] REFUSED: /home/user/review/str4/repro/held_g9d_meet_inner.olang:10:9: error[E12]: expected Array<Res&>&, found Array<mut Res&>|/home/user/review/str4/repro/held_g9d_meet_inner.olang:11:14: error[E12]: expected Array<Res&>&, found Array<mut Res&>|
+  [-b -s] REFUSED: /home/user/review/str4/repro/held_g9d_meet_inner.olang:10:9: error[E12]: expected Array<Res&>&, found Array<mut Res&>|/home/user/review/str4/repro/held_g9d_meet_inner.olang:11:14: error[E12]: expected Array<Res&>&, found Array<mut Res&>|
+  [-i] exit=1: /home/user/review/str4/repro/held_g9d_meet_inner.olang:10:9: error[E12]: expected Array<Res&>&, found Array<mut Res&>|   10 |     put(arr, ro)|      |         ^~~|/home/user/review/str4/repro/held_g9d_meet_inner.olang:11
+== held_t25d_identity.olang
+  [-b] run exit=0: false false false false true false false|false false false false true false false|
+  [-b -s] run exit=0: false false false false true false false|false false false false true false false|
+  [-i] exit=0: false false false false true false false|false false false false true false false|
+== held_task_generic_destructors.olang
+  [-b] run exit=0: 41200 40000|
+  [-b -s] run exit=0: 41200 40000|
+  [-i] exit=1: olang -i: /home/user/review/str4/repro/held_task_generic_destructors.olang:12: it builds a value whose type declares a destructor, which -i does not run yet|
+== held_task_try_join_clause.olang
+  [-b] run exit=0: 1400|
+  [-b -s] run exit=0: 1400|
+  [-i] exit=0: 1400|
+== held_transient_keepers.olang
+prints "20 21 22 23 24 26 26 0".
+  [-b] run exit=0: 20 21 22 23 24 26 26 0|
+  [-b -s] run exit=0: 20 21 22 23 24 26 26 0|
+  [-i] exit=0: 20 21 22 23 24 26 26 0|

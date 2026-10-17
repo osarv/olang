@@ -1,0 +1,110 @@
+# A sales report: records grouped by an enum category in a Map, totals, a text table with aligned columns, and
+# values rendered with "$" - defaults for plain structs and enums, a Str method where a type wants its own.
+import "std/io"
+import "std/map"
+
+type Category enum {
+    Hardware
+    Software
+    Service(hourly Bool)
+}
+
+# (written by hand: the compiler supplies Hash for an enum only when every part hashes, and Bool has no Hash)
+fn (c Category) Hash() I64 {
+    return match c {
+        case Category.Hardware => 1
+        case Category.Software => 2
+        case Category.Service(true) => 3
+        case Category.Service(_) => 4
+    }
+}
+
+type Money struct(cents I64) {
+    cents
+}
+fn (m Money) Plus(o Money) Money { return Money(m.cents + o.cents) }
+fn (m Money) Mul(k I64) Money { return Money(m.cents * k) }
+fn (m Money) Less(o Money) Bool { return m.cents < o.cents }
+fn (m Money) Str() String {
+    sign := "-" if m.cents < 0 else ""
+    c I64 = m.cents if m.cents >= 0 else -m.cents
+    frac I64 = c % 100
+    return $sign "$" $(c / 100) "." $("0" if frac < 10 else "") $frac
+}
+
+type Sale struct(item String&, cat Category, unit Money, qty I64) {
+    item
+    cat
+    unit
+    qty
+}
+fn (s Sale&) total() Money { return s.unit * s.qty }
+
+type Summary struct(cat Category) {
+    cat
+    count mut I64 = 0
+    revenue mut Money = Money(0)
+    biggest mut String& = ""
+    biggestTotal mut Money = Money(0)
+}
+
+fn catName(c Category) String& {
+    return match c {
+        case Category.Hardware => "hardware"
+        case Category.Software => "software"
+        case Category.Service(true) => "service (hourly)"
+        case Category.Service(_) => "service (fixed)"
+    }
+}
+
+fn padRight(s String&, w I64) String& {
+    if s.Len() >= w { return $s }
+    return $s $String(Array<Char>(w - s.Len(), ' '))
+}
+
+fn padLeft(s String&, w I64) String& {
+    if s.Len() >= w { return $s }
+    return $String(Array<Char>(w - s.Len(), ' ')) $s
+}
+
+fn percent(part I64, whole I64) String& {
+    tenths I64 = part * 1000 / whole
+    return $(tenths / 10) "." $(tenths % 10) "%"
+}
+
+fn main() ? io.IoError {
+    sales := Sale[
+        Sale("laptop", Category.Hardware, Money(129900), 3),
+        Sale("mouse", Category.Hardware, Money(1999), 12),
+        Sale("ide license", Category.Software, Money(24900), 5),
+        Sale("consulting", Category.Service(true), Money(15000), 20),
+        Sale("setup", Category.Service(false), Money(50000), 2),
+        Sale("antivirus", Category.Software, Money(3999), 30),
+        Sale("monitor", Category.Hardware, Money(34900), 4)]
+    byCat := map.Map<Category, mut Summary&>()
+    order := List<Category>()
+    grand := Money(0)
+    for s in sales {
+        if s.cat not in byCat {
+            byCat.Put(s.cat, Summary(s.cat))
+            order.Push(s.cat)
+        }
+        sum := try byCat.Get(s.cat) catch default null        # (catch { unreachable }: min/f15.olang)
+        t := s.total()
+        sum.count++
+        sum.revenue = sum.revenue + t
+        if sum.biggestTotal < t {
+            sum.biggest = $s.item        # (a copy: a mut field cannot hold read-only text, and s.item is not traced, min/h6.olang)
+            sum.biggestTotal = t
+        }
+        grand = grand + t
+    }
+    try io.Print($padRight("category", 18) $padLeft("sales", 6) $padLeft("revenue", 14) $padLeft("share", 8) "  biggest\n")
+    for c in order {
+        sum := try byCat.Get(c) catch default null
+        try io.Print($padRight(catName(c), 18) $padLeft($sum.count, 6) $padLeft($sum.revenue, 14) $padLeft(percent(sum.revenue.cents, grand.cents), 8) "  " $sum.biggest "\n")
+    }
+    try io.Print($padRight("total", 18) $padLeft($sales.Len(), 6) $padLeft($grand, 14) "\n")
+    try io.Print("first sale: " $sales[0] "\n")
+    try io.Print("a category: " $Category.Service(true) ", money: " $Money(-1205) "\n")
+}

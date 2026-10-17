@@ -1,0 +1,42 @@
+# own5 F2: an owner value local whose storage O26a moves into the result scope - returned as a reference ('return v'
+# for 'mut Outer&') or held by a returned instance ('Hold(v)') - is still released as its block closes (O35: the
+# owndrop node is registered on the function's own scope). The caller then holds v's storage with every own slot
+# nulled, while the compile-time evaluator, which gives a release no meaning, still sees the objects: K bakes as 3 and
+# 'assert k3() == 3' is decided true while compiling, but the same call at run time reads a null own slot.
+# -b: "baked K=3", "true", then a segfault at address 0 (T2b's trap) in 'k3()'; -i: "baked K=3 / false / run time: 3"
+type Leaf struct(n I64) {
+    n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Hold struct(x Outer&) {
+    x
+}
+fn mk3() mut Outer& {
+    v := Outer()                  # an owner value local; O26a builds it in the result scope
+    v.o = Inner(3)
+    v.o.deep = Leaf(7)
+    return v                      # its storage survives - its owners are released at the return
+}
+fn mkHold() Hold {
+    v := Outer()
+    v.o = Inner(4)
+    h := Hold(v)                  # C2d: the instance holds v's storage, so O26a moves v too
+    return h
+}
+fn k3() I64 { return mk3().o.k }
+K I64 = k3()                      # baked while compiling: 3
+fn main() ? {
+    assert k3() == 3              # decided while compiling, so no check is emitted
+    println("baked K=" $K)
+    r := mk3()
+    println($(r.o == null))       # true at run time, false under -i
+    h := mkHold()
+    println($(h.x.o == null))     # true at run time, false under -i
+    println("run time: " $k3())   # a null read
+}

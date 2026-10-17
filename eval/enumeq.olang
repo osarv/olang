@@ -1,0 +1,22 @@
+import "std/io"
+type Tok enum {
+    Num(v I64)
+    Word(s String&)
+    End
+}
+type Hold struct(t Tok, n I32) {
+    t
+    n
+}
+M mut I64 = 1
+fn main() ? io.IoError {
+    a := Tok.Num(M)
+    b := Tok.Word("x")
+    c := Tok.End
+    try io.Print($(a == b) " " $(b == Tok.Word("x")) " " $(c == a) "\n")
+    h1 := Hold(a, 1)
+    h2 := Hold(c, 1)
+    try io.Print($(h1 == h2) "\n")
+    xs := Tok[a, b, c]
+    try io.Print($(c in xs) " " $(Tok.Word("y") in xs) "\n")
+}

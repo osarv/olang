@@ -1,0 +1,9 @@
+# check: fail error[D3a]: 'N' is already declared in this module
+# G22, D3a: a constant variable is named apart from the module's globals - a bare N in the body would read the global
+N I64 = 3
+fn total(a Array<I64, <N>>&) I64 {
+    t I64 = 0
+    for x in a { t = t + x }
+    return t
+}
+fn main() ? { assert total(I64[1, 2]) == 3 }

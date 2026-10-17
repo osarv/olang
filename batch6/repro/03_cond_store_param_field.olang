@@ -1,0 +1,30 @@
+# CONFIRMED, PRE-EXISTING (04f4a4d, 45eea97 and 91ab3ba alike) - a use after scope closed. A conditional of a local's
+# reference and static text, "b.last = x if i == 1 else "z"", stored into a field of a reference PARAMETER, is accepted
+# and the caller reads the dangling text. RefExactScope answers FALSE for a conditional (or match) whose values live in
+# different scopes - the same answer it gives a temporary - so buildAssignCore's rhsExisting is false and the O25/O20
+# checks for existing storage are skipped; the per-value OperandFitsType check does not judge a bare reference field
+# against its container. (A local declared from it reads at its block, so "o = x if c else "z"" is O10; an array
+# element, a global and an argument are refused too - only a field store is open.) O12 meant such a conditional to be
+# "not known here", never shown to outlive anything.
+#   -b: 299299-897xxx...   -b -d -s: use after scope closed   -i: w1-abcdefghijklmnopqrstuvwxyz
+type Bag struct() {
+    last String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn set(b mut Bag&, i I64) {
+    x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+    b.last = x if i == 1 else "z"
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    set(b, 1)
+    churn()
+    println(b.last)
+}

@@ -1,0 +1,10 @@
+# an immutable global List written at run time through a read-only reference's value copy
+G := I32[1, 2].ToList()
+fn look(l List<I32>&) {
+    c List<I32> = l
+    c.Push(99)
+}
+fn main() ? {
+    look(G)
+    assert G.Len() == 2, "G changed: " $G.Len()
+}

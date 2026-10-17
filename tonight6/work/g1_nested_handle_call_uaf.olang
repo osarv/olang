@@ -1,0 +1,31 @@
+# PRE-EXISTING use-after-free the hold-and-lend does not reach: a call on a handle element read out of ANOTHER handle
+# element - "users[0][0].Push(t)", "pushFn(users[0][0], t)", "(try mm.Get(0))[0].Push(t)" - with t a loop body's text.
+# One level ("users[0].Push(t)") and the store "users[0][0][0] = t" are correctly O10c. atWriteBackArgs holds the
+# argument "users[0][0]" in $handle as ":=" would, but the inner "users[0]" is an unheld call result (the store path's
+# atReadAgain holds it; the call path does not), so $handle's references read as the statement's block and Push binds
+# its scope there: t is stored into the inner list, whose state lives where users does.
+#   expected: O10c at each Push (as one level)
+#   actual (a10397c, and a2e2878): builds; -b prints freed bytes, -b -s / -b -d -s "use after scope closed",
+#   -i prints 0..2 three times. Same with "users[0][0].Push($t)" (the rendering built in the loop body).
+fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }
+
+fn main() ? {
+    users := List<List<List<String&>>>()
+    users.Push(List<List<String&>>())
+    users[0].Push(List<String&>())
+    mm := Map<I64, List<List<String&>>>()
+    mm.Put(0, List<List<String&>>())
+    (try mm.Get(0)).Push(List<String&>())
+    for k in range 3 {
+        t := $k "-loop-text-of-moderate-length"
+        users[0][0].Push(t)
+        pushFn(users[0][0], t)
+        (try mm.Get(0))[0].Push(t)
+    }
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+    for s in users[0][0] { println(s) }
+    for s in (try mm.Get(0))[0] { println(s) }
+}

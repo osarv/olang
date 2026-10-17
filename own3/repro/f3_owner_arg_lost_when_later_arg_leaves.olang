@@ -1,0 +1,46 @@
+# own3 F3: an owner made, taken or given for an owning parameter is held only in a register until the call; a later
+# argument that leaves the expression (a 'try' propagating, a catch clause's 'break' or 'return') leaves it released by
+# nobody - its destructor never runs and its region is never freed. Likewise a constructor's region, allocated before
+# its arguments (cgOwnNew), when one of them leaves.
+# all of -b, -b -s: "made 4 dropped 0"; valgrind --leak-check=full: the regions "definitely lost". (-i runs no destructors.)
+Dropped mut I64 = 0
+Made mut I64 = 0
+type Leaf struct(n I64) {
+    n
+    m I64 = bump()
+} destruct { Dropped++ }
+fn bump() I64 {
+    Made++
+    return Made
+}
+type H struct() {
+    a own mut Leaf&
+}
+fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }     # releases c as it returns - when it is called
+fn g() I64 ? { error }
+fn mkl(k I64) own mut Leaf& { return Leaf(k) }
+fn viaCtor() ? {
+    x := take2(Leaf(1), try g())               # the Leaf is built, then g fails
+}
+fn viaTake(s mut H&) ? {
+    x := take2(take s.a, try g())              # s.a emptied, then g fails: the Leaf is nobody's
+}
+fn viaResult() ? {
+    x := take2(mkl(3), try g())
+}
+fn viaRegion(s mut H&) ? {
+    s.a = Leaf(try g())                         # the region made for the Leaf before its argument fails
+}
+fn main() ? {
+    s := H()
+    try viaCtor() catch { }
+    s.a = Leaf(2)
+    try viaTake(s) catch { }
+    try viaResult() catch { }
+    for i in range 1 {
+        s.a = Leaf(4)
+        x := take2(take s.a, try g() catch { break })
+    }
+    try viaRegion(s) catch { }
+    println("made " $Made " dropped " $Dropped)  # every one made should have been released
+}

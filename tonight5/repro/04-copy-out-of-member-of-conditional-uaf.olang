@@ -1,0 +1,46 @@
+# PRE-EXISTING (master prints -7 too), and not covered by this batch's general O25h: a copy taken out of a MEMBER (or
+# an "as", 04b) of a conditional is not seen as a copy of existing references. copiesExistingRefs/copiedRefsScope handle
+# a conditional or match only at the top of the expression, and valueRefsHome/RefExactScope do not walk a member or an
+# "as" down into one - so "h := (w1 if c else w2).b" keeps h's references in h's own block, and growv(h) builds the new
+# node there and hangs it off w1's node, which outlives the block.
+#     expected: 44 (as -i prints), or an error (O12: the two arms live in different scopes)
+#     actual:   -b and -d print -7 (the node's chunk reused after the block closed); -d -s: "use after scope closed"
+# The same with both arms value locals (04c) and with "(e1 if c else E.Z) as E.A" (04b).
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn growv(b Box) { b.head.next = Node(44) }
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+type W struct() { b Box = Box() }
+fn pickw(w mut W&) mut W&w { return w }
+fn pickwv(w mut W&) W { return w }
+fn main() ? {
+    c := churn() < 0
+    w1 mut W& = W()
+    k1 := w1.b.head
+    {
+        w2 mut W& = W()
+        h := (w1 if c else w2).b
+        growv(h)
+    }
+    churn()
+    println($rd(k1))
+}

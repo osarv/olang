@@ -1,0 +1,19 @@
+# a collection whose At gives a view into a Vec's buffer; a view callee reaches the Vec another way and pushes
+type V struct(row Array<I64>&, n I64) {
+    row
+    n
+}
+type Coll struct(v mut Vec<I64>&) {
+    v
+}
+fn (c Coll&) At(i I64) V { return V(c.v.View(), i) }
+fn f(x mut V&, c mut Coll&) {
+    for k in range 100 { c.v.Push(k) }
+    println($x.row[0])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(42)
+    c := Coll(v)
+    f(c[0], c)
+}

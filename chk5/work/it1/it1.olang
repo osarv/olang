@@ -1,0 +1,30 @@
+# exprReadsName now finds a foreign type's method: a local List's iterator returned
+fn mk(n I64) ListIter<I64> {
+    l := List<I64>()
+    for k in range n { l.Push(k * 10) }
+    return l.Iter()
+}
+type Words struct() {
+    w mut List<String&>& = List<String&>()
+}
+fn mkw(n I64) Array<String&>& {
+    l := List<String&>()
+    for k in range n { l.Push("w" $k) }
+    return l.ToArray()
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    it := mk(4)
+    ws := mkw(3)
+    churn()
+    s I64 = 0
+    for x in it { s += x }
+    println($s " " $ws)
+}

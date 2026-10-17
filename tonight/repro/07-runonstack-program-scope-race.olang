@@ -1,0 +1,33 @@
+# CONFIRMED (portgaps S1 + P2).
+# Expected: "corrupted elements seen: I64[0, 0, 0, 0]" every run, and no ThreadSanitizer report under -r - each task
+#           reaches the program's scope through a private stand-in folded back at its join (P2), so the scope needs no
+#           lock.
+# Actual:   now and then (1 run in 3 here) "corrupted elements seen: I64[112, 0, 44, 45]"; under -r ThreadSanitizer
+#           reports a data race between fill0/fill1-style frames in __olang_stack_main. The RunOnStack thread starts
+#           with @__olang_prog_scope at its initial value, the REAL @__olang_global_scope, not the stand-in of the task
+#           that called RunOnStack - so f's from two tasks bump one arena with no lock. Fix: carry the caller's
+#           @__olang_prog_scope in %olang.stackrun and store it in the new thread's TLS before calling f (the caller
+#           is blocked in pthread_join, so its stand-in is free to use).
+import "std/os"
+type N struct(v I64) {
+    v
+    pad Array<I64>& = Array<I64>(16, v)
+}
+G mut Array<mut N&>& = Array<mut N&>(4, N(0))
+fn fill(t I64) I64 {
+    bad I64 = 0
+    for i in range 200000 {
+        G[t] = N(t * 10000000 + i)
+        for x in G[t].pad { if x != t * 10000000 + i { bad++ } }
+    }
+    return bad
+}
+fn main() ? {
+    bad mut Array<I64>& = Array<I64>(4)
+    join {
+        for t in range 4 {
+            spawn fn() { os.RunOnStack(1 << 20, fn() { bad[t] = fill(t) }) }
+        }
+    }
+    println("corrupted elements seen: " $bad)
+}

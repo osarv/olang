@@ -1,0 +1,11 @@
+# "try a[i]" on a built-in array (E16d, a checked index) given to a "mut &" parameter
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(a mut Acc&) { a.N++ }
+fn main() ? {
+    a := Acc[Acc(), Acc()]
+    bump(try a[0] catch default Acc())
+    bump(a[1])
+    println("N " $a[0].N " " $a[1].N)
+}

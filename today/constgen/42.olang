@@ -1,0 +1,17 @@
+# G21/G25: a constant argument needing evaluation (a call) reading a constant variable, in two instantiations
+fn twice(n I64) I64 { return n * 2 }
+fn sizeOf(a Array<I64, <N>>&) I64 {
+    b := Array<I64, twice(N)>()
+    return b.Len()
+}
+fn sig(a Array<I64, <N>>&) Array<I64, twice(N)> {
+    return Array<I64, twice(N)>()
+}
+fn main() ? {
+    x Array<I64, 2> = I64[1, 2]
+    y Array<I64, 3> = I64[1, 2, 3]
+    println($sizeOf(x) " " $sizeOf(y))
+    p := sig(x)
+    q := sig(y)
+    println($p.Len() " " $q.Len())
+}

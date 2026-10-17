@@ -1,0 +1,10 @@
+/home/user/review/vec7/repro/n1_conversion_of_conditional_returned_d8.olang:3:21: error[D8]: this function returns String&, found String&
+    3 |     return String(a if k > 0 else a[0:1])
+      |                     ^~
+/home/user/review/vec7/repro/n1_conversion_of_conditional_returned_d8.olang:6:19: error[D8]: this function returns String&, found String&
+    6 |     return String(match k { case 1 => a nomatch => a[0:1] })
+      |                   ^~~~~
+/home/user/review/vec7/repro/n1_conversion_of_conditional_returned_d8.olang:9:21: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    9 |     return String(a if k > 0 else a[0:1])
+      |                     ^~
+compilation failed with 3 errors

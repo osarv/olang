@@ -1,0 +1,23 @@
+# R evasion (variant): the ctor-field instance kept in a List that lives in the block
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type H struct(x String&, n I64) {
+    y String&x = $n "-new-text-in-the-region"
+}
+fn main() ? {
+    c := CB()
+    l := List<H>()
+    l.Push(H(c.text, 5))
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(l[0].y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

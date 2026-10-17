@@ -1,0 +1,9 @@
+# G17: a constant that keeps changing - f at N asks for f at N + 1 - is reported once
+fn Up(a Array<I64, <N>>&) I64 {
+    b Array<I64, N + 1> = Array<I64, N + 1>()
+    return Up(b)
+}
+fn main() ? {
+    x Array<I64, 1> = Array<I64, 1>()
+    println($Up(x))
+}

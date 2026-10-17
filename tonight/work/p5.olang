@@ -1,0 +1,21 @@
+type N struct(v I32) { v }
+type H struct(r N&) { r }
+type S enum {
+    L(a Array<I32>&)
+    R(n N&)
+}
+G := S.L(I32[1, 2])
+GH := H(N(3))
+fn main() ? {
+    match G {
+        case S.L(a) {
+            a[0] = 5
+        }
+        nomatch { }
+    }
+    h := GH
+    h.r.v = 9
+    x := GH.r
+    x.v = 10
+    println($G " " $GH)
+}

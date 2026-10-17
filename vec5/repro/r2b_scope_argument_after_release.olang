@@ -1,0 +1,21 @@
+# R: the same through a scope argument naming the borrow, after the release
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(n I64) String& { return $n "-new-text-in-the-freed-region" }
+fn main() ? {
+    c := CB()
+    x := c.text
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    d := mk&x(5)
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

@@ -1,0 +1,14 @@
+# a generic callee writing the parameter's own storage, given x[i]'s hidden copy
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(a mut <T>&) { a.N = a.N + 1 }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    bump(l[0])
+    println("list " $l[0].N)
+    arr := Array<Acc>(1)
+    bump(arr[0])
+    println("array " $arr[0].N)
+}

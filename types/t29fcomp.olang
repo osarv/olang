@@ -1,0 +1,10 @@
+# T29f/S4: "p += 1" on a declared number that does not extend its base
+import "std/io"
+type Pct I32(v mut I32) {
+  if v > 100 { v = 100 }
+}
+fn main() ? {
+  p Pct = Pct(95)
+  p += 10                 # p + 10 is an I32 (T29f); an I32 does not flow into Pct (T6b) - an error
+  try io.Print($I32(p) "\n")
+}

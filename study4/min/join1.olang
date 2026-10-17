@@ -1,0 +1,27 @@
+import "std/filepath"
+fn walkB(dir String&, names Array<String&>&, out mut List<String&>&) {
+    for name in names {
+        out.Push(filepath.Join(dir, name))
+    }
+}
+fn walkC(dir String&, names Array<String&>&, out mut List<String&>&) {
+    for name in names {
+        p String&out = filepath.Join(dir, name)
+        out.Push(p)
+    }
+}
+fn walkD(dir String&, names Array<String&>&, out mut List<String&>&) {
+    for name in names {
+        p := filepath.Join(dir, name)
+        out.Push($p)
+    }
+}
+fn main() ? {
+    l := List<String&>()
+    l.Push("a")
+    l.Push("b")
+    walkB("d", String&["x", "y"], l)
+    walkC("d", String&["x", "y"], l)
+    walkD("d", String&["x", "y"], l)
+    println($l.Len() " " $l[0] " " $l[7])
+}

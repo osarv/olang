@@ -1,0 +1,18 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# s3 with a Vec whose buffer is over 2KB (a region that is a real scope): x := v.ViewMut(), d mut String&x
+fn main() ? {
+    v := Vec<I64>()
+    for i in range 600 { v.Push(i) }
+    x := v.ViewMut()
+    d mut String&x = $5 "-new-text-in-the-buffer-region"
+    for i in range 5000 { v.Push(i) }
+    churn()
+    println(d)
+}

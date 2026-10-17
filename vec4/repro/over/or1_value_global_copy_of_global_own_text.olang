@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F4 via a -D default (B10c): an immutable top-level String global initialized with a borrow of a global's own object
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+Docs own mut Doc& = Doc()
+T String = Docs.title
+fn main() ? {
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(T)
+}

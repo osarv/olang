@@ -1,0 +1,23 @@
+# CONTROL for F2: the same call written out, h := bs[b].S; h.Push(x) - correct (buildVarDecl's O18c lands the At call
+# a field is read out of, projLanded); the hidden copy's declaration (buildVarDeclFromOperandIn) does not
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn add(bs mut List<Blk>&, b I64, x I64) {
+    h := bs[b].S
+    h.Push(x)
+}
+fn main() ? {
+    bs := List<Blk>()
+    bs.Push(Blk())
+    add(bs, 0, 7)
+    churn()
+    for s in bs[0].S { println("for " $s) }
+}

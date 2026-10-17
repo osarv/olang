@@ -1,0 +1,11 @@
+type P struct(v I64) { v }
+fn r(n P&) I64 { return n.v }
+fn mk() mut P& { return P(5) }
+fn apply(f fn(n mut P&) I64, p mut P&) I64 { return f(p) }
+fn get(g fn() P&) I64 { return g().v }
+fn main() ? {
+    p mut P& = P(4)
+    println($apply(r, p) " " $get(mk))
+    k := apply(fn(n P&) I64 { return n.v * 2 }, p)
+    println($k)
+}

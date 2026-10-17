@@ -1,0 +1,5 @@
+fn pick(b Bool) F32 { return 1.0 if b else 0.0 }
+fn main() ? {
+    x F32 = 2.5 if pick(true) > 0.5 else 3.5
+    assert pick(true) == 1.0 and x == 2.5
+}

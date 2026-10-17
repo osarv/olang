@@ -1,0 +1,19 @@
+fn apply(v <T>, f fn(x T) I32) I32 { return f(v) }
+fn twice(x <T>) I32 {
+    x[0] = x[0] * 2
+    return x[0]
+}
+fn run() I32 {
+    a := I32[5, 6]
+    r := apply(a, fn(b) {
+        b[0] = 99
+        return b[0]
+    })
+    return r * 1000 + a[0]
+}
+G := run()
+fn main() ? {
+    println($G " " $run())
+    a := I32[3]
+    println($apply(a, fn(b) { return b[0] }))
+}

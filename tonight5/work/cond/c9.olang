@@ -1,0 +1,12 @@
+fn main() ? {
+    c := churn() < 0
+    w1 := W()
+    k1 := w1.b.head
+    {
+        w2 := W()
+        h := (w1 if c else w2).b
+        growv(h)
+    }
+    churn()
+    println($rd(k1))
+}

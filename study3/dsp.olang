@@ -1,0 +1,155 @@
+# dsp - a fixed-point (Q15) filter bank: FIR band filters designed in F64 with windowed sinc, quantized to Q15 with
+# saturation, run over a test signal as a bank, and compared with the same filters in F64. Q15 is a declared number
+# with its own saturating arithmetic; a filter's length is a constant parameter.
+
+import "std/math"
+
+# a Q15 number: I16 read as value / 32768, in [-1, 1)
+type Q15 I16
+
+Q15Max I16 = 32767
+Q15Min I16 = -32768
+
+fn sat(v I32) Q15 {
+    if v > 32767 { return Q15(Q15Max) }
+    if v < -32768 { return Q15(Q15Min) }
+    return Q15(I16(v))
+}
+
+fn (a Q15) Plus(b Q15) Q15 { return sat(I32(a) + I32(b)) }
+fn (a Q15) Minus(b Q15) Q15 { return sat(I32(a) - I32(b)) }
+fn (a Q15) Neg() Q15 { return sat(-I32(a)) }
+# rounding multiply: (a b + 2^14) >> 15
+fn (a Q15) Mul(b Q15) Q15 { return sat((I32(a) * I32(b) + 16384) >> 15) }
+fn (a Q15) Less(b Q15) Bool { return I16(a) < I16(b) }
+fn (a Q15) F64() F64 { return F64(I16(a)) / 32768.0 }
+fn (a Q15) Str() String { return a.F64().Fixed(4) }
+
+fn q15(x F64) Q15 {
+    v := math.Round(x * 32768.0)
+    if v >= 32767.0 { return Q15(Q15Max) }
+    if v <= -32768.0 { return Q15(Q15Min) }
+    return Q15(I16(v))
+}
+
+# anything that filters a stream of samples one at a time
+type Filter trait {
+    mut Step(x Q15) Q15
+}
+
+# a default for every Filter: a whole block
+fn (f mut <F Filter>&) Run(xs Array<Q15>&) Array<Q15> {
+    out := Array<Q15>(xs.Len())
+    for i, x in xs { out[i] = f.Step(x) }
+    return out
+}
+
+# ---- FIR filters: N taps, a circular delay line, a 32-bit accumulator ----
+
+type Fir<N I64> struct(taps Array<Q15, N>&) {
+    taps
+    delay Array<Q15, N>
+    at I64 = 0
+}
+
+fn (f mut Fir<<N I64>>&) Step(x Q15) Q15 {
+    f.delay[f.at] = x
+    acc I32 = 0
+    for k in range N {
+        i := (f.at - k + N) % N
+        acc += I32(f.taps[k]) * I32(f.delay[i])
+    }
+    f.at = (f.at + 1) % N
+    return sat((acc + 16384) >> 15)
+}
+
+# a windowed-sinc band-pass between lo and hi (fractions of the sample rate), in F64
+fn design(lo F64, hi F64, taps mut Array<F64, <N I64>>&) {
+    m := F64(N - 1)
+    for k in range N {
+        t := F64(k) - m / 2.0
+        ideal := if0(t, 2.0 * (hi - lo), (math.Sin(2.0 * math.Pi * hi * t) - math.Sin(2.0 * math.Pi * lo * t)) / (math.Pi * t))
+        window := 0.54 - 0.46 * math.Cos(2.0 * math.Pi * F64(k) / m)
+        taps[k] = ideal * window
+    }
+}
+
+fn if0(t F64, atZero F64, other F64) F64 { return atZero if t == 0.0 else other }
+
+fn quantize(taps Array<F64, <N I64>>&) Array<Q15, N> {
+    out Array<Q15, N>
+    for k in range N { out[k] = q15(taps[k]) }
+    return out
+}
+
+Taps I64 = 31
+Bands := F64[0.02, 0.08, 0.15, 0.30]
+
+fn bank() Array<Fir<Taps>, 3> {
+    out Array<Fir<Taps>, 3>
+    for b in range 3 {
+        t Array<F64, Taps>
+        design(Bands[b], Bands[b + 1], t)
+        out[b] = Fir<Taps>(quantize(t))
+    }
+    return out
+}
+
+# the reference: the same filter in F64
+fn firF64(taps Array<F64, <N I64>>&, xs Array<F64>&) Array<F64> {
+    out := Array<F64>(xs.Len())
+    for i in range xs.Len() {
+        s F64 = 0.0
+        for k in range N {
+            if i - k >= 0 { s += taps[k] * xs[i - k] }
+        }
+        out[i] = s
+    }
+    return out
+}
+
+fn signal(n I64) Array<F64> {
+    xs := Array<F64>(n)
+    for i in range n {
+        t := F64(i)
+        xs[i] = 0.3 * math.Sin(2.0 * math.Pi * 0.05 * t) + 0.3 * math.Sin(2.0 * math.Pi * 0.2 * t) +
+            0.2 * math.Sin(2.0 * math.Pi * 0.4 * t)
+    }
+    return xs
+}
+
+fn energy(xs Array<F64>&) F64 { return xs.Fold(0.0, fn(acc F64, x F64) F64 { return acc + x * x }) / F64(xs.Len()) }
+
+fn bandEnergies() Array<F64, 3> {
+    xs := signal(512)
+    qs := Q15[q15(x) for x in xs]
+    filters := bank()
+    out Array<F64, 3>
+    for b in range 3 {
+        ys := filters[b].Run(qs)
+        out[b] = energy(F64[y.F64() for y in ys])
+    }
+    return out
+}
+
+Baked := bandEnergies()
+
+fn main() ? {
+    a := q15(0.75)
+    b := q15(0.5)
+    println("q15: " $a " + " $b " = " $(a + b) " (saturated), " $a " * " $b " = " $(a * b) ", -" $a " = " $(-a))
+    xs := signal(512)
+    qs := Q15[q15(x) for x in xs]
+    filters := bank()
+    for band in range 3 {
+        t Array<F64, Taps>
+        design(Bands[band], Bands[band + 1], t)
+        ref := firF64(t, xs)
+        got := filters[band].Run(qs)
+        worst F64 = 0.0
+        for i in range xs.Len() { worst = math.Max(worst, math.Abs(got[i].F64() - ref[i])) }
+        e := energy(F64[y.F64() for y in got])
+        println("band " $band " [" $Bands[band] ", " $Bands[band + 1] "): energy " $e.Fixed(4) ", worst error vs F64 " $worst.Fixed(5))
+    }
+    println("baked energies: " $Baked[0].Fixed(4) " " $Baked[1].Fixed(4) " " $Baked[2].Fixed(4))
+}

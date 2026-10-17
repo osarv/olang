@@ -1,0 +1,1 @@
+fn Area() I32 { return 2 }

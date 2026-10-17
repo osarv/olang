@@ -1,0 +1,8 @@
+# M6a: $ on a value whose type has private fields - fine (renders the value)
+# M6a: 'is' with a private case
+import "lib"
+import "std/io"
+fn main() ? {
+  d := lib.Dir.North
+  try io.Print($(d is lib.Dir.south) "\n")
+}

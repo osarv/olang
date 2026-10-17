@@ -1,0 +1,7 @@
+# G21: a field whose length is computed by a call from a U8 constant, passed where its length is expected
+type B<N I64> struct() { a mut Array<I32, N + 0> }
+fn take(x Array<I32, 3>&) I64 { return x.Len() }
+fn main() ? {
+    b := B<3>()
+    println($take(b.a))
+}

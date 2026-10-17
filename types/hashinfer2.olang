@@ -1,0 +1,9 @@
+type K struct(s String&, n I32) {
+  s
+  n
+}
+fn main() ? {
+  k := K("a", 1)
+  h := k.Hash()
+  g := K("a", 1).Hash()
+}

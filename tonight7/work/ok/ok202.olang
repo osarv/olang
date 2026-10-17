@@ -1,0 +1,32 @@
+type Reg struct(l List<I64>) {
+    l
+}
+fn h1(it mut ListIter<I64>&) I64 {
+    n I64 = 0
+    for x in it { n += x }
+    return n
+}
+fn h2(it mut ListIter<I64>&) List<I64>& {
+    out mut List<I64>&return = List<I64>()
+    out.Push(1)
+    return out
+}
+fn h3(it mut ListIter<I64>&) I64 {
+    x := try it.Next() catch default 0
+    return x
+}
+fn h4(it mut ListIter<I64>&, f fn(x I64) Bool) I64 {
+    if f(1) { return 1 }
+    return 0
+}
+fn (r Reg&) Str() String {
+    it := r.l.Iter()
+    n := h2(it)
+    return "x"
+}
+fn main() ? {
+    l := List<I64>()
+    l.Push(3)
+    r := Reg(l)
+    println($r)
+}

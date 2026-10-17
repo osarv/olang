@@ -1,0 +1,19 @@
+type Inner struct(n I64) {
+    n
+    tag String& = "inner" $n
+}
+type Node struct(n I64) {
+    n
+    kid mut Inner& = null
+}
+type Holder struct() {
+    cur own mut Node&
+}
+fn main() ? {
+    s := Holder()
+    s.cur = Node(1)
+    s.cur.kid = Inner(2)          # Inner built in the Node's region
+    k := s.cur.kid                # a plain reference into the Node's region - a loan on the region
+    s.cur = null                  # frees the region, including the Inner
+    println(k.tag)                # UAF
+}

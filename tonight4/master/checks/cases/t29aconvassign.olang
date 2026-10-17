@@ -1,0 +1,6 @@
+# check: fail error[S4]: this cannot be written
+# T29a: a conversion lends its argument's storage, but it is no place an assignment may name
+fn main() ? {
+  raw := Array<U8>(2, 104)
+  String(raw) = "hi"
+}

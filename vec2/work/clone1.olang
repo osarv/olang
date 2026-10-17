@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk(k I64) Vec<String&> {
+    v := Vec<String&>()
+    s := $k "-text-built-in-mk"
+    v.Push(s)
+    return v.Clone()
+}
+fn main() ? {
+    c := mk(5)
+    churn()
+    println(c[0])
+}

@@ -1,0 +1,2 @@
+type StringBuilder struct() { }
+fn main() ? { }

@@ -1,0 +1,11 @@
+# conditional expression, membership, not in
+test "a" {
+    a := I32[1, 2, 3]
+    x I32 = 2
+    y I32 = 7 if x in a else 9
+    assert y == 7
+    assert 5 not in a
+    assert not 5 in a
+    z I32 = 1 if x == 3 else 2 if x == 2 else 3
+    assert z == 2
+}

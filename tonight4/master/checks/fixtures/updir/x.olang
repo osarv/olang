@@ -1,0 +1,4 @@
+# M23: a module reached by climbing out of the directory the compiler runs in imports its neighbour as any local module
+# does - "../x" importing "y" is "../y"
+import "y"
+fn X() I64 { return y.Y() + 1 }

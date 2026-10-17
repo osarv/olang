@@ -1,0 +1,13 @@
+type Bag struct() {
+    items List<I64>& = List<I64>()
+}
+fn main() ? {
+    a := Array<Bag&>(2)
+    a[0] = Bag()
+    a[1] = Bag()
+    s I64 = 0
+    for k in a { s += k.items.Len() }
+    it := a.Iter()
+    for k in it { s += k.items.Len() }
+    assert s == 0
+}

@@ -1,0 +1,19 @@
+# OVER-REJECTION (listed by the author), avoidable. The conditional is a read-only String& (writing name[0] is
+# error[T25b]), so T25d's own rule - a literal reaching a read-only reference is the constant data - could make
+# "anon" static. Instead the arm goes through cgStoreOperand's run-time-length promotion and is copied into the
+# conditional's scope (the receiver's), and the walk's literal case counts any array literal under a placed target
+# (mbiOperand: 'op->isLiteral ... BASETYPE_ARRAY ... && at'), even where mbBoundary would exclude a static literal.
+# 'return $(b.name if ... else "anon")' and 'return b.name if ... else "anon"' already compile.
+# e27b83b: error[E11c, O12] at "anon". 7345ff9: internal compiler error. b6259d1: 'anon' / 'x' (copying "anon" into
+# the Bag's own scope at every rendering).
+type Bag struct(name String&) {
+    name
+}
+fn (b Bag&) Str() String {
+    name := b.name if b.name.Len() > 0 else "anon"
+    return $name
+}
+fn main() ? {
+    println($Bag(""))
+    println($Bag("x"))
+}

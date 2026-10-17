@@ -1,0 +1,24 @@
+import "std/os"
+fn n() I64 { return I64(os.Args().Len()) + 2 }
+fn main() ? {
+    a := I32[1, 2, 3]
+    m := os.Args().Len()
+    which := os.Args()[1] if m > 1 else "slice"
+    if which == "slice" { println($a[1:n() + 3]) }
+    if which == "len" { x := Array<I32>(0 - n()) }
+    if which == "fit" {
+        f Array<I32, 2> = a
+    }
+    if which == "as" {
+        b := Box.B(1)
+        println($(b as Box.A))
+    }
+    if which == "list" {
+        l := List<I32>()
+        println($l.RemoveAt(n()))
+    }
+}
+type Box enum {
+    A(x I32)
+    B(y I32)
+}

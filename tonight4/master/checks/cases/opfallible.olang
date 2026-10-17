@@ -1,0 +1,7 @@
+# check: fail error[E31a]: Mul cannot fail
+# E31: an operator method's shape
+type V struct(x I32) {
+    x
+}
+fn (a V) Mul(b V) V ? { return a }
+fn main() ? { }

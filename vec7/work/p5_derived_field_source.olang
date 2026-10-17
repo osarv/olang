@@ -1,0 +1,27 @@
+type Sub struct() {
+    more Vec<String&> = Vec<String&>()
+}
+type Lexer struct(s mut Sub&) {
+    sub mut Sub&s = s
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    s mut Sub& = Sub()
+    p := Parser()
+    p.lx = Lexer(s)
+    for i in range 3 { p.lx.sub.more.Push($i "-word-built-through-sub") }
+    p.lx = null
+    churn()
+    println(s.more[0])
+}

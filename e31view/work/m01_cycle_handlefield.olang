@@ -1,0 +1,26 @@
+# a cycle through a handle field: f hands the element's Bag (a handle held by value) to g, g repoints the Bag's own field
+# on one branch and calls back into f - every body declared after main
+type State struct() {
+    n I64 = 0
+}
+type Bag struct() {
+    s mut State& = State()
+}
+type V struct(d mut Array<I64>&, b Bag) {
+    d
+    b
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(1), Bag()))
+    f(l[0], 3)
+    println($l[0].b.s.n)
+}
+fn f(c mut V&, k I64) {
+    if k > 0 { g(c.b, c, k - 1) }
+}
+fn g(b mut Bag&, c mut V&, k I64) {
+    if k == 1 { b.s = State() }
+    b.s.n++
+    f(c, k)
+}

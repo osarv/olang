@@ -1,0 +1,16 @@
+type E enum {
+  A(l List<I32>)
+  B
+}
+fn look(e E&) {
+  match e {
+    case E.A(l) { l.Push(9) }
+    case E.B { }
+  }
+}
+fn main() ? {
+  a := I32[1, 2].ToList()
+  e := E.A(a)
+  look(e)
+  println($a.Len())
+}

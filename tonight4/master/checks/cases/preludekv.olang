@@ -1,0 +1,7 @@
+# check: run
+# a test's type in the prelude is private to it, so a program may declare its own KV
+type KV struct(k I32) { k }
+fn main() ? {
+  a := KV(3)
+  assert a.k == 3
+}

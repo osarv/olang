@@ -1,0 +1,8 @@
+type K enum {
+    Aa
+    Bb
+}
+fn main() ? {
+    k K = K.Bb
+    println($k)
+}

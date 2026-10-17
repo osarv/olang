@@ -1,0 +1,34 @@
+import "lib"
+type Elem struct() { n I64 = 0 }
+fn (e Elem&) size(i lib.Info&) I64 { return i.Len }
+type G struct() {
+    arr mut Array<Elem>& = Array<Elem>(3)
+    lst mut List<Elem>& = List<Elem>()
+}
+fn (g G&) at(k I64) I64 { return k }
+fn (g G&) v1(k I64) lib.Wrap {
+    i := lib.Info(k, k + 1)
+    return lib.Wrap(lib.Keep(i))
+}
+fn (g G&) v2(k I64) lib.Wrap {
+    i := lib.Info(k, k + 1)
+    n := g.arr[g.at(lib.Size(i))].size(i)
+    return lib.Wrap(lib.Keep(lib.Info(n, n)))
+}
+fn (g G&) v3(k I64) lib.Wrap {
+    i := lib.Info(k, k + 1)
+    n := lib.Hook(i)
+    return lib.Wrap(lib.Keep(lib.Info(n + g.arr[0].size(i), lib.Size(i))))
+}
+fn (g G&) v4(k I64) lib.Wrap {
+    i := lib.Info(k, k + 1)
+    return lib.Wrap(lib.Info(g.lst.Len() + g.arr[k % 3].size(i), lib.Hook(i)))
+}
+fn main() ? {
+    g := G()
+    a := g.v1(1)
+    b := g.v2(2)
+    c := g.v3(3)
+    d := g.v4(4)
+    println($a.r.Len " " $b.r.Len " " $c.r.Len " " $d.r.Len)
+}

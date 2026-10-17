@@ -1,0 +1,1 @@
+fn Show(x <T>) String { return $x }

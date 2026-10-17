@@ -1,0 +1,10 @@
+# check: fail error[D13c]: Counted has no zero value, so this needs one
+# D13c: a constructor with an effect gives no zero value - how often it ran would show (the user's counter)
+Made mut I32 = 0
+type Counted struct(n I32) {
+    n
+    Made++
+}
+fn main() ? {
+    c Counted
+}

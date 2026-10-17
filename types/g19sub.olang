@@ -1,0 +1,12 @@
+# G19: a constraint on a generic type's parameter, reached by substitution rather than written arguments
+import "std/io"
+type Keyed<K Hashable<<K>>> struct(k <K>) {
+  k
+  h I64 = k.Hash()
+}
+fn wrap(x <T>) Keyed<<T>> { return Keyed<<T>>(x) }
+fn main() ? {
+  a := wrap(5)
+  b := wrap(2.5)                 # F64 has no Hash: the constraint is not met (G19) - reported where?
+  try io.Print($a.h " " $b.h "\n")
+}

@@ -1,0 +1,22 @@
+# r07 OVER-REJECTION - O17 (S4 compound assignment, E31 At/SetAt): "s.values[i] += 1", where values is a List field of
+# a "mut S&" parameter, is O17 - the hidden copy of the place the compound assignment reads through. The spelled-out
+# "s.values[i] = s.values[i] + 1" compiles, and so does "l[i] += 1" on a local List. (An ECS aging system.)
+#
+# expected: 3
+# actual: error[O17] at lines 14 and 15 (column of "+=") - the message names a value whose references live elsewhere,
+#         and nothing of the kind is written
+type S struct() {
+    values List<I32>
+}
+type W struct() {
+    age S
+}
+fn bump(w mut W&, i I64) { w.age.values[i] += 1 }
+fn bump3(s mut S&, i I64) { s.values[i] += 1 }
+fn main() ? {
+    w := W()
+    w.age.values.Push(1)
+    bump(w, 0)
+    bump3(w.age, 0)
+    println($w.age.values[0])
+}

@@ -1,0 +1,6 @@
+type K struct(V I64) {
+    V
+}
+fn Show(n I64, k K& = K(5)) I64 {
+    return n + k.V
+}

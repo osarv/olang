@@ -1,0 +1,28 @@
+import "std/io"
+type Counter struct(start I64) { n mut I64 = start }
+fn (c mut Counter&) Call() I64 {
+    c.n++
+    return c.n
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I64>(8, 7)
+    }
+}
+fn mkF() fn() I64 {
+    c Counter& = Counter(41)
+    return c
+}
+fn keepF(l mut List<fn() I64>&, f fn() I64) { l.Push(f) }
+fn main() ? {
+    l List<fn() I64>& = List<fn() I64>()
+    for i in range 2 {
+        c Counter& = Counter(50)
+        l.Push(c)
+        keepF(l, c)
+    }
+    g := mkF()
+    churn()
+    try io.Print($l[0]() " " $g() "\n")
+}

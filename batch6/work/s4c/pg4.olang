@@ -1,0 +1,16 @@
+# S4c: hidden locals of parallel assignments collide in one function
+type Node struct(v I64) {
+    v
+}
+type VH struct(n Node&) {
+    n
+}
+GV mut VH = VH(Node(0))
+fn set(i I64) {
+    k I64 = 0
+    GV, k = VH(Node(i)), k
+}
+fn main() ? {
+    set(1)
+    println($GV.n.v)
+}

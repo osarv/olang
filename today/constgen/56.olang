@@ -1,0 +1,6 @@
+# T7c: rendering and hashing a large fixed array value
+fn main() ? {
+    x Array<I32, 50000> = Array<I32, 50000>()
+    s := $x
+    println($s.Len() " " $x.Hash())
+}

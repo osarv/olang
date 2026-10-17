@@ -1,0 +1,21 @@
+# NEW, CONFIRMED: segfault in a callee. A helper handed the receiver's part adapts it to a local function value; the
+# walk sees the adapter object placed in g's block (not where c lives) and never reads Call, so hh is judged to build
+# nothing where c lives - but cgCallAdapterValue emits __olang_scope_escape(<c's scope>) = escape(null).
+# (str2's f1d, the adapter handed on as an argument, is refused now; this local form is not.)
+# e27b83b -b: exit 139. 7345ff9: 'b2'. b6259d1: 'b2'.
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 {
+    s := $c.v "x"
+    return s.Len()
+}
+fn hh(c Ctr&) I64 {
+    g fn() I64 = c
+    return g()
+}
+type Bag struct(c Ctr&) {
+    c
+}
+fn (b Bag&) Str() String { return "b" $hh(b.c) }
+fn main() ? { println($Bag(Ctr(5))) }

@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# held? a fresh literal holding the argument
+fn lit(a mut Array<I64>&) mut Array<Array<I64>&>& { return Array<I64>&[a, a] }
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := lit(v.ViewMut())
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0][0])
+}

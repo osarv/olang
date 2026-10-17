@@ -1,0 +1,15 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn make(x mut Node&) fn(i I64) {
+    return fn(i I64) { x.next = Node(i) }
+}
+fn main() ? {
+    f fn(i I64) = null
+    for k in range 2 {
+        x mut Node& = Node(0)
+        join { spawn f = make(x) }
+    }
+    f(3)
+}

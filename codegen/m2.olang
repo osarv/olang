@@ -1,0 +1,19 @@
+import "std/io"
+import "std/os"
+
+fn work(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        v I64 = 1
+        if i % 2 == 0 {
+            v = I64[($x "abcdefghijklmnopqrstuvwxyz").Len() for x in range 50].Len()
+        }
+        t = t + v
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    n I64 = 200000 * (os.Args().Len())
+    try io.Print($work(n) "\n")
+}

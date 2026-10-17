@@ -1,0 +1,223 @@
+# ecs - an entity-component-system game loop: entities are numbers, each component kind lives in a sparse set (dense
+# values, owners, and an index from entity to slot), systems are functions over the stores, and a whole frame runs
+# them in order. Particles fall, bounce, age and die; spawners make new ones. The positions of the particles are also
+# advanced in bulk with std/linalg, as a check on the per-entity system.
+
+import "std/linalg"
+import "std/rand"
+import "std/math"
+
+MaxEntities I64 = 4096
+
+type Vec2 struct(x F64, y F64) {
+    x
+    y
+}
+
+fn (a Vec2) Plus(b Vec2) Vec2 { return Vec2(a.x + b.x, a.y + b.y) }
+fn (a Vec2) Mul(k F64) Vec2 { return Vec2(a.x * k, a.y * k) }
+fn (a Vec2) Str() String { return "(" $a.x.Fixed(2) ", " $a.y.Fixed(2) ")" }
+
+# a sparse set of T keyed by entity
+type Store<T> struct() {
+    values List<T>
+    owners List<I32>
+    slot Array<I64, MaxEntities>
+    for i in range MaxEntities { slot[i] = -1 }
+}
+
+fn (s Store<<T>>&) Has(e I32) Bool { return s.slot[e] >= 0 }
+
+fn (s Store<<T>>&) Len() I64 { return s.values.Len() }
+
+fn (s mut Store<<T>>&) Put(e I32, v T) {
+    if s.slot[e] >= 0 {
+        s.values[s.slot[e]] = v
+        return
+    }
+    s.slot[e] = s.values.Len()
+    s.values.Push(v)
+    s.owners.Push(e)
+}
+
+fn (s Store<<T>>&) At(e I32) T { return s.values[s.slot[e]] }
+fn (s mut Store<<T>>&) SetAt(e I32, v T) { s.values[s.slot[e]] = v }
+
+# removes e by moving the last value into its slot
+fn (s mut Store<<T>>&) Remove(e I32) {
+    i := s.slot[e]
+    if i < 0 { return }
+    last := s.values.Len() - 1
+    moved := s.owners[last]
+    s.values[i] = s.values[last]
+    s.owners[i] = moved
+    s.slot[moved] = i
+    s.slot[e] = -1
+    try s.values.Pop() catch {}
+    try s.owners.Pop() catch {}
+}
+
+type Kind enum {
+    Particle(bounces I32)
+    Spawner(every I32, left I32)
+}
+
+type World struct(seed U64) {
+    rng rand.Rand = rand.Rand(seed)
+    free List<I32>
+    next I32 = 0
+    pos Store<Vec2>
+    vel Store<Vec2>
+    age Store<I32>
+    kind Store<Kind>
+    frame I64 = 0
+    born I64 = 0
+    died I64 = 0
+}
+
+fn (w mut World&) newEntity() I32 {
+    e := try w.free.Pop() catch {
+        w.next++
+        return w.next - 1
+    }
+    return e
+}
+
+fn (w mut World&) kill(e I32) {
+    w.pos.Remove(e)
+    w.vel.Remove(e)
+    w.age.Remove(e)
+    w.kind.Remove(e)
+    w.free.Push(e)
+    w.died++
+}
+
+fn (w mut World&) particle(at Vec2) {
+    e := w.newEntity()
+    w.pos.Put(e, at)
+    w.vel.Put(e, Vec2(w.rng.Uniform(-1.0, 1.0), w.rng.Uniform(2.0, 5.0)))
+    w.age.Put(e, 0)
+    w.kind.Put(e, Kind.Particle(0))
+    w.born++
+}
+
+Gravity := Vec2(0.0, -9.8)
+Dt F64 = 0.05
+
+# ---- systems ----
+
+fn movement(w mut World&) {
+    for i in range w.vel.Len() {
+        e := w.vel.owners[i]
+        if not w.pos.Has(e) { continue }
+        v := w.vel.values[i] + Gravity * Dt
+        w.vel.values[i] = v
+        w.pos[e] = w.pos[e] + v * Dt
+    }
+}
+
+fn bounce(w mut World&) {
+    for i in range w.pos.Len() {
+        e := w.pos.owners[i]
+        p := w.pos.values[i]
+        if p.y >= 0.0 or not w.vel.Has(e) { continue }
+        w.pos.values[i] = Vec2(p.x, -p.y)
+        v := w.vel[e]
+        w.vel[e] = Vec2(v.x * 0.9, -v.y * 0.6)
+        w.kind[e] = match w.kind[e] {
+            case Kind.Particle(n) => Kind.Particle(n + 1)
+            nomatch => w.kind[e]
+        }
+    }
+}
+
+fn aging(w mut World&) {
+    dead := List<I32>()
+    for i in range w.age.Len() {
+        w.age.values[i] = w.age.values[i] + 1
+        e := w.age.owners[i]
+        tooOld := w.age.values[i] > 60
+        worn := match w.kind[e] {
+            case Kind.Particle(n) if n >= 3 => true
+            nomatch => false
+        }
+        if tooOld or worn { dead.Push(e) }
+    }
+    for e in dead { w.kill(e) }
+}
+
+fn spawners(w mut World&) {
+    for i in range w.kind.Len() {
+        e := w.kind.owners[i]
+        match w.kind.values[i] {
+            case Kind.Spawner(every, left) if left > 0 and w.frame % every == 0 {
+                w.kind.values[i] = Kind.Spawner(every, left - 1)
+                w.particle(w.pos[e])
+            }
+            nomatch {}
+        }
+    }
+}
+
+fn (w mut World&) Frame() {
+    spawners(w)
+    movement(w)
+    bounce(w)
+    aging(w)
+    w.frame++
+}
+
+# the bulk version of one movement step: positions and velocities as n x 2 matrices
+fn bulkStep(p linalg.Matrix<F64>&, v linalg.Matrix<F64>&) {
+    for r in range v.Rows { v.Set(r, 1, v.Get(r, 1) + Gravity.y * Dt) }
+    p.AddScaled(v, Dt)
+}
+
+fn run(frames I64) String {
+    w := World(5)
+    for k in range 3 {
+        e := w.newEntity()
+        w.pos.Put(e, Vec2(F64(k) * 10.0, 5.0))
+        w.kind.Put(e, Kind.Spawner(3 + I32(k), 20))
+    }
+    for f in range frames { w.Frame() }
+    return "frame " $w.frame ": " $w.pos.Len() " positioned, born " $w.born ", died " $w.died
+}
+
+Baked := run(100)
+
+fn mainOld() ? {
+    println(run(100))
+    println("baked: " $Baked)
+    # bulk check: 3 particles advanced 10 steps by matrix operations and by the system agree
+    w := World(1)
+    for k in range 3 { w.particle(Vec2(F64(k), 1.0)) }
+    p := linalg.Matrix<F64>(3, 2)
+    v := linalg.Matrix<F64>(3, 2)
+    for i in range 3 {
+        e := w.pos.owners[i]
+        p.Set(i, 0, w.pos[e].x)
+        p.Set(i, 1, w.pos[e].y)
+        v.Set(i, 0, w.vel[e].x)
+        v.Set(i, 1, w.vel[e].y)
+    }
+    for s in range 10 {
+        movement(w)
+        bulkStep(p, v)
+    }
+    worst F64 = 0.0
+    for i in range 3 {
+        e := w.pos.owners[i]
+        worst = math.Max(worst, math.Abs(p.Get(i, 0) - w.pos[e].x) + math.Abs(p.Get(i, 1) - w.pos[e].y))
+    }
+    println("bulk and per-entity agree to " $worst)
+}
+type Probe<N I64> struct() { }
+fn probeValue() I64 {
+    x := I64(run(100).Len())
+    return 1
+}
+fn main() ? {
+    p := Probe<probeValue()>()
+    println("ok")
+}

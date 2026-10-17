@@ -1,0 +1,93 @@
+# A fluent query builder (methods returning the receiver so calls chain), and GUI-style event handlers:
+# closures capturing references, stored in struct fields and called later.
+import "std/io"
+
+type Query struct(table String&) {
+    table
+    fields mut List<String&>& = List<String&>()
+    conds mut List<String&>& = List<String&>()
+    limit mut I64 = -1
+    order mut String& = ""
+}
+
+fn (q mut Query&) Select(f String&q) mut Query&q {
+    q.fields.Push(f)
+    return q
+}
+
+fn (q mut Query&) Where(c String&q) mut Query&q {
+    q.conds.Push(c)
+    return q
+}
+
+fn (q mut Query&) Limit(n I64) mut Query&q {
+    q.limit = n
+    return q
+}
+
+fn (q mut Query&) OrderBy(f String&q) mut Query&q {
+    q.order = $f        # (a copy: a mut field cannot take read-only text)
+    return q
+}
+
+fn joinWith(parts List<String&>&, sep String&) String& {
+    b := StringBuilder()
+    first := true
+    for p in parts {
+        if not first { b.Push(sep) }
+        first = false
+        b.Push(p)
+    }
+    return b.ToString()
+}
+
+fn (q Query&) Build() String& {
+    b := StringBuilder()
+    b.Push("SELECT ")
+    b.Push(joinWith(q.fields, ", ") if q.fields.Len() > 0 else "*")
+    b.Push(" FROM " $q.table)
+    if q.conds.Len() > 0 { b.Push(" WHERE " $joinWith(q.conds, " AND ")) }
+    if q.order.Len() > 0 { b.Push(" ORDER BY " $q.order) }
+    if q.limit >= 0 { b.Push(" LIMIT " $q.limit) }
+    return b.ToString()
+}
+
+type Counter struct() {
+    n mut I64 = 0
+    log mut List<String&>& = List<String&>()
+}
+
+type Button struct(label String&) {
+    label
+    onClick mut fn() = null
+    onHover mut fn(x I32, y I32) = null
+}
+
+fn (b Button&) click() {
+    if b.onClick != null { b.onClick() }
+}
+
+fn wire(b mut Button&, c mut Counter&b) {
+    b.onClick = fn() {
+        c.n++
+        c.log.Push("clicked " $c.n)
+    }
+    b.onHover = fn(x I32, y I32) { c.log.Push("hover " $x "," $y) }
+}
+
+fn main() ? io.IoError {
+    q := Query("users")
+    q.Select("id").Select("name").Where("age > 30").Where("active").OrderBy("name").Limit(10)
+    try io.Print($q.Build() "\n")
+    for i in range 3 {
+        q.Where("id != " $i)
+    }
+    try io.Print($q.Build() "\n")
+
+    c Counter& = Counter()
+    ok Button& = Button("OK")
+    wire(ok, c)
+    for i in range 3 { ok.click() }
+    ok.onHover(3, 4)
+    try io.Print("clicks " $c.n ", log " $c.log.ToArray() "\n")
+}

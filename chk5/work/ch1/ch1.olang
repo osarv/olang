@@ -1,0 +1,43 @@
+# channel: a spawned lambda stores the argument into the receiver
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type Holder struct() {
+    ref Info& = null
+    n I64 = 0
+}
+fn (h mut Holder&) fill(i Info&) {
+    join { spawn fn() { h.ref = i } }
+}
+fn (h mut Holder&) fill2(i Info&) I64 {
+    f := fn() { h.ref = i }
+    f()
+    return 0
+}
+fn mk(k I64) Holder {
+    h := Holder()
+    i := Info(k, k + 1)
+    h.fill(i)
+    return h
+}
+fn mk2(k I64) Holder {
+    h := Holder()
+    i := Info(k, k + 1)
+    h.fill2(i)
+    return h
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    h := mk(5)
+    h2 := mk2(8)
+    churn()
+    println($h.ref.Offset " " $h.ref.Len " " $h2.ref.Offset)
+}

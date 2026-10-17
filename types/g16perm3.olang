@@ -1,0 +1,13 @@
+# a read-only reference becomes writable through a List whose instantiation it shares with List<mut Node&>
+import "std/io"
+type Node struct(v I32) { v mut }
+G Node& = Node(1)              # an immutable global reference: read-only (T25b)
+fn keep(l mut List<Node&>&, p Node&) { l.Push(p) }
+fn main() ? {
+  rw := List<mut Node&>()
+  ro := List<Node&>()
+  keep(ro, G)
+  x := ro[0]
+  x.v = 5                      # must be rejected: ro holds read-only references
+  try io.Print($G.v "\n")
+}

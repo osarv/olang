@@ -1,0 +1,23 @@
+# a small, standalone module imported (unnamed - see the report) by worker.olang, and re-exported from
+# there since worker's own alias for it ("Base", derived from this file's own name) is capitalized. Used
+# from runner.olang, two hops away ("wk.Base.Whatever"), to exercise transitive re-export end to end -
+# see the tests in runner.olang.
+
+BaseCount mut I32 = 0
+
+# constructor-bearing, to exercise a re-exported type constructed via an ordinary CALL (which supports an
+# alias chain of any length the same way any other call target does).
+# M6a: a member's own capitalization decides its visibility, exactly as a top-level declaration's does.
+# "Id" crosses the module boundary; "secret" is this module's own, and "t.secret" from runner.olang is a
+# compile error - which is why that shape appears there only as a comment. The default on "secret" is what
+# keeps the existing one-argument call sites working (D8a).
+type BaseThing struct(Id I32, secret I32 = 7) {
+    Id
+    secret
+}
+
+# M6a rejects "t.secret" from any other module, and reports it EXACTLY ONCE. The member's real type is
+# carried on past the error, so nothing downstream complains a second time about a non-problem: recovering
+# it as an I32 instead used to make "v.data[0]" report the privacy error and then "operand is not an
+# array". Only nameable here, since a rejected program cannot be a test.
+#   z I32 = t.secret        # private, on

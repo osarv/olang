@@ -1,0 +1,8 @@
+fn main() ? {
+    names := String&["a", "b"]
+    m := Map<I64, List<String&>>()
+    m.Put(1, List<String&>())
+    l := try m.Get(1)
+    for n in names { l.Push(n) }
+    println($(try m.Get(1)).Len())
+}

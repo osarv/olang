@@ -1,0 +1,10 @@
+/home/user/review/vec3/work/d1.olang:17:7: error[O39]: assigning 'G.text' may release the String borrowed on line 16, which is used after it
+   17 |     G.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+/home/user/review/vec3/work/d1.olang:16:10: note: borrowed here
+   16 |     t := g(1)
+      |          ^
+/home/user/review/vec3/work/d1.olang:19:13: note: used here, after it
+   19 |     println(t)
+      |             ^
+compilation failed with 1 error

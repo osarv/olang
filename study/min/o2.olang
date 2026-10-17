@@ -1,0 +1,27 @@
+type Counter struct() {
+    n mut I64 = 0
+}
+type Button struct(label String&) {
+    label
+    onClick mut fn() = null
+}
+fn wire(b mut Button&, c mut Counter&) {
+    b.onClick = fn() { c.n++ }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 1000 {
+        a := Array<I64>(4, I64(i))
+        t += a[1]
+    }
+    return t
+}
+fn main() ? {
+    ok Button& = Button("OK")
+    for i in range 2 {
+        c Counter& = Counter()
+        wire(ok, c)
+    }
+    churn()
+    ok.onClick()
+}

@@ -1,0 +1,19 @@
+# check: run
+# flags: -D Mode=fast
+# B10/T29c: a text build constant is a String - it compares by content in a call deciding a top-level condition
+# (compile-time evaluation), at run time, and passes wherever a String& is wanted
+error E { X }
+fn modeIs(m String&) Bool { return Mode == m }
+if modeIs("fast") {
+    fn pick() I32 { return 1 }
+} else {
+    fn pick() I32 { return 2 }
+}
+fn length(s String&) I64 { return s.Len() }
+Live mut I32 = 0
+fn main() ? E {
+    assert pick() == 1
+    Live = 1
+    assert (Mode == "fast") == (Live == 1)    # Live is mutable, so this is decided at run time
+    assert length(Mode) == 4
+}

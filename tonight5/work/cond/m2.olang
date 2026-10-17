@@ -1,0 +1,14 @@
+fn mkn() Node& { return Node(47) }
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    k := outer.head
+    {
+        inner mut Box& = Box()
+        d Box = outer if c else inner
+        h := d.head
+        join { spawn h.next = mkn() }
+    }
+    churn()
+    println($rd(k))
+}

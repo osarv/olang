@@ -1,0 +1,21 @@
+# "try x[i]" on a type that DECLARES TryAt - a copy of the element as the derived form is - lent to a callee writing
+# its own storage: the write goes to a temporary and is lost
+type Acc struct() {
+    N I64 = 0
+}
+type Accs struct() {
+    a mut Array<Acc>& = Acc[Acc(), Acc()]
+}
+fn (s Accs&) At(i I64) Acc { return s.a[i] }
+fn (s mut Accs&) SetAt(i I64, v Acc) { s.a[i] = v }
+fn (s Accs&) TryAt(i I64) Acc ? BuiltinError {
+    if i < 0 or i >= s.a.Len() { error BuiltinError.OUT_OF_BOUNDS }
+    return s.a[i]
+}
+fn bump(a mut Acc&) { a.N++ }
+fn main() ? {
+    s := Accs()
+    bump(try s[0])
+    (try s[1]).N = 3
+    println("N " $s[0].N " " $s[1].N)
+}

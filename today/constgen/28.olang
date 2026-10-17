@@ -1,0 +1,22 @@
+# T7c value semantics: copies of a fixed array (in a struct, an element, a payload) are copies - compiled, -d, -i, baked
+type V struct() { a mut Array<I32, 3> }
+type E enum { One(a Array<I32, 2>) }
+fn run() I64 {
+    v := V()
+    w V = v
+    w.a[0] = 7
+    rows Array<Array<I32, 2>, 2> = Array<Array<I32, 2>, 2>()
+    r0 Array<I32, 2> = rows[0]
+    r0[1] = 5
+    rows[1][0] = 3
+    e := E.One(r0)
+    r0[0] = 9
+    k := e as E.One
+    s := rows[0]
+    s[0] = 11
+    return I64(v.a[0]) * 100000 + I64(w.a[0]) * 10000 + I64(rows[0][1]) * 1000 + I64(rows[1][0]) * 100 + I64(k[0]) * 10 + I64(rows[0][0])
+}
+Baked I64 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

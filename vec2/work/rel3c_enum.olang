@@ -1,0 +1,33 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Pt struct(k I64) {
+    a Array<I64, 3> = I64[k, k, k]
+}
+type E enum {
+    A(r Array<I64>&)
+    B
+}
+type H struct(r Array<I64>&) {
+    r
+}
+fn wrapE(a Array<Pt>&) E { return E.A(a[0].a[0:2]) }
+fn wrapH(a Array<Pt>&) H { return H(a[0].a[0:2]) }
+fn two(a Array<Pt>&) (Array<I64>&a, I64) { return a[0].a[0:2], 5 }
+fn grow(w mut Vec<Pt>&) {
+    e := wrapE(w.View())
+    d := e as E.A
+    for i in range 1000 { w.Push(Pt(i)) }
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<Pt>()
+    v.Push(Pt(7))
+    grow(v)
+}

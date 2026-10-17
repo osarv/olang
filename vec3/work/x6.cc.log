@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/mod/x6.olang:12:30: error[O37]: 'Call' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'Call' by name
+   12 |     d := mid.Vl.Apply(mid.Vl.G(), w)
+      |                              ^
+compilation failed with 1 error

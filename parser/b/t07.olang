@@ -1,0 +1,8 @@
+# a generic type in a declaration with no initializer, ending the line (L20a)
+test "a" {
+    l List<I32>
+    l.Push(3)
+    m List<List<I32>>
+    assert l.Len() == 1
+    assert m.Len() == 0
+}

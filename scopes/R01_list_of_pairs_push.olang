@@ -1,0 +1,10 @@
+# a List of pairs holding text references - natural code
+import "std/io"
+fn main() ? {
+    names List<String&>& = List<String&>()
+    names.Push("ann")
+    names.Push("bob")
+    l List<Pair<String&, I64>>& = List<Pair<String&, I64>>()
+    for n in names { l.Push(Pair(n, n.Len())) }
+    for p in l { try io.Print($p.First " " $p.Second "\n") }
+}

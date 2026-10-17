@@ -1,0 +1,32 @@
+# T2b: a read through a null reference traps - here one the optimizer can see after inlining (the peek of an empty
+# stack), which it used to treat as undefined and act on: the rest of main, its return included, was deleted and
+# control fell into the code after it, printing the first lines again forever
+import "std/os"
+
+type Node struct(v I64, next Node&) {
+    v
+    next
+}
+
+type Stack struct() {
+    top Node& = null
+    n I64 = 0
+}
+
+fn (s mut Stack&) Push(v I64) {
+    s.top = Node(v, s.top)
+    s.n++
+}
+
+fn (s Stack&) Peek() I64 { return s.top.v }
+
+fn main() ? {
+    os.OnCrash("nullpeek crashed\n")
+    println("start")
+    s := Stack()
+    s.Push(4)
+    println("after a push: " $s.Peek())
+    t := Stack()
+    println("peek of an empty stack: " $t.Peek())
+    println("end")
+}

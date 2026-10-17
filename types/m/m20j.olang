@@ -1,0 +1,3 @@
+import "lib"
+fn (lib I32) Twice() I32 { return lib * 2 }
+fn main() ? { }

@@ -1,0 +1,24 @@
+# P4a: a clause holding a try join with no clauses of its own - its error would leave the clause
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn g(n I64) ? E {
+    if n < 0 { error E.NEG }
+}
+fn a1(n I64) I64 {
+    x I64 = 0
+    join {
+        spawn x = try f(n) catch E {
+            try join { spawn try g(n) }
+            unreachable
+        }
+    }
+    return x
+}
+fn main() ? {
+    println($a1(-1))
+}

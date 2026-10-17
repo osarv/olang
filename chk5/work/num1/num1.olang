@@ -1,0 +1,10 @@
+type Meters extends I64
+fn (m mut Meters&) bump() I64 {
+    m++
+    return 0
+}
+fn main() ? {
+    x Meters = Meters(3)
+    x.bump()
+    println($x)
+}

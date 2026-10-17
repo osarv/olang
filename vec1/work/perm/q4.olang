@@ -1,0 +1,30 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn perm(a mut Array<String&>&, k I64) {
+    t := a[0]
+    if k > 3 {
+        defer { t = $k "new" }
+    }
+    a[1] = t
+}
+type SB struct() {
+    data own mut Array<String&>& = Array<String&>(3)
+}
+fn (s mut SB&) Regrow() { s.data = Array<String&>(s.data.Len() * 2) }
+fn main() ? {
+    s := SB()
+    s.data[0] = "aa"
+    s.data[1] = "bb"
+    s.data[2] = "cc"
+    perm(s.data, 7)
+    keep := s.data[1]
+    s.Regrow()
+    churn()
+    println($keep " " $s.data.Len())
+}

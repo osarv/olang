@@ -1,0 +1,58 @@
+# words - tokenize a text file into lowercase words and print word statistics: counts, the most frequent words and
+# bigrams, word lengths.
+import "std/os"
+import "std/math"
+
+fn tokenize(text String&) List<String&> {
+    words := List<String&>()
+    start I64 = -1
+    for i, c in text {
+        if c.IsLetter() or (c == '\'' and start >= 0) {
+            if start < 0 { start = i }
+        } else if start >= 0 {
+            words.Push(text[start:i].ToLower())
+            start = -1
+        }
+    }
+    if start >= 0 { words.Push(text[start:].ToLower()) }
+    return words
+}
+
+fn top(counts Map<String&, I64>&, k I64) List<Pair<String&, I64>> {
+    all := List<Pair<String&, I64>>()
+    for e in counts { all.Push(Pair(e.Key, e.Value)) }
+    all.Sort(fn(a, b) { return a.Second > b.Second or (a.Second == b.Second and a.First < b.First) })
+    out := List<Pair<String&, I64>>()
+    for i in range math.Min(k, all.Len()) { out.Push(all[i]) }   # "for p in all { out.Push(p) }" is O10c
+    return out
+}
+
+fn main() ? os.OsError {
+    args := os.Args()
+    path := args[1] if args.Len() > 1 else "../../../wt/s5c/HISTORY.md"
+    text := try os.ReadFile(path)
+    words := tokenize(text)
+    counts := Map<String&, I64>()
+    bigrams := Map<String&, I64>()
+    prev String& = ""
+    lengths := Array<I64>(30)
+    totalLen I64 = 0
+    for w in words {
+        counts.Update(w, 0, fn(n I64) I64 { return n + 1 })
+        if prev.Len() > 0 { bigrams.Update($prev " " $w, 0, fn(n I64) I64 { return n + 1 }) }
+        prev = w
+        lengths[math.Min(w.Len(), 29)]++
+        totalLen += w.Len()
+    }
+    println("words " $words.Len() ", distinct " $counts.Len() ", mean length " $(F64(totalLen) / F64(words.Len())).Fixed(2))
+    println("top words:")
+    for p in top(counts, 15) { println("  " $p.First.PadEnd(12) " " $p.Second) }
+    println("top bigrams:")
+    for p in top(bigrams, 10) { println("  " $p.First.PadEnd(20) " " $p.Second) }
+    longest := List<String&>()
+    for e in counts {
+        if e.Key.Len() >= 18 { longest.Push(e.Key) }
+    }
+    longest.Sort(fn(a, b) { return a.Len() > b.Len() or (a.Len() == b.Len() and a < b) })
+    println("longest: " $longest.ToArray()[:math.Min(5, longest.Len())])
+}

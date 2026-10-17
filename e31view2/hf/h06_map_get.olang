@@ -1,0 +1,22 @@
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type F struct(K I64) {
+    K
+    M Map<I64, Blk>
+}
+fn add(f mut F&, k I64, x I64) ? { (try f.M.Get(k)).S.Push(x) }
+fn main() ? {
+    f := F(1)
+    f.M.Put(3, Blk())
+    try add(f, 3, 7)
+    churn()
+    for s in (try f.M.Get(3)).S { println("for " $s) }
+}

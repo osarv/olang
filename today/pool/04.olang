@@ -1,0 +1,26 @@
+# O8b/P2 under -r: tasks allocating of many sizes into scopes they were handed and into their own, then the spawner
+# closing what the tasks filled - the pool's chunks cross threads only at a join
+type Bag struct() { items mut List<mut Array<I64>&> }
+fn fill(b mut Bag&, n I64, seed I64) {
+    for i in range 40 {
+        k := (seed * 7919 + i * 104729) % n + 1
+        b.items.Push(Array<I64>(k, seed))
+        tmp := Array<I64>(k * 3, i)
+        b.items[b.items.Len() - 1][0] = tmp[k]
+    }
+}
+fn round(r I64) I64 {
+    bags := Array<mut Bag&>(4)
+    for t in range 4 { bags[t] = Bag() }
+    join {
+        for t in range 4 { spawn fill(bags[t], 40000 + r * 1000, t + r) }
+    }
+    s I64 = 0
+    for b in bags { for a in b.items { s = s + a.Len() } }
+    return s
+}
+fn main() ? {
+    total I64 = 0
+    for r in range 20 { total = total + round(r) }
+    println($total)
+}

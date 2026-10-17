@@ -1,0 +1,6 @@
+# check: fail this shift amount is past the shifted literal's own bit width
+# E4a/E8a: "1 << 40" adapted to an I64 is computed exactly; with nothing adapting it, it is an I32 shift by 40, which
+# E8a leaves undefined - so it is an error, as a written amount past a typed value's width is
+fn main() ? {
+    t := $(1 << 40)
+}

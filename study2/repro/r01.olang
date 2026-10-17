@@ -1,0 +1,20 @@
+# r01 OVER-REJECTION: any method call on an immutable global whose type can be stored through (List, Map) is O17,
+# even a read-only one (Len): "the callee can store through it". G.Count() on a plain struct global is fine.
+type Holder struct(name String&) {
+    name
+    n mut I64 = 0
+}
+fn (h Holder&) Count() I64 { return h.n }
+
+G Holder = Holder("x")
+GL List<String&> = mk()
+fn mk() List<String&> {
+    l := List<String&>()
+    l.Push("a")
+    return l
+}
+
+fn main() ? {
+    println($G.Count())
+    println($GL.Len())
+}

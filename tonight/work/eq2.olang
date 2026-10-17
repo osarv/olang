@@ -1,0 +1,4 @@
+type S struct(xs Array<S>&) { xs }
+fn f(a S, b S) Bool { return a == b }
+fn main() ? {
+}

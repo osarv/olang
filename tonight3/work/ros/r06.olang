@@ -1,0 +1,27 @@
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+fn fill(l mut List<N&>&, base I64) { for i in range 300000 { l.Push(N(i + base)) } }
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    b mut List<N&>& = List<N&>()
+    c mut List<N&>& = List<N&>()
+    d mut List<N&>& = List<N&>()
+    join {
+        spawn fill(a, 0)
+        spawn fill(b, 1000000)
+        spawn fill(c, 2000000)
+        spawn fill(d, 3000000)
+    }
+    bad I64 = 0
+    i I64 = 0
+    for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
+    i = 0
+    for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
+    i = 0
+    for x in c { if x.v != i + 2000000 or x.w != 3 * (i + 2000000) { bad++ } i++ }
+    i = 0
+    for x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } i++ }
+    println("wrong elements: " $bad)
+}

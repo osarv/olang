@@ -1,0 +1,8 @@
+type P struct(x I64) { x }
+fn main() ? {
+    p P& = null
+    v := p.x
+    println("v")
+    println($v)
+    println("after")
+}

@@ -1,0 +1,28 @@
+# Lost write the handle exemption lets through (pre-existing in effect - a2e2878 lost it through r02's copy): a mut
+# method on a HANDLE element that repoints the handle's own field - "bags[0].Reset()" with Reset doing "b.s = State()",
+# or "resetFn(bags[0])" - runs on the hidden copy ($handle), and nothing is written back, so the element keeps its old
+# state. The same statements inside a loop are E31/O17's split-lend error, so the outcome depends on whether the
+# statement is in the collection's own block.
+#   expected: 7 then 0 (as an Array<Bag> element, written in place), or an error as in a loop
+#   actual (a10397c, all modes; a2e2878 the same): "12" twice - both resets lost.
+type State struct() {
+    n I64 = 0
+}
+type Bag struct() {
+    s mut State& = State()
+}
+fn (b mut Bag&) Add(v I64) { b.s.n = b.s.n + v }
+fn (b mut Bag&) Reset() { b.s = State() }
+fn (b Bag&) Total() I64 { return b.s.n }
+fn resetFn(b mut Bag&) { b.s = State() }
+
+fn main() ? {
+    bags := List<Bag>()
+    bags.Push(Bag())
+    bags[0].Add(5)
+    bags[0].Reset()
+    bags[0].Add(7)
+    println($bags[0].Total())
+    resetFn(bags[0])
+    println($bags[0].Total())
+}

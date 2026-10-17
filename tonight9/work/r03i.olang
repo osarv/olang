@@ -1,0 +1,38 @@
+# PRE-EXISTING for a field of 64KB or less (a stack frame), NEW for a larger one (91ab3ba moved C2g/T7c frame storage
+# out of the instance's scope into the constructor's own, closed as it returns).
+# A constructor field the instance keeps a view of - a slice ('big[0:2]'), an 'as' view, a conditional of slices, a
+# slice handed to a constructor that keeps it - must be stored where the instance lands (C2d), and the checker accepts
+# these fields as if it were. But slotBorrowed, which tells codegen so, is set only by a borrow into a reference
+# (borrowLifetimeFits) or a call argument - never by a slice or a view - so the field's storage stays frame storage:
+# the stack for a small field, and since 91ab3ba the constructor's own scope for one over 64KB. Both are gone when the
+# constructor returns, and 'k.view' points into them.
+#   expected: "8 8 8 8 <churn>" under -b, -d -s and -i (as with a field that is only borrowed by a call)
+#   actual (BIG as written, 20000 elements): -b "8 8 8 8 19900" by luck; -d -s: "use after scope closed: storage a closed
+#             scope gave back was read or written", status 134. 45eea97: -d -s clean (the frame came from %here).
+#   actual (BIG = 4, a stack frame): -b prints garbage for k.view[1] (bytes of a dead frame, e.g. 140722955494776),
+#             -d -s prints 0 - on 91ab3ba and 45eea97 alike
+type Holder struct(a Array<I64>&) {
+    a
+}
+type K struct(n I64) {
+    big Array<I64, 20000>
+    big[0] = n
+    big[1] = n + 1
+    view Array<I64>& = big[0:2]
+    w := big as Array<I64, 20000>&
+    c Array<I64>& = big[0:2] if n > 0 else big[1:3]
+    h Holder& = Holder(big[0:2])
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 2 {
+        t := Array<I64>(300, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    k := K(7)
+    x := churn()
+    println($k.view[1] " " $k.w[1] " " $k.c[1] " " $k.h.a[1] " " $x)
+}

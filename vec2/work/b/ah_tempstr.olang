@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn view(v Vec<I64>&) Array<I64>&v { return v.View() }
+fn pushRet(w mut Vec<I64>&, x I64) I64 {
+    for i in range 1000 { w.Push(i + x) }
+    return x
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 120)
+}
+fn (c CB&) Text() String&c { return String(c.data) }
+fn grow(w mut Vec<I64>&) {
+    d := CB().Text()
+    churn()
+    println(d)
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    grow(v)
+}

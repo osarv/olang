@@ -1,0 +1,8 @@
+import "std/os"
+test "early return" {
+    x := os.Args().Len()
+    if x > 0 {
+        return
+    }
+    assert x == 0
+}

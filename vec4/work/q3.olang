@@ -1,0 +1,23 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F4: a global initializer under conditional compilation
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+Docs own mut Doc& = Doc()
+if TargetOs == "linux" {
+    T := Docs.title
+} else {
+    T := "x"
+}
+fn main() ? {
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(T)
+}

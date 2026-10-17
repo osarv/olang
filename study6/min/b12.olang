@@ -1,0 +1,9 @@
+type Value struct(n F64) {
+    n
+    fields mut Map<String&, Value>& = null
+}
+fn main() ? {
+    m := Map<String&, Value>()
+    m.Put("a", Value(1.0))
+    println($m.Len())
+}

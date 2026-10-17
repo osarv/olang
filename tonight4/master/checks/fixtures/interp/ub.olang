@@ -1,0 +1,7 @@
+# B3e: an index out of range is undefined in the built program; -i stops there and says where
+fn main() ? {
+    a := I32[1, 2, 3]
+    i I64 = 2
+    i = i + 5
+    assert a[i] == 0
+}

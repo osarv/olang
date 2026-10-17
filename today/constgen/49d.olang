@@ -1,0 +1,7 @@
+fn twice(n I64) I64 { return n * 2 }
+type B<N I64> struct() { a mut Array<I32, twice(N)> }
+fn take(x Array<I32, 6>&) I64 { return x.Len() }
+fn main() ? {
+    b := B<3>()
+    println($take(b.a))
+}

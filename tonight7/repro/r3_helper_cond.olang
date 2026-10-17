@@ -1,0 +1,24 @@
+# 0859cbe accepts this Str; its parent rejected it (E11c). The helper hands a field of a conditional of its two
+# parameters on: the two live in different scope variables, so RefExactScope cannot place the conditional, effCall
+# counts the field as storage of the helper's own (not "own"), and poke's write of it is dropped - though it is the
+# rendered value's
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&, other mut Mid&) {
+    m
+    other
+}
+fn poke(p mut In&) { p.k++ }
+fn either(p mut Mid&, q mut Mid&, c Bool) { poke((p if c else q).inner) }
+fn (b Bag&) Str() String {
+    either(b.m, b.other, true)
+    return "b"
+}
+fn main() ? {
+    b := Bag(Mid(), Mid())
+    println($b $b " k=" $b.m.inner.k)
+}

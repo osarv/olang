@@ -1,0 +1,7 @@
+G List<I32> = I32[1, 2].ToList()
+fn mk(n I32) List<I32> ? { if n > 0 { error } return List<I32>() }
+fn main() ? {
+  x := try mk(1) catch default G
+  x.Push(9)
+  println($G.Len())
+}

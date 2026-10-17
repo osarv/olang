@@ -1,0 +1,14 @@
+# OVER-REJECTION, avoidable: a Call adapter for a receiver part handed to a parameter that keeps nothing. Call only
+# reads, but the 16-byte adapter object is allocated where the function value lives, bound to where the instance
+# lives (the receiver's scope); it could be in the frame, as a transient lambda's environment is.
+# e27b83b: error[E11c, O12]. 7345ff9: internal compiler error. b6259d1: refused (purity).
+type Ctr struct(v I64) {
+    v
+}
+fn (c Ctr&) Call() I64 { return c.v }
+fn apply(f fn() I64) I64 { return f() }
+type Bag struct(c Ctr&) {
+    c
+}
+fn (b Bag&) Str() String { return "b" $apply(b.c) }
+fn main() ? { println($Bag(Ctr(5))) }

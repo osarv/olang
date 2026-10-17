@@ -1,0 +1,21 @@
+# r20 DIAGNOSTIC - R11/S3: a catch block in value position ending in its value, as a Rust or Kotlin programmer writes
+# it, gives two errors per clause: R11 "a clause here leaves, or gives the value with 'default v'" and S3 "this computes
+# a value and discards it" at the value. Made twice in this study (../jobrun.olang, three clauses, six errors; and
+# ../sysinfo.olang). The rule is clear once known ("catch E { ... } default -1"); the message pair does not connect the
+# block's last line with 'default'.
+#
+# expected: one error per clause: "a block's last value is not the clause's value - write '} default -1'"
+# actual:   error[R11] and error[S3] for each of the two clauses
+fn half(n I64) I64 ? {
+    if n % 2 != 0 { error }
+    return n / 2
+}
+
+fn main() ? {
+    a := try half(3) catch {
+        eprintln("odd")
+        -1
+    }
+    b := try half(5) catch { 0 }
+    println($a " " $b)
+}

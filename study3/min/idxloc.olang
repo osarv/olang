@@ -1,0 +1,6 @@
+fn main() ? {
+    a := Array<I32>(3)
+    n := a.Len() - 4
+    x := Array<I32>(n)
+    println($x.Len())
+}

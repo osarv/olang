@@ -1,0 +1,21 @@
+# CONFIRMED, NEW (771a922): the value form of r05_projection_growth. "x := mk(base, 64).p" - mk holds base (an
+# obligation) and builds a fresh Array<I64>(64): the array of every iteration lands where base lives.
+# 2M iterations: new peak RSS 1,032,936 kB, c2a38f0 1,576 kB. Output (both): 22000000
+type Pair2 struct(a String&, b Array<I64>&) {
+    a
+    b
+}
+type Out struct(p Pair2) { p }
+fn mk(t String&, n I64) Out { return Out(Pair2(t, Array<I64>(n, 7))) }
+fn sum(base String&, iters I64) I64 {
+    total I64 = 0
+    for k in range iters {
+        x := mk(base, 64).p
+        total += x.b[k % 64] + x.a.Len()
+    }
+    return total
+}
+fn main() ? {
+    base := "base"
+    println($sum(base, 2000000))
+}

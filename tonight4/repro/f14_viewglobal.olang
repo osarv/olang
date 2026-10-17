@@ -1,0 +1,11 @@
+# a view of a local array stored into a mut global, local NOT returned - must be rejected (local stays block-scoped)
+G mut Array<I64>& = null
+fn stash(n I64) {
+    a := I64[1, 2, 3, 4, 5]
+    a[0] = n
+    G = a[1:4]
+}
+fn main() ? {
+    stash(7)
+    println($G[0])
+}

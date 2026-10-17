@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# class R across a call: a method builds text where its own field lives and hands it back borrowed from the receiver
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn (c CB&) Make(n I64) String&c {
+    x := c.text
+    d mut String&x = $n "-new-text-in-the-field-region"
+    return d
+}
+fn main() ? {
+    c := CB()
+    t := c.Make(5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}

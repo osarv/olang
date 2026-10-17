@@ -1,0 +1,17 @@
+# M12/E32/S13b: a case named through an alias, or an alias chain reaching a re-exported module, is the case of that
+# module's own enum - "lib.Other.Dir.North" is other's Dir, never lib's
+import "lib"
+import "std/io"
+fn which(d lib.Dir) I32 {
+  return match d {
+    case lib.Dir.North => 1
+    case lib.Dir.Hold(v) => 10 + v
+    nomatch => 3
+  }
+}
+fn main() ? {
+  d := lib.Dir.Hold(4)
+  u := lib.Other.Dir.Up
+  holds Bool = d is lib.Dir.Hold and not (d is lib.Dir.North) and u is lib.Other.Dir.Up
+  try io.Print($which(d) " " $which(lib.Dir.North) " " $which(lib.South()) " " $holds " " $(d as lib.Dir.Hold) "\n")
+}

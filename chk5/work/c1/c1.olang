@@ -1,0 +1,21 @@
+# channel: a global
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type Res struct(n I64) { n }
+Kept mut Info& = null
+type G struct() { x I64 = 0 }
+fn (g G&) keep(i Info&) I64 {
+    Kept = i
+    return i.Len
+}
+fn (g G&) build(k I64) Res {
+    i := Info(k, k + 1)
+    return Res(g.keep(i))
+}
+fn main() ? {
+    g := G()
+    r := g.build(3)
+    println($r.n " " $Kept.Len)
+}

@@ -1,0 +1,81 @@
+# csvstats - write a CSV of sales records, read it back, group by region and product, and print stats.
+import "std/os"
+import "std/rand"
+import "std/math"
+import "std/io"
+
+error AppError {
+    BAD_ROW
+}
+
+type Stats struct() {
+    Count I64 = 0
+    Sum F64 = 0.0
+    SumSq F64 = 0.0
+    Min F64 = math.Inf
+    Max F64 = -math.Inf
+}
+
+fn (s mut Stats&) Add(x F64) {
+    s.Count++
+    s.Sum += x
+    s.SumSq += x * x
+    if x < s.Min { s.Min = x }
+    if x > s.Max { s.Max = x }
+}
+
+fn (s Stats&) Mean() F64 { return s.Sum / F64(s.Count) }
+
+fn (s Stats&) StdDev() F64 {
+    m := s.Mean()
+    return math.Sqrt(s.SumSq / F64(s.Count) - m * m)
+}
+
+Regions := String&["north", "south", "east", "west"]
+Products := String&["widget", "gadget", "doohickey"]
+
+fn writeCsv(path String&, rows I64) ? os.OsError {
+    r := rand.Rand(42)
+    sb := StringBuilder()
+    sb.Push("region,product,units,price\n")
+    for i in range rows {
+        region := Regions[r.Below(Regions.Len())]
+        product := Products[r.Below(Products.Len())]
+        units := r.Below(100) + 1
+        price := r.Uniform(1.0, 50.0)
+        sb.Push($region "," $product "," $units "," price.Fixed(2) "\n")
+    }
+    try os.WriteFile(path, sb.ToString())
+}
+
+fn main() ? os.OsError + AppError + ParseError {
+    path := "/tmp/study5_sales.csv"
+    try writeCsv(path, 200000)
+    text := try os.ReadFile(path)
+    byRegion := Map<String&, Stats>()
+    byProduct := Map<String&, Stats>()
+    first := true
+    for line in text.Lines() {
+        if first {
+            first = false
+            continue
+        }
+        cols := line.Split(",")
+        if cols.Len() != 4 { error AppError.BAD_ROW }
+        units := try cols[2].ParseInt()
+        price := try cols[3].ParseFloat()
+        revenue := F64(units) * price
+        byRegion.Update(cols[0], Stats(), fn(s Stats) Stats { s.Add(revenue); return s })
+        byProduct.Update(cols[1], Stats(), fn(s Stats) Stats { s.Add(revenue); return s })
+    }
+    println("by region:")
+    for e in byRegion {
+        s := e.Value
+        println($e.Key ": n=" $s.Count " mean=" s.Mean().Fixed(2) " sd=" s.StdDev().Fixed(2) " min=" s.Min.Fixed(2) " max=" s.Max.Fixed(2))
+    }
+    println("by product:")
+    for e in byProduct {
+        s := e.Value
+        println($e.Key ": n=" $s.Count " mean=" s.Mean().Fixed(2) " total=" s.Sum.Fixed(2))
+    }
+}

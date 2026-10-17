@@ -1,0 +1,29 @@
+# r04 OVER-REJECTION + DIAGNOSTIC - O25/O26a: "fields := line.Split(" ")" is rejected with "a reference never narrows
+# - ... or declare it with ':='" - it IS declared with ':='. The line is a per-iteration local whose slice becomes a
+# key of the returned struct's map, so O26a moves 'line' into the result scope - but not 'fields', which is declared
+# from it. Adding an unrelated "s.last.Push(line)" (variant B) makes the function compile, and correctly: the keys
+# then live with the result. Found counting log levels (../tailer.olang shape).
+#
+# expected: compiles (as variant B does), the keys living where the result does
+# actual:   error[O25] at line.Split, column of Split: "declare it with ':='"
+type S struct() {
+    counts Map<String&, I64> = Map<String&, I64>()
+    last List<String&> = List<String&>()
+}
+
+fn mk(i I64) String& ? { return "k" $(i % 5) " tail " $i }
+
+fn collect(n I64) S {
+    s := S()
+    for i in range n {
+        line := try mk(i) catch { continue }
+        fields := line.Split(" ")
+        s.counts.Update(fields[0], 0, fn(c I64) I64 { return c + 1 })
+        # variant B: s.last.Push(line)
+    }
+    return s
+}
+
+fn main() ? {
+    println($collect(100).counts.Len())
+}

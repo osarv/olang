@@ -1,0 +1,6 @@
+full: 40 modules, rebuilt 40 in 308 ms
+again: 40 modules, rebuilt 0 in 0 ms
+edit: 40 modules, rebuilt 3 in 78 ms
+first 40 edited 3
+cyclic: cycle: m3 -> m20 -> m3
+cycle detected

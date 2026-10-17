@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/l1_parallel_copy_part.olang:16:13: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
+   16 |         c.a.toks.Push(k)
+      |             ^~~~
+/home/user/review/vec7/work/l1_parallel_copy_part.olang:13:9: note: 'c' copies a place reached read-only, so it is read-only
+   13 |         c := t
+      |         ^
+compilation failed with 1 error

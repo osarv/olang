@@ -1,0 +1,20 @@
+# r15 BUG (diagnostic): C2d points at the declaration's first column and names no argument - here it is 'src' (built
+# in this block) among three - and its suggested fix, 'T&x(...)', is not the fix: 'src String&r = ...' is.
+type Module struct(Path String&, Dir String&, Src String&) {
+    Path
+    Dir
+    Src
+}
+type R struct() {
+    mods mut List<mut Module&>
+}
+fn (r mut R&) load(path String&) {
+    src := "text" $path
+    m Module&r = Module(path, path[0:1], src)
+    r.mods.Push(m)
+}
+fn main() ? {
+    r := R()
+    r.load("abc")
+    println($r.mods.Len())
+}

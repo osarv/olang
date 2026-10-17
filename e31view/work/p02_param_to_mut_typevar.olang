@@ -1,0 +1,16 @@
+# the view callee hands its parameter whole to a generic "mut <T>": how T binds decides whether k writes the element
+type Acc struct() {
+    N I64 = 0
+    d mut Array<I64>& = Array<I64>(1)
+}
+fn k(x mut <T>) { x.N = 5 }
+fn f(c mut Acc&) { k(c) }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    f(l[0])
+    println("list " $l[0].N)
+    a := Acc[Acc()]
+    f(a[0])
+    println("array " $a[0].N)
+}

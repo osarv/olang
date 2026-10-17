@@ -1,0 +1,2 @@
+error BuiltinError { X }
+fn main() ? { }

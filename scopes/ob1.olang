@@ -1,0 +1,29 @@
+import "std/io"
+type N struct(v I32) { v mut }
+type Cur struct(of N&) { at N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn pick(a N&, b N&, c Bool) Cur {
+    if c { return Cur(a) }
+    return Cur(b)
+}
+fn pickR(a N&, b N&, c Bool) Cur& {
+    if c { return Cur(a) }
+    return Cur(b)
+}
+fn main() ? {
+    outer N& = N(1)
+    oc Cur = Cur(outer)
+    ocr Cur& = Cur(outer)
+    for i in range 2 {
+        inner N& = N(42)
+        oc = pick(outer, inner, false)
+        ocr = pickR(outer, inner, false)
+    }
+    churn()
+    try io.Print($oc.at.v " " $ocr.at.v "\n")
+}

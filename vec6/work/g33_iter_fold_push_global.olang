@@ -1,0 +1,23 @@
+G mut Vec<I64> = Vec<I64>()
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    G.Push(1)
+    G.Push(2)
+    s := G.Iter().Fold(0, fn(acc I64, x I64) I64 { return acc + x })
+    d := G.View()
+    l := List<I64>()
+    l.Push(5)
+    t := l.Iter().Fold(0, fn(acc I64, x I64) I64 {
+        G.Push(x)
+        return acc + x
+    })
+    churn()
+    println($d[0] $s $t)
+}

@@ -1,0 +1,9 @@
+# check: fail error[G9]: the type arguments of first cannot be inferred from these arguments
+# G9a: null takes no part in inference, so a variable only null reaches cannot be inferred
+type Box<T> struct(v T) {
+    v
+}
+fn first(a Box<<T>>&, b Box<T>&) I32 { return 1 }
+fn main() ? {
+  n := first(null, null)
+}

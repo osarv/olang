@@ -1,0 +1,5 @@
+# T7a non-generic: the same field written directly is an error
+type Box struct(v Array<I32>) {
+  v mut
+}
+fn main() ? { }

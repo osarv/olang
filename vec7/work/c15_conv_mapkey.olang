@@ -1,0 +1,11 @@
+fn main() ? {
+    m := Map<String&, I64>()
+    if true {
+        v := Vec<Char>()
+        for i in range 10 { v.Push('a') }
+        m.Put(String(v.View()), 1)
+    }
+    w := Vec<I64>()
+    for i in range 100 { w.Push(i) }
+    for e in m { println(e.Key) }
+}

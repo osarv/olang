@@ -1,0 +1,24 @@
+# r21 FRICTION - std/io Lines: once a read finds the end of the file, Lines.Next gives Exhausted for good ("ended" is
+# latched), so a reader cannot follow a file another writer is still appending to (tail -f, a log follower) - calling
+# Next again after the file grew still says Exhausted. Go's bufio.Reader returns io.EOF and reads again next time.
+# ../tailer.olang wrote its own line reader over io.Read for this.
+#
+# expected: "first" then "second" (Next reads again after an Exhausted)
+# actual:   "first" then "still exhausted"
+import "std/os"
+import "std/io"
+import "std/filepath"
+
+fn main() ? {
+    dir := try os.MkTemp()
+    defer try os.RemoveAll(dir) catch { }
+    path := filepath.Join(dir, "log")
+    w := try os.Create(path)
+    try io.Write(w, "first\n") catch { fail }
+    r := try os.Open(path)
+    lines := io.Lines(r)
+    println(try lines.Next() catch default "?")
+    try lines.Next() catch Exhausted { }                       # caught up with the writer
+    try io.Write(w, "second\n") catch { fail }                 # the file grows
+    println(try lines.Next() catch Exhausted default "still exhausted")
+}

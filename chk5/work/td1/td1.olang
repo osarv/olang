@@ -1,0 +1,33 @@
+# a reference read out of a fallible call's value result with a default holding a shorter block's storage
+type V struct(Data mut Array<F64>&) {
+    Data
+}
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+}
+type Sink struct() { kept mut Array<F64>& = null }
+fn (g G&) paramsF(k I64) V ? {
+    if k > 100 { error }
+    return V(g.mem)
+}
+fn keepA(s mut Sink&, p mut Array<F64>&) { s.kept = p }
+fn stash(s mut Sink&, g G&) {
+    for i in range 3 {
+        local := G(2)
+        keepA(s, (try g.paramsF(I64(i) * 1000) catch default V(local.mem)).Data)
+    }
+}
+fn stash2(s mut Sink&, g G&) {
+    for i in range 3 {
+        local := G(2)
+        v := try g.paramsF(I64(i) * 1000) catch default V(local.mem)
+        keepA(s, v.Data)
+    }
+}
+fn main() ? {
+    g := G(4)
+    s := Sink()
+    stash(s, g)
+    stash2(s, g)
+    println($s.kept.Len())
+}

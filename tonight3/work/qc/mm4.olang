@@ -1,0 +1,4 @@
+fn main() ? {
+    a := Array<List<I64>>(2, List<I64>())
+    z := a.Iter().ToList()
+}

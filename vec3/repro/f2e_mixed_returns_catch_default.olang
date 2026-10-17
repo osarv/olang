@@ -1,0 +1,31 @@
+# F2: in ONE return - the try is a recorded source (Raw: Array<Char>), its catch default (Text: String) is not.
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+fn (c CB&) Text() String&c { return c.text }
+fn (c CB&) Raw(n I64) String&c ? {
+    if n > 0 { error }
+    return String(c.data)
+}
+fn f(c CB&, n I64) String&c {
+    return try c.Raw(n) catch default c.Text()   # the try is a source (Raw, Array<Char>); the default is not
+}
+fn use(c mut CB&) {
+    t := f(c, 1)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

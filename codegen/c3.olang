@@ -1,0 +1,24 @@
+import "std/io"
+
+type Ctr struct(start I64) {
+    n mut I64 = start
+}
+
+fn (c mut Ctr&) Next() I64 {
+    c.n = c.n + 1
+    return c.n
+}
+
+fn f() I64 {
+    c Ctr& = Ctr(0)
+    a := Array<I64>(4, 0)
+    a[c.Next()] = c.Next() * 10
+    return a[1] + a[2]
+}
+
+Baked I64 = f()
+
+fn main() ? io.IoError {
+    r := f()
+    try io.Print($Baked " " $r "\n")
+}

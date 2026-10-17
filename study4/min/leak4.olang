@@ -1,0 +1,23 @@
+# a per-iteration line from a fallible call, passed to a function whose number goes into the returned struct
+type S struct() {
+    best I64 = 0
+    n I64 = 0
+}
+fn next(i I64) String& ? { 
+    if i >= N { error }
+    return "line " $i " took " $(i % 97) "ms"
+}
+fn measure(t String&) I64 { return t.Len() }
+fn scan() S {
+    s := S()
+    for {
+        line := try next(s.n) catch { break }
+        s.n++
+        v := measure(line)
+        if v > s.best { s.best = v }
+    }
+    return s
+}
+fn main() ? {
+    println($scan().best)
+}

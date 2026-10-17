@@ -1,0 +1,34 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type H struct(f fn() I64) { f }
+type E enum {
+    F(f fn() I64)
+    Z
+}
+fn wrap(f fn() I64) H { return H(f) }
+fn pass(f fn() I64) fn() I64 { return f }
+fn arr(f fn() I64) Array<fn() I64> { return Array<fn() I64>(1, f) }
+fn en(f fn() I64) E { return E.F(f) }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 { return n.v }
+    r fn() I64 = g
+    hr H = H(g)
+    ar Array<fn() I64> = arr(g)
+    er E = E.Z
+    join {
+        spawn r = pass(g)
+        spawn hr = wrap(g)
+        spawn ar = arr(g)
+        spawn er = en(g)
+    }
+    println($(r is g) " " $(r == g))
+    println($(hr == H(g)) " " $(hr.f is g))
+    println($(ar == arr(g)) " " $(ar[0] is g))
+    println($(er == E.F(g)))
+    l := List<fn() I64>()
+    l.Push(g)
+    println($(r in l))
+}

@@ -1,0 +1,19 @@
+# Array<T>(n, v) with a temporary reference fill, landing outside the function or block
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mkNodes(v I32) Array<mut Node&>& { return Array<mut Node&>(2, Node(v)) }
+fn main() ? {
+    a := mkNodes(43)
+    keep Array<mut Node&>& = Array<mut Node&>(1, Node(0))
+    for i in range 2 {
+        keep = Array<mut Node&>(2, Node(44))
+    }
+    churn()
+    try io.Print($a[0].v " " $keep[0].v "\n")
+}

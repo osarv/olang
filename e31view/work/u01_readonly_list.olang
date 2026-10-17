@@ -1,0 +1,18 @@
+# QC/T25c: a copy of a read-only List's element holding "mut" references is read-only - lent as a view it must not be
+# written through
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn put(v mut V&, x I64) { v.d[v.n] = x }
+fn (v mut V&) Put(x I64) { v.d[v.n] = x }
+fn h(l List<V>&) {
+    put(l[0], 7)
+    l[0].Put(8)
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 0))
+    h(l)
+    println($l[0].d)
+}

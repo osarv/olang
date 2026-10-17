@@ -1,0 +1,21 @@
+# NEW: h4 through os.RunOnStack(bytes, h.f) on a task - its stand-in copy is made in main's scope from the task.
+# expected: no report under -r; actual: data race in __olang_scope_alloc_a under __olang_env_standin
+import "std/os"
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+type H struct(f fn()) { f }
+fn relay(h H&, k I64) {
+    for j in range k { os.RunOnStack(1 << 16, h.f) }
+}
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    c mut List<N&>& = List<N&>()
+    h := H(fn() { a.Push(N(1)) })
+    join {
+        spawn relay(h, 300)
+        for i in range 200000 { c.Push(N(i)) }
+    }
+    println("a " $a.Len() " c " $c.Len())
+}

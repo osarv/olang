@@ -1,0 +1,40 @@
+type Pt struct() {
+    X I64 = 0
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    p Pt = Pt()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V {
+    v := V(s.d, i)
+    v.p.X = 100 + i
+    return v
+}
+fn id(p Pt&) Pt&p { return p }
+fn churn() {
+    for k in range 100 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn clobber(n I64) I64 {
+    a := Array<I64, 64>()
+    for k in range 64 { a[k] = n * 1000 + k }
+    if n > 0 { return clobber(n - 1) + a[3] }
+    return a[5]
+}
+fn f(c mut V&) fn() I64 {
+    pp := id(c.p)
+    return fn() I64 { return pp.X }
+}
+fn mk(s Vs&) fn() I64 { return f(s[2]) }
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    g := mk(s)
+    churn()
+    println($clobber(10) " " $g())
+}

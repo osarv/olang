@@ -1,0 +1,24 @@
+- [No AskUserQuestion for design brainstorms](feedback_no_askuserquestion_for_design.md) — prefer plain conversational options+recommendation over the tool UI for olang syntax/design talk
+- [Maintain CLAUDE.md as design doc](feedback_maintain_claude_md.md) — keep olang's CLAUDE.md in sync with every design decision, don't let it go stale
+- [Style, form, conciseness](feedback_style_form_conciseness.md) — follow explicit refactor targets exactly, no substituting my own judgment silently; keep code and responses tight
+- [Keep old tests](feedback_keep_old_tests.md) — never remove/replace existing olang test cases when adding new ones, unless a language change invalidates them
+- [Surface and fix bugs found along the way](feedback_surface_and_fix_bugs.md) — proactively fix + call out incidental bugs found while building a feature, don't quietly patch or ignore them
+- [olang next steps](project_olang_next_steps.md) — work order (self-hosting prep, in order) and all recorded future work, parked items and revisit-ifs
+- [olang open language gaps](project_olang_open_language_gaps.md) — historical only; every item resolved
+- [olang: Vec growth SETTLED](project_olang_vec_growth_question.md) — no growable contiguous Vec; List<T> is chunked+append-only, Buffer rejected on measurements
+- [olang concurrency gaps](project_olang_concurrency_gaps.md) — all done incl. cancellation/timeout (std/cancel); no fixed pool or M:N
+- [Record flagged decisions](feedback_record_flagged_decisions.md) — every decision I ask the user for goes in the ledger at once; silence is not a yes
+- [olang pending decisions](project_olang_pending_decisions.md) — numbered: questions for the user, answers I owe, my unconfirmed calls (each with default + rec), on-hold and deferred items
+- [olang: natural-language direction](user_olang_natural_language.md) — user wants olang syntax to read more like natural language (for x in a); weigh that in syntax proposals
+- [Language-change checklist](feedback_keep_evaluator_current.md) — walk the checklist in the repo CLAUDE.md for every language change; keep comptime.c current
+- [Errors are errors](feedback_errors_are_errors.md) — never (value, Bool) in olang APIs; empty/exhausted/missing is an error
+- [No per-operation runtime checks](feedback_no_runtime_checks.md) — olang never checks per operation; opt-in via try only; do not even offer it
+- [Number the questions](feedback_numbered_questions.md) — flagged calls and open questions always as a numbered list
+- [No Claude attribution in commits](feedback_no_claude_attribution.md) — author as the user, no Co-Authored-By / Claude-Session lines
+- [Dictated messages](user_dictation.md) — expect misheard words and spoken self-corrections; read for intent, state the reading taken when ambiguous
+- [Usage and subagents](feedback_usage_and_agents.md) — time matters: parallel agents in worktrees, cheaper model for search; pace by usage (rate_limit_event); ALWAYS arm a send_later resume for after the reset before usage runs out
+- [olang direction](user_olang_direction.md) — no manual memory mgmt, C-like perf, natural language, minimal syntax, multi-purpose; base of larger projects: solid and smooth
+- [Port is a redesign](feedback_port_clean_design.md) — self-hosted compiler: industry-standard designs (scanner, Pratt parser, separate passes), C only as the behaviour reference
+- [Decide details myself](feedback_decide_details.md) — authority over details within the direction; record as decisions, ask only direction questions; short reports
+- [Revisit rigid decisions](feedback_revisit_decisions.md) — the user's own past calls may be changed when they prove really rigid in real code, by PRINCIPLES.md; record as a reversal and report it
+- [Times in CEST](user_timezone.md) — the user is in Gothenburg: report times as Swedish local time (CEST, CET after 2026-10-25)

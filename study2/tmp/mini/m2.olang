@@ -1,0 +1,39 @@
+type Node enum {
+    Leaf(v I64)
+    Many(items Array<Node&>&)
+}
+type P struct() {
+    pos mut I64 = 0
+}
+fn (p mut P&) leaf() Node&p {
+    p.pos++
+    return Node.Leaf(p.pos)
+}
+fn (p mut P&) wleaf() mut Node&p {
+    p.pos++
+    return Node.Leaf(p.pos)
+}
+fn (p mut P&) opt3b(b Bool) Node&p {
+    x := p.leaf() if b else null
+    return Node.Many(Node&[x])
+}
+fn (p mut P&) opt3c(b Bool) Node&p {
+    x Node&p = null
+    if b { x = p.wleaf() }
+    return Node.Many(Node&[x])
+}
+fn (p mut P&) opt3d(b Bool) Node&p {
+    x Node&p = p.leaf()
+    if not b { x = null }
+    return Node.Many(Node&[x])
+}
+fn (p mut P&) list5() Node&p {
+    l List<Node&>&p = List<Node&>()
+    l.Push(p.leaf())
+    a := l.ToArray()
+    return Node.Many(a)
+}
+fn main() ? {
+    p := P()
+    println($p.opt3b(true) " " $p.opt3c(true) " " $p.opt3d(false) " " $p.list5())
+}

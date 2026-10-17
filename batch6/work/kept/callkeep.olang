@@ -1,0 +1,58 @@
+# O18c kept mode: a ":=" from a call that builds, kept beyond its block through: a call that keeps it
+type Tok struct(text String&, kind I64) {
+    text
+    kind
+}
+type Lexer struct(n I64) {
+    n
+    pos I64 = 0
+}
+fn (lx mut Lexer&) next() Tok {
+    lx.pos = lx.pos + 1
+    return Tok("w" $lx.pos "-abcdefghijklmnopqrstuvwxyz", lx.pos)
+}
+type Cell struct() {
+    s String& = ""
+}
+type Bag struct() {
+    cells mut List<mut Cell&>& = List<mut Cell&>()
+    last String& = ""
+    f fn() String = fn() String { return "" }
+}
+fn (b mut Bag&) cell(i I64) mut Cell&b {
+    return b.cells[i]
+}
+fn cellOf(b mut Bag&, i I64) mut Cell&b {
+    return b.cells[i]
+}
+fn keep(b mut Bag&, s String&) {
+    b.last = s
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn keep2(b mut Bag&, s String&) I64 {
+    b.last = s
+    return 1
+}
+fn churn2(n I64) {
+}
+fn main() ? {
+    lx mut Lexer& = Lexer(0)
+    b mut Bag& = Bag()
+    for i in range 3 { b.cells.Push(Cell()) }
+    for i in range 3 {
+        t := lx.next()
+        keep(b, t.text)
+        churn()
+    }
+    churn()
+    print($b.last " ")
+    for c in b.cells { print($c.s " ") }
+    println($b.f())
+}

@@ -1,0 +1,12 @@
+# check: fail error[M6b]: K declares Str twice, public and private
+# also: error[M6b]: K declares Next twice, public and private
+# also: error[M6b]: K declares Hash twice, public and private
+# M6b: every method the compiler calls by itself, not only an operator, is one or the other
+type K struct(n I32) { n }
+fn (k K) Str() String { return "a" }
+fn (k K) str() String { return "b" }
+fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.END }
+fn (k mut K&) next() I32 ? Exhausted { error Exhausted.END }
+fn (k K) Hash() I64 { return 1 }
+fn (k K) hash() I64 { return 2 }
+fn main() ? { }

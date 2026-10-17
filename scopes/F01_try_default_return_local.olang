@@ -1,0 +1,22 @@
+# try catch default: a local of the returning function as the default of a returned call
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mk(k I64) Node& ? {
+    if k > -5 { error }
+    return Node(7)
+}
+fn get() Node& {
+    n Node& = Node(42)
+    return try mk(1) catch default n
+}
+fn main() ? {
+    keep := get()
+    churn()
+    try io.Print($keep.v "\n")
+}

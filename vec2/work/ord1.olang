@@ -1,0 +1,31 @@
+fn words(t String&) Vec<String&> {
+    v := Vec<String&>()
+    for w in t.Split(" ") { v.Push(w) }
+    return v
+}
+fn main() ? {
+    v := Vec<String&>()
+    for i in range 20 { v.Push($i) }
+    v.Insert(0, "zero")
+    r := v.RemoveAt(3)
+    s := v.SwapRemove(2)
+    v.Reverse()
+    v.Sort(fn(a String&, b String&) Bool { return a < b })
+    k := try v.IndexOf("5") catch default -1
+    ok := v.Remove("7")
+    h := "9" in v
+    j := v.Join(",")
+    a := v.ToArray()
+    an := a.Len()
+    n := 0
+    for x in v { n += x.Len() }
+    f := v.Iter().Fold(0, fn(acc I64, x String&) I64 { return acc + x.Len() })
+    d := v.View()
+    e := v[0]
+    dn := d.Len()
+    v.Push("late")
+    println($k " " $ok " " $h " " $j " " $an " " $n " " $f " " $e " " $r " " $s)
+    println($v)
+    ws := words("a b c")
+    println($ws.Len() " " $(v == v) " " $v.Hash())
+}

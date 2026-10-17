@@ -1,0 +1,8 @@
+# M6b/E31: a private call is not reached from another module - neither by calling the value nor by handing it where a
+# function value is wanted (the adapter would call it)
+import "lib/cl"
+fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }
+fn main() ? {
+    a := cl.Make(3)
+    println($apply(a, 4))
+}

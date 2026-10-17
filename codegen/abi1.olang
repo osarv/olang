@@ -1,0 +1,39 @@
+import "std/io"
+import "std/os"
+
+error E {
+    BAD
+}
+
+type V enum {
+    H(a F16, b BF16, c U8)
+    W(x U64, y I8)
+    N
+}
+
+fn mk(k I64) V {
+    if k == 0 { return V.H(F16(1.5), BF16(2.5), U8(200)) }
+    if k == 1 { return V.W(U64(18446744073709551615), I8(-3)) }
+    return V.N
+}
+
+fn halves(x F16, y BF16) (F16, BF16, U64) ? E {
+    if x > F16(100.0) { error E.BAD }
+    return x * F16(2.0), y + BF16(1.0), U64(x) + 18446744073709551000
+}
+
+fn apply(f fn(a F16, b BF16) (F16, BF16, U64) ? E, x F16) (F16, BF16, U64) ? E {
+    return try f(x, BF16(3.0))
+}
+
+fn main() ? io.IoError + E {
+    k I64 = os.Args().Len() - 1
+    a, b, c := try apply(halves, F16(0.25) + F16(k))
+    v0 := mk(k)
+    v1 := mk(k + 1)
+    v2 := mk(k + 2)
+    s := $v0 " " $v1 " " $v2
+    x U64 = 18446744073709551615
+    y U64 = x / 3
+    try io.Print($a " " $b " " $c " " $s " " $y " " $(x > U64(5)) "\n")
+}

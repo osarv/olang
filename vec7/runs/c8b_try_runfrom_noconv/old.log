@@ -1,0 +1,13 @@
+/home/user/review/vec7/work/c8b_try_runfrom_noconv.olang:5:28: error[O39]: calling 'Push' may release the Array<Char> borrowed on line 4, which is used after it
+    5 |     for i in range 100 { v.Push('b') }
+      |                            ^~~~
+/home/user/review/vec7/work/c8b_try_runfrom_noconv.olang:4:16: note: borrowed here
+    4 |     s := try v.RunFrom(0) catch default Array<Char>(1, 'x')
+      |                ^~~~~~~
+/home/user/review/vec7/work/c8b_try_runfrom_noconv.olang:8:14: note: used here, after it
+    8 |     println($s)
+      |              ^
+/home/user/review/vec7/base-d5ddcda/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error

@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/c19_conv_cond_return.olang:3:21: error[D8]: this function returns String&, found String&
+    3 |     return String(a if k > 0 else a[0:1])
+      |                     ^~
+compilation failed with 1 error

@@ -1,0 +1,25 @@
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn add(l mut Lex2&, k I64) { for i in range k { l.toks.Push(Tok($i "-param-field-text", i)) } }
+fn main() ? {
+    p mut Lex2& = Lex2()
+    {
+        add(p, 4)
+        churn()
+    }
+    churn()
+    println(p.toks[2].text)
+}

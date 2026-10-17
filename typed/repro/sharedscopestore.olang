@@ -1,0 +1,21 @@
+type N struct(v I64) {
+    v
+    next N& = null
+}
+fn link(a mut N&, b N&a) { a.next = b }
+fn put(f fn(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
+fn churn(n I64) I64 {
+    s := 0
+    for i in range n {
+        t := N(i * 1000)
+        s += t.v
+    }
+    return s
+}
+fn main() ? {
+    f fn(a mut N&, b N&) = link
+    x mut N& = N(1)
+    put(f, x, 42)
+    println($churn(100))
+    println($x.next.v)
+}

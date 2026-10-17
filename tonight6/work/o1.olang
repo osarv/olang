@@ -1,0 +1,48 @@
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn pick(n I64) List<I64> ? {
+    groups := Map<I64, List<I64>>()
+    for i in range n {
+        groups.Put(i, List<I64>())
+        g := try groups.Get(i)
+        g.Push(i * 11)
+    }
+    l := try groups.Get(1)
+    return l
+}
+fn pick2(n I64) List<I64> ? {
+    groups := Map<I64, List<I64>>()
+    for i in range n {
+        groups.Put(i, List<I64>())
+        g := try groups.Get(i)
+        g.Push(i * 11)
+    }
+    out := List<I64>()
+    l := try groups.Get(1)
+    for x in l { out.Push(x) }
+    return out
+}
+fn firsts2() List<List<I64>> {
+    all := List<List<I64>>()
+    for i in range 3 {
+        l := List<I64>()
+        l.Push(i)
+        all.Push(l)
+    }
+    out := List<List<I64>>()
+    for p in all { out.Push(p) }
+    return out
+}
+fn main() ? {
+    a := try pick(3)
+    b := try pick2(3)
+    c := firsts2()
+    println($churn())
+    println($a[0] " " $b[0] " " $c[2][0])
+}

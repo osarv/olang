@@ -1,0 +1,30 @@
+# r05 inside a constructor: a field declared from a part of a call's result that lands by its obligations
+type Pair2 struct(a String&, b Array<I64>&) {
+    a
+    b
+}
+type Out struct(p Pair2) { p }
+fn mk(t String&, n I64) Out { return Out(Pair2(t, Array<I64>(n, 7))) }
+type Holder struct(t String&, s Pair2) {
+    x := mk(t, 3).p
+    y := mk(s.a, 4).p
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn fill(keep mut List<Holder>&, pr Pair2) {
+    for k in range 3 { keep.Push(Holder("base", pr)) }
+}
+fn main() ? {
+    loc := "loc"
+    keep := List<Holder>()
+    fill(keep, Pair2(loc, Array<I64>(1, 1)))
+    churn()
+    h := keep[2]
+    println($h.x.a " " $h.x.b " " $h.y.a " " $h.y.b)
+}

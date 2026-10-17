@@ -1,0 +1,23 @@
+import "std/io"
+type N struct(v I32) { v mut }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn (c mut Cur&) Set(x mut N&) { c.at = x }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn main() ? {
+    outer N& = N(1)
+    keep N& = outer
+    for i in range 2 {
+        x N& = N(42)
+        c := Cur(outer)
+        arr Array<mut Cur&> = Cur&[c]
+        arr[0].Set(x)
+        keep = c.at
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

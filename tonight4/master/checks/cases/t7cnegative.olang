@@ -1,0 +1,5 @@
+# check: fail error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1
+# T7c: a fixed length out of range is an error where the type is written
+fn main() ? {
+    a Array<I32, 2 - 3>
+}

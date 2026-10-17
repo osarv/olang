@@ -1,0 +1,53 @@
+error E { X }
+type CtPair struct(a I32, b F64) {
+    a mut
+    b mut
+}
+fn fib(n I32) I32 {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+fn table() Array<I32>& {
+    t Array<I32>&return = Array<I32>(4)
+    for i in range 4 { t[i] = fib(i + 10) }
+    return t
+}
+type Node struct(v I32, next mut Node&) {
+    v mut
+    next mut
+}
+fn ring() Node& {
+    a Node&return = Node(1, null)
+    a.next = a
+    return a
+}
+Chain Node& = Node(1, Node(2, null))
+Ring Node& = ring()
+closed mut I32 = 0
+type Loud struct(id I32) { id } destruct { closed = closed + 1 }
+fn loudOnce() I32 {
+    l Loud& = Loud(1)
+    return l.id
+}
+Kept Loud& = Loud(7)
+Dropped I32 = loudOnce()
+fn deferred(n I32) I32 {
+    t I32 = n
+    defer t = 0                         # S19: after the result is computed
+    for i in range 3 {
+        defer t += 1
+    }
+    return t
+}
+Deferred I32 = deferred(4)
+Fib I32 = fib(15)
+Table Array<I32>& = table()
+P CtPair = CtPair(fib(6), 0.5)
+seed mut I32 = 3
+Later I32 = seed * 2
+fn main() ? E {
+    assert Deferred == 7
+    assert Fib == 610 and Table[3] == 233 and P.a == 8 and P.b == 0.5 and Later == 6
+    assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring
+    assert Kept.id == 7 and Dropped == 1 and closed == 1
+}

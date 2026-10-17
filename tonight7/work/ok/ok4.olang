@@ -1,0 +1,17 @@
+type Reg struct(m Map<String&, I64>, l List<I64>, a mut Array<I64>&) {
+    m
+    l
+    a
+}
+fn (r Reg&) Str() String {
+    n := r.m.Iter().Count(fn(e MapEntry<String&, I64>) Bool { return true })
+    return "x"
+}
+fn main() ? {
+    m := Map<String&, I64>()
+    m.Put("b", 1)
+    l := List<I64>()
+    l.Push(3)
+    r := Reg(m, l, I64[3, 1, 2])
+    println($r)
+}

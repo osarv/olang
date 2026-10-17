@@ -1,0 +1,9 @@
+# D13c/T7c: globals with no initializer whose element's zero value is not zero bits - mutable and immutable
+type P struct(v I64 = 7) { v }
+type H struct() { ps mut Array<P, 2> }
+G mut Array<P, 3>
+GI Array<P, 3>
+GH mut H
+fn main() ? {
+    println($G[2].v " " $GI[0].v " " $GH.ps[1].v)
+}

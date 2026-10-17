@@ -1,0 +1,23 @@
+# S4c/O1b: a parallel assignment into a global's reference field, with a value holding a local's storage
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Wrap struct(n Node&) {
+    n
+}
+type Holder struct() {
+    w mut Wrap& = null
+    n mut Node& = null
+}
+G mut Holder& = Holder()
+fn f(i I64) I64 {
+    loc mut Node& = Node(i)
+    k I64 = 0
+    G.w, k = Wrap(loc), i
+    return k
+}
+fn main() ? {
+    f(5)
+    println($G.w.n.v)
+}

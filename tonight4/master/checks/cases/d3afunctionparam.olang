@@ -1,0 +1,8 @@
+# check: fail error[D3a]: 'size' names a function of this module - a name means one thing in it, so name this apart
+# also: note: 'size' is declared here
+# D3a: a constructor parameter named like a function of its module is the error, pointing at both
+fn size() I32 { return 1 }
+type T struct(size I32) {
+    size
+}
+fn main() ? { }

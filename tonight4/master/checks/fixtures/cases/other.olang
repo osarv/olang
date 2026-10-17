@@ -1,0 +1,5 @@
+# another module's enum sharing the name and a case name - a different type
+type Dir enum {
+  North
+  Up
+}

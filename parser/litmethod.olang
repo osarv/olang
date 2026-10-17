@@ -1,0 +1,7 @@
+test "a method called on a decimal integer literal" {
+    a := U16(15360).F16FromBits()
+    b F16 = 1.0
+    assert a == b
+    assert 0x3C00.F16FromBits() == b
+    assert 7.Hash() == I32(7).Hash()
+}

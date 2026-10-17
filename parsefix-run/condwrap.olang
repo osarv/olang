@@ -1,0 +1,19 @@
+fn viaIf() I32 {
+    if N + 1 < 0 {
+        return 1
+    }
+    return 2
+}
+
+fn viaValue() I32 {
+    v I32 = N + 1
+    if v < 0 {
+        return 1
+    }
+    return 2
+}
+
+test "a build constant's arithmetic wraps the same way in a condition" {
+    assert viaValue() == 1
+    assert viaIf() == viaValue()
+}

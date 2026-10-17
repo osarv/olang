@@ -1,0 +1,15 @@
+type Bag struct(m mut Map<I64, List<I64>>&) {
+    m
+}
+fn (b Bag&) Str() String {
+    x := try b.m.Get(1) catch default List<I64>()
+    x.Push(5)
+    return "b" $x.Len()
+}
+fn main() ? {
+    m mut Map<I64, List<I64>>& = Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    b := Bag(m)
+    println($b)
+    println($b)
+}

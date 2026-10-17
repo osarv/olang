@@ -1,0 +1,13 @@
+# control: the same in an ordinary function
+type Node struct(v I64) {
+    v
+}
+GF mut fn() I64 = fn() I64 { return 0 }
+fn setIt(k I64) {
+    n := Node(k)
+    GF = fn() I64 { return n.v }
+}
+fn main() ? {
+    setIt(41)
+    println($GF())
+}

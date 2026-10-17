@@ -1,0 +1,7 @@
+# check: fail these two numbers do not meet
+# T6b: F16 and BF16 each keep something the other loses - neither flows into the other
+fn main() ? {
+    a F16 = 1
+    b BF16 = 1
+    c F32 = a + b
+}

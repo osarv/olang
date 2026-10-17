@@ -1,0 +1,9 @@
+fn show(s String&) { println(s) }
+fn main() ? {
+    v := Vec<Char>()
+    for i in range 3 { v.Push('a') }
+    join {
+        spawn show(String(v.View()))
+        for i in range 100 { v.Push('b') }
+    }
+}

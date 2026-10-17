@@ -1,0 +1,21 @@
+import "olib"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn fill(h mut olib.Holder&) {
+    f := olib.Stash
+    k := 41
+    n olib.Node& = olib.Node(k + 1)
+    f(h, n)
+}
+fn main() ? {
+    h := olib.Holder()
+    fill(h)
+    churn()
+    println($h.N.V)
+}

@@ -1,0 +1,10 @@
+import "std/io"
+Z F64 = -0.0
+T String = $Z
+Mz mut F64 = 0.0
+fn main() ? io.IoError {
+    assert $Z == "-0"
+    m F64 = -Mz
+    try io.Print("baked text " $T " runtime text " $Z " neg of runtime zero " $m "\n")
+    assert $m == "-0"
+}

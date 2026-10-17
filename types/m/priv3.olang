@@ -1,0 +1,5 @@
+# M6a: a private error word
+import "lib"
+fn main() ? {
+  try lib.Fail(1) catch lib.Err.quiet { }
+}

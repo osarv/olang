@@ -1,0 +1,6 @@
+# check: fail the compiler supplies a method of this name for this type
+# E33/T29e: a type extending a float has the supplied Bits(), which is never overridden
+type Temp extends F64
+fn (t Temp) Bits() U64 { return 7 }
+error E { X }
+fn main() ? E { }

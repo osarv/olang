@@ -1,0 +1,26 @@
+import "std/io"
+
+Count mut I32 = 0
+
+type G struct(n I32) {
+    n
+} destruct {
+    Count = Count + 100
+}
+
+type H struct(n I32) {
+    n
+    inner mut G& = null
+} destruct {
+    Count = Count + 1
+    inner = G(n)
+}
+
+fn use() {
+    h H& = H(1)
+}
+
+fn main() ? io.IoError {
+    use()
+    try io.Print($Count "\n")
+}

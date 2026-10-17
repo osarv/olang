@@ -1,0 +1,617 @@
+# Os - the program's command line and environment, running programs (Run through a shell, Exec without one), and files
+# and directories. Ordinary olang on top of "extern fn" (§11), like std/io: the C library's own functions where they
+# take and give numbers, and the runtime's (X6) where C would hand back a pointer, a structure or errno. A path is
+# text; the C library wants it NUL-terminated, so each call here passes "$path "\0"".
+
+import "io"
+
+extern fn system(cmd Array<U8>) I32
+extern fn exit(status I32)
+extern fn open(path Array<U8>, flags I32) I32
+extern fn creat(path Array<U8>, mode U32) I32
+extern fn close(fd I32) I32
+extern fn lseek(fd I32, offset I64, whence I32) I64
+extern fn read(fd I32, buf Array<U8>, count I64) I64
+extern fn mkdir(path Array<U8>, mode U32) I32
+extern fn rename(from Array<U8>, to Array<U8>) I32
+extern fn remove(path Array<U8>) I32
+extern fn readlink(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_arg_count() I64
+extern fn __olang_arg(i I64, buf Array<U8>, cap I64) I64
+extern fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_err() I32
+extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
+extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32) I32
+extern fn waitpid(pid I32, status Array<I32>, options I32) I32
+extern fn memfd_create(name Array<U8>, flags U32) I32
+
+# why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and FAILED for
+# every other
+error OsError {
+    NOT_FOUND
+    EXISTS
+    DENIED
+    NOT_DIR
+    IS_DIR
+    NOT_EMPTY
+    FAILED
+}
+
+# fails with the OsError naming "code" - what __olang_err() said, asked right after the call that failed, before
+# anything else could change errno
+fn raise(code I32) ? OsError {
+    match code {
+        case 1 { error OsError.NOT_FOUND }
+        case 2 { error OsError.EXISTS }
+        case 3 { error OsError.DENIED }
+        case 4 { error OsError.NOT_DIR }
+        case 5 { error OsError.IS_DIR }
+        case 6 { error OsError.NOT_EMPTY }
+        nomatch { error OsError.FAILED }
+    }
+}
+
+# fails with what errno says when "result" - a C call's, made just before - says it failed, by being negative
+fn check(result I64) ? OsError {
+    if result < 0 { try raise(__olang_err()) }
+}
+
+# text a runtime function copies out (X6): fill(buf) copies what fits of it into buf and gives its whole length, or
+# a negative one when it fails. Measured, then filled at that length - again if it grew in between, as a directory
+# being written to can.
+fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? OsError {
+    n := fill(Array<U8>(0))
+    for {
+        try check(n)
+        text String&return = String(Array<U8>(n))
+        got := fill(text)
+        if got <= n {
+            try check(got)
+            return text[:got]
+        }
+        n = got
+    }
+    unreachable
+}
+
+# the program's command line (B4a): its own name first - the path it was started by, or under "olang -i" the file
+# being interpreted - then each argument, as given
+fn Args() Array<String&>& {
+    n := __olang_arg_count()
+    args Array<String&>&return = Array<String&>(n)
+    for i in range n {
+        text String&return = String(Array<U8>(__olang_arg(i, Array<U8>(0), 0)))
+        __olang_arg(i, text, text.Len())
+        args[i] = text
+    }
+    return args
+}
+
+# the value of the environment variable "name" - failing, with the default error, when it is not set (one set to
+# nothing is "")
+fn Env(name String&) String& ? {
+    key := $name "\0"
+    return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) }) catch OsError { error }
+}
+
+# B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the same exit path
+# `done` and `fail` take. It ends the PROCESS whatever is running - a test included, so a test calling it ends the
+# whole run - where `done`/`fail` end the innermost thing that can end (S16a). An ordinary call to D10a: a function
+# owing a result writes `unreachable` after it.
+fn Exit(code I32) {
+    exit(code)
+}
+
+# runs "cmd" through the shell and gives its exit status - 0 for success. A command the shell cannot run at
+# all, or one ended by a signal, is reported as a nonzero status like any other failure.
+fn Run(cmd String&) I32 {
+    status := system($cmd "\0")
+    if status < 0 { return 127 }
+    if status % 256 != 0 { return 128 + status % 128 }        # ended by a signal
+    return status / 256
+}
+
+# what a program Exec ran did: the status it ended with - its exit status, or 128 plus the signal that ended it, as a
+# shell reports it - and everything it wrote to its standard output and its standard error
+type Output struct(Status I32, Stdout String&, Stderr String&) {
+    Status
+    Stdout
+    Stderr
+}
+
+# runs the program args[0] with args as its command line - no shell between, so each argument reaches it as it is,
+# whatever it holds - and waits for it to end. Its standard input is "input" and then the end of the file; what it
+# writes to its standard output and error is gathered, in full, into what Exec gives back, built where the caller puts
+# it. args[0] is looked up through PATH unless it holds a '/'. A program that runs and fails is no error here: its
+# status says so. Exec fails, with the OsError naming why, only when the program cannot be started - NOT_FOUND (no
+# such program), DENIED (not executable) - or with FAILED when there is nothing to run, an argument holds a zero byte
+# (which no command line can carry), or the system refuses what Exec needs. Output is gathered in memory files the
+# program writes into as fast as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output.
+fn Exec(args Array<String&>&, input Array<U8>& = "") Output ? OsError {
+    if args.Len() == 0 { error OsError.FAILED }
+    size I64 = 0
+    for a in args {
+        zero := true
+        try a.FindByte(0) catch { zero = false }
+        if zero { error OsError.FAILED }
+        size += a.Len() + 1
+    }
+    line := Array<U8>(size)                         # the arguments, each ended by a zero byte
+    at I64 = 0
+    for a in args {
+        for c in a {
+            line[at] = c
+            at++
+        }
+        at++
+    }
+    feed := try memFile()
+    defer close(feed)
+    try io.Write(feed, input) catch io.IoError { error OsError.FAILED }
+    lseek(feed, 0, 0)
+    out := try memFile()
+    defer close(out)
+    errs := try memFile()
+    defer close(errs)
+    pid := __olang_spawn(line, args.Len(), feed, out, errs)
+    if pid < 0 { try raise(__olang_err()) }
+    waited Array<I32, 1>
+    if waitpid(pid, waited, 0) < 0 { try raise(__olang_err()) }
+    status I32 = (waited[0] >> 8) & 0xFF
+    if (waited[0] & 0x7F) != 0 { status = 128 + (waited[0] & 0x7F) }      # ended by a signal
+    return Output(status, try readBack(out), try readBack(errs))
+}
+
+# a file in memory, with no name in the file system: written and read through its descriptor as any file, gone once
+# closed - and closed in any program Exec starts (MFD_CLOEXEC), but for the copies it is given as its standard streams
+fn memFile() I32 ? OsError {
+    fd := memfd_create("olang\0", 1)
+    try check(fd)
+    return fd
+}
+
+# everything written to the file fd, from its start, as text built where the caller puts it
+fn readBack(fd I32) String& ? OsError {
+    size := lseek(fd, 0, 2)
+    if size < 0 { try raise(__olang_err()) }
+    lseek(fd, 0, 0)
+    text String&return = String(Array<U8>(size))
+    got I64 = 0
+    for got < size {
+        n := read(fd, text[got:], size - got)
+        if n < 0 { try raise(__olang_err()) }
+        if n == 0 { error OsError.FAILED }
+        got += n
+    }
+    return text
+}
+
+# the whole of the file at "path", built where the caller puts it, or where the scope argument says
+# ("os.ReadFile&x(p)" builds it where x lives)
+fn ReadFile(path String&) String& ? OsError {
+    if IsDir(path) { error OsError.IS_DIR }            # a directory opens, and its size means nothing
+    fd := open($path "\0", 0)
+    try check(fd)
+    # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
+    # read that finds the end is the next one, and room doubled for a file longer than it said - one in /proc, or a pipe,
+    # has no size to give (lseek fails or says 0), and a file may grow while it is read
+    size := lseek(fd, 0, 2)
+    if size < 0 { size = 0 } else { lseek(fd, 0, 0) }
+    text String&return = String(Array<U8>(size + 1))
+    got I64 = 0
+    for {
+        if got == text.Len() {
+            more String&return = String(Array<U8>(text.Len() * 2))
+            for i in range got { more[i] = text[i] }
+            text = more
+        }
+        n := read(fd, text[got:], text.Len() - got)
+        if n < 0 { try closeAndRaise(fd, __olang_err()) }
+        if n == 0 { break }
+        got += n
+    }
+    close(fd)
+    return text[:got]        # the file's bytes, read as text (T29c)
+}
+
+# closes fd and fails with the OsError naming "code" - for a call that failed on an open descriptor, whose errno has
+# to be read before close can change it
+fn closeAndRaise(fd I32, code I32) ? OsError {
+    close(fd)
+    try raise(code)
+}
+
+# the file at "path" holding "data" and nothing else: created, or emptied first when it is there already
+fn WriteFile(path String&, data Array<U8>&) ? OsError {
+    fd := try Create(path)
+    try io.Write(fd, data) catch io.IoError {
+        try closeAndRaise(fd, __olang_err())
+    }
+    try Close(fd)
+}
+
+# a descriptor to write the file at "path" through (io.Write), created or emptied - 0666 less the process's umask,
+# as C's creat gives it. Close it once written.
+fn Create(path String&) I32 ? OsError {
+    fd := creat($path "\0", 0x1B6)
+    try check(fd)
+    return fd
+}
+
+# a descriptor to read the file at "path" through (io.Read). Close it once read.
+fn Open(path String&) I32 ? OsError {
+    fd := open($path "\0", 0)
+    try check(fd)
+    return fd
+}
+
+# closes a descriptor Open or Create gave - which is also where a write the system deferred can still fail
+fn Close(fd I32) ? OsError {
+    try check(close(fd))
+}
+
+# what a path names
+type FileKind enum {
+    FILE
+    DIR
+    OTHER
+}
+
+# what Stat finds at a path: its kind, its size in bytes, and when it was last modified, in nanoseconds since the
+# Unix epoch - the resolution the file system keeps, which is what telling which of two files is newer needs
+type FileInfo struct(Kind FileKind, Size I64, ModTime I64) {
+    Kind
+    Size
+    ModTime
+}
+
+# what is at "path", following a symbolic link to what it names
+fn Stat(path String&) FileInfo ? OsError {
+    out Array<I64, 3>
+    try check(__olang_stat($path "\0", out))
+    kind := FileKind.OTHER
+    if out[0] == 1 { kind = FileKind.FILE }
+    if out[0] == 2 { kind = FileKind.DIR }
+    return FileInfo(kind, out[1], out[2])
+}
+
+# whether anything is at "path" - a symbolic link counts only when what it names is there
+fn Exists(path String&) Bool {
+    out Array<I64, 3>
+    return __olang_stat($path "\0", out) == 0
+}
+
+# whether "path" names a directory, directly or through a symbolic link
+fn IsDir(path String&) Bool {
+    out Array<I64, 3>
+    return __olang_stat($path "\0", out) == 0 and out[0] == 2
+}
+
+# makes the directory "path" - 0777 less the process's umask - whose parent must be there already
+fn MkDir(path String&) ? OsError {
+    try check(mkdir($path "\0", 0x1FF))
+}
+
+# makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
+# anything else in the way fails with NOT_DIR
+fn MkDirAll(path String&) ? OsError {
+    if IsDir(path) { return }
+    for i in range 1, path.Len() + 1 {
+        if i < path.Len() and path[i] != '/' { continue }
+        part := path[:i]
+        if mkdir($part "\0", 0x1FF) != 0 {
+            code := __olang_err()
+            if code != 2 { try raise(code) }            # 2 is EXISTS: fine, when what exists is a directory
+            if not IsDir(part) { error OsError.NOT_DIR }
+        }
+    }
+}
+
+# removes the file, the symbolic link or the empty directory at "path"
+fn Remove(path String&) ? OsError {
+    try check(remove($path "\0"))
+}
+
+# moves what is at "from" to "to", in one step, replacing a file already at "to"
+fn Rename(from String&, to String&) ? OsError {
+    try check(rename($from "\0", $to "\0"))
+}
+
+# what the symbolic link at "path" holds, as it was written - not resolved further
+fn ReadLink(path String&) String& ? OsError {
+    p := $path "\0"
+    cap I64 = 256
+    buf Array<U8>&return = Array<U8>(cap)
+    n := readlink(p, buf, cap)
+    for n == cap {                                  # it may not all have fitted: again, with twice the room
+        cap = cap * 2
+        buf = Array<U8>(cap)
+        n = readlink(p, buf, cap)
+    }
+    try check(n)
+    return String(buf[:n])
+}
+
+# "path" made absolute, with every symbolic link, "." and ".." resolved - what it really names, which must exist
+fn RealPath(path String&) String& ? OsError {
+    p := $path "\0"
+    return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_realpath(p, buf, buf.Len()) })
+}
+
+# the directory the program is working in, as an absolute path
+fn Cwd() String& ? OsError {
+    return try RealPath(".")
+}
+
+# the names in the directory "path", in byte order, without "." and ".."
+fn ReadDir(path String&) Array<String&>& ? OsError {
+    p := $path "\0"
+    all String&return = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) })
+    if all.Len() == 0 { return Array<String&>(0) }
+    names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
+    names.Sort(fn(a, b) { return a.Compare(b) < 0 })
+    return names
+}
+
+# text quoted for the shell: one argument whatever it holds
+fn Quote(t String&) String& {
+    out String& = "'"
+    start I64 = 0
+    for i in range t.Len() {
+        if t[i] == '\'' {
+            out = $out $t[start:i] "'\\''"
+            start = i + 1
+        }
+    }
+    return $out $t[start:] "'"
+}
+
+test "Run gives a command's exit status" {
+    assert Run("true") == 0
+    assert Run("exit 3") == 3
+}
+
+test "ReadFile reads what a command wrote" {
+    assert Run("printf 'a\\nb' > build/os_test.txt") == 0
+    text := try ReadFile("build/os_test.txt") catch default ""
+    assert text.Eq("a\nb")
+    missing := try ReadFile("build/no/such/file") catch OsError.NOT_FOUND default "gone" catch default "other"
+    assert missing.Eq("gone")
+}
+
+# a file with no size to give - one in /proc, a pipe - is read to its end all the same, and so is one longer than the
+# room first made for it
+test "ReadFile reads to the end, whatever the size says" {
+    status := try ReadFile("/proc/self/status") catch default ""
+    assert status.Contains("VmHWM:") and status.EndsWith("\n")
+    Run("mkdir -p build/os_files && seq 1 20000 > build/os_files/seq.txt")
+    lines := try ReadFile("build/os_files/seq.txt") catch default ""
+    assert lines.Len() == 108894 and lines.StartsWith("1\n2\n") and lines.EndsWith("19999\n20000\n")
+}
+
+test "Quote survives a quote" {
+    assert Run("test " $Quote("it's") " = \"it's\"") == 0
+}
+
+# the command line of this very test binary: its own path, and nothing after it
+test "Args gives the program's own name first" {
+    args := Args()
+    assert args.Len() == 1
+    assert args[0].Contains("os_test")
+}
+
+test "Env gives a variable's value, and fails when it is not set" {
+    assert (try Env("PATH") catch default "").Len() > 0
+    gone := false
+    try Env("OLANG_NO_SUCH_VARIABLE_AT_ALL") catch { gone = true }
+    assert gone
+}
+
+test "WriteFile creates a file, and empties one that is there" {
+    assert Run("rm -rf build/os_files && mkdir -p build/os_files") == 0
+    try WriteFile("build/os_files/a.txt", "first line\nsecond") catch { fail }
+    text := try ReadFile("build/os_files/a.txt") catch default ""
+    assert text == "first line\nsecond"
+    try WriteFile("build/os_files/a.txt", "short") catch { fail }
+    again := try ReadFile("build/os_files/a.txt") catch default ""
+    assert again == "short"
+    try WriteFile("build/os_files/empty", "") catch { fail }
+    assert (try ReadFile("build/os_files/empty") catch default "x") == ""
+    denied := false
+    try WriteFile("build/os_files/no/such/dir/f", "x") catch OsError.NOT_FOUND { denied = true } catch { }
+    assert denied
+}
+
+test "Create writes through a descriptor, a piece at a time" {
+    assert Run("mkdir -p build/os_files") == 0
+    fd := try Create("build/os_files/pieces") catch default -1
+    assert fd >= 0
+    try io.Write(fd, "one ") catch { fail }
+    try io.Write(fd, "two") catch { fail }
+    try Close(fd) catch { fail }
+    assert (try ReadFile("build/os_files/pieces") catch default "") == "one two"
+    rd := try Open("build/os_files/pieces") catch default -1
+    buf Array<U8, 16>
+    got := try io.Read(rd, buf) catch default buf[:0]
+    assert got.Len() == 7
+    try Close(rd) catch { fail }
+    closed := false
+    try Close(rd) catch OsError.FAILED { closed = true } catch { }
+    assert closed
+}
+
+test "Stat gives the kind, the size, and the modification time to the nanosecond" {
+    assert Run("mkdir -p build/os_files && printf 12345 > build/os_files/s.txt") == 0
+    assert Run("touch -d @1700000000.123456789 build/os_files/s.txt") == 0
+    info := try Stat("build/os_files/s.txt") catch default FileInfo(FileKind.OTHER, -1, -1)
+    assert info.Kind == FileKind.FILE
+    assert info.Size == 5
+    assert info.ModTime == 1700000000123456789
+    dir := try Stat("build/os_files") catch default FileInfo(FileKind.OTHER, -1, -1)
+    assert dir.Kind == FileKind.DIR
+    assert (try Stat("/dev/null") catch default FileInfo(FileKind.FILE, -1, -1)).Kind == FileKind.OTHER
+    missing := false
+    try Stat("build/os_files/none") catch OsError.NOT_FOUND { missing = true } catch { }
+    assert missing
+    assert Exists("build/os_files/s.txt") and not Exists("build/os_files/none")
+    assert IsDir("build/os_files") and not IsDir("build/os_files/s.txt")
+    notDir := false
+    try Stat("build/os_files/s.txt/x") catch OsError.NOT_DIR { notDir = true } catch { }
+    assert notDir
+}
+
+test "MkDir and MkDirAll make directories" {
+    assert Run("rm -rf build/os_files/m && mkdir -p build/os_files") == 0
+    try MkDirAll("build/os_files/m/x/y/") catch { fail }
+    assert IsDir("build/os_files/m/x/y")
+    try MkDirAll("build/os_files/m/x/y") catch { fail }        # all there already: nothing to do
+    there := false
+    try MkDir("build/os_files/m/x") catch OsError.EXISTS { there = true } catch { }
+    assert there
+    try MkDir("build/os_files/m/z") catch { fail }
+    assert IsDir("build/os_files/m/z")
+    noParent := false
+    try MkDir("build/os_files/m/a/b") catch OsError.NOT_FOUND { noParent = true } catch { }
+    assert noParent
+    try WriteFile("build/os_files/m/f", "") catch { fail }
+    inTheWay := false
+    try MkDirAll("build/os_files/m/f/g") catch OsError.NOT_DIR { inTheWay = true } catch { }
+    assert inTheWay
+}
+
+test "ReadDir, Rename and Remove" {
+    assert Run("rm -rf build/os_files/d && mkdir -p build/os_files/d/sub") == 0
+    try WriteFile("build/os_files/d/b", "2") catch { fail }
+    try WriteFile("build/os_files/d/a", "1") catch { fail }
+    try WriteFile("build/os_files/d/.hidden", "") catch { fail }
+    names := try ReadDir("build/os_files/d") catch default Array<String&>(0)
+    assert names.Len() == 4
+    assert names[0] == ".hidden" and names[1] == "a" and names[2] == "b" and names[3] == "sub"
+    try Rename("build/os_files/d/a", "build/os_files/d/z") catch { fail }
+    try Rename("build/os_files/d/b", "build/os_files/d/z") catch { fail }      # replaces it
+    assert (try ReadFile("build/os_files/d/z") catch default "") == "2"
+    try Remove("build/os_files/d/.hidden") catch { fail }
+    after := try ReadDir("build/os_files/d") catch default Array<String&>(0)
+    assert after.Len() == 2 and after[0] == "sub" and after[1] == "z"
+    full := false
+    try Remove("build/os_files/d") catch OsError.NOT_EMPTY { full = true } catch { }
+    assert full
+    try Remove("build/os_files/d/z") catch { fail }
+    try Remove("build/os_files/d/sub") catch { fail }
+    assert (try ReadDir("build/os_files/d") catch default Array<String&>(1)).Len() == 0
+    gone := false
+    try ReadDir("build/os_files/nothing") catch OsError.NOT_FOUND { gone = true } catch { }
+    assert gone
+    try Rename("build/os_files/nothing", "build/os_files/else") catch OsError.NOT_FOUND { gone = false } catch { }
+    assert not gone
+}
+
+test "ReadLink, RealPath and Cwd" {
+    assert Run("rm -rf build/os_files/l && mkdir -p build/os_files/l && ln -s target.txt build/os_files/l/link") == 0
+    assert (try ReadLink("build/os_files/l/link") catch default "") == "target.txt"
+    notLink := false
+    try ReadLink("build/os_files/l") catch OsError.FAILED { notLink = true } catch { }
+    assert notLink
+    dangling := false
+    try RealPath("build/os_files/l/link") catch OsError.NOT_FOUND { dangling = true } catch { }
+    assert dangling
+    try WriteFile("build/os_files/l/target.txt", "t") catch { fail }
+    real := try RealPath("build/os_files/l/./link") catch default ""
+    cwd := try Cwd() catch default ""
+    assert cwd.StartsWith("/") and real == $cwd "/build/os_files/l/target.txt"
+    assert (try RealPath(".") catch default "") == cwd
+}
+
+test "ReadFile names why it failed" {
+    isDir := false
+    try ReadFile("build") catch OsError.IS_DIR { isDir = true } catch { }
+    assert isDir
+}
+
+# allocates and lets go of a few hundred texts, so storage a closed scope gave back is handed out again - anything
+# still pointing into such storage would read these bytes instead of its own
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i "-------------------------------------------------------------"
+        t += s.Len()
+    }
+    return t
+}
+
+# what Args, Env, ReadDir, ReadLink and RealPath give is built where the caller puts it, never in a scope of their
+# own that has since closed
+test "what os gives back lives where it is put" {
+    assert Run("rm -rf build/os_files/c && mkdir -p build/os_files/c && touch build/os_files/c/aa build/os_files/c/bb") == 0
+    assert Run("ln -s bb build/os_files/c/ln") == 0
+    args := Args()
+    path := try Env("PATH") catch default ""
+    names := try ReadDir("build/os_files/c") catch default Array<String&>(0)
+    link := try ReadLink("build/os_files/c/ln") catch default ""
+    real := try RealPath("build/os_files/c/ln") catch default ""
+    assert churn() > 0
+    assert args[0].Contains("os_test")
+    assert path.Len() > 0 and not path.Contains("-----")
+    assert names.Len() == 3 and names[0] == "aa" and names[1] == "bb" and names[2] == "ln"
+    assert link == "bb"
+    assert real.EndsWith("/build/os_files/c/bb")
+}
+
+test "Exec runs a program without a shell, and gathers what it writes" {
+    r := try Exec(String&["printf", "%s|%s|%s", "two words", "it's", "$HOME;*"]) catch { fail }
+    assert r.Status == 0 and r.Stdout == "two words|it's|$HOME;*" and r.Stderr == ""
+    e := try Exec(String&["sh", "-c", "echo out; echo err >&2; exit 3"]) catch { fail }
+    assert e.Status == 3 and e.Stdout == "out\n" and e.Stderr == "err\n"
+    k := try Exec(String&["sh", "-c", "kill -9 $$"]) catch { fail }
+    assert k.Status == 137 and k.Stdout == ""                 # ended by signal 9: 128 + 9, as a shell says
+}
+
+test "Exec feeds its input to the program's standard input" {
+    c := try Exec(String&["cat"], "line one\nline two") catch { fail }
+    assert c.Status == 0 and c.Stdout == "line one\nline two"
+    w := try Exec(String&["wc", "-c"]) catch { fail }             # no input: the end of the file at once
+    assert w.Stdout.Trim() == "0"
+    bytes := Array<U8>(70000, 'x')
+    big := try Exec(String&["wc", "-c"], bytes) catch { fail }
+    assert big.Stdout.Trim() == "70000"
+}
+
+test "Exec takes any amount of output without waiting on it" {
+    big := try Exec(String&["head", "-c", "3000000", "/dev/zero"]) catch { fail }
+    assert big.Status == 0 and big.Stdout.Len() == 3000000 and big.Stdout[2999999] == 0
+    both := try Exec(String&["sh", "-c", "head -c 200000 /dev/zero; head -c 300000 /dev/zero >&2"]) catch { fail }
+    assert both.Stdout.Len() == 200000 and both.Stderr.Len() == 300000
+}
+
+test "Exec fails only when the program cannot be started" {
+    missing := false
+    try Exec(String&["olang-no-such-program"]) catch OsError.NOT_FOUND { missing = true } catch { }
+    assert missing
+    assert Run("mkdir -p build/os_files && printf '#!/bin/sh\\necho hi\\n' > build/os_files/noexec.sh && chmod -x build/os_files/noexec.sh") == 0
+    denied := false
+    try Exec(String&["build/os_files/noexec.sh"]) catch OsError.DENIED { denied = true } catch { }
+    assert denied
+    nothing := false
+    try Exec(Array<String&>(0)) catch OsError.FAILED { nothing = true } catch { }
+    assert nothing
+    zero := false
+    try Exec(String&["echo", String(U8['a', 0, 'b'])]) catch OsError.FAILED { zero = true } catch { }
+    assert zero
+    assert Run("chmod +x build/os_files/noexec.sh") == 0
+    ok := try Exec(String&["build/os_files/noexec.sh"]) catch { fail }
+    assert ok.Status == 0 and ok.Stdout == "hi\n"
+}
+
+# what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
+fn echoed(i I64) Output {
+    return try Exec(String&["echo", "run " $i]) catch { fail }
+}
+
+test "what Exec gives back lives where it is put" {
+    a := echoed(1)
+    b := echoed(2)
+    assert churn() > 0
+    assert a.Stdout == "run 1\n" and b.Stdout == "run 2\n" and a.Status == 0
+}

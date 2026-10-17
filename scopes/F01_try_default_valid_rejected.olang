@@ -1,0 +1,15 @@
+# R9a: a default that lives exactly where the result lands, rejected because it is compared before the call lands
+import "std/io"
+type Node struct(v I32) { v mut }
+fn fail1() Node& ? { error }
+fn h(a Node&) Node&a {
+    return try fail1() catch default a
+}
+fn main() ? {
+    outer Node& = Node(1)
+    keep Node& = outer
+    for i in range 2 {
+        keep = try fail1() catch default outer
+    }
+    try io.Print($h(outer).v " " $keep.v "\n")
+}

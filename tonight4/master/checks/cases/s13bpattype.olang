@@ -1,0 +1,17 @@
+# check: fail error[S13b]: a pattern here names a case of I32, found 'T'
+# S13b: a nested pattern names a case of the enum at its position
+type T enum {
+    P
+    Q
+}
+type S enum {
+    A(x I32)
+    B
+}
+fn f(s S) I32 {
+    match s {
+        case S.A(T.P) { return 1 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? { }

@@ -1,0 +1,25 @@
+# falsify a per-instance binding by writing the &of field through an alias whose binding is unknown (O23 fallback)
+import "std/io"
+type N struct(v I32) { v mut }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn main() ? {
+    outer N& = N(1)
+    keep N& = outer
+    for i in range 2 {
+        x N& = N(42)
+        for j in range 1 {
+            c := Cur(outer)
+            arr Array<mut Cur&> = Cur&[c]
+            arr[0].at = x
+            keep = c.at
+        }
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

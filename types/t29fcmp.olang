@@ -1,0 +1,8 @@
+# T29f: a declared number without extends still compares (it reads as its base)
+import "std/io"
+type Pct I32
+fn main() ? {
+  p Pct = Pct(5)
+  q Pct = Pct(7)
+  try io.Print($(p < q) " " $(p == 5) " " $(p + 1) " " $(-p) "\n")
+}

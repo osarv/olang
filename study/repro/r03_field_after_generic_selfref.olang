@@ -1,0 +1,12 @@
+# fields declared after a field holding List<mut Widget&> are "unknown struct member" through the list's elements
+type Widget struct(id I32) {
+    id
+    kids mut List<mut Widget&>& = List<mut Widget&>()
+    tag mut I32 = 0
+}
+fn main() ? {
+    root Widget& = Widget(1)
+    root.kids.Push(Widget(2))
+    k := root.kids[0]
+    assert k.tag == 0 and k.id == 2
+}

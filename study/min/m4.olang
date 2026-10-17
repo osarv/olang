@@ -1,0 +1,19 @@
+import "std/io"
+type Widget struct(id I32) {
+    id
+    kids mut List<mut Widget&>& = List<mut Widget&>()
+    tag mut I32 = 0
+    name mut String& = ""
+}
+fn main() ? io.IoError {
+    root Widget& = Widget(1)
+    child Widget& = Widget(2)
+    child.tag = 77
+    child.name = "kid"
+    root.kids.Push(child)
+    k := root.kids[0]
+    try io.Print($k "\n" $root "\n")
+    other Widget& = Widget(2)
+    other.tag = 5
+    try io.Print("eq " $(k == child) " " $(root.kids[0] == other) "\n")
+}

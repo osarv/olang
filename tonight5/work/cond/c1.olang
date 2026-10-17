@@ -1,0 +1,12 @@
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    keep mut Node& = outer.head
+    {
+        inner mut Box& = Box()
+        d Box = outer if c else inner
+        grow(d)
+    }
+    churn()
+    println($rd(keep))
+}

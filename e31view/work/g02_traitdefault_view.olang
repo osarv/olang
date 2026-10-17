@@ -1,0 +1,17 @@
+type Bumper trait {
+    mut Bump()
+}
+fn (x mut <B Bumper>&) Twice() {
+    x.Bump()
+    x.Bump()
+}
+type View struct(d mut Array<I64>&) {
+    d
+}
+fn (v mut View&) Bump() { v.d[0]++ }
+fn main() ? {
+    m := List<View>()
+    m.Push(View(Array<I64>(1)))
+    m[0].Twice()
+    println("view d " $m[0].d[0])
+}

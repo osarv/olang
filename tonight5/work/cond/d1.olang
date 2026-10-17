@@ -1,0 +1,12 @@
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    k1 := outer.head
+    {
+        inner mut Box& = Box()
+        d Box = try pickf(outer, false) catch default inner
+        growv(d)
+    }
+    churn()
+    println($rd(k1))
+}

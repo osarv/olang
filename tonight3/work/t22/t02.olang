@@ -1,0 +1,12 @@
+type P struct() {
+    n I64 = 0
+}
+G P = P()
+type W struct() { k I64 = 0 }
+fn (w W&) Call() P& { return G }
+fn get(f fn() mut P&) mut P& { return f() }
+fn main() ? {
+    q := get(W())
+    q.n = 5
+    println($G.n)
+}

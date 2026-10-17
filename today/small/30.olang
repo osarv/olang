@@ -1,0 +1,7 @@
+# E11a: the same through a prelude generic (List's join of rendered values)
+fn main() ? {
+    l := List<F32>()
+    l.Push(0.1)
+    m := l.Iter().Map(fn(x F32) String& { return $x })
+    println($m.Len())
+}

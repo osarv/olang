@@ -1,0 +1,3 @@
+# G22: <N> written twice in a signature
+fn f(a Array<I64, <N>>&, b Array<I64, <N>>&) I64 { return N }
+fn main() ? { println($f(I64[1, 2], I64[3, 4])) }

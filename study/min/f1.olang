@@ -1,0 +1,17 @@
+import "std/map"
+type Node struct(v I64) {
+    v mut
+}
+type C struct() {
+    index mut map.Map<I64, mut Node&>& = map.Map<I64, mut Node&>()
+}
+fn (c mut C&) bump(k I64) ? {
+    n := try c.index.Get(k)
+    n.v++
+}
+fn main() ? {
+    c := C()
+    c.index.Put(1, Node(5))
+    try c.bump(1)
+    assert (try c.index.Get(1)).v == 6
+}

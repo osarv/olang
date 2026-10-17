@@ -1,0 +1,24 @@
+import "std/io"
+
+Sink mut I64 = 0
+
+type H struct(n I32) {
+    n
+} destruct {
+    junk := Array<I32>(64, 99)
+    Sink = Sink + junk.Len()
+}
+
+fn mk(c Bool) Array<I32> {
+    h H& = H(1)
+    if c {
+        a := Array<I32>(8, 5)
+        return a
+    }
+    return Array<I32>(1, 0)
+}
+
+fn main() ? io.IoError {
+    r := mk(Sink == 0)
+    try io.Print($r "\n")
+}

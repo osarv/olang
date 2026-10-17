@@ -1,0 +1,7 @@
+# check: fail error[X2]: fn() cannot cross the C boundary
+# X2: a function value crosses the C boundary only to the runtime's own functions (a name beginning "__olang_"), which
+# call it on threads they made themselves (os.RunOnStack) - never to a C function, which could call it on any thread,
+# or after the call
+extern fn atexit(f fn()) I32
+
+fn main() ? { }

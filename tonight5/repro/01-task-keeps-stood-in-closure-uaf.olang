@@ -1,0 +1,39 @@
+# NEW (this batch's P2 env stand-ins). A function value a spawned call is handed - or the closure it calls through - is
+# replaced at the spawn by a COPY of its environment made in the join block's arena (__olang_env_standin), each captured
+# scope swapped for a sub-scope also made there. Nothing stops the task from keeping that copy: returning it into a
+# spawn target (here), or storing it (spawn keep(fns, g) with keep pushing g into a List outside the join, see
+# 01b). After the join block closes the copy and its sub-scope headers are reclaimed, and a later call reads the
+# environment out of freed memory and allocates through a dead scope header.
+#     expected: "42", "42", "true" (as -i prints, and as master's -b prints)
+#     actual:   -b and -d segfault (status 139); built -b -s / -d -s: "use after scope closed: storage a closed
+#               scope gave back was read or written"
+# Even where nothing is freed, identity changes: "r is g" is false at run time (01c), true under -i and on master.
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn id(f fn() I64) fn() I64 { return f }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 {
+        n.next = Node(n.v + 41)
+        return n.next.v
+    }
+    r fn() I64 = g
+    join {
+        spawn r = id(g)
+    }
+    churn()
+    println($r())
+    churn()
+    println($n.next.v)
+    println($(r is g))
+}

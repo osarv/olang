@@ -1,0 +1,4 @@
+error E { A B }
+test "x" {
+    assert 1 == 1
+}

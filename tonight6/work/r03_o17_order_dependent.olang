@@ -1,0 +1,14 @@
+# OVER-REJECTION (O17), order-dependent: walking a List<List<String&>> and indexing each inner list compiles - until
+# an earlier statement of the same block reads one element through rows[0][0]. Then r[0] in the walk is "this
+# value's references live where its own storage does not, and the callee can store through it" (List.At stores
+# nothing). Replace "rows[0][0]" by "y" and it compiles. Met in a CSV reader (column type inference: the first row's
+# kind, then every row's).
+fn main() ? {
+    rows := List<List<String&>>()
+    a := List<String&>()
+    a.Push("x")
+    rows.Push(a)
+    first := rows[0][0]
+    for r in rows { println(r[0]) }
+    println(first)
+}

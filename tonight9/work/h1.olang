@@ -1,0 +1,28 @@
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn main() ? {
+    ua := List<List<I64>>()
+    ua.Push(List<I64>())
+    ub := List<List<I64>>()
+    ub.Push(List<I64>())
+    ra mut List<List<I64>>& = ua
+    rb mut List<List<I64>>& = ub
+    fa := fn(i I64) {
+        ra[0].Push(i)
+    }
+    fb := fn(i I64) {
+        rb[0].Push(i)
+    }
+    c mut Node& = Node(0)
+    join {
+        spawn work(fa, 200000)
+        spawn work(fb, 200000)
+        for i in range 200000 { c.next = Node(i) }
+    }
+    println($ua[0].Len() " " $ub[0].Len() " " $c.next.v)
+}

@@ -1,0 +1,22 @@
+# BUG (silent lost write): a mut method (or a mut& argument) on a List element writes a copy.
+# E31 rejects "l[0].N = 5" ("this writes into a value a call gave back, a copy no one holds") but accepts
+# "l[0].Add()" and "bump(l[0])", whose writes go to the same unheld copy. An Array element is written in place.
+# Expected: a compile-time error as for the field write (or the write reaching the element). Actual: array 3, list 0.
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+fn bump(a mut Acc&) { a.N++ }
+
+fn main() ? {
+    arr := Array<Acc>(1)
+    arr[0].Add()
+    arr[0].Add()
+    bump(arr[0])
+    l := List<Acc>()
+    l.Push(Acc())
+    l[0].Add()
+    l[0].Add()
+    bump(l[0])
+    println("array " $arr[0].N " list " $l[0].N)
+}

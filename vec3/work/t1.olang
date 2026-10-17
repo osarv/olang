@@ -1,0 +1,26 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Texty trait {
+    Text() String&
+}
+type CB struct() {
+    text own mut String& = "bb"
+}
+fn (c CB&) Text() String&c { return c.text }
+fn textOf(x <T Texty>&) String&x { return x.Text() }
+fn use(c mut CB&) {
+    t := textOf(c)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

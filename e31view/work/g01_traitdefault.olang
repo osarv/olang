@@ -1,0 +1,22 @@
+# a trait default called on x[i]: judged by the instantiation for the element type
+type Bumper trait {
+    mut Bump()
+}
+fn (x mut <B Bumper>&) Twice() {
+    x.Bump()
+    x.Bump()
+}
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Bump() { a.N++ }
+type View struct(d mut Array<I64>&) {
+    d
+}
+fn (v mut View&) Bump() { v.d[0]++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l[0].Twice()
+    println("acc N " $l[0].N)
+}

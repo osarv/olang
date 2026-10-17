@@ -1,0 +1,15 @@
+# O25h: storing a by-value parameter holding a reference into a container reached through a reference parameter
+import "std/io"
+type Named struct(id I64, name String&) {
+  id
+  name
+}
+type Shelf struct() {
+  slots mut Array<Named>& = Array<Named>(4)
+}
+fn put(s mut Shelf&, x Named) { s.slots[0] = x }
+fn main() ? {
+  s := Shelf()
+  put(s, Named(1, "x"))
+  try io.Print($s.slots[0].name "\n")
+}

@@ -1,0 +1,5 @@
+G := 5
+fn main() ? {
+  G = 6
+  println($G)
+}

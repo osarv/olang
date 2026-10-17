@@ -1,0 +1,7 @@
+fn main() ? {
+    keep Box& = Box(0)
+    arr := Box[Box(1), Box(2)]
+    for i, x in arr { keep = borrow(x) }
+    churn()
+    println($keep.v)
+}

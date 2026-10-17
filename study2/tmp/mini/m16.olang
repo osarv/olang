@@ -1,0 +1,8 @@
+import "../../ast"
+import "../../scan"
+fn main() ? {
+    n I64 = 1000000
+    keep := List<ast.Expr&>()
+    for i in range n { keep.Push(null) }
+    println($keep.Len())
+}

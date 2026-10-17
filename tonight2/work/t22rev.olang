@@ -1,0 +1,14 @@
+type P struct(v I64) { v }
+fn w(n mut P&) { n.v = 9 }
+fn r(n P&) I64 { return n.v }
+fn mk() mut P& { return P(5) }
+fn ro() P& { return P(6) }
+Gp P& = P(1)
+fn main() ? {
+    f fn(n P&) = w
+    f(Gp)
+    g fn() mut P& = ro
+    h := g()
+    h.v = 3
+    println($Gp.v " " $h.v)
+}

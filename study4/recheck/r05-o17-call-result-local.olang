@@ -1,0 +1,20 @@
+# r05 OVER-REJECTION - O17 (D15): a value local declared with ":=" from a call whose result holds references borrowed
+# from an argument cannot be lent even to a READ-ONLY receiver: "toks := split(line); toks.Len()" is O17, "the callee
+# can store through it" - List.Len cannot. The same value declared with its type, "toks List<String&> = split(line)",
+# compiles, as do split(line).Len() and a list filled in place. Hit at once by a tokenizer returning its tokens.
+#
+# expected: 1
+# actual: error[O17] at line 16 "this value's references live where its own storage does not, and the callee can store
+#         through it - declare it a reference where they live ('x T&y = ...')"
+fn split(line String&) List<String&> {
+    toks := List<String&>()
+    toks.Push(line[0:1])
+    return toks
+}
+fn count(line String&) I64 {
+    toks := split(line)
+    return toks.Len()
+}
+fn main() ? {
+    println($count("ab"))
+}

@@ -1,0 +1,11 @@
+# G25: an argument computed by a call is the same type as its value written
+fn twice(n I64) I64 { return n * 2 }
+Four I64 = twice(2)
+type Box<N I64> struct() { a mut Array<I32, N> }
+fn take(b Box<4>&) I64 { return b.a.Len() }
+fn main() ? {
+    x Array<I32, twice(2)> = Array<I32, 4>()
+    b := Box<twice(2)>()
+    c := Box<Four>()
+    println($x.Len() " " $take(b) " " $take(c))
+}

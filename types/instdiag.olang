@@ -1,0 +1,7 @@
+# an error inside an instantiation: which call produced it?
+type P struct(x I32) { x }
+fn add(a <T>, b <T>) <T> { return a + b }
+fn main() ? {
+  a := add(1, 2)
+  b := add(P(1), P(2))
+}

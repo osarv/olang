@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F1: the same with a Vec's view as the argument
+fn mk(a mut Array<I64>&, n I64) mut Array<I64>& {
+    out mut Array<I64>&a = Array<I64>(2, n)
+    return out
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := mk(v.ViewMut(), 7)
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0] " " $d[1])
+}

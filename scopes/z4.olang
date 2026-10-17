@@ -1,0 +1,21 @@
+# the same through a ListIter constructed directly, and through a typed value declaration
+import "std/io"
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I64>(8, 7)
+    }
+}
+fn main() ? {
+    base List<I64>& = List<I64>()
+    base.Push(1)
+    it ListIter<I64> = ListIter<I64>(base)
+    for i in range 2 {
+        l List<I64>& = List<I64>()
+        for k in range 20 { l.Push(42) }
+        it = ListIter<I64>(l)
+    }
+    churn()
+    v := try it.Next()
+    try io.Print($v "\n")
+}

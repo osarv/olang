@@ -1,0 +1,6 @@
+ 200     13 bytes  4 attempt(s)  http://127.0.0.1:29571/hello.txt  (no response)
+ 200 108890 bytes  4 attempt(s)  http://127.0.0.1:29571/numbers.txt  (no response)
+ 200     13 bytes  4 attempt(s)  http://127.0.0.1:29571/sub/data.json  (no response)
+ 404    335 bytes  4 attempt(s)  http://127.0.0.1:29571/missing.txt  (no response)
+   -      0 bytes  7 attempt(s)  http://127.0.0.1:1/never  (no response)
+self-check: 0 problem(s)

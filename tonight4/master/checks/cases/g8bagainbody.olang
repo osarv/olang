@@ -1,0 +1,12 @@
+# check: fail error[G8b]: T was introduced already - write it 'T', not '<T>'
+# G8b: a body writes its signature's variables bare - one error at the declaration, however many instantiations
+# also: compilation failed with 1 error
+fn twice(a <T>) T {
+    x <T> = a
+    return x
+}
+fn main() ? {
+    assert twice(1) == 1
+    assert twice(2.5) == 2.5
+    assert twice(I64(3)) == 3
+}

@@ -1,0 +1,15 @@
+# D9b/T7c: a generic's mut by-value parameter bound to a fixed array is the callee's own copy
+fn poke(a mut <T>) <T> {
+    a[0] = a[1]
+    return a
+}
+fn run() String {
+    x Array<I64, 3> = I64[1, 2, 3]
+    y := poke(x)
+    return $x " " $y
+}
+B String = run()
+fn main() ? {
+    println(run())
+    println(B)
+}

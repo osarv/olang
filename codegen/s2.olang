@@ -1,0 +1,35 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+}
+
+type Holder struct() {
+    item mut Node& = null
+}
+
+fn fill(h mut Holder&, v I64) {
+    h.item = Node(v)
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 10 {
+        b := Array<I64>(16, 99)
+        t = t + b[0]
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    h Holder& = Holder()
+    join {
+        spawn fill(h, 5)
+    }
+    k := churn()
+    try io.Print($h.item.v " " $k "\n")
+    h2 Holder& = Holder()
+    fill(h2, 6)
+    k2 := churn()
+    try io.Print($h2.item.v " " $k2 "\n")
+}

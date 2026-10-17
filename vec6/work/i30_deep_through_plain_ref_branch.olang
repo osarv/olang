@@ -1,0 +1,37 @@
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n "-text-of-the-leaf"
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf& = Leaf(k)
+}
+type Outer struct() {
+    o own mut Inner& = Inner(1)
+    p mut Inner& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn (x Outer&) First(c Bool) Inner&x {
+    if c { return x.o }
+    return x.p
+}
+fn (x Outer&) Deep(c Bool) Leaf&x { return x.First(c).deep }
+fn work(a mut Inner&) {
+    v := Outer()
+    v.p = a
+    d := v.Deep(false)
+    a.deep = Leaf(99)
+    churn()
+    println(d.text)
+}
+fn main() ? {
+    a mut Inner& = Inner(7)
+    work(a)
+}

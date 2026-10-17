@@ -1,0 +1,35 @@
+# P2/D16e (pre-existing: db2af5d gives the same; not covered by rvfix's RunOnStack stand-in): a spawned lambda
+# ("spawn fn() { ... }") that builds into a scope it reached through a CAPTURED reference - here each task pushes nodes
+# into a List the spawner owns - allocates straight into the spawner's block arena from the task's thread. P2 promises
+# "no arena is ever bumped by more than one thread" (a scope a task is handed gets a private stand-in, folded back at
+# the join), and a spawned CALL gets one ("spawn fill(a, 0)" with the same body is correct every run), but the scopes a
+# lambda's captures carry are used as they are. Four tasks bump main's block arena at once: chunks are handed out twice.
+# expected: "wrong elements: 0" every run (or an error at the spawn)
+# actual:   -b: segfaults (2 runs in 5 here) or "wrong elements: 1679" (varies); db2af5d: "wrong elements: 7927";
+#           -r: ThreadSanitizer reports races in List.grow and a SEGV
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    b mut List<N&>& = List<N&>()
+    c mut List<N&>& = List<N&>()
+    d mut List<N&>& = List<N&>()
+    join {
+        spawn fn() { for i in range 300000 { a.Push(N(i)) } }
+        spawn fn() { for i in range 300000 { b.Push(N(i + 1000000)) } }
+        spawn fn() { for i in range 300000 { c.Push(N(i + 2000000)) } }
+        spawn fn() { for i in range 300000 { d.Push(N(i + 3000000)) } }
+    }
+    bad I64 = 0
+    i I64 = 0
+    for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
+    i = 0
+    for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
+    i = 0
+    for x in c { if x.v != i + 2000000 or x.w != 3 * (i + 2000000) { bad++ } i++ }
+    i = 0
+    for x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } i++ }
+    println("wrong elements: " $bad)
+}

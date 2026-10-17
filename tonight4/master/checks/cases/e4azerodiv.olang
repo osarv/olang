@@ -1,0 +1,5 @@
+# check: fail division by zero
+# E4a/E6a: a divisor built only from literals is a compile-time constant, and zero is an error at it
+fn main() ? {
+    x I32 = 7 % (3 - 3)
+}

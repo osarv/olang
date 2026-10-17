@@ -1,0 +1,75 @@
+# own5 F1: a callee that keeps an '&p' field of its argument (read at a derived scope, O23a) escapes O38's confinement.
+# ownKeepDests/calleeMayHoldArg match an obligation only when its 'longer' is the parameter's own scope variable; here
+# it is the parameter's DERIVED scope variable (derivedFrom == the parameter), so the call is taken to keep nothing and
+# the borrowed copy 'b' - held through W's '&o' field - ends up in the list (or a struct field) while v releases.
+# -b -s: "use after scope closed" (each of the three); -b: segfault; valgrind: invalid read of a block freed by
+# __olang_own_free; -i: "1 leaf5 / 2 leaf6 / 3 leaf7" (it never frees)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type W struct(o Outer&) {
+    f Outer&o = o                 # an '&p' field: lives where the argument for o does
+}
+type Big struct() {
+    x Outer& = null
+}
+fn keepVal(l mut List<Outer&>&, w W) { l.Push(w.f) }     # by-value parameter
+fn (w W&) into(l mut List<Outer&>&) { l.Push(w.f) }      # receiver
+fn setBig(g mut Big&, w W&) { g.x = w.f }                # into another argument's field
+fn viaValue() {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v                        # a borrowed copy
+    l := List<Outer&>()
+    w := W(b)                     # w holds b's loans (a local, allowed)
+    keepVal(l, w)                 # accepted: the keep is through w's derived scope
+    v.o = null                    # accepted
+    churn()
+    println($l[0].o.k " " $l[0].o.deep.text)
+}
+fn viaMethod() {
+    v := Outer()
+    v.o = Inner(2)
+    v.o.deep = Leaf(6)
+    b := v
+    l := List<Outer&>()
+    w := W(b)
+    w.into(l)
+    v.o = null
+    churn()
+    println($l[0].o.k " " $l[0].o.deep.text)
+}
+fn viaField() {
+    v := Outer()
+    v.o = Inner(3)
+    v.o.deep = Leaf(7)
+    b := v
+    g := Big()
+    w := W(b)
+    setBig(g, w)
+    v.o = null
+    churn()
+    println($g.x.o.k " " $g.x.o.deep.text)
+}
+fn main() ? {
+    viaValue()
+    viaMethod()
+    viaField()
+}

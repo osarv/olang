@@ -1,0 +1,23 @@
+# NEW, CONFIRMED: segfault. A Call adapter for a receiver part held in a local function value. cgCallAdapterValue
+# emits __olang_scope_escape(instScope) - the receiver's scope, null - since Call may build (it renders text in its own
+# block); the adapter's prologue would then call __olang_scope_mine(null) too. The walk counts only where the adapter
+# object is placed (g's block), so it accepts this. 'apply(b.c)' (adapter placed where the receiver lives) is refused.
+# e27b83b -b: exit 139. 7345ff9: 'b2'. b6259d1: refused (purity).
+type Ctr struct() {
+    v I64 = 3
+}
+fn (c Ctr&) Call() I64 {
+    s := $c.v "x"
+    return s.Len()
+}
+type Bag struct(c mut Ctr&) {
+    c
+}
+fn (b Bag&) Str() String {
+    g fn() I64 = b.c
+    return "b" $g()
+}
+fn main() ? {
+    b := Bag(Ctr())
+    println($b)
+}

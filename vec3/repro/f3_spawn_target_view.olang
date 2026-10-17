@@ -1,0 +1,26 @@
+# F3 (older, since a6fbc53 / Vec phase 1): a spawn target set from a task's borrowed own result. The own walk's
+# spawn-target check collects loans from the call's ARGUMENTS only; the call's own borrowed-own-result loan
+# (ownResultRegionsOf) is never looked at, so d holds the view past the join with no loan.
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn grow(w mut Vec<I64>&) {
+    d Array<I64>&w = null
+    join {
+        spawn d = w.View()          # the task's call gives a borrowed own result into d
+    }
+    for i in range 1000 { w.Push(i + 100) }   # frees the buffer d views: not refused
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    grow(v)
+}

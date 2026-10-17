@@ -1,0 +1,25 @@
+# O8b/P1e: memory a finished task's scopes gave back stays in its idle worker's pool, out of reach of every other
+# thread - measured as the process's resident memory once everything is closed
+import "std/os"
+fn rss() String {
+    s := try os.ReadFile("/proc/self/status") catch default ""
+    for line in s.Lines() {
+        if line.StartsWith("VmRSS") { return line }
+    }
+    return "?"
+}
+fn work(n I64) I64 {
+    a := Array<I64>(n, 1)
+    s I64 = 0
+    for x in a { s = s + x }
+    return s
+}
+fn main() ? {
+    println("start      " $rss())
+    join {
+        for t in range 4 { spawn work(25000000) }
+    }
+    println("after join " $rss())
+    s := work(25000000)
+    println("main again " $rss() " " $s)
+}

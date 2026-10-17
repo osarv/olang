@@ -1,0 +1,14 @@
+type Nums Array<I64>
+fn bumpN(n mut Nums&) { n[0]++ }
+type Bag struct(a mut Array<I64>&) {
+    a
+}
+fn (b Bag&) Str() String {
+    bumpN(Nums(b.a))
+    return "b" $b.a[0]
+}
+fn main() ? {
+    b := Bag(I64[0, 0])
+    println($b)
+    println($b)
+}

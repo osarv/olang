@@ -1,0 +1,7 @@
+# check: fail it reads the bits of a signalling NaN
+# E33a: moving a signalling NaN may quiet it, so its bits are not decided while compiling
+error E { X }
+if U32(0x7F800001).F32FromBits().Bits() == 0x7F800001 {
+    fn g() { }
+}
+fn main() ? E { }

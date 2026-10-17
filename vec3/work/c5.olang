@@ -1,0 +1,18 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn f(v mut Vec<I64>&) Vec<I64> { return take v }
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := f(v)
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0] " " $d[1])
+}

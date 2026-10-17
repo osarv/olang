@@ -1,0 +1,21 @@
+# NEW in 7345ff9, CONFIRMED. A lookup with a default in Str - 'try find(b.head, 9) catch default Node(0, null)', find
+# borrowing from its argument: the default is built where the result lives (R9a) - null. Internal compiler error.
+# new -b: internal compiler error. d6c7f52 and d0abfe8: 0.
+type Node struct(v I64, next Node&) {
+    v
+    next
+}
+type Bag struct(head Node&) {
+    head
+}
+fn find(n Node&, k I64) Node&n ? {
+    for c := n, c != null, c = c.next { if c.v == k { return c } }
+    error
+}
+fn (b Bag&) Str() String {
+    x := try find(b.head, 9) catch default Node(0, null)
+    return $x.v
+}
+fn main() ? {
+    println($Bag(Node(1, Node(5, null))))
+}

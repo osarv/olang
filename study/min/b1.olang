@@ -1,0 +1,7 @@
+fn mk() String& { return "abc" }
+fn main() ? {
+    l := List<Pair<String&, I64>>()
+    k := mk()
+    l.Push(Pair(k, I64(3)))
+    assert l.Len() == 1
+}

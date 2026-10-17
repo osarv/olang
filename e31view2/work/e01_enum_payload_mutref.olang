@@ -1,0 +1,27 @@
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+type E enum {
+    Holds(c mut Acc&)
+    Nothing
+}
+fn poke(e E) {
+    match e {
+        case E.Holds(c) { c.N++ }
+        case E.Nothing { }
+    }
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    poke(E.Holds(l[0]))
+    a := Acc[Acc()]
+    poke(E.Holds(a[0]))
+    println("list N " $l[0].N " array N " $a[0].N)
+}

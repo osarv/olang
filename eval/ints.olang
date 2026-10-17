@@ -1,0 +1,58 @@
+import "std/io"
+
+fn ops8(a I8, b I8) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(-a) " " $(a << 3) " " $(a >> 1) " " $(~a) " " $(a & b) " " $(a | b) " " $(a ^ b) " " $(a < b) }
+fn opsu8(a U8, b U8) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(a << 3) " " $(a >> 1) " " $(~a) " " $(a < b) }
+fn ops16(a I16, b I16) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(-a) " " $(a << 9) " " $(a >> 3) " " $(~a) }
+fn opsu16(a U16, b U16) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(a << 9) " " $(a >> 3) " " $(~a) " " $(a < b)}
+fn ops32(a I32, b I32) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(-a) " " $(a << 17) " " $(a >> 5) " " $(~a) }
+fn opsu32(a U32, b U32) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(a << 17) " " $(a >> 5) " " $(~a) " " $(a < b) }
+fn ops64(a I64, b I64) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(-a) " " $(a << 40) " " $(a >> 7) " " $(~a) }
+fn opsu64(a U64, b U64) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a % b) " " $(a << 40) " " $(a >> 7) " " $(~a) " " $(a < b) " " $(a > b) }
+fn incs(a mut I8, b mut U8) String {
+    a++
+    b++
+    c I8 = a
+    c--
+    return $a " " $b " " $c
+}
+
+B1 String = ops8(-100, 77)
+B2 String = opsu8(200, 77)
+B3 String = ops16(-30000, 1234)
+B4 String = opsu16(60000, 1234)
+B5 String = ops32(-2000000000, 123456)
+B6 String = opsu32(4000000000, 123456)
+B7 String = ops64(-9000000000000000000, 1234567891234)
+B8 String = opsu64(18000000000000000000, 1234567891234)
+B9 String = incs(127, 255)
+
+M8a mut I8 = -100
+M8b mut I8 = 77
+MU8a mut U8 = 200
+MU8b mut U8 = 77
+M16a mut I16 = -30000
+M16b mut I16 = 1234
+MU16a mut U16 = 60000
+MU16b mut U16 = 1234
+M32a mut I32 = -2000000000
+M32b mut I32 = 123456
+MU32a mut U32 = 4000000000
+MU32b mut U32 = 123456
+M64a mut I64 = -9000000000000000000
+M64b mut I64 = 1234567891234
+MU64a mut U64 = 18000000000000000000
+MU64b mut U64 = 1234567891234
+MI mut I8 = 127
+MU mut U8 = 255
+
+fn main() ? io.IoError {
+    try io.Print("i8  " $B1 "\n    " $ops8(M8a, M8b) "\n")
+    try io.Print("u8  " $B2 "\n    " $opsu8(MU8a, MU8b) "\n")
+    try io.Print("i16 " $B3 "\n    " $ops16(M16a, M16b) "\n")
+    try io.Print("u16 " $B4 "\n    " $opsu16(MU16a, MU16b) "\n")
+    try io.Print("i32 " $B5 "\n    " $ops32(M32a, M32b) "\n")
+    try io.Print("u32 " $B6 "\n    " $opsu32(MU32a, MU32b) "\n")
+    try io.Print("i64 " $B7 "\n    " $ops64(M64a, M64b) "\n")
+    try io.Print("u64 " $B8 "\n    " $opsu64(MU64a, MU64b) "\n")
+    try io.Print("inc " $B9 "\n    " $incs(MI, MU) "\n")
+}

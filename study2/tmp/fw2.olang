@@ -1,0 +1,15 @@
+type A enum {
+    Leaf(v I64)
+    Box(b B&)
+}
+type S struct(a A&) {
+    a
+}
+type B enum {
+    One(s S&)
+    Two(v I64)
+}
+fn main() ? {
+    x A& = A.Box(B.Two(3))
+    println($x)
+}

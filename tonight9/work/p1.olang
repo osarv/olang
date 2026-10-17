@@ -1,0 +1,28 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        u := Node(j + 1)
+        s = s + t.v + u.v
+    }
+    return s
+}
+fn setg(i I64) {
+    k I64 = 0
+    G.next, k = Node(i), i
+}
+fn main() ? {
+    setg(5)
+    x := churn()
+    G.next, x = Node(9), x + 1
+    y := churn()
+    g := G
+    g.next.next, y = Node(11), 3
+    z := churn()
+    println($G.next.v " " $G.next.next.v " " $x " " $y " " $z)
+}

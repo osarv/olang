@@ -1,0 +1,12 @@
+# spawned lambda capturing a value String declared in the loop body (T7b borrow)
+import "std/io"
+fn main() ? {
+    total Array<I64>& = Array<I64>(4)
+    join {
+        for i in range 4 {
+            s := $i "abc"
+            spawn fn() { total[i] = s.Len() }
+        }
+    }
+    try io.Print($total[3] "\n")
+}

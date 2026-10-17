@@ -1,0 +1,31 @@
+import "std/io"
+type Pt struct(name String&, n I32) {
+    name
+    n
+}
+type Wr enum {
+    T(s String&)
+    N(n I32)
+}
+type F8h struct(v F8E4M3) {
+    v
+}
+fn cmp(k I32) String {
+    a := Pt("x" $k, 1)
+    b := Pt("x" $k, 1)
+    e1 := Wr.T("y" $k)
+    e2 := Wr.T("y" $k)
+    arrs := Array<String&>(1)
+    arrs[0] = "z" $k
+    arrs2 := Array<String&>(1)
+    arrs2[0] = "z" $k
+    f1 := F8h(F8E4M3(0.0))
+    f2 := F8h(F8E4M3(-0.0))
+    n1 := F8h(F8E4M3(0.0 / 0.0))
+    return $(a == b) " " $(e1 == e2) " " $(arrs == arrs2) " " $(f1 == f2) " " $(n1 == n1)
+}
+B String = cmp(1)
+M mut I32 = 1
+fn main() ? io.IoError {
+    try io.Print($B "\n" $cmp(M) "\n")
+}

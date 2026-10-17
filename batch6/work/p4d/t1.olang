@@ -1,0 +1,18 @@
+# P4d: targets of failing tasks, read after the join through several shapes
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn a1(n I64) I64 {
+    x I64 = 0
+    try join {
+        spawn x = try fn() I64 ? E { return try f(n) }()
+    } catch E { }
+    return x
+}
+fn main() ? {
+    println($a1(-1))
+}

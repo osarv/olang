@@ -1,0 +1,7 @@
+import "std/os"
+fn main() ? {
+    a := os.Args()
+    for i in range 1, a.Len() {
+        try os.RemoveAll(a[i]) catch os.OsError { println("error " $a[i]) }
+    }
+}

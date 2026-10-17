@@ -1,0 +1,7 @@
+import "std/os"
+fn main() ? { }
+test "RunOnStack(0) is given the least stack a thread may have" {
+    x mut Array<I64>& = Array<I64>(1)
+    os.RunOnStack(0, fn() { x[0] = 7 })
+    assert x[0] == 7
+}

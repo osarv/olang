@@ -1,0 +1,16 @@
+type V struct(n I64) {
+    d mut Array<I64>& = Array<I64>(n, 0)
+}
+fn (v V&) At(i I64) I64 { return v.d[i] }
+fn (v mut V&) SetAt(i I64, x I64) { v.d[i] = x }
+type H struct() {
+    v V = V(4)
+    w I64 = 0
+}
+fn main() ? {
+    l := List<H>()
+    l.Push(H())
+    arr := Array<H>(2, H())
+    arr[0].v[1] += 5
+    println($arr[0].v[1] " " $arr[1].v[1])
+}

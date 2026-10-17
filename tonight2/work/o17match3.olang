@@ -1,0 +1,40 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type E enum {
+    Has(n mut Node&)
+    No
+}
+type Box struct() {
+    e E = E.Has(Node())
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn grow(b mut Box&) {
+    if b.e is E.Has {
+        m := b.e as E.Has
+        m.next = Node()
+        m.next.v = 42
+    }
+}
+fn bump(src mut W&) {
+    b := src.b
+    grow(b)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($(w.b.e as E.Has).next.v)
+}

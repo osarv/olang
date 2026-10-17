@@ -1,0 +1,20 @@
+mkdir -p build/obj
+mkdir -p build/obj
+mkdir -p build/obj
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/codegen.c -o build/obj/codegen.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/comptime.c -o build/obj/comptime.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/errmsg.c -o build/obj/errmsg.o
+mkdir -p build/obj
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/main.c -o build/obj/main.o
+mkdir -p build/obj
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/runtime.c -o build/obj/runtime.o
+mkdir -p build/obj
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/semantic.c -o build/obj/semantic.o
+mkdir -p build/obj
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/syntax.c -o build/obj/syntax.o
+mkdir -p build/obj
+mkdir -p build/obj
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/token.c -o build/obj/token.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP -c bootstrap/util.c -o build/obj/util.o
+gcc -Wall -Werror -Wextra -Wpedantic -g -MMD -MP build/obj/codegen.o build/obj/comptime.o build/obj/errmsg.o build/obj/main.o build/obj/runtime.o build/obj/semantic.o build/obj/syntax.o build/obj/token.o build/obj/util.o -o build/out -lm -lffi -ldl -lpthread
+done 0

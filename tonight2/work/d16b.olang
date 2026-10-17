@@ -1,0 +1,16 @@
+error E { X }
+G := fn(a I64, b I64) I64 { return a * b }(6, 7)
+fn gen(v <T>) T { return fn(x T) T { return x }(v) }
+fn run() I64 {
+    xs := I64[fn(k I64) I64 { return k + 1 }(i) for i in range 4]
+    r := try fn(k I64) I64 ? E {
+        if k > 5 { error E.X }
+        return k
+    }(9) catch default -1
+    s := fn() String& { return "abc" $G }()
+    return xs[3] * 1000 + r * 100 + gen(7) + s.Len() * 1000000
+}
+B := run()
+fn main() ? {
+    println($G " " $B " " $run())
+}

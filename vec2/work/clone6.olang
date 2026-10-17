@@ -1,0 +1,9 @@
+type N struct(k I64) {
+    k
+}
+fn main() ? {
+    w := Vec<N&>()
+    w.Push(N(1))
+    c := w.Clone()
+    println($c.Len())
+}

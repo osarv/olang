@@ -1,0 +1,131 @@
+# An inventory: a trait used as a constraint on generic helpers, declared number types with "extends",
+# checked arithmetic with try, "is"/"as" on an enum, a generic stack whose Pop fails when empty, and globals
+# computed while compiling.
+import "std/io"
+
+type Cents extends I64
+type Grams extends I64
+
+type Priced trait {
+    Price() Cents
+    Name() String&
+}
+
+type Book struct(title String&, price Cents, pages I32) {
+    title
+    price
+    pages
+}
+fn (b Book&) Price() Cents { return b.price }
+fn (b Book&) Name() String& { return $b.title }
+
+type Food struct(name String&, price Cents, weight Grams) {
+    name
+    price
+    weight
+}
+fn (f Food&) Price() Cents { return f.price }
+fn (f Food&) Name() String& { return $f.name }
+
+# the cheapest of a non-empty array of anything priced
+fn cheapest(xs Array<<T Priced>>&) <T> {
+    # (by index: "best = x" with x the loop's copy is rejected, min/h6.olang)
+    bi I64 = 0
+    for i in range 1, xs.Len() {
+        if xs[i].Price() < xs[bi].Price() { bi = i }
+    }
+    return xs[bi]
+}
+
+fn totalPrice(xs Array<<T Priced>>&) Cents ? BuiltinError {
+    t Cents = Cents(0)
+    for x in xs { t = Cents(try (I64(t) + I64(x.Price()))) }
+    return t
+}
+
+type Stack<T> struct() {
+    items mut List<<T>>& = List<<T>>()
+    top mut I64 = 0
+}
+
+error StackError {
+    EMPTY
+}
+
+fn (s mut Stack<<T>>&) Push(x <T>) {
+    if s.top < s.items.Len() { s.items[s.top] = x } else { s.items.Push(x) }
+    s.top++
+}
+
+fn (s mut Stack<<T>>&) Pop() <T> ? StackError {
+    if s.top == 0 { error StackError.EMPTY }
+    s.top--
+    return s.items[s.top]
+}
+
+type Change enum {
+    Restock(sku I32, count I32)
+    Sell(sku I32, count I32)
+    Reprice(sku I32, to Cents)
+    Note(text String&)
+}
+
+fn mulChecked(a I64, b I64) I64 ? BuiltinError { return try (a * b) }
+
+fn fact(n I64) I64 {
+    r I64 = 1
+    for i in range 2, n + 1 { r *= i }
+    return r
+}
+
+Fact15 I64 = fact(15)
+Primes Array<I32> = I32[x for x in range 2, 50 if isPrime(x)]
+fn isPrime(n I32) Bool {
+    for d in range 2, n {
+        if d * d > n { break }
+        if n % d == 0 { return false }
+    }
+    return true
+}
+
+fn main() ? io.IoError + BuiltinError {
+    books := Book[Book("Dune", Cents(1299), 412), Book("SICP", Cents(4500), 657), Book("K&R", Cents(3999), 272)]
+    foods := Food[Food("rice", Cents(250), Grams(1000)), Food("tea", Cents(399), Grams(100))]
+    cb := cheapest(books)
+    cf := cheapest(foods)
+    try io.Print("cheapest book " $cb.Name() " at " $cb.Price() ", cheapest food " $cf.Name() "\n")
+    try io.Print("totals " $(try totalPrice(books)) " and " $(try totalPrice(foods)) "\n")
+    perGram I64 = I64(cf.price) * 1000 / I64(cf.weight)
+    try io.Print("rice per kg " $perGram "\n")
+
+    big := try mulChecked(3037000499, 3037000499)
+    try io.Print("big square " $big "\n")
+    over := try mulChecked(3037000500, 3037000500) catch BuiltinError.OVERFLOW default -1
+    try io.Print("overflow caught " $(over == -1) "\n")
+
+    st := Stack<Change>()
+    st.Push(Change.Restock(1, 10))
+    st.Push(Change.Sell(1, 3))
+    st.Push(Change.Note("audit"))
+    st.Push(Change.Reprice(2, Cents(99)))
+    sold I32 = 0
+    notes := 0
+    for {
+        c := try st.Pop() catch StackError.EMPTY { break }
+        if c is Change.Sell {
+            sku, n := c as Change.Sell
+            sold += n
+        } else if c is Change.Note {
+            text := c as Change.Note
+            notes += I32(text.Len())
+        }
+        match c {
+            case Change.Reprice(sku, to) if to < Cents(100) { try io.Print("cheap reprice of " $sku " to " $to "\n") }
+            nomatch { }
+        }
+    }
+    try io.Print("sold " $sold ", note chars " $notes "\n")
+    try io.Print("15! = " $Fact15 ", primes " $Primes "\n")
+    half := F32(0.5)
+    try io.Print("bits of 0.5f: " $half.Bits() ", back " $half.Bits().F32FromBits() "\n")
+}

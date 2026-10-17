@@ -1,0 +1,35 @@
+# Vec phase 2a, relaxation a/d (O32/O35): a borrowed copy's field holding an owning type by value ('c.a', a Lexer) is
+# assigned an owner - accepted, where 'c.a.o = X(9)' (an own field of the copy) and 'c = ...' are O32's errors ("belongs
+# to what 't' was copied from - assign it there"). The copy owns nothing, so the assignment releases nothing (no double
+# release - the source keeps its own), but what it gives the copy is held until the FUNCTION's scope closes: none of the
+# loop's turns gives anything back. Here 3 X's (and their Vec buffers) outlive their copies; with 300,000 turns in main
+# (work/n16_assign_copy_field_value_loop.olang) the process peaks at 2.6GB, ~8.6KB a turn.
+#   -b and -b -d -s: "turn: made 4 dropped 0" three times, "at work end: made 4 dropped 0", then "made 4 dropped 4" -
+#   the X's given to the copies are destructed only when work() returns; -i refuses destructors (stage 1)
+Made mut I64 = 0
+Dropped mut I64 = 0
+type X struct(k I64) {
+    k
+    Made++
+} destruct { Dropped++ }
+type Lexer struct(n I64) {
+    n
+    o own mut X& = X(n)
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn work() {
+    defer { println("at work end: made " $Made " dropped " $Dropped) }
+    t := Two()                       # one X, released with t
+    for i in range 3 {
+        c := t                       # a borrowed copy of t - owns nothing
+        c.a = Lexer(7 + i)           # given an owner: accepted; nothing releases it as c's block ends
+        println("turn: made " $Made " dropped " $Dropped)
+    }
+}
+fn main() ? {
+    work()
+    println("made " $Made " dropped " $Dropped)
+}

@@ -1,0 +1,16 @@
+type Bag<T> struct() {
+    v Vec<T> = Vec<T>()
+}
+type W struct() {
+    b Bag<I64> = Bag<I64>()
+}
+type WG<T> struct() {
+    b Bag<T> = Bag<T>()
+}
+fn main() ? {
+    w := W()
+    for i in range 3 { w.b.v.Push(i + 1) }
+    c := w
+    for i in range 100 { w.b.v.Push(i) }
+    println($c.b.v[0])
+}

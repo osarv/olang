@@ -1,0 +1,7 @@
+type H struct(l List<I32>) { l }
+G := H(I32[1, 2].ToList())
+M mut List<I32> = G.l
+fn main() ? {
+  M.Push(9)
+  println($G.l.Len())
+}

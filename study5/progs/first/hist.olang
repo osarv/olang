@@ -1,0 +1,59 @@
+# hist - read numbers (one per line) from a file, print percentiles and a text histogram.
+import "std/os"
+import "std/io"
+import "std/rand"
+import "std/math"
+
+Count I64 = 1000000
+Bins I64 = 20
+
+fn percentile(sorted Array<F64>&, p F64) F64 {
+    # linear interpolation between closest ranks, as numpy's default
+    pos := p / 100.0 * F64(sorted.Len() - 1)
+    lo := I64(math.Floor(pos))
+    hi := I64(math.Ceil(pos))
+    frac := pos - F64(lo)
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * frac
+}
+
+fn main() ? {
+    path := "/tmp/study5_numbers.txt"
+    # a log-normal sample
+    r := rand.Rand(1)
+    w := io.Writer(try os.Create(path))
+    for i in range Count {
+        w.Write($math.Exp(r.Normal() * 0.5 + 2.0) "\n")
+    }
+    try w.Flush()
+
+    fd := try os.Open(path)
+    values := List<F64>()
+    for line in try io.Lines(fd) {
+        values.Push(try line.ParseFloat())
+    } catch io.IoError { error }
+    try os.Close(fd)
+
+    data := values.ToArray()
+    data.Sort(fn(a, b) { return a < b })
+    println("n = " $data.Len())
+    for p in F64[0, 1, 5, 25, 50, 75, 95, 99, 100] {
+        println("p" $p ": " $percentile(data, p).Fixed(3))
+    }
+    mean := data.Fold(0.0, fn(acc, x) { return acc + x }) / F64(data.Len())
+    println("mean: " $mean.Fixed(3))
+
+    lo := data[0]
+    hi := data[data.Len() - 1]
+    width := (hi - lo) / F64(Bins)
+    counts := Array<I64>(Bins)
+    for x in data {
+        b := I64((x - lo) / width)
+        if b >= Bins { b = Bins - 1 }
+        counts[b]++
+    }
+    most := counts.Fold(0, fn(acc I64, c I64) I64 { return math.Max(acc, c) })
+    for b, c in counts {
+        bar := "#".Repeat(c * 50 / most)
+        println((lo + F64(b) * width).Fixed(2).PadStart(8) " | " $bar " " $c)
+    }
+}

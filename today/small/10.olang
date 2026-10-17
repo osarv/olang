@@ -1,0 +1,18 @@
+# E11a: $ on every F16 and BF16 bit pattern, compiled vs -i vs baked while compiling
+fn all16() String {
+    b := StringBuilder()
+    for i in range 65536 {
+        u := U16(i)
+        b.Push($u.F16FromBits())
+        b.PushChar(' ')
+        b.Push($u.BF16FromBits())
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+Baked String = all16()
+fn main() ? {
+    r := all16()
+    println("same as baked: " $(r == Baked))
+    print(r)
+}

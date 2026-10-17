@@ -1,0 +1,10 @@
+fn show(n I64) String& {
+    return match n {
+        case 1 => $n
+        case 2 => "two" $n
+        nomatch => "many"
+    }
+}
+fn main() ? {
+    assert show(2) == "two2"
+}

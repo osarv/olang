@@ -1,0 +1,33 @@
+type E enum {
+    Lit(v I64)
+    Add(a E&, b E&)
+}
+fn (a E&) Plus(b E&) E { return E.Add(a, b) }
+fn ev(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Add(a, b) => ev(a) + ev(b)
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    x mut E& = E.Lit(1)
+    for i in range 5 {
+        x += E.Lit(i)
+        churn()
+    }
+    y E = E.Lit(1)
+    for i in range 5 {
+        y += E.Lit(i)
+        churn()
+    }
+    churn()
+    println($ev(x) " " $ev(y))
+}

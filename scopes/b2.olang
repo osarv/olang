@@ -1,0 +1,17 @@
+# slice of an inner value array into an outer reference
+import "std/io"
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I32>(64, 7)
+    }
+}
+fn main() ? {
+    keep Array<I32>& = Array<I32>(4)
+    for i in range 2 {
+        inner := Array<I32>(4, 42)
+        keep = inner[0:2]
+    }
+    churn()
+    try io.Print($keep[0] "\n")
+}

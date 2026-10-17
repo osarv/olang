@@ -1,0 +1,17 @@
+# HAZARD (no diagnostic, by the rules): Meters extends F64 and declares Div(t Seconds) Speed. Declaring it removes
+# the inherited Meters / F64 scaling, and a literal adapts into Seconds, so "d / 2.0" - halving a length - silently
+# divides by two seconds and is a Speed: prints "half of 10 m is 5 m/s". "d / d" names the conversion to Seconds.
+type Meters extends F64
+type Seconds extends F64
+type Speed extends F64
+fn (d Meters) Div(t Seconds) Speed { return Speed(F64(d) / F64(t)) }
+fn (v Speed) Str() String { return $F64(v) " m/s" }
+fn (d Meters) Str() String { return $F64(d) " m" }
+
+fn main() ? {
+    d := Meters(10.0)
+    half := d / 2.0
+    println("half of " $d " is " $half)
+    e := d * 2.0
+    println("twice " $e)
+}

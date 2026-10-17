@@ -1,0 +1,50 @@
+# tasks that build lists of new text and hand them back through spawn targets; read back after the arena churns
+type Rec struct(Name String&, N I64) {
+    Name
+    N
+}
+
+fn build(id I64, n I64) List<Rec> {
+    out := List<Rec>()
+    for i in range n { out.Push(Rec("task" $id "-item" $i, i * id)) }
+    return out
+}
+
+fn names(id I64, n I64) List<String&> {
+    out := List<String&>()
+    for i in range n { out.Push("n" $id "." $i) }
+    return out
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        l := List<String&>()
+        for k in range 40 { l.Push("garbage " $k " " $i) }
+        t += l[3].Len()
+    }
+    return t
+}
+
+fn main() ? {
+    parts := Array<List<Rec>>(4, List<Rec>())
+    lists := Array<List<String&>>(4, List<String&>())
+    join {
+        for t in range 4 {
+            spawn parts[t] = build(t, 1000)
+            spawn lists[t] = names(t, 500)
+        }
+    }
+    for i in range 20 { churn() }
+    bad := 0
+    for t in range 4 {
+        for i in range 1000 {
+            r := parts[t][i]
+            if r.Name != "task" $t "-item" $i or r.N != i * t { bad++ }
+        }
+        for i in range 500 {
+            if lists[t][i] != "n" $t "." $i { bad++ }
+        }
+    }
+    println("bad: " $bad)
+}

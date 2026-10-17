@@ -1,0 +1,14 @@
+import "std/io"
+import "std/os"
+
+fn mk() Array<I32> {
+    a := Array<I32>(8, 5)
+    return a
+}
+
+fn main() ? io.IoError {
+    args := os.Args()
+    if args.Len() > 0 {
+        try io.Print($mk() "\n")
+    }
+}

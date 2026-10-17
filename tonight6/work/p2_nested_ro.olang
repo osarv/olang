@@ -1,0 +1,22 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+type Fixed struct() {
+    a Array<Acc, 4>
+}
+fn (f Fixed&) At(i I64) Acc { return f.a[i] }
+fn (f mut Fixed&) SetAt(i I64, v Acc) { f.a[i] = v }
+fn (f Fixed&) Len() I64 { return 4 }
+GV Fixed = Fixed()
+fn nested(rows List<List<Acc>>&) {
+    rows[0][0].N = 9
+    rows[0][0].Add()
+}
+fn main() ? {
+    GV[0].N = 1
+    GV[1].Add()
+    rows := List<List<Acc>>()
+    nested(rows)
+    println($GV[0].N)
+}

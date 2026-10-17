@@ -1,0 +1,130 @@
+# typedmat - a typed matrix over std/linalg: Mat<T, R, C> whose dimensions are constants or Dynamic, so a product's
+# inner dimensions are checked while compiling where they are known and once at run time where they are not. Indexing
+# is m[i, j]; a checked form comes from TryAt. A tiny two-layer network forward pass and a least-squares fit use it.
+
+import "std/linalg"
+import "std/math"
+import "std/rand"
+
+Dynamic I64 = -1
+
+error MatError {
+    SHAPE
+}
+
+type Mat<T, R I64, C I64> struct(rows I64 = R, cols I64 = C) {
+    assert R == Dynamic or rows == R
+    assert C == Dynamic or cols == C
+    m linalg.Matrix<T> = linalg.Matrix<T>(rows, cols)
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Rows() I64 { return R if R != Dynamic else a.m.Rows }
+fn (a Mat<<T>, <R I64>, <C I64>>&) Cols() I64 { return C if C != Dynamic else a.m.Cols }
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) At(i I64, j I64) T { return a.m.Get(i, j) }
+fn (a mut Mat<<T>, <R I64>, <C I64>>&) SetAt(i I64, j I64, v T) { a.m.Set(i, j, v) }
+fn (a Mat<<T>, <R I64>, <C I64>>&) TryAt(i I64, j I64) T ? MatError {
+    if i < 0 or j < 0 or i >= a.Rows() or j >= a.Cols() { error MatError.SHAPE }
+    return a.m.Get(i, j)
+}
+
+# a product: K must agree - by the types when both know it, at run time otherwise
+fn (a Mat<<T>, <R I64>, <K I64>>&) MatMul(b Mat<T, <K2 I64>, <C I64>>&) Mat<T, R, C> {
+    assert K == Dynamic or K2 == Dynamic or K == K2
+    assert a.Cols() == b.Rows()
+    out := Mat<T, R, C>(a.Rows(), b.Cols())
+    linalg.Gemm(out.m, a.m, false, b.m, false)
+    return out
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Plus(b Mat<T, R, C>&) Mat<T, R, C> {
+    out := Mat<T, R, C>(a.Rows(), a.Cols())
+    out.m.Copy(a.m)
+    out.m.Add(b.m)
+    return out
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Map(f fn(x T) T) Mat<T, R, C> {
+    out := Mat<T, R, C>(a.Rows(), a.Cols())
+    for i in range a.Rows() {
+        for j in range a.Cols() { out[i, j] = f(a[i, j]) }
+    }
+    return out
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Str() String {
+    b := StringBuilder()
+    for i in range a.Rows() {
+        b.Push("[")
+        for j in range a.Cols() { b.Push($(" " if j > 0 else "") $a[i, j]) }
+        b.Push("]")
+    }
+    return b.ToString()
+}
+
+# a fixed-size row read out of a run-time matrix, viewed with "as"
+fn firstRow(a Mat<F64, Dynamic, <C I64>>&) Array<F64, C> {
+    row := a.m.Row(0)
+    v := try (row as Array<F64, C>&) catch default Array<F64, C>()
+    out Array<F64, C> = v
+    return out
+}
+
+# ---- a two-layer network: batch x 4 -> 3 -> 2 ----
+
+fn relu(x F64) F64 { return math.Max(x, 0.0) }
+
+fn forward(x Mat<F64, Dynamic, 4>&, w1 Mat<F64, 4, 3>&, w2 Mat<F64, 3, 2>&) Mat<F64, Dynamic, 2> {
+    h := (x @ w1).Map(relu)
+    return h @ w2
+}
+
+# least squares for y = a x + b through the normal equations (A^T A) p = A^T y, solved with linalg.Solve
+fn fitLine(xs Array<F64>&, ys Array<F64>&) (F64, F64) ? MatError {
+    n := xs.Len()
+    a := Mat<F64, Dynamic, 2>(n)
+    y := Mat<F64, Dynamic, 1>(n)
+    for i in range n {
+        a[i, 0] = xs[i]
+        a[i, 1] = 1.0
+        y[i, 0] = ys[i]
+    }
+    ata := Mat<F64, 2, 2>()
+    linalg.Gemm(ata.m, a.m, true, a.m, false)
+    aty := Mat<F64, 2, 1>()
+    linalg.Gemm(aty.m, a.m, true, y.m, false)
+    p := try linalg.Solve(ata.m, aty.m) catch linalg.SolveError { error MatError.SHAPE }
+    return p.Get(0, 0), p.Get(1, 0)
+}
+
+fn checksum() F64 {
+    w1 := Mat<F64, 4, 3>()
+    w2 := Mat<F64, 3, 2>()
+    for i in range 4 { for j in range 3 { w1[i, j] = F64(i - j) * 0.5 } }
+    for i in range 3 { for j in range 2 { w2[i, j] = F64(i + j) * 0.25 } }
+    x := Mat<F64, Dynamic, 4>(5)
+    for i in range 5 { for j in range 4 { x[i, j] = F64(i * j) * 0.1 } }
+    y := forward(x, w1, w2)
+    s F64 = 0.0
+    for i in range y.Rows() { for j in range y.Cols() { s += y[i, j] } }
+    return s
+}
+
+Baked := checksum()
+
+fn main() ? {
+    a := Mat<F64, 2, 3>()
+    b := Mat<F64, 3, 2>()
+    for i in range 2 { for j in range 3 { a[i, j] = F64(i + j) } }
+    for i in range 3 { for j in range 2 { b[i, j] = F64(i * j + 1) } }
+    c := a @ b
+    println("a @ b = " $c ", (a @ b)[1, 1] checked: " $(try c[1, 1] catch default -1.0) ", [5, 5]: " $(try c[5, 5] catch default -1.0))
+    println("forward checksum " $checksum() " baked " $Baked)
+    xs := F64[0.0, 1.0, 2.0, 3.0, 4.0]
+    ys := F64[1.1, 2.9, 5.2, 7.1, 8.8]
+    slope, icept := try fitLine(xs, ys)
+    println("fit: y = " $slope.Fixed(3) " x + " $icept.Fixed(3))
+    d := Mat<F64, Dynamic, 3>(2)
+    d[0, 2] = 7.0
+    println("first row as Array<F64, 3>: " $firstRow(d))
+}

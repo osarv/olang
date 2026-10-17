@@ -1,0 +1,30 @@
+# struct layout: mixed fields, an enum with a payload, an inline array - written and read back through an array
+import "std/io"
+type Sh enum {
+  Dot
+  Seg(a U8, b F16)
+  Box(w I16, h I16, tag U8)
+}
+type Rec struct(k U8) {
+  k mut
+  half mut F16 = 0.0
+  s mut Sh = Sh.Dot
+  flag mut Bool = false
+  little Array<U16> = Array<U16>(3)
+  big mut I64 = 0
+  tail mut U8 = 0
+}
+fn main() ? {
+  rs := Array<Rec>(5, Rec(0))
+  for i in range 5 {
+    rs[i].k = U8(i + 1)
+    rs[i].half = F16(i) + 0.5
+    rs[i].s = Sh.Box(I16(i * 10), I16(i * 20), U8(i + 7)) if i % 2 == 0 else Sh.Seg(U8(i), F16(i) * 2.0)
+    rs[i].flag = i % 3 == 0
+    rs[i].big = I64(i) * 1000000007
+    rs[i].tail = U8(200 + i)
+  }
+  for r in rs {
+    try io.Print($r.k " " $r.half " " $r.s " " $r.flag " " $r.big " " $r.tail "\n")
+  }
+}

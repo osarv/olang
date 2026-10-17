@@ -1,0 +1,8 @@
+# expected: "42 44"; -i prints that
+# actual:   build/main.main.ll:...: error: use of undefined value '@lib_lambda$2'   (45eea97: '@lib_lambda$1')
+#           olang: error: clang could not compile build/main.main.ll
+import "lib"
+fn one() I64 { return lib.Apply(1) }
+fn main() ? {
+    println($one() " " $lib.Apply(2))
+}

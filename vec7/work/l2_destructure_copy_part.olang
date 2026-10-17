@@ -1,0 +1,18 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn two(i I64) (Lexer, I64) { return Lexer(i), i }
+fn main() ? {
+    t := Two()
+    for i in range 100000 {
+        c := t
+        k := 0
+        c.a, k = two(i)
+        c.a.toks.Push(k)
+    }
+    println($t.a.n)
+}

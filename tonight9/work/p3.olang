@@ -1,0 +1,33 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct(n mut Node&) {
+    n
+}
+fn mk(n mut Node&, k I64) Node {
+    r := Node(k)
+    r.next = n
+    return r
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        u := Node(j + 1)
+        s = s + t.v + u.v
+    }
+    return s
+}
+fn main() ? {
+    o mut Node& = Node(1)
+    bx mut Box& = Box(Node(0))
+    for i in range 3 {
+        loc mut Node& = Node(50 + i)
+        k I64 = 0
+        o.next, k = mk(loc, i), 7
+        bx.n.next, k = Node(i), 8
+    }
+    y := churn()
+    println($o.next.v " " $o.next.next.v " " $y)
+}

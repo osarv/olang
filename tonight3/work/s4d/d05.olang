@@ -1,0 +1,40 @@
+# S4d (wt-rv2fix): "a borrow written in the value an assignment writes over a value place, of the place itself, takes the
+# place's old value" - but only a plain "=" sets ctx->assignPlaces (buildAssignStmnt, buildParallel, spawn targets).
+# A compound assignment is "x = x + e" (S5), and "x++" is "x = x.Inc()" / "x = x + 1" (E31), yet neither collects the
+# place, so when the operator method keeps its receiver ("fn (a E&) Plus(b E&) E { return E.Add(a, b) }") the new value
+# holds x itself, written over in place: a value holding its own storage, which S4d says no assignment makes.
+# expected: 3 3 4 (as "x = x + E.Lit(2)" gives 3)
+# actual:   -b and -d: the first line prints 3, then a segmentation fault (eval recurses through the cycle);
+#           -i: 3, then "it recurses deeper than -i allows"
+type E enum {
+    Lit(v I64)
+    Add(a E&, b E&)
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Add(a, b) => eval(a) + eval(b)
+    }
+}
+fn (a E&) Plus(b E&) E { return E.Add(a, b) }
+fn (a E&) Inc() E { return E.Add(a, E.Lit(1)) }
+fn plain() I64 {
+    x := E.Lit(1)
+    x = x + E.Lit(2)
+    return eval(x)
+}
+fn compound() I64 {
+    x := E.Lit(1)
+    x += E.Lit(2)
+    return eval(x)
+}
+fn increment() I64 {
+    x := E.Lit(3)
+    x++
+    return eval(x)
+}
+fn main() ? {
+    println($plain())
+
+    println($increment())
+}

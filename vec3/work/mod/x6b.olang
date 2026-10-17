@@ -1,0 +1,23 @@
+import "mid"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn apply(f fn(v Vec<I64>&) Array<I64>&v, w Vec<I64>&) Array<I64>&w { return f(w) }
+fn grow(w mut Vec<I64>&) {
+    d := apply(mid.Vl.G(), w)
+    for i in range 1000 { w.Push(i + 100) }
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    grow(v)
+    println($mid.Nothing())
+}

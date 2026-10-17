@@ -1,0 +1,27 @@
+# PRE-EXISTING use-after-free that r01's fix (landedCallRefsScope) does not reach: a FIELD or ELEMENT of a call's value
+# result passed straight to another call. "bs.Push(box(t))" is now O10c, and so are "x := pairish(t).a; bs.Push(x)" and
+# "arr[k] = pairish(t).a" - but the projection passed directly is accepted, and every row reads freed text.
+#   expected: O10c, as the spellings above
+#   actual (055e97c and a2e2878 alike): builds; -b prints garbage ("xxxx..."), -b -s / -b -d -s "use after scope
+#   closed", -i prints 0..3. Same with an element: "bs.Push(boxes(t)[0])", and wrapped: "bs.Push(wrap(pairish(t).a))".
+type Box struct(s String&) { s }
+type Pairish struct(a Box, n I64) {
+    a
+    n
+}
+fn pairish(s String&) Pairish { return Pairish(Box(s), 1) }
+fn boxes(s String&) Array<Box> { return Box[Box(s)] }
+
+fn main() ? {
+    bs := List<Box>()
+    for k in range 4 {
+        t := $k "-some-text-of-moderate-length"
+        bs.Push(pairish(t).a)
+        bs.Push(boxes(t)[0])
+    }
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        assert junk.Len() > 0
+    }
+    for b in bs { println(b.s) }
+}

@@ -1,0 +1,27 @@
+# a user type that is its own iterator (Next), held in a local and walked with for-in
+type Countdown struct(n I64) {
+    left List<I64>
+    for i in range n { left.Push(n - i) }
+}
+fn (c mut Countdown&) Next() I64 ? Exhausted { return try c.left.Pop() catch { error Exhausted.END } }
+fn sum() I64 {
+    c := Countdown(4)
+    s I64 = 0
+    for v in c { s += v }
+    return s
+}
+type Plain struct(n I64) {
+    n
+}
+fn (c mut Plain&) Next() I64 ? Exhausted {
+    if c.n == 0 { error Exhausted.END }
+    c.n--
+    return c.n
+}
+fn sum2() I64 {
+    p := Plain(4)
+    s I64 = 0
+    for v in p { s += v }
+    return s
+}
+fn main() ? { println($sum() " " $sum2()) }

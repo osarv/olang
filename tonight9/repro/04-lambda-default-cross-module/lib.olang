@@ -1,0 +1,9 @@
+# PRE-EXISTING (45eea97 alike), with main.olang. A parameter default that is a lambda, used by a call in another module.
+# The lambda is made while the default is built, in this module's context and with no host, so it is emitted as an
+# internal function of THIS module's object - while main's object names it. Since 91ab3ba the default is built again
+# for each call, so the program makes one more lambda per call site (dl1.olang in the review's work/: four calls of a
+# same-module default emit six lambda functions where 45eea97 emitted two); the cross-module case fails either way.
+Base I64 = 40
+fn Apply(x I64, f fn(v I64) I64 = fn(v I64) I64 { return v * 2 + Base }) I64 {
+    return f(x)
+}

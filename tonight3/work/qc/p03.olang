@@ -1,0 +1,12 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+type Box<T> struct(v T) { v }
+fn main() ? {
+  y := G
+  b := Box(y)
+  b.v.c.n = 5
+  println($G.c.n)
+}

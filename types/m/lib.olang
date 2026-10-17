@@ -1,0 +1,22 @@
+type Rec struct(id I32, sec I32) {
+  Id I32 = id
+  secret I32 = sec
+}
+error Err {
+  Loud
+  quiet
+}
+type Dir enum {
+  North
+  south
+  Hold(v I32)
+}
+fn MakeRec() Rec { return Rec(1, 2) }
+fn Fail(n I32) ? Err {
+  if n == 1 { error Err.quiet }
+  error Err.Loud
+}
+fn (r Rec) Get() I32 { return r.secret }
+fn (r Rec) peek() I32 { return r.secret }
+Count I32 = 3
+hidden I32 = 4

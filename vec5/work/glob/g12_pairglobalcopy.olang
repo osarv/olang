@@ -1,0 +1,23 @@
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+Docs own mut Doc& = Doc()
+
+type P2 struct() {
+    p own mut Pair<String&, I64>& = Pair<String&, I64>("x", 1)
+}
+Ps own mut P2& = P2()
+G Pair<String&, I64> = Ps.p
+fn main() ? {
+    Ps.p = Pair<String&, I64>($3 "-yyyyyyyyyyyyyyyyyyyyyyyyy", 2)
+    churn()
+    println(G.First)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

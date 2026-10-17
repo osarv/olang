@@ -1,0 +1,35 @@
+type Diag struct() {
+    col I64 = 0
+}
+type Ctx struct(diag mut Diag&, nums mut List<I64>&) {
+    diag
+    nums
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn work(c mut Ctx&) {
+    c.nums.Push(c.nums.Len() * 3)
+    c.diag.col += 1
+    c.diag = Diag()
+    c.diag.col = 9
+}
+fn main() ? {
+    d := Diag()
+    total I64 = 0
+    for i in range 5 {
+        nums := List<I64>()
+        c := Ctx(d, nums)
+        for k in range 20 { work(c) }
+        churn()
+        total += c.nums[19] + c.diag.col
+    }
+    println($total " " $d.col)
+}

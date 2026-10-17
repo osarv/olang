@@ -1,0 +1,15 @@
+# E33: a NaN made from bits is written out with exactly those bits when a global is computed while compiling (K2) -
+# signalling or quiet, F32 included, which LLVM reads from a double. Checked by grepping the emitted IR.
+error E { X }
+GS F32 = U32(0x7F800001).F32FromBits()
+GQ F64 = U64(0xFFF8000000000123).F64FromBits()
+GH F16 = U16(0x7C01).F16FromBits()
+GB BF16 = U16(0xFFC1).BF16FromBits()
+Baked Bool = F64(1).Bits() == 0x3FF0000000000000 and U16(0x3C00).F16FromBits() == 1 and GQ.Bits() == U64(0xFFF8000000000123)
+
+fn main() ? E {
+    assert GS != GS and GQ != GQ and GH != GH and GB != GB and Baked
+    assert GQ.Bits() == U64(0xFFF8000000000123) and GB.Bits() == 0xFFC1
+    s := GS.Bits()
+    assert s == 0x7F800001 or s == 0x7FC00001
+}

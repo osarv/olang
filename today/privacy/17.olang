@@ -1,0 +1,12 @@
+# M6b: ordinary private helpers that happen to share a protocol method's lowercase name are held to the protocol's
+# shape - a private len() returning I32 or a next() returning a node is rejected
+type Node struct(v I32) {
+    v
+    link mut Node& = null
+}
+fn (n Node&) next() Node&n { return n.link }
+fn (n Node&) len() I32 { return 1 }
+fn main() ? {
+    n := Node(1)
+    println($n.len())
+}

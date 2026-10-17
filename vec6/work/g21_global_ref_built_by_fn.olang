@@ -1,0 +1,27 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() mut Two& {
+    t mut Two& = Two()
+    for i in range 5 { t.a.toks.Push(i + 1) }
+    return t
+}
+GR mut Two& = mk()
+fn main() ? {
+    for i in range 100 { GR.a.toks.Push(i) }
+    churn()
+    println($GR.a.toks[0] " " $GR.a.toks[104])
+}

@@ -1,0 +1,27 @@
+# (d) FRICTION / principle 1, O25/C2d + O8c: a dynamic language's environments - each frame a Map plus a writable link
+# to its parent - must all live in exactly the root's scope (something can be stored through 'parent', so C2d asks
+# exactness), so every frame, and every value bound in one, lives until the interpreter ends, however dead it is.
+# progs/interp.olang: a 'while' turn that binds one list and one string retains ~1.8 KB, 100k turns 193 MB, 200k
+# 368 MB, 400k 717 MB. Below: one child frame per turn - 250k turns 50 MB, 1M turns 195 MB. There is no spelling that lets a
+# finished frame go short of writing a heap of indices and a collector by hand.
+# The same in progs/ecs.olang with r02 worked around: a List made per carrier (cargo) and removed from its Map when the
+# carrier dies, and the text of each event put in a 200-entry log, still grow the world by ~0.8 KB a step (24k steps
+# 22 MB, 48k 41 MB) - Map.Remove and List.RemoveAt drop the reference, never the storage (O8c, study 4's r22).
+# Expected (direction): a way for a long-lived structure to drop what it no longer reaches - e.g. a scope that can be
+# compacted/copied (copy the reachable part into a fresh scope that then replaces the old), or nested frames whose
+# parent link is read-only so a child need not live exactly with its parent.
+Turns I64 = 1000000
+type Env struct(parent mut Env&) {
+    vars mut Map<String&, I64>& = Map<String&, I64>()
+    parent
+}
+fn main() ? {
+    root mut Env& = Env(null)
+    root.vars.Put("i", 0)
+    for t in range Turns {
+        frame mut Env&root = Env(root)        # 'frame := Env(root)' is C2d's error (exactness); this compiles
+        frame.vars.Put("tmp", t)
+        root.vars.Put("i", t)
+    }
+    println($(try root.vars.Get("i")))
+}

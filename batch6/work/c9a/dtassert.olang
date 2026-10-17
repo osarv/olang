@@ -1,0 +1,38 @@
+# C9a/P1d: a destructor that fails a check while its scope is being closed, in a test - the scope it closes is on the
+# unwind chain too
+Log mut I64 = 0
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Res struct(n mut Node&, k I64) {
+    n
+    k
+} destruct {
+    n.next = Node(k)
+    Log = Log * 10 + k
+    assert k != 2, "dtor fails"
+}
+fn f() {
+    a mut Node& = Node(0)
+    r1 Res&a = Res(a, 1)
+    r2 Res&a = Res(a, 2)
+    r3 Res&a = Res(a, 3)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+test "a destructor fails" {
+    f()
+}
+test "after" {
+    churn()
+    println($Log)
+    f2 := 0
+    assert churn() > 0
+}

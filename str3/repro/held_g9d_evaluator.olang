@@ -1,0 +1,21 @@
+# HELD (item 2): G9d in global initializers and asserts - the evaluator and the run time agree ('5 7 2 true 1')
+# under -b and -b -d; -i stops on the destructor (its stage-1 limit).
+Made mut I64 = 0
+type Res struct(k I64) {
+    k
+} destruct {
+    Made++
+}
+fn id(x <T>) T { return x }
+fn pick(a <T>, b T, c Bool) T { return a if c else b }
+fn twice(x <T>) Array<T> { return T[x, x] }
+G := id(Res(5))
+H := pick(Res(6), Res(7), false)
+A := twice(Res(8))
+fn count(l List<<T>>&, x T) I64 { return l.Len() }
+fn main() ? {
+    l := List<Res&>()
+    l.Push(Res(1))
+    println($G.k " " $H.k " " $A.Len() " " $(A[0] is A[1]) " " $count(l, Res(2)))
+    assert id(Res(9)).k == 9
+}

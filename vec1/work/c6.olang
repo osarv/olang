@@ -1,0 +1,15 @@
+fn asText(v Vec<Char>&) String&v { return String(v.View()) }
+fn ali(w mut Vec<Char>&) {
+    t := asText(w)
+    w[0] = 'z'
+    println(t)
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    ali(v)
+    t := asText(v)
+    v[1] = 'y'
+    println(t)
+}

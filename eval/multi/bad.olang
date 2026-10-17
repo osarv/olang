@@ -1,0 +1,3 @@
+test "bad" {
+    assert nosuch() == 1
+}

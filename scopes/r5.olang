@@ -1,0 +1,23 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box struct(n mut Node&) { n mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+        a := Array<I32>(8, 7)
+    }
+}
+fn mkBox(v I32) Box& { return Box(Node(v)) }
+fn (b Box&) Get() mut Node&b { return b.n }
+fn mkNodes(v I32) Array<mut Node&>& { return Array<mut Node&>(2, Node(v)) }
+fn main() ? {
+    k1 Node& = Node(1)
+    k2 Node& = Node(1)
+    for i in range 2 {
+        k1 = mkBox(42).Get()
+        k2 = mkNodes(43)[0]
+    }
+    churn()
+    try io.Print($k1.v " " $k2.v "\n")
+}

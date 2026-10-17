@@ -1,0 +1,19 @@
+type Node struct(v I64, next Node&) {
+    v
+    next
+}
+type Stack struct() {
+    top Node& = null
+    n I64 = 0
+}
+fn (s mut Stack&) Push(v I64) {
+    s.top = Node(v, s.top)
+    s.n++
+}
+fn (s Stack&) Peek() I64 { return s.top.v }
+fn main() ? {
+    s := Stack()
+    println("peek of an empty stack: " $s.Peek())
+    s.Push(4)
+    println("after a push: " $s.Peek())
+}

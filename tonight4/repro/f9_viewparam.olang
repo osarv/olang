@@ -1,0 +1,22 @@
+type V struct(xs Array<I64>&) { xs }
+fn mk(a Array<I64>&) V {
+    s := a[1:3]
+    return V(s)
+}
+fn make() V {
+    local := I64[10, 20, 30, 40]
+    return mk(local)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 6000 {
+        b := Array<I64>(4, i)
+        t += b[0]
+    }
+    return t
+}
+fn main() ? {
+    v := make()
+    churn()
+    println($v.xs[0] " " $v.xs[1])
+}

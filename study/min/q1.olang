@@ -1,0 +1,7 @@
+fn (e Missing&) eval() F64 { return 1.0 }
+fn f(e Missing&) F64 {
+    d := e.eval()
+    if d == 0.0 { return 0.0 }
+    return d
+}
+fn main() ? { }

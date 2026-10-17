@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/r11_global_take_through_call_local.olang:18:34: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   18 | fn words() Vec<String&> { return take GP.Lx().toks }
+      |                                  ^~~~
+compilation failed with 1 error

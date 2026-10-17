@@ -1,0 +1,9 @@
+# a type with only TryAt indexed without try: the first index is E31a, then every later one "I32 cannot be indexed"
+type Box struct() {
+    n I64 = 0
+}
+fn (b Box&) TryAt(i I64) Box&b ? { return b }
+fn main() ? {
+    b := Box()
+    c := b[0][1][2]
+}

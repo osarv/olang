@@ -1,0 +1,6 @@
+# G22: constant variable named like a lambda parameter
+fn f(a Array<I64, <N>>&) I64 {
+    g := fn(N I64) I64 { return N + 1 }
+    return g(1)
+}
+fn main() ? { println($f(I64[1, 2])) }

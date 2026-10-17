@@ -1,0 +1,6 @@
+fn main() ? {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    x := try l.First() catch { return }
+    println($x.Len())
+}

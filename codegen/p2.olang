@@ -1,0 +1,11 @@
+import "std/io"
+
+fn use(a mut Array<I32>&) ? io.IoError {
+    a[5] = 3
+    try io.Print($a[5] "\n")
+}
+
+fn main() ? io.IoError {
+    n I64 = 100000000
+    try use(Array<I32>(n))
+}

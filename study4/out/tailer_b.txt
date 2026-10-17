@@ -1,0 +1,10 @@
+lines followed: 400 (writer wrote 400), saw END: true
+  DEBUG    88
+  INFO     70
+  WARN     83
+  ERROR   159
+slowest request: 249 ms
+last errors:
+  00395 ERROR request 963 took 244ms
+  00396 ERROR request 816 took 181ms
+  00398 ERROR request 557 took 118ms

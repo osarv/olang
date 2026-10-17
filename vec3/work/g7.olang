@@ -1,0 +1,21 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Doc struct() {
+    title own mut String& = "bb"
+}
+Docs own mut Doc& = Doc()
+Current mut String& = "none"
+fn remember() { Current = Docs.title }          # stores a borrow of a global's own object in a global
+fn rename() { Docs.title = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" }   # releases it
+fn main() ? {
+    remember()
+    rename()
+    churn()
+    println(Current)
+}

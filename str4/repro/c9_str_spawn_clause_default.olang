@@ -1,0 +1,33 @@
+# E11c + P4a (decision 50, merged in bbf115f): a spawned try's catch default is built where the call's result lands - here
+# the receiver's node, the spawn's target - but the walk visits the clause's default with no target (mbiStmt, STATEMENT_SPAWN),
+# so Str is accepted and the default is built in the scope "$" opened for the call. new -b -s: "use after scope
+# closed" (134); new -b: wrong value; -i: "101 0". (e27b83b predates decision 50; be042da refuses Str effects)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(head mut Node&) {
+    head
+}
+error Odd { NO }
+fn f(n mut Node&) mut Node&n ? Odd {
+    if n.v >= 0 { error Odd.NO }
+    return n
+}
+fn (b Bag&) Str() String {
+    join { spawn b.head.next = try f(b.head) catch default Node(b.head.v + 100) }
+    return "b" $b.head.v
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    b := Bag(Node(1))
+    println($b)
+    t := churn(100)
+    println($b.head.next.v " " $t)
+}

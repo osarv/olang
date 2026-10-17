@@ -1,0 +1,54 @@
+# a rendezvous channel under timeouts: every value SendUntil reports as sent must be received exactly once, and
+# none it reports as given up may be received
+import "std/chan"
+import "std/cancel"
+
+extern fn usleep(us U32) I32
+
+Sent mut I64 = 0
+GaveUp mut I64 = 0
+SumSent mut I64 = 0
+
+fn sender(id I64, c mut chan.Chan<I64>&, n I64) {
+    for i in range n {
+        v := id * 1000000 + i
+        tok := cancel.After(1)                        # a millisecond: often too short
+        try chan.SendUntil(c, v, tok) catch cancel.Stopped {
+            GaveUp.AtomicAdd(1)
+            continue
+        }
+        Sent.AtomicAdd(1)
+        SumSent.AtomicAdd(v)
+    }
+}
+
+fn receiver(c mut chan.Chan<I64>&, stop cancel.Token&) (I64, I64) {
+    got I64 = 0
+    sum I64 = 0
+    for {
+        v := try chan.RecvUntil(c, stop) catch cancel.Stopped { break }
+        got++
+        sum += v
+        if got % 7 == 0 { usleep(1500) }              # slow now and then, so senders time out
+    }
+    return got, sum
+}
+
+fn main() ? {
+    c := chan.Chan<I64>(0)
+    chan.Init(c)
+    stop := cancel.Token()
+    got I64 = 0
+    sum I64 = 0
+    join {
+        spawn got, sum = receiver(c, stop)
+        join {
+            for s in range 4 { spawn sender(s, c, 300) }
+        }
+        # every sender has finished: nothing more will come
+        stop.Cancel()
+    }
+    println("sent " $Sent.AtomicLoad() ", gave up " $GaveUp.AtomicLoad() ", received " $got)
+    println("sums agree: " $(sum == SumSent.AtomicLoad()) ", counts agree: " $(got == Sent.AtomicLoad()))
+    if got != Sent.AtomicLoad() or sum != SumSent.AtomicLoad() { fail }
+}

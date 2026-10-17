@@ -1,0 +1,4 @@
+test "a" {
+    assert 1 == 1
+}
+# trailing comment no newline

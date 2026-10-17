@@ -1,0 +1,39 @@
+# PRE-EXISTING: 04 with both arms value locals (w1 outer, w2 inner). expected 44 (-i); actual -b -7, -d -s "use after scope closed"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn growv(b Box) { b.head.next = Node(44) }
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+type W struct() { b Box = Box() }
+fn pickw(w mut W&) mut W&w { return w }
+fn pickwv(w mut W&) W { return w }
+fn main() ? {
+    c := churn() < 0
+    w1 := W()
+    k1 := w1.b.head
+    {
+        w2 := W()
+        h := (w1 if c else w2).b
+        growv(h)
+    }
+    churn()
+    println($rd(k1))
+}

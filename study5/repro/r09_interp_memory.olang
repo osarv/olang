@@ -1,0 +1,8 @@
+# PERF (-i): a plain numeric loop costs ~8.4 KB and ~16 us per iteration under -i and nothing is reclaimed:
+# -D N=100000 0.93 GB / 2.0 s, N=400000 3.5 GB / 6.6 s. Built: 3 ms for the whole run.
+N I64 = 100000
+fn main() ? {
+    s := 0.0
+    for i in range N { s += F64(i) * 0.5 }
+    println($s)
+}

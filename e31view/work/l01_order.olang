@@ -1,0 +1,24 @@
+# argument order around a view lend: every argument evaluated once, left to right
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+Log mut I64 = 0
+fn tick(k I64) I64 {
+    Log = Log * 10 + k
+    return k
+}
+fn put3(a I64, v mut V&, b I64) I64 {
+    v.d[v.n] = a * 10 + b
+    return 0
+}
+fn main() ? {
+    s := Vs(Array<I64>(8))
+    put3(tick(1), s[tick(2)], tick(3))
+    s[tick(4)].d[tick(5)] = 7
+    println($Log " " $s.d)
+}

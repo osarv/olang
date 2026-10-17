@@ -1,0 +1,7 @@
+# check: fail error[M19f]: 'print' is the prelude's function, seen in every module - choose another name
+# G22/M19f: a type's constant variable is no name the prelude's print already means
+type B<print I64> struct() { x I64 = print }
+fn main() ? {
+    b := B<3>()
+    println($b.x)
+}

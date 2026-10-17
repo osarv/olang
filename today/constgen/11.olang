@@ -1,0 +1,18 @@
+# G23: N in a lambda, as a receiver, in match N, baked into a global (K2) and decided in an assert (S18c)
+fn Sum(a Array<I64, <N>>&) I64 {
+    f := fn(i I64) I64 { return a[i] * N }
+    s I64 = 0
+    for i in range N { s = s + f(i) }
+    k := match N {
+        case 0 => 100
+        case 3 => 300
+        nomatch => 0
+    }
+    return s + k + N.Hash() * 0
+}
+Baked I64 = Sum(I64[1, 2, 3])
+fn main() ? {
+    x Array<I64, 3> = I64[1, 2, 3]
+    assert Sum(I64[1, 2, 3]) == 318
+    println($Sum(x) " " $Baked)
+}

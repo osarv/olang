@@ -1,0 +1,18 @@
+# Diagnostic (minor). O10c's note says 'declare it where n lives: l mut List<mut Node&>&n = ...'; inside a Str that
+# spelling is now error[E11c, O12]. Same O10c error on d6c7f52 and d0abfe8 (the note was followable there).
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    l := List<mut Node&>()
+    for n := b.head, n != null, n = n.next { l.Push(n) }
+    return $l.Len() " " $l[0].v
+}
+fn main() ? {
+    b := Bag(Node(1, Node(2, null)))
+    println($b)
+}

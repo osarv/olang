@@ -1,0 +1,23 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }
+fn main() ? {
+    users := List<List<List<String&>>>()
+    users.Push(List<List<String&>>())
+    users[0].Push(List<String&>())
+    mm := Map<I64, List<List<String&>>>()
+    mm.Put(0, List<List<String&>>())
+    (try mm.Get(0)).Push(List<String&>())
+    for k in range 3 {
+        t := $k "-loop-text-of-moderate-length"
+        (try mm.Get(0))[0].Push(t)
+        pushFn(users[0][0], t)
+    }
+    churnIt()
+    for s in (try mm.Get(0))[0] { println(s) }
+    for s in users[0][0] { println(s) }
+}

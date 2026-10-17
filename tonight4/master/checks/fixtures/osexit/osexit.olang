@@ -1,0 +1,10 @@
+# B5b: os.Exit ends the process with the status it is given, after what the program already wrote - built and run,
+# and interpreted with -i, the same
+import "std/os"
+import "std/io"
+
+fn main() ? io.IoError {
+    try io.Print("before\n")
+    os.Exit(42)
+    try io.Print("after\n")
+}

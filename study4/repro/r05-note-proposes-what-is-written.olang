@@ -1,0 +1,53 @@
+# r05 DIAGNOSTIC - B11/O10c: the note "X is made here, in a block that closes first - make it where 'y' lives: 'f&y(...)'"
+# proposes a scope argument that is already written, and repeating the build gives the same error with the same note.
+# Seen six times across the programs (../pgrep.olang, ../jobrun.olang, ../mk.olang, ../json2csv.olang, ../todo.olang,
+# ../config.olang). Three shapes:
+#   joined - the callee returns a String VALUE: "p := filepath.Join&out(...)" builds the value where p's own storage
+#            is, the loop block, so the scope argument changes nothing; what works is "p String&out = ..." or pushing
+#            the call directly.
+#   counted - the same with a function of one's own ("describe&tally").
+#   env    - the destination is a local the function returns (r03): "&c" names its block. What works is "&return".
+#
+# expected: no error in any of them, or a note whose fix compiles
+# actual:   three error[O10c], each with "note: ... make it where 'out'/'tally'/'c' lives: 'Join&out(...)' /
+#           'describe&tally(...)' / 'Env&c(...)'" pointing at the very line that already says so
+import "std/filepath"
+import "std/os"
+
+fn joined(dir String&, names Array<String&>&, out mut List<String&>&) {
+    for name in names {
+        p := filepath.Join&out(dir, name)
+        out.Push(p)
+    }
+}
+
+fn describe(n I64) String { return "w" $(n % 3) " " $n }
+
+fn counted() I64 {
+    tally := Map<String&, I64>()
+    for i in range 10 {
+        line := describe&tally(i)
+        word := line.Split(" ")[0]
+        tally.Update(word, 0, fn(n I64) I64 { return n + 1 })
+    }
+    return tally.Len()
+}
+
+type Config struct() {
+    values Map<String&, String&> = Map<String&, String&>()
+}
+
+fn env(keys Array<String&>&) Config {
+    c := Config()
+    for k in keys {
+        v := try os.Env&c(k) catch { continue }
+        c.values.Put(k, v)
+    }
+    return c
+}
+
+fn main() ? {
+    l := List<String&>()
+    joined("d", String&["a", "b"], l)
+    println($l.Len() " " $counted() " " $env(String&["HOME", "PATH"]).values.Len())
+}

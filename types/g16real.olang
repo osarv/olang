@@ -1,0 +1,11 @@
+# a realistic nested instantiation: its mangled name passes 200 characters
+import "std/io"
+import "std/map"
+fn main() ? {
+  m := map.Map<Pair<String&, String&>, List<Pair<I64, String&>>&>()
+  k := Pair<String&, String&>("a", "b")
+  l := List<Pair<I64, String&>>()
+  l.Push(Pair<I64, String&>(1, "x"))
+  m.Put(k, l)
+  try io.Print($m.Len() "\n")
+}

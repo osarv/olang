@@ -1,0 +1,20 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Cell struct(v I64) {
+    v
+    n mut Node& = null
+}
+fn setc(r mut List<Cell>&, i I64) {
+    r[0].n = Node(i)
+}
+fn main() ? {
+    la := List<Cell>()
+    la.Push(Cell(1))
+    la[0].n = Node(5)
+    ra mut List<Cell>& = la
+    ra[0].n = Node(6)
+    setc(ra, 7)
+    println($la[0].n.v)
+}

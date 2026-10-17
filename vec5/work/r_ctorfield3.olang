@@ -1,0 +1,23 @@
+# R evasion (variant): the ctor-field instance made through a plain function
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type H struct(x String&, n I64) {
+    y String&x = $n "-new-text-in-the-region"
+}
+fn mk(p String&) H { return H(p, 5) }
+fn main() ? {
+    c := CB()
+    h := mk(c.text)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(h.y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

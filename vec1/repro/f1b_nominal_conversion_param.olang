@@ -1,0 +1,25 @@
+# Same root cause as f1, with a plain (non-prelude) declared array type and an explicit conversion.
+# A borrowed own result whose type is 'Ix' (type Ix Array<I64>) names the buffer, but OwnTypeKey interns
+# Ix as a key distinct from Array<I64>, so the loan does not match the buffer the Vec releases.
+#   -b -d -s -> "use after scope closed"    -i -> "1 2"    -b -> "1 2" (survives)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 { s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len() }
+    return t
+}
+fn id(a Array<I64>&) Array<I64>&a { return a }
+type Ix Array<I64>
+fn f(v Vec<I64>&) Ix&v { return Ix(v.View()) }
+fn grow(w mut Vec<I64>&) {
+    d := f(w)
+    for i in range 1000 { w.Push(i + 100) }
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    grow(v)
+}

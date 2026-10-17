@@ -1,0 +1,41 @@
+error PErr { BAD }
+type Diag struct() {
+    what String& = ""
+}
+type Tok struct(text String&) {
+    text
+}
+type P struct(toks List<Tok>&, diag mut Diag&) {
+    toks
+    diag
+    at I64 = 0
+}
+fn (p mut P&) bail(t Tok) ? PErr {
+    p.diag.what = t.text
+    error PErr.BAD
+}
+fn (p mut P&) expect(s String&) ? PErr {
+    t := p.toks[p.at]
+    p.at++
+    if t.text != s { try p.bail(t) }
+}
+# nested groups: "(" group* ")" - recursive, as every parser is
+fn (p mut P&) group() I64 ? PErr {
+    try p.expect("(")
+    n I64 = 1
+    for p.toks[p.at].text == "(" { n += try p.group() }
+    try p.expect(")")
+    return n
+}
+fn main() ? {
+    src := "(()]"
+    toks := List<Tok>()
+    for i in range src.Len() { toks.Push(Tok(src[i:i + 1])) }
+    d := Diag()
+    p := P(toks, d)
+    n := try p.group() catch PErr {
+        println("bad: " $d.what)
+        return
+    }
+    println($n)
+}

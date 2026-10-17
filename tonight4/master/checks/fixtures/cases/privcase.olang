@@ -1,0 +1,6 @@
+# M6a: a private case named across the boundary is one error - not also a comparison of mismatched types
+import "lib"
+fn main() ? {
+  d := lib.Dir.south
+  b Bool = d == lib.Dir.North
+}

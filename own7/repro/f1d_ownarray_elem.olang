@@ -1,0 +1,28 @@
+# F1d: an element of an own array (a plain struct held by value in the buffer) lent to a
+# reference parameter; the callee releases the buffer. This is Vec<Plain>'s element hazard.
+# Expected output: 9. Accepted; -s reports use after scope closed (the 300-element buffer is
+# an arena chunk, so valgrind is silent).
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Plain struct(k I64) {
+    k
+}
+type HB struct() {
+    buf own mut Array<Plain>&
+}
+fn f(h mut HB&, p mut Plain&) I64 {
+    h.buf = null
+    churn()
+    return p.k
+}
+fn main() ? {
+    h mut HB& = HB()
+    h.buf = Array<Plain>(300, Plain(9))
+    println($f(h, h.buf[3]))
+}

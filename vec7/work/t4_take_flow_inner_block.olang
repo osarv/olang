@@ -1,0 +1,26 @@
+# the take in an inner block: l declared in the function block, taken inside an if, returned after
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk(n I64) Vec<String&> {
+    w := Vec<String&>()
+    if n > 0 {
+        l := Lex()
+        for i in range n { l.toks.Push($i "-word-in-an-inner-block") }
+        w = take l.toks
+    }
+    return w
+}
+fn main() ? {
+    a := mk(3)
+    churn()
+    println(a[0])
+}

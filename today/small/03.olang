@@ -1,0 +1,26 @@
+# E31 multi-index: x[i, j] calls At(i, j), x[i, j] = v SetAt(i, j, v); a compound store evaluates its indices once,
+# left to right - compared compiled, -d and -i, and baked
+type Grid struct(w I64, h I64) {
+    w
+    h
+    cells mut Array<I64>& = Array<I64>(w * h)
+}
+fn (g Grid&) At(r I64, c I64) I64 { return g.cells[r * g.w + c] }
+fn (g mut Grid&) SetAt(r I64, c I64, v I64) { g.cells[r * g.w + c] = v }
+type Counter struct() { n mut I64 }
+fn (c mut Counter&) Tick() I64 {
+    c.n++
+    return c.n
+}
+fn run() I64 {
+    g := Grid(3, 3)
+    k := Counter()
+    g[k.Tick(), k.Tick()] = 5
+    g[0, 1] += 10
+    g[k.Tick() - 3, k.Tick() - 3] += 100
+    return g[1, 2] * 1000 + g[0, 1] + k.n * 1000000
+}
+Baked I64 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

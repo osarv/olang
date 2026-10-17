@@ -1,0 +1,9 @@
+fn classify(n I64) String {
+    return match n {
+        case 0 => "zero"
+        case big if big > 100 => "big"
+        case _ if n < 0 => "negative"
+        nomatch => "small"
+    }
+}
+fn main() ? { println(classify(500) " " classify(-3) " " classify(7)) }

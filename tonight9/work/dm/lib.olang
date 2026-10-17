@@ -1,0 +1,15 @@
+type Node struct(V I64) {
+    V
+    Next mut Node& = null
+}
+Base I64 = 40
+Dbl fn(v I64) I64 = fn(v I64) I64 { return v * 2 }
+fn Apply(x I64, f fn(v I64) I64 = fn(v I64) I64 { return v * 2 + Base }) I64 {
+    return f(x)
+}
+fn Pick(r Node&, n Node&r = Node(Base + 7)) Node&r {
+    return n
+}
+fn Label(k I64, s String& = "k=" $Base) String&s {
+    return s
+}

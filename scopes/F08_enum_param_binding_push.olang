@@ -1,0 +1,27 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    No
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn stash(b Box, l mut List<Node&>&) {
+    match b {
+        case Box.Has(n) { l.Push(n) }
+        nomatch { }
+    }
+}
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        stash(Box.Has(inner), l)
+    }
+    churn()
+    try io.Print($l[0].v "\n")
+}

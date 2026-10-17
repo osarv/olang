@@ -1,0 +1,24 @@
+# R: a spawned lambda building text in a captured borrow's region while the spawner releases it inside the join
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    join {
+        spawn fn() {
+            d mut String&x = $5 "-new-text-in-the-region"
+            churn()
+            println(d)
+        }()
+        c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

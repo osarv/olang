@@ -1,0 +1,37 @@
+type L0 struct() {
+    toks Vec<I64> = Vec<I64>()
+}
+type L1 struct() {
+    x L0 = L0()
+}
+type L2 struct() {
+    x L1 = L1()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() mut L2& {
+    o := L2()
+    for i in range 100 { o.x.x.toks.Push(i + 1) }
+    return o
+}
+type Hold struct(x L2&) {
+    x
+}
+fn mkHold() Hold {
+    o := L2()
+    for i in range 100 { o.x.x.toks.Push(i + 7) }
+    h := Hold(o)
+    return h
+}
+fn main() ? {
+    r := mk()
+    h := mkHold()
+    churn()
+    println($r.x.x.toks[0] " " $h.x.x.x.toks[0])
+}

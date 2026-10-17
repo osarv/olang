@@ -1,0 +1,14 @@
+fn cl(v Vec<I64>&) Vec<I64> { return v.Clone() }
+fn cs(v Vec<String&>&) I64 {
+    c := v.Clone()
+    c.Push("x")
+    return c.Len()
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(3)
+    c := cl(v)
+    w := Vec<String&>()
+    w.Push("a")
+    println($c[0] " " $cs(w))
+}

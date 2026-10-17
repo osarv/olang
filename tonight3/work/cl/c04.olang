@@ -1,0 +1,5 @@
+fn g(c Bool, b U8) I64 { return b + (1 if c else (1 << 40)) }
+C mut Bool = false
+fn main() ? {
+    println($g(C, 3))
+}

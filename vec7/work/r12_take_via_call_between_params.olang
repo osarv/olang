@@ -1,0 +1,28 @@
+# F2 across a function: the callee moves words out of a parameter's owned lexer through a getter
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }
+fn move(src mut Parser&, dst mut Parser&) { dst.lx.toks = take src.Lx().toks }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    a := Parser()
+    a.lx = Lexer()
+    for i in range 3 { a.lx.toks.Push($i "-word-built-in-a's-lexer-region") }
+    b := Parser()
+    b.lx = Lexer()
+    move(a, b)
+    a.lx = null
+    churn()
+    println(b.lx.toks[0])
+}

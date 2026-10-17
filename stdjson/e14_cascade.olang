@@ -1,0 +1,26 @@
+# one wrong argument count (E14) at a call, then a spurious O10d at a later use of what the call bound
+type H struct(Name String&, Value String&) {
+    Name
+    Value
+}
+type R struct(Hs Array<H>&) {
+    Hs
+}
+fn (r R&) find(name String&) String&r ? {
+    for h in r.Hs {
+        if h.Name == name { return h.Value }
+    }
+    error
+}
+fn make(url String&) R ? {
+    hs Array<H>&return = Array<H>(1)
+    hs[0] = H("a", "b")
+    return R(hs)
+}
+fn f() String& {
+    r := try make("u", 3) catch { return "none" }
+    return "<" $(try r.find("a") catch default "-") ">"
+}
+fn main() ? {
+    assert f() == "<b>"
+}

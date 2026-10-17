@@ -1,0 +1,18 @@
+fn main() ? {
+    m := Map<I64, I64>()
+    for i in range 20 { m.Put(i, i) }
+    it := m.Iter()
+    for j in range 5 { x := try it.Next() catch Exhausted { break } }
+    m.Clear()
+    for i in range 200 { m.Put(i + 1000, i) }
+    n I64 = 0
+    for {
+        x := try it.Next() catch Exhausted { break }
+        n++
+        if n > 100000 { break }
+    }
+    println("after Clear the iterator gave " $n " more; len " $m.Len())
+    k := m.Clone()
+    m.Remove(1000)
+    println($k.Len() " " $m.Len() " " $(1000 in k))
+}

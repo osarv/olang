@@ -1,0 +1,27 @@
+type Arr struct() {
+    data own mut Array<String&>& = null
+}
+type H struct() {
+    a own mut Arr& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    g := H()
+    h.a = Arr()
+    g.a = Arr()
+    h.a.data = Array<String&>(3, "x")
+    for i in range 3 { h.a.data[i] = $i "-built-into-h-region" }
+    g.a.data = take h.a.data
+    h.a = null
+    z := Vec<I64>()
+    churn()
+    println(g.a.data[0])
+}

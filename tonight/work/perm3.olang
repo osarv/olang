@@ -1,0 +1,13 @@
+# read-only Map reference: Put and Remove through a value copy of the handle
+fn look(m Map<String&, I32>&) I64 {
+    c Map<String&, I32> = m
+    c.Remove("a")
+    return m.Len()
+}
+fn main() ? {
+    m := Map<String&, I32>()
+    m.Put("a", 1)
+    m.Put("b", 2)
+    r Map<String&, I32>& = m
+    println($look(r) " " $m.Len() " " $("a" in m))
+}

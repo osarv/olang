@@ -1,0 +1,17 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n mut }
+fn main() ? {
+    h Holder = Holder(Node(1))
+    arr Array<Node&>& = Array<Node&>(4)
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(5)
+        h2 := Holder(inner)
+        h = h2
+        h.n = inner
+        arr[0] = inner
+        l.Push(inner)
+    }
+    try io.Print($h.n.v "\n")
+}

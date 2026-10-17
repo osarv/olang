@@ -1,0 +1,149 @@
+# ring - a fixed-capacity ring buffer whose storage is an Array<T, N> held in place, walked three ways (runs, an
+# iterator, positions), and a moving-window statistics type built on it. Sensor readings stream in; the window keeps
+# the last N and answers mean, min, max and a trend.
+
+import "std/math"
+import "std/rand"
+
+type Ring<T, N I64> struct() {
+    assert N > 0
+    items Array<T, N>
+    start I64 = 0         # oldest
+    count I64 = 0
+}
+
+fn (r Ring<<T>, <N I64>>&) Len() I64 { return r.count }
+fn (r Ring<<T>, <N I64>>&) Cap() I64 { return N }
+fn (r Ring<<T>, <N I64>>&) Full() Bool { return r.count == N }
+
+# the i-th oldest element
+fn (r Ring<<T>, <N I64>>&) At(i I64) T { return r.items[(r.start + i) % N] }
+
+# adds x, dropping the oldest when full; gives what was dropped
+fn (r mut Ring<<T>, <N I64>>&) Push(x T) T ? {
+    if r.count < N {
+        r.items[(r.start + r.count) % N] = x
+        r.count++
+        error
+    }
+    old := r.items[r.start]
+    r.items[r.start] = x
+    r.start = (r.start + 1) % N
+    return old
+}
+
+fn (r mut Ring<<T>, <N I64>>&) PopOldest() T ? {
+    if r.count == 0 { error }
+    x := r.items[r.start]
+    r.start = (r.start + 1) % N
+    r.count--
+    return x
+}
+
+# the elements stored next to each other from position at: at most two runs, the second when the ring wraps
+fn (r Ring<<T>, <N I64>>&) RunFrom(at I64) Array<T>&r ? Exhausted {
+    if at >= r.count { error Exhausted.END }
+    first := (r.start + at) % N
+    end := math.Min(first + (r.count - at), N)
+    return r.items[first:end]
+}
+
+type RingIter<T, N I64> struct(of Ring<T, N>&) {
+    of
+    at I64 = 0
+}
+fn (it mut RingIter<<T>, <N I64>>&) Next() T ? Exhausted {
+    if it.at >= it.of.Len() { error Exhausted.END }
+    x := it.of[it.at]
+    it.at++
+    return x
+}
+fn (r Ring<<T>, <N I64>>&) Iter() RingIter<T, N> { return RingIter<T, N>(r) }
+
+# ---- a moving window of readings ----
+
+type Reading struct(sensor I32, value F64) {
+    sensor
+    value
+}
+
+fn (a Reading) Less(b Reading) Bool { return a.value < b.value }
+
+type Window<N I64> struct() {
+    ring Ring<Reading, N>
+    seen I64 = 0
+    dropped I64 = 0
+}
+
+fn (w mut Window<<N I64>>&) Add(r Reading) {
+    w.seen++
+    try w.ring.Push(r) catch { return }
+    w.dropped++
+}
+
+fn (w Window<<N I64>>&) Mean() F64 {
+    if w.ring.Len() == 0 { return math.NaN }
+    s F64 = 0.0
+    for r in w.ring { s += r.value }
+    return s / F64(w.ring.Len())
+}
+
+fn (w Window<<N I64>>&) Extremes() (Reading, Reading) {
+    lo := w.ring[0]
+    hi := w.ring[0]
+    for r in w.ring.Iter() {
+        if r < lo { lo = r }
+        if hi < r { hi = r }
+    }
+    return lo, hi
+}
+
+# least-squares slope of value against position
+fn (w Window<<N I64>>&) Trend() F64 {
+    n := F64(w.ring.Len())
+    if n < 2.0 { return 0.0 }
+    sx, sy, sxy, sxx := 0.0, 0.0, 0.0, 0.0
+    for i in range w.ring.Len() {
+        x := F64(i)
+        y := w.ring[i].value
+        sx += x
+        sy += y
+        sxy += x * y
+        sxx += x * x
+    }
+    return (n * sxy - sx * sy) / (n * sxx - sx * sx)
+}
+
+fn (w Window<<N I64>>&) Describe() String {
+    lo, hi := w.Extremes()
+    t := w.Trend()
+    arrow := "rising" if t > 0.05 else "falling" if t < -0.05 else "steady"
+    return "mean " $w.Mean().Fixed(2) " min " $lo.value.Fixed(2) "@" $lo.sensor " max " $hi.value.Fixed(2) "@" $hi.sensor " " $arrow
+}
+
+fn simulate(steps I64) String {
+    w := Window<16>()
+    r := rand.Rand(99)
+    for i in range steps {
+        drift := F64(i) * 0.01
+        w.Add(Reading(I32(r.Below(4)), 20.0 + drift + r.Normal()))
+    }
+    return $w.Describe() " seen " $w.seen " dropped " $w.dropped
+}
+
+Summary := simulate(200)
+
+fn main() ? {
+    r := Ring<I32, 5>()
+    for i in range 7 { try r.Push(I32(i * 10)) catch {} }
+    print("ring by runs:")
+    for x in r { print(" " $x) }
+    println()
+    big := I32[x for x in r.Iter() if x > 25]
+    println("over 25: " $big ", count " $r.Iter().Count(fn(x I32) Bool { return x % 20 == 0 }))
+    println("fold: " $r.Iter().Fold(0, fn(acc I32, x I32) I32 { return acc + x }))
+    oldest := try r.PopOldest() catch default -1
+    println("oldest " $oldest ", now " $r.Len() " of " $r.Cap())
+    println(simulate(200))
+    println("baked: " $Summary)
+}

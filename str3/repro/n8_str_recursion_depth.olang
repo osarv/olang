@@ -1,0 +1,24 @@
+# NEW, CONFIRMED, minor (stack): recursion through a Str holds less depth. The join's scratch scope header (48 bytes,
+# in cgTextBuilt) sits in every frame of the recursion (Str inlined into the render helper: 'sub $0xc8,%rsp' against
+# 7345ff9's 'sub $0x88,%rsp'). Deepest list that renders with the default 8MB stack: e27b83b ~32,400, 7345ff9 ~43,400.
+# Run: build/deep N.
+import "std/os"
+type L struct(v I64, next L&) {
+    v
+    next
+}
+fn (l L&) Str() String {
+    if l.next == null { return $l.v }
+    return $l.v "," $l.next
+}
+fn depthOf() I64 {
+    a := os.Args()
+    return 0 if a.Len() < 2 else try a[1].ParseInt() catch default 0
+}
+fn main() ? {
+    d := depthOf()
+    l L& = L(0, null)
+    for i in range d { l = L(i, l) }
+    s := $l
+    println($s.Len())
+}

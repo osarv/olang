@@ -1,0 +1,28 @@
+# P1g: a String value target given a generic's result that returns its by-value (borrowed) parameter
+type Node struct(v I64) {
+    v
+}
+fn id(x <T>) T {
+    return x
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i)
+        t = t + nn.v
+    }
+    return t
+}
+fn main() ? {
+    s String = "init"
+    for i in range 2 {
+        src := "src" $i "-abcdefghijklmnopqrstuvwxyz"
+        join { spawn s = id(src) }
+        src[0] = 'X'
+        churn()
+    }
+    churn()
+    println(s)
+}

@@ -1,0 +1,11 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(c mut Acc&) { c.N++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    p := Pair(bump, 3)
+    p.First(l[0])
+    println("list N " $l[0].N)
+}

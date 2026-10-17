@@ -1,0 +1,16 @@
+/home/user/review/vec7/work/t11_take_flow_inner_text.olang:14:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         v.Push(s)
+      |           ^~~~
+/home/user/review/vec7/base-d5ddcda/std/prelude/vec.olang:32:5: note: the callee requires it because of this statement
+   32 |     v.data[v.n] = x
+      |     ^
+/home/user/review/vec7/work/t11_take_flow_inner_text.olang:13:9: note: 's' is declared here, in a block that closes first - declare it where 'v' lives: 's mut String&v = ...'
+   13 |         s := "inner-" $i "-text-made-in-the-loop-body"
+      |         ^
+/home/user/review/vec7/work/t11_take_flow_inner_text.olang:14:16: note: this text lives in a block that closes first - pass a copy, which is made where 'v' lives: write '$' before it
+   14 |         v.Push(s)
+      |                ^
+/home/user/review/vec7/work/t11_take_flow_inner_text.olang:16:10: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   16 |     w := take v
+      |          ^~~~
+compilation failed with 2 errors

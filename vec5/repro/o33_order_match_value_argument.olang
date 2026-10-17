@@ -1,0 +1,32 @@
+# O33 order: the region-naming borrow read inside a match value's clause of a later argument (ownOpContains walks
+# args, chain operands and callees only - not a match value's statements)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Hold struct(v I64) {
+    v
+    n mut Node& = Node(v)
+}
+type Holder struct() {
+    cur own mut Hold&
+}
+fn setN(x mut Node&, h mut Hold&) { h.n = x }
+fn main() ? {
+    s := Holder()
+    for i in range 4 {
+        s.cur = Hold(i)
+        k := i % 2
+        setN(Node(9 + i), match k { case 7 { unreachable } case _ => s.cur })
+        churn()
+        println($s.cur.n.v)
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

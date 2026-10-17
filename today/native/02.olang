@@ -1,0 +1,16 @@
+# X8/B12: exact math functions as intrinsics - baked, compiled native, compiled x86-64 (no FMA), -i
+import "std/math"
+fn f(x F64, y F64, z F64) String {
+    return $math.Fma(x, y, z) " " $math.Round(x * 2.5) " " $math.RoundEven(x * 2.5) " " $math.Floor(-x) " " $math.Sqrt(y) " " $math.Fma(F16(x), F16(y), F16(z)) " " $math.Round(F32(x) * F32(2.5)) " " $math.Trunc(BF16(y))
+}
+Baked String = f(0.1, 0.30000000000000004, -0.030000000000000002)
+B2 String = f(1.0, 3.0, 1e-17)
+X mut F64 = 0.1
+Y mut F64 = 0.30000000000000004
+Z mut F64 = -0.030000000000000002
+fn main() ? {
+    println(Baked)
+    println(f(X, Y, Z))
+    println(B2)
+    println(f(1.0 + X - X, 3.0 + Y - Y, 1e-17))
+}

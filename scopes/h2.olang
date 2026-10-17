@@ -1,0 +1,19 @@
+# a match value of existing references passed where the callee stores it
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    outer Node& = Node(1)
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        l.Push(match i { case 0, 1 => inner  nomatch => outer })
+    }
+    churn()
+    try io.Print($l[0].v " " $l[1].v "\n")
+}

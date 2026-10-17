@@ -1,0 +1,22 @@
+type Box<T> struct(v T) {
+    v
+}
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Holder struct(b mut Box<<T>>&, n I64) {
+    n
+    w String& = $b.v
+    tag String& = $n
+    nd mut Node& = Node(n)
+    l List<I64> = List<I64>()
+    l.Push(n)
+}
+fn main() ? {
+    bx mut Box<I64>& = Box<I64>(3)
+    by mut Box<F64>& = Box<F64>(2.5)
+    h := Holder(bx, 5)
+    g := Holder(by, 6)
+    println($h.tag " " $h.nd.v " " $h.l.Len() " " $g.tag " " $h.w " " $g.w)
+}

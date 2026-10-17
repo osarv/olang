@@ -1,0 +1,8 @@
+fn main() ? {
+    keep Box& = Box(0)
+    l := List<Box>()
+    l.Push(Box(4))
+    for x in l { keep = borrow(x) }
+    churn()
+    println($keep.v)
+}

@@ -1,0 +1,7 @@
+# M6b: a private spelling on an extending type replacing an inherited method other than Eq/Hash/Str (Plus via extends)
+type M extends I32
+fn (a M) plus(b M) M { return M(I32(a) * 100) }
+fn main() ? {
+    x := M(2)
+    println($(x + M(3)))
+}

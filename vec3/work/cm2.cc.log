@@ -1,0 +1,13 @@
+/home/user/review/vec3/work/cm2.olang:11:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
+   11 |     for i in range 1000 { w.Push(i + 100) }
+      |                             ^~~~
+/home/user/review/vec3/work/cm2.olang:10:25: note: borrowed here
+   10 |     xs := Array<I64>&[w.View(), w.View()]
+      |                         ^~~~
+/home/user/review/vec3/work/cm2.olang:13:14: note: used here, after it
+   13 |     println($xs[0][0])
+      |              ^~
+/home/user/wt/rvvec3/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error

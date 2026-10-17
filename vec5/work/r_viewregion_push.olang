@@ -1,0 +1,18 @@
+# R: a local typed in a Vec view's region, the Vec grown (its buffer released) while the local is used
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    w := v.View()
+    d mut String&w = $5 "-new-text-in-the-view-region"
+    for i in range 1000 { v.Push("b") }
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

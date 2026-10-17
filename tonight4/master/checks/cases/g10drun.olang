@@ -1,0 +1,22 @@
+# check: run
+# G10d: one type built by a constructor called with graphs of two element types, the instances in one List
+type G<T> struct(seed T) {
+    seed
+    vals List<T> = List<T>()
+}
+type Layer struct(g mut G<<T>>&, width I64) {
+    {
+        g.vals.Push(g.seed)
+    }
+    Width I64 = width + g.vals.Len()
+}
+fn main() ? {
+    gf := G<F32>(0.5)
+    gi := G<I64>(3)
+    l := List<Layer>()
+    l.Push(Layer(gf, 10))
+    l.Push(Layer(gi, 20))
+    l.Push(Layer(gf, 30))
+    assert l[0].Width == 11 and l[1].Width == 21 and l[2].Width == 32
+    assert gf.vals.Len() == 2 and gi.vals[0] == 3
+}

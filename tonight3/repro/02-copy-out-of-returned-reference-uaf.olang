@@ -1,0 +1,40 @@
+# O25h (rvfix extended it to "a copy out of a reference keeps its referent's scope"; pre-existing otherwise - db2af5d
+# gives the same): the copy's references are given the referent's scope only when the source is an LVALUE reference
+# (copyRefsHome bails on !OperandIsLvalue(rhs), and the assignment check in buildAssignCore likewise). A reference a
+# CALL gives back - a borrowed result, a method's, one under try - is not an lvalue, so "d Box = pick(r)" records nothing:
+# d's references are taken to live in d's block, d.head.next = Node() builds the node there, and hangs it off r's node.
+# Same for "d = pick(r)" (assignment), "for d Box = pick(r), ...", "d Box = r.me()", "try mk(r) catch { return }",
+# "d Box = r if c else Box()" and "d Box = match k { case 0 => r case _ => r }" - none of them an lvalue.
+# expected: 42 (the node built where r's references live), as "d Box = r" now gives
+# actual:   -b and -d print -7 (the node's chunk reused by churn), -i prints 42
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn pick(x mut Box&) mut Box&x { return x }
+fn grow(r mut Box&) {
+    d Box = pick(r)
+    d.head.next = Node()
+    d.head.next.v = 42
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    grow(w.b)
+    churn()
+    println($w.b.head.next.v)
+}

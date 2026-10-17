@@ -1,0 +1,10 @@
+import "std/io"
+run mut I32 = 5
+fn reinterp(x I32) String {
+    hb := F16(x).Bits().BF16FromBits()
+    bh := BF16(x).Bits().F16FromBits()
+    return $hb " " $I32(hb) " " $bh " " $I32(bh)
+}
+fn main() ? io.IoError {
+    try io.Print($reinterp(run) "\n")      # 2050 2048 2.312 2 - "5 5 2.312 5" from -b before the fix
+}

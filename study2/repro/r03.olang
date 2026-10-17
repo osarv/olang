@@ -1,0 +1,14 @@
+# r03 BUG (diagnostic): a type whose declaration fails to parse is 'unknown type' at every use - reported FIRST (errors
+# print in source order), with a 'did you mean' pointing elsewhere, before the real error (a keyword as a payload name).
+type A enum {
+    Leaf(v I64)
+    Box(b B&)
+}
+type B enum {
+    One(destruct I64)
+    Two(v I64)
+}
+fn main() ? {
+    x A& = A.Leaf(3)
+    println($x)
+}

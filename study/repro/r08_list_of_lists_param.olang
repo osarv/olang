@@ -1,0 +1,16 @@
+# an element of a List of Lists, used as a receiver or a loop source through a parameter, is rejected
+# ("inner := adj[a]; inner.Push(v)" is accepted)
+fn add(adj mut List<mut List<I64>&>&, a I64, v I64) {
+    adj[a].Push(v)
+}
+fn total(adj List<mut List<I64>&>&, a I64) I64 {
+    n I64 = 0
+    for x in adj[a] { n += x }
+    return n
+}
+fn main() ? {
+    adj := List<mut List<I64>&>()
+    adj.Push(List<I64>())
+    add(adj, 0, 5)
+    assert total(adj, 0) == 5
+}

@@ -1,0 +1,12 @@
+# r19 DIAGNOSTIC - S18a/D14b/E16b: a failed guaranteed run-time check - a slice out of range, a negative array length -
+# aborts with "slice bounds out of range" / "array length out of range" and no FILE:LINE, where a failed assert,
+# abort or unreachable now says where (S18a, 2026-10-09). -i likewise names no line for them.
+#
+# expected: r19-check-abort-no-location.olang:10: slice bounds out of range
+# actual: slice bounds out of range   (then Aborted)
+fn main() ? {
+    s := "abc"
+    n := s.Len() + 2
+    t := s[1:n]
+    println(t)
+}

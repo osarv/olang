@@ -1,0 +1,13 @@
+import "std/io"
+fn f(x enum {
+  A
+  B
+}) I32 { return 1 }
+fn main() ? {
+  y enum {
+    X
+    Y
+    Z
+  }
+  try io.Print($f(y) " " $y "\n")
+}

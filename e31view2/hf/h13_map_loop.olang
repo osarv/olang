@@ -1,0 +1,17 @@
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    m := Map<I64, Blk>()
+    m.Put(3, Blk())
+    for i in range 3 { (try m.Get(3)).S.Push(i + 7) }
+    churn()
+    for s in (try m.Get(3)).S { println("for " $s) }
+}

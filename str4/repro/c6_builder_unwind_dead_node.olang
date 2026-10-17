@@ -1,0 +1,25 @@
+# Builder header off the stack (round 4): a rendering whose builder first outgrows its 64-byte room inside a render
+# helper pushes the builder's node on the unwind chain above the helper's own scratch-scope node; the helper then pops
+# below both, and __olang_sb_done restores the chain to the helper's (dead) node. A later failing assert in the same
+# test walks dead stack: new hangs in __olang_join_tasks (or crashes); e27b83b reports "1 passed, 1 failed".
+# run: olang -t c6_builder_unwind_dead_node.olang (and -t -d)
+type Bag struct(k I64) {
+    k
+}
+Flag mut I64 = 0
+fn (b Bag&) Str() String { return "bag-" $b.k " with a fairly long rendering that goes well past sixty-four bytes of room" }
+fn noise(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return Flag }
+    return noise(d - 1) + a[3] - d
+}
+test "renders then fails" {
+    s := $Bag(1)
+    assert s.Len() > 64
+    t := noise(50)
+    assert t != 0, "expected failure"
+}
+test "after" {
+    s := $Bag(2)
+    assert s.Len() > 64
+}

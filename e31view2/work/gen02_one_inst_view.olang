@@ -1,0 +1,30 @@
+type M1 struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+type M2 struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+fn (m mut M1&) Fill(x I64) { m.d[m.off] = x }
+fn (m mut M2&) Fill(x I64) {
+    m.d[m.off] = x
+    m.off = 0
+}
+type L1 struct(w M1, n I64) {
+    w
+    n
+}
+type L2 struct(w M2, n I64) {
+    w
+    n
+}
+fn step(c mut <L>&) { c.w.Fill(3) }
+fn main() ? {
+    a := List<L1>()
+    a.Push(L1(M1(Array<I64>(2), 1), 0))
+    step(a[0])
+    b := L2[L2(M2(Array<I64>(2), 1), 0)]
+    step(b[0])
+    println($a[0].w.d " " $b[0].w.d " " $b[0].w.off)
+}

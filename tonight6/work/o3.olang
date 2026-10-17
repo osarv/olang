@@ -1,0 +1,33 @@
+# O26a/callResultTiedToBlock variants
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn pickList(n I64) List<String&> {
+    groups := Map<I64, List<String&>>()
+    for i in range n {
+        groups.Put(i, List<String&>())
+        g := try groups.Get(i) catch default List<String&>()
+        g.Push($i "-member-of-moderate-length-built-into-the-map")
+    }
+    l := try groups.Get(1) catch default List<String&>()
+    return l
+}
+fn main() ? {
+    b := pickList(3)
+    println($churn())
+    for r in range 3 {
+        other := Map<I64, List<String&>>()
+        for i in range 3 {
+            other.Put(i, List<String&>())
+            g := try other.Get(i) catch default List<String&>()
+            g.Push($i "-OVERWRITTEN-OVERWRITTEN-OVERWRITTEN-OVERWRITTEN-")
+        }
+        println($other.Len())
+    }
+    println(b[0])
+}

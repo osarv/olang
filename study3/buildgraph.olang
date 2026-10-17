@@ -1,0 +1,190 @@
+# buildgraph - a tiny make: reads rules "target: deps... | command", orders them with Kahn's algorithm, finds which
+# targets are stale by modification time, and runs their commands with os.Exec. A second run must find nothing to do.
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+import "std/time"
+
+error BuildError {
+    SYNTAX
+    CYCLE
+    MISSING
+    FAILED
+}
+
+type Rule struct(target String&, deps Array<String&>&, command Array<String&>&) {
+    target
+    deps
+    command
+}
+
+type Status enum {
+    UpToDate
+    Built(ms I64)
+    Failed(status I32, why String&)
+    Source
+}
+
+fn (s Status) Str() String {
+    return match s {
+        case Status.UpToDate => "up to date"
+        case Status.Built(ms) if ms < 1 => "built"
+        case Status.Built(ms) => "built in " $ms "ms"
+        case Status.Failed(st, why) => "FAILED (" $st "): " $why.Trim()
+        case Status.Source => "source"
+    }
+}
+
+type Graph struct(dir String&) {
+    dir
+    rules Map<String&, Rule&>
+    order List<String&>
+}
+
+# the words of s, split on runs of spaces
+fn words(s String&) List<String&> {
+    out := List<String&>()
+    for w in s.Split(" ") {
+        if w.Len() > 0 { out.Push(w) }
+    }
+    return out
+}
+
+type Where struct() {
+    line I64
+}
+
+fn parseRules(g mut Graph&, text String&, at mut Where&) ? BuildError {
+    n I64 = 0
+    for line in text.Lines() {
+        n++
+        body := line.Trim()
+        if body.Len() == 0 or body[0] == '#' { continue }
+        colon := try body.FindByte(':') catch {
+            at.line = n
+            error BuildError.SYNTAX
+        }
+        bar := try body.FindByte('|') catch default body.Len()
+        target := body[:colon].Trim()
+        deps List<String&>&g = words(body[colon + 1:bar])
+        cmd List<String&>&g = words(body[bar + 1:] if bar < body.Len() else "")
+        g.rules.Put(target, Rule(target, deps.ToArray(), cmd.ToArray()))
+    }
+}
+
+# Kahn's algorithm: every target after its dependencies; anything left over is on a cycle
+fn (g mut Graph&) sort() ? BuildError {
+    indegree := Map<String&, I64>()
+    users := Map<String&, mut List<String&>&>()
+    for e in g.rules {
+        indegree.Update(e.Key, 0, fn(v I64) I64 { return v })
+        for d in e.Value.deps {
+            indegree.Update(e.Key, 0, fn(v I64) I64 { return v + 1 })
+            if d not in users { users.Put(d, List<String&>()) }
+            (try users.Get(d) catch { unreachable }).Push(e.Key)
+            if d not in g.rules { indegree.Update(d, 0, fn(v I64) I64 { return v }) }
+        }
+    }
+    ready := List<String&>()
+    for e in indegree {
+        if e.Value == 0 { ready.Push(e.Key) }
+    }
+    ready.Sort(fn(a String&, b String&) Bool { return a < b })
+    for i I64 = 0, i < ready.Len(), i++ {
+        name := ready[i]
+        g.order.Push($name)
+        next := try users.Get(name) catch { continue }
+        for u in next {
+            indegree.Update(u, 0, fn(v I64) I64 { return v - 1 })
+            if (try indegree.Get(u) catch default -1) == 0 { ready.Push(u) }
+        }
+    }
+    if g.order.Len() != indegree.Len() { error BuildError.CYCLE }
+}
+
+fn (g Graph&) path(name String&) String { return filepath.Join(g.dir, name) }
+
+fn (g Graph&) mtime(name String&) I64 {
+    info := try os.Stat(g.path(name)) catch default os.FileInfo(os.FileKind.OTHER, 0, -1)
+    return info.ModTime
+}
+
+fn (g Graph&) stale(r Rule&) Bool {
+    own := g.mtime(r.target)
+    if own < 0 { return true }
+    return r.deps.Any(fn(d String&) Bool { return g.mtime(d) > own })
+}
+
+fn (g Graph&) run(r Rule&) Status {
+    args := List<String&>()
+    for w in r.command {
+        # a word starting with '@' names a file in the build directory
+        if w[0] == '@' { args.Push(g.path(w[1:])) } else { args.Push(w) }
+    }
+    start := time.Now()
+    out := try os.Exec(args.ToArray()) catch os.OsError { return Status.Failed(-1, "cannot start " $r.command[0]) }
+    if out.Status != 0 { return Status.Failed(out.Status, $out.Stderr) }
+    return Status.Built(time.Since(start) / 1000000)
+}
+
+fn (g mut Graph&) build(w mut io.Writer&) I32 {
+    failures I32 = 0
+    finished := Map<String&, Bool>()
+    for name in g.order {
+        st := Status.Source
+        r := try g.rules.Get(name) catch {
+            if g.mtime(name) < 0 { st = Status.Failed(-1, "no rule and no file") }
+            w.Write($name.PadEnd(14) " " $st "\n")
+            continue
+        }
+        seen Map<String&, Bool>&finished = finished
+        blocked := r.deps.Any(fn(d String&) Bool { return (try seen.Get(d) catch default true) == false })
+        if blocked {
+            st = Status.Failed(-1, "a dependency failed")
+        } else if g.stale(r) {
+            st = g.run(r)
+        } else {
+            st = Status.UpToDate
+        }
+        ok := st is not Status.Failed
+        finished.Put(name, ok)
+        if not ok { failures++ }
+        w.Write($name.PadEnd(14) " " $st "\n")
+    }
+    return failures
+}
+
+Rules String& = ("# a two-file program\n"
+    "app: main.o util.o | cp @main.o @app\n"
+    "main.o: main.c util.h | cp @main.c @main.o\n"
+    "util.o: util.c util.h | cp @util.c @util.o\n"
+    "check: app | test -s @app\n"
+    "bad: app | ls @nothing-here\n"
+    "after: bad | true\n")
+
+fn setup(dir String&) ? os.OsError {
+    try os.MkDirAll(dir)
+    for name in String&["main.c", "util.c", "util.h"] {
+        try os.WriteFile(filepath.Join(dir, name), "// " $name "\n")
+    }
+}
+
+fn once(dir String&, label String&) I32 ? BuildError {
+    g := Graph(dir)
+    at := Where()
+    try parseRules(g, Rules, at)
+    try g.sort()
+    w := io.Writer(io.Stdout)
+    defer try w.Flush() catch io.IoError { fail }
+    w.Write("-- " $label " (" $g.order.Len() " nodes)\n")
+    return g.build(w)
+}
+
+fn main() ? {
+    dir := "build/bg"
+    try setup(dir)
+    a := try once(dir, "first run")
+    b := try once(dir, "second run")
+    println($a " and " $b " failures")
+}

@@ -1,0 +1,48 @@
+fn run() I64 {
+    m := Map<String&, I64>()
+    for i in range 50 { m.Put("k" $i, i) }
+    for i in range 0, 50, 3 { m.Remove("k" $i) }
+    ks := List<String&>()
+    for k in m.Keys() { ks.Push(k) }
+    vs I64 = 0
+    for v in m.Values() { vs += v }
+    es I64 = 0
+    n I64 = 0
+    for e in m {
+        es += e.Value
+        n++
+    }
+    ok := 1 if ks.Len() == n and ks.Len() == m.Len() else 0
+    j I64 = 0
+    same I64 = 1
+    for e in m {
+        if not (ks[j] == e.Key) { same = 0 }
+        j++
+    }
+    return vs * 1000 + es * 10 + ok + same * 100000000
+}
+Baked := run()
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn keep(m mut Map<String&, I64>&, l mut List<String&>&) {
+    for i in range 20 { m.Put("x" $i $i, i) }
+    for k in m.Keys() { l.Push(k) }
+}
+fn main() ? {
+    println($Baked " " $run())
+    m := Map<String&, I64>()
+    l := List<String&>()
+    {
+        keep(m, l)
+    }
+    churn()
+    println($l.Len() " " $l[0] " " $l[19])
+}

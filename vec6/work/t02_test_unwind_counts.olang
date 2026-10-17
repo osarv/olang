@@ -1,0 +1,62 @@
+Made mut I64 = 0
+Dropped mut I64 = 0
+type X struct(k I64) {
+    k
+    Made++
+} destruct { Dropped++ }
+type Lexer struct(n I64) {
+    n
+    o own mut X& = null
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b own mut Lexer& = Lexer(2)
+}
+fn deepFail(k I64) {
+    w := Two()
+    w.a.o = X(1)
+    w.b.o = X(2)
+    for i in range k { w.a.toks.Push(i)
+        w.b.toks.Push(i) }
+    m := take w.a
+    defer { m.toks.Push(6) }
+    w.a = Lexer(5)
+    w.a.o = X(3)
+    assert k < 0
+}
+fn deepDone(k I64) {
+    w := Two()
+    w.a.o = X(4)
+    {
+        x := take w.a
+        x.toks.Push(1)
+        y := Lexer(9)
+        y.o = X(5)
+        done
+    }
+}
+fn ctorFail(k I64) ? {
+    p := try Pair3(k)
+}
+type Pair3 struct(k I64) ? {
+    l Lexer = Lexer(k)
+    l.o = X(6)
+    m Lexer = Lexer(k + 1)
+    m.o = X(7)
+    if k > 0 { error }
+    r Lexer = Lexer(k + 2)
+}
+test "a failing assert with owning fields alive" {
+    deepFail(50)
+}
+test "done with owning fields alive" {
+    deepDone(40)
+}
+test "a constructor failing half-way" {
+    for k in range 3 { try ctorFail(k) catch { } }
+}
+test "every owner made in the tests above was released" {
+    println("made " $Made " dropped " $Dropped)
+    assert Made == Dropped
+}

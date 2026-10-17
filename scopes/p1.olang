@@ -1,0 +1,7 @@
+import "std/map"
+fn main() ? {
+    m Map<I32, I64>& = Map<I32, I64>()
+    n Map<String&, I64>& = Map<String&, I64>()
+    k := Map<String&, I64>()
+    o Map<String&, I64>& = k
+}

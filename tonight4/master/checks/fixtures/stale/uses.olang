@@ -1,0 +1,5 @@
+import "plain"
+error E { X }
+fn main() ? E {
+    assert plain.Plain() + Level == Want
+}

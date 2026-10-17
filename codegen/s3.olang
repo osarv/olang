@@ -1,0 +1,21 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+}
+
+fn dbl(x I64) I64 {
+    return x * 2
+}
+
+fn pick() fn(x I64) I64 {
+    return dbl
+}
+
+fn main() ? io.IoError {
+    r Node = Node(0)
+    join {
+        spawn r = Node(5)
+    }
+    try io.Print($r.v "\n")
+}

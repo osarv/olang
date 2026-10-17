@@ -1,0 +1,9 @@
+# r04 BUG (diagnostic) / FRICTION: a parenthesized piece of a text join is read as a call of the piece before it (E13b,
+# kept by design) - but the message says "Array<Char, 3> is not a function, and declares no Call", and when the piece
+# before is a literal a second error follows from the same mistake (D8 "this function returns String, found I32"). "$(...)" is the
+# fix; the message could say so.
+fn a(tried Bool, op String&) String { return "(" $op (" try" if tried else "") }
+fn b(negated Bool) String { return "(is" (" not " if negated else " ") }
+fn main() ? {
+    println($a(true, "=") $b(false))
+}

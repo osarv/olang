@@ -1,0 +1,29 @@
+# R: a match binding naming a borrow's region, a local typed in the binding's scope
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type E enum {
+    S(s String&)
+    N
+}
+fn main() ? {
+    c := CB()
+    e := E.S(c.text)
+    match e {
+        case E.S(t) {
+            d mut String&t = $5 "-new-text-in-the-region"
+            c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+            churn()
+            println(d)
+        }
+        case E.N { }
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

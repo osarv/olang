@@ -1,0 +1,30 @@
+# PRE-EXISTING (45eea97 alike), found checking "destructors run by a closure's scope closes" (no closure needed).
+# A destructor that builds through its instance's reference field ('n.next = Node(k)') builds into the destructor's
+# own scope - its IR allocates from a scope header it alloca'd itself - which closes as the destructor returns, while
+# the node is stored where the instance's referent lives. The next destructor of the same scope reads it.
+# (The instance has to live exactly where 'a' lives, C2d, so the store is accepted.)
+#   expected: "reads 33", "reads 22", "done"
+#   actual:   -b prints that by luck; -d -s: "use after scope closed: storage a closed scope gave back was read or
+#             written", status 134 (-i does not run destructors yet)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Res struct(n mut Node&, k I64) {
+    n
+    k
+} destruct {
+    if n.next != null { println("reads " $n.next.v) }
+    n.next = Node(k)
+    for j in range 20 { t := Node(j) }
+}
+fn f() {
+    a mut Node& = Node(0)
+    r1 Res&a = Res(a, 11)
+    r2 Res&a = Res(a, 22)
+    r3 Res&a = Res(a, 33)
+}
+fn main() ? {
+    f()
+    println("done")
+}

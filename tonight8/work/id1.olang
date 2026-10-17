@@ -1,0 +1,27 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn same2(f fn() I64, g fn() I64) Bool { return f is g }
+fn id(f fn() I64) fn() I64 { return f }
+fn eq2(f fn() I64, g fn() I64) Bool { return f == g }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 {
+        n.next = Node(2)
+        return n.v
+    }
+    h := fn() I64 {
+        n.next = Node(2)
+        return n.v
+    }
+    r, q, e Bool
+    k fn() I64 = null
+    join {
+        spawn r = same2(g, g)
+        spawn q = same2(g, h)
+        spawn k = id(g)
+        spawn e = eq2(g, g)
+    }
+    println($same2(g, g) " " $r " " $q " " $(k is g) " " $e " " $(k == g))
+}

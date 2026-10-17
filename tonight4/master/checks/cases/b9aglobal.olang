@@ -1,0 +1,21 @@
+# check: run
+# B9a: a global of a type narrower than the token evaluator computes in - an I32 that wraps, an F32 - is read as its type
+# makes it, which only compile-time evaluation (B9c) does
+Max I32 = 2147483647
+Tenth F32 = 0.1
+if Max + 1 < 0 {
+    fn wraps() Bool { return true }
+} else {
+    fn wraps() Bool { return false }
+}
+if Tenth + 0.2 == 0.3 {
+    fn sumF32() Bool { return true }
+} else {
+    fn sumF32() Bool { return false }
+}
+fn main() ? {
+    m I32 = Max
+    assert wraps() == (m + 1 < 0)
+    t F32 = Tenth
+    assert sumF32() == (t + 0.2 == 0.3)
+}

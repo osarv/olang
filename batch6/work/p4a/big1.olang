@@ -1,0 +1,38 @@
+# P4a/P1g: tasks returning a struct over 128 bytes (through memory) and a fixed array, failing into a default
+error E {
+    NEG
+}
+type Big struct(k I64) {
+    k
+    a Array<I64, 20> = Array<I64, 20>()
+}
+fn mkBig(n I64) Big ? E {
+    if n < 0 { error E.NEG }
+    b := Big(n)
+    for i in range 20 { b.a[i] = n * 100 + i }
+    return b
+}
+fn mkArr(n I64) Array<I64, 4> ? E {
+    if n < 0 { error E.NEG }
+    return I64[n, n + 1, n + 2, n + 3]
+}
+fn two(n I64) (Big, Array<I64, 4>) ? E {
+    if n < 0 { error E.NEG }
+    return Big(n), I64[n, n, n, n]
+}
+fn main() ? {
+    x Big = Big(0)
+    y Big = Big(0)
+    a Array<I64, 4> = I64[0, 0, 0, 0]
+    b Array<I64, 4> = I64[0, 0, 0, 0]
+    p Big = Big(0)
+    q Array<I64, 4> = I64[0, 0, 0, 0]
+    join {
+        spawn x = try mkBig(3) catch default Big(-1)
+        spawn y = try mkBig(-3) catch default Big(-2)
+        spawn a = try mkArr(5) catch default I64[9, 9, 9, 9]
+        spawn b = try mkArr(-5) catch default I64[8, 8, 8, 8]
+        spawn p, q = try two(-1) catch default Big(-7), I64[7, 7, 7, 7]
+    }
+    println($x.k " " $x.a[19] " " $y.k " " $y.a[19] " " $a " " $b " " $p.k " " $q)
+}

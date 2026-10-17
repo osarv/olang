@@ -1,0 +1,4 @@
+# check: fail error[M23]: a remote import names a file in the repository: host/owner/repo[@ref]/path
+import "example.com/me/tools"
+error E { X }
+fn main() ? E { }

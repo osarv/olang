@@ -1,0 +1,20 @@
+# S17: a try join whose task's error would leave the assert message
+error Bad {
+    WORD
+}
+fn g(k I64) ? Bad {
+    if k > 1 { error Bad.WORD }
+}
+fn h(k I64) String ? {
+    if k > 3 { error }
+    return "ok " $k
+}
+fn check(k I64) I64 ? Bad {
+    assert k < 2, (try h(k) catch { try join { spawn try g(k) }
+        println("joined") } default "message")
+    return k
+}
+fn main() ? {
+    println($(try check(1)))
+    println($(try check(5) catch default 0))
+}

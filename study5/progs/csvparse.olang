@@ -1,0 +1,106 @@
+# csvparse - a CSV reader that handles quoted fields ("a, b", doubled quotes), then per-column type inference
+# (integer, float, text) and a JSON line per record.
+import "std/os"
+import "std/json"
+
+error CsvError {
+    UNTERMINATED_QUOTE
+    RAGGED_ROW
+}
+
+# the fields of one record starting at text[at], pushed onto "into"; where the next record starts. (First written
+# returning "(List<String&>, I64)": the destructured list cannot be pushed outward (r04), and its Clone() compiles but
+# is a use-after-free (r01).)
+# (Then written pushing a List<String&> of fields onto a List<List<String&>>: no spelling of the inner list found
+# compiled - O10c, then O17 for "List<String&>&into()". So the cells go flat into one List, a record per Count.)
+fn readRecord(text String&, at I64, fields mut List<String&>&) I64 ? CsvError {
+    field := StringBuilder()
+    i := at
+    inQuotes := false
+    for i < text.Len() {
+        c := text[i]
+        if inQuotes {
+            if c == '"' {
+                if i + 1 < text.Len() and text[i + 1] == '"' {
+                    field.PushChar('"')
+                    i++
+                } else {
+                    inQuotes = false
+                }
+            } else {
+                field.PushChar(c)
+            }
+        } else if c == '"' {
+            inQuotes = true
+        } else if c == ',' {
+            fields.Push(field.ToString())
+            field.Clear()
+        } else if c == '\n' {
+            i++
+            break
+        } else if c != '\r' {
+            field.PushChar(c)
+        }
+        i++
+    }
+    if inQuotes { error CsvError.UNTERMINATED_QUOTE }
+    fields.Push(field.ToString())
+    return i
+}
+
+type Kind enum {
+    Int
+    Float
+    Text
+}
+
+fn kindOf(s String&) Kind {
+    if s.Len() == 0 { return Kind.Text }
+    try s.ParseInt() catch {                  # "_ := try ..." is D8c's error
+        try s.ParseFloat() catch { return Kind.Text }
+        return Kind.Float
+    }
+    return Kind.Int
+}
+
+fn widen(a Kind, b Kind) Kind {
+    if a == Kind.Text or b == Kind.Text { return Kind.Text }
+    if a == Kind.Float or b == Kind.Float { return Kind.Float }
+    return Kind.Int
+}
+
+fn main() ? CsvError + os.OsError + ParseError {
+    path := "/tmp/study5_quoted.csv"
+    try os.WriteFile(path, "name,city,score,visits\n\"Smith, Anna\",Lund,9.5,3\nBo,\"Malm\"\"o\",7,12\n\"Li\",\"New\nYork\",8.25,1\n")
+    text := try os.ReadFile(path)
+    cells := List<String&>()
+    at := try readRecord(text, 0, cells)
+    width := cells.Len()
+    for at < text.Len() {
+        before := cells.Len()
+        at = try readRecord(text, at, cells)
+        if cells.Len() - before != width { error CsvError.RAGGED_ROW }
+    }
+    nrows := cells.Len() / width - 1
+    kinds := Array<Kind>(width)
+    for c in range width {
+        k := Kind.Int
+        for r in range 1, nrows + 1 { k = widen(k, kindOf(cells[r * width + c])) }
+        kinds[c] = k
+    }
+    println("columns: " $kinds)
+    names := Array<String&>(width)        # a comprehension may not hold references (E27)
+    for c in range width { names[c] = cells[c] }
+    for r in range 1, nrows + 1 {
+        values := Array<json.Json&>(width)
+        for c in range width {
+            cell := cells[r * width + c]
+            values[c] = match kinds[c] {
+                case Kind.Int => json.Json.Num(F64(try cell.ParseInt()))
+                case Kind.Float => json.Json.Num(try cell.ParseFloat())
+                case Kind.Text => json.Json.Str(cell)
+            }
+        }
+        println($json.Json.Obj(json.Object(names, values)))
+    }
+}

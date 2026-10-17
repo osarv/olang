@@ -1,0 +1,36 @@
+Count mut I64 = 0
+type R struct(v I64) {
+    v
+} destruct { Count.AtomicAdd(1) }
+type Node struct(v I64) {
+    v
+    w I64 = v * 3
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn mkr(r Node&, i I64) R&r { return R(i) }
+fn work(f fn(i I64) I64, n I64) I64 {
+    s I64 = 0
+    for i in range n { s += f(i) }
+    return s
+}
+fn main() ? {
+    bad I64 = 0
+    for it in range 300 {
+        root Node& = Node(it)
+        f := fn(i I64) I64 {
+            n := mk(root, i)
+            k := mkr(root, i)
+            return n.v + n.w + k.v - i
+        }
+        sums := Array<I64>(16)
+        join {
+            for t in range 16 {
+                spawn sums[t] = work(f, 50)
+            }
+        }
+        for t in range 16 {
+            if sums[t] != 4 * 1225 { bad++ }
+        }
+    }
+    println("bad " $bad " dtors " $Count)
+}

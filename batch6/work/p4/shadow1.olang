@@ -1,0 +1,36 @@
+# P4b: a return from inside a join that cannot fail, nested in one that can and fails
+error E {
+    NEG
+}
+fn g(c mut Array<I64>&, k I64, n I64) ? E {
+    c[k] = c[k] + 1
+    if n < 0 { error E.NEG }
+}
+fn h(c mut Array<I64>&, k I64) {
+    c[k] = c[k] + 10
+}
+fn f(c mut Array<I64>&, n I64) I64 {
+    try join {
+        spawn try g(c, 0, n)
+        join {
+            spawn h(c, 1)
+            if n < 5 { return 3 }
+        }
+        c[2] = c[2] + 100
+    } catch E { return 8 }
+    return 9
+}
+fn run(n I64) String {
+    c := Array<I64>(3)
+    r := f(c, n)
+    return $r " " $c
+}
+B1 String = run(-1)
+B2 String = run(1)
+B3 String = run(9)
+on mut I64 = 1
+fn main() ? {
+    println($run(-on) " | " $B1)
+    println($run(on) " | " $B2)
+    println($run(9 * on) " | " $B3)
+}

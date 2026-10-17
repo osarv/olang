@@ -1,0 +1,9 @@
+fn first3(row Array<F64>&) Array<F64, 3> {
+    v := try (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
+    return v
+}
+fn main() ? {
+    a := F64[1.0, 2.0, 3.0]
+    b := F64[1.0]
+    println($first3(a) " " $first3(b))
+}

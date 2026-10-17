@@ -1,0 +1,10 @@
+fn main() ? {
+    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())
+    parts[0].Put("a", 1)
+    println("part 1 has " $parts[1].Len() " entries, Has a: " $parts[1].Has("a"))
+    lists := Array<List<I64>>(3, List<I64>())
+    lists[0].Push(7)
+    println("list 2 has " $lists[2].Len() " elements")
+    for i in range 10 { lists[0].Push(i) }
+    println("list 2 has " $lists[2].Len() " elements, list 0 " $lists[0].Len())
+}

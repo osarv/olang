@@ -1,0 +1,18 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Doc struct() { title own mut String& = "bb" }
+type Idx struct() { alias String& = null }
+Docs own mut Doc& = Doc()
+Index mut Idx& = Idx()
+fn main() ? {
+    Index.alias = Docs.title
+    Docs.title = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(Index.alias)
+}

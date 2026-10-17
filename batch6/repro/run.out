@@ -1,0 +1,130 @@
+== 01_elem_field_store.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w0-abcdefghijklmnopqrstuvwxyz w1-abcdefghijklmnopqrstuvwxyz w2-abcdefghijklmnopqrstuvwxyz |
+  [base] refused: 01_elem_field_store.olang:27:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 01b_elem_field_store_map.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w0-abcdefghijklmnopqrstuvwxyz w1-abcdefghijklmnopqrstuvwxyz w2-abcdefghijklmnopqrstuvwxyz |
+  [base] refused: 01b_elem_field_store_map.olang:20:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 01c_elem_field_store_first.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx   |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w2-abcdefghijklmnopqrstuvwxyz   |
+  [base] refused: 01c_elem_field_store_first.olang:19:20: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx   |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 01d_elem_field_store_parallel.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w0-abcdefghijklmnopqrstuvwxyz w1-abcdefghijklmnopqrstuvwxyz w2-abcdefghijklmnopqrstuvwxyz |
+  [base] refused: 01d_elem_field_store_parallel.olang:20:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 01e_elem_field_store_user_generic.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w0-abcdefghijklmnopqrstuvwxyz w1-abcdefghijklmnopqrstuvwxyz w2-abcdefghijklmnopqrstuvwxyz |
+  [base] refused: 01e_elem_field_store_user_generic.olang:29:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 01f_elem_store_rows.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w0-abcdefghijklmnopqrstuvwxyz w1-abcdefghijklmnopqrstuvwxyz w2-abcdefghijklmnopqrstuvwxyz |
+  [base] refused: 01f_elem_store_rows.olang:16:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 01g_elem_value_field_store.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w0-abcdefghijklmnopqrstuvwxyz w1-abcdefghijklmnopqrstuvwxyz w2-abcdefghijklmnopqrstuvwxyz |
+  [base] refused: 01g_elem_value_field_store.olang:23:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx 299299-897xxxxxxxxxxxxxxxxxxx |
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 02_control_dtor_no_task.olang
+  [new -b]      50|100|150|200|
+  [new -b -d -s] 50|100|150|200|
+  [new -i]      olang -i: 02_control_dtor_no_task.olang:27: it builds a value whose type declares a destructor, which -i does not run yet|
+  [base -b]      50|100|150|200|
+  [base -b -d -s] 50|100|150|200|
+  [round1 -b]      50|100|150|200|
+  [round1 -b -d -s] 50|100|150|200|
+== 02_dtor_task_part.olang
+  [new -b]      0|0|0|0|
+  [new -b -d -s] 0|0|0|0|
+  [new -i]      olang -i: 02_dtor_task_part.olang:38: it builds a value whose type declares a destructor, which -i does not run yet|
+  [base -b]      50|100|150|200|
+  [base -b -d -s] 50|100|150|200|
+  [round1 -b]      50|100|150|200|
+  [round1 -b -d -s] 50|100|150|200|
+== 02b_dtor_task_part_box.olang
+  [new -b]      0|0|0|0|0|
+  [new -b -d -s] 0|0|0|0|0|
+  [new -i]      olang -i: 02b_dtor_task_part_box.olang:39: it builds a value whose type declares a destructor, which -i does not run yet|
+  [base -b]      0|1007|3014|6021|10028|
+  [base -b -d -s] 0|1007|3014|6021|10028|
+  [round1 -b]      0|1007|3014|6021|10028|
+  [round1 -b -d -s] 0|1007|3014|6021|10028|
+== 03_cond_store_param_field.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w1-abcdefghijklmnopqrstuvwxyz|
+  [base -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [base -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 03b_cond_store_local_field.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w1-abcdefghijklmnopqrstuvwxyz|
+  [base -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [base -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 03c_match_store_local_field.olang
+  [new -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [new -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [new -i]      w1-abcdefghijklmnopqrstuvwxyz|
+  [base -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [base -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [round1 -b]      299299-897xxxxxxxxxxxxxxxxxxx|
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+== 04_task_default_lambda_number.olang
+  [new] refused: 04_task_default_lambda_number.olang:31:51: error[P4a]: a task's default is built where its result lands, and this names existing storage - build the value here, or give null
+  [base] refused: 04_task_default_lambda_number.olang:31:46: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
+  [round1] refused: 04_task_default_lambda_number.olang:31:46: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
+== 05_par_hidden_name_collision.olang
+  [new] refused: 05_par_hidden_name_collision.olang:19:10: error: '$par6' is declared twice
+  [base] refused: 05_par_hidden_name_collision.olang:19:10: error: '$par6' is declared twice
+  [round1 -b]      4 1|
+  [round1 -b -d -s] 4 1|
+== 06_try_fallible_call.olang
+  [new] refused: 06_try_fallible_call.olang:15:14: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+  [base] refused: 06_try_fallible_call.olang:15:14: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+  [round1] refused: 06_try_fallible_call.olang:15:14: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+== 07_dtor_method_on_field.olang
+  [new] refused: 07_dtor_method_on_field.olang:10:5: error[M10]: 'l' is no import here
+  [base] refused: 07_dtor_method_on_field.olang:10:5: error[M10]: 'l' is no import here
+  [round1] refused: 07_dtor_method_on_field.olang:10:5: error[M10]: 'l' is no import here
+== 08_dtor_check_fails_in_test.olang
+  [new -t -d -s] 08_dtor_check_fails_in_test.olang:15: assertion failed: dtor fails|FAIL - a destructor fails|32|ok - after|1 passed, 1 failed|
+  [base -t -d -s] 08_dtor_check_fails_in_test.olang:15: assertion failed: dtor fails|FAIL - a destructor fails|32|ok - after|1 passed, 1 failed|
+  [round1 -t -d -s] 08_dtor_check_fails_in_test.olang:15: assertion failed: dtor fails|FAIL - a destructor fails|32|ok - after|1 passed, 1 failed|
+== 09_parallel_whole_global.olang
+  [new] refused: 09_parallel_whole_global.olang:12:11: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  [base] refused: 09_parallel_whole_global.olang:12:11: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  [round1] refused: 09_parallel_whole_global.olang:12:11: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+== 10_dtor_lifo_by_design.olang
+  [new -b]      125|
+  [new -b -d -s] 125|
+  [new -i]      olang -i: 10_dtor_lifo_by_design.olang:27: it builds a value whose type declares a destructor, which -i does not run yet|
+  [base -b]      125|
+  [base -b -d -s] use after scope closed: storage a closed scope gave back was read or written|
+  [round1 -b]      125|
+  [round1 -b -d -s] use after scope closed: storage a closed scope gave back was read or written|

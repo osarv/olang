@@ -1,0 +1,11 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn set(a mut Node&, i I64) { a.next, a.v = Node(i), i }
+fn main() ? {
+    a mut Node& = Node(0)
+    set(a, 3)
+    a.next, a.v = Node(4), 4
+    println($a.next.v " " $a.v)
+}

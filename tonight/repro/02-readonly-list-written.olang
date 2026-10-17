@@ -1,0 +1,16 @@
+# CONFIRMED (s3std List/Map as handles + T25b permissions).
+# Expected: a read-only List<I32>& (and an immutable global) cannot be changed through - T25b/T25c: "read-only never
+#           converts to writable". Either the copy "c List<I32> = l" gives a list that does not write G's record, or
+#           the Push is a compile-time error.
+# Actual:   compiles; the copy is a writable local whose one field (s mut listState<T>&) names G's own record, so
+#           c.Push writes the immutable global: "assertion failed: G changed: 3" in -b, -d and -i. The same holds for
+#           Map (c Map<K, V> = m; c.Remove(k)) and for any read-only reference to a List/Map.
+G := I32[1, 2].ToList()
+fn look(l List<I32>&) {
+    c List<I32> = l
+    c.Push(99)
+}
+fn main() ? {
+    look(G)
+    assert G.Len() == 2, "G changed: " $G.Len()
+}

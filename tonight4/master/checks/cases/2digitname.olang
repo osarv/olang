@@ -1,0 +1,12 @@
+# check: run
+# a module whose file name begins with a digit builds: every symbol and type name starts with the module's identity, and
+# an LLVM name may not begin with a digit ("@2go_helper" was invalid IR), so the leading digit is escaped (B3b)
+type Pt struct(x I32) { x }
+fn (p Pt&) Twice() I32 { return p.x * 2 }
+G mut I32 = 21
+fn helper() I32 { return G }
+fn main() ? {
+    p := Pt(4)
+    f := fn(x I32) { return x + G }
+    assert p.Twice() == 8 and helper() == 21 and f(1) == 22
+}

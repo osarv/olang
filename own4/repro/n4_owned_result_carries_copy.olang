@@ -1,0 +1,74 @@
+# own4 N4: an owned result whose own array's elements hold a borrowed copy carries the copy's loans to nothing. An owner
+# local is never a holder (ownHold skips 'own'), whether declared with the result or assigned it, and an owner handed
+# to an owning parameter "holds no loan" (ownCallKeeps skips it) - though keepFirst keeps an element of what it owns in g.
+# The release after is accepted while arr / g still name the copy.
+# -b -s: "use after scope closed" (each of the three); -b: segfault; -i: "1 leaf5" (it never frees)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Box struct(x Outer&) {
+    x
+}
+type Big2 struct() {
+    bx Box& = null
+}
+# an owned result: the own array's elements live in the result scope, so the obligation is only "x outlives it"
+fn withFirst(x Outer&) own mut Array<Box&>& {
+    a own mut Array<Box&>& = Array<Box&>(1)
+    a[0] = Box(x)
+    return a
+}
+fn keepFirst(dst mut Big2&, a own mut Array<Box&>&) { dst.bx = a[0] }
+fn viaDecl() {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v                                            # a borrowed copy
+    arr own mut Array<Box&>& = withFirst(b)           # an owner local: no holder
+    v.o = null                                        # accepted
+    churn()
+    println($arr[0].x.o.k " " $arr[0].x.o.deep.text)
+}
+fn viaAssign() {
+    v := Outer()
+    v.o = Inner(2)
+    v.o.deep = Leaf(6)
+    b := v
+    arr own mut Array<Box&>& = null
+    arr = withFirst(b)                                # assigned: no holder either
+    v.o = null
+    churn()
+    println($arr[0].x.o.k " " $arr[0].x.o.deep.text)
+}
+fn viaOwningParam() {
+    v := Outer()
+    v.o = Inner(3)
+    v.o.deep = Leaf(7)
+    b := v
+    g := Big2()
+    keepFirst(g, withFirst(b))                        # an owner for an owning parameter "holds no loan"
+    v.o = null
+    churn()
+    println($g.bx.x.o.k " " $g.bx.x.o.deep.text)
+}
+fn main() ? {
+    viaDecl()
+    viaAssign()
+    viaOwningParam()
+}

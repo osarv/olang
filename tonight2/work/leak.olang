@@ -1,0 +1,13 @@
+fn pick(s String&) String&s {
+    l := List<String&>()
+    l.Push(s)
+    l.Push(s)
+    return l[1]
+}
+fn main() ? {
+    t I64 = 0
+    for i in range 2000000 {
+        t += pick("literal").Len()
+    }
+    println($t)
+}

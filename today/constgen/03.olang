@@ -1,0 +1,6 @@
+# what type does ':=' give a fixed-array constructor call (D15: the expression's own type)?
+fn takeFixed(a Array<U8, 4>&) I64 { return a.Len() }
+fn main() ? {
+    a := Array<U8, 4>()
+    println($takeFixed(a))
+}

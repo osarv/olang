@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/c5.olang:9:41: error[E34]: 'take' moves an owner out of an own slot, and this is Vec<I64>&
+    9 | fn f(v mut Vec<I64>&) Vec<I64> { return take v }
+      |                                         ^~~~
+compilation failed with 1 error

@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/k14.olang:10:59: error[O10d]: this value lives in this function's own scope, which closes first
+   10 | fn k(a mut Array<Char>&) mut Array<Char>& { return Box(a).x }
+      |                                                           ^
+compilation failed with 1 error

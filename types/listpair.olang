@@ -1,0 +1,11 @@
+# G11/G16: a List of a value type holding a reference - Push is rejected inside the prelude
+import "std/io"
+type Named struct(id I64, name String&) {
+  id
+  name
+}
+fn main() ? {
+  l := List<Named>()
+  l.Push(Named(1, "x"))
+  try io.Print($l.Len() "\n")
+}

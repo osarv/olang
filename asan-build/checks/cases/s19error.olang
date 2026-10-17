@@ -1,0 +1,12 @@
+# check: fail an error may not leave deferred code
+# S19b: nor may an error statement raise one from it
+error E {
+    BAD
+}
+fn f(n I32) I32 ? E {
+    defer {
+        if n > 1 { error E.BAD }
+    }
+    return n
+}
+fn main() ? E { assert try f(1) == 1 }

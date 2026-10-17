@@ -1,0 +1,53 @@
+# F1a: a by-value part (inline struct field, inline fixed array) of an owned object, lent in
+# place to a reference parameter or receiver, carries no loan - the callee releases the owner
+# and then reads the freed part. Expected output: 5, 33, 7, 7. Accepted; -s reports use after
+# scope closed, valgrind invalid reads inside a block __olang_own_free freed.
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Plain struct(k I64) {
+    k
+}
+type In3 struct(k I64) {
+    pl Plain = Plain(k)
+    data Array<I64, 8> = Array<I64, 8>()
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn f(h mut H3&, p mut Plain&) I64 {
+    h.cur = null
+    churn()
+    return p.k
+}
+fn g(h mut H3&, a mut Array<I64>&) I64 {
+    h.cur = null
+    churn()
+    return a[0] + a[7]
+}
+fn (p mut Plain&) Bump(h mut H3&) I64 {
+    h.cur = null
+    churn()
+    return p.k
+}
+fn viaParam(h mut H3&) I64 {
+    return f(h, h.cur.pl)
+}
+fn main() ? {
+    h mut H3& = H3()
+    h.cur = In3(5)
+    println($f(h, h.cur.pl))
+    h.cur = In3(6)
+    h.cur.data[0] = 11
+    h.cur.data[7] = 22
+    println($g(h, h.cur.data))
+    h.cur = In3(7)
+    println($h.cur.pl.Bump(h))
+    h.cur = In3(7)
+    println($viaParam(h))
+}

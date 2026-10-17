@@ -1,0 +1,4 @@
+# check: fail declared by the prelude alone
+fn (n I32) Tw() I32 { return n * 2 }
+error E { X }
+fn main() ? E { }

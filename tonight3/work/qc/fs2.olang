@@ -1,0 +1,24 @@
+type Node struct() {
+  v I64 = 0
+}
+type E enum {
+  A(n mut Node&)
+  Z
+}
+type B struct() {
+  arr Array<mut Node&, 2>
+  e E = E.A(Node())
+}
+fn mk() B {
+  b := B()
+  b.arr[0] = Node()
+  b.arr[1] = Node()
+  return b
+}
+G B = mk()
+fn main() ? {
+  x := G
+  w := x.arr as Array<mut Node&, 2>&
+  w[0].v = 5
+  println($G.arr[0].v " " $(G.e as E.A).v)
+}

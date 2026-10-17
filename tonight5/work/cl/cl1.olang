@@ -1,0 +1,31 @@
+fn show(l List<I64>&) String {
+    b := StringBuilder()
+    for x in l { b.Push($x " ") }
+    return b.ToString()
+}
+fn main() ? {
+    l := List<I64>()
+    for i in range 40 { l.Push(i) }
+    for i in range 17 { try l.Pop() catch { } }
+    c1 := l.Clone()
+    println($c1.Len() ": " $show(c1))
+    for i in range 7 { try l.Pop() catch { } }
+    c2 := l.Clone()
+    println($c2.Len() ": " $show(c2))
+    l.Clear()
+    c3 := l.Clone()
+    println($c3.Len() ": " $show(c3))
+    for i in range 30 { l.Push(i * 2) }
+    l.RemoveAt(3)
+    l.Insert(0, 99)
+    for i in range 6 { try l.Pop() catch { } }
+    c4 := l.Clone()
+    println($c4.Len() ": " $show(c4))
+    for i in range 24 { try l.Pop() catch { } }
+    c5 := l.Clone()
+    println($c5.Len() ": " $show(c5))
+    for i in range 8 { l.Push(i) }
+    c6 := l.Clone()
+    c6.Push(100)
+    println($c6.Len() ": " $show(c6) " / " $l.Len())
+}

@@ -1,0 +1,11 @@
+# T25c: a conversion of a read-only reference handed to a writable parameter writes the read-only storage
+import "std/io"
+fn w(s mut String&) { s[0] = 'Z' }
+fn touch(b Array<U8>&) {                 # b is read-only: nothing may write through it
+  w(String(b))
+}
+fn main() ? {
+  raw Array<U8> = U8[104, 105, 106]
+  touch(raw)
+  try io.Print($raw "\n")
+}

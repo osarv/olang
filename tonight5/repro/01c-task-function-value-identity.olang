@@ -1,0 +1,17 @@
+# NEW - identity of a function value changes across a spawn (P2 env copy): a task comparing the closure it was
+# handed with itself through two arguments gets two different copies.
+#     expected: "true true" (-i, master); actual -b: "true false"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn same2(f fn() I64, g fn() I64) Bool { return f is g }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 { return n.v }
+    r Bool = false
+    join {
+        spawn r = same2(g, g)
+    }
+    println($same2(g, g) " " $r)
+}

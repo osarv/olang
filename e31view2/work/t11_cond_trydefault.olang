@@ -1,0 +1,15 @@
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn main() ? {
+    a := Acc[Acc(), Acc()]
+    k := a.Len()
+    bump((try a[1] catch default Acc()) if k > 0 else a[0])
+    println("array N " $a[1].N " " $a[0].N)
+}

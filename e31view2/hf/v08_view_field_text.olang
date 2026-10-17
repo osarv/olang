@@ -1,0 +1,38 @@
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type In struct(r mut Node&, k I64) {
+    r
+    k
+}
+type M struct(r mut Node&, off I64) {
+    r
+    off
+    inner In = In(Node(0, null), 0)
+}
+type Layer struct(w M, n I64) {
+    w
+    n
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type T struct(s String&, n I64) {
+    s
+    n
+}
+type Lt struct(t T, n I64) {
+    t
+    n
+}
+fn (t mut T&) Show() I64 { return t.s.Len() + t.n }
+fn add(l mut List<Lt>&) I64 { return l[0].t.Show() }
+fn main() ? {
+    l := List<Lt>()
+    l.Push(Lt(T("abc", 1), 2))
+    println($add(l))
+}

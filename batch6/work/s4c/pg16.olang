@@ -1,0 +1,10 @@
+# S4c: hidden locals of parallel assignments collide - '$par6' is declared twice in a correct program
+fn main() ? {
+    a I64 = 0
+    k I64 = 0
+    a, k = k + 1, a + 1
+    a, k = k + 1, a + 1
+    a, k = k + 1, a + 1
+    a, k = k + 1, a + 1
+    println($a " " $k)
+}

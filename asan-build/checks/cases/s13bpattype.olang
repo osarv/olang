@@ -1,0 +1,17 @@
+# check: fail a case pattern names a case of the enum the value it is matched against holds
+# S13b: a nested pattern names a case of the enum at its position
+type T enum {
+    P
+    Q
+}
+type S enum {
+    A(x I32)
+    B
+}
+fn f(s S) I32 {
+    match s {
+        case S.A(T.P) { return 1 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? { }

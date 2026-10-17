@@ -1,0 +1,4 @@
+100 0 -3 | x01ba| | 1 | small other seven | 2 33 | 16 18 true3 false 758 -5 39 40 -3 | V2(4, 3) V2(-4, -3) true false 7 3 | 1 0 | -5 0 Expr.Add(Expr.Lit(1), Expr.Mul(Expr.Neg(Expr.Lit(3)), Expr.Add(Expr.Lit(1), Expr.Lit(1))))
+100 0 -3 | x01ba| | 1 | small other seven | 2 33 | 16 18 true3 false 758 -5 39 40 -3 | V2(4, 3) V2(-4, -3) true false 7 3 | 1 0 | -5 0 Expr.Add(Expr.Lit(1), Expr.Mul(Expr.Neg(Expr.Lit(3)), Expr.Add(Expr.Lit(1), Expr.Lit(1))))
+-1 100 0 | x01x2ba| | 2 | small big other | 3 36 | 16 36 true6 false 1521 -5 78 40 -3 | V2(5, 4) V2(-5, -4) true false 9 4 | 2 0 | -7 0 Expr.Add(Expr.Lit(2), Expr.Mul(Expr.Neg(Expr.Lit(3)), Expr.Add(Expr.Lit(1), Expr.Lit(2))))
+-1 100 0 | x01x2ba| | 2 | small big other | 3 36 | 16 36 true6 false 1521 -5 78 40 -3 | V2(5, 4) V2(-5, -4) true false 9 4 | 2 0 | -7 0 Expr.Add(Expr.Lit(2), Expr.Mul(Expr.Neg(Expr.Lit(3)), Expr.Add(Expr.Lit(1), Expr.Lit(2))))

@@ -1,0 +1,6 @@
+# E32: "is" naming another module's same-named enum
+import "lib"
+fn main() ? {
+  d := lib.Dir.North
+  b Bool = d is lib.Other.Dir.North
+}

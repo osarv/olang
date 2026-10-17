@@ -1,0 +1,33 @@
+import "std/os"
+type N struct(v I64) {
+    v
+    pad Array<I64>& = Array<I64>(16, v)
+}
+G mut Array<mut N&>& = Array<mut N&>(8, N(0))
+fn fill(t I64) I64 {
+    bad I64 = 0
+    for i in range 50000 {
+        G[t] = N(t * 10000000 + i)
+        for x in G[t].pad { if x != t * 10000000 + i { bad++ } }
+    }
+    return bad
+}
+fn main() ? {
+    bad mut Array<I64>& = Array<I64>(8)
+    join {
+        for t in range 2 {
+            spawn fn() {
+                os.RunOnStack(1 << 20, fn() {
+                    join {
+                        spawn fn() { os.RunOnStack(1 << 20, fn() { bad[t * 4] = fill(t * 4) }) }
+                        spawn fn() { bad[t * 4 + 1] = fill(t * 4 + 1) }
+                    }
+                    os.RunOnStack(1 << 18, fn() { bad[t * 4 + 2] = fill(t * 4 + 2) })
+                    bad[t * 4 + 3] = fill(t * 4 + 3)
+                })
+            }
+        }
+        os.RunOnStack(1 << 20, fn() { G[7] = N(5) })
+    }
+    println("corrupted elements seen: " $bad " " $G[0].pad[3])
+}

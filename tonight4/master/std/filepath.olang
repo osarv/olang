@@ -1,0 +1,404 @@
+# filepath - paths as text: the parts of one (Dir, Base, Ext), one made of several (Join), one in its shortest form
+# (Clean), and one relative to another (Rel). Go's path/filepath, on a system whose separator is '/', rule for rule.
+# Nothing here asks the file system anything - std/os does that - so every function is plain text in and text out, and
+# runs while compiling (K1) as at run time.
+#
+# What can be a part of the path given is one: Base, Ext, and Dir and Clean when the path is already clean, borrow the
+# path's own storage and copy nothing - they live where the path does. Where the answer is text the path does not
+# hold, Dir and Clean build it where the path lives, and Join and Rel build theirs where their result is put.
+#
+# Its own module rather than part of std/os, which is about effects: and named "filepath" rather than "path", since an
+# import's name is reserved in the module importing it (M20), where "path" is the name every function taking one wants.
+
+# whether the path starts at the root: "/usr" does, "usr" and "./usr" do not
+fn IsAbs(path String&) Bool { return path.Len() > 0 and path[0] == '/' }
+
+# the last element of the path, its trailing slashes aside: "c" for "a/b/c" and for "a/b/c/"; "/" for a path of only
+# slashes, and "." for the empty path
+fn Base(path String&) String&path {
+    if path.Len() == 0 { return "." }
+    end I64 = path.Len()
+    for end > 0 and path[end - 1] == '/' { end-- }
+    if end == 0 { return path[:1] }
+    start I64 = end
+    for start > 0 and path[start - 1] != '/' { start-- }
+    return path[start:end]
+}
+
+# the extension of the path's last element: what follows the last '.' in it, the '.' included - ".gz" for
+# "a/b.tar.gz", "" for "a.b/c", and ".bashrc" for ".bashrc"
+fn Ext(path String&) String&path {
+    i I64 = path.Len() - 1
+    for i >= 0 and path[i] != '/' {
+        if path[i] == '.' { return path[i:] }
+        i--
+    }
+    return ""
+}
+
+# everything but the path's last element, cleaned (Clean): "a/b" for "a/b/c", and for "a/b/c/" too, whose last element
+# is the empty one after its slash; "." for a path with no slash in it, "/" for one in the root
+fn Dir(path String&) String&path {
+    i I64 = path.Len() - 1
+    for i >= 0 and path[i] != '/' { i-- }
+    return Clean(path[:i + 1])
+}
+
+# the shortest path naming what "path" names, by lexical processing alone - Go's rules, applied until none applies:
+# a run of slashes is one slash; a "." element goes; a ".." element goes with the element before it, unless that is
+# itself ".."; and a ".." just after the root goes, since the root's parent is the root. Only the root itself ends in a
+# slash, and the empty path, or one that cleans to nothing, is ".". "a//b/./c/../d/" is "a/b/d", "/../x" is "/x", and
+# "../../x" stays as it is. It knows nothing of symbolic links: "a/.." is "." even where "a" is a link elsewhere
+# (os.RealPath asks the file system)
+fn Clean(path String&) String&path {
+    n := path.Len()
+    if n == 0 { return "." }
+    out := Array<Char>(n)              # never longer than the path: elements are only removed
+    w I64 = 0
+    rooted := path[0] == '/'
+    r I64 = 0
+    dotdot I64 = 0                     # out[:dotdot] may not be backed out of: the root, or ".." elements kept
+    if rooted {
+        out[0] = '/'
+        w = 1
+        r = 1
+        dotdot = 1
+    }
+    for r < n {
+        if path[r] == '/' {
+            r++                                                     # an empty element
+        } else if path[r] == '.' and (r + 1 == n or path[r + 1] == '/') {
+            r++                                                     # "."
+        } else if path[r] == '.' and path[r + 1] == '.' and (r + 2 == n or path[r + 2] == '/') {
+            r += 2                                                  # "..": the element before it goes, where it can
+            if w > dotdot {
+                w--
+                for w > dotdot and out[w] != '/' { w-- }
+            } else if not rooted {
+                if w > 0 {
+                    out[w] = '/'
+                    w++
+                }
+                out[w] = '.'
+                out[w + 1] = '.'
+                w += 2
+                dotdot = w
+            }
+        } else {
+            if (rooted and w != 1) or (not rooted and w != 0) {
+                out[w] = '/'
+                w++
+            }
+            for r < n and path[r] != '/' {
+                out[w] = path[r]
+                w++
+                r++
+            }
+        }
+    }
+    if w == 0 { return "." }
+    same := true                                                    # the path's own beginning: borrowed
+    for i in range w {
+        if out[i] != path[i] {
+            same = false
+            break
+        }
+    }
+    if same { return path[:w] }
+    text mut String&path = String(Array<Char>(w))
+    for i in range w { text[i] = out[i] }
+    return text
+}
+
+# the parts made one path, a '/' between each two, and cleaned (Clean): Join("a", "b/c") is "a/b/c", Join("a/", "../b")
+# is "b", and Join("/", "x") is "/x". Empty parts are left out, and when every part is empty the path is "" - not "." as
+# Clean would make it. Up to six parts; for more, or for an array of them, "Clean(parts.Join("/"))" - the same but for
+# empty parts, which are then empty elements, and so dropped all the same unless leading ("", "a" is "/a" that way)
+fn Join(a String&, b String&, c String& = "", d String& = "", e String& = "", f String& = "") String {
+    parts := String&[a, b, c, d, e, f]
+    n I64 = 0
+    for p in parts {
+        if p.Len() > 0 {
+            if n > 0 { n++ }
+            n += p.Len()
+        }
+    }
+    if n == 0 { return "" }
+    joined := String(Array<Char>(n))
+    w I64 = 0
+    for p in parts {
+        if p.Len() == 0 { continue }
+        if w > 0 {
+            joined[w] = '/'
+            w++
+        }
+        for ch in p {
+            joined[w] = ch
+            w++
+        }
+    }
+    return Clean(joined)
+}
+
+# the path that names "target" when joined to "base" (Join(base, Rel(base, target)) cleans to Clean(target)), by
+# lexical processing alone, as Clean is: Rel("/a", "/a/b/c") is "b/c", Rel("/a/b", "/a/c") is "../c", Rel("a", "a") is
+# ".". Fails, with the default error, where no such path can be known without asking the file system: one path is
+# absolute and the other is not, or "base" climbs out of where "target" is through ".." ("../x" from "a")
+fn Rel(base String&, target String&) String ? {
+    b := Clean(base)
+    t := Clean(target)
+    if t == b { return "." }
+    if b == "." { b = b[:0] }
+    if IsAbs(b) != IsAbs(t) { error }
+    bl := b.Len()
+    tl := t.Len()
+    b0 I64 = 0
+    bi I64 = 0
+    t0 I64 = 0
+    ti I64 = 0
+    for {                                        # past the elements the two share
+        for bi < bl and b[bi] != '/' { bi++ }
+        for ti < tl and t[ti] != '/' { ti++ }
+        if t[t0:ti] != b[b0:bi] { break }
+        if bi < bl { bi++ }
+        if ti < tl { ti++ }
+        b0 = bi
+        t0 = ti
+    }
+    if b[b0:bi] == ".." { error }
+    if b0 == bl { return t[t0:] }
+    ups I64 = 1                                  # one ".." for each element of base left
+    for i in range b0, bl {
+        if b[i] == '/' { ups++ }
+    }
+    rest := t[t0:]
+    out := String(Array<Char>(ups * 3 - 1 + (rest.Len() + 1 if rest.Len() > 0 else 0)))
+    w I64 = 0
+    for k in range ups {
+        if k > 0 {
+            out[w] = '/'
+            w++
+        }
+        out[w] = '.'
+        out[w + 1] = '.'
+        w += 2
+    }
+    if rest.Len() > 0 {
+        out[w] = '/'
+        w++
+        for ch in rest {
+            out[w] = ch
+            w++
+        }
+    }
+    return out
+}
+
+# allocates and lets go of a few hundred texts, so storage a closed scope gave back is handed out again - anything
+# still pointing into such storage would read these bytes instead of its own
+fn churn() I64 {
+    s I64 = 0
+    for i in range 300 {
+        x := $i "-------------------------------------------------------------"
+        s += x.Len()
+    }
+    return s
+}
+
+# Go's own table for Clean: each path, then what it cleans to
+cleanCases := String&[
+    "", ".",
+    "abc", "abc",
+    "abc/def", "abc/def",
+    "a/b/c", "a/b/c",
+    ".", ".",
+    "..", "..",
+    "../..", "../..",
+    "../../abc", "../../abc",
+    "/abc", "/abc",
+    "/", "/",
+    "abc/", "abc",
+    "abc/def/", "abc/def",
+    "a/b/c/", "a/b/c",
+    "./", ".",
+    "../", "..",
+    "../../", "../..",
+    "/abc/", "/abc",
+    "abc//def//ghi", "abc/def/ghi",
+    "//abc", "/abc",
+    "///abc", "/abc",
+    "//abc//", "/abc",
+    "abc//", "abc",
+    "abc/./def", "abc/def",
+    "/./abc/def", "/abc/def",
+    "abc/.", "abc",
+    "abc/def/ghi/../jkl", "abc/def/jkl",
+    "abc/def/../ghi/../jkl", "abc/jkl",
+    "abc/def/..", "abc",
+    "abc/def/../..", ".",
+    "/abc/def/../..", "/",
+    "abc/def/../../..", "..",
+    "/abc/def/../../..", "/",
+    "abc/def/../../../ghi/jkl/../../../mno", "../../mno",
+    "/../abc", "/abc",
+    "a/../b:/../../c", "../c",
+    "abc/./../def", "def",
+    "abc//./../def", "def",
+    "abc/../../././../def", "../../def",
+]
+
+# every case of a table, as "path -> got" for each that is not what it should be: "" when all are
+fn cleanMisses() String {
+    b := StringBuilder()
+    for i in range 0, cleanCases.Len(), 2 {
+        got := Clean(cleanCases[i])
+        if got != cleanCases[i + 1] { b.Push($cleanCases[i] " -> " $got "; ") }
+        again := Clean(got)                                     # cleaning a clean path changes nothing
+        if again != got { b.Push($got " again -> " $again "; ") }
+    }
+    return b.ToString()
+}
+cleanMissesBaked := cleanMisses()
+
+test "Clean follows Go's rules, case for case" {
+    assert cleanMisses() == "" and cleanMissesBaked == ""
+}
+
+test "Clean borrows the path where its clean form is the path's own beginning, and builds otherwise" {
+    p String& = "a/b/c//"
+    q := Clean(p)
+    assert q == "a/b/c" and q is p[:5]                        # the path's own storage
+    r String& = "x/./y/../z"
+    s := Clean(r)
+    assert s == "x/z" and s is not r[:3]                      # new text
+    t String& = "/usr/lib/"                                 # its last element is the empty one after its slash
+    assert Dir(t) is t[:8] and Base(t) is t[5:8] and Ext("a.txt") == ".txt"
+    assert churn() > 0 and q == "a/b/c" and s == "x/z"
+}
+
+# each path, then its Base, then its Dir
+partCases := String&[
+    "", ".", ".",
+    ".", ".", ".",
+    "/.", ".", "/",
+    "/", "/", "/",
+    "////", "/", "/",
+    "x/", "x", "x",
+    "abc", "abc", ".",
+    "abc/def", "def", "abc",
+    "a/b/.x", ".x", "a/b",
+    "a/b/c.", "c.", "a/b",
+    "a/b/c.x", "c.x", "a/b",
+    "/abc", "abc", "/",
+    "/abc/def", "def", "/abc",
+    "a//b", "b", "a",
+    "a/./b", "b", "a",
+    "a/b/c/", "c", "a/b/c",
+    "../a", "a", "..",
+    "a/..", "..", "a",
+    "/../x", "x", "/",
+]
+
+# every Base and Dir that is not what it should be, as "Base(path) = got; ": "" when all are
+fn partMisses() String {
+    b := StringBuilder()
+    for i in range 0, partCases.Len(), 3 {
+        p := partCases[i]
+        if Base(p) != partCases[i + 1] { b.Push("Base(" $p ") = " $Base(p) "; ") }
+        if Dir(p) != partCases[i + 2] { b.Push("Dir(" $p ") = " $Dir(p) "; ") }
+    }
+    return b.ToString()
+}
+partMissesBaked := partMisses()
+
+test "Base and Dir take a path apart" {
+    assert partMisses() == "" and partMissesBaked == ""
+}
+
+test "Ext is the last element's extension" {
+    assert Ext("a/b.tar.gz") == ".gz" and Ext("a.b/c") == "" and Ext(".bashrc") == ".bashrc" and Ext("x.") == "."
+    assert Ext("") == "" and Ext("plain") == "" and Ext("dir.d/") == ""
+}
+
+test "IsAbs is whether a path starts at the root" {
+    assert IsAbs("/") and IsAbs("/usr/bin") and not IsAbs("") and not IsAbs("usr") and not IsAbs("./usr")
+}
+
+test "Join makes one clean path of its parts, leaving empty ones out" {
+    assert Join("a", "b") == "a/b" and Join("a", "b/c") == "a/b/c" and Join("a/", "b") == "a/b"
+    assert Join("a/", "../b") == "b" and Join("/", "x") == "/x" and Join("", "x") == "x" and Join("a", "") == "a"
+    assert Join("", "") == "" and Join("a", "b", "c", "d", "e", "f") == "a/b/c/d/e/f" and Join("a", "", "c") == "a/c"
+    assert Join("/a/b", "../../..", "c") == "/c" and Join("..", "x") == "../x" and Join(".", ".") == "."
+    dir String& = "/cache/olang"
+    assert Join(dir, "example.com", "me", "repo@v1") == "/cache/olang/example.com/me/repo@v1"
+}
+
+# Go's table for Rel: base, target, then what Rel gives - "!" where it fails
+relCases := String&[
+    "a/b", "a/b", ".",
+    "a/b/.", "a/b", ".",
+    "a/b", "a/b/.", ".",
+    "./a/b", "a/b", ".",
+    "a/b", "./a/b", ".",
+    "ab/cd", "ab/cde", "../cde",
+    "ab/cd", "ab/c", "../c",
+    "a/b", "a/b/c/d", "c/d",
+    "a/b", "a/b/../c", "../c",
+    "a/b/../c", "a/b", "../b",
+    "a/b/c", "a/c/d", "../../c/d",
+    "a/b", "c/d", "../../c/d",
+    "a/b/c/d", "a/b", "../..",
+    "a/b/c/d", "a/b/", "../..",
+    "a/b/c/d/", "a/b", "../..",
+    "a/b/c/d/", "a/b/", "../..",
+    "../../a/b", "../../a/b/c/d", "c/d",
+    "/a/b", "/a/b", ".",
+    "/a/b/.", "/a/b", ".",
+    "/a/b", "/a/b/.", ".",
+    "/ab/cd", "/ab/cde", "../cde",
+    "/ab/cd", "/ab/c", "../c",
+    "/a/b", "/a/b/c/d", "c/d",
+    "/a/b", "/a/b/../c", "../c",
+    "/a/b/../c", "/a/b", "../b",
+    "/a/b/c", "/a/c/d", "../../c/d",
+    "/a/b", "/c/d", "../../c/d",
+    "/a/b/c/d", "/a/b", "../..",
+    "/a/b/c/d", "/a/b/", "../..",
+    "/a/b/c/d/", "/a/b", "../..",
+    "/a/b/c/d/", "/a/b/", "../..",
+    "/../../a/b", "/../../a/b/c/d", "c/d",
+    ".", "a/b", "a/b",
+    ".", "..", "..",
+    "..", ".", "!",
+    "..", "a", "!",
+    "../..", "..", "!",
+    "a", "/a", "!",
+    "/a", "a", "!",
+]
+
+# every Rel that is not what it should be: "" when all are
+fn relMisses() String {
+    b := StringBuilder()
+    for i in range 0, relCases.Len(), 3 {
+        got := try Rel(relCases[i], relCases[i + 1]) catch default "!"
+        if got != relCases[i + 2] { b.Push("Rel(" $relCases[i] ", " $relCases[i + 1] ") = " $got "; ") }
+    }
+    return b.ToString()
+}
+relMissesBaked := relMisses()
+
+test "Rel makes one path relative to another, Go's table case for case" {
+    assert relMisses() == "" and relMissesBaked == ""
+}
+
+# a mutable copy of a path, so what reads it is computed at run time, where the arena is
+livePath mut String& = "x//y/./z/../w/"
+
+test "what filepath gives lives where it is put, evaluated at run time" {
+    c := Clean(livePath)
+    d := Dir(livePath)
+    j := Join(livePath, "v")
+    r := try Rel("x", livePath) catch default "!"
+    assert churn() > 0
+    assert c == "x/y/w" and d == "x/y/w" and j == "x/y/w/v" and r == "y/w" and Base(livePath) == "w"
+}

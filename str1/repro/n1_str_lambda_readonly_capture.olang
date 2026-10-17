@@ -1,0 +1,31 @@
+# NEW (d6c7f52), CONFIRMED use-after-free. Str makes a lambda capturing its read-only receiver and stores a new Node
+# through the writable field b.head; the capture is read-only, so bindCallScopeVars (semantic.c:10109) records no O17
+# edge and ERR_STR_STORES_IN_RECEIVER never fires. Node(5) is built in the temp scope '$' hands Str and freed with it.
+# new -b prints -7 (want 5); -b -s: 'use after scope closed'; base d0abfe8 refuses (E11c).
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn (b Bag&) Str() String {
+    f := fn() { b.head.next = Node(5, null) }
+    f()
+    return "b"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    churn()
+    println(s)
+    println($b.head.next.v)
+}

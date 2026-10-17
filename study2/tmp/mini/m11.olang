@@ -1,0 +1,8 @@
+fn a(path String&) Bool { return path[0:3].Contains(".") }
+fn b(path String&) Bool {
+    s := path[0:3]
+    return "." in s
+}
+fn main() ? {
+    println($a("a.cd") " " $b("a.cd"))
+}

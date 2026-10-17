@@ -1,0 +1,12 @@
+# M19: a method call is never a call of a local, a parameter, a global or a module function of the same name
+type P struct(v I64) { v }
+fn (p P&) Twice() I64 { return p.v * 2 }
+fn (p P&) bump(k I64) I64 { return p.v + k }
+fn Twice() I64 { return -1 }
+Gbump fn(k I64) I64 = fn(k I64) I64 { return -1000 }
+fn use(bump fn(k I64) I64, p P&) I64 { return p.bump(1) + bump(0) }
+fn main() ? {
+    p := P(5)
+    twice2 := fn() I64 { return -7 }
+    println($p.Twice() " " $use(fn(k I64) I64 { return 100 }, p))
+}

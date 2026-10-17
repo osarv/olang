@@ -1,0 +1,13 @@
+# r17 DIAGNOSTIC - E11b: for a method chain used as a join piece, the hint names only its first name when the chain
+# holds a lambda: "write '$cols'" for "cols.ToArray().Map(fn ...).Join(",")" - following it renders the List. Without
+# the lambda (second line) the hint is the whole chain, as it should be. Found in ../json2csv.olang.
+#
+# expected: "write '$cols.ToArray().Map(...).Join(",")'" (or "write '$(...)'") for the first line
+# actual:   error[E11b] ... "write '$cols'" for the first (reported alone - E11b is a parse error); with the first line
+#           removed, the second gets "write '$cols.ToArray().Join(",")'"
+fn main() ? {
+    cols := List<String&>()
+    cols.Push("a")
+    println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
+    println(cols.ToArray().Join(",") "\n")
+}

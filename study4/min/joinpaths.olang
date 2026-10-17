@@ -1,0 +1,65 @@
+# leaving a join block by return, break and an error: every task must have finished first (P1b); deferred code in
+# tasks; atomics on a field reached through a shared reference; spawned lambdas capturing a reference
+extern fn usleep(us U32) I32
+
+type Stats struct() {
+    hits I64 = 0
+    finished I64 = 0
+}
+
+error Stop {
+    EARLY
+}
+
+fn work(s mut Stats&, ms I64) {
+    defer s.finished.AtomicAdd(1)
+    usleep(U32(ms * 1000))
+    s.hits.AtomicAdd(ms)
+}
+
+fn leaveByReturn(s mut Stats&) I64 {
+    join {
+        for i in range 4 { spawn work(s, 5 + i) }
+        return s.finished.AtomicLoad()          # the join waits before the return completes
+    }
+    unreachable
+}
+
+fn leaveByError(s mut Stats&) ? Stop {
+    join {
+        for i in range 4 { spawn work(s, 5) }
+        error Stop.EARLY
+    }
+}
+
+fn leaveByBreak(s mut Stats&) I64 {
+    rounds I64 = 0
+    for r in range 10 {
+        join {
+            spawn work(s, 2)
+            spawn fn() { s.hits.AtomicAdd(100) }
+            if r == 2 { break }
+        }
+        rounds++
+    }
+    return rounds
+}
+
+fn (s mut Stats&) fanOut(n I64) {
+    join {
+        for i in range n { spawn fn() { s.hits.AtomicAdd(1) } }
+    }
+}
+
+fn main() ? {
+    s := Stats()
+    early := leaveByReturn(s)
+    println("returned with " $early " finished; after: " $s.finished.AtomicLoad())
+    try leaveByError(s) catch Stop.EARLY { println("error left with " $s.finished.AtomicLoad() " finished") }
+    rounds := leaveByBreak(s)
+    println("broke after " $rounds " rounds, finished " $s.finished.AtomicLoad())
+    s.fanOut(1000)
+    println("hits " $s.hits.AtomicLoad() ", finished " $s.finished.AtomicLoad())
+    # 5+6+7+8 + 4*5 + 3*(2+100) + 1000
+    if s.hits.AtomicLoad() != 26 + 20 + 306 + 1000 or s.finished.AtomicLoad() != 11 { fail }
+}

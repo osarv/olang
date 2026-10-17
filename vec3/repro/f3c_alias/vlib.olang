@@ -1,0 +1,4 @@
+fn View2(v Vec<I64>&) Array<I64>&v { return v.View() }
+type G struct() { }
+fn (g G&) Call(v Vec<I64>&) Array<I64>&v { return v.View() }
+fn Apply(f fn(x Vec<I64>&) Array<I64>&x, v Vec<I64>&) Array<I64>&v { return f(v) }

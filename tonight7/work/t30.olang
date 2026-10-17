@@ -1,0 +1,21 @@
+type Gen struct() {
+    pos I64 = 0
+}
+fn (g mut Gen&) Next() I64 ? Exhausted {
+    if g.pos >= 3 { error Exhausted.END }
+    g.pos++
+    return g.pos
+}
+type Bag struct(g mut Gen&) {
+    g
+}
+fn (b Bag&) Str() String {
+    s I64 = 0
+    for x in b.g { s += x }
+    return "b" $s "/" $b.g.pos
+}
+fn main() ? {
+    b := Bag(Gen())
+    println($b)
+    println($b)
+}

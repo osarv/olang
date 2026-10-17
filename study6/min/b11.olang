@@ -1,0 +1,14 @@
+type Value enum {
+    Nil
+    Num(n F64)
+    Arr(items List<Value>&)
+}
+fn main() ? {
+    l := List<Value>()
+    l.Push(Value.Num(1.0))
+    inner := List<Value>()
+    inner.Push(Value.Nil)
+    l.Push(Value.Arr(inner))
+    v := Value.Arr(l)
+    println($l.Len() " " $v)
+}

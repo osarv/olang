@@ -1,0 +1,32 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Cell struct(v I64) {
+    v
+    n mut Node& = null
+}
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    la := List<Cell>()
+    la.Push(Cell(1))
+    lb := List<Cell>()
+    lb.Push(Cell(2))
+    ra mut List<Cell>& = la
+    rb mut List<Cell>& = lb
+    fa := fn(i I64) {
+        ra[0].n = Node(i)
+    }
+    fb := fn(i I64) {
+        rb[0].n = Node(i)
+    }
+    c mut Node& = Node(0)
+    join {
+        spawn work(fa, 200000)
+        spawn work(fb, 200000)
+        for i in range 200000 { c.next = Node(i) }
+    }
+    println($la[0].n.v " " $lb[0].n.v " " $c.next.v)
+}

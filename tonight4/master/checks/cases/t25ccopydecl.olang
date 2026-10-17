@@ -1,0 +1,12 @@
+# check: fail error[T25c]: this copies a read-only List<I64>, and a written type declares a writable one
+# also: make one of its own with 'G.Clone()'
+# T25c: a written type declares a writable value, so a copy of a read-only place cannot initialize one - ':=' gives a read-only copy
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn main() ? {
+    y List<I64> = G
+    println($y.Len())
+}

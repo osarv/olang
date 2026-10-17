@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/w1.olang:13:6: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   13 | type W struct(c CB&) {
+      |      ^
+compilation failed with 1 error

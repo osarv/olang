@@ -1,0 +1,16 @@
+type Tree enum {
+    Leaf(n I64)
+    Node(kids Array<Tree&>&)
+}
+fn main() ? {
+    l := List<Tree&>()
+    l.Push(Tree.Leaf(1))
+    s I64 = 0
+    for k in l {
+        match k {
+            case Tree.Leaf(n) { s += n }
+            nomatch { s += 100 }
+        }
+    }
+    assert s == 1
+}

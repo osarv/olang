@@ -1,0 +1,92 @@
+### repro/f1a_else_if_catch_return.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1a_else_if_catch_return.olang:19:19: error: expected an expression, found ')'
+### repro/f1b_else_if_catch_return_min.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1b_else_if_catch_return_min.olang:21:19: error: expected an expression, found ')'
+### repro/f1c_else_if_match_value_return.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1c_else_if_match_value_return.olang:21:19: error: expected an expression, found ')'
+### repro/f1d_case_guard_return.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1d_case_guard_return.olang:23:19: error: expected an expression, found ')'
+### repro/f1e_assert_message_return.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : /home/user/review/vec4/repro/f1e_assert_message_return.olang:20: assertion failed|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1e_assert_message_return.olang:24:19: error: expected an expression, found ')'
+### repro/f1f_for_post_return.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1f_for_post_return.olang:20:19: error: expected an expression, found ')'
+### repro/f1g_generic_else_if_return.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1g_generic_else_if_return.olang:22:19: error: expected an expression, found ')'
+### repro/f1h_spawn_target_index_write.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 10 20|
+  1bcfb72 -b      : 10 20|
+  280ef76: accepted
+  8548b56: refused -  /home/user/review/vec4/repro/f1h_spawn_target_index_write.olang:23:19: error: expected an expression, found ')'
+### repro/r1_local_typed_with_borrow_scope.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 5-new-text-in-the-region|
+  1bcfb72 -b      : 2999abcdefghijklmnopqrst|
+  280ef76: accepted
+  8548b56: accepted
+### repro/r1b_scope_argument_names_borrow.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 5-new-text-in-the-region|
+  1bcfb72 -b      : 2999abcdefghijklmnopqrst|
+  280ef76: accepted
+  8548b56: accepted
+### repro/r1c_in_a_method.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 5-new-text-in-the-field-region|
+  1bcfb72 -b      : 2999abcdefghijklmnopqrstuvwxyz|
+  280ef76: accepted
+  8548b56: accepted
+### repro/r1d_owned_list_text.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 5-new-text-made-where-the-list-lives|
+  1bcfb72 -b      : 5-new-text-made-where-the-list-lives|
+  280ef76: accepted
+  8548b56: accepted
+### repro/r1e_note_source.olang
+  1bcfb72: REFUSED /home/user/review/vec4/repro/r1e_note_source.olang:21:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')|compilation failed with 1 error|
+  280ef76: refused - error[O20] /home/user/review/vec4/repro/r1e_note_source.olang:21:13: error[O20]: the container outlives what this refers to - build it where the container lives 
+  8548b56: refused - error[O20] /home/user/review/vec4/repro/r1e_note_source.olang:21:13: error[O20]: the container outlives what this refers to - build it where the container lives 
+### repro/r1e_o20_note_guided.olang
+  1bcfb72 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  1bcfb72 -i      : 2-new-text-built-where-the-box-lives|
+  1bcfb72 -b      : 2-new-text-built-where-the-box-lives|
+  280ef76: accepted
+  8548b56: accepted
+### repro/x1_assert_message_return_i_vs_b.olang
+  1bcfb72 -b -d -s: 7| (status 0)
+  1bcfb72 -i      : /home/user/review/vec4/repro/x1_assert_message_return_i_vs_b.olang:7: assertion failed|
+  1bcfb72 -b      : 7|
+  280ef76: accepted
+  8548b56: accepted
+### repro/over/or1_value_global_copy_of_global_own_text.olang
+  1bcfb72: REFUSED /home/user/review/vec4/repro/over/or1_value_global_copy_of_global_own_text.olang:14:17: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead|com
+  280ef76: accepted
+  8548b56: accepted

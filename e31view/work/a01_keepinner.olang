@@ -1,0 +1,29 @@
+# a callee judged view-only stores a borrow of the copy's VALUE part into what the copy's reference names
+type Inner struct(x I64) {
+    x
+}
+type R struct() {
+    i Inner& = null
+}
+type V struct(ref mut R&, inner Inner) {
+    ref
+    inner
+}
+type Vs struct(r mut R&) {
+    r
+}
+fn (s Vs&) At(i I64) V { return V(s.r, Inner(i)) }
+fn keep(r mut R&, i Inner&) { r.i = i }
+fn f(c mut V&) { keep(c.ref, c.inner) }
+fn churn() {
+    for k in range 50 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    s := Vs(R())
+    f(s[42])
+    churn()
+    println($s.r.i.x)
+}

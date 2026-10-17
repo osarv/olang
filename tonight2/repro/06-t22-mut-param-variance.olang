@@ -1,0 +1,15 @@
+# T22 (wt-s3scope, funcFitsByPermission): a function whose parameter is read-only is meant to fit a function type whose
+# parameter is writable ("a read-only parameter for a writable one"). It does when the writable parameter's type is a
+# type variable bound to "mut T&" (the corpus test), but not when "mut" is written on the parameter: the check compares
+# the parameters' binding flag (va->mut != vb->mut), and a written "n mut P&" sets it while "n P&" does not.
+# expected: compiles and prints "8 6" (r reads only; the lambda reads only)
+# actual:   error[E12]: expected fn(n mut P&) I64, found fn(n P&) I64 - at both calls (over-rejection only)
+type P struct(v I64) { v }
+fn r(n P&) I64 { return n.v * 2 }
+fn apply(f fn(n mut P&) I64, p mut P&) I64 { return f(p) }
+fn main() ? {
+    p mut P& = P(4)
+    a := apply(r, p)
+    b := apply(fn(n P&) I64 { return n.v + 2 }, p)
+    println($a " " $b)
+}

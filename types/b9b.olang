@@ -1,0 +1,10 @@
+# B9c: a condition reading a global computed by a call, declared after the condition
+import "std/io"
+if Mode == 2 {
+  fn f() I32 { return 20 }
+} else {
+  fn f() I32 { return 10 }
+}
+Mode I32 = two()
+fn two() I32 { return 2 }
+fn main() ? { try io.Print($f() "\n") }

@@ -1,0 +1,31 @@
+# r08 OVER-REJECTION + DIAGNOSTIC - C2d/O23a: a struct holding a List, built for a Map field of a "mut" receiver. With
+# "deps := List<String&>()" in the loop the rejection is right (the list's state would live in the loop's block); the
+# note's fix, "deps mut List<String&>&m = ...", builds the list where the receiver lives - and gets the same error and
+# the same note. In a plain function with a local map, "deps mut List<String&>&rules = ..." compiles (variant B).
+# Found parsing a Makefile's rules into a struct (../mk.olang): the rule had to be Put empty, fetched back with
+# "r mut Rule&m = try m.rules.Get(t)" and filled in place.
+#
+# expected: 2
+# actual:   error[C2d] at "deps" in Rule(line, deps), note "declare it where 'm' lives: 'deps mut List<String&>&m = ...'"
+type Rule struct(Target String&, Deps List<String&>) {
+    Target
+    Deps
+}
+
+type Mk struct() {
+    rules Map<String&, Rule> = Map<String&, Rule>()
+}
+
+fn (m mut Mk&) parse(text String&) {
+    for line in text.Lines() {
+        deps mut List<String&>&m = List<String&>()
+        for d in line.Split(" ") { deps.Push(d) }
+        m.rules.Put(line, Rule(line, deps))
+    }
+}
+
+fn main() ? {
+    m := Mk()
+    m.parse("a b\nc d e")
+    println($m.rules.Len())
+}

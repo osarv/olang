@@ -1,0 +1,13 @@
+# S17: a lambda in an assert message returns from the lambda - not from the function
+fn mkmsg(k I64) String {
+    f := fn(n I64) String { return "n is " $n }
+    return f(k)
+}
+fn check(k I64) I64 {
+    assert k < 100, (fn(n I64) String { return "lambda " $n })(k)
+    return k
+}
+fn main() ? {
+    println($check(5))
+    println(mkmsg(3))
+}

@@ -1,0 +1,22 @@
+# a slice of a call's built result, and a field of one, stored into an outer variable
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box struct(n mut Node&) { n mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+        a := Array<I32>(8, 7)
+    }
+}
+fn mkArr(v I32) Array<I32>& { return Array<I32>(4, v) }
+fn mkBox(v I32) Box& { return Box(Node(v)) }
+fn main() ? {
+    keep Array<I32>& = Array<I32>(4)
+    keepn Node& = Node(1)
+    for i in range 2 {
+        keep = mkArr(42)[0:2]
+    }
+    churn()
+    try io.Print($keep[0] "\n")
+}

@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# a global given a global's own String through the base type it flows into (T29a)
+type Doc struct() {
+    title own mut String& = $1 "-title-built"
+}
+Docs own mut Doc& = Doc()
+Current mut Array<Char>& = Array<Char>(1)
+fn remember() { Current = Docs.title }
+fn rename() { Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" }
+fn main() ? {
+    remember()
+    rename()
+    churn()
+    println(String(Current))
+}

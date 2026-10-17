@@ -1,0 +1,15 @@
+# NEW, CONFIRMED unbounded leak. A join built in one pass mallocs past 256 bytes and frees only at its end;
+# 'continue' from a piece's catch leaves without @__olang_sb_free. Peak RSS new 1,562,116 KB vs base 1,608 KB.
+fn g(i I64) I64 ? {
+    if i % 2 == 0 { error }
+    return i
+}
+fn main() ? {
+    big := Array<I64>(200, 123456)
+    n I64 = 0
+    for i in range 2000000 {
+        s := $big $(try g(i) catch { continue })
+        n += s.Len()
+    }
+    println($n)
+}

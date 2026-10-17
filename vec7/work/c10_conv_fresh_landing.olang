@@ -1,0 +1,38 @@
+# a conversion of a fresh built result (a call giving 'Array<Char>&') is the call itself now - does it land where it is put?
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk(n I64) Array<Char>& {
+    return Array<Char>(n, 'q')
+}
+fn text(n I64) String& {
+    return String(mk(n))
+}
+type Box struct() {
+    s String& = ""
+}
+fn main() ? {
+    l := List<String&>()
+    for i in range 3 {
+        l.Push(String(mk(i + 4)))
+    }
+    keep String& = ""
+    b := Box()
+    for i in range 3 {
+        x := String(mk(i + 2))
+        keep = String(mk(i + 2))
+        println(x)
+        b.s = String(mk(i + 6))
+    }
+    t := text(5)
+    churn()
+    println(l[0])
+    println(keep)
+    println(b.s)
+    println(t)
+}

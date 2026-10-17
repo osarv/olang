@@ -1,0 +1,23 @@
+# R2b, silent: the released region's memory is reused by another owned object's region before the build - the text
+# lands in that object's region, and its release frees what d points at
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    e := CB()
+    d mut String&x = $5 "-new-text-in-a-reused-region"
+    e.text = $3 "-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

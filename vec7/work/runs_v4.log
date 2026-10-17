@@ -1,0 +1,7 @@
+v4_selfhold_inline_array.olang:2:5: error[T16]: S cannot hold itself by value - hold it through a reference ('&')
+    2 |     kids Array<S, 2> = Array<S, 2>()
+      |     ^~~~
+v4_selfhold_inline_array.olang:2:30: error[O31]: S owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write S&, or 'own mut S&' to own one
+    2 |     kids Array<S, 2> = Array<S, 2>()
+      |                              ^
+compilation failed with 2 errors

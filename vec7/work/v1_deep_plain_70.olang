@@ -1,0 +1,234 @@
+# 70 plain-data struct levels by value: past VALUE_WALK_LIMIT the walks answer 'holds references' now
+type S0 struct(n I64 = 0) {
+    n
+}
+type S1 struct() {
+    x S0 = S0()
+}
+type S2 struct() {
+    x S1 = S1()
+}
+type S3 struct() {
+    x S2 = S2()
+}
+type S4 struct() {
+    x S3 = S3()
+}
+type S5 struct() {
+    x S4 = S4()
+}
+type S6 struct() {
+    x S5 = S5()
+}
+type S7 struct() {
+    x S6 = S6()
+}
+type S8 struct() {
+    x S7 = S7()
+}
+type S9 struct() {
+    x S8 = S8()
+}
+type S10 struct() {
+    x S9 = S9()
+}
+type S11 struct() {
+    x S10 = S10()
+}
+type S12 struct() {
+    x S11 = S11()
+}
+type S13 struct() {
+    x S12 = S12()
+}
+type S14 struct() {
+    x S13 = S13()
+}
+type S15 struct() {
+    x S14 = S14()
+}
+type S16 struct() {
+    x S15 = S15()
+}
+type S17 struct() {
+    x S16 = S16()
+}
+type S18 struct() {
+    x S17 = S17()
+}
+type S19 struct() {
+    x S18 = S18()
+}
+type S20 struct() {
+    x S19 = S19()
+}
+type S21 struct() {
+    x S20 = S20()
+}
+type S22 struct() {
+    x S21 = S21()
+}
+type S23 struct() {
+    x S22 = S22()
+}
+type S24 struct() {
+    x S23 = S23()
+}
+type S25 struct() {
+    x S24 = S24()
+}
+type S26 struct() {
+    x S25 = S25()
+}
+type S27 struct() {
+    x S26 = S26()
+}
+type S28 struct() {
+    x S27 = S27()
+}
+type S29 struct() {
+    x S28 = S28()
+}
+type S30 struct() {
+    x S29 = S29()
+}
+type S31 struct() {
+    x S30 = S30()
+}
+type S32 struct() {
+    x S31 = S31()
+}
+type S33 struct() {
+    x S32 = S32()
+}
+type S34 struct() {
+    x S33 = S33()
+}
+type S35 struct() {
+    x S34 = S34()
+}
+type S36 struct() {
+    x S35 = S35()
+}
+type S37 struct() {
+    x S36 = S36()
+}
+type S38 struct() {
+    x S37 = S37()
+}
+type S39 struct() {
+    x S38 = S38()
+}
+type S40 struct() {
+    x S39 = S39()
+}
+type S41 struct() {
+    x S40 = S40()
+}
+type S42 struct() {
+    x S41 = S41()
+}
+type S43 struct() {
+    x S42 = S42()
+}
+type S44 struct() {
+    x S43 = S43()
+}
+type S45 struct() {
+    x S44 = S44()
+}
+type S46 struct() {
+    x S45 = S45()
+}
+type S47 struct() {
+    x S46 = S46()
+}
+type S48 struct() {
+    x S47 = S47()
+}
+type S49 struct() {
+    x S48 = S48()
+}
+type S50 struct() {
+    x S49 = S49()
+}
+type S51 struct() {
+    x S50 = S50()
+}
+type S52 struct() {
+    x S51 = S51()
+}
+type S53 struct() {
+    x S52 = S52()
+}
+type S54 struct() {
+    x S53 = S53()
+}
+type S55 struct() {
+    x S54 = S54()
+}
+type S56 struct() {
+    x S55 = S55()
+}
+type S57 struct() {
+    x S56 = S56()
+}
+type S58 struct() {
+    x S57 = S57()
+}
+type S59 struct() {
+    x S58 = S58()
+}
+type S60 struct() {
+    x S59 = S59()
+}
+type S61 struct() {
+    x S60 = S60()
+}
+type S62 struct() {
+    x S61 = S61()
+}
+type S63 struct() {
+    x S62 = S62()
+}
+type S64 struct() {
+    x S63 = S63()
+}
+type S65 struct() {
+    x S64 = S64()
+}
+type S66 struct() {
+    x S65 = S65()
+}
+type S67 struct() {
+    x S66 = S66()
+}
+type S68 struct() {
+    x S67 = S67()
+}
+type S69 struct() {
+    x S68 = S68()
+}
+G S69 = S69()
+fn mk(k I64) S69 {
+    s := S69()
+    s.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.n = k
+    return s
+}
+fn may(k I64) S69 ? {
+    if k < 0 { error }
+    return mk(k)
+}
+fn main() ? {
+    a := mk(3)
+    b S69 = a
+    l := List<S69>()
+    l.Push(a)
+    f := fn() I64 { return a.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.n }
+    c := mk(9)
+    arr := Array<S69>(2)
+    arr[1] = b
+    out := 0
+    join { spawn out = f() }
+    println($(l[0].x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.n + c.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.n + arr[1].x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.n + out + G.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.n))
+}

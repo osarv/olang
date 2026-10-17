@@ -1,0 +1,8 @@
+# check: fail these numbers' types do not meet
+# flags: -D X=1
+# B9a/T6b: an integer of a type of its own - a build constant is typed as its literal is - never meets a float, as in
+# the program; the token evaluator used to compare them as values
+if X > 0.5 {
+    fn pick() I32 { return 1 }
+}
+fn main() ? { }

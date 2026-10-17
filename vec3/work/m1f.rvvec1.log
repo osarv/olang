@@ -1,0 +1,10 @@
+m1f.olang:21:7: error[O39]: assigning 'c.text' may release the String borrowed on line 20, which is used after it
+   21 |     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+m1f.olang:20:10: note: borrowed here
+   20 |     t := f(c, 1)
+      |          ^
+m1f.olang:23:13: note: used here, after it
+   23 |     println(t)
+      |             ^
+compilation failed with 1 error

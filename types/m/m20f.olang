@@ -1,0 +1,4 @@
+import "lib"
+fn main() ? {
+  for lib in range 3 { }
+}

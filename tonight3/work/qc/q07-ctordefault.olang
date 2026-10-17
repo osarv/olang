@@ -1,0 +1,7 @@
+G List<I32> = I32[1, 2].ToList()
+type W struct(l List<I32> = G) { l }
+fn main() ? {
+  w := W()
+  w.l.Push(9)
+  println($G.Len())
+}

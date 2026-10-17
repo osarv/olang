@@ -1,0 +1,40 @@
+# PRE-EXISTING class (master segfaults too); the fix for review finding 2b covers only a DIRECT capture in the program
+# scope (held as null). Here the program scope reaches the closure through a SCOPE VARIABLE: work() runs on a task and
+# calls keep(G, Fns), so keep's scope variable for x is bound to the program scope as the task reaches it - the task's
+# stand-in for it, a header that stays in the join block's arena. The lambda keep makes captures x with that stand-in's
+# address (not null). The checker lets the closure live as long as the program scope, so storing it in a global List
+# is accepted. After the join block closes, calling it reads the stand-in header out of reclaimed memory.
+#     expected: 42 42 (as -i prints)
+#     actual:   -b segfaults (139); -b -s and -d -s: "use after scope closed"
+# "spawn keep(G, Fns)" directly (work/fu/g2) is right: there the stand-in is made where the bound scope is.
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+Fns mut List<fn() I64> = List<fn() I64>()
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn keep(x mut Node&, l mut List<fn() I64>&) {
+    l.Push(fn() I64 {
+        x.next = Node(x.v + 41)
+        return x.next.v
+    })
+}
+fn work() { keep(G, Fns) }
+fn main() ? {
+    join {
+        spawn work()
+    }
+    churn()
+    f := Fns[0]
+    println($f())
+    churn()
+    println($G.next.v)
+}

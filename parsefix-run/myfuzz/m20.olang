@@ -1,0 +1,7 @@
+# check: fail what a lambda captures from a value is read-only
+error E { X }
+fn main() ? E {
+    n I32 = 1
+    f := fn() { n = 2 }
+# check: fail what a lambda captures from a value is read-only
+}

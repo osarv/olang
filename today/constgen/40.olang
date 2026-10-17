@@ -1,0 +1,8 @@
+# D3a/M19f: a parameter and a local named like the prelude's print functions
+fn f(println I64) I64 {
+    eprint := 2
+    return println + eprint
+}
+fn main() ? {
+    println($f(1))
+}

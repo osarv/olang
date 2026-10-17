@@ -1,0 +1,20 @@
+# writing through a conditional whose one value is a read-only reference (T25c)
+import "std/io"
+type Node struct(v I32) { v mut }
+fn f2(p mut Node&, q Node&, c Bool) {
+    (p if c else q).v = 92
+}
+fn g(q Node&) {          # promises not to write q
+    other Node& = Node(0)
+    f2(other, q, false)
+}
+fn f3(p mut Node&, q Node&, k I32) {
+    (match k { case 1 => p  nomatch => q }).v = 93
+}
+fn main() ? {
+    b Node& = Node(2)
+    g(b)
+    c Node& = Node(3)
+    f3(Node(0), c, 5)
+    try io.Print($b.v " " $c.v "\n")
+}

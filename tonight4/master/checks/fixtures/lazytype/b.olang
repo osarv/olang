@@ -1,0 +1,12 @@
+# the root: its signature names a.Wrap before a's types are resolved (the scenario pads this file, so it is stored
+# apart from a.olang, above it - the order that showed the leak)
+import "a"
+type Pack<T> struct(v T) {
+    v
+    Copy T = v
+}
+fn ReadA(x a.Wrap<<T>>&) T { return x.Twin }
+test "a generic type first reached from another module's signature" {
+    assert ReadA(a.Wrap(3)) == 3
+    assert a.ReadB(Pack(4)) == 4
+}

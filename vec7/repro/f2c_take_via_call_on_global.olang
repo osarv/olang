@@ -1,0 +1,26 @@
+# R1 through a call on a global: GP.Lx() names the program's scope, so the take is believed to move anywhere
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+GP mut Parser = Parser()
+G2 mut Vec<String&> = Vec<String&>()
+fn main() ? {
+    GP.lx = Lexer()
+    for i in range 3 { GP.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    G2 = take GP.Lx().toks
+    GP.lx = null
+    churn()
+    println(G2[0])
+}

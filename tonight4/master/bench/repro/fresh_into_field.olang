@@ -1,0 +1,23 @@
+# A fresh Array<T>(n) assigned into a reference field or a reference element is built, zero-filled, and then COPIED
+# into a second allocation of the same size, instead of being adopted where it was built. The IR shows two
+# allocations and an "arrcopy" loop per assignment; List.grow pays it for every chunk (twice the memory, and a memset
+# plus a copy of each chunk), which is most of what makes List.Push 3x slower than a C vector's push.
+import "std/io"
+import "std/os"
+
+type Holder struct() {
+    a mut Array<I64>& = null
+    rows mut Array<mut Array<I64>&>& = null
+}
+
+fn main() ? {
+    args := os.Args()
+    n := try args[1].ParseInt()
+    h := Holder()
+    h.a = Array<I64>(n)                            # field: allocated twice, copied once
+    h.rows = Array<mut Array<I64>&>(2)             # the same for an array of references
+    h.rows[0] = Array<I64>(n)                      # element: the same
+    h.a[n - 1] = 7
+    h.rows[0][0] = 5
+    try io.Print($(h.a[n - 1] + h.rows[0][0]) "\n")
+}

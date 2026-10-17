@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F1: a fresh local declared via a scope argument naming the parameter, returned
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(n I64) mut String& { return $n "-new-text-built-where-a-lives" }
+fn longer(a mut String&, n I64) mut String& {
+    out := mk&a(n)
+    return out
+}
+fn main() ? {
+    c := CB()
+    d := longer(c.text, 5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}

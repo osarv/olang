@@ -1,0 +1,46 @@
+type H struct() { a Array<I32>& = null }
+fn t1() Bool {
+    r Array<I32>& = Array<I32>(0)
+    return r == null
+}
+fn t2() Bool {
+    h := H()
+    e Array<I32>& = Array<I32>(0)
+    return h.a == e
+}
+fn t3() Bool {
+    z Array<I32>
+    r Array<I32>& = z
+    return r == null
+}
+fn t4() Bool {
+    a Array<F64>& = F64[0.0 / 0.0, 1.0]
+    return a == a
+}
+fn t5() Bool {
+    a Array<I32>& = I32[1, 2, 3]
+    b Array<I32>& = I32[1, 2, 3]
+    return a == b and not (a is b) and a[0:2] == b[0:2] and a[0:0] == b[3:3]
+}
+fn t6() Bool {
+    a Array<Array<I32>&>& = Array<I32>&[I32[1], null]
+    b Array<Array<I32>&>& = Array<I32>&[I32[1], null]
+    return a == b
+}
+fn t7() Bool {
+    z Array<I32>
+    e Array<I32>& = Array<I32>(0)
+    zr Array<I32>& = z
+    return zr == e
+}
+G1 := t1()
+G2 := t2()
+G3 := t3()
+G4 := t4()
+G5 := t5()
+G6 := t6()
+G7 := t7()
+fn main() ? {
+    println("baked " $G1 " " $G2 " " $G3 " " $G4 " " $G5 " " $G6 " " $G7)
+    println("run   " $t1() " " $t2() " " $t3() " " $t4() " " $t5() " " $t6() " " $t7())
+}

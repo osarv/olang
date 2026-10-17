@@ -1,0 +1,10 @@
+import "std/io"
+
+type Q struct(a I64 = 5) {
+    a
+}
+
+fn main() ? io.IoError {
+    arr := Array<Q>(3)
+    try io.Print($arr "\n")
+}

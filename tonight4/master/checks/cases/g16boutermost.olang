@@ -1,0 +1,11 @@
+# check: fail error[E16]: index 0 is outside the array's 0 elements
+# also: g16boutermost.olang:10:14: note: instantiated here, with N = 3
+# G16b: a long chain of instantiations shows its innermost notes and always the outermost - the program's own call
+fn Total(a Array<I64, <N>>&) I64 {
+    if N == 0 { return 0 }
+    return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+}
+fn main() ? {
+    x Array<I64, 3> = I64[1, 2, 3]
+    println($Total(x))
+}

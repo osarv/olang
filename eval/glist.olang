@@ -1,0 +1,19 @@
+import "std/io"
+import "std/map"
+fn mk() List<I32>& {
+    l List<I32>&return = List<I32>()
+    l.Push(5)
+    return l
+}
+fn mkm() map.Map<I32, I32>& {
+    m map.Map<I32, I32>&return = map.Map<I32, I32>()
+    m.Put(1, 2)
+    return m
+}
+G List<I32>& = mk()
+GM map.Map<I32, I32>& = mkm()
+fn main() ? io.IoError {
+    try io.Print($G.Len() " " $G[0] " " $(1 in GM) "\n")
+    v := try GM.Get(1) catch default -1
+    try io.Print($v "\n")
+}

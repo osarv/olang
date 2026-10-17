@@ -1,0 +1,24 @@
+type Tree enum {
+    Leaf(n I64)
+    Node(kids List<Tree&>&)
+}
+
+fn total(t Tree&) I64 {
+    match t {
+        case Tree.Leaf(n) { return n }
+        case Tree.Node(kids) {
+            s I64 = 0
+            for k in kids { s += total(k) }
+            return s
+        }
+    }
+    unreachable
+}
+
+fn main() ? {
+    kids := List<Tree&>()
+    kids.Push(Tree.Leaf(1))
+    kids.Push(Tree.Leaf(2))
+    t Tree& = Tree.Node(kids)
+    assert total(t) == 3
+}

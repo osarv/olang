@@ -1,0 +1,5 @@
+q15: 0.7500 + 0.5000 = 1.0000 (saturated), 0.7500 * 0.5000 = 0.3750, -0.7500 = -0.7500
+band 0 [0.02, 0.08): energy 0.0273, worst error vs F64 0.00002
+band 1 [0.08, 0.15): energy 0.0005, worst error vs F64 0.00007
+band 2 [0.15, 0.3): energy 0.0427, worst error vs F64 0.00004
+baked energies: 0.0273 0.0005 0.0427

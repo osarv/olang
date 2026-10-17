@@ -1,0 +1,1 @@
+fn F0() I32 { return 0 }

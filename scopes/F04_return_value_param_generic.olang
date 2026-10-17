@@ -1,0 +1,23 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn id(x <T>) <T> { return x }
+fn first(a <T>, b <T>) <T> { return a }
+fn main() ? {
+    outer Node& = Node(1)
+    keep Holder = Holder(outer)
+    keepr Node& = outer
+    for i in range 2 {
+        inner Node& = Node(42)
+        h2 := Holder(inner)
+        keep = id(h2)
+    }
+    churn()
+    try io.Print($keep.n.v "\n")
+}

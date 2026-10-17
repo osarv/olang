@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/k3.olang:9:77: error[D16a]: this lambda's signature disagrees with fn(acc mut Array<Char>&, x I64) mut Array<Char>& - leave that part out, or make them agree
+    9 | fn k(a mut Array<Char>&) mut Array<Char>& { return I64[1].Iter().Fold(a, fn(acc mut Array<Char>&, x I64) mut Array<Char>& { return acc }) }
+      |                                                                             ^~~
+/home/user/review/vec3/work/k3.olang:9:132: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    9 | fn k(a mut Array<Char>&) mut Array<Char>& { return I64[1].Iter().Fold(a, fn(acc mut Array<Char>&, x I64) mut Array<Char>& { return acc }) }
+      |                                                                                                                                    ^~~
+compilation failed with 2 errors

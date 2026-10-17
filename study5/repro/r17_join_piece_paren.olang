@@ -1,0 +1,6 @@
+# DIAGNOSTIC (study 4's r12/#14, still so): a join piece that is a parenthesized expression without '$' is
+# "expected '(', found ')'" (at a line's end "found end of line"); after a name or a call E11b says "write '$...'".
+fn main() ? {
+    s := 125
+    println($(s / 60) ":" (s % 60).PadStart(2, '0'))
+}

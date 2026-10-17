@@ -1,0 +1,14 @@
+Dropped mut I64 = 0
+type Node struct(n I64) {
+    n
+    kid mut Node& = null
+} destruct { Dropped++ }
+R mut I64 = 1
+fn main() ? {
+    {
+        a mut Node& = Node(1 * R)
+        a.kid = Node(5 * R)
+        println("before close: " $Dropped)
+    }
+    println("after close: " $Dropped)
+}

@@ -1,0 +1,5 @@
+type Box struct() {
+    Data own mut Array<I64>& = Array<I64>(4, 9)
+}
+fn Eat(b own mut Box&) I64 { return b.Data[0] }
+fn Mk() own mut Box& { return Box() }

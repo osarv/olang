@@ -1,0 +1,22 @@
+import "std/io"
+fn joinAll(parts List<String&>&, sep String&) String {
+    b := StringBuilder()
+    first := true
+    for p in parts {
+        if not first { b.Push(sep) }
+        b.Push(p)
+        first = false
+    }
+    return b.ToString()
+}
+fn words(n I64) List<String&>& {
+    l List<String&>&return = List<String&>()
+    for i in range n { l.Push($i "w") }
+    return l
+}
+fn main() ? {
+    ws := words(4)
+    s := joinAll(ws, ", ")
+    upper := String(Char[c.ToUpper() for c in s])
+    try io.Print($s " / " $upper "\n")
+}

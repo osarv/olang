@@ -1,0 +1,4 @@
+# check: fail error[R15]: '?' alone is the default error
+# R15: the default error is '?' by itself
+fn main() ?error {
+}

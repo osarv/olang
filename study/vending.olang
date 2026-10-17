@@ -1,0 +1,159 @@
+# A vending machine as a state machine: events and states are enums with payloads, transitions are a match
+# with guards and nested patterns, deferred code logs every way out of a handler, and a session resource
+# releases itself with a destructor when its scope closes.
+import "std/io"
+
+type Coin enum {
+    Nickel
+    Dime
+    Quarter
+    Slug(weight I32)
+}
+
+type Event enum {
+    Insert(c Coin)
+    Select(slot I32)
+    Refund
+    Service(code String&)
+}
+
+type State enum {
+    Idle
+    Paying(cents I32)
+    Vending(slot I32, change I32)
+    Locked(reason String&)
+}
+
+error VendError {
+    BAD_COIN
+    SOLD_OUT
+    NOT_ENOUGH
+    LOCKED
+    UNKNOWN_SLOT
+}
+
+type Slot struct(name String&, price I32, stock I32) {
+    name
+    price
+    stock mut
+}
+
+Log mut I64 = 0
+Released mut I32 = 0
+
+# what a session holds open while the machine serves one customer
+type Session struct(id I32) {
+    id
+    events mut I32 = 0
+} destruct {
+    Released++
+}
+
+type Machine struct() {
+    state mut State = State.Idle
+    slots mut Array<Slot>& = Array<Slot>(3)
+    bank mut I32 = 0
+    lines mut List<String&>& = List<String&>()
+}
+
+fn value(c Coin) I32 ? VendError {
+    return match c {
+        case Coin.Nickel => 5
+        case Coin.Dime => 10
+        case Coin.Quarter => 25
+        case Coin.Slug(w) if w > 100 => 0
+        case Coin.Slug(_) { error VendError.BAD_COIN }
+    }
+}
+
+fn (m mut Machine&) say(text String&) {
+    m.lines.Push(text)
+}
+
+fn (m mut Machine&) handle(e Event, s mut Session&) ? VendError {
+    s.events++
+    defer Log++
+    defer { if m.lines.Len() > 100 { m.lines = List<String&>() } }
+    match m.state {
+        case State.Locked(why) if e != Event.Service("open") {
+            m.say("locked: " $why)
+            error VendError.LOCKED
+        }
+        nomatch { }
+    }
+    match e {
+        case Event.Insert(c) {
+            v := try value(c)
+            match m.state {
+                case State.Idle { m.state = State.Paying(v) }
+                case State.Paying(cents) { m.state = State.Paying(cents + v) }
+                nomatch { error VendError.LOCKED }
+            }
+            m.say("inserted " $v)
+        }
+        case Event.Select(slot) if slot < 0 or slot >= m.slots.Len() { error VendError.UNKNOWN_SLOT }
+        case Event.Select(slot) {
+            item := m.slots[slot]
+            match m.state {
+                case State.Paying(cents) if item.stock == 0 {
+                    m.say("sold out: " $item.name)
+                    error VendError.SOLD_OUT
+                }
+                case State.Paying(cents) if cents >= item.price {
+                    m.slots[slot].stock--
+                    m.bank += item.price
+                    m.state = State.Vending(slot, cents - item.price)
+                    m.say("vend " $item.name " change " $(cents - item.price))
+                    m.state = State.Idle
+                }
+                case State.Paying(cents) {
+                    m.say("need " $(item.price - cents) " more for " $item.name)
+                    error VendError.NOT_ENOUGH
+                }
+                nomatch { error VendError.NOT_ENOUGH }
+            }
+        }
+        case Event.Refund {
+            match m.state {
+                case State.Paying(cents) { m.say("refund " $cents) }
+                nomatch { m.say("nothing to refund") }
+            }
+            m.state = State.Idle
+        }
+        case Event.Service("lock") { m.state = State.Locked("service") }
+        case Event.Service("open") { m.state = State.Idle }
+        case Event.Service(code) { m.say("unknown service code " $code) }
+    }
+}
+
+fn (m Machine&) stateName() String& {
+    return match m.state {
+        case State.Idle => "idle"
+        case State.Paying(c) => "paying " $c
+        case State.Vending(s, c) => "vending " $s
+        case State.Locked(r) => "locked (" $r ")"
+    }
+}
+
+fn run(m mut Machine&, events Array<Event>&, id I32) I32 {
+    s Session& = Session(id)
+    failures I32 = 0
+    for e in events {
+        try m.handle(e, s) catch VendError.LOCKED + VendError.NOT_ENOUGH { failures++ } catch { failures += 10 }
+    }
+    return failures
+}
+
+fn main() ? io.IoError {
+    m := Machine()
+    m.slots[0] = Slot("cola", 75, 2)
+    m.slots[1] = Slot("chips", 50, 0)
+    m.slots[2] = Slot("gum", 15, 5)
+    first := Event[Event.Insert(Coin.Quarter), Event.Insert(Coin.Quarter), Event.Select(0), Event.Insert(Coin.Quarter), Event.Insert(Coin.Quarter), Event.Insert(Coin.Quarter), Event.Select(0), Event.Insert(Coin.Dime), Event.Select(1), Event.Refund]
+    f1 := run(m, first, 1)
+    second := Event[Event.Service("lock"), Event.Insert(Coin.Nickel), Event.Service("open"), Event.Insert(Coin.Slug(50)), Event.Insert(Coin.Slug(500)), Event.Insert(Coin.Dime), Event.Insert(Coin.Nickel), Event.Select(2), Event.Select(7), Event.Service("x")]
+    f2 := run(m, second, 2)
+    for line in m.lines { try io.Print($line "\n") }
+    try io.Print("failures " $f1 " and " $f2 ", bank " $m.bank ", state " $m.stateName() ", log " $Log ", sessions released " $Released "\n")
+    try io.Print("stock " $m.slots "\n")
+}

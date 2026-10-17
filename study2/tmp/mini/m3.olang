@@ -1,0 +1,21 @@
+type Node enum {
+    Leaf(s String&)
+}
+type P struct(src String&) {
+    src
+    pos mut I64 = 0
+}
+fn (p P&) word() String&p { return p.src[0:2] }
+fn (p P&) none() String&p { return p.src[0:0] }
+fn (p mut P&) a() Node&p {
+    m := p.word()
+    mk := m if p.pos == 0 else p.none()
+    return Node.Leaf(mk)
+}
+fn (p mut P&) b() Node&p {
+    return Node.Leaf(p.word() if p.pos == 0 else p.none())
+}
+fn main() ? {
+    p := P("hello")
+    println($p.a() " " $p.b())
+}

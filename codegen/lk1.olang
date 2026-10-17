@@ -1,0 +1,23 @@
+import "std/io"
+import "std/os"
+
+type Link struct(v I64, next Link&) {
+    v
+    next
+}
+
+fn work(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        l Link& = Link(i, Link(i + 1, null))
+        t = t + l.next.v
+        m := Link(i, Link(i + 2, null))
+        t = t + m.next.v
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    n I64 = 1000000 * os.Args().Len()
+    try io.Print($work(n) "\n")
+}

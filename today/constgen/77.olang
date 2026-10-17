@@ -1,0 +1,13 @@
+# G21/B9c: deferred constant arguments that depend on one another through instantiations - each level needs another
+# attempt
+fn inc(n I64) I64 { return n + 1 }
+type L<N I64> struct() { a mut Array<I64, inc(N)> }
+fn (l L<<N>>&) Next() I64 {
+    m := L<inc(N)>()
+    return m.a.Len()
+}
+fn main() ? {
+    x := L<1>()
+    y := L<inc(inc(1))>()
+    println($x.a.Len() " " $x.Next() " " $y.a.Len() " " $y.Next())
+}

@@ -1,0 +1,8 @@
+profile dev on linux
+server.port            = 9000                     (min/cfg/app.conf)
+server.workers         = 7                        (APP_SERVER_WORKERS)
+server.tls.enabled     = true                     (min/cfg/app.conf)
+server.tls.cert        = /etc/ssl/app.pem         (min/cfg/app.conf)
+log.level              = info                     (min/cfg/app.conf)
+db.url                 =                          (default)
+nested: depth 2001, 1 value(s), first key ends s9.leaf

@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/t5_take_through_ref_to_owner_local.olang:16:18: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   16 |     r mut Lex& = o
+      |                  ^
+/home/user/review/vec7/work/t5_take_through_ref_to_owner_local.olang:17:10: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   17 |     w := take r.toks
+      |          ^~~~
+compilation failed with 2 errors

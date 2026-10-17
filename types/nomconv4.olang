@@ -1,0 +1,21 @@
+# E12c/T29a: a conversion of a local array taken for a temporary - stored into a longer-lived reference
+import "std/io"
+type Holder struct() {
+  s mut String& = null
+}
+fn keep(h mut Holder&) {
+  local Array<U8> = U8[104, 105, 106]
+  h.s = String(local)              # if this names local's storage, it must be rejected (it dies at the return)
+}
+fn churn() I64 {
+  a := Array<I64>(64, 7)
+  t I64 = 0
+  for x in a { t += x }
+  return t
+}
+fn main() ? {
+  h := Holder()
+  keep(h)
+  n := churn()
+  try io.Print($h.s " " $n "\n")
+}

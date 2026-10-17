@@ -1,0 +1,14 @@
+import "std/io"
+
+type P struct(a I64) {
+    a
+}
+
+fn apply(f fn(a I64) P, x I64) P {
+    return f(x)
+}
+
+fn main() ? io.IoError {
+    p := apply(P, 4)
+    try io.Print($p "\n")
+}

@@ -1,0 +1,2 @@
+type hid struct() { x I32 = 1 }
+fn MakeHid() I32 { return 0 }

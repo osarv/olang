@@ -1,0 +1,31 @@
+# own3 F4: an owner local at a destructor's top level is registered for release on the scope being closed (%dscope,
+# C9a), with its slot - an alloca of the destructor's frame - as the node's instance. The node runs after the
+# destructor has returned, reading the dead stack slot: __olang_own_free(garbage).
+# -b and -b -s: segfault; valgrind (-a x86-64-v3): "uninitialised value" / "Invalid read" in __olang_own_free.
+# (A single release, with nothing else on the stack in between, may happen to read the right pointer.)
+Dropped mut I64 = 0
+type Leaf struct(n I64) {
+    n
+} destruct { Dropped++ }
+type Box2 struct() {
+    l own mut Leaf&
+}
+type Deep struct(v I64) {
+    v
+    next own mut Deep&
+} destruct {
+    x := Box2()                          # an owner value local
+    x.l = Leaf(v)
+    y own mut Leaf& = Leaf(v + 1)        # an own reference local
+}
+fn main() ? {
+    {
+        head own mut Deep& = null
+        for i in range 1000 {
+            n own mut Deep& = Deep(i)
+            n.next = take head
+            head = take n
+        }
+    }
+    println($Dropped)                    # 2000 expected
+}

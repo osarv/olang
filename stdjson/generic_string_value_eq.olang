@@ -1,0 +1,8 @@
+# a text literal binds <K> to String by value; comparing such a parameter, or passing it to a String& parameter,
+# is rejected (O10d), though nothing outlives anything
+fn eqv(a String&, key <K>) Bool {
+    return a == key
+}
+fn main() ? {
+    assert eqv("x", "x")
+}

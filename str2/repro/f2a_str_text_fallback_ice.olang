@@ -1,0 +1,16 @@
+# NEW in 7345ff9, CONFIRMED. A natural Str - its receiver's text or a literal fallback, declared with ':=' - stops the
+# compiler: the literal is built where the receiver's text lives (E28), which codegen resolves to null, and
+# cgCheckNoNullScope fires. The checker neither refuses it nor sees the build.
+# new -b: 'olang: internal compiler error: a check inside the compiler failed', no location. -i: anon / x.
+# d6c7f52 and d0abfe8: anon / x. Rendering the conditional directly, $(b.name if ... else "anon"), compiles.
+type Bag struct(name String&) {
+    name
+}
+fn (b Bag&) Str() String {
+    name := b.name if b.name.Len() > 0 else "anon"
+    return $name
+}
+fn main() ? {
+    println($Bag(""))
+    println($Bag("x"))
+}

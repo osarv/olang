@@ -1,0 +1,11 @@
+# List<mut Node&> instantiated first (in a signature); List<Node&> then shares it
+import "std/io"
+type Node struct(v I32) { v mut }
+G Node& = Node(1)              # an immutable global reference: read-only (T25b)
+fn first(l mut List<mut Node&>&) {}
+fn keep(l mut List<Node&>&, p Node&) { l.Push(p) }     # legal: a read-only reference into a list of them
+fn main() ? {
+  ro := List<Node&>()
+  keep(ro, G)
+  try io.Print($ro.Len() "\n")
+}

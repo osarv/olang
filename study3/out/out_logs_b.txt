@@ -1,0 +1,23 @@
+lines: 5000, malformed: 52
+
+level    count
+debug     1031
+info      3202
+warn       466
+error      249
+
+service  count   p50   p90   p99   max
+auth      1214    25    46   720  1020
+billing   1239    25    46   703  1016
+search    1251    25    45   622   997
+upload    1244    25    46   746  1000
+
+slowest:
+   1020ms auth retry
+   1016ms billing user=7
+   1000ms upload user=42
+    998ms auth cache miss
+    997ms search retry
+
+first malformed lines: I64[14, 111, 208]
+wc agrees: true

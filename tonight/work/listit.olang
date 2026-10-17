@@ -1,0 +1,15 @@
+fn main() ? {
+    l := List<I64>()
+    for i in range 20 { l.Push(i) }
+    it := l.Iter()
+    for j in range 15 { x := try it.Next() catch Exhausted { break } }
+    l.Clear()
+    l.Push(100)
+    n I64 = 0
+    for {
+        x := try it.Next() catch Exhausted { break }
+        n++
+        if n > 1000 { break }
+    }
+    println("after Clear the iterator gave " $n " more")
+}

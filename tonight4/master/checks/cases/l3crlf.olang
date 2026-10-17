@@ -1,0 +1,6 @@
+# check: fail carriage return - save the file with LF line endings
+# also: compilation failed with 1 error
+# L3: a carriage return is reported once, however many lines end in one - the header lines end in LF, the rest in CR-LF
+fn main() ? {
+    x := 1
+}

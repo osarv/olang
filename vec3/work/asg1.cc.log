@@ -1,0 +1,16 @@
+/home/user/review/vec3/work/asg1.olang:11:11: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   11 |     d = w.View()
+      |           ^~~~
+/home/user/review/vec3/work/asg1.olang:12:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     for i in range 1000 { w.Push(i + 100) }   # frees the buffer d views: not refused
+      |                             ^~~~
+/home/user/review/vec3/work/asg1.olang:11:11: note: borrowed here
+   11 |     d = w.View()
+      |           ^~~~
+/home/user/review/vec3/work/asg1.olang:14:14: note: used here, after it
+   14 |     println($d[0] " " $d[1])
+      |              ^
+/home/user/wt/rvvec3/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 2 errors

@@ -1,0 +1,11 @@
+# T7d/E10: an Array<T, N> beside an Array<T> in == meets it as an Array<T>
+fn eqq(a Array<I32, 3>&, b Array<I32>&) Bool { return a == b }
+Gq Bool = eqq(I32[1, 2, 3], I32[1, 2, 3, 4])
+fn main() ? {
+    f Array<I32, 3> = I32[1, 2, 3]
+    r := I32[1, 2, 3]
+    s := I32[1, 2]
+    v Array<I32> = r
+    println($(f == v) " " $(f == s) " " $(v == f) " " $Gq)
+    assert f == v
+}

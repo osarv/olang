@@ -1,0 +1,34 @@
+# r27 DIAGNOSTIC - B11/G16b in a program's own generic code: a scope error inside a generic method is reported once per
+# instantiation (here 2 causes x 2 instantiations = 4 errors), and the note's suggested fix is spelled with the
+# instantiation's types - "declare it where 'c' lives: 'n Node<I64, I64>&c = ...'" - which cannot be written inside
+# the generic; the line to write is "n mut Node<K, V>&c = Node(key, value)" ("mut" because pushFront writes through n,
+# which the note also leaves out). (An LRU cache's Put.)
+#
+# expected: 2 errors, the note written with K and V
+# actual: 4 errors at lines 25-26 (two per instantiation), note at line 24 notes "n Node<I64, I64>&c" and "n Node<String&, I32>&c"
+type Node<K, V> struct(key K, value V) {
+    key
+    value
+    prev mut Node<K, V>&
+    next mut Node<K, V>&
+}
+type Lru<K Hashable<K>, V> struct() {
+    nodes Map<K, mut Node<K, V>&>
+    head mut Node<K, V>&
+}
+fn (c mut Lru<<K>, <V>>&) pushFront(n mut Node<K, V>&) {
+    n.next = c.head
+    c.head = n
+}
+fn (c mut Lru<<K>, <V>>&) Put(key K, value V) {
+    n := Node(key, value)
+    c.nodes.Put(key, n)
+    c.pushFront(n)
+}
+fn main() ? {
+    a := Lru<I64, I64>()
+    a.Put(1, 2)
+    b := Lru<String&, I32>()
+    b.Put("x", 3)
+    println($a.nodes.Len() $b.nodes.Len())
+}

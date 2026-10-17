@@ -1,0 +1,22 @@
+# C2d (no own): a constructor field made by a call given a scope argument naming a parameter ("y := mk&x(n)")
+type H struct(x String&, n I64) {
+    y := mk&x(n)
+}
+fn mk(n I64) String& { return $n "-new-text-in-x's-scope" }
+fn main() ? {
+    h := H("outer", 1)
+    for i in range 2 {
+        t := $i "-inner-block-text"
+        h = H(t, 5 + i)
+    }
+    churn()
+    println(h.y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

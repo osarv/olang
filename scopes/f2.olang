@@ -1,0 +1,23 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n }
+fn mk1() Holder {
+    n Node& = Node(1)
+    return Holder(n)
+}
+fn mk2(c Bool) Holder {
+    n Node& = Node(1)
+    return Holder(n) if c else Holder(Node(3))
+}
+fn mk3(k I32) Holder {
+    n Node& = Node(1)
+    return match k { case 1 => Holder(n)  nomatch => Holder(Node(3)) }
+}
+fn mk4(k I32) Holder {
+    n Node& = Node(1)
+    h := Holder(n)
+    return h
+}
+fn main() ? {
+    try io.Print($mk1().n.v "\n")
+}

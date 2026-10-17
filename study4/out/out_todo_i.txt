@@ -1,0 +1,51 @@
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json add buy milk
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json add write the -i study --verbose
+todo: unknown flag -i
+  (status 2)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json -v add call bob, about the 'quote'
+added #2
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json list
+[ ]   1  buy milk
+[ ]   2  call bob, about the 'quote'
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json done 2
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json list
+[ ]   1  buy milk
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json -a list
+[ ]   1  buy milk
+[x]   2  call bob, about the 'quote'
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -n1 -f/tmp/tmp.xhkUip6AOt/list.json list
+[ ]   1  buy milk
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json rm 1
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json rm 99
+todo: no such item
+  (status 1)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json --limit=x list
+todo: --limit takes a number, not 'x'
+  (status 2)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json --nope list
+todo: unknown flag --nope
+  (status 2)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json frobnicate
+todo: unknown command 'frobnicate'
+  (status 2)
+$ todo /home/user/wt/s3c/build/out -i todo.olang --help
+usage: todo [flags] ...
+keeps a list of things to do
+
+flags:
+  -f, --file FILE           where the list is kept (default todo.json)
+  -n, --limit LIMIT         list at most this many (default 20)
+  -v, --verbose             say more
+  -a, --all                 list finished items too
+  (status 0)
+$ todo /home/user/wt/s3c/build/out -i todo.olang -f /tmp/tmp.xhkUip6AOt/list.json list
+todo: /tmp/tmp.xhkUip6AOt/list.json is not a to-do list
+  (status 1)

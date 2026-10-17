@@ -1,0 +1,9 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn main() ? {
+    n Node& = Node(5)
+    c := n.v > 3
+    k Node& = n if c else Node(1)
+    j Node& = Node(1) if c else n
+    try io.Print($k.v " " $j.v "\n")
+}

@@ -1,0 +1,41 @@
+# DIAGNOSTIC (B11, new note) on a pre-existing over-rejection: "m[$k \"...\"] += 100" holds the rendered key in a hidden
+# local (buildSetAt's compound path) and O10c refuses it, while "m[$k \"...\"] = k" is accepted. The new note says
+# "this text lives in a block that closes first - pass a copy ... write '$' before it" - it already is a '$' rendering.
+# (The plain forms build and run right under -s: forgetCall drops nothing SetAt needs.)
+type TMap struct() {
+    keys List<String&> = List<String&>()
+    vals List<I64> = List<I64>()
+}
+fn (m TMap&) At(k String&) I64 {
+    for i in range m.keys.Len() {
+        if m.keys[i] == k { return m.vals[i] }
+    }
+    return -1
+}
+fn (m mut TMap&) SetAt(k String&, v I64) {
+    m.keys.Push(k)
+    m.vals.Push(v)
+}
+fn (m TMap&) Len() I64 { return m.keys.Len() }
+fn mkKey(k I64) String { return $k "-a-key-of-moderate-length-xxxxxxxxxxxxxxxx" }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn main() ? {
+    m := TMap()
+    for k in range 3 {
+        m[$k "-joined-key-of-moderate-length-yyyyyyyyyyyyyyyy"] = k
+        m[mkKey(k)] = k + 10
+        m[$k "-compound-key-of-moderate-length-zzzzzzzzzzzzz"] += 100
+    }
+    println($churn())
+    for i in range m.Len() {
+        println(m.keys[i])
+        println($m.vals[i])
+    }
+}

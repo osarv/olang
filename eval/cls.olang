@@ -1,0 +1,24 @@
+import "std/io"
+fn classify(n I32) String {
+    return match n {
+        case 1, 2, 3 => "small"
+        case 7 => "seven"
+        nomatch => "other"
+    }
+}
+fn classify2(n I32) String {
+    s String = match n {
+        case 1 => "small"
+        nomatch => "other"
+    }
+    return s
+}
+fn classify3(n I32) String {
+    return "small" if n == 1 else "other"
+}
+M mut I32 = 1
+fn main() ? io.IoError {
+    try io.Print($classify(M) "|" $classify(7) "|" $classify2(M) "|" $classify3(M) "\n")
+    x := classify(M)
+    try io.Print($x "\n")
+}

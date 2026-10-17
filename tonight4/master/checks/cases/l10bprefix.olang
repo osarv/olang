@@ -1,0 +1,5 @@
+# check: fail error[L10b]: '_' in a number must stand between two digits
+# L10b: a separator stands between two digits - one right after a "0x" prefix has none before it
+fn main() ? {
+    x U64 = 0x_FF
+}

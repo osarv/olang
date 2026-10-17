@@ -1,0 +1,23 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Inner struct() { data own mut Array<Char>& = Array<Char>(2, 'a') }
+type Outer struct() { in own mut Inner& = Inner() }
+fn (o mut Outer&) FirstMut() mut Inner&o { return o.in }
+fn (o Outer&) Data() Array<Char>&o { return o.in.data }
+fn use(o mut Outer&) {
+    x := o.Data()
+    d := o.FirstMut()
+    d.data = Array<Char>(40, 'z')
+    churn()
+    println($x[0])
+}
+fn main() ? {
+    o := Outer()
+    use(o)
+}

@@ -1,0 +1,8 @@
+# check: fail error[L18]: a line cannot begin with '+' - the line before ended its statement
+# L18: a line beginning with an operator that only joins two values - the line before ended its statement there
+fn sum(a I64, b I64, c I64) I64 {
+    s := a + b
+        + c
+    return s
+}
+fn main() ? { println($sum(1, 2, 3)) }

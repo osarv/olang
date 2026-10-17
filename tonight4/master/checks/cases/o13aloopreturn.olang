@@ -1,0 +1,28 @@
+# check: run
+# O26a: a local returned inside a loop lives in the result scope, so what the loop assigns it later is built there. This
+# was an error (O13a: the text was made in the block); o13aloopreturnwrap.olang keeps it where the local is not what is
+# returned
+type H struct(r String&) {
+    r
+}
+fn mk(n I64, s String&) H {
+    e := H(s)
+    for i in range 3 {
+        if i == 2 { return e }
+        e = H($n $n)
+    }
+    return H(s)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := mk(12, "x")
+    churn()
+    assert w.r == "1212"
+}

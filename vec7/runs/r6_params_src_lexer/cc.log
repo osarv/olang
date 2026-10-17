@@ -1,0 +1,10 @@
+/home/user/review/vec7/work/r6_params_src_lexer.olang:23:5: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   23 |     mv(p.lx, d)
+      |     ^~
+/home/user/review/vec7/work/r6_params_src_lexer.olang:8:42: note: the callee requires it because of this statement
+    8 | fn mv(src mut Lexer&, dst mut Parser&) { dst.lx.toks = take src.toks }
+      |                                          ^~~
+/home/user/review/vec7/work/r6_params_src_lexer.olang:18:5: note: 'p' is declared here, in a block that closes first - declare it where 'd' lives: 'p mut Parser&d = ...'
+   18 |     p := Parser()
+      |     ^
+compilation failed with 1 error

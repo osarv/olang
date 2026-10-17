@@ -1,0 +1,6 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn (l mut Lexer&) Grow(k I64) { for i in range k { l.toks.Push(i + 1) } }
+fn (l Lexer&) First() I64 { return l.toks[0] }

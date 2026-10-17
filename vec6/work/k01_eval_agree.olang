@@ -1,0 +1,35 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+    words Vec<Tok> = Vec<Tok>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+fn work(k I64) I64 {
+    t := Two()
+    for i in range k { t.a.toks.Push(i)
+        t.b.words.Push(Tok($i "w", i)) }
+    m := take t.a.toks
+    r := m.Len() * 1000 + t.a.toks.Len() * 100
+    t.a = take t.b
+    r += t.a.words.Len() * 10 + t.b.words.Len()
+    t.b.toks = take m
+    r += t.b.toks.Len() * 10000 + m.Len() * 100000
+    w := t.a.words.TakeAt(1)
+    s := t.a.words.SwapTake(0)
+    r += w.text.Len() * 1000000 + s.n * 10000000 + t.a.words.Len() * 100000000
+    t.a.words.RemoveAt(0)
+    r += t.a.words[0].n * 1000000000
+    return r
+}
+Baked I64 = work(5)
+fn main() ? {
+    k := 5
+    println($Baked " " $work(k) " " $(Baked == work(k)))
+}

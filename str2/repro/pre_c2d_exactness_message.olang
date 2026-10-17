@@ -1,0 +1,35 @@
+# PRE-EXISTING (diagnostic only), same on d0abfe8. A temporary instance with a writable bare field read through in
+# a callee: C2d says the instance 'would outlive' the argument, while the rule at work is exactness - it is a
+# temporary in the callee's block and outlives nothing.
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type Bag struct(head mut Node&) {
+    head
+}
+type Res struct(a mut Node&) {
+    a
+} destruct { println("destructed") }
+fn peek(n mut Node&) I64 {
+    return Res(n).a.v
+}
+fn (b Bag&) Str() String {
+    return $peek(b.head)
+}
+fn main() ? {
+    b := Bag(Node(4, null))
+    s := $b
+    churn()
+    println(s)
+}

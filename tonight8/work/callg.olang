@@ -1,0 +1,20 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Adder struct(n mut Node&) {
+    n
+}
+fn (a Adder) Call(i I64) { a.n.next = Node(i) }
+G mut Node& = Node(0)
+GA := Adder(G)
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    join {
+        spawn work(GA, 1000)
+    }
+    work(GA, 5)
+    println($G.next.v)
+}

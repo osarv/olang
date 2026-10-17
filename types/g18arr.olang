@@ -1,0 +1,11 @@
+# T7a/G18: a value array held inside another value must be a reference - re-checked per instantiation?
+import "std/io"
+type Box<T> struct(v <T>) {
+  v mut
+}
+fn main() ? {
+  b := Box<Array<I32>>(I32[1, 2])
+  c Box<Array<I32>> = b          # a copy of the box
+  c.v[0] = 9                     # if the array is shared, b.v changes too
+  try io.Print($b.v[0] " " $c.v[0] "\n")
+}

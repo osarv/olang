@@ -1,0 +1,21 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn perm(a mut Array<String&>&, k I64) {
+    a[1] = $k "new"
+}
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("aa")
+    v.Push("bb")
+    v.Push("cc")
+    perm(v.ViewMut(), 7)
+    for i in range 100 { v.Push($i "zz") }
+    churn()
+    println($v)
+}

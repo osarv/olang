@@ -1,0 +1,32 @@
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn mk() fn() I64 {
+    l := List<I64>()
+    for i in range 40 { l.Push(i) }
+    f := fn() I64 { return l[39] + l.Len() }
+    return f
+}
+fn mk2() fn() I64 {
+    n mut List<I64>& = List<I64>()
+    for i in range 40 { n.Push(i) }
+    return fn() I64 { return n[39] + n.Len() }
+}
+fn mk3() fn() I64 {
+    s := "abc" $40
+    return fn() I64 { return s.Len() }
+}
+fn main() ? {
+    f := mk()
+    g := mk2()
+    h := mk3()
+    churn()
+    println($f() " " $g() " " $h())
+}

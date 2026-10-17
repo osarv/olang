@@ -1,0 +1,17 @@
+mkdir -p build
+mkdir -p build
+mkdir -p build
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c codegen.c -o build/codegen.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c comptime.c -o build/comptime.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c errmsg.c -o build/errmsg.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c main.c -o build/main.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c semantic.c -o build/semantic.o
+mkdir -p build
+mkdir -p build
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c syntax.c -o build/syntax.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c token.c -o build/token.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c util.c -o build/util.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP build/codegen.o build/comptime.o build/errmsg.o build/main.o build/semantic.o build/syntax.o build/token.o build/util.o -o build/out -lm -lffi -ldl -lpthread

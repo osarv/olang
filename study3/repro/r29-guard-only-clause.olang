@@ -1,0 +1,17 @@
+# r29 FRICTION - S12/S13b/S13e: on a match over a number (or any non-enum), a clause cannot bind the value or be a
+# guard alone: "case big if big > 100" and "case _ if n < 0" are "unknown name". Ranges are what a guard is for, and
+# match is the only multiway expression (S12b). Written twice in this study (a trend arrow, a Q15 saturation); the
+# first time as "case v if v >= 32767.0" with v the matched variable itself - which compiles, comparing v == v, and so
+# silently fails for a NaN.
+#
+# expected: big negative small
+# actual: three "unknown name" errors at lines 12-13
+fn classify(n I64) String {
+    return match n {
+        case 0 => "zero"
+        case big if big > 100 => "big"
+        case _ if n < 0 => "negative"
+        nomatch => "small"
+    }
+}
+fn main() ? { println($classify(500) " " $classify(-3) " " $classify(7)) }

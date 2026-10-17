@@ -1,0 +1,25 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# held? a fresh array of references filled with slices of the argument (type walk must keep the loan)
+fn split2(a mut String&) mut Array<String&>& {
+    out mut Array<String&>&return = Array<String&>(2)
+    out[0] = a[0:2]
+    out[1] = a[2:4]
+    return out
+}
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    d := split2(c.text)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d[0])
+}

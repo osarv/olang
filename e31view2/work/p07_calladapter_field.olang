@@ -1,0 +1,17 @@
+type Acc struct() {
+    N I64 = 0
+}
+type B struct(k I64) {
+    k
+}
+fn (b B&) Call(c mut Acc&) { c.N += b.k }
+type H struct(b B) {
+    b
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    h := H(B(5))
+    h.b(l[0])
+    println("list N " $l[0].N)
+}

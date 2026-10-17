@@ -1,0 +1,10 @@
+# G22/G23/D8a: a constant variable read in a parameter's default - a constructor's (the type's own N) and a method's
+# (introduced earlier in the signature). Expected: per-instantiation defaults (3 and 30 for B<3>); found "unknown name"
+type B<N I64> struct(k I64 = N * 10) {
+    k
+}
+fn (b B<<N>>&) F(x I64 = N + 1) I64 { return x }
+fn main() ? {
+    b := B<3>()
+    println($b.k " " $b.F())
+}

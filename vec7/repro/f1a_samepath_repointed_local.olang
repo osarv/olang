@@ -1,0 +1,31 @@
+# R1's "same path" (ownSamePath): a borrow 'q := p.lx' read through a reference local p, then p repointed at another
+# Parser - 'q.more' and 'p.lx.toks' are the same path by name, but two different objects
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    a mut Parser& = Parser()
+    b mut Parser& = Parser()
+    a.lx = Lexer()
+    b.lx = Lexer()
+    for i in range 3 { b.lx.toks.Push($i "-word-in-b's-lexer-region") }
+    p mut Parser& = a
+    q := p.lx
+    p = b
+    q.more = take p.lx.toks
+    b.lx = null
+    churn()
+    println(a.lx.more[0])
+}

@@ -1,0 +1,9 @@
+# check: fail a 'return' here would leave in the middle of another way out (S19b)
+# S19b: deferred code runs while its block is being left, so it may not return
+fn f(n I32) I32 {
+    defer {
+        if n > 1 { return 3 }
+    }
+    return n
+}
+fn main() ? { assert f(1) == 1 }

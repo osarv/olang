@@ -1,0 +1,10 @@
+# G21/G23 in an instantiation: N is a U8 value, so N + 1 is U8 arithmetic in the body (0 for N = 255),
+# while the same expression as a constant argument is folded in 64 bits (256)
+type Box<N U8> struct() {
+    a mut Array<I32, N + 1>
+}
+fn (b Box<<N>>&) Inside() I64 { return I64(N + 1) }
+fn main() ? {
+    b := Box<255>()
+    println("type length " $b.a.Len() ", body N + 1 = " $b.Inside())
+}

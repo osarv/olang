@@ -1,0 +1,31 @@
+# G28: a trait with constant parameters; a variable introduced in a constraint's arguments, bound through the methods
+type Shaped<R I64, C I64> trait {
+    Get(r I64, c I64) F64
+    Row(r I64) Array<F64, C>
+    Col(c I64) Array<F64, R>
+}
+type M<R I64, C I64> struct() { d mut Array<F64, R * C> }
+fn (m M<<R>, <C>>&) Get(r I64, c I64) F64 { return m.d[r * C + c] }
+fn (m M<<R>, <C>>&) Row(r I64) Array<F64, C> {
+    out Array<F64, C> = Array<F64, C>()
+    for c in range C { out[c] = m.Get(r, c) }
+    return out
+}
+fn (m M<<R>, <C>>&) Col(c I64) Array<F64, R> {
+    out Array<F64, R> = Array<F64, R>()
+    for r in range R { out[r] = m.Get(r, c) }
+    return out
+}
+fn trace(m <V Shaped<<R>, <C>>>&) F64 {
+    s F64 = 0
+    for i in range R { s = s + m.Get(i, i) }
+    return s
+}
+Baked F64 = trace(M<2, 2>())
+fn main() ? {
+    m := M<3, 3>()
+    m.d[0] = 1.5
+    m.d[4] = 2.0
+    m.d[8] = 3.0
+    println($trace(m) " " $Baked)
+}

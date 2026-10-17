@@ -1,0 +1,21 @@
+# r05 OVER-REJECTION: a conditional of a borrowed reference and null loses the reference's scope:
+# "x := p.leaf() if b else null" then "Node&[x]" is O25c ("the array outlives what this element refers to").
+type Node enum {
+    Leaf(v I64)
+    Many(items Array<Node&>&)
+}
+type P struct() {
+    pos mut I64 = 0
+}
+fn (p mut P&) leaf() Node&p {
+    p.pos++
+    return Node.Leaf(p.pos)
+}
+fn (p mut P&) opt(b Bool) Node&p {
+    x := p.leaf() if b else null
+    return Node.Many(Node&[x])
+}
+fn main() ? {
+    p := P()
+    println($p.opt(true))
+}

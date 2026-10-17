@@ -1,0 +1,2 @@
+type P struct() { x mut Array<mut I32>& = null }
+fn main() ? { }

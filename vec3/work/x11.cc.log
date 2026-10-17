@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/mod/x11.olang:12:18: error[O37]: 'View2' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'View2' by name
+   12 |     f := (mid.Vl.View2)
+      |                  ^~~~~
+compilation failed with 1 error

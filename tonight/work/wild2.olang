@@ -1,0 +1,21 @@
+type E enum {
+    A(v I32)
+    B(e E&)
+}
+fn k(e E&) I32 {
+    return match e {
+        case E.A(v) => v
+        case _ => 99
+    }
+}
+fn k2(e E&) I32 {
+    match e {
+        case E.B(E.A(v)) { return v }
+        case _ { return 7 }
+    }
+}
+G1 := k(null)
+G2 := k2(E.B(null))
+fn main() ? {
+    println($G1 " " $G2 " " $k(null) " " $k2(E.B(null)) " " $k2(E.B(E.A(3))))
+}

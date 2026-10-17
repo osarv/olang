@@ -1,0 +1,148 @@
+# wordcount - counts words in a generated corpus three ways and checks they agree: sequentially, with one task per
+# chunk each returning its own map (spawn out[i] = f(...)), and as a pipeline - a producer feeding lines through a
+# channel to workers that send back partial counts.
+
+import "std/chan"
+import "std/rand"
+import "std/time"
+import "std/math"
+
+Vocabulary := String&["the", "olang", "scope", "arena", "task", "join", "spawn", "list", "map", "trait",
+    "match", "error", "array", "value", "reference", "compile", "evaluate", "generic", "constant", "fast"]
+
+fn corpus(lines I64, seed U64) List<String&> {
+    r := rand.Rand(seed)
+    out := List<String&>()
+    for i in range lines {
+        b := StringBuilder()
+        n := 3 + r.Below(12)
+        for k in range n {
+            if k > 0 { b.Push(" ") }
+            # a skewed choice: earlier words are more common
+            w := Vocabulary[math.Min(r.Below(Vocabulary.Len()), r.Below(Vocabulary.Len()))]
+            b.Push(w if r.Below(10) != 0 else w.ToUpper())
+        }
+        out.Push(b.ToString())
+    }
+    return out
+}
+
+fn countInto(m mut Map<String&, I64>&, line String&) {
+    for w in line.Split(" ") {
+        if w.Len() == 0 { continue }
+        m.Update(w.ToLower(), 0, fn(n I64) I64 { return n + 1 })
+    }
+}
+
+fn countRange(lines List<String&>&, lo I64, hi I64) Map<String&, I64> {
+    m := Map<String&, I64>()
+    for i in range lo, hi { countInto(m, lines[i]) }
+    return m
+}
+
+fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
+    for e in from {
+        add := e.Value
+        into.Update(e.Key, 0, fn(n I64) I64 { return n + add })
+    }
+}
+
+fn sequential(lines List<String&>&) Map<String&, I64> {
+    return countRange(lines, 0, lines.Len())
+}
+
+fn chunked(lines List<String&>&, tasks I64) Map<String&, I64> {
+    parts := Array<Map<String&, I64>>(tasks)
+    step := (lines.Len() + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := t * step
+            hi := math.Min(lo + step, lines.Len())
+            spawn parts[t] = countRange(lines, lo, hi)
+        }
+    }
+    total := Map<String&, I64>()
+    for i in range parts.Len() { merge(total, parts[i]) }
+    return total
+}
+
+type Batch struct(lines Array<String&>&) {
+    lines
+}
+
+fn pipeline(lines List<String&>&, workers I64) Map<String&, I64> {
+    work mut chan.Chan<Batch&>& = chan.Chan<Batch&>(8)
+    chan.Init(work)
+    results mut chan.Chan<Map<String&, I64>&>& = chan.Chan<Map<String&, I64>&>(I32(workers))
+    chan.Init(results)
+    total := Map<String&, I64>()
+    join {
+        spawn fn() {
+            batch mut List<String&>&work = List<String&>()
+            for l in lines {
+                batch.Push(l)
+                if batch.Len() == 64 {
+                    chan.Send(work, Batch(batch.ToArray()))
+                    batch.Clear()
+                }
+            }
+            if batch.Len() > 0 { chan.Send(work, Batch(batch.ToArray())) }
+            for i in range workers { chan.Send(work, null) }
+        }
+        for i in range workers {
+            spawn fn() {
+                mine mut Map<String&, I64>&results = Map<String&, I64>()
+                for {
+                    b := chan.Recv(work)
+                    if b == null { break }
+                    for l in b.lines { countInto(mine, l) }
+                }
+                chan.Send(results, mine)
+            }
+        }
+        for i in range workers {
+            r := chan.Recv(results)
+            merge(total, r)
+        }
+    }
+    return total
+}
+
+fn same(a Map<String&, I64>&, b Map<String&, I64>&) Bool {
+    if a.Len() != b.Len() { return false }
+    for e in a {
+        if (try b.Get(e.Key) catch default -1) != e.Value { return false }
+    }
+    return true
+}
+
+fn top(m Map<String&, I64>&, n I64) String {
+    entries := List<Pair<String&, I64>>()
+    for e in m { entries.Push(Pair(e.Key, e.Value)) }
+    entries.Sort(fn(a Pair<String&, I64>, b Pair<String&, I64>) Bool {
+        return a.Second > b.Second or (a.Second == b.Second and a.First < b.First)
+    })
+    b := StringBuilder()
+    for i in range math.Min(n, entries.Len()) {
+        if i > 0 { b.Push(", ") }
+        b.Push($entries[i].First "=" $entries[i].Second)
+    }
+    return b.ToString()
+}
+
+SmallCount := sequential(corpus(50, 1)).Len()
+
+fn main() ? {
+    lines := corpus(20000, 2026)
+    t0 := time.Now()
+    seq := sequential(lines)
+    t1 := time.Now()
+    par := chunked(lines, 4)
+    t2 := time.Now()
+    pipe := pipeline(lines, 3)
+    t3 := time.Now()
+    println("distinct words: " $seq.Len() " (small corpus: " $SmallCount ")")
+    println("top 5: " $top(seq, 5))
+    println("chunked agrees: " $same(seq, par) ", pipeline agrees: " $same(seq, pipe))
+    println("ms: sequential " $((t1 - t0) / 1000000) ", chunked " $((t2 - t1) / 1000000) ", pipeline " $((t3 - t2) / 1000000))
+}

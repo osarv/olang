@@ -1,0 +1,32 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Holder struct() {
+    cur own mut Inner&
+}
+fn two(x Inner&) (Inner&x, I64) { return x, x.k }
+fn main() ? {
+    h mut Holder& = Holder()
+    h.cur = Inner(1)
+    h.cur.deep = Leaf(5)
+    c, k := two(h.cur)            # a borrow of h.cur's object, handed back as one of two results
+    h.cur = null                  # accepted: c's holder carries no loan - the Inner is freed
+    churn()
+    println($c.k " " $c.deep.text)
+}

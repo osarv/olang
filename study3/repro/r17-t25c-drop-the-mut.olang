@@ -1,0 +1,18 @@
+# r17 DIAGNOSTIC - T25c/O14: returning an existing read-only reference from a function whose bare "&" result is built
+# says "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'". No "mut" is written
+# anywhere; the result is writable only because a built result is (T25b), and the fix is to borrow the result -
+# "fn first(l List<Item&>&) Item&l". Seen five times in this study (removeNamed, Map values, Pratt locals, fold). In
+# the Pratt case (r04) the attached note says "declare it 'lhs mut E&' to write through it", which drops the "&return"
+# the local needs and leads straight to O10d.
+#
+# expected: an error naming the built result and suggesting Item&l
+# actual: error[T25c] at line 12 as quoted
+type Item struct(name String&) { name }
+fn first(l List<Item&>&) Item& {
+    return l[0]
+}
+fn main() ? {
+    l := List<Item&>()
+    l.Push(Item("a"))
+    println(first(l).name)
+}

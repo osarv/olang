@@ -1,0 +1,28 @@
+# NEW in 7345ff9, CONFIRMED (memory). A lambda Str makes, capturing its receiver, holds that capture's scope as null,
+# which a lambda's prologue reads as the program's scope (cgClosure/O1b). A helper it calls builds a closure 'where
+# the receiver lives' - in the program's scope, kept until the program ends: once per rendering, unbounded.
+# 2,000,000 renderings, peak RSS: new 82,504 KB (-d 82,964 KB); d6c7f52 11,104 KB; d0abfe8 11,068 KB. Output 2000000
+# in all. Clean under -s (no use-after-free: the program's scope is never closed).
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn peek(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    return f()
+}
+fn (b Bag&) Str() String {
+    g := fn() I64 { return peek(b.head) }
+    return $g()
+}
+fn main() ? {
+    b := Bag(Node(4))
+    t I64 = 0
+    for i in range 2000000 {
+        s := $b
+        t += s.Len()
+    }
+    println($t)
+}

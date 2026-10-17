@@ -1,0 +1,14 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn same2(f fn() I64, g fn() I64) Bool { return f is g }
+fn main() ? {
+    n mut Node& = Node(1)
+    g := fn() I64 { return n.v }
+    r Bool = false
+    join {
+        spawn r = same2(g, g)
+    }
+    println($same2(g, g) " " $r)
+}

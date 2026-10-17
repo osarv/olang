@@ -1,0 +1,22 @@
+# BUG (use-after-free; wrong output, segfault in variants): a call's built result passed straight to another call
+# loses the first callee's obligation. box(t) returns a Box holding t's reference (an obligation: t's scope outlives
+# where the result lands, O13c/O18a), and the result lands in bs's elements - which outlive t, a loop-body local.
+# The checker accepts it; the text is reclaimed at the end of each turn.
+#   expected: a compile-time error, as for the two spellings below it (C2d / O10c)
+#   actual:   prints "3-some-text-of-moderate-length" four times (-b, -d); -i prints 0..3
+# The same hole is behind List.Clone()/Map.Clone() of a loop-body collection pushed outward ("rows.Push(rec.Clone())"
+# - every row reads the last turn's text; destructured from a fallible call it segfaults in List.At) and any helper
+# returning a value that holds its reference parameter ("fn one(s String&) List<String&>").
+type Box struct(s String&) { s }
+fn box(s String&) Box { return Box(s) }
+
+fn main() ? {
+    bs := List<Box>()
+    for k in range 4 {
+        t := $k "-some-text-of-moderate-length"
+        bs.Push(box(t))              # accepted - wrong
+        # bs.Push(Box(t))            # C2d: rejected
+        # b := box(t)  bs.Push(b)    # O10c: rejected
+    }
+    for b in bs { println($b.s) }
+}

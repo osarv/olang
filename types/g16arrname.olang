@@ -1,0 +1,11 @@
+# Box<String> and Box<Array<Char>> are different types (T29a) but share one instantiation
+import "std/io"
+type Box<T> struct(v <T>&) { v }
+fn main() ? {
+  s := "hello"
+  a := Box<String>(s)
+  raw Array<Char> = Char['x', 'y']
+  b := Box<Array<Char>>(raw)
+  try io.Print($a.v.Trim() " " $b.v.Len() "\n")
+  t := b.v.Trim()       # must be rejected: Trim is String's, and b.v is an Array<Char>
+}

@@ -1,0 +1,15 @@
+import "std/io"
+fn id(s String&) String&s { return s }
+fn two(a String&, b String&) Bool { return same(a, b) }
+fn t(n I32) String {
+    l := List<String&>()
+    for i in range n {
+        l.Push("hello")
+    }
+    return $two(l[0], l[1]) " " $two("hey", "hey")
+}
+B String = t(2)
+M mut I32 = 2
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

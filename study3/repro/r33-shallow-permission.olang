@@ -1,0 +1,19 @@
+# r33 FRICTION - T25b (shallow permission) vs D9's promise that a signature shows whether a call writes: a struct holding
+# a "mut" reference field can be written through a READ-ONLY reference to it. std/linalg relies on this - Fill, Add,
+# Scale, Set, AddScaled all take "m Matrix<<T>>&" (no mut) and write m's elements - so a reader of a signature cannot
+# tell a destination form from a query. The same is true of any view type the port will write (a cursor over a
+# buffer, a slice of an AST arena).
+#
+# expected: an error at line 13, or Set declared on "mut Matrix<<T>>&"
+# actual: builds; prints 5
+type View struct(data mut Array<I64>&) {
+    data
+}
+fn poke(v View&) {           # read-only, by its signature
+    v.data[0] = 5
+}
+fn main() ? {
+    v := View(Array<I64>(2))
+    poke(v)
+    println($v.data[0])
+}

@@ -1,0 +1,4 @@
+# M6: a private type named across a module boundary - one error expected
+import "lib2"
+fn f(h lib2.hid) I32 { return h.x }
+fn main() ? { }

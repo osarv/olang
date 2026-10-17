@@ -1,0 +1,10 @@
+# expected: "4 4" (45eea97 prints that)
+# actual:   "6 4" - built, -d and -i alike: lib.F() inside g<N = 5> computes 5 + 1
+import "lib"
+fn g(a Array<I64, <N>>&) I64 {
+    return lib.F()
+}
+fn main() ? {
+    b := Array<I64, 5>()
+    println($g(b) " " $lib.F())
+}

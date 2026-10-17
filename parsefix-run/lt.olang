@@ -1,0 +1,9 @@
+fn local() I32 {
+    if X > 0.5 {
+        return 1
+    }
+    return 2
+}
+test "x" {
+    assert local() == 1
+}

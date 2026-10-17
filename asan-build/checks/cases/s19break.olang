@@ -1,0 +1,16 @@
+# check: fail deferred code may not 'break' or 'continue' out of itself
+# S19b: a break in deferred code may leave only a loop written in that deferred code
+fn f() I32 {
+    t I32 = 0
+    for i in range 3 {
+        defer {
+            for j in range 2 {
+                if j == 1 { break }
+            }
+            if t > 1 { break }
+        }
+        t += i
+    }
+    return t
+}
+fn main() ? { assert f() == 3 }

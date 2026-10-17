@@ -1,0 +1,21 @@
+# NEW (merge of 7345ff9 with master's decision 48), CONFIRMED: segfault. An ordinary Str: a lambda capturing the
+# receiver, passed to Iterator.Any, renders a field. Neither the may-build walk nor cgCheckMayBuild objects (the closure
+# lives in Str's block, nothing is allocated where the receiver lives), but cgClosure emits
+# '__olang_scope_escape(%receiverScope)' because the lambda may build somewhere (SemanticMayBuild) - and '$' hands Str a
+# null scope for its receiver, so escape reads offset 24 of null.
+# e27b83b -b, -b -s, -b -d: exit 139 (no message, -s cannot tell). 7345ff9: '7 true'. -i: '7 true'.
+# b6259d1: refused by its E11c purity rule.
+type Item struct(id I64) {
+    id
+    tags List<String&> = List<String&>()
+}
+fn (it Item&) Str() String {
+    hit := it.tags.Iter().Any(fn(t String&) Bool { return t == $it.id })
+    return $it.id " " $hit
+}
+fn main() ? {
+    it := Item(7)
+    it.tags.Push("a")
+    it.tags.Push("7")
+    println($it)
+}

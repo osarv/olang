@@ -1,0 +1,22 @@
+# CONFIRMED, NEW (771a922) - finding 1 through an element store: "rows[i][0] = x", rows a List<mut Array<String&>&>.
+#   -b -d -s: use after scope closed; -i: w0.. w1.. w2..; 04f4a4d: O10c
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    rows := List<mut Array<String&>&>()
+    for i in range 3 { rows.Push(Array<String&>(2)) }
+    for i in range 3 {
+        x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        rows[i][0] = x
+        churn()
+    }
+    churn()
+    for r in rows { print($r[0] " ") }
+    println("")
+}

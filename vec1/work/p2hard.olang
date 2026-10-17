@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 5000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789_padding_padding"
+        t += s.Len()
+    }
+    return t
+}
+fn perm(a mut Array<String&>&, k I64) {
+    t := a[0]
+    t = $k "_outsidevalue_built_in_perm_frame"
+    a[1] = t
+}
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("aa")
+    v.Push("bb")
+    perm(v.ViewMut(), 7)
+    churn()
+    for i in range 500 { v.Push($i "zz") }
+    churn()
+    e := v[1]
+    println(e)
+}

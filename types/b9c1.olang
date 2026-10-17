@@ -1,0 +1,15 @@
+# B9c: a condition whose call is to a generic and to a method; a branch declaring a method and a type it uses
+import "std/io"
+fn twice(x <T>) <T> { return x + x }
+type Meters extends I32
+fn (m Meters) Big() Bool { return m > 10 }
+if twice(3) == 6 and Meters(20).Big() {
+  type Unit struct() { n I32 = 1 }
+  fn (u Unit) Get() I32 { return u.n }
+} else {
+  type Unit struct() { n I32 = 2 }
+  fn (u Unit) Get() I32 { return -u.n }
+}
+fn main() ? {
+  try io.Print($Unit().Get() "\n")
+}

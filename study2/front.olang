@@ -1,0 +1,144 @@
+# front - drives the scanner (and later the parser) over files: "-tokens FILE" dumps tokens as the C compiler's
+# tokenizer would ("LINE TEXT", a statement end as ";"), "-count FILES..." counts tokens and times the scan.
+import "std/os"
+import "std/time"
+import "scan"
+import "ast"
+import "parse"
+import "dump"
+import "resolve"
+
+fn main() ? os.OsError {
+    args := os.Args()
+    if args.Len() < 3 {
+        eprintln("usage: front -tokens FILE | -count FILE...")
+        os.Exit(2)
+    }
+    mode := args[1]
+    if mode == "-tokens" {
+        src := try os.ReadFile(args[2])
+        s := scan.Scan(src)
+        for t in s.Toks {
+            if t.Kind == scan.Tok.Eof { break }
+            line, col := s.LineCol(t.Start)
+            if t.Kind == scan.Tok.StmtEnd {
+                println($line " ;")
+            } else {
+                println($line " " $s.Text(t))
+            }
+        }
+        for d in s.Diags {
+            line, col := s.LineCol(d.Pos)
+            eprintln($args[2] ":" $line ":" $col ": " $d.Msg)
+        }
+        return
+    }
+    if mode == "-kinds" {
+        src := try os.ReadFile(args[2])
+        s := scan.Scan(src)
+        for t in s.Toks {
+            if t.Kind == scan.Tok.Eof { break }
+            line, col := s.LineCol(t.Start)
+            println($line " " $t.Kind)
+        }
+        return
+    }
+    if mode == "-ast" {
+        src := try os.ReadFile(args[2])
+        s := scan.Scan(src)
+        p := parse.NewParser(s)
+        ds := p.File()
+        d := dump.Dumper()
+        d.Decls(ds)
+        print(d.Text())
+        for x in p.Diags {
+            line, col := s.LineCol(x.Pos)
+            eprintln($args[2] ":" $line ":" $col ": " $x.Msg)
+        }
+        return
+    }
+    if mode == "-resolve" {
+        std := try os.Env("OLANG_STD") catch default "/home/user/wt/study/std"
+        t0 := time.Now()
+        r := resolve.NewResolver(std)
+        try r.LoadPrelude()
+        for i in range 2, args.Len() {
+            if r.Load(args[i]) < 0 { eprintln("cannot read " $args[i]) }
+        }
+        r.ResolveAll()
+        ns := time.Since(t0)
+        for d in r.Diags {
+            m := r.Mods[d.Mod]
+            line, col := m.Scanner.LineCol(d.At)
+            println($m.Path ":" $line ":" $col ": " $d.Msg)
+        }
+        bytes I64 = 0
+        for m in r.Mods { bytes += m.Src.Len() }
+        st := r.S
+        println($r.Mods.Len() " modules, " $bytes " bytes, " $(ns / 1000) " us; " $r.Diags.Len() " problems")
+        println("names " $st.Names ": locals " $st.Locals ", globals " $st.Globals ", functions " $st.Funcs ", types " $st.Types
+                ", builtins " $st.Builtins ", unresolved " $st.Unresolved "; through imports " $st.Imported ", enum cases "
+                $st.Cases ", members left to types " $st.Members)
+        return
+    }
+    if mode == "-parse" {
+        files I64 = 0
+        bad I64 = 0
+        decls I64 = 0
+        bytes I64 = 0
+        ns I64 = 0
+        looks := Array<I64>(parse.LookSites)
+        typed I64 = 0
+        deferred I64 = 0
+        for i in range 2, args.Len() {
+            src := try os.ReadFile(args[i])
+            t0 := time.Now()
+            s := scan.Scan(src)
+            p := parse.NewParser(s)
+            ds := p.File()
+            ns += time.Since(t0)
+            files++
+            bytes += src.Len()
+            decls += ds.Len()
+            for j in range parse.LookSites { looks[j] += p.Looks[j] }
+            typed += p.Typed
+            deferred += p.Deferred
+            if p.Diags.Len() + s.Diags.Len() > 0 {
+                bad++
+                println("FAIL " $args[i] " (" $(p.Diags.Len() + s.Diags.Len()) " errors)")
+            }
+            for d in s.Diags {
+                line, col := s.LineCol(d.Pos)
+                println("  " $args[i] ":" $line ":" $col ": " $d.Msg)
+            }
+            for d in p.Diags {
+                line, col := s.LineCol(d.Pos)
+                println("  " $args[i] ":" $line ":" $col ": " $d.Msg)
+            }
+        }
+        println($files " files, " $bad " with errors, " $decls " declarations, " $bytes " bytes, " $(ns / 1000) " us")
+        println("lookahead uses by site: " $looks "; decisions needing a type name: " $typed "; if branches left unparsed: " $deferred)
+        return
+    }
+    if mode == "-count" {
+        total I64 = 0
+        bytes I64 = 0
+        ns I64 = 0
+        for i in range 2, args.Len() {
+            src := try os.ReadFile(args[i])
+            t0 := time.Now()
+            s := scan.Scan(src)
+            ns += time.Since(t0)
+            n := s.Toks.Len() - 1
+            total += n
+            bytes += src.Len()
+            println($n " " $args[i])
+            for d in s.Diags {
+                line, col := s.LineCol(d.Pos)
+                eprintln($args[i] ":" $line ":" $col ": " $d.Msg)
+            }
+        }
+        println($total " tokens, " $bytes " bytes, " $(ns / 1000) " us")
+        return
+    }
+}

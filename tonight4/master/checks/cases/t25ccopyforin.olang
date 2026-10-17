@@ -1,0 +1,12 @@
+# check: fail error[T25c]: this writes through a reference a read-only copy holds
+# also: note: 'b' copies a place reached read-only, so it is read-only
+# T25c: a for-in element copied out of an immutable global is read-only
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+GA Array<Box> = Box[Box(Array<I64>(1)), Box(Array<I64>(2))]
+fn main() ? {
+    for b in GA { b.P[0] = 1 }
+}

@@ -1,0 +1,30 @@
+# O33 order: a spawned call's arguments are never checked for it (the spawn case walks the call's arguments, not the call)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Hold struct(v I64) {
+    v
+    n mut Node& = Node(v)
+}
+type Holder struct() {
+    cur own mut Hold&
+}
+fn setN(x mut Node&, h mut Hold&) { h.n = x }
+fn main() ? {
+    s := Holder()
+    for i in range 3 {
+        s.cur = Hold(i)
+        join { spawn setN(Node(9 + i), s.cur) }
+        churn()
+        println($s.cur.n.v)
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

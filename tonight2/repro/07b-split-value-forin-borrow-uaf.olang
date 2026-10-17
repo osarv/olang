@@ -1,0 +1,39 @@
+# Variant of 07 (pre-existing; 472373d and the rvfix build give the same): for-in borrows the collection it walks into a
+# hidden reference local, which takes the storage scope of b (bump's block) - so an element read through it is taken to
+# live there too, though the elements are references into src's nodes. x.next = Node() then builds in bump's block.
+# The same stores written as b.items[0].next = Node() are correct on the rvfix build.
+# expected: 42 42 (or an error at the loop)
+# actual:   -b and -d print -7 -7; -i prints 42 42
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    items Array<mut Node&, 2>
+}
+type W struct(b Box) { b }
+fn bump(src mut W&) {
+    b := src.b
+    for x in b.items {
+        x.next = Node()
+        x.next.v = 42
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        q := Array<I64>(64, -7)
+        t += q[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    w.b.items[0] = Node()
+    w.b.items[1] = Node()
+    bump(w)
+    churn()
+    println($w.b.items[0].next.v " " $w.b.items[1].next.v)
+}

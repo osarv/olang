@@ -1,0 +1,10 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn main() ? {
+  rw := List<mut Node&>()      # a list of writable references
+  m := Node(2)
+  rw.Push(m)
+  x := rw[0]
+  x.v = 5
+  try io.Print($m.v "\n")
+}

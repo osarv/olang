@@ -1,0 +1,12 @@
+# CONFIRMED (s3std, E10: "==" through an array reference compares contents).
+# Expected: compiles; a == b compares the (empty) arrays: prints "true" (-i prints true).
+# Actual:   -b and -d: "olang: internal compiler error: the compiler crashed (a segmentation fault)".
+#           cgDeepEq (codegen.c ~2716) inlines S's fields -> the Array<S>& branch -> cgDeepEqSlice -> cgDeepEq(S) -> ...
+#           forever: a struct reaching its own type through an array reference is expanded without bound.
+#           (Before the change the array reference was identity and this printed false.)
+type S struct(xs Array<S>&) { xs }
+fn main() ? {
+    a := S(Array<S>(0))
+    b := S(Array<S>(0))
+    println($(a == b))
+}

@@ -1,0 +1,5 @@
+type Mod10 extends I32
+fn (a Mod10) eq(b Mod10) Bool { return a % 10 == b % 10 }
+fn (a Mod10) hash() I64 { return I64(a % 10) }
+fn M(v I32) Mod10 { return Mod10(v) }
+fn Eq2(a Mod10, b Mod10) Bool { return a == b }

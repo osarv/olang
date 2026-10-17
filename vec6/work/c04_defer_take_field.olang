@@ -1,0 +1,26 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn work(k I64) I64 {
+    l := Lexer(k)
+    for i in range k { l.toks.Push(i) }
+    defer { l.toks.Push(99) }
+    m := take l.toks
+    for i in range 50 { m.Push(i) }
+    return m.Len()
+}
+fn main() ? {
+    t := 0
+    for k in range 2000 { t += work(k % 7) }
+    churn()
+    println($t)
+}

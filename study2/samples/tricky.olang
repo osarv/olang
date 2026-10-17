@@ -1,0 +1,82 @@
+import "std/os"
+import lib "std/json"
+
+type Shape enum {
+    Circle(r F64)
+    Rect(w F64, h F64)
+}
+
+type Box<T> struct(v <T>, n I64 = 3) ? os.OsError {
+    v
+    n mut
+    a, b := 1, 2
+    data Array<I32>& = Array<I32>(n)
+    assert n > 0, "n must be positive"
+} destruct {
+    x := 1
+}
+
+type Meters extends I32
+type Pct I32(v mut I32) ? {
+    if v > 100 { error }
+}
+
+fn (s Shape&) Area() F64 {
+    return match s {
+        case Shape.Circle(r) => 3.14 * r * r
+        case Shape.Rect(w, h) if w > 0.0 => w * h
+        nomatch => 0.0
+    }
+}
+
+fn f(a I32, b <T>, c fn(x I32) I32 = null) (I32, Bool) ? os.OsError + lib.JsonError {
+    x := a + b * 2 - -c(3) << 1
+    y := not a == b and c or d xor e
+    z := 1 < a <= b < 10
+    w := x if y else z if q else 0
+    t := "a" $x " b " $f(x)[0].y "c"
+    u := "abc".Len() + $-x
+    v := try g(x) catch E.A + F { return } catch default 3, 4
+    k := s is Shape.Circle and s is not Shape.Rect and a is b
+    m := s as Shape.Rect
+    arr := I32[1, 2, 3]
+    cs := String&["a", "b"]
+    cmp := I32[x * 2 for x in arr if x > 1]
+    rng := I32[i for i in range 0, 10, 2]
+    gen := Array<I32>(4)
+    p := Pair<I32, Array<I64>>(1, Array<I64>(2))
+    sl := arr[1:] arr[:2] arr[:]
+    lam := fn(x, y I32) I32 { return x + y }
+    ok := x not in arr and 3 in arr
+    sc := ScopedBox&return(1)
+    big := Array<Array<I32, 4>, N + 1>()
+    a, b = b, a
+    arr[i] += 3
+    x++
+    try arr[9] = 4 catch { }
+    for i := 0, i < 10, i++ { continue }
+    for k, v in try lib.Parse(t) { break } catch lib.JsonError { }
+    for x < 3 { x = x + 1 }
+    for { break }
+    do { x-- } for x > 0
+    defer { x = 0 }
+    join {
+        spawn r1, r2 = g(x)
+        spawn fn() { x = 1 }
+    }
+    match <T> {
+        case I32 { }
+        case String& { }
+    }
+    error os.OsError.FAILED
+}
+
+if TargetOs == "linux" {
+    Lin I32 = 1
+} else {
+    Lin I32 = 2
+}
+
+test "it works" {
+    assert f(1, 2) == 3
+}

@@ -1,0 +1,36 @@
+# O33 order: an enum case built from a temporary and a later own-slot borrow
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Hold struct(v I64) {
+    v
+    n mut Node& = Node(v)
+}
+type Holder struct() {
+    cur own mut Hold&
+}
+type E enum {
+    Two(a mut Node&, h mut Hold&)
+    Nil
+}
+fn main() ? {
+    s := Holder()
+    for i in range 3 {
+        s.cur = Hold(i)
+        e := E.Two(Node(9 + i), s.cur)
+        churn()
+        match e {
+            case E.Two(a, h) { println($a.v " " $h.v) }
+            case E.Nil { }
+        }
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

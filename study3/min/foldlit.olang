@@ -1,0 +1,10 @@
+type Box struct(v I32) { v }
+fn main() ? {
+    a := I32[1, 2, 3]
+    total := a.Fold(0, fn(acc I64, x I32) I64 { return acc + x })
+    println($total)
+    l := List<mut Box&>()
+    l.Push(Box(4))
+    s := l.Iter().Fold(0, fn(acc I32, b Box&) I32 { return acc + b.v })
+    println($s)
+}

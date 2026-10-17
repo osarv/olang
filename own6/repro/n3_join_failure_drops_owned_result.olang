@@ -1,0 +1,44 @@
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Res struct(n I64) {
+    n
+    Made.AtomicAdd(1)
+} destruct {
+    Dropped.AtomicAdd(1)
+}
+type Hold struct() {
+    r own mut Res&
+}
+error Bad {
+    NO
+}
+fn fails(k I64) ? Bad {
+    if k > 0 { error Bad.NO }
+}
+fn mkOwned(k I64) own mut Res& ? Bad {
+    try join {
+        spawn try fails(k)
+        return Res(1)               # the join fails after the result is made: the value is discarded
+    }
+    return Res(2)
+}
+fn mkValue(k I64) Hold ? Bad {
+    h := Hold()
+    h.r = Res(3)
+    try join {
+        spawn try fails(k)
+        return h                    # h is moved into the result, then the join fails
+    }
+    return h
+}
+fn main() ? {
+    for i in range 3 {
+        x := try mkOwned(1) catch Bad { println("mkOwned failed") } default null
+        y := try mkValue(1) catch Bad {
+            println("mkValue failed")
+            continue
+        }
+        println($y.r.n)
+    }
+    println("made " $Made.AtomicLoad() " dropped " $Dropped.AtomicLoad())
+}

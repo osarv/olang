@@ -1,0 +1,17 @@
+type P struct(v I32) { v }
+fn (p mut P&) Set(v I32) { p.v = v }
+fn main() ? {
+    p := P(1)
+    a := I32[1, 2]
+    f := fn() {
+        r mut P& = p
+        r.v = 9
+        p.Set(5)
+        s mut Array<I32>& = a
+        s[0] = 7
+        q := p
+        q.v = 3
+    }
+    f()
+    println($p.v " " $a[0])
+}

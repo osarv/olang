@@ -1,0 +1,31 @@
+# O26a view-flow UAF attempt: `a` is moved to the RESULT scope. When mk is called in a loop, the result lands in the
+# loop block; but the view of `a` is pushed into `keep`, which outlives the loop. If accepted, keep's views dangle.
+type V struct(xs Array<I64>&) { xs }
+fn mk(n I64, out mut List<Array<I64>&>&) V {
+    a := I64[1, 2, 3, 4, 5]
+    a[0] = n
+    s := a[1:4]
+    out.Push(s)
+    return V(s)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 6000 {
+        b := Array<I64>(5, i + 100)
+        t += b[0] + b[4]
+    }
+    return t
+}
+fn main() ? {
+    keep := List<Array<I64>&>()
+    for i in range 4 {
+        v := mk(i, keep)
+        t I64 = v.xs[0]
+        t += 0
+    }
+    churn()
+    for j in range keep.Len() {
+        a := keep[j]
+        println($a[0] " " $a[1] " " $a[2])
+    }
+}

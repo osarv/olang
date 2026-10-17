@@ -1,0 +1,199 @@
+# pmat - a parallel matrix job: C = A x B split over tasks, two ways, checked against std/linalg.
+#
+# Static: the rows of C are cut into one band per task; each task computes its band and hands back two numbers with
+# "spawn sum[i], ns[i] = band(...)": the sum of its band and how long it took. Dynamic: tasks take rows of 8 one at a
+# time from a shared counter (AtomicAdd), so a slow task takes fewer. Both must equal linalg.Gemm's product to a
+# relative tolerance (the kernels sum in different orders, and linalg fuses multiply-adds where the machine can). Then
+# a power iteration finds the dominant eigenvalue of a symmetric matrix, the matrix-vector products split the same
+# way, and a task-local maximum is merged with AtomicCompareSwap on the bits of an F64.
+
+import "std/linalg"
+import "std/rand"
+import "std/math"
+import "std/time"
+
+fn random(n I64, seed U64) Array<F64> {
+    r := rand.Rand(seed)
+    a := Array<F64>(n * n)
+    for i in range n * n { a[i] = r.Float() * 2.0 - 1.0 }
+    return a
+}
+
+# rows [lo, hi) of c = a x b, i-k-j order; gives the band's sum and the nanoseconds it took
+fn band(a Array<F64>&, b Array<F64>&, c mut Array<F64>&, n I64, lo I64, hi I64) (F64, I64) {
+    t0 := time.Now()
+    sum := 0.0
+    for i in range lo, hi {
+        row := c[i * n:(i + 1) * n]
+        for j in range n { row[j] = 0.0 }
+        for k in range n {
+            aik := a[i * n + k]
+            brow := b[k * n:(k + 1) * n]
+            for j in range n { row[j] += aik * brow[j] }
+        }
+        for j in range n { sum += row[j] }
+    }
+    return sum, time.Since(t0)
+}
+
+fn static(a Array<F64>&, b Array<F64>&, c mut Array<F64>&, n I64, tasks I64) F64 {
+    sums := Array<F64>(tasks)
+    ns := Array<I64>(tasks)
+    step := (n + tasks - 1) / tasks
+    join {
+        for t in range tasks {
+            lo := math.Min(t * step, n)
+            hi := math.Min(lo + step, n)
+            spawn sums[t], ns[t] = band(a, b, c, n, lo, hi)
+        }
+    }
+    slowest := ns.Fold(I64(0), fn(m I64, x I64) I64 { return math.Max(m, x) })
+    fastest := ns.Fold(slowest, fn(m I64, x I64) I64 { return math.Min(m, x) })
+    eprintln("  static: bands took " $(fastest / 1000) " to " $(slowest / 1000) " us")
+    return sums.Fold(0.0, fn(s F64, x F64) F64 { return s + x })
+}
+
+NextRow mut I64 = 0
+RowsDone mut I64 = 0
+
+fn worker(a Array<F64>&, b Array<F64>&, c mut Array<F64>&, n I64) F64 {
+    sum := 0.0
+    for {
+        lo := NextRow.AtomicAdd(8)
+        if lo >= n { break }
+        s, _ := band(a, b, c, n, lo, math.Min(lo + 8, n))
+        sum += s
+        RowsDone.AtomicAdd(math.Min(lo + 8, n) - lo)
+    }
+    return sum
+}
+
+fn dynamic(a Array<F64>&, b Array<F64>&, c mut Array<F64>&, n I64, tasks I64) F64 {
+    NextRow.AtomicStore(0)
+    RowsDone.AtomicStore(0)
+    sums := Array<F64>(tasks)
+    join {
+        for t in range tasks { spawn sums[t] = worker(a, b, c, n) }
+    }
+    assert RowsDone.AtomicLoad() == n
+    return sums.Fold(0.0, fn(s F64, x F64) F64 { return s + x })
+}
+
+fn maxRelError(x Array<F64>&, y Array<F64>&) F64 {
+    worst := 0.0
+    for i in range x.Len() {
+        d := math.Abs(x[i] - y[i]) / math.Max(1.0, math.Abs(y[i]))
+        worst = math.Max(worst, d)
+    }
+    return worst
+}
+
+# the bits of the largest |v| any task saw, merged with a compare-and-swap loop
+Largest mut U64 = 0
+
+fn noteLargest(v F64) {
+    for {
+        seen := Largest.AtomicLoad()
+        if math.Abs(v) <= seen.F64FromBits() { return }
+        if Largest.AtomicCompareSwap(seen, math.Abs(v).Bits()) == seen { return }
+    }
+}
+
+# y = m x over rows [lo, hi)
+fn mulRows(m Array<F64>&, x Array<F64>&, y mut Array<F64>&, n I64, lo I64, hi I64) {
+    for i in range lo, hi {
+        s := 0.0
+        for k in range n { s += m[i * n + k] * x[k] }
+        y[i] = s
+        noteLargest(s)
+    }
+}
+
+fn dominantEigenvalue(m Array<F64>&, n I64, tasks I64, iterations I64) F64 {
+    x := Array<F64>(n, 1.0)
+    y := Array<F64>(n)
+    lambda := 0.0
+    step := (n + tasks - 1) / tasks
+    for it in range iterations {
+        Largest.AtomicStore(0)
+        join {
+            for t in range tasks {
+                lo := math.Min(t * step, n)
+                spawn mulRows(m, x, y, n, lo, math.Min(lo + step, n))
+            }
+        }
+        norm := Largest.AtomicLoad().F64FromBits()
+        dot := 0.0
+        xx := 0.0
+        for i in range n {
+            dot += x[i] * y[i]
+            xx += x[i] * x[i]
+        }
+        lambda = dot / xx
+        for i in range n { x[i] = y[i] / norm }
+    }
+    return lambda
+}
+
+# the same band split, small and without clocks, so the compile-time evaluator can run it (K1 runs a join's tasks
+# one after another): the global is baked while compiling and compared with the run time's answer in main
+fn smallBands(n I64, tasks I64) F64 {
+    a := random(n, 5)
+    b := random(n, 6)
+    c := Array<F64>(n * n)
+    sums := Array<F64>(tasks)
+    step := n / tasks
+    join {
+        for t in range tasks { spawn sums[t] = plainBand(a, b, c, n, t * step, (t + 1) * step) }
+    }
+    return sums.Fold(0.0, fn(s F64, x F64) F64 { return s + x }) + c[n * n - 1]
+}
+
+fn plainBand(a Array<F64>&, b Array<F64>&, c mut Array<F64>&, n I64, lo I64, hi I64) F64 {
+    sum := 0.0
+    for i in range lo, hi {
+        for j in range n {
+            s := 0.0
+            for k in range n { s += a[i * n + k] * b[k * n + j] }
+            c[i * n + j] = s
+            sum += s
+        }
+    }
+    return sum
+}
+
+SmallBands := smallBands(12, 3)
+
+fn main() ? {
+    println("baked small bands agree with the run time: " $(SmallBands == smallBands(12, 3)) " (" $SmallBands.Fixed(9) ")")
+    n I64 = 256
+    tasks I64 = 4
+    a := random(n, 1)
+    b := random(n, 2)
+    c1 := Array<F64>(n * n)
+    c2 := Array<F64>(n * n)
+    t0 := time.Now()
+    s1 := static(a, b, c1, n, tasks)
+    t1 := time.Now()
+    s2 := dynamic(a, b, c2, n, tasks)
+    t2 := time.Now()
+    ref := linalg.Matrix<F64>(n, n)
+    linalg.Gemm(ref, linalg.Matrix<F64>(n, n, a), false, linalg.Matrix<F64>(n, n, b), false, 1, 0, tasks)
+    t3 := time.Now()
+    e1 := maxRelError(c1, ref.Data)
+    e2 := maxRelError(c2, ref.Data)
+    println("static sum " $s1.Fixed(6) ", dynamic sum " $s2.Fixed(6) ", identical bands: " $(c1 == c2))
+    println("max relative error vs linalg: " $(e1 < 1e-12) " " $(e2 < 1e-12))
+    eprintln("ms: static " $((t1 - t0) / 1000000) ", dynamic " $((t2 - t1) / 1000000) ", linalg " $((t3 - t2) / 1000000))
+    # a symmetric matrix with a known dominant eigenvalue: I + u u^T has eigenvalue 1 + |u|^2
+    u := random(1, 3)
+    m := Array<F64>(n * n)
+    uu := Array<F64>(n)
+    for i in range n { uu[i] = 0.1 * F64(i % 7) }
+    for i in range n {
+        for j in range n { m[i * n + j] = uu[i] * uu[j] + (1.0 if i == j else 0.0) }
+    }
+    expectedL := 1.0 + uu.Fold(0.0, fn(s F64, v F64) F64 { return s + v * v })
+    l := dominantEigenvalue(m, n, tasks, 50)
+    println("dominant eigenvalue " $l.Fixed(9) " (expected " $expectedL.Fixed(9) "), close: " $(math.Abs(l - expectedL) < 1e-9))
+}

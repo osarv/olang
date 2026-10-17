@@ -1,0 +1,11 @@
+1: r = 2
+2: area = 12.56636
+3: area = 12.56636
+4: big = 1
+5: big = 1
+6: min(3, (r * 4), (1 + 1)) = 2
+7: max(sqrt(16), abs(-7), floor(2.5)) = 7
+8: unknown name 'x'
+9: division by zero
+10: error at column 2 near '$'
+11: error at column 6 near ''

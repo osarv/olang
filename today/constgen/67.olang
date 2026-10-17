@@ -1,0 +1,7 @@
+# D9a/D9b/D16a/T7c: a lambda whose parameter's type comes from a type variable bound to a fixed array - the prelude's
+# Sort, Any, Count on an array of fixed arrays
+fn main() ? {
+    a := Array<Array<I32, 2>>(3)
+    a[1][0] = 5
+    println($a.Any(fn(x) { return x[0] == 5 }))
+}

@@ -1,0 +1,24 @@
+# derived "try l[i]" (List, its check from Len) in shapes derivedAtRead may not see
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+type Pt struct() {
+    X I64 = 0
+}
+fn bump(a mut Acc&) { a.N++ }
+fn (a mut Acc&) Add() { a.N++ }
+fn move(p mut Pt&) { p.X++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    (try l[0]).Add()
+    bump(try l[0] catch default Acc())
+    move((try l[1]).P)
+    move(try l[1].P)
+    ll := List<List<Acc>>()
+    ll.Push(l)
+    bump(try ll[0][1])
+    println("N " $l[0].N " X " $l[1].P.X " " $ll[0][1].N)
+}

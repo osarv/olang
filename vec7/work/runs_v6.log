@@ -1,0 +1,4 @@
+v6_selfhold_own_field.olang:3:5: error[T16]: S cannot hold itself by value - hold it through a reference ('&')
+    3 |     s S = S()
+      |     ^
+compilation failed with 1 error

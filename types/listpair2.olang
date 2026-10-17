@@ -1,0 +1,5 @@
+import "std/io"
+fn main() ? {
+  l := List<Pair<I64, String&>>()
+  try io.Print($l.Len() "\n")
+}

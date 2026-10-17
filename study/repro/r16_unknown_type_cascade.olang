@@ -1,0 +1,9 @@
+# one unknown type: six errors, including "primitives are always by value", "a built-in type's methods are declared by
+# the prelude alone", and a false S8a dead-branch error on an unrelated condition
+fn (e Missing&) eval() F64 { return 1.0 }
+fn f(e Missing&) F64 {
+    d := e.eval()
+    if d == 0.0 { return 0.0 }
+    return d
+}
+fn main() ? { }

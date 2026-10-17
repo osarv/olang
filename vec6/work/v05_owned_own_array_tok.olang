@@ -1,0 +1,29 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+type Arr struct() {
+    data own mut Array<Tok>& = null
+}
+type H struct() {
+    a own mut Arr& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    h.a = Arr()
+    h.a.data = Array<Tok>(3)
+    for i in range 3 {
+        t := "w" $i "-loop-turn-text"
+        h.a.data[i] = Tok(t, i)
+    }
+    churn()
+    println(h.a.data[0].text)
+}

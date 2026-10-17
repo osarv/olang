@@ -1,0 +1,24 @@
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+    d mut Array<I64>& = Array<I64>(2)
+}
+fn two() (I64, I64) { return 7, 8 }
+fn seven() I64 { return 7 }
+fn fails() ? { error }
+fn g(a mut Acc&) {
+    defer { a.N = 5 }
+    a.d[0] = 1
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    g(l[0])
+    println("list N " $l[0].N " X " $l[0].P.X " d " $l[0].d[0])
+    arr := Array<Acc>(1)
+    g(arr[0])
+    println("array N " $arr[0].N " X " $arr[0].P.X " d " $arr[0].d[0])
+}

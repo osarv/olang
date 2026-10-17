@@ -1,0 +1,29 @@
+# E31b: the index of "l[G].Add()" is a global read twice - once for the At read, once for the SetAt write back.
+# A method that changes G moves the write back to another slot.
+type Acc struct() {
+    N I64 = 0
+}
+G mut I64 = 0
+fn (a mut Acc&) AddAndMove() {
+    a.N = a.N + 100
+    G = 1
+}
+fn bumpG() I64 {
+    G = 1
+    return 7
+}
+
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    l[G].AddAndMove()
+    println("method: l[0].N=" $l[0].N " l[1].N=" $l[1].N)
+    G = 0
+    l[G].N = bumpG()
+    println("assign: l[0].N=" $l[0].N " l[1].N=" $l[1].N)
+    arr := Array<Acc>(2)
+    G = 0
+    arr[G].AddAndMove()
+    println("array: arr[0].N=" $arr[0].N " arr[1].N=" $arr[1].N)
+}

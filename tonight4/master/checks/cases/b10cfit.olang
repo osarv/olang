@@ -1,0 +1,4 @@
+# check: fail error[B10c]: -D Port=x does not fit 'Port', which is I64
+# flags: -D Port=x
+Port I64 = 8080
+fn main() ? { }

@@ -1,0 +1,26 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    Empty
+}
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    f fn() I32 = fn() { return 0 }
+    k fn() I32 = fn() { return 0 }
+    outer Node& = Node(5)
+    for i in range 2 {
+        inner Node& = Node(42)
+        g := fn() { return inner.v }
+        f = fn() { return g() }
+        b := Box.Has(inner)
+        k = fn() { return (b as Box.Has).v }
+    }
+    churn()
+    try io.Print($f() " " $k() "\n")
+}

@@ -1,0 +1,13 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+type W struct(b B) {
+  b.c.n = 5
+  k := 1
+}
+fn main() ? {
+  w := W(G)
+  println($G.c.n " " $w.k)
+}

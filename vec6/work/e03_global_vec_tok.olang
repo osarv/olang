@@ -1,0 +1,19 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+GT mut Vec<Tok> = Vec<Tok>()
+fn add(k I64) { for i in range k { GT.Push(Tok($i "-global-text", i)) } }
+fn main() ? {
+    add(4)
+    churn()
+    println(GT[2].text)
+}

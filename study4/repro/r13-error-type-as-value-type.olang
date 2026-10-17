@@ -1,0 +1,23 @@
+# r13 DIAGNOSTIC - T20/E22: an error type is accepted as the type of a parameter, a local and a field, though no
+# value of it can ever be written (errors are raised and caught, not values). The mistake surfaces later, far from
+# the declaration and in other words: comparing with a word is "'E' is not an enum type, so it has no values
+# 'T.Case'"; rendering one is "'$' has nothing to render - this call returns no value" (it is no call). A Go
+# programmer writes exactly this ("func retryable(err error) bool"); found in ../fetch.olang.
+#
+# expected: an error at "e E" (and at "x E", "h struct(e E)") saying an error type is not a value's type - catch its
+#           words instead
+# actual:   the declarations compile; E22 at the comparison and E11a at "$x"
+error E {
+    A
+    B
+}
+
+type Holder struct(e E) { e }
+
+fn final(e E) Bool { return e != E.A }
+
+fn main() ? {
+    x E
+    h := Holder(x)
+    println($x " " $final(x))
+}

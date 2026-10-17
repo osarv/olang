@@ -1,0 +1,29 @@
+# r06 OVER-REJECTION + DIAGNOSTIC - O26a/O26: a text local that starts as "" and is assigned a join on some path is
+# returned inside a constructor call: O26 "this value refers to this function's own storage, which dies at the return
+# - build it in '&return'", pointing at the constructor without naming the local. Returning the local itself (check2)
+# compiles - O26a moves it into the result scope - but not when it reaches the result through a constructor. Seen twice:
+# a fetcher's per-URL note (../fetch.olang) and a test runner's failure detail (../sandbox.olang); both declared it
+# "note String&return = """.
+#
+# expected: both compile, "big: 5" and "big: 7"
+# actual:   error[O26] at "R(n, note)", column of R
+type R struct(Code I64, Note String&) {
+    Code
+    Note
+}
+
+fn check(n I64) R {
+    note := ""
+    if n > 3 { note = "big: " $n }
+    return R(n, note)
+}
+
+fn check2(n I64) String& {
+    note := ""
+    if n > 3 { note = "big: " $n }
+    return note
+}
+
+fn main() ? {
+    println($check(5).Note " " $check2(7))
+}

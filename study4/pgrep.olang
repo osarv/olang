@@ -1,0 +1,179 @@
+# pgrep - a parallel grep over a directory tree.
+#
+#   pgrep [-i] [-n] [-j N] PATTERN [DIR]
+#
+# Walks DIR (default ".") for regular files, skipping hidden entries, splits the files among N tasks (default 4) and
+# prints every line holding PATTERN as "path:line: text", sorted by path then line. -i matches ignoring ASCII case,
+# -n prints only the count. A file that cannot be read is reported on stderr and skipped.
+
+import "std/os"
+import "std/filepath"
+import "std/time"
+
+type Match struct(Path String&, Line I64, Text String&) {
+    Path
+    Line
+    Text
+}
+
+type Options struct() {
+    pattern String& = ""
+    dir String& = "."
+    fold Bool = false
+    countOnly Bool = false
+    jobs I64 = 4
+}
+
+error UsageError {
+    MISSING_PATTERN
+    BAD_JOBS
+    UNKNOWN_FLAG
+}
+
+# files read, lines scanned and lines matched, over every task - counted atomically, since every task adds to them
+FilesRead mut I64 = 0
+LinesScanned mut I64 = 0
+Skipped mut I64 = 0
+
+fn parseArgs(args Array<String&>&) Options ? UsageError {
+    o := Options()
+    positional := 0
+    i := 1
+    for i < args.Len() {
+        a := args[i]
+        if a == "-i" {
+            o.fold = true
+        } else if a == "-n" {
+            o.countOnly = true
+        } else if a == "-j" {
+            i++
+            if i >= args.Len() { error UsageError.BAD_JOBS }
+            o.jobs = try args[i].ParseInt() catch { error UsageError.BAD_JOBS }
+            if o.jobs < 1 { error UsageError.BAD_JOBS }
+        } else if a.StartsWith("-") {
+            error UsageError.UNKNOWN_FLAG
+        } else if positional == 0 {
+            o.pattern = a
+            positional++
+        } else {
+            o.dir = a
+            positional++
+        }
+        i++
+    }
+    if positional == 0 { error UsageError.MISSING_PATTERN }
+    return o
+}
+
+# every regular file under dir, depth first, hidden names skipped
+fn walk(dir String&, out mut List<String&>&) ? os.OsError {
+    for name in try os.ReadDir(dir) {
+        if name.StartsWith(".") { continue }
+        p String&out = filepath.Join(dir, name)
+        info := try os.Stat(p)
+        match info.Kind {
+            case os.FileKind.DIR { try walk(p, out) }
+            case os.FileKind.FILE { out.Push(p) }
+            nomatch { }
+        }
+    }
+}
+
+# whether line holds pat, ignoring ASCII case when fold is set
+fn holds(line String&, pat String&, fold Bool) Bool {
+    if not fold { return line.Contains(pat) }
+    n := pat.Len()
+    if n == 0 { return true }
+    for i in range line.Len() - n + 1 {
+        ok := true
+        for k in range n {
+            if line[i + k].ToLower() != pat[k].ToLower() {
+                ok = false
+                break
+            }
+        }
+        if ok { return true }
+    }
+    return false
+}
+
+# the matches in files[lo:hi]
+fn grepRange(files List<String&>&, lo I64, hi I64, pat String&, fold Bool) List<Match> {
+    out := List<Match>()
+    for i in range lo, hi {
+        path := files[i]
+        text String&return = try os.ReadFile(path) catch {
+            Skipped.AtomicAdd(1)
+            continue
+        }
+        FilesRead.AtomicAdd(1)
+        n := 0
+        for line in text.Lines() {
+            n++
+            if holds(line, pat, fold) { out.Push(Match(path, n, line)) }
+        }
+        LinesScanned.AtomicAdd(n)
+    }
+    return out
+}
+
+fn byPathThenLine(a Match, b Match) Bool {
+    c := a.Path.Compare(b.Path)
+    return c < 0 or (c == 0 and a.Line < b.Line)
+}
+
+fn run(o Options&) ? os.OsError {
+    files := List<String&>()
+    try walk(o.dir, files)
+    tasks := o.jobs
+    if tasks > files.Len() { tasks = files.Len() }
+    if tasks == 0 { tasks = 1 }
+    parts := Array<List<Match>>(tasks, List<Match>())
+    step := (files.Len() + tasks - 1) / tasks
+    start := time.Now()
+    join {
+        for t in range tasks {
+            lo := t * step
+            hi := lo + step
+            if hi > files.Len() { hi = files.Len() }
+            if lo > hi { lo = hi }
+            spawn parts[t] = grepRange(files, lo, hi, o.pattern, o.fold)
+        }
+    }
+    all := List<Match>()
+    for t in range parts.Len() {
+        for m in parts[t] { all.Push(m) }
+    }
+    all.Sort(byPathThenLine)
+    if o.countOnly {
+        println($all.Len())
+    } else {
+        for m in all { println($m.Path ":" $m.Line ": " $m.Text) }
+    }
+    ms := time.Since(start) / 1000000
+    eprintln("pgrep: " $all.Len() " matches in " $FilesRead.AtomicLoad() " files (" $LinesScanned.AtomicLoad()
+        " lines, " $Skipped.AtomicLoad() " skipped) with " $tasks " tasks, " $ms " ms")
+}
+
+fn usage(why String&) {
+    eprintln("pgrep: " $why)
+    eprintln("usage: pgrep [-i] [-n] [-j N] PATTERN [DIR]")
+    os.Exit(2)
+}
+
+fn main() ? {
+    o := try parseArgs(os.Args()) catch UsageError.MISSING_PATTERN {
+        usage("no pattern given")
+        return
+    } catch UsageError.BAD_JOBS {
+        usage("-j takes a positive number")
+        return
+    } catch UsageError.UNKNOWN_FLAG {
+        usage("unknown flag")
+        return
+    }
+    try run(o) catch os.OsError {
+        eprintln("pgrep: cannot walk " $o.dir)
+        os.Exit(1)
+    }
+}

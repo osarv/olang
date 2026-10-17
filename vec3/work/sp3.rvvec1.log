@@ -1,0 +1,4 @@
+sp3.olang:16:9: error[O10]: this reference lives in a scope that may not outlive where it is put
+   16 |         spawn d = pass(c.text)        # the borrow of c.text handed to a task whose result is d
+      |         ^~~~~
+compilation failed with 1 error

@@ -1,0 +1,164 @@
+# tailer - follows a log file as another task writes it, like "tail -f", and keeps per-level counts.
+#
+# A writer task appends timestamped lines to a log in a temporary directory, a few at a time with pauses, and ends
+# with "END". The tailer opens the same file, reads it line by line with io.Lines, and when it has caught up waits a
+# little and reads again, until it sees END or its deadline passes. It counts lines by level, remembers the last
+# three errors, and prints a summary through an io.Writer. The counts are checked against what the writer says it
+# wrote.
+
+import "std/os"
+import "std/io"
+import "std/cancel"
+import "std/filepath"
+import "std/time"
+import "std/rand"
+
+extern fn usleep(us U32) I32
+
+Levels := String&["DEBUG", "INFO", "WARN", "ERROR"]
+
+type Written struct() {
+    perLevel Array<I64, 4>
+    lines I64 = 0
+}
+
+# writes n lines in bursts, returning what it wrote per level
+fn writeLog(path String&, n I64, seed U64) Written ? os.OsError {
+    w := Written()
+    fd := try os.Create(path)
+    defer try os.Close(fd) catch { eprintln("tailer: close failed") }
+    r := rand.Rand(seed)
+    for i in range n {
+        lv := r.Below(4)
+        if r.Below(5) == 0 { lv = 3 }
+        line := $i.PadStart(5, '0') " " $Levels[lv] " request " $r.Below(1000) " took " $r.Below(250) "ms\n"
+        try io.Write(fd, line) catch io.IoError { error os.OsError.FAILED }
+        w.perLevel[lv]++
+        w.lines++
+    }
+    try io.Write(fd, "END\n") catch io.IoError { error os.OsError.FAILED }
+    return w
+}
+
+type Summary struct() {
+    counts Map<String&, I64> = Map<String&, I64>()
+    lastErrors List<String&> = List<String&>()
+    lines I64 = 0
+    waits I64 = 0
+    sawEnd Bool = false
+    slowest I64 = 0
+}
+
+# the number after "took ", before "ms"
+fn tookMs(line String&) I64 {
+    at := try line.Find("took ") catch { return -1 }
+    rest := line[at + 5:]
+    end := try rest.Find("ms") catch { return -1 }
+    return try rest[:end].ParseInt() catch default -1
+}
+
+# io.Lines latches the end of the file: once a read finds nothing, Next gives Exhausted for good, so it cannot follow
+# a file that is still growing. A follower reads with io.Read itself and holds back a last line with no newline yet.
+type Follower struct(fd I32) {
+    fd
+    buf mut Array<U8>& = Array<U8>(4096)
+    pending List<Char> = List<Char>()
+    start I64 = 0
+    end I64 = 0
+}
+
+# the next whole line, or Exhausted when none is complete yet - call again later for more
+fn (f mut Follower&) Next() String& ? io.IoError + Exhausted {
+    for {
+        for i in range f.start, f.end {
+            if f.buf[i] == '\n' {
+                for k in range f.start, i { f.pending.Push(Char(f.buf[k])) }
+                f.start = i + 1
+                line := String(f.pending.ToArray())
+                f.pending.Clear()
+                return line
+            }
+        }
+        for k in range f.start, f.end { f.pending.Push(Char(f.buf[k])) }
+        f.start = 0
+        f.end = 0
+        got := try io.Read(f.fd, f.buf)
+        if got.Len() == 0 { error Exhausted.END }
+        f.end = got.Len()
+    }
+    unreachable
+}
+
+fn follow(path String&, deadline cancel.Token&) Summary ? os.OsError {
+    s := Summary()
+    # the writer may not have created it yet
+    for not os.Exists(path) {
+        if deadline.Cancelled() { return s }
+        usleep(1000)
+    }
+    fd := try os.Open(path)
+    defer try os.Close(fd) catch { }
+    lines := Follower(fd)
+    for not s.sawEnd {
+        line := try lines.Next() catch Exhausted {
+            if deadline.Cancelled() { break }
+            s.waits++
+            usleep(1000)
+            continue
+        } catch io.IoError {
+            error os.OsError.FAILED
+        }
+        if line == "END" {
+            s.sawEnd = true
+            break
+        }
+        s.lines++
+        fields := line.Split(" ")
+        if fields.Len() < 2 { continue }
+        s.counts.Update(fields[1], 0, fn(n I64) I64 { return n + 1 })
+        if fields[1] == "ERROR" {
+            s.lastErrors.Push(line)
+            if s.lastErrors.Len() > 3 { s.lastErrors.RemoveAt(0) }
+        }
+        ms := tookMs(line)
+        if ms > s.slowest { s.slowest = ms }
+    }
+    return s
+}
+
+fn report(s Summary&, w Written&) ? io.IoError {
+    out := io.Writer(io.Stdout)
+    out.Write("lines followed: " $s.lines " (writer wrote " $w.lines "), saw END: " $s.sawEnd "\n")
+    for i, lv in Levels {
+        got := try s.counts.Get(lv) catch default 0
+        mark := "" if got == w.perLevel[i] else "  <- MISMATCH, wrote " $w.perLevel[i]
+        out.Write("  " $lv.PadEnd(6) $got.PadStart(5) $mark "\n")
+    }
+    out.Write("slowest request: " $s.slowest " ms\n")
+    out.Write("last errors:\n")
+    for e in s.lastErrors { out.Write("  " $e "\n") }
+    try out.Flush()
+}
+
+# tasks may not fail (P4): each reports a failure on stderr and gives what it has
+fn writeTask(path String&, n I64, seed U64) Written {
+    return try writeLog(path, n, seed) catch os.OsError { eprintln("tailer: writing the log failed") } default Written()
+}
+
+fn followTask(path String&, deadline cancel.Token&) Summary {
+    return try follow(path, deadline) catch os.OsError { eprintln("tailer: reading the log failed") } default Summary()
+}
+
+
+fn main() ? {
+    dir := try os.MkTemp("", "tailer-")
+    defer try os.RemoveAll(dir) catch { }
+    path := filepath.Join(dir, "app.log")
+    deadline := cancel.After(20000)
+    written Written
+    seen Summary
+    written = writeTask(path, N, 7)
+    seen = followTask(path, deadline)
+    try report(seen, written)
+    if seen.waits == 0 { eprintln("tailer: never caught up with the writer") }
+}

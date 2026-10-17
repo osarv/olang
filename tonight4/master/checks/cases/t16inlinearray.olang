@@ -1,0 +1,9 @@
+# check: fail error[T16]: N cannot hold itself by value
+# T16/T7c: a fixed-length array field holds its elements in the value, so a struct holding itself through one is infinite
+type N struct() {
+  v I32 = 0
+  kids Array<N, 2>
+}
+fn main() ? {
+  n := N()
+}

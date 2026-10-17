@@ -1,0 +1,12 @@
+# r35 FRICTION - L14: there is no multi-line or raw text literal. Test data written in the program - a calculator
+# script, a build file, two JSON documents - was written first as one literal spanning lines (L14 at every line,
+# plus cascades: the first program got 17 errors from one literal), then as a parenthesized join of pieces each ending
+# in "\n" (L18a), with every JSON quote escaped.
+#
+# expected: the text, four lines
+# actual: L14 "string literal not closed on its line - write \n for a newline", then an error per following line
+Doc String = "{
+  \"name\": \"api\",
+  \"port\": 443
+}"
+fn main() ? { println(Doc) }

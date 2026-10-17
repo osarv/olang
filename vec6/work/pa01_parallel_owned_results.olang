@@ -1,0 +1,37 @@
+Made mut I64 = 0
+Dropped mut I64 = 0
+type X struct(k I64) {
+    k
+    Made++
+} destruct { Dropped++ }
+type Lexer struct(n I64) {
+    n
+    o own mut X& = X(n)
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+fn mkLexer(k I64) Lexer {
+    l := Lexer(k)
+    for i in range k { l.toks.Push(i) }
+    return l
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn work() {
+    t := Two()
+    for k in range 3 { t.a, t.b = mkLexer(k + 3), mkLexer(k + 4) }
+    println($t.a.toks.Len() " " $t.b.toks.Len() " made " $Made " dropped " $Dropped)
+}
+fn main() ? {
+    work()
+    println("made " $Made " dropped " $Dropped)
+}

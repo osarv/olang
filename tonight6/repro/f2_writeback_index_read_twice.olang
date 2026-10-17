@@ -1,0 +1,39 @@
+# NEW wrong write (E31b, S4 "the place is evaluated once"): an index that is a plain variable is not held - atReadForWrite
+# holds an index "unless a variable or a literal" - so a GLOBAL index is read once for the At read and again, after the
+# call (or the assigned value), for the SetAt write back. A call that changes the global moves the write back to another
+# slot: slot 0's modified copy overwrites slot 1, and slot 0 keeps its old value.
+#   expected: method: l[0].N=100 l[1].N=50   assign: l[0].N=7 l[1].N=50   (as the Array lines show)
+#   actual:   method: l[0].N=0 l[1].N=100    assign: l[0].N=0 l[1].N=7     (-b, -b -s, -b -d -s, -i all agree)
+#   a2e2878: "l[G].N = ..." is E31's error; "l[G].AddAndMove()" builds and drops the write (r02).
+# A global index changed to a value out of range makes the write back an out-of-range store (cf. f1).
+type Acc struct() {
+    N I64 = 0
+}
+G mut I64 = 0
+fn (a mut Acc&) AddAndMove() {
+    a.N = a.N + 100
+    G = 1
+}
+fn bumpG() I64 {
+    G = 1
+    return 7
+}
+
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    l[1].N = 50
+    l[G].AddAndMove()
+    println("method: l[0].N=" $l[0].N " l[1].N=" $l[1].N)
+    l[0].N = 0
+    l[1].N = 50
+    G = 0
+    l[G].N = bumpG()
+    println("assign: l[0].N=" $l[0].N " l[1].N=" $l[1].N)
+    arr := Array<Acc>(2)
+    arr[1].N = 50
+    G = 0
+    arr[G].AddAndMove()
+    println("array:  arr[0].N=" $arr[0].N " arr[1].N=" $arr[1].N)
+}

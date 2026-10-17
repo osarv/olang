@@ -1,0 +1,23 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17/O17a: a constructor keeping a reference parameter in its instance hands what it reaches to the caller, as a return
+# does, so a copy whose references live elsewhere than its storage is not lent to it - "h.r.head.next = Node()" would
+# build in the copy's block
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type W struct(b Box) { b }
+type H struct(r mut Box&) { r }
+fn viaCtor(src mut W&) {
+    b := src.b
+    h := H(b)
+    h.r.head.next = Node()
+}
+fn main() ? {
+    w := W(Box())
+    viaCtor(w)
+    println($w.b.head.v)
+}

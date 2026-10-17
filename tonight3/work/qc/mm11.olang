@@ -1,0 +1,4 @@
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Update(1, List<I64>(), fn(l List<I64>) List<I64> { return l })
+}

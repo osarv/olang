@@ -1,0 +1,14 @@
+import "std/ffi"
+fn main() ? {
+    # strtol(text, null-ish?) - use a function taking an array and an int and returning a double: atof
+    t := "2.5e3"
+    w := Array<U64>(1 + ffi.WordsFor(t.Len() + 1))
+    w[0] = U64(t.Len() + 1)
+    ffi.Pack(w, 1, t)
+    r := try ffi.Call("atof", U8[ffi.ArrayOf(ffi.Kind.U8)], w, ffi.Code(ffi.Kind.F64)) catch { fail }
+    println($r.F64FromBits())
+    # an array whose words hold fewer elements than its length says
+    bad := U64[100, 0]
+    try ffi.Call("strlen", U8[ffi.ArrayOf(ffi.Kind.U8)], bad, ffi.Code(ffi.Kind.I64)) catch { println("err") }
+    println("unreached?")
+}

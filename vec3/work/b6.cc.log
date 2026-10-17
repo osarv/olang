@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/b6.olang:9:29: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - borrow it: 'Array<Char>&x'
+    9 | fn back(x <T>&) T& { return x }
+      |                             ^
+/home/user/review/vec3/work/b6.olang:10:43: note: instantiated here, with T = Array<Char>
+   10 | fn mk(v Vec<Char>&) Array<Char>& { return back(v.View()) }
+      |                                           ^~~~
+compilation failed with 1 error

@@ -1,0 +1,16 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) Eq(b B) Bool {
+  a.c.n = 99
+  return true
+}
+fn (a B) Hash() I64 { return 1 }
+type H struct(b B) { b }
+GH H = H(B(Ctr()))
+fn main() ? {
+  k := GH == GH
+  println($GH.b.c.n " " $k)
+}

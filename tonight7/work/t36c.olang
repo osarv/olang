@@ -1,0 +1,18 @@
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn (b Bag&) Str() String {
+    w(b.m.inner)
+    return "b"
+}
+fn w(p mut In&) { p.k++ }
+fn main() ? {
+    b := Bag(Mid())
+    println($b)
+}

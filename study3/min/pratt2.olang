@@ -1,0 +1,38 @@
+type E enum {
+    Num(v I64)
+    Add(l E&, r E&)
+}
+type P struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (p mut P&) atom() E& {
+    v := I64(p.src[p.at] - '0')
+    p.at++
+    return E.Num(v)
+}
+# the Pratt loop as anyone writes it
+fn (p mut P&) sum() E& {
+    lhs E&return = p.atom()
+    for p.at < p.src.Len() and p.src[p.at] == '+' {
+        p.at++
+        rhs E&return = p.atom()
+        lhs = E.Add(lhs, rhs)
+    }
+    return lhs
+}
+# a parenthesized sub-expression handed back
+fn (p mut P&) group() E& {
+    e E&return = p.sum()
+    return e
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Num(v) => v
+        case E.Add(l, r) => eval(l) + eval(r)
+    }
+}
+fn main() ? {
+    p := P("1+2+3")
+    println($eval(p.group()))
+}

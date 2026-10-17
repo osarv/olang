@@ -1,0 +1,22 @@
+fn grow(w mut Vec<Char>&) {
+    t := String(w.View())
+    w.Push('b')
+    println(t)
+}
+fn grow2(w mut Vec<Char>&) {
+    t String&w = String(w.View())
+    w.Push('b')
+    println(t)
+}
+fn grow3(w mut Vec<Char>&) {
+    t := w.View()
+    w.Push('b')
+    println($t)
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    grow(v)
+    grow2(v)
+    grow3(v)
+}

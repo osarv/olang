@@ -1,0 +1,13 @@
+# T25c (wt-qc, "a copy of a place reached read-only is read-only"): semaBuildGlobalInits builds a global's initializer
+# with no T25c check at all - neither roStoreCheck for a written type nor roInheritFrom for ":=" - so a MUTABLE global
+# initialized from an immutable value global is a writable copy of it, sharing its List record. The same copy as a
+# local ("x List<I32> = G"), or assigned to the global in a function ("M = G"), is refused with error[T25c].
+# Also "M mut := G" and "M mut List<I32> = H.l" (a field of an immutable global).
+# expected: error[T25c] at "= G" (this copies a read-only List<I32>...), as for a local
+# actual:   compiles; prints "G has 3" in -b, -d and -i - the immutable G was pushed to through M
+G List<I32> = I32[1, 2].ToList()
+M mut List<I32> = G
+fn main() ? {
+    M.Push(9)
+    println("G has " $G.Len())
+}

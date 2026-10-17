@@ -1,0 +1,45 @@
+# O17 (wt-s3scope): a spawn with several targets stores its results without going through buildAssignCore, so a store
+# into the lent region ("spawn b.head.next, k = two()") never sets regionStored, and the split value is lent.
+# (A single target goes through buildAssignCore and is refused; so is a plain destructuring "b.head.next, k = two()".)
+# The node two() builds lands where grow's b is bound - bump's block - and hangs off src's node.
+# expected: rejected with error[O17] at grow(b) (the previous compiler, 472373d, rejects it), or else prints 42
+# actual:   compiles; -b and -d print -7 (the node's storage reused by churn)
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn mkNode() mut Node& {
+    n := Node()
+    n.v = 42
+    return n
+}
+fn two() (mut Node&, I64) { return mkNode(), 5 }
+fn grow(b mut Box&) {
+    k I64 = 0
+    join { spawn b.head.next, k = two() }
+}
+fn bump(src mut W&) {
+    b := src.b
+    grow(b)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

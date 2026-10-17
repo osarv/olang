@@ -1,0 +1,16 @@
+# DIAGNOSTIC: counting the first CSV column of each line read with io.Lines. The key is a slice of the line, which
+# lives in the loop body, and the map outlives it - correctly rejected, but the error is the generic O10c with a note
+# pointing into the prelude ("s.add(i, key, f(init))", or "s.grow(x)" for List.Push) and nothing naming the
+# argument or the fix ($cols[0], a copy built where the map lives). Met five times in this study.
+import "std/os"
+import "std/io"
+fn main() ? {
+    try os.WriteFile("/tmp/s5_keys.txt", "alpha,1\nbeta,2\nalpha,4\n")
+    fd := try os.Open("/tmp/s5_keys.txt")
+    m := Map<String&, I64>()
+    for line in try io.Lines(fd) {
+        cols := line.Split(",")
+        m.Update(cols[0], 0, fn(v I64) I64 { return v + 1 })
+    } catch io.IoError { error }
+    for e in m { println($e.Key " " $e.Value) }
+}

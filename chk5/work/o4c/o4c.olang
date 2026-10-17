@@ -1,0 +1,38 @@
+# O4b for a plain (non-generic) constructor whose by-value parameter's type is declared after it (mutual types)
+type A struct(b B) {
+    b
+    n I64 = 0
+}
+type B struct(t String&, back mut A&) {
+    t
+    back
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn fill(keep mut List<A>&) {
+    for k in range 3 {
+        s := "short" $k
+        keep.Push(A(B(s, null)))
+    }
+}
+fn fill2(keep mut List<A>&) {
+    for k in range 3 {
+        s := "short2" $k
+        bv := B(s, null)
+        a := A(bv)
+        keep.Push(a)
+    }
+}
+fn main() ? {
+    keep := List<A>()
+    fill(keep)
+    fill2(keep)
+    churn()
+    for a in keep { println(a.b.t) }
+}

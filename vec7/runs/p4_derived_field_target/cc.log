@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/p4_derived_field_target.olang:26:19: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   26 |     p.lx.sub.more = take p.lx.toks
+      |                   ^
+compilation failed with 1 error

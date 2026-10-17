@@ -1,0 +1,3 @@
+import "lib"
+fn f(lib I32) I32 { return lib }
+fn main() ? { }

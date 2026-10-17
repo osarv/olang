@@ -1,0 +1,26 @@
+mkdir -p build
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c codegen.c -o build/codegen.o
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c comptime.c -o build/comptime.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c errmsg.c -o build/errmsg.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c main.c -o build/main.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c semantic.c -o build/semantic.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c syntax.c -o build/syntax.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c token.c -o build/token.o
+mkdir -p build
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP -c util.c -o build/util.o
+In file included from /usr/include/stdio.h:980,
+                 from util.c:3:
+In function 'vsnprintf',
+    inlined from 'StrFmt' at util.c:74:13:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:68:10: warning: null format string [-Wformat-truncation=]
+   68 |   return __builtin___vsnprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   69 |                                     __glibc_objsize (__s), __fmt, __ap);
+      |                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+gcc -Wall -Wextra -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -MMD -MP build/codegen.o build/comptime.o build/errmsg.o build/main.o build/semantic.o build/syntax.o build/token.o build/util.o -o build/out -lm -lffi -ldl -lpthread

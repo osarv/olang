@@ -1,0 +1,7 @@
+# T29a: V3(f) from a fixed array of the right length (control)
+type V3 extends Array<F32, 3>
+fn third(v V3&) F32 { return v[2] }
+fn main() ? {
+    f Array<F32, 3> = F32[1.5, 2.5, 3.5]
+    println($third(V3(f)))
+}

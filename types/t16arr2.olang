@@ -1,0 +1,11 @@
+# T16 through an enum payload holding an inline-array struct
+type W struct() {
+  a Array<E> = Array<E>(2)
+}
+type E enum {
+  Leaf
+  Node(w W)
+}
+fn main() ? {
+  e := E.Leaf
+}

@@ -1,0 +1,21 @@
+# an iterator value (holding '&of' to its list) assigned out of the list's block
+import "std/io"
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I64>(8, 7)
+    }
+}
+fn main() ? {
+    base List<I64>& = List<I64>()
+    base.Push(1)
+    it := base.Iter()
+    for i in range 2 {
+        l List<I64>& = List<I64>()
+        for k in range 20 { l.Push(42) }
+        it = l.Iter()
+    }
+    churn()
+    v := try it.Next()
+    try io.Print($v "\n")
+}

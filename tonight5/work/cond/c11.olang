@@ -1,0 +1,11 @@
+fn main() ? {
+    c := churn() < 0
+    e1 := E.A(Box())
+    k1 := (e1 as E.A).head
+    {
+        y := (e1 if c else E.Z) as E.A
+        growv(y)
+    }
+    churn()
+    println($rd(k1))
+}

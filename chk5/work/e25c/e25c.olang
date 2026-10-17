@@ -1,0 +1,30 @@
+# E25/C2d on c2a38f0: x := Env&c(local) - the value's references claimed where c lives, one of them a block's local
+type Info struct(n I64) { n }
+type Env struct(r Info&) {
+    r
+}
+type Holder struct(e Env) {
+    e
+}
+fn build(c mut Holder&) {
+    for k in range 3 {
+        local := Info(k + 100)
+        x := Env&c(local)
+        c.e = x
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := Info(1)
+    c mut Holder& = Holder(Env(g))
+    build(c)
+    churn()
+    println($c.e.r.n)
+}

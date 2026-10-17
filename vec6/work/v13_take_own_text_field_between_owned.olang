@@ -1,0 +1,29 @@
+type Obj struct() {
+    name String& = "init"
+}
+type Wrap struct() {
+    o own mut Obj& = null
+}
+type H struct() {
+    w own mut Wrap& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    g := H()
+    h.w = Wrap()
+    g.w = Wrap()
+    h.w.o = Obj()
+    h.w.o.name = "n" $5 "-built-into-h-w-region"
+    g.w.o = take h.w.o
+    h.w = null
+    churn()
+    println(g.w.o.name)
+}

@@ -1,0 +1,19 @@
+# F4 across modules: a global initialized with a borrow of another module's global own object
+import "lib"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+T := lib.Docs.Title
+U := lib.Docs.Text()
+Current mut String& = "none"
+fn main() ? {
+    Current = lib.Docs.Text()
+    lib.Rename()
+    churn()
+    println(T)
+}

@@ -1,0 +1,54 @@
+# own4 N3: F3's hidden owner slot is made only where a later argument "runs code" (cgRunsCode, written for E11a's joins),
+# which takes a checked index, slice, division, conversion or 'as' for plain operations - but under 'try' each can leave
+# the expression by propagating a BuiltinError. The owner made, taken or given for an owning parameter, a constructor's
+# region and an own array's buffer are then released by nobody: destructors never run, regions are lost.
+# -b, -b -s: "made 5 dropped 0" (5 expected); valgrind --leak-check=full: regions definitely lost (from __olang_own_new)
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+    Made = Made + 1
+} destruct { Dropped = Dropped + 1 }
+type H struct() {
+    a own mut Leaf&
+}
+type Buf struct() {
+    nums own mut Array<I64>&
+}
+fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
+fn viaIndex(arr Array<I64>&, i I64) ? {
+    x := take2(Leaf(1), try arr[i])               # OUT_OF_BOUNDS leaves: Leaf(1) never released
+}
+fn viaDiv(z I64) ? {
+    x := take2(Leaf(2), try (10 / z))             # DIVIDE_BY_ZERO
+}
+fn viaConv(big I64) ? {
+    x := take2(Leaf(3), I64(try I32(big)))        # OVERFLOW
+}
+fn viaTake(s mut H&, arr Array<I64>&) ? {
+    x := take2(take s.a, try arr[9])              # the moved owner is lost
+}
+fn viaRegion(s mut H&, arr Array<I64>&) ? {
+    s.a = Leaf(try arr[9])                        # the region made before the constructor's arguments
+}
+fn viaFill(b mut Buf&, z I64) ? {
+    b.nums = Array<I64>(8, try (5 / z))           # the own array's buffer made before its fill
+}
+fn viaSlice(arr Array<I64>&) ? {
+    x := take2(Leaf(4), (try arr[3:9]).Len())
+}
+fn main() ? {
+    arr := I64[1, 2, 3]
+    s := H()
+    b := Buf()
+    try viaIndex(arr, 9) catch { }
+    try viaDiv(0) catch { }
+    try viaConv(1 << 40) catch { }
+    s.a = Leaf(10)
+    try viaTake(s, arr) catch { }
+    try viaRegion(s, arr) catch { }
+    try viaFill(b, 0) catch { }
+    try viaSlice(arr) catch { }
+    println("made " $Made " dropped " $Dropped)
+}

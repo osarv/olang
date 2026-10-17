@@ -1,0 +1,11 @@
+# PRE-EXISTING over-rejection (be042da too): folding a List of Lists - the callback is handed a handle element read
+# through ListIter's "&p" fields and C2d refuses it ("builds through a '&p' field") - while a List<mut Node&> element,
+# which can be built through, is not refused (c3/pe2)
+fn total(ls List<List<I64>>) I64 {
+    return ls.Iter().Fold(0, fn(acc, l) { return acc + l.Len() })
+}
+fn main() ? {
+    ls := List<List<I64>>()
+    ls.Push(List<I64>())
+    println($total(ls))
+}

@@ -1,0 +1,153 @@
+# A small dense matrix library, generic over the element type, with operators declared as methods: "+" is
+# Plus, "*" by a scalar is Mul, "@" is MatMul. Used at F32 and BF16 for a tiny two-layer network forward pass.
+import "std/io"
+
+extern fn expf(x F32) F32
+
+type Matrix<T> struct(rows I64, cols I64) {
+    rows
+    cols
+    data mut Array<<T>>& = Array<<T>>(rows * cols)
+}
+
+# anything with a shape
+type Shaped trait {
+    Rows() I64
+    Cols() I64
+}
+
+fn (m Matrix<<T>>&) Rows() I64 { return m.rows }
+fn (m Matrix<<T>>&) Cols() I64 { return m.cols }
+fn (m Matrix<<T>>&) get(i I64, j I64) <T> { return m.data[i * m.cols + j] }
+fn (m mut Matrix<<T>>&) set(i I64, j I64, v <T>) { m.data[i * m.cols + j] = v }
+
+fn describe(x <S Shaped>&) String& { return $x.Rows() "x" $x.Cols() }
+
+error ShapeError {
+    MISMATCH
+}
+
+fn (a Matrix<<T>>&) Plus(b Matrix<<T>>&) Matrix<<T>>& {
+    out Matrix<<T>>&return = Matrix<<T>>(a.rows, a.cols)
+    for i in range a.data.Len() { out.data[i] = a.data[i] + b.data[i] }
+    return out
+}
+
+fn (a Matrix<<T>>&) Mul(k <T>) Matrix<<T>>& {
+    out Matrix<<T>>&return = Matrix<<T>>(a.rows, a.cols)
+    for i in range a.data.Len() { out.data[i] = a.data[i] * k }
+    return out
+}
+
+fn (a Matrix<<T>>&) MatMul(b Matrix<<T>>&) Matrix<<T>>& {
+    out Matrix<<T>>&return = Matrix<<T>>(a.rows, b.cols)
+    for i in range a.rows {
+        for k in range a.cols {
+            aik := a.get(i, k)
+            for j in range b.cols {
+                out.data[i * b.cols + j] += aik * b.get(k, j)
+            }
+        }
+    }
+    return out
+}
+
+fn (a Matrix<<T>>&) Str() String {
+    b := StringBuilder()
+    b.Push("[")
+    for i in range a.rows {
+        if i > 0 { b.Push("; ") }
+        for j in range a.cols {
+            if j > 0 { b.Push(" ") }
+            b.Push($a.get(i, j))
+        }
+    }
+    b.Push("]")
+    return b.ToString()
+}
+
+fn checked(a Matrix<<T>>&, b Matrix<<T>>&) Matrix<<T>>& ? ShapeError {
+    if a.cols != b.rows { error ShapeError.MISMATCH }
+    return a @ b
+}
+
+# a matrix filled from a function of the position
+fn tabulate(rows I64, cols I64, f fn(i I64, j I64) <T>) Matrix<<T>>& {
+    m Matrix<<T>>&return = Matrix<<T>>(rows, cols)
+    for i in range rows {
+        for j in range cols { m.set(i, j, f(i, j)) }
+    }
+    return m
+}
+
+fn relu(m mut Matrix<F32>&) {
+    for i in range m.data.Len() {
+        if m.data[i] < 0.0 { m.data[i] = 0.0 }
+    }
+}
+
+fn softmaxRows(m mut Matrix<F32>&) {
+    for i in range m.rows {
+        row := m.data[i * m.cols:(i + 1) * m.cols]
+        top := row.Fold(row[0], fn(acc F32, x F32) F32 { return x if x > acc else acc })
+        sum F32 = 0.0
+        for j in range row.Len() {
+            row[j] = expf(row[j] - top)
+            sum += row[j]
+        }
+        for j in range row.Len() { row[j] /= sum }
+    }
+}
+
+fn toBF16(m Matrix<F32>&) Matrix<BF16>& {
+    out Matrix<BF16>&return = Matrix<BF16>(m.rows, m.cols)
+    for i in range m.data.Len() { out.data[i] = BF16(m.data[i]) }
+    return out
+}
+
+fn maxAbsDiff(a Matrix<F32>&, b Matrix<BF16>&) F32 {
+    d F32 = 0.0
+    for i in range a.data.Len() {
+        e F32 = a.data[i] - F32(b.data[i])
+        if e < 0.0 { e = -e }
+        if e > d { d = e }
+    }
+    return d
+}
+
+fn main() ? ShapeError + io.IoError {
+    x := tabulate(2, 3, fn(i I64, j I64) F32 { return F32(i * 3 + j) / 4.0 - 0.5 })
+    w1 := tabulate(3, 4, fn(i I64, j I64) F32 { return F32((i + 2 * j) % 5) / 5.0 - 0.3 })
+    w2 := tabulate(4, 2, fn(i I64, j I64) F32 { return F32((3 * i + j) % 4) / 4.0 - 0.4 })
+    bias := tabulate(2, 4, fn(i I64, j I64) F32 { return 0.1 })
+    try io.Print("x " $describe(x) " = " $x "\n")
+    h := try checked(x, w1) + bias
+    relu(h)
+    logits := h @ w2 * 2.0
+    probs := logits @ tabulate(2, 2, fn(i I64, j I64) F32 { return F32(1.0) if i == j else F32(0.0) })        # (bare literals: invalid IR, min/i5.olang)
+    softmaxRows(probs)
+    try io.Print("hidden " $describe(h) " = " $h "\n")
+    try io.Print("probs = " $probs "\n")
+    bad := try checked(x, x) catch ShapeError.MISMATCH default null
+    try io.Print("x @ x rejected: " $(bad == null) "\n")
+
+    # the same forward pass in BF16
+    xb := toBF16(x)
+    hb := xb @ toBF16(w1) + toBF16(bias)
+    for i in range hb.data.Len() { if hb.data[i] < 0.0 { hb.data[i] = 0.0 } }
+    lb := hb @ toBF16(w2) * BF16(2.0)
+    try io.Print("bf16 logits = " $lb "\nmax |f32 - bf16| = " $maxAbsDiff(logits, lb) "\n")
+
+    # a larger product, checked against a direct sum
+    n I64 = 64
+    a := tabulate(n, n, fn(i I64, j I64) F64 { return F64((i * 7 + j * 3) % 11) - 5.0 })
+    b := tabulate(n, n, fn(i I64, j I64) F64 { return F64((i * 5 + j) % 13) - 6.0 })
+    c := a @ b
+    trace F64 = 0.0
+    for i in range n { trace += c.get(i, i) }
+    direct F64 = 0.0
+    for i in range n {
+        for k in range n { direct += a.get(i, k) * b.get(k, i) }
+    }
+    try io.Print("trace " $trace " direct " $direct "\n")
+}

@@ -1,0 +1,36 @@
+# r14 DIAGNOSTIC - cascades from one cause, two shapes (each hit while writing the programs; a third, a catch block
+# ending in its value, is r20):
+#   1. a type named without its module's alias ("Json" for "json.Json"): 'unknown type', then every case pattern of
+#      it ('Json' is no import here), every binding in those patterns at every use ('unknown name b' ...), a bogus
+#      S8a "this condition is the same on every build" on "j is Json.Arr or j is Json.Obj", and no "did you mean
+#      json.Json" though the import is right there. ../json2csv.olang: 39 errors for 2 causes.
+#   2. a field named with a keyword ("done", L9): the L9 error, then "expected end of line, found '.'" at every
+#      "s.done" (L9a admits keywords as method names only).
+#
+# expected: one error per cause, with "did you mean 'json.Json'" for the first
+# actual:   13 errors for the two (a parse error in shape 2 hides the S8a; delete the Stats part to see it: 11 errors for 1 cause)
+import "std/json"
+
+fn kind(j Json&) String {
+    return match j {
+        case Json.Null => "null"
+        case Json.Num(v) => "number " $v
+        case Json.Str(s) => "text " $s
+        nomatch => "other"
+    }
+}
+
+fn nested(j json.Json&) Bool {
+    if j is Json.Arr or j is Json.Obj { return true }
+    return false
+}
+
+type Stats struct() {
+    done I64 = 0
+}
+
+fn main() ? {
+    s := Stats()
+    s.done = 3
+    println($s.done " " $kind(json.Json.Null) " " $nested(json.Json.Null))
+}

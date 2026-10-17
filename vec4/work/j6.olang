@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# held? an own array of texts given a borrow of another own object, then copied out
+type B struct() {
+    names own mut Array<String&>& = Array<String&>(2, "n")
+}
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    b := B()
+    c := CB()
+    b.names[0] = c.text
+    a := b.names[0]
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(a)
+}

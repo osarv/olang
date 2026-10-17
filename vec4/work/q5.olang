@@ -1,0 +1,30 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F4: a global initialized through a function whose built result is proven fresh - but wraps a pick of the borrow
+fn pick(c Bool, x <T>, y T) T { return x if c else y }
+type Doc struct() {
+    title own mut String& = $1 "-title-built-at-run-time"
+}
+Docs own mut Doc& = Doc()
+fn g(k I64) I64 ? {
+    if k < 5 { error }
+    return k
+}
+fn wrap(a mut String&, b mut String&) mut String& {
+    if a.Len() == 0 { return "" $1 }
+    else if (try g(1) catch { return pick(true, a, b) }) > 0 { return "" $2 }
+    return "" $3
+}
+Other mut String& = "other-text"
+T := wrap(Docs.title, Other)
+fn main() ? {
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(T)
+}

@@ -1,0 +1,23 @@
+# OVER-REJECTION (O10c; study 3's recorded r06 limit, met turning a Map of records into JSON): a method taking its
+# receiver by reference, called on a for-in copy of a Map's value, whose built result holds the value's reference
+# field, cannot be pushed into an outer List. Building the same result inline (Tag.Text(e.Value.Name)) compiles, and
+# so does the method with a by-value receiver (fn (b Box) Wrap()) - the workaround used.
+type Tag enum {
+    Text(s String&)
+    Num(n I64)
+}
+
+type Box struct(Name String&, N I64) {
+    Name
+    N
+}
+
+fn (b Box&) Wrap() Tag& { return Tag.Text(b.Name) }
+
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box("a", 1))
+    out := List<Tag&>()
+    for e in m { out.Push(e.Value.Wrap()) }
+    println($out.Len())
+}

@@ -1,0 +1,48 @@
+# P1g: String value spawn targets in several places: a field through a reference parameter, a global, two targets of one call in different scopes
+type H struct() {
+    s mut String& = ""
+}
+type V struct(n I64) {
+    n
+}
+G mut String = "g"
+fn render(n I64) String {
+    return "r" $n "-abcdefghijklmnopqrstuvwxyz0123456789"
+}
+fn two(n I64) (String, String) {
+    return "a" $n "-abcdefghijklmnopqrstuvwxyz", "b" $n "-abcdefghijklmnopqrstuvwxyz"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn fillG() {
+    join { spawn G = render(7) }
+}
+fn fillTwo(out mut Array<I64>&) String {
+    a String = "x"
+    b String = "y"
+    join {
+        spawn a, b = two(3)
+    }
+    churn()
+    return $a $b
+}
+fn main() ? {
+    fillG()
+    churn()
+    println(G)
+    r := fillTwo(Array<I64>(1))
+    churn()
+    println(r)
+    loc String = "init"
+    for i in range 3 {
+        join { spawn loc = render(i) }
+        churn()
+    }
+    println(loc)
+}

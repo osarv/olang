@@ -1,0 +1,16 @@
+type Tok struct(text String&) {
+    text
+}
+fn split(line String&) List<Tok> {
+    toks := List<Tok>()
+    toks.Push(Tok(line[0:1]))
+    toks.Push(Tok(line[1:2]))
+    return toks
+}
+fn count(line String&) I64 {
+    toks := split(line)
+    return toks.Len()
+}
+fn main() ? {
+    println($count("ab"))
+}

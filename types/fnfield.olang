@@ -1,0 +1,7 @@
+import "std/io"
+type Box struct(f fn(n I32) I32) { f }
+fn dbl(n I32) I32 { return n * 2 }
+fn main() ? {
+  b := Box(dbl)
+  try io.Print($(b.f)(21) "\n")
+}

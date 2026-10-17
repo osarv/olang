@@ -1,0 +1,17 @@
+# INHERITED FROM MASTER (b6259d1), CONFIRMED, minor: recursion through a non-Str join. str1's n6 (depth 100,000)
+# segfaults again. Deepest depth: e27b83b ~103,800, b6259d1 ~103,800, 7345ff9 ~261,500 (master's function keeps a
+# zeroed 48-byte scope header in the frame: 'sub $0x30,%rsp' plus three pushes, where 7345ff9's needs one push).
+# Run: build/n6d N.
+import "std/os"
+fn r(n I64, name String&) I64 {
+    if n == 0 { return 0 }
+    s := $name $r(n - 1, name)
+    return s.Len() - name.Len()
+}
+fn depthOf() I64 {
+    a := os.Args()
+    return 0 if a.Len() < 2 else try a[1].ParseInt() catch default 0
+}
+fn main() ? {
+    println($r(depthOf(), "x"))
+}

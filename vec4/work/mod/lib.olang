@@ -1,0 +1,6 @@
+type Doc struct() {
+    Title own mut String& = $1 "-title-built-at-run-time"
+}
+Docs own mut Doc& = Doc()
+fn Rename() { Docs.Title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" }
+fn (d Doc&) Text() String&d { return d.Title }

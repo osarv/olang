@@ -1,0 +1,19 @@
+# E11a: $ on F16 and BF16 bit patterns - a hash of the renderings computed while compiling (baked) and at run time
+fn h16(lo I64, hi I64) I64 {
+    h I64 = 1469598103934665603
+    for i in range lo, hi {
+        u := U16(i)
+        s := $u.F16FromBits() "|" $u.BF16FromBits()
+        for c in s { h = (h ^ I64(c)) * 1099511628211 }
+    }
+    return h
+}
+B0 I64 = h16(0, 2048)
+B1 I64 = h16(2048, 4096)
+B2 I64 = h16(30720, 32768)
+B3 I64 = h16(32768, 34816)
+B4 I64 = h16(63488, 65536)
+B5 I64 = h16(0, 4)
+fn main() ? {
+    println($(B0 == h16(0, 2048)) " " $(B1 == h16(2048, 4096)) " " $(B2 == h16(30720, 32768)) " " $(B3 == h16(32768, 34816)) " " $(B4 == h16(63488, 65536)))
+}

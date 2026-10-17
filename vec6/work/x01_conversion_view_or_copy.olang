@@ -1,0 +1,16 @@
+# T29a: "a conversion names its argument's storage" - so t, a reference declared from String(...), should see the write
+fn main() ? {
+    a := Array<Char>(2, 'a')
+    t String& = String(a)
+    a[0] = 'z'
+    println(t)
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    w String&v = String(v.View())
+    v[0] = 'z'
+    println(w)
+    x := v.View()
+    v[1] = 'q'
+    println($x[1])
+}

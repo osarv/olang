@@ -1,0 +1,8 @@
+# T29a: a conversion of a call giving a fixed-length array reference
+fn view(a Array<Char, 4>&) Array<Char, 4>&a { return a }
+fn main() ? {
+    b Array<Char, 4> = Char['a', 'a', 'a', 'a']
+    w String& = String(view(b))
+    b[0] = 'z'
+    println(w)
+}

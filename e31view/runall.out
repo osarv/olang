@@ -1,0 +1,195 @@
+### repro/d1_diag_held_index_note.olang
+[new -b] COMPILE FAIL:
+d1_diag_held_index_note.olang:37:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   37 |     for k in range 3 { f(s[k], out) }
+d1_diag_held_index_note.olang:33:38: note: the callee requires it because of this statement
+   33 | fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
+d1_diag_held_index_note.olang:37:27: note: the index is held here, for both the read and the write, in a block that closes first - make it where 'out' lives first, then index with it
+   37 |     for k in range 3 { f(s[k], out) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+d1_diag_held_index_note.olang:37:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   37 |     for k in range 3 { f(s[k], out) }
+d1_diag_held_index_note.olang:33:38: note: the callee requires it because of this statement
+   33 | fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
+d1_diag_held_index_note.olang:37:27: note: the index is held here, for both the read and the write, in a block that closes first - make it where 'out' lives first, then index with it
+   37 |     for k in range 3 { f(s[k], out) }
+compilation failed with 1 error
+[new -i]:
+d1_diag_held_index_note.olang:37:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   37 |     for k in range 3 { f(s[k], out) }
+d1_diag_held_index_note.olang:33:38: note: the callee requires it because of this statement
+   33 | fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
+d1_diag_held_index_note.olang:37:27: note: the index is held here, for both the read and the write, in a block that closes first - make it where 'out' lives first, then index with it
+   37 |     for k in range 3 { f(s[k], out) }
+compilation failed with 1 error
+  (exit 1)
+[old -b] COMPILE FAIL:
+d1_diag_held_index_note.olang:37:27: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by ref
+   37 |     for k in range 3 { f(s[k], out) }
+compilation failed with 1 error
+### repro/d2_diag_cascade_body_errors.olang
+[new -b] COMPILE FAIL:
+d2_diag_cascade_body_errors.olang:15:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   15 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+d2_diag_cascade_body_errors.olang:26:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by
+   26 |         hang(s[k], 100 + k)
+compilation failed with 2 errors
+[new -b -d -s] COMPILE FAIL:
+d2_diag_cascade_body_errors.olang:15:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   15 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+d2_diag_cascade_body_errors.olang:26:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by
+   26 |         hang(s[k], 100 + k)
+compilation failed with 2 errors
+[new -i]:
+d2_diag_cascade_body_errors.olang:15:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   15 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+d2_diag_cascade_body_errors.olang:26:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by
+   26 |         hang(s[k], 100 + k)
+compilation failed with 2 errors
+  (exit 1)
+[old -b] COMPILE FAIL:
+d2_diag_cascade_body_errors.olang:15:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   15 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+d2_diag_cascade_body_errors.olang:26:15: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by
+   26 |         hang(s[k], 100 + k)
+compilation failed with 2 errors
+### repro/m1_bigcopy_condition_growth.olang
+[new -b] exit 0 peak 715584 KB: 5000
+[base -b] compile fail: m1_bigcopy_condition_growth.olang:23:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+### repro/m1b_bigtemp_condition_growth_preexisting.olang
+[new -b] exit 0 peak 359896 KB: 5000
+[base -b] exit 0 peak 350128 KB: 5000
+### repro/p1_computed_callee_lost_write_preexisting.olang
+[new -b] exit 0:
+list N 0 / array N 1 10 1
+[new -b -d -s] exit 0:
+list N 0 / array N 1 10 1
+[new -i]:
+list N 0 / array N 1 10 1
+  (exit 0)
+[old -b] exit 0:
+list N 0 / array N 1 10 1
+### repro/r1_overreject_nested_view_fields.olang
+[new -b] COMPILE FAIL:
+r1_overreject_nested_view_fields.olang:22:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elemen
+   22 |     step(s[1])
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+r1_overreject_nested_view_fields.olang:22:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elemen
+   22 |     step(s[1])
+compilation failed with 1 error
+[new -i]:
+r1_overreject_nested_view_fields.olang:22:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elemen
+   22 |     step(s[1])
+compilation failed with 1 error
+  (exit 1)
+[old -b] COMPILE FAIL:
+r1_overreject_nested_view_fields.olang:22:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elemen
+   22 |     step(s[1])
+compilation failed with 1 error
+### repro/r2_overreject_try_view_regression.olang
+[new -b] COMPILE FAIL:
+r2_overreject_try_view_regression.olang:15:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the eleme
+   15 |     put(try s[2] catch default V(Array<I64>(1), 0), 9)
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+r2_overreject_try_view_regression.olang:15:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the eleme
+   15 |     put(try s[2] catch default V(Array<I64>(1), 0), 9)
+compilation failed with 1 error
+[new -i]:
+r2_overreject_try_view_regression.olang:15:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the eleme
+   15 |     put(try s[2] catch default V(Array<I64>(1), 0), 9)
+compilation failed with 1 error
+  (exit 1)
+[old -b] exit 0:
+I64[0, 0, 9, 0]
+### repro/r3_overreject_enum_field_read.olang
+[new -b] COMPILE FAIL:
+r3_overreject_enum_field_read.olang:29:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements b
+   29 |     f(s[1])
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+r3_overreject_enum_field_read.olang:29:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements b
+   29 |     f(s[1])
+compilation failed with 1 error
+[new -i]:
+r3_overreject_enum_field_read.olang:29:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements b
+   29 |     f(s[1])
+compilation failed with 1 error
+  (exit 1)
+[old -b] COMPILE FAIL:
+r3_overreject_enum_field_read.olang:29:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements b
+   29 |     f(s[1])
+compilation failed with 1 error
+### repro/s1_view_alias_replaced.olang
+[new -b] exit 0:
+  callee sees n 1
+list:  element d[0] 0 n 7
+  callee sees n 7
+array: element d[0] 5 n 7
+[new -b -d -s] exit 0:
+  callee sees n 1
+list:  element d[0] 0 n 7
+  callee sees n 7
+array: element d[0] 5 n 7
+[new -i]:
+  callee sees n 1
+list:  element d[0] 0 n 7
+  callee sees n 7
+array: element d[0] 5 n 7
+  (exit 0)
+[old -b] COMPILE FAIL:
+s1_view_alias_replaced.olang:21:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by refe
+   21 |     work(l[0], l)
+compilation failed with 1 error
+### repro/s1b_view_later_argument.olang
+[new -b] exit 0:
+list:  element d[0] 0
+array: element d[0] 5
+[new -b -d -s] exit 0:
+list:  element d[0] 0
+array: element d[0] 5
+[new -i]:
+list:  element d[0] 0
+array: element d[0] 5
+  (exit 0)
+[old -b] COMPILE FAIL:
+s1b_view_later_argument.olang:20:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by refe
+   20 |     l[0].Put(replace(l))
+compilation failed with 1 error
+### repro/s1c_view_alias_other_element.olang
+[new -b] exit 0:
+list:  slot0 0 slot1 99
+array: slot0 99 slot1 0
+[new -b -d -s] exit 0:
+list:  slot0 0 slot1 99
+array: slot0 99 slot1 0
+[new -i]:
+list:  slot0 0 slot1 99
+array: slot0 99 slot1 0
+  (exit 0)
+[old -b] COMPILE FAIL:
+s1c_view_alias_other_element.olang:21:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by
+   21 |     l[0].Mark(l)
+compilation failed with 1 error
+### repro/s1h_handle_alias_preexisting.olang
+[new -b] exit 0:
+list:  element len 0
+[new -b -d -s] exit 0:
+list:  element len 0
+[new -i]:
+list:  element len 0
+  (exit 0)
+[old -b] exit 0:
+list:  element len 0
+### repro/t1_try_array_index_lost_write.olang
+[new -b] exit 0:
+N 2 0 10
+[new -b -d -s] exit 0:
+N 2 0 10
+[new -i]:
+N 2 0 10
+  (exit 0)
+[old -b] exit 0:
+N 2 0 10

@@ -1,0 +1,23 @@
+# a deferred view call on l[0]: the deferred code should read l[0] when it runs (S19)
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn put(c mut V&, x I64) { c.d[0] = x + c.n }
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 1))
+    old := l[0].d
+    {
+        defer put(l[0], 100)
+        l[0] = V(Array<I64>(2), 7)
+    }
+    println("list: element d " $l[0].d " old d " $old)
+    a := V[V(Array<I64>(2), 1)]
+    olda := a[0].d
+    {
+        defer put(a[0], 100)
+        a[0] = V(Array<I64>(2), 7)
+    }
+    println("array: element d " $a[0].d " old d " $olda)
+}

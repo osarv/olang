@@ -1,0 +1,7 @@
+# G16b: an error inside an instantiation is followed by a note at the call that asked for it
+fn First(a Array<I64, <N>>&) I64 { return a[0] }
+fn Wrap(a Array<I64, <N>>&) I64 { return First(a) }
+fn main() ? {
+    x Array<I64, 0> = Array<I64, 0>()
+    println($Wrap(x))
+}

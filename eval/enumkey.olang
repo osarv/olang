@@ -1,0 +1,14 @@
+import "std/io"
+import "std/map"
+type Tok enum {
+    Num(v I64)
+    Word(s String&)
+    End
+}
+fn main() ? io.IoError {
+    m := map.Map<Tok, I32>()
+    m.Put(Tok.Num(1), 1)
+    try io.Print("num ok\n")
+    m.Put(Tok.End, 2)
+    try io.Print("end ok\n")
+}

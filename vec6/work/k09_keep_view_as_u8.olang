@@ -1,0 +1,22 @@
+type H struct() {
+    s Array<U8>& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn keep(h mut H&, d String&) { h.s = d }
+fn main() ? {
+    v := Vec<Char>()
+    for i in range 3 { v.Push('a') }
+    h := H()
+    d := String(v.View())
+    keep(h, d)
+    for i in range 100 { v.Push('b') }
+    churn()
+    println($h.s[0])
+}

@@ -1,0 +1,15 @@
+# section 12: an enum type can never be generic - but the declaration is accepted
+import "std/io"
+type Opt<T> enum {
+  None
+  Some(v <T>)
+}
+fn show(o Opt<I32>) I32 {
+  match o {
+    case Opt.Some(v) { return v }
+    nomatch { return 0 }
+  }
+}
+fn main() ? {
+  try io.Print($show(Opt.None) "\n")
+}

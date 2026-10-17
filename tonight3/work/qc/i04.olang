@@ -1,0 +1,9 @@
+fn look(ls Array<List<I32>>&) {
+    ls[0].Push(9)
+}
+fn main() ? {
+    a := I32[1, 2].ToList()
+    o := List<I32>[a]
+    look(o)
+    println($a.Len())
+}

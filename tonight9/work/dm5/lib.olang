@@ -1,0 +1,4 @@
+N I64 = 3
+fn F(x I64 = N + 1) I64 {
+    return x
+}

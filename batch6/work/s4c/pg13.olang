@@ -1,0 +1,46 @@
+# S4c/O1b: parallel assignments into a global's fields from calls that build, from a value global, and in tasks
+type Node struct(v I64, s String&) {
+    v
+    s
+    next mut Node& = null
+}
+type Holder struct() {
+    n mut Node& = null
+    l mut List<String&>& = List<String&>()
+}
+type VH struct(n Node&) {
+    n
+}
+G mut Holder& = Holder()
+GV mut VH = VH(Node(0, "gv"))
+fn mk(i I64) Node& {
+    return Node(i, "mk" $i "-abcdefghijklmnopqrstuvwxyz")
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i, "c")
+        t = t + nn.v
+    }
+    return t
+}
+fn set(i I64) {
+    h mut Holder& = Holder()
+    k I64 = 0
+    h.n, k = mk(i), i
+    h.l, k = List<String&>(), k
+    h.l.Push("p" $i)
+    GV.n, k = mk(i * 2), k
+    GV.n, k = mk(i * 3), k
+    h.n, k = mk(i * 4), k
+    h.n.next, k = mk(i * 5), k
+}
+fn main() ? {
+    for i in range 3 {
+        set(i)
+        churn()
+    }
+    println($G.n.v " " $G.n.s " " $G.l " " $GV.n.v " " $GV.n.s)
+}

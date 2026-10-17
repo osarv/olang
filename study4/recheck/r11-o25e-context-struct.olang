@@ -1,0 +1,37 @@
+# r11 OVER-REJECTION + DIAGNOSTIC - O25e/C2d/O25g: a context struct holding a READ-ONLY reference to a local List and a
+# writable reference to the caller's state cannot be built - "these arguments live in different scopes, and the
+# signature requires one ('&p')". Nothing in Ctx's signature says the two must share a scope, and "&p" names nothing in
+# the program. With Array<I64> instead of List<I64> it compiles (Ctx2); with both arguments local to one block it
+# compiles. (A parser holding its token list and the caller's diagnostics sink: the shape of every compiler pass.)
+#
+# expected: 1 then 7
+# actual: error[O25e] at line 19, column 20 (the argument d)
+type Diag struct() {
+    col I64 = 0
+}
+type Ctx struct(nums List<I64>&, diag mut Diag&) {
+    nums
+    diag
+}
+fn check(d mut Diag&) {
+    nums := List<I64>()
+    nums.Push(4)
+    c := Ctx(nums, d)
+    c.diag.col = c.nums.Len()
+}
+type Ctx2 struct(nums Array<I64>&, diag mut Diag&) {
+    nums
+    diag
+}
+fn check2(d mut Diag&) {
+    nums := I64[1, 2]
+    c := Ctx2(nums, d)
+    c.diag.col = 7
+}
+fn main() ? {
+    d := Diag()
+    check(d)
+    println($d.col)
+    check2(d)
+    println($d.col)
+}

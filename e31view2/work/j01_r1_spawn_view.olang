@@ -1,0 +1,23 @@
+# r1 + a task: the callee spawns a view call on c.w and c.b inside its own join
+type M struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+fn (m mut M&) Fill(x I64) { m.d[m.off] = x }
+type Layer struct(w M, b M) {
+    w
+    b
+}
+fn step(c mut Layer&) {
+    join {
+        spawn c.w.Fill(3)
+        spawn c.b.Fill(4)
+    }
+}
+fn main() ? {
+    l := List<Layer>()
+    d := Array<I64>(4)
+    l.Push(Layer(M(d, 0), M(d, 1)))
+    for i in range 3 { step(l[0]) }
+    println($l[0].w.d)
+}

@@ -1,0 +1,8 @@
+# the same with an ordinary function: correctly rejected
+fn write(n mut Node&) { n.v = 99 }
+type Node struct(v I32) { v mut }
+fn apply(f fn(n Node&), n Node&) { f(n) }
+fn main() ? {
+  m := Node(1)
+  apply(write, m)
+}

@@ -1,0 +1,14 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+GL mut List<Node&>& = List<Node&>()
+GI mut List<I32>& = List<I32>()
+GS mut List<String&>& = List<String&>()
+fn work() {
+    GI.Push(5)
+    GL.Push(Node(5))
+    GS.Push($5 "x")
+}
+fn main() ? {
+    work()
+    try io.Print($GI.Len() " " $GL.Len() " " $GS.Len() "\n")
+}

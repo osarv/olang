@@ -1,0 +1,34 @@
+# r12 MISSING: no way to give a deep recursion more stack, or to learn the depth left. A recursive-descent parser over
+# "((((...))))" 300,000 deep dies with SIGSEGV and no message (20,000 deep is fine on the default 8MB). The C compiler
+# runs on a 1GB thread and bounds nesting at 20,000 (L21); an olang compiler can count depth itself, but cannot ask for
+# the stack (main's, or a spawned task's).
+type Node enum {
+    Leaf
+    Paren(inner Node&)
+}
+type P struct(src String&) {
+    src
+    pos mut I64 = 0
+}
+fn (p mut P&) expr() mut Node&p {
+    if p.pos < p.src.Len() and p.src[p.pos] == '(' {
+        p.pos++
+        inner := p.expr()
+        p.pos++
+        return Node.Paren(inner)
+    }
+    return Node.Leaf
+}
+fn count(n Node&) I64 {
+    return match n {
+        case Node.Leaf => 0
+        case Node.Paren(i) => 1 + count(i)
+    }
+}
+fn main() ? {
+    n I64 = 300000
+    text := String(Array<Char>(2 * n, '('))
+    for i in range n, 2 * n { text[i] = ')' }
+    p := P(text)
+    println($count(p.expr()))
+}

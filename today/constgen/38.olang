@@ -1,0 +1,6 @@
+# G22: a constant named like a prelude function, used in the body
+type B<print I64> struct() { x mut I64 = print }
+fn main() ? {
+    b := B<3>()
+    println($b.x)
+}

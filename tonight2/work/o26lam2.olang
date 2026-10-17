@@ -1,0 +1,26 @@
+type Node struct(v I64) { v }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i "-" $(i * 7)
+        t += x.Len()
+    }
+    return t
+}
+fn each(n I64, f fn(i I64)) { for i in range n { f(i) } }
+fn build() List<Node&> {
+    out := List<Node&>()
+    o mut List<Node&>& = out
+    n := Node(7)
+    add := fn() { o.Push(n) }
+    add()
+    each(3, fn(i I64) { o.Push(n) })
+    return out
+}
+fn main() ? {
+    l := build()
+    churn()
+    println($l.Len() " " $l[0].v)
+}

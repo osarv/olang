@@ -1,0 +1,12 @@
+type Node struct(v I64) {
+    v
+    next own mut Node&
+}
+fn leak() Node& {
+    head own mut Node& = Node(1)
+    return head
+}
+fn main() ? {
+    x := leak()
+    println($x.v)
+}

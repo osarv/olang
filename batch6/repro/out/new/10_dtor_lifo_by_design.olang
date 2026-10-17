@@ -1,0 +1,33 @@
+# HELD (by design, C9a + O15's LIFO): a destructor-bearing value a destructor builds is destructed as that destructor
+# returns, so a later destructor of the same scope reads it after release (Log 125). The same happens in an ordinary
+# function when a newer instance is stored into an older one's field (b.r = Res2(7): Log 25). Before C9a (04f4a4d) this
+# program was a use after scope closed under -s; now the memory is valid.
+# destructor of the same scope can still reach it through a field it was stored in
+Log mut I64 = 0
+type Res2 struct(id I64) {
+    id
+    live Bool = true
+} destruct {
+    Log = Log * 10 + 2
+}
+type B struct() {
+    r mut Res2& = null
+} destruct {
+    if r != null {
+        Log = Log * 10 + (5 if r.id == 7 else 6)
+    }
+}
+type A struct(b mut B&) {
+    b
+} destruct {
+    b.r = Res2(7)
+    Log = Log * 10 + 1
+}
+fn f() {
+    b mut B& = B()
+    a A&b = A(b)
+}
+fn main() ? {
+    f()
+    println($Log)
+}

@@ -1,0 +1,2 @@
+fuzz scope: 301 programs, 867 scenarios run, 2745 refused by the compiler, 0 findings
+exit 0

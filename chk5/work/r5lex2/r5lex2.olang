@@ -1,0 +1,28 @@
+# O18c/r05: a ':=' reading one field of a call's result lands that call by its obligations, so what the callee builds
+# fresh lands there too - here, every token's rendered text lands where the lexer lives, for the whole loop
+type Token struct(kind I64, text String&) {
+    kind
+    text
+}
+type Lexer struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (lx mut Lexer&) next() Token {
+    lx.at++
+    if lx.at % 2 == 0 { return Token(1, lx.src[0:3]) }  # a slice of the source: lives where the lexer's text does
+    return Token(2, "n" $lx.at)                          # fresh text, built in the result scope
+}
+fn count(lx mut Lexer&, n I64) I64 {
+    total I64 = 0
+    for k in range n {
+        tk := lx.next()
+        t := tk.text
+        total += t.Len() + I64(t[t.Len() - 1])
+    }
+    return total
+}
+fn main() ? {
+    lx := Lexer("abcdef")
+    println($count(lx, 30000000))
+}

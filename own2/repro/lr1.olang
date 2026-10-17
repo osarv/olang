@@ -1,0 +1,29 @@
+Dropped mut I64 = 0
+import "std/time"
+type Conn struct(fd I64) { fd } destruct { Dropped++ }
+type Server struct() { cur own mut Conn& }
+type Out struct() { v I64 = 0 }
+type Flag struct() { v I64 = 0 }
+fn wait(f Flag&) {
+    t0 := time.Now()
+    for f.v.AtomicLoad() == 0 and time.Since(t0) < 2000000 { }
+}
+fn task(s Server&, started mut Flag&, out mut Out&) {
+    c := s.cur
+    started.v.AtomicStore(1)
+    out.v = c.fd
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    o := Out()
+    st := Flag()
+    join {
+        for i in range 2 {
+            spawn task(s, st, o)
+            wait(st)
+            s.cur = Conn(i + 10)
+        }
+    }
+    println($o.v)
+}

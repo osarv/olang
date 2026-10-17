@@ -1,0 +1,14 @@
+type CB struct() {
+    text own mut String& = "bb"
+}
+fn (c CB&) Text() String&c { return c.text }
+fn use(c mut CB&) {
+    f := fn(x CB&) { return x.Text() }
+    t := f(c)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

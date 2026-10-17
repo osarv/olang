@@ -1,0 +1,18 @@
+import "std/map"
+type Node struct(value String&) {
+    value mut
+}
+type C struct() {
+    index mut map.Map<I64, mut Node&>& = map.Map<I64, mut Node&>()
+}
+fn (c mut C&) Get(key I64) String&c ? {
+    n := try c.index.Get(key) catch {
+        error
+    }
+    return n.value
+}
+fn main() ? {
+    c := C()
+    c.index.Put(1, Node("x"))
+    assert (try c.Get(1)) == "x"
+}

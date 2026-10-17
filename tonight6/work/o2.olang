@@ -1,0 +1,24 @@
+# O26a/callResultTiedToBlock: a local declared from a call whose result holds a local Map's storage, returned.
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn pick(n I64) List<I64> ? {
+    groups := Map<I64, List<I64>>()
+    for i in range n {
+        groups.Put(i, List<I64>())
+        g := try groups.Get(i)
+        g.Push(i * 11)
+    }
+    l := try groups.Get(1)
+    return l
+}
+fn main() ? {
+    a := try pick(3)
+    println($churn())
+    println($a[0] " " $a.Len())
+}

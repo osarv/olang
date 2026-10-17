@@ -1,0 +1,72 @@
+type E enum {
+    Lit(v I64)
+    Neg(e E&)
+    Add(a E&, b E&)
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(x) => 0 - eval(x)
+        case E.Add(a, b) => eval(a) + eval(b)
+    }
+}
+fn wrap(a E&) E { return E.Neg(a) }
+fn both(a E&, b E&) E { return E.Add(a, b) }
+type PE struct(a E) {
+    a
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        q := Array<I64>(64, -7)
+        t += q[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn t1() I64 {
+    x := E.Lit(1)
+    for i in range 5 {
+        x = wrap(x)
+        churn()
+    }
+    churn()
+    return eval(x)
+}
+fn t2(p mut PE&) I64 {
+    for i in range 5 {
+        p.a = wrap(p.a)
+        churn()
+    }
+    return eval(p.a)
+}
+fn t3() I64 {
+    x := E.Lit(1)
+    y := E.Lit(10)
+    for i in range 3 {
+        x, y = both(y, x), wrap(x)
+        churn()
+    }
+    churn()
+    return eval(x) * 1000 + eval(y)
+}
+fn t4() I64 {
+    a Array<E, 2> = E[E.Lit(1), E.Lit(1)]
+    for i in range 3 {
+        a[0] = both(a[1], a[0])
+        a[1] = wrap(a[0])
+        churn()
+    }
+    return eval(a[0]) * 1000 + eval(a[1])
+}
+B1 I64 = t1()
+B3 I64 = t3()
+B4 I64 = t4()
+fn main() ? {
+    p := PE(E.Lit(2))
+    r2 := t2(p)
+    churn()
+    println("baked " $B1 " " $B3 " " $B4)
+    println("run   " $t1() " " $r2 " " $eval(p.a) " " $t3() " " $t4())
+}

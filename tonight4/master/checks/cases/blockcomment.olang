@@ -1,0 +1,4 @@
+# check: fail error[L4a]: unterminated block comment
+# L4a: a block comment must be closed
+fn main() ? { }
+## never closed

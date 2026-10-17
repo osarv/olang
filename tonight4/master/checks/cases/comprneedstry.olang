@@ -1,0 +1,13 @@
+# check: fail error[E27, S9e]: this comprehension's own calls can fail
+# S9e: a comprehension over an iterator whose Next can fail
+error E {
+    X
+}
+type It struct() {
+    i I32 = 0
+}
+fn (t mut It&) Next() I32 ? E + Exhausted { error E.X }
+fn main() ? {
+    t mut It& = It()
+    xs := I32[x for x in t]
+}

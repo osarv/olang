@@ -1,0 +1,5 @@
+n mut I64 = 3
+fn main() ? {
+    a := Array<String&>(n, "ab")
+    assert a[1].Len() == 2 and a[2] == "ab"
+}

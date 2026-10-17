@@ -1,0 +1,1 @@
+fn Y() I64 { return 6 }

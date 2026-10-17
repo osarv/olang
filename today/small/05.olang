@@ -1,0 +1,20 @@
+# D9b: a generic's mut by-value parameter bound to an array is the callee's own copy
+fn poke(a mut <T>) <T> {
+    a[0] = a[1]
+    return a
+}
+fn run() I64 {
+    x := I64[1, 2, 3]
+    y := poke(x)
+    s := poke("abc")
+    return x[0] * 100 + y[0] * 10 + I64(s.Len())
+}
+Baked I64 = run()
+fn main() ? {
+    x := I64[1, 2, 3]
+    y := poke(x)
+    s := poke("abc")
+    t := "xyz"
+    u := poke(t)
+    println($x " " $y " " $s " " $t " " $u " " $run() " " $Baked)
+}

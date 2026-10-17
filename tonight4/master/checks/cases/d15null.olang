@@ -1,0 +1,11 @@
+# check: fail error[D15]: ':=' takes its type from the initializer, and null has none
+# also: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
+# also: error[E4a]: this literal expression has no value
+# D15: ':=' declares any settled type - but null has none, nor does a call returning nothing, nor a literal-only
+# expression whose value no type holds
+fn nothing() { }
+fn main() ? {
+    x := null
+    y := nothing()
+    z := 18446744073709551615 * 2
+}

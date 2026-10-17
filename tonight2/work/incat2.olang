@@ -1,0 +1,20 @@
+type V struct(n I64) {
+    d mut Array<I64>& = Array<I64>(n, 0)
+}
+fn (v V&) At(i I64) I64 { return v.d[i] }
+fn (v mut V&) SetAt(i I64, x I64) { v.d[i] = x }
+Calls mut I64 = 0
+fn next() I64 {
+    Calls++
+    return 1
+}
+fn main() ? {
+    v := V(4)
+    v[next()]++
+    println("after ++: " $Calls)
+    v[next()] += 1
+    println("after +=: " $Calls)
+    a := Array<I64>(4, 0)
+    a[next()]++
+    println("array ++: " $Calls " " $v[1] " " $a[1])
+}

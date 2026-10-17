@@ -1,0 +1,32 @@
+# (c) DIAGNOSTIC, O10c: a call building a struct from loop-local text - load() below: the path joined in the loop, and
+# a slice of the file name - is "the callee needs one argument's scope to outlive another's, and nothing here shows it
+# - pass them from one scope", with one note pointing at the struct's constructor inside the callee. It names neither
+# local nor the list that outlives them; mk.olang's fix was '&return' on three locals (the directory listing, the
+# joined path and the file's text). Pushing a loop-local text directly ('deps.Push(dep)' in main) gets the good B11
+# note "'dep' is declared here, in a block that closes first - declare it where 'deps' lives" - the same note is
+# wanted when the local reaches the list through a call.
+type Module struct(name String&, path String&) {
+    name
+    path
+}
+fn parse(name String&, path String&) Module { return Module(name, path) }
+fn load(dir String&) List<Module> {
+    mods := List<Module>()
+    names := String&["a.mod", "b.mod"]
+    for n in names {
+        path := $dir "/" $n
+        m := parse(n[0:n.Len() - 4], path)
+        mods.Push(m)
+    }
+    return mods
+}
+fn main() ? {
+    deps := List<String&>()
+    for i in range 3 {
+        for k in range 2 {
+            dep := "m" $(i * k)
+            if dep not in deps { deps.Push(dep) }
+        }
+    }
+    println($deps.Len() " " $load("src").Len())
+}

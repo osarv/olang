@@ -1,0 +1,45 @@
+# NEW behaviour, lost writes (E31b's get/set model): the element is copied out before the call and written back after
+# it, so any other write to the same element during the call - through a second copy of it, or by the callee reaching
+# the list by another path - is overwritten. An Array element is written in place and keeps both writes.
+#   expected (as the Array column): AddFrom 11, Touch 112; Remove leaves the one remaining element (N 50)
+#   actual (-b, -b -s, -b -d -s, -i agree): AddFrom: list 10 array 11
+#                                           Touch: list 11 array 112
+#                                           Remove: len 1 r[0].N 1  - the REMOVED element written over the survivor
+#   a2e2878: the field writes inside Touch/main are E31's error; l[0].AddFrom(l[0]) builds and drops both writes (r02).
+# Swift traps these as exclusivity violations; here they are silent.
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) AddFrom(b mut Acc&) {
+    a.N = a.N + 1
+    b.N = b.N + 10
+}
+fn (a mut Acc&) Touch(l mut List<Acc>&) {
+    a.N = a.N + 1
+    l[0].N = l[0].N + 100
+}
+fn (a mut Acc&) TouchArr(l mut Array<Acc>&) {
+    a.N = a.N + 1
+    l[0].N = l[0].N + 100
+}
+fn (a mut Acc&) Remove(l mut List<Acc>&) {
+    a.N = a.N + 1
+    x := l.RemoveAt(0)
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l[0].AddFrom(l[0])
+    arr := Array<Acc>(1)
+    arr[0].AddFrom(arr[0])
+    println("AddFrom: list " $l[0].N " array " $arr[0].N)
+    l[0].Touch(l)
+    arr[0].TouchArr(arr)
+    println("Touch: list " $l[0].N " array " $arr[0].N)
+    r := List<Acc>()
+    r.Push(Acc())
+    r.Push(Acc())
+    r[1].N = 50
+    r[0].Remove(r)
+    println("Remove: len " $r.Len() " r[0].N " $r[0].N)
+}

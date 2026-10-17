@@ -1,0 +1,23 @@
+G mut Vec<I64> = Vec<I64>()
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Runner trait {
+    Run()
+}
+type R struct() {
+}
+fn (r R&) Run() { for i in range 100 { G.Push(i) } }
+fn run(r <T Runner>&) { r.Run() }
+fn main() ? {
+    G.Push(1)
+    d := G.View()
+    run(R())
+    churn()
+    println($d[0])
+}

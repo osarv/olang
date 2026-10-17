@@ -1,0 +1,8 @@
+# one generic instantiation whose mangled name is between 200 and 256 characters long
+import "std/io"
+type AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<T> struct(v <T>) { v }
+type Wrap struct(w AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>) { w }
+fn main() ? {
+  x := Wrap(AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>>(AVeryLongGenericTypeNameThatIsStillPerfectlyOrdinaryInAnyRealCodebaseXXXXXXXXXXXXXXXXXXXX<I32>(7)))
+  try io.Print($x.w.v.v "\n")
+}

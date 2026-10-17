@@ -1,0 +1,93 @@
+# series - a time series: simple and exponential moving averages, a rolling window with a ring buffer, anomaly
+# detection by z-score, written with iterators and comprehensions.
+import "std/math"
+import "std/rand"
+
+N I64 = 100000
+
+# a rolling window of the last W values
+type Window<W I64> struct() {
+    buf Array<F64, W>
+    next I64 = 0
+    full Bool = false
+    sum F64 = 0.0
+    sumSq F64 = 0.0
+}
+
+fn (w mut Window<<W>>&) Push(x F64) {
+    if w.full {
+        old := w.buf[w.next]
+        w.sum -= old
+        w.sumSq -= old * old
+    }
+    w.buf[w.next] = x
+    w.sum += x
+    w.sumSq += x * x
+    w.next = (w.next + 1) % W
+    if w.next == 0 { w.full = true }
+}
+
+fn (w Window<<W>>&) Count() I64 { return W if w.full else w.next }
+fn (w Window<<W>>&) Mean() F64 { return w.sum / F64(w.Count()) }
+fn (w Window<<W>>&) StdDev() F64 {
+    n := F64(w.Count())
+    m := w.Mean()
+    return math.Sqrt(math.Max(w.sumSq / n - m * m, 0.0))
+}
+
+# an iterator giving the simple moving average over W points of an array, once W points are in
+type Sma<W I64> struct(src Array<F64>&) {
+    src
+    win Window<W> = Window<W>()
+    at I64 = 0
+}
+
+fn (s mut Sma<<W>>&) Next() F64 ? Exhausted {
+    for {
+        if s.at >= s.src.Len() { error Exhausted.END }
+        s.win.Push(s.src[s.at])
+        s.at++
+        if s.win.full { return s.win.Mean() }
+    }
+}
+
+fn ema(xs Array<F64>&, alpha F64) Array<F64> {
+    out := Array<F64>(xs.Len())
+    prev := xs[0]
+    for i, x in xs {
+        prev = alpha * x + (1.0 - alpha) * prev
+        out[i] = prev
+    }
+    return out
+}
+
+fn main() ? {
+    r := rand.Rand(5)
+    n := N
+    # a slow sine with noise and a few spikes
+    xs := F64[math.Sin(F64(i) / 500.0) * 10.0 + r.Normal() for i in range n]
+    for k in I64[1000, 25000, 77777] {
+        if k < n { xs[k] += 30.0 }
+    }
+
+    smooth := F64[v for v in Sma<50>(xs)]
+    println("sma points: " $smooth.Len() " first " $smooth[0].Fixed(4) " last " $smooth[smooth.Len() - 1].Fixed(4))
+    e := ema(xs, 0.1)
+    println("ema last " $e[n - 1].Fixed(4))
+
+    # anomalies: |x - mean| > 5 sd of the previous 200 points
+    w := Window<200>()
+    anomalies := List<I64>()
+    for i, x in xs {
+        if w.full and math.Abs(x - w.Mean()) > 5.0 * w.StdDev() { anomalies.Push(i) }
+        w.Push(x)
+    }
+    println("anomalies at " $anomalies.ToArray())
+
+    # differences and their mean, by comprehension
+    diffs := F64[xs[i] - xs[i - 1] for i in range 1, n]
+    meanDiff := diffs.Fold(0.0, fn(a, d) { return a + d }) / F64(diffs.Len())
+    println("mean diff " $meanDiff.Fixed(6))
+    big := I64[i for i in range diffs.Len() if math.Abs(diffs[i]) > 20.0]
+    println("big jumps " $big)
+}

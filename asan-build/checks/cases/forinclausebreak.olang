@@ -1,0 +1,17 @@
+# check: fail a loop's catch clause runs once the loop has ended
+# S9e: break in a for-in's catch clause
+error E {
+    X
+}
+type It struct() {
+    i mut I32 = 0
+}
+fn (t mut It&) Next() I32 ? E + Exhausted {
+    error E.X
+}
+fn main() ? {
+    for k in range 3 {
+        t It& = It()
+        for x in try t { } catch { break }
+    }
+}

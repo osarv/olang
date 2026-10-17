@@ -1,0 +1,21 @@
+# PRE-EXISTING (since 91ab3ba, decision 48's review fixes; 771a922 built it): a correct program is refused with
+# "'$par6' is declared twice" (in larger programs also a nonsense "expected Node&, found List<String&>&"). Parallel
+# assignments name their hidden locals "$par" from two counters: holdForRefTarget uses ++destructCounter, holdInHidden
+# ++hiddenCounter, so the two meet.
+#   6af6a4e, 04f4a4d: error: '$par6' is declared twice      771a922: 4 1
+type Node struct(v I64) {
+    v
+}
+fn mk(i I64) Node& {
+    return Node(i)
+}
+fn main() ? {
+    k I64 = 0
+    a mut Node& = Node(0)
+    l mut List<I64>& = List<I64>()
+    l, k = List<I64>(), 1
+    a, k = mk(2), k
+    a, k = mk(3), k
+    a, k = mk(4), k
+    println($a.v " " $k)
+}

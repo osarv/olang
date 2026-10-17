@@ -1,0 +1,28 @@
+# PRE-EXISTING (master accepts it and prints garbage too). A constructor keeps, in a reference field, a borrow of a match
+# binding: the binding reads as living at the constructor's top level, which in a constructor is the instance's scope -
+# but it is a stack slot of the constructor's frame. After the constructor returns, h.keep points into a dead frame.
+#     expected: 42 (-i, -d); actual -b: garbage bytes (stack-use-after-return)
+type P struct(v I64) { v }
+type E enum {
+    A(p P)
+    Z
+}
+fn borrow(b P&) P&b { return b }
+fn deep(n I64) I64 {
+    a := Array<I64, 64>()
+    for i in range 64 { a[i] = -7 }
+    if n == 0 { return a[3] }
+    return deep(n - 1) + a[5]
+}
+type H struct(e E) {
+    keep P& = P(0)
+    match e {
+        case E.A(y) { keep = borrow(y) }
+        case _ { }
+    }
+}
+fn main() ? {
+    h := H(E.A(P(42)))
+    deep(50)
+    println($h.keep.v)
+}

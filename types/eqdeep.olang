@@ -1,0 +1,24 @@
+# E10a: == calls a declared Eq at every depth - inside an inline array field, an enum payload, a nested struct
+import "std/io"
+type P struct(v I32) { v mut }
+fn (a P) Eq(b P) Bool { return a.v % 10 == b.v % 10 }
+type S struct() {
+  ps mut Array<P> = Array<P>(2, P(0))
+  tag mut I32 = 0
+}
+type E enum {
+  One(p P)
+  Two(a I32, p P)
+}
+type Outer struct(s S) { s }
+fn main() ? {
+  x := S()
+  y := S()
+  x.ps[0] = P(13)
+  y.ps[0] = P(3)
+  e1 := E.Two(1, P(21))
+  e2 := E.Two(1, P(1))
+  o1 := Outer(x)
+  o2 := Outer(y)
+  try io.Print($(x == y) " " $(e1 == e2) " " $(o1 == o2) " " $(x.ps == y.ps) "\n")
+}

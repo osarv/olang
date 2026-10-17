@@ -1,0 +1,4 @@
+# check: fail error[B12a]
+# flags: -a aarch64-linux-gnu
+# B12a: another architecture is built for with -c only, and only where clang can compile the runtime's code for it
+fn main() ? { }

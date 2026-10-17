@@ -1,0 +1,27 @@
+type S struct(a Array<F64>&, b Array<I32>&) { a, b }
+fn t1() Bool { return S(F64[1.0], I32[2]) == S(F64[1.0], I32[2]) }
+fn t2() Bool { return S(F64[0.0 / 0.0], I32[2]) == S(F64[0.0 / 0.0], I32[2]) }
+fn t3() Bool { return S(null, I32[2]) == S(null, I32[2]) }
+fn t4() Bool { return S(null, I32[2]) == S(F64[], I32[2]) }
+fn t5() Bool {
+    x := S(F64[-0.0], I32[2])
+    y := S(F64[0.0], I32[2])
+    return x == y
+}
+fn t6() Bool {
+    h := Map<Array<I32>&, I32>()
+    k1 Array<I32>& = I32[1, 2]
+    h.Put(k1, 5)
+    k2 Array<I32>& = I32[1, 2]
+    return k2 in h and (try h.Get(k2) catch default 0) == 5
+}
+B1 := t1()
+B2 := t2()
+B3 := t3()
+B4 := t4()
+B5 := t5()
+B6 := t6()
+fn main() ? {
+    println("baked " $B1 " " $B2 " " $B3 " " $B4 " " $B5 " " $B6)
+    println("run   " $t1() " " $t2() " " $t3() " " $t4() " " $t5() " " $t6())
+}

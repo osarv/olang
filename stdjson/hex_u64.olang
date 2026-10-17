@@ -1,0 +1,6 @@
+# a hex literal with the top bit set is an I64 bit pattern (L10a) and does not fit U64 - U64 constants such as
+# 0x8000000000000000 need U64(0x8000000000000000) or an I64 table converted on use
+fn main() ? {
+    x U64 = 0x8000000000000000
+    assert x != 0
+}

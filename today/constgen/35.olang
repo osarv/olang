@@ -1,0 +1,7 @@
+# G22: for-in variable named like the constant
+fn f(a Array<I64, <N>>&) I64 {
+    s I64 = 0
+    for N in a { s = s + N }
+    return s
+}
+fn main() ? { println($f(I64[1, 2])) }

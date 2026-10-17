@@ -1,0 +1,24 @@
+# a temporary stored through a reference field of a BY-VALUE parameter is built in the callee's own scope (UAF)
+type N struct(v I64) {
+    v
+    next mut N& = null
+}
+type Box struct(n mut N&) { n }
+fn grow(b Box) { b.n.next = N(9) }
+fn growRef(n mut N&) { n.next = N(8) }
+fn churn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        s = s + a[3]
+    }
+    return s
+}
+fn main() ? {
+    root mut N& = N(1)
+    other mut N& = N(2)
+    grow(Box(root))
+    growRef(other)
+    c := churn()
+    println("expected 9 8, got " $root.next.v " " $other.next.v)
+}

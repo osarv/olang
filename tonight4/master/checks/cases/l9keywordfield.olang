@@ -1,0 +1,6 @@
+# check: fail error[L9]: 'done' is a keyword, not a name - choose another
+# L9: "done" beginning a line ends the statement there, so a field named "done" read as two statements
+type Task struct() {
+    done mut Bool = false
+}
+fn main() ? { }

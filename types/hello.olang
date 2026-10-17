@@ -1,0 +1,6 @@
+import "std/io"
+fn main() ? {
+  x := 3
+  y I64 = x
+  try io.Print($y "\n")
+}

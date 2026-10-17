@@ -1,0 +1,13 @@
+fn compose(f fn(x I64) I64, g fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return g(f(x)) }
+}
+fn twice(f fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return f(f(x)) }
+}
+fn inc(x I64) I64 { return x + 1 }
+fn main() ? {
+    h := twice(inc)
+    assert h(1) == 3
+    k := compose(inc, h)
+    assert k(1) == 4
+}

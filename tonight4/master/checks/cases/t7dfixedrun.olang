@@ -1,0 +1,11 @@
+# check: run
+# T7d/E32b: a checked copy, a checked view, and a fixed array meeting a run-time one in "==" - all at run time
+fn main() ? {
+    r := Array<I32>(3, 4)
+    f Array<I32, 3> = r
+    assert f == r and f[2] == 4
+    v := try (r as Array<I32, 3>&) catch default I32[0, 0, 0]
+    assert v[0] == 4
+    w := try (r as Array<I32, 2>&) catch default I32[5, 5]
+    assert w[1] == 5
+}

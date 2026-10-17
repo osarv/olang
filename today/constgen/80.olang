@@ -1,0 +1,13 @@
+# O26/C2d with a constant generic: an instance holding a reference to a local, returned
+type Win<N I64> struct(src Array<I64>&) {
+    src
+    buf mut Array<I64, N>
+}
+fn make() Win<4> {
+    local := Array<I64>(10, 3)
+    return Win<4>(local)
+}
+fn main() ? {
+    w := make()
+    println($w.src.Len())
+}

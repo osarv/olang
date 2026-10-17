@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/l4.olang:17:16: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+   17 |         return t2
+      |                ^~
+compilation failed with 1 error

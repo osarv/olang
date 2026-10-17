@@ -1,0 +1,23 @@
+Dropped mut I64 = 0
+Run mut I64 = 1
+type Conn struct(fd I64) { fd } destruct { Dropped++ }
+type Server struct() {
+    a own mut Conn&
+    b own mut Conn&
+}
+fn swap(s mut Server&) {
+    t := take s.a
+    s.a = take s.b
+    s.b = take t
+}
+fn main() ? {
+    {
+        s := Server()
+        s.a = Conn(1 * Run)
+        s.b = Conn(2 * Run)
+        swap(s)
+        assert s.a.fd == 2 and s.b.fd == 1
+    }
+    assert Dropped == 2
+    println($Dropped)
+}

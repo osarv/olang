@@ -1,0 +1,22 @@
+import "std/io"
+fn show(a Array<String&>&) String {
+    b := StringBuilder()
+    for s in a { b.Push("[" $s "]") }
+    return b.ToString()
+}
+fn t(k I32) String {
+    s String& = "a,,b," $k
+    e String& = ""
+    p1 := try "  -42 ".Trim().ParseInt() catch default 1
+    p2 := try "-9223372036854775808".ParseInt() catch default 2
+    p3 := try "9223372036854775808".ParseInt() catch default 3
+    p4 := try "+".ParseInt() catch default 4
+    p5 := try "".ParseInt() catch ParseError.EMPTY default 5 catch default 55
+    p6 := try "0012".ParseInt() catch default 6
+    return $show(s.Split(",")) " " $show(e.Split(",")) " " $show("abc".Split("")) " " $show(s.Split(",,")) " " $s.Find("") " " $e.Find("x") " " $"aaa".Find("aa") " " $s.StartsWith("") " " $e.EndsWith("") " " $p1 " " $p2 " " $p3 " " $p4 " " $p5 " " $p6 " " $"   ".Trim().Len() " " $"ab".Compare("abc") " " $("b" in "abc") " " $(e in s)
+}
+B String = t(7)
+M mut I32 = 7
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

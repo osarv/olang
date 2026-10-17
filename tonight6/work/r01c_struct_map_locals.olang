@@ -1,0 +1,27 @@
+# BUG (r01): the same through a returned local struct and a returned local Map; every entry reads the last turn.
+type Box struct(s String&) { s }
+fn arr(s String&) Array<String&> {
+    a := Array<String&>(1, s)
+    return a
+}
+fn box(s String&) Box {
+    b := Box(s)
+    return b
+}
+fn mp(s String&) Map<I64, String&> {
+    m := Map<I64, String&>()
+    m.Put(0, s)
+    return m
+}
+
+fn main() ? {
+    bs := List<Box>()
+    ms := List<Map<I64, String&>>()
+    for k in range 4 {
+        t := $k "-some-text-of-moderate-length"
+        bs.Push(box(t))
+        ms.Push(mp(t))
+    }
+    for b in bs { println($b.s) }
+    for m in ms { println($(try m.Get(0))) }
+}

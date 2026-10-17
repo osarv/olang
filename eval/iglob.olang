@@ -1,0 +1,11 @@
+import "std/io"
+fn dbl(x I32) I32 { return x * 2 }
+fn tri(x I32) I32 { return x * 3 }
+F mut fn(x I32) I32 = dbl
+G fn(x I32) I32 = tri
+Early mut I32 = Late + 1
+Late I32 = Mut2 + 10
+Mut2 mut I32 = 5
+fn main() ? io.IoError {
+    try io.Print($F(4) " " $G(4) " " $Early " " $Late "\n")
+}

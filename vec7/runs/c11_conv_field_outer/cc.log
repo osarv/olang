@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/c11_conv_field_outer.olang:14:8: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
+   14 |     if true {
+      |        ^~~~
+/home/user/review/vec7/work/c11_conv_field_outer.olang:17:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+   17 |         h.s = String(v.View())
+      |             ^
+compilation failed with 2 errors

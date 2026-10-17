@@ -1,0 +1,23 @@
+# r06 OVER-REJECTION - O17 (O25h): the element a for-in copies out of an array of Maps cannot be passed to a READ-ONLY
+# parameter: "for p in parts { merge(total, p) }" is O17, while the indexed "merge(total, parts[i])" compiles. (A merge
+# step of a parallel word count.)
+#
+# expected: 2
+# actual: error[O17] at line 20, column 33 (the argument p). (A value array of maps needs a fill, which is r01.)
+fn countWords(words Array<String&>&) Map<String&, I64> {
+    m := Map<String&, I64>()
+    for w in words { m.Update(w, 0, fn(n I64) I64 { return n + 1 }) }
+    return m
+}
+fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
+    for e in from { into.Put(e.Key, e.Value) }
+}
+fn total(words Array<String&>&) I64 {
+    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())
+    parts[0] = countWords(words)
+    parts[1] = countWords(words)
+    sum := Map<String&, I64>()
+    for p in parts { merge(sum, p) }
+    return sum.Len()
+}
+fn main() ? { println($total(String&["x", "y", "x"])) }

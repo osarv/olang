@@ -1,0 +1,36 @@
+# M1: a module is one file. This file and measure.olang sit in one directory, which groups them and names
+# them ("geom/rect", "geom/measure") and nothing more: each imports what it uses of the other (M22), by a
+# path relative to its own directory (M23).
+
+import "measure"
+
+type Rect struct(W I32, H I32) {
+    W
+    H
+}
+
+fn Square(side I32) Rect {
+    return Rect(side, side)
+}
+
+test "a function in one file calls one declared in its neighbour, through an import" {
+    assert measure.Area(Square(3)) == 9
+}
+
+# B9a: a top-level condition reads a global of an imported module (measure.olang)
+if measure.GeomUnits == "cm" {
+    fn UnitName() String& { return "cm" }
+} else {
+    fn UnitName() String& { return "mm" }
+}
+
+# G19: Map's key constraint, met by methods of a module resolved after this one
+fn TagCount(m Map<measure.Tag&, I32>&) I64 { return m.Len() }
+
+test "a Map keyed by a neighbour's type, named in a signature here" {
+    m := Map<measure.Tag&, I32>()
+    m.Put(measure.Tag("apple"), 1)
+    m.Put(measure.Tag("avocado"), 2)        # the same key by Tag's Eq: the first letter
+    m.Put(measure.Tag("pear"), 3)
+    assert TagCount(m) == 2 and (try m.Get(measure.Tag("ax")) catch default 0) == 2
+}

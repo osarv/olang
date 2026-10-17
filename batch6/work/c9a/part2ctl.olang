@@ -1,0 +1,40 @@
+# C9a + P2: what a destructor's task builds into the closing scope goes into a part made after the parts were folded.
+# Its destructors do not run at that close; if the scope's header is closed again (a loop body), they run then, reading
+# what they hold - storage the earlier close already gave back
+Log mut I64 = 0
+type Node struct(v I64) {
+    v
+}
+type Tracker struct(n Node&) {
+    n
+} destruct {
+    Log = Log + n.v
+}
+type Box struct(v I64) {
+    node mut Node& = Node(v)
+    keep mut List<Tracker&>& = List<Tracker&>()
+}
+type Res struct(k I64) {
+    k
+} destruct {
+    b mut Box& = Box(k * 1000 + 7)
+    b.keep.Push(Tracker(b.node))
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i)
+        t = t + nn.v
+    }
+    return t
+}
+fn main() ? {
+    for i in range 4 {
+        r Res& = Res(i + 1)
+        churn()
+        println($Log)
+    }
+    println($Log)
+}

@@ -1,0 +1,7 @@
+# M6a: a private field read across a module boundary
+import "lib"
+import "std/io"
+fn main() ? {
+  r := lib.MakeRec()
+  try io.Print($r.secret "\n")
+}

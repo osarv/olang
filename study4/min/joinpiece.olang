@@ -1,0 +1,5 @@
+fn main() ? {
+    mark := "!"
+    n := 5
+    println("a " $n mark "b")
+}

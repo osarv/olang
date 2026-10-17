@@ -1,0 +1,41 @@
+# r02 BUG (silent wrong behaviour; a spec claim that does not hold) - SPEC T2b: reading through a null reference is
+# undefined behaviour, "in practice a deterministic trap, address zero being unmapped". Under the default build
+# (-O3 + LTO) LLVM inlines Peek, proves the field null, and deletes everything from the read on - including the
+# function's return - so control falls off the end of the program's main into the next function in the binary, the
+# C main that calls it: the program prints its first two lines again and again, forever. Peeking an empty stack is
+# the commonest null bug there is.
+#   objdump: null5_main ends "call std_prelude_print_println; nopw" with no ret, and <main> follows.
+# Variants in ../min: null4.olang (the empty peek first) prints nothing and exits with status 48; null1.olang
+# ("p P& = null; println($p.x)") prints 20 garbage bytes and exits 0; null3.olang prints an earlier line twice.
+# Where the null comes through a search the compiler cannot see through (min/null2.olang), the trap happens.
+# -d traps (status 139) in every variant; -i stops with "it reads through a null reference".
+#
+# expected: start / after a push: 4 / then a trap (status 139), as -d gives - and as -b gives with LLVM's
+#           null_pointer_is_valid attribute on the module's functions (tried by hand on this IR: 139)
+# actual  -b: "start" and "after a push: 4" repeated without end (9,091 times in 2 seconds), never a trap
+type Node struct(v I64, next Node&) {
+    v
+    next
+}
+
+type Stack struct() {
+    top Node& = null
+    n I64 = 0
+}
+
+fn (s mut Stack&) Push(v I64) {
+    s.top = Node(v, s.top)
+    s.n++
+}
+
+fn (s Stack&) Peek() I64 { return s.top.v }
+
+fn main() ? {
+    println("start")
+    s := Stack()
+    s.Push(4)
+    println("after a push: " $s.Peek())
+    t := Stack()
+    println("peek of an empty stack: " $t.Peek())
+    println("end")
+}

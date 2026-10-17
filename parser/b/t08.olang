@@ -1,0 +1,12 @@
+# constructor bare puns, mut puns on one line each, a one-line ctor
+type P struct(x I32, y I32) {
+    x mut
+    y
+}
+type Q struct(a I32) { a }
+test "a" {
+    p := P(1, 2)
+    p.x = 5
+    assert p.x == 5 and p.y == 2
+    assert Q(3).a == 3
+}

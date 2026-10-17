@@ -1,0 +1,6 @@
+ring by runs: 20 30 40 50 60
+over 25: I32[30, 40, 50, 60], count 3
+fold: 200
+oldest 20, now 4 of 5
+mean 21.90 min 20.63@3 max 23.02@1 steady seen 200 dropped 184
+baked: mean 21.90 min 20.63@3 max 23.02@1 steady seen 200 dropped 184

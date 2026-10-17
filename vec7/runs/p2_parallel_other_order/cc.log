@@ -1,0 +1,10 @@
+/home/user/review/vec7/work/p2_parallel_other_order.olang:22:21: error[O34]: a local of Vec<String&>, which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one
+   22 |     p.lx.more, p.lx = take p.lx.toks, take p.other
+      |                     ^
+/home/user/review/vec7/work/p2_parallel_other_order.olang:22:21: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   22 |     p.lx.more, p.lx = take p.lx.toks, take p.other
+      |                     ^
+/home/user/review/vec7/work/p2_parallel_other_order.olang:22:21: error[O34]: an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this is not one
+   22 |     p.lx.more, p.lx = take p.lx.toks, take p.other
+      |                     ^
+compilation failed with 3 errors

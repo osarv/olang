@@ -1,0 +1,29 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# held? a return in a "try x[i] = v" statement's clause (R21)
+fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn g(k I64) I64 ? {
+    if k < 5 { error }
+    return k
+}
+fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {
+    out mut Array<I64>&return = Array<I64>(2)
+    try out[5] = 1 catch { return pick(true, a, b) }
+    return out
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    other mut Array<I64>& = Array<I64>(1)
+    d := longer(v.ViewMut(), other)
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0] " " $d[1])
+}

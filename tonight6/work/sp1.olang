@@ -1,0 +1,19 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() {
+    for i in range 1000000 { a.N++ }
+}
+fn bump(a mut Acc&) {
+    for i in range 1000000 { a.N++ }
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    join {
+        spawn l[0].Add()
+        spawn bump(l[1])
+    }
+    println("l[0].N=" $l[0].N " l[1].N=" $l[1].N)
+}

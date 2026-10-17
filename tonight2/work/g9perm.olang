@@ -1,0 +1,9 @@
+type P struct(v I64) { v }
+fn main() ? {
+    pts := P&[P(1), P(2)]
+    r := pts.Fold(0, fn(acc I64, x mut P&) I64 {
+        x.v = 99
+        return acc + x.v
+    })
+    println($r " " $pts[0].v)
+}

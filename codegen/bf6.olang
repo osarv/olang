@@ -1,0 +1,27 @@
+import "std/io"
+
+error E {
+    BAD
+}
+
+fn r4(y BF16) (F16, BF16, U64) ? E {
+    if y > BF16(100.0) { error E.BAD }
+    return F16(1.0), y + BF16(1.0), 3
+}
+
+fn r5(y BF16) (BF16, U64) ? E {
+    if y > BF16(100.0) { error E.BAD }
+    return y + BF16(1.0), 3
+}
+
+fn r6(y F16) (F16, F16, U64) ? E {
+    if y > F16(100.0) { error E.BAD }
+    return F16(1.0), y + F16(1.0), 3
+}
+
+fn main() ? io.IoError + E {
+    a, b, c := try r4(BF16(3.0))
+    d, e := try r5(BF16(3.0))
+    g, h, i := try r6(F16(3.0))
+    try io.Print($a " " $b " " $c " " $d " " $e " " $g " " $h " " $i "\n")
+}

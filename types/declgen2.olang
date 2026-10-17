@@ -1,0 +1,6 @@
+import "std/io"
+type Names List<String&>
+fn main() ? {
+  n := Names()
+  try io.Print($n.count "\n")
+}

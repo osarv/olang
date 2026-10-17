@@ -1,0 +1,14 @@
+# D15: "an expression whose type is an Array<T, N> declares that type" - from a variable, a call, a field
+type S struct() { f mut Array<I32, 3> }
+fn mk() Array<I32, 3> { return I32[1, 2, 3] }
+fn takeFixed(a Array<I32, 3>&) I64 { return a.Len() }
+fn gen(a <T>) <T> { return a }
+fn main() ? {
+    x Array<I32, 3> = I32[1, 2, 3]
+    s := S()
+    a := x
+    b := mk()
+    c := s.f
+    d := gen(x)
+    println($takeFixed(a) $takeFixed(b) $takeFixed(c) $takeFixed(d))
+}

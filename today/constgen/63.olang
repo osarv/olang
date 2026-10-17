@@ -1,0 +1,17 @@
+# G26 in a constructor body, on an enum and on N
+type Layout enum {
+    RowMajor
+    ColMajor
+}
+type Buf<L Layout, N I64> struct() {
+    d mut Array<I64, N>
+    tag I64 = 1 if L == Layout.RowMajor else 2
+    if N > 2 {
+        d[2] = 7
+    }
+}
+fn main() ? {
+    a := Buf<Layout.RowMajor, 3>()
+    b := Buf<Layout.ColMajor, 1>()
+    println($a.tag " " $a.d " " $b.tag " " $b.d)
+}

@@ -1,0 +1,6 @@
+# check: fail error[S4c]: 2 targets need as many values, found 3
+# S4c: values and targets pair one to one
+fn main() ? {
+    a, b := 1, 2
+    a, b = 3, 4, 5
+}

@@ -1,0 +1,9 @@
+# lambda in main doing == inside a prelude generic
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    xs := pv.Tag[a, b]
+    println($xs.Any(fn(t pv.Tag) Bool { return t == b }))
+}

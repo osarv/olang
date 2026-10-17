@@ -1,0 +1,2 @@
+type Pair struct() { }
+fn main() ? { }

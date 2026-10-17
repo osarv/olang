@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/l4_vec_part_of_copy.olang:8:13: error[O32]: 'c.v' belongs to what 't' was copied from - assign it there
+    8 |         c.v = Vec<I64>(8)
+      |             ^
+compilation failed with 1 error

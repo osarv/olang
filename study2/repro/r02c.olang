@@ -1,0 +1,29 @@
+# r02c BUG (use-after-free accepted): same as r02, with the local filled through a method taking "mut Box&" and then
+# returned by value - compiles, segfaults. Filling it directly in the function (b.items.Push) IS rejected (O26).
+type Box struct(name String&) {
+    name
+    items mut List<I64>
+}
+fn (b mut Box&) fill() {
+    for i in range 100 { b.items.Push(i) }
+}
+fn make(name String&) Box {
+    b := Box(name)
+    b.fill()
+    return b
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 100 {
+        a := Array<I64>(64, 7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    b := make("x")
+    x := churn()
+    s I64 = 0
+    for v in b.items { s += v }
+    println($x " " $s)
+}

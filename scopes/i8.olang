@@ -1,0 +1,23 @@
+# y := try w.items[0] - the SEQ-held At result: what scope does y take? Then build through it.
+import "std/io"
+type Node struct(v I32) {
+    v mut
+    next mut Node& = null
+}
+type World struct() { items mut List<mut Node&>& = List<mut Node&>() }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    w World& = World()
+    w.items.Push(Node(5))
+    for i in range 2 {
+        y := try w.items[0]
+        y.next = Node(42)
+    }
+    churn()
+    try io.Print($w.items[0].next.v "\n")
+}

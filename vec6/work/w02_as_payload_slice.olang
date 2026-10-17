@@ -1,0 +1,20 @@
+type E enum {
+    A(xs Array<I64, 4>)
+    B
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    v := Vec<E>()
+    v.Push(E.A(I64[1, 2, 3, 4]))
+    sl := (v.View()[0] as E.A)[0:2]
+    for i in range 100 { v.Push(E.B) }
+    churn()
+    println($sl[0])
+}

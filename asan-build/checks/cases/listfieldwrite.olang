@@ -1,0 +1,13 @@
+# check: fail this writes into a value a call gave back
+# E31: a List's At gives a copy of the element, so writing a field of "l[i]" would change only that copy - the whole
+# element is stored instead, "l[i] = v"
+
+type P struct(x I32) {
+    x mut
+}
+
+fn main() ? {
+    l := List<P>()
+    l.Push(P(1))
+    l[0].x = 5
+}

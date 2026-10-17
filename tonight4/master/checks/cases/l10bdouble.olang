@@ -1,0 +1,5 @@
+# check: fail error[L10b]: '_' in a number must stand between two digits
+# L10b: one separator between two digits, not two
+fn main() ? {
+    x := 1__000
+}

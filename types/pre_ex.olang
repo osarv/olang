@@ -1,0 +1,2 @@
+error Exhausted { X }
+fn main() ? { }

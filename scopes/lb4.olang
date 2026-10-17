@@ -1,0 +1,17 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    No
+}
+G mut Node& = null
+fn stash(b Box, l mut List<Node&>&) {
+    match b {
+        case Box.Has(n) {
+            G = n
+            l.Push(n)
+        }
+        nomatch { }
+    }
+}
+fn main() ? { }

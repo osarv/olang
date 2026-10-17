@@ -1,0 +1,17 @@
+import "ownlib"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    f := ownlib.Eat
+    b own mut ownlib.Box& = ownlib.Box()
+    d := b.Data
+    k := f(take b)
+    churn()
+    println($d[0] " " $k)
+}

@@ -1,0 +1,25 @@
+# PRE-EXISTING E31b hole (base too): x[i] - a List's copy - passed for a "mut &" parameter of a call through a function
+# value that is not a plain name (E13b: a field's function value "h.fv(...)", an element "fs[0](...)", a call's result
+# "bumper()(...)") goes through no E31b check at all: the copy is a temporary and every write is silently lost
+# (List N stays 0; the Array spelling gives 1, 10, 1). "g(l[0])" through a local or a parameter is E31b's error.
+type Acc struct() {
+    N I64 = 0
+}
+type H struct(fv fn(c mut Acc&)) {
+    fv
+}
+fn bumper() fn(c mut Acc&) { return fn(c mut Acc&) { c.N++ } }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    h := H(fn(c mut Acc&) { c.N++ })
+    fs := Array<fn(c mut Acc&)>(1, fn(c mut Acc&) { c.N += 10 })
+    h.fv(l[0])
+    fs[0](l[0])
+    bumper()(l[0])
+    a := Acc[Acc(), Acc(), Acc()]
+    h.fv(a[0])
+    fs[0](a[1])
+    bumper()(a[2])
+    println("list N " $l[0].N " / array N " $a[0].N " " $a[1].N " " $a[2].N)
+}

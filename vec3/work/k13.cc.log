@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/k13.olang:14:10: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |     d := longer(b.buf, other)        # b's own buffer, no loan kept
+      |          ^~~~~~
+/home/user/review/vec3/work/k13.olang:10:67: note: the callee requires it because of this statement
+   10 | fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return pick(a.Len() >= b.Len(), a, b) }
+      |                                                                   ^~~~~~
+compilation failed with 1 error

@@ -1,0 +1,20 @@
+type P struct(v I64) {
+    v
+}
+fn mk() P& {
+    a mut P& = P(0)
+    k I64 = 0
+    a, k = P(5), 1
+    return a
+}
+fn deep(n I64) I64 {
+    x := Array<I64, 64>()
+    for i in range 64 { x[i] = -7 }
+    if n == 0 { return x[3] }
+    return deep(n - 1) + x[5]
+}
+fn main() ? {
+    r := mk()
+    deep(20)
+    println($r.v)
+}

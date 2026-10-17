@@ -1,0 +1,22 @@
+# check: fail error[D13c]: Ticket has no zero value, so this needs one
+# also: :18:20: error[D13c]
+# also: note: 'Chan<Ticket&>' holds it by reference, whose zero value is null
+# also: :20:12: error[D13c]
+# also: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
+# D13c/B11: a library's need for a zero value is reported at the program's type argument, naming the reference to hold
+import "std/chan"
+Counter mut I64 = 0
+type Ticket struct(n I64) {
+    id I64 = next(n)
+}
+fn next(n I64) I64 {
+    Counter++
+    return Counter + n
+}
+fn main() ? {
+    a := Ticket[Ticket(1), Ticket(2)]
+    c := chan.Chan<Ticket>(4)
+    assert a.Len() == 2
+    b := a.Repeat(2)
+    assert b.Len() == 4
+}

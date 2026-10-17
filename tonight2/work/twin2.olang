@@ -1,0 +1,34 @@
+type G<T> struct(seed T) {
+    seed
+    n I64 = 0
+}
+type Layer struct(g mut G<<T>>&, buf mut Array<I64>&) {
+    buf
+    width I64 = buf.Len()
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn mk(g mut G<I64>&) Layer {
+    b := Array<I64>(4, 9)
+    return Layer(g, b)
+}
+fn main() ? {
+    gf := G<F32>(0.5)
+    gi := G<I64>(3)
+    l := Layer(gf, Array<I64>(3, 1))
+    {
+        b := Array<I64>(4, 7)
+        l = Layer(gi, b)
+    }
+    k := mk(gi)
+    churn()
+    println($l.buf[0] " " $l.width " " $k.buf[0])
+}

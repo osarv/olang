@@ -1,0 +1,65 @@
+# O4b/O25h (pre-existing - db2af5d gives the same): a match binding or an "as" that copies a by-value payload holding
+# references out of an enum the function was handed - by value (O4b: "a payload bound by match or taken by as ... lives
+# there", the parameter's scope variable) or by reference (O25h: "where the referent is") - gives the copy's references
+# its own block. A store through them then builds in the callee's block. Reading a reference out (case E.R(n)) is right.
+# expected: 42 42 42
+# actual:   -b and -d print "-7 -7 -7", -i prints "42 42 42"
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+type E enum {
+    A(b Box)
+    Z
+}
+fn byValueMatch(e E) {
+    match e {
+        case E.A(b) {
+            b.head.next = Node()
+            b.head.next.v = 42
+        }
+        case E.Z { }
+    }
+}
+fn byValueAs(e E) {
+    b := e as E.A
+    b.head.next = Node()
+    b.head.next.v = 42
+}
+fn byRefMatch(e mut E&) {
+    match e {
+        case E.A(b) {
+            b.head.next = Node()
+            b.head.next.v = 42
+        }
+        case E.Z { }
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w1 := W(Box())
+    w2 := W(Box())
+    w3 := W(Box())
+    e1 := E.A(w1.b)
+    e2 := E.A(w2.b)
+    e3 := E.A(w3.b)
+    byValueMatch(e1)
+    byValueAs(e2)
+    byRefMatch(e3)
+    churn()
+    println($w1.b.head.next.v " " $w2.b.head.next.v " " $w3.b.head.next.v)
+}

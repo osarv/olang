@@ -1,0 +1,17 @@
+type In struct() {
+    k I64 = 0
+}
+type E enum {
+    A(x In)
+    B
+}
+fn poke(p mut In&) { p.k++ }
+fn main() ? {
+    e mut E& = E.A(In())
+    poke(e as E.A)
+    println("as through ref: " $e)
+    f mut E& = E.A(In())
+    c := e is E.A
+    poke((e if c else f) as E.A)
+    println("as of cond: " $e $f)
+}

@@ -1,0 +1,27 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn perm(a mut Array<String&>&, b Array<String&>&a) {
+    t := b[0]
+    a[0] = t
+}
+fn fill(v mut Vec<String&>&) {
+    k := 7
+    other := Array<String&>(2)
+    other[0] = $k "-short-lived-text-built-in-this-block"
+    other[1] = "x"
+    perm(v.ViewMut(), other)
+}
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("long")
+    v.Push("lived")
+    fill(v)
+    churn()
+    println(v[0])
+}

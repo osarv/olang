@@ -1,0 +1,7 @@
+# S18c/S17: a message that itself fails a check while compiling
+fn pure(n I32) I32 { return n * 2 }
+fn main() ? {
+    a := I32[1, 2]
+    assert pure(3) == 7, "slice " $a[5:9]
+    println("x")
+}

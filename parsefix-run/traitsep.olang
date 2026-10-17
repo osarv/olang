@@ -1,0 +1,9 @@
+type Sh trait { Area() I32 Perim() I32 }
+type Sq struct(s I32) { s }
+fn (q Sq&) Area() I32 { return q.s * q.s }
+fn (q Sq&) Perim() I32 { return 4 * q.s }
+fn both(x <T Sh>&) I32 { return x.Area() + x.Perim() }
+test "x" {
+    q Sq& = Sq(2)
+    assert both(q) == 12
+}

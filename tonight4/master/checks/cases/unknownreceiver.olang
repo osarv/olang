@@ -1,0 +1,14 @@
+# check: fail unknown type 'Missing'
+# also: compilation failed with 2 errors
+# never: cannot be a reference
+# never: only the prelude declares methods
+# never: [S8a]
+# one misspelled type is one error where it is written: not also "I32 cannot be a reference", not a method "of I32",
+# and a call on a value of it gives nothing a fixed local's condition could be decided from (S8a)
+fn (e Missing&) eval() F64 { return 1.0 }
+fn f(e Missing&) F64 {
+    d := e.eval()
+    if d == 0.0 { return 0.0 }
+    return d
+}
+fn main() ? { }

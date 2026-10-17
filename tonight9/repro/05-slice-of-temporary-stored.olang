@@ -1,0 +1,33 @@
+# PRE-EXISTING (45eea97 alike), the general form behind 03b. A slice of an inline array field of a VALUE temporary
+# ('Big(n).a[0:2]', Big returned by value) is accepted into a reference that outlives the statement - a parameter's
+# field here - though the temporary is frame storage of 'set': the stack when small, the function's own scope (T7c) when
+# over 64KB. Both are gone when 'set' returns.
+#   expected: "8 190" (-i prints that)
+#   actual:   -b and -d -s "0 190" (a dead stack slot); with Array<I64, 4> -> Array<I64, 20000>: -b "8 190" by luck,
+#             -d -s "use after scope closed: storage a closed scope gave back was read or written", status 134
+type Big struct(n I64) {
+    a Array<I64, 4>
+    a[0] = n
+    a[1] = n + 1
+}
+type H struct(k I64) {
+    k
+    r Array<I64>& = null
+}
+fn set(h mut H&, n I64) {
+    h.r = Big(n).a[0:2]
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 20 {
+        t := Array<I64>(300, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    h mut H& = H(1)
+    set(h, 7)
+    x := churn()
+    println($h.r[1] " " $x)
+}

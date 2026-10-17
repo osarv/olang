@@ -1,0 +1,24 @@
+# PRE-EXISTING (base too): a plain over-64KB temporary (At's result) read in a loop's condition grows the enclosing
+# block's arena by 72KB per evaluation
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    big Big = Big()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+Cnt mut I64 = 0
+fn next() I64 {
+    Cnt++
+    return Cnt
+}
+fn main() ? {
+    s := Vs(Array<I64>(8))
+    for s[0].n + next() < 5000 { }
+    println($Cnt)
+}

@@ -1,0 +1,672 @@
+# interp - a tree-walking interpreter for "mini", a small dynamically typed language.
+# Lexer -> parser into an enum tree -> evaluator with environments (Maps of values, chained to a parent),
+# first-class closures, lists, strings. Ends with a garbage-heavy loop.
+
+error LexError {
+    BAD_CHAR
+    UNTERMINATED
+}
+
+error ParseFail {
+    UNEXPECTED
+}
+
+error RunError {
+    UNDEFINED
+    TYPE
+    ARITY
+    INDEX
+}
+
+# ---- tokens ----
+
+type Tok enum {
+    Num
+    Str
+    Ident
+    Kw
+    Op
+    End
+}
+
+type Token struct(kind Tok, text String&, line I64) {
+    kind
+    text
+    line
+}
+
+Keywords := String&["let", "fn", "if", "else", "while", "return", "print", "true", "false", "nil", "and", "or", "not"]
+
+fn isIdentChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+fn lex(src String&) List<Token> ? LexError {
+    toks := List<Token>()
+    i I64 = 0
+    line I64 = 1
+    for i < src.Len() {
+        c := src[i]
+        if c == '\n' {
+            line++
+            i++
+            continue
+        }
+        if c.IsSpace() {
+            i++
+            continue
+        }
+        if c == '#' {
+            for i < src.Len() and src[i] != '\n' { i++ }
+            continue
+        }
+        start := i
+        if c.IsDigit() {
+            for i < src.Len() and (src[i].IsDigit() or src[i] == '.') { i++ }
+            toks.Push(Token(Tok.Num, src[start:i], line))
+            continue
+        }
+        if c.IsLetter() or c == '_' {
+            for i < src.Len() and isIdentChar(src[i]) { i++ }
+            word := src[start:i]
+            kind := Tok.Kw if word in Keywords else Tok.Ident
+            toks.Push(Token(kind, word, line))
+            continue
+        }
+        if c == '"' {
+            i++
+            for i < src.Len() and src[i] != '"' { i++ }
+            if i >= src.Len() { error LexError.UNTERMINATED }
+            toks.Push(Token(Tok.Str, src[start + 1:i], line))
+            i++
+            continue
+        }
+        two := src[i:i + 2] if i + 2 <= src.Len() else ""
+        if two == "==" or two == "!=" or two == "<=" or two == ">=" {
+            toks.Push(Token(Tok.Op, two, line))
+            i += 2
+            continue
+        }
+        if c in "+-*/%<>=(){}[],;" {
+            toks.Push(Token(Tok.Op, src[i:i + 1], line))
+            i++
+            continue
+        }
+        error LexError.BAD_CHAR
+    }
+    toks.Push(Token(Tok.End, "", line))
+    return toks
+}
+
+# ---- the tree ----
+
+type Expr enum {
+    Num(v F64)
+    Str(s String&)
+    Bool(b Bool)
+    Nil
+    Var(name String&)
+    Unary(op String&, e Expr&)
+    Binary(op String&, l Expr&, r Expr&)
+    Call(callee Expr&, args Array<Expr&>&)
+    Lambda(params Array<String&>&, body Array<Stmt&>&)
+    ListLit(items Array<Expr&>&)
+    Index(target Expr&, index Expr&)
+}
+
+type Stmt enum {
+    Let(name String&, init Expr&)
+    Assign(name String&, value Expr&)
+    SetIndex(target Expr&, index Expr&, value Expr&)
+    Eval(e Expr&)
+    Print(e Expr&)
+    If(cond Expr&, then Array<Stmt&>&, els Array<Stmt&>&)
+    While(cond Expr&, body Array<Stmt&>&)
+    Return(e Expr&)
+    FnDecl(name String&, params Array<String&>&, body Array<Stmt&>&)
+}
+
+# ---- the parser ----
+
+type Parser struct(toks List<Token>&) {
+    toks
+    at I64 = 0
+}
+
+fn (p Parser&) peek() Token { return p.toks[p.at] }
+
+fn (p mut Parser&) next() Token {
+    t := p.toks[p.at]
+    if p.at < p.toks.Len() - 1 { p.at++ }
+    return t
+}
+
+fn (p Parser&) isOp(text String&) Bool {
+    t := p.peek()
+    return (t.kind == Tok.Op or t.kind == Tok.Kw) and t.text == text
+}
+
+fn (p mut Parser&) expect(text String&) ? ParseFail {
+    if not p.isOp(text) {
+        eprintln("line " $p.peek().line ": expected '" $text "', found '" $p.peek().text "'")
+        error ParseFail.UNEXPECTED
+    }
+    p.next()
+}
+
+fn (p mut Parser&) program() Array<Stmt&>& ? ParseFail {
+    out := List<Stmt&>()
+    for p.peek().kind != Tok.End {
+        out.Push(try p.statement())
+    }
+    return out.ToArray()
+}
+
+fn (p mut Parser&) block() Array<Stmt&>& ? ParseFail {
+    try p.expect("{")
+    out := List<Stmt&>()
+    for not p.isOp("}") {
+        if p.peek().kind == Tok.End { error ParseFail.UNEXPECTED }
+        out.Push(try p.statement())
+    }
+    try p.expect("}")
+    return out.ToArray()
+}
+
+fn (p mut Parser&) statement() Stmt& ? ParseFail {
+    t := p.peek()
+    if t.kind == Tok.Kw {
+        if t.text == "let" {
+            p.next()
+            name := p.next().text
+            try p.expect("=")
+            e := try p.expression()
+            try p.expect(";")
+            return Stmt.Let(name, e)
+        }
+        if t.text == "fn" and p.toks[p.at + 1].kind == Tok.Ident {
+            p.next()
+            name := p.next().text
+            params := try p.params()
+            body := try p.block()
+            return Stmt.FnDecl(name, params, body)
+        }
+        if t.text == "if" {
+            p.next()
+            c := try p.expression()
+            th := try p.block()
+            el := Array<Stmt&>(0)
+            if p.isOp("else") {
+                p.next()
+                if p.isOp("if") {
+                    el = Stmt&[try p.statement()]
+                } else {
+                    el = try p.block()
+                }
+            }
+            return Stmt.If(c, th, el)
+        }
+        if t.text == "while" {
+            p.next()
+            c := try p.expression()
+            body := try p.block()
+            return Stmt.While(c, body)
+        }
+        if t.text == "return" {
+            p.next()
+            e := Expr.Nil
+            if not p.isOp(";") { e = try p.expression() }
+            try p.expect(";")
+            return Stmt.Return(e)
+        }
+        if t.text == "print" {
+            p.next()
+            e := try p.expression()
+            try p.expect(";")
+            return Stmt.Print(e)
+        }
+    }
+    e := try p.expression()
+    if p.isOp("=") {
+        p.next()
+        v := try p.expression()
+        try p.expect(";")
+        match e {
+            case Expr.Var(name) => return Stmt.Assign(name, v)
+            case Expr.Index(target, index) => return Stmt.SetIndex(target, index, v)
+            nomatch {
+                eprintln("line " $t.line ": cannot assign to this")
+                error ParseFail.UNEXPECTED
+            }
+        }
+    }
+    try p.expect(";")
+    return Stmt.Eval(e)
+}
+
+fn (p mut Parser&) params() Array<String&>& ? ParseFail {
+    try p.expect("(")
+    names := List<String&>()
+    for not p.isOp(")") {
+        names.Push(p.next().text)
+        if p.isOp(",") { p.next() }
+    }
+    try p.expect(")")
+    return names.ToArray()
+}
+
+fn power(op String&) I32 {
+    match op {
+        case "or" { return 1 }
+        case "and" { return 2 }
+        case "==", "!=" { return 3 }
+        case "<", "<=", ">", ">=" { return 4 }
+        case "+", "-" { return 5 }
+        case "*", "/", "%" { return 6 }
+        nomatch { return 0 }
+    }
+}
+
+fn (p mut Parser&) expression() Expr& ? ParseFail {
+    return try p.binary(1)
+}
+
+fn (p mut Parser&) binary(min I32) Expr& ? ParseFail {
+    left := try p.unary()
+    for {
+        t := p.peek()
+        if t.kind != Tok.Op and t.kind != Tok.Kw { break }
+        pw := power(t.text)
+        if pw == 0 or pw < min { break }
+        p.next()
+        right := try p.binary(pw + 1)
+        left = Expr.Binary(t.text, left, right)
+    }
+    return left
+}
+
+fn (p mut Parser&) unary() Expr& ? ParseFail {
+    if p.isOp("-") or p.isOp("not") {
+        op := p.next().text
+        e := try p.unary()
+        return Expr.Unary(op, e)
+    }
+    return try p.postfix()
+}
+
+fn (p mut Parser&) postfix() Expr& ? ParseFail {
+    e := try p.primary()
+    for {
+        if p.isOp("(") {
+            p.next()
+            args := List<Expr&>()
+            for not p.isOp(")") {
+                args.Push(try p.expression())
+                if p.isOp(",") { p.next() }
+            }
+            try p.expect(")")
+            e = Expr.Call(e, args.ToArray())
+        } else if p.isOp("[") {
+            p.next()
+            i := try p.expression()
+            try p.expect("]")
+            e = Expr.Index(e, i)
+        } else {
+            break
+        }
+    }
+    return e
+}
+
+fn (p mut Parser&) primary() Expr& ? ParseFail {
+    t := p.next()
+    match t.kind {
+        case Tok.Num => return Expr.Num(try t.text.ParseFloat() catch { error ParseFail.UNEXPECTED })
+        case Tok.Str => return Expr.Str(t.text)
+        case Tok.Ident => return Expr.Var(t.text)
+        nomatch { }
+    }
+    if t.text == "true" { return Expr.Bool(true) }
+    if t.text == "false" { return Expr.Bool(false) }
+    if t.text == "nil" { return Expr.Nil }
+    if t.text == "fn" {
+        params := try p.params()
+        body := try p.block()
+        return Expr.Lambda(params, body)
+    }
+    if t.text == "(" {
+        e := try p.expression()
+        try p.expect(")")
+        return e
+    }
+    if t.text == "[" {
+        items := List<Expr&>()
+        for not p.isOp("]") {
+            items.Push(try p.expression())
+            if p.isOp(",") { p.next() }
+        }
+        try p.expect("]")
+        return Expr.ListLit(items.ToArray())
+    }
+    eprintln("line " $t.line ": unexpected '" $t.text "'")
+    error ParseFail.UNEXPECTED
+}
+
+# ---- values and environments ----
+
+type Value enum {
+    Nil
+    Bool(b Bool)
+    Num(n F64)
+    Str(s String&)
+    Fn(c Closure&)
+    Builtin(name String&)
+    Items(l List<Value>&)
+}
+
+type Closure struct(params Array<String&>&, body Array<Stmt&>&, env Env&) {
+    params
+    body
+    env
+}
+
+type Env struct(parent Env&) {
+    vars mut Map<String&, Value>& = Map<String&, Value>()
+    parent
+}
+
+fn (e Env&) lookup(name String&) Value ? RunError {
+    for at := e; at != null; at = at.parent {
+        v := try at.vars.Get(name) catch { continue }
+        return v
+    }
+    eprintln("undefined: " $name)
+    error RunError.UNDEFINED
+}
+
+fn (e mut Env&) assign(name String&, v Value) ? RunError {
+    for at := e; at != null; at = at.parent {
+        if name in at.vars {
+            at.vars.Put(name, v)
+            return
+        }
+    }
+    eprintln("undefined: " $name)
+    error RunError.UNDEFINED
+}
+
+fn show(v Value) String {
+    match v {
+        case Value.Nil => return "nil"
+        case Value.Bool(b) => return "true" if b else "false"
+        case Value.Num(n) {
+            if n == F64(I64(n)) { return $I64(n) }
+            return $n
+        }
+        case Value.Str(s) => return s
+        case Value.Fn(c) => return "<fn>"
+        case Value.Builtin(name) => return "<builtin " $name ">"
+        case Value.Items(l) {
+            sb := StringBuilder()
+            sb.Push("[")
+            for i in range l.Len() {
+                if i > 0 { sb.Push(", ") }
+                sb.Push(show(l[i]))
+            }
+            sb.Push("]")
+            return sb.ToString()
+        }
+    }
+}
+
+fn truthy(v Value) Bool {
+    match v {
+        case Value.Nil => return false
+        case Value.Bool(b) => return b
+        nomatch => return true
+    }
+}
+
+# ---- the evaluator ----
+
+type Flow enum {
+    Normal
+    Ret(v Value)
+}
+
+type Interp struct() {
+    globals mut Env& = Env(null)
+    steps I64 = 0
+}
+
+fn (it mut Interp&) eval(e Expr&, env mut Env&) Value ? RunError {
+    it.steps++
+    match e {
+        case Expr.Num(v) => return Value.Num(v)
+        case Expr.Str(s) => return Value.Str(s)
+        case Expr.Bool(b) => return Value.Bool(b)
+        case Expr.Nil => return Value.Nil
+        case Expr.Var(name) => return try env.lookup(name)
+        case Expr.Unary(op, x) {
+            v := try it.eval(x, env)
+            if op == "not" { return Value.Bool(not truthy(v)) }
+            n := try (v as Value.Num) catch { error RunError.TYPE }
+            return Value.Num(-n)
+        }
+        case Expr.Binary(op, l, r) {
+            if op == "and" {
+                a := try it.eval(l, env)
+                if not truthy(a) { return a }
+                return try it.eval(r, env)
+            }
+            if op == "or" {
+                a := try it.eval(l, env)
+                if truthy(a) { return a }
+                return try it.eval(r, env)
+            }
+            a := try it.eval(l, env)
+            b := try it.eval(r, env)
+            return try binop(op, a, b)
+        }
+        case Expr.Call(callee, args) {
+            f := try it.eval(callee, env)
+            vals := List<Value>()
+            for a in args { vals.Push(try it.eval(a, env)) }
+            return try it.call(f, vals)
+        }
+        case Expr.Lambda(params, body) => return Value.Fn(Closure(params, body, env))
+        case Expr.ListLit(items) {
+            l := List<Value>()
+            for x in items { l.Push(try it.eval(x, env)) }
+            return Value.Items(l)
+        }
+        case Expr.Index(target, index) {
+            t := try it.eval(target, env)
+            i := try it.eval(index, env)
+            l := try (t as Value.Items) catch { error RunError.TYPE }
+            n := try (i as Value.Num) catch { error RunError.TYPE }
+            k := I64(n)
+            if k < 0 or k >= l.Len() { error RunError.INDEX }
+            return l[k]
+        }
+    }
+}
+
+fn binop(op String&, a Value, b Value) Value ? RunError {
+    if op == "==" { return Value.Bool(valueEq(a, b)) }
+    if op == "!=" { return Value.Bool(not valueEq(a, b)) }
+    if op == "+" and (a is Value.Str or b is Value.Str) {
+        return Value.Str(show(a) show(b))
+    }
+    x := try (a as Value.Num) catch { error RunError.TYPE }
+    y := try (b as Value.Num) catch { error RunError.TYPE }
+    match op {
+        case "+" => return Value.Num(x + y)
+        case "-" => return Value.Num(x - y)
+        case "*" => return Value.Num(x * y)
+        case "/" => return Value.Num(x / y)
+        case "%" => return Value.Num(F64(I64(x) % I64(y)))
+        case "<" => return Value.Bool(x < y)
+        case "<=" => return Value.Bool(x <= y)
+        case ">" => return Value.Bool(x > y)
+        case ">=" => return Value.Bool(x >= y)
+        nomatch { error RunError.TYPE }
+    }
+}
+
+fn valueEq(a Value, b Value) Bool {
+    match a {
+        case Value.Num(x) {
+            y := try (b as Value.Num) catch { return false }
+            return x == y
+        }
+        case Value.Str(s) {
+            t := try (b as Value.Str) catch { return false }
+            return s == t
+        }
+        case Value.Bool(x) {
+            y := try (b as Value.Bool) catch { return false }
+            return x == y
+        }
+        case Value.Nil => return b is Value.Nil
+        nomatch => return false
+    }
+}
+
+fn (it mut Interp&) call(f Value, args List<Value>&) Value ? RunError {
+    match f {
+        case Value.Builtin(name) => return try it.builtin(name, args)
+        case Value.Fn(c) {
+            if args.Len() != c.params.Len() { error RunError.ARITY }
+            local := Env(c.env)
+            for i in range args.Len() { local.vars.Put(c.params[i], args[i]) }
+            flow := try it.run(c.body, local)
+            match flow {
+                case Flow.Ret(v) => return v
+                case Flow.Normal => return Value.Nil
+            }
+        }
+        nomatch { error RunError.TYPE }
+    }
+}
+
+fn (it mut Interp&) builtin(name String&, args List<Value>&) Value ? RunError {
+    if name == "len" {
+        match args[0] {
+            case Value.Items(l) => return Value.Num(F64(l.Len()))
+            case Value.Str(s) => return Value.Num(F64(s.Len()))
+            nomatch { error RunError.TYPE }
+        }
+    }
+    if name == "push" {
+        l := try (args[0] as Value.Items) catch { error RunError.TYPE }
+        l.Push(args[1])
+        return Value.Nil
+    }
+    if name == "str" { return Value.Str(show(args[0])) }
+    error RunError.UNDEFINED
+}
+
+fn (it mut Interp&) run(body Array<Stmt&>&, env mut Env&) Flow ? RunError {
+    for s in body {
+        flow := try it.exec(s, env)
+        if flow is Flow.Ret { return flow }
+    }
+    return Flow.Normal
+}
+
+fn (it mut Interp&) exec(s Stmt&, env mut Env&) Flow ? RunError {
+    match s {
+        case Stmt.Let(name, init) {
+            env.vars.Put(name, try it.eval(init, env))
+        }
+        case Stmt.Assign(name, value) {
+            try env.assign(name, try it.eval(value, env))
+        }
+        case Stmt.SetIndex(target, index, value) {
+            t := try it.eval(target, env)
+            i := try it.eval(index, env)
+            v := try it.eval(value, env)
+            l := try (t as Value.Items) catch { error RunError.TYPE }
+            n := try (i as Value.Num) catch { error RunError.TYPE }
+            l[I64(n)] = v
+        }
+        case Stmt.Eval(e) {
+            try it.eval(e, env)
+        }
+        case Stmt.Print(e) {
+            println(show(try it.eval(e, env)))
+        }
+        case Stmt.If(cond, th, el) {
+            inner := Env(env)
+            if truthy(try it.eval(cond, env)) { return try it.run(th, inner) }
+            return try it.run(el, inner)
+        }
+        case Stmt.While(cond, body) {
+            for truthy(try it.eval(cond, env)) {
+                inner := Env(env)
+                flow := try it.run(body, inner)
+                if flow is Flow.Ret { return flow }
+            }
+        }
+        case Stmt.Return(e) {
+            return Flow.Ret(try it.eval(e, env))
+        }
+        case Stmt.FnDecl(name, params, body) {
+            env.vars.Put(name, Value.Fn(Closure(params, body, env)))
+        }
+    }
+    return Flow.Normal
+}
+
+# ---- the program ----
+
+Script := "
+# closures and counters
+fn makeCounter(start) {
+    let n = start;
+    return fn() { n = n + 1; return n; };
+}
+let c = makeCounter(10);
+c(); c();
+print c();
+
+fn fib(n) { if n < 2 { return n; } return fib(n - 1) + fib(n - 2); }
+print fib(20);
+
+# higher-order functions over lists
+fn map(xs, f) {
+    let out = [];
+    let i = 0;
+    while i < len(xs) { push(out, f(xs[i])); i = i + 1; }
+    return out;
+}
+let sq = map([1, 2, 3, 4], fn(x) { return x * x; });
+print sq;
+
+# a garbage-heavy loop: every turn builds a list and a string and throws them away
+let i = 0;
+let total = 0;
+let last = \"\";
+while i < 200000 {
+    let tmp = [i, i * 2, i * 3];
+    last = \"item \" + str(i);
+    total = total + tmp[1] + len(last);
+    i = i + 1;
+}
+print total;
+print last;
+"
+
+fn main() ? {
+    toks := try lex(Script) catch LexError { error }
+    p := Parser(toks)
+    prog := try p.program() catch ParseFail { error }
+    it := Interp()
+    it.globals.vars.Put("len", Value.Builtin("len"))
+    it.globals.vars.Put("push", Value.Builtin("push"))
+    it.globals.vars.Put("str", Value.Builtin("str"))
+    flow := try it.run(prog, it.globals) catch RunError {
+        eprintln("runtime error")
+        error
+    }
+    println("steps " $it.steps)
+}

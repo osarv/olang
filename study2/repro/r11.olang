@@ -1,0 +1,13 @@
+# r11 BUG: a slice of a String loses "extends": "path[0:3].Count(f)" and "path[0:3].Contains(\".\")" are T29f ("String&
+# declares no 'Count', and does not extend its base"), and "\".\" in path[0:3]" is E29 - plus a false S8a ("this
+# condition is the same on every build") when it is an if's condition. "path.Count(f)" and String's own methods on a
+# slice ("path[0:3].Find(\".\")") work.
+fn a(path String&) I64 { return path[0:3].Count(fn(ch Char) Bool { return ch == '.' }) }
+fn b(path String&) Bool { return path[0:3].Contains(".") }
+fn c(path String&) Bool {
+    if "." in path[0:3] { return true }
+    return false
+}
+fn main() ? {
+    println($a("a.cd") " " $b("a.cd") " " $c("a.cd"))
+}

@@ -1,0 +1,4 @@
+# B12: the target constants, as -b, -d, -i and -a see them
+fn main() ? {
+    println($TargetOs " " $TargetArch " " $TargetCpu " " $TargetVectorBits " " $TargetHasFma)
+}

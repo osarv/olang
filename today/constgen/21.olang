@@ -1,0 +1,10 @@
+# T7b/T7c: an Array<T, N> returned and passed by value - large ones should go through memory
+fn make(v F32) Array<F32, 100000> {
+    r Array<F32, 100000> = Array<F32, 100000>()
+    r[3] = v
+    return r
+}
+fn main() ? {
+    x Array<F32, 100000> = make(1.5)
+    println($x[3])
+}

@@ -1,0 +1,10 @@
+# T7d: an Array<T> copied into an Array<T, N> is length-checked once per copy
+fn mk(n I64) Array<I32> { return Array<I32>(n, 7) }
+fn main() ? {
+    f Array<I32, 3> = mk(3)
+    println($f)
+    v := try (mk(4) as Array<I32, 3>&) catch default null
+    println($(v == null))
+    g Array<I32, 3> = mk(4)
+    println("not reached " $g)
+}

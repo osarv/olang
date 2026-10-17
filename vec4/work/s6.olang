@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# new storage built into an own object's region by a constructor field typed with a borrow's scope... through
+# a struct field of the owned object itself: a plain reference field of an own object, assigned new text
+type Body struct() {
+    name mut String& = "none"
+}
+type CB struct() {
+    body own mut Body& = Body()
+}
+fn main() ? {
+    c := CB()
+    c.body.name = $5 "-new-text-built-in-the-region"
+    keep := c.body.name
+    c.body = Body()
+    churn()
+    println(keep)
+}

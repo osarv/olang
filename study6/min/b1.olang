@@ -1,0 +1,16 @@
+type Value enum {
+    Nil
+    Num(n F64)
+    Str(s String&)
+}
+type Env struct(parent Env&) {
+    vars mut Map<String&, Value>& = Map<String&, Value>()
+    parent
+}
+fn main() ? {
+    g := Env(null)
+    g.vars.Put("x", Value.Num(1.0))
+    e := Env(g)
+    e.vars.Put("y", Value.Str("hi"))
+    println($e.vars.Len() " " $g.vars.Len())
+}

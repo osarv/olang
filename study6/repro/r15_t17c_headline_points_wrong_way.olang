@@ -1,0 +1,25 @@
+# (c) DIAGNOSTIC, T17c: an enum value whose payload holds a local's text, pushed into a longer-lived list (an undo stack
+# recording what a delete removed), is "this value's payload refers to storage the value would outlive - build it
+# where that storage lives ('v E&x')". Building the Edit where 'gone' lives (this block) is the opposite of what is
+# needed - it must go into undos; the fix is to build 'gone' where the list lives, 'gone String&b = b.slice(at, n)'
+# (the editor), 'gone String&history = ...' (its driver). The note below it does say so ("'gone' is declared here, in a
+# block that closes first - declare it where 'b' lives"), so it is the headline that misleads: it proposes the move
+# that cannot work.
+# Expected: the headline says the payload's storage must be made where the value goes, as the note does.
+type Edit enum {
+    Insert(at I64, text String&)
+    Delete(at I64, text String&)
+}
+type Buffer struct(text String&) {
+    text
+    undos mut List<Edit>& = List<Edit>()
+}
+fn (b mut Buffer&) Delete(at I64, n I64) {
+    gone := $b.text[at:at + n]
+    b.undos.Push(Edit.Delete(at, gone))
+}
+fn main() ? {
+    b := Buffer("hello world")
+    b.Delete(0, 6)
+    println($b.undos.Len())
+}

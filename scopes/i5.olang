@@ -1,0 +1,22 @@
+# the same, plain index (no try)
+import "std/io"
+type Node struct(v I32) { v mut }
+type Gen struct() { n mut I32 = 0 }
+type Holder struct(g Gen&) { g }
+fn (g Gen&) At(i I64) Node& { return Node(I32(i) + 40) }
+fn (g Gen&) Len() I64 { return 10 }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    h Holder& = Holder(Gen())
+    keep Node& = Node(1)
+    for i in range 2 {
+        keep = h.g[2]
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

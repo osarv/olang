@@ -1,0 +1,30 @@
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type Cur struct(p Info&) {
+    at Info&p = p
+}
+type G struct() {
+    infos mut List<Info>& = List<Info>()
+}
+fn (g G&) cur(i Info&) Cur { return Cur(i) }
+fn (g G&) view(k I64) Cur {
+    i := g.infos[k]
+    return g.cur(i)
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k))
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := G()
+    g.infos.Push(Info(7, 9))
+    c := g.view(0)
+    churn()
+    println($c.at.Offset " " $c.at.Len)
+}

@@ -1,0 +1,5 @@
+import "std/io"
+v mut BF16 = 1.1754943508222875e-38      # 2^-126, F32's smallest normal: a BF16, and below F16's range
+fn main() ? io.IoError {
+    try io.Print($F16(F32(v) / F32(v)) "\n")   # 1 - "nan" from -b before the fix
+}

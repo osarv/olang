@@ -1,0 +1,17 @@
+import "std/os"
+if TargetOs == "linux" {
+    fn platform() String& { return "linux " $TargetArch }
+} else {
+    fn platform() String& { return "other" }
+}
+fn workers() I64 {
+    n I64 = Workers
+    if Verbose { eprintln("workers from -D: " $n) }
+    env := try os.Env("APP_WORKERS") catch default ""
+    if env.Len() > 0 { n = try env.ParseInt() catch default n }
+    return n
+}
+Banner := "v" $Version " (" $platform() ")"
+fn main() ? {
+    println($Banner " workers " $workers() " big " $(Workers * 1000000000))
+}

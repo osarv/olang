@@ -1,0 +1,26 @@
+# a Clone of a Map holding references kept past the block the references live in
+fn churn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        t := $i "abcdefghijklmnopqrstuvwxyz"
+        s = s + a[3] + t.Len()
+    }
+    return s
+}
+fn main() ? {
+    keep := Map<String&, I32>()
+    lkeep := List<String&>()
+    for i in range 2 {
+        k := $i "-key-text-long-enough"
+        m := Map<String&, I32>()
+        m.Put(k, 5)
+        keep = m.Clone()
+        l := List<String&>()
+        l.Push(k)
+        lkeep = l.Clone()
+    }
+    c := churn()
+    for e in keep { println($e.Key " " $e.Value) }
+    println($lkeep[0] " " $c)
+}

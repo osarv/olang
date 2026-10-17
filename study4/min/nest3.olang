@@ -1,0 +1,16 @@
+type M struct(t String&) { t }
+fn mk(n I64) List<M> {
+    out := List<M>()
+    for i in range n { out.Push(M($i)) }
+    return out
+}
+fn main() ? {
+    parts := Array<List<M>>(2, List<M>())
+    parts[0] = mk(2)
+    parts[1] = mk(3)
+    all := List<M>()
+    for i in range parts.Len() {
+        for m in parts[i] { all.Push(m) }
+    }
+    println($all.Len())
+}

@@ -1,0 +1,36 @@
+# HELD: every spawn of a local lambda (target, several targets, try statement, try target, try join) puts its
+# environment on the heap. Prints "11 1 5 5".
+type Node struct(v I64) {
+    v
+}
+error Bad { NO }
+fn two(n Node&) I64 {
+    f := fn() (I64, I64) { return n.v, n.v + 1 }
+    a I64 = 0
+    b I64 = 0
+    join { spawn a, b = f() }
+    return a + b
+}
+fn trystmt(n Node&) I64 {
+    f := fn() ? Bad { if n.v < 0 { error Bad.NO } }
+    join { spawn try f() catch Bad { } }
+    return 1
+}
+fn trytarget(n Node&) I64 {
+    f := fn() I64 ? Bad { if n.v < 0 { error Bad.NO }
+        return n.v }
+    x I64 = 0
+    join { spawn x = try f() catch Bad default 3 }
+    return x
+}
+fn tryjoin(n Node&) I64 ? Bad {
+    f := fn() I64 ? Bad { if n.v < 0 { error Bad.NO }
+        return n.v }
+    x I64 = 0
+    try join { spawn x = try f() }
+    return x
+}
+fn main() ? {
+    n := Node(5)
+    println($two(n) " " $trystmt(n) " " $trytarget(n) " " $(try tryjoin(n) catch default 0))
+}

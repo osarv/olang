@@ -1,0 +1,20 @@
+# r28 FRICTION - D16c/T7b: a lambda copies what it captures, and a captured local List, Map or channel value is refused:
+# "a lambda copies what it captures, and a copy of this loses its references' scopes - capture a reference to it",
+# with a T25c error at every use besides. An array value is BORROWED by a lambda (T7b, read-only); a struct value that
+# holds references is not. Seen three times: a "finished" map read by an Any() predicate, an eviction log, a channel
+# shared by spawned lambdas. The workaround is an alias "seen Map<String&, Bool>&finished = finished" captured instead
+# (its scope written out, or O25 refuses the alias). A lambda also cannot bump a captured I64 (captures are read-only,
+# and there are no primitive references): a counter needs a struct and a "mut Counter&".
+#
+# expected: 1 1
+# actual: error[D16c] at line 15; error[D16c] + error[T25c] at line 17
+fn main() ? {
+    finished := Map<String&, Bool>()
+    finished.Put("a", true)
+    deps := String&["a", "b"]
+    blocked := deps.Any(fn(d String&) Bool { return (try finished.Get(d) catch default true) == false })
+    log := List<String&>()
+    record := fn(k String&) { log.Push($k) }
+    record("x")
+    println($deps.Count(fn(d String&) Bool { return d == "a" }) " " $log.Len() " " $blocked)
+}

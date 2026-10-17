@@ -1,0 +1,31 @@
+# r25 OVER-REJECTION + DIAGNOSTIC - O10c/O25h: a depth-first walk over a graph kept in a Map of records - the
+# record fetched by value ("r := try g.rules.Get(t)"), its dependencies visited recursively - is refused at the
+# recursive call: "the callee needs one argument's scope to outlive another's", the note pointing into the callee's
+# "g.seen.Put(t, true)", and nothing saying what to change. The dependency names live in the map, as long as g does;
+# only the copy 'r' stands between them and the callee. Declaring the record a reference where g lives ("r Rule&g =
+# try g.rules.Get(t)") compiles. Found in ../mk.olang (make's dependency walk).
+#
+# expected: 3
+# actual:   error[O10c] at "g.visit(d)", note at "g.seen.Put(t, true)"
+type Rule struct(Deps List<String&>) { Deps }
+
+type Graph struct() {
+    rules Map<String&, Rule> = Map<String&, Rule>()
+    seen Map<String&, Bool> = Map<String&, Bool>()
+}
+
+fn (g mut Graph&) visit(t String&) {
+    if g.seen.Has(t) { return }
+    g.seen.Put(t, true)
+    r := try g.rules.Get(t) catch { return }
+    for d in r.Deps { g.visit(d) }
+}
+
+fn main() ? {
+    g := Graph()
+    g.rules.Put("all", Rule(String&["a", "b"].ToList()))
+    g.rules.Put("a", Rule(String&["b"].ToList()))
+    g.rules.Put("b", Rule(List<String&>()))
+    g.visit("all")
+    println($g.seen.Len())
+}

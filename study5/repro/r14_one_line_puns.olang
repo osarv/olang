@@ -1,0 +1,5 @@
+# DIAGNOSTIC: two bare-pun fields on one line read as "field Sensor of type Value": "unknown type 'Value'" and C2a's
+# "field 'Sensor' has a parameter's name - write it bare" (it is written bare). Nothing says fields go one per line.
+type Reading struct(Sensor String&, Value F64) { Sensor  Value }
+
+fn main() ? { println($Reading("a", 1.0).Value) }

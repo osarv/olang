@@ -1,0 +1,22 @@
+# R evasion: a lambda capturing a value local whose references live in an own region (refsHome), called after the release
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type W struct(s String&) { s }
+fn main() ? {
+    c := CB()
+    x := c.text
+    w := W(x)
+    f := fn() String& { return w.s }
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(f())
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

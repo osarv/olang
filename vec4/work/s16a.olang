@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# what does the compiler suggest when block text is stored into a plain field of an owned object?
+type Box struct() {
+    s mut String& = "none"
+}
+type CB struct() {
+    box own mut Box& = Box()
+}
+fn main() ? {
+    c := CB()
+    b := c.box
+    s := $5 "-new-text"
+    b.s = s
+    println(b.s)
+}

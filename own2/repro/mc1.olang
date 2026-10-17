@@ -1,0 +1,21 @@
+Dropped mut I64 = 0
+type Sock struct(n I64) { n } destruct { Dropped++ }
+type Conn struct(fd I64) {
+    fd
+    sock own mut Sock&
+} destruct { Dropped++ }
+type Server struct() { cur own mut Conn& }
+fn (c mut Conn&) close() { c.sock = null }
+fn churn() {
+    j := List<String&>()
+    for i in range 50 { j.Push("" $i) }
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    s.cur.sock = Sock(7)
+    d := s.cur.sock          # borrow the sock
+    s.cur.close()            # close() releases the sock while d borrows it - must conflict
+    churn()
+    println($d.n)
+}

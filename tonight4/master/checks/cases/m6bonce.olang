@@ -1,0 +1,15 @@
+# check: fail error[M6b]: '==' needs K's eq, which is private to its module
+# also: compilation failed with 1 error
+# M6b: an operation reaching one private method twice - "==" part by part over a struct holding two of K - says so once
+type K struct(n I32) { n }
+fn (a K) eq(b K) Bool { return a.n % 10 == b.n % 10 }
+fn (a K) Hash() I64 { return I64(a.n % 10) }
+type P struct(a K, b K) {
+    a
+    b
+}
+fn (p P) Hash() I64 { return p.a.Hash() + p.b.Hash() }
+fn main() ? {
+    m := Map<P, I32>()
+    m.Put(P(K(1), K(2)), 5)
+}

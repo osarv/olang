@@ -1,0 +1,23 @@
+# check: run
+# O14c/O26a/T7b: a slice of a local array is read where the result is put, so the array lives there and the text made
+# for its elements too - the copy returned refers to storage that outlives the return. It used to be an error (O26)
+fn mk(n I64) Array<String&> {
+    a := Array<String&>(2)
+    a[0] = $n $n
+    return a[0:1]
+}
+fn main() ? {
+    a := mk(12)
+    churn()
+    assert a.Len() == 1 and a[0] == "1212"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
+}

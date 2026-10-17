@@ -1,0 +1,33 @@
+# (a) BUG, wrong output (spec violation, -b/-d/-i agree): 'for x in l' over a List keeps giving the rest of the run
+# it is in after the list shrank under it. SPEC (List, §4 prelude): "once the list holds no more than the walk has given
+# (after a Clear(), or Pop()s below its position) the next step is its end" - here a Clear() at x == 1 is followed by
+# 2, 3, 4. And removing the element just walked gives the last element of the run again and again:
+# [0, 20, 40, 40, 40] from a list that held 40 once. The loop walks a slice of the chunk (S9f), whose length was taken
+# when the run was asked for; the review fix that ends ListIter at at >= count does not reach this path.
+# Found in progs/ecs.olang: destroying a carrier walks its cargo list while each destroyed item detaches itself from
+# that list - every so often the last item was destroyed twice (2,049 double destroys in 24,000 steps; 'died' >
+# 'born').
+# Expected: "I64[0, 20, 40]"-like (only elements held, each once) and "I64[0, 1]".
+fn main() ? {
+    l := List<I64>()
+    for i in range 5 { l.Push(i * 10) }
+    seen := List<I64>()
+    for x in l {
+        seen.Push(x)
+        for i in range l.Len() {
+            if l[i] == x {
+                l.RemoveAt(i)
+                break
+            }
+        }
+    }
+    println($seen.ToArray() " left " $l.ToArray())
+    m := List<I64>()
+    for i in range 5 { m.Push(i) }
+    walked := List<I64>()
+    for x in m {
+        walked.Push(x)
+        if x == 1 { m.Clear() }
+    }
+    println($walked.ToArray())
+}

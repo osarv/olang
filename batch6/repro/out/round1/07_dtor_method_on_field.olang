@@ -1,0 +1,14 @@
+# PRE-EXISTING over-rejection: a method called on a field read bare in a destructor ("l.Push(k)") is "M10: 'l' is no
+# import here"; reading or assigning the field bare works.
+type Node struct(v I64) {
+    v
+}
+type Res struct(k I64) {
+    k
+    l mut List<I64>& = List<I64>()
+} destruct {
+    l.Push(k)
+}
+fn main() ? {
+    r Res& = Res(1)
+}

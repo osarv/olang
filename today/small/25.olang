@@ -1,0 +1,5 @@
+# M19f: println on a stream that cannot be written ends the program with a message on stderr
+fn main() ? {
+    println("hello")
+    eprintln("to stderr")
+}

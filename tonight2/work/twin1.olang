@@ -1,0 +1,36 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type G<T> struct(seed T) {
+    seed
+    root mut Node& = Node(0)
+}
+type Layer struct(g mut G<<T>>&, w I64) {
+    top mut Node&g = g.root
+    {
+        top.next = Node(w)
+    }
+    width I64 = w
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    gf := G<F32>(0.5)
+    gi := G<I64>(3)
+    {
+        l := Layer(gf, 10)
+        m := Layer(gi, 20)
+        assert l.width == 10 and m.width == 20
+    }
+    churn()
+    println($gf.root.next.v " " $gi.root.next.v)
+}

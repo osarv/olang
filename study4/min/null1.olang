@@ -1,0 +1,6 @@
+# expected: a null dereference traps (SPEC T2b: undefined behaviour, "in practice a deterministic trap")
+type P struct(x I64) { x }
+fn main() ? {
+    p P& = null
+    println("x is " $p.x)
+}

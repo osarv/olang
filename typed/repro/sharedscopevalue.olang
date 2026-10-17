@@ -1,0 +1,12 @@
+type N struct(v I64) {
+    v
+    next mut N& = null
+}
+fn link(a mut N&, b N&a) { a.v = b.v + 1 }
+fn main() ? {
+    f fn(a mut N&, b N&) = link
+    x mut N& = N(41)
+    y mut N& = N(7)
+    f(x, y)
+    println($x.v $" " $y.v)
+}

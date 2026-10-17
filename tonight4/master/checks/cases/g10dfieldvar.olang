@@ -1,0 +1,11 @@
+# check: fail error[G10d]: the type of field 'g' names T, which only the constructor introduces
+# also: declare it the type's parameter: 'type D<T>'
+# G10d: a type with no parameters is one type whatever its constructor's call binds, so no field may hold a variable
+# only the constructor introduces - a pun of such a parameter included
+type G<T> struct() {
+    n I64 = 0
+}
+type D struct(g G<<T>>&) {
+    g
+}
+fn main() ? { d := D(G<I64>()) }

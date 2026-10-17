@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+fn a(c CB&, n I64) String&c {
+    if n == 0 { return String(c.data) }
+    if n == 1 { return b(c, n - 1) }
+    return c.text
+}
+fn b(c CB&, n I64) String&c { return a(c, n) }
+fn use(c mut CB&) {
+    t := a(c, 2)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

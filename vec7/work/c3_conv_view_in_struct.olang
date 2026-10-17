@@ -1,0 +1,13 @@
+# stored in a struct built in the block, then the Vec grows
+type Holder struct(s String&) {
+    s
+}
+fn main() ? {
+    v := Vec<Char>()
+    for i in range 3 { v.Push('a') }
+    h := Holder(String(v.View()))
+    for i in range 100 { v.Push('b') }
+    w := Vec<I64>()
+    for i in range 100 { w.Push(i) }
+    println(h.s)
+}

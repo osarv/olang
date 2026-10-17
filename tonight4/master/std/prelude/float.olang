@@ -1,0 +1,156 @@
+# floats, part of the prelude: a float as text with a fixed number of digits after the point - what C's "%.*f" gives,
+# for writing numbers in a set format ("$x" is the shortest text that reads back as x, E11a).
+#
+# Exact, with no help from the C library: a finite F64 is m * 2^e for whole numbers m and e, so x * 10^n is the whole
+# number m * 10^n * 2^e, and rounding it to a whole number is a shift and one look at the bits shifted out. Big numbers
+# here are arrays of 32-bit limbs, lowest first. Being ordinary computation, Fixed runs while compiling (K1) and under
+# -i exactly as it runs in a built program.
+
+# x with n digits after the point, rounded to the nearest such number - a tie to the even one - as C's "%.*f" rounds:
+# "1.25".Fixed(1) is "1.2", "2.5".Fixed(0) is "2", and -0.04.Fixed(1) is "-0.0" (the sign is x's). n below 0 counts as
+# 0. A NaN is "nan" and an infinity "inf" or "-inf", as "$x" writes them
+fn (x F64) Fixed(n I64) String {
+    bits := x.Bits()
+    neg Bool = bits >> 63 == 1
+    ex I64 = I64((bits >> 52) & 0x7FF)
+    frac U64 = bits & 0xFFFFFFFFFFFFF
+    if ex == 0x7FF {
+        if frac != 0 { return "nan" }
+        if neg { return "-inf" }
+        return "inf"
+    }
+    digits I64 = n
+    if digits < 0 { digits = 0 }
+    m U64 = frac
+    e2 I64 = -1074                                   # a subnormal (or zero): no implied leading one
+    if ex != 0 {
+        m = frac | 0x10000000000000
+        e2 = ex - 1075
+    }
+    # room for m * 10^digits * 2^e2 with e2 >= 0, or for m * 10^digits before the shift right: 53 bits, a little over
+    # 3.33 bits a decimal digit, and the shift
+    up I64 = e2
+    if up < 0 { up = 0 }
+    room I64 = (53 + digits * 4 + up) / 32 + 3
+    big := Array<U64>(room)
+    big[0] = m & 0xFFFFFFFF
+    big[1] = m >> 32
+    len I64 = 2
+    left I64 = digits
+    for left >= 9 {
+        len = fixedMul(big, len, 1000000000)
+        left -= 9
+    }
+    p10 U64 = 1
+    for i in range left { p10 = p10 * 10 }
+    len = fixedMul(big, len, p10)
+    if e2 >= 0 {
+        s I64 = e2
+        for s >= 31 {
+            len = fixedMul(big, len, 0x80000000)
+            s -= 31
+        }
+        len = fixedMul(big, len, U64(1) << U64(s))
+    } else {
+        len = fixedShiftRound(big, len, -e2)
+    }
+    text := fixedDecimal(big, len)
+    out := StringBuilder()
+    if neg { out.PushChar('-') }
+    whole I64 = text.Len() - digits
+    if digits == 0 {
+        out.Push(text)
+    } else if whole > 0 {
+        out.Push(text[:whole])
+        out.PushChar('.')
+        out.Push(text[whole:])
+    } else {
+        out.Push("0.")
+        for i in range -whole { out.PushChar('0') }
+        out.Push(text)
+    }
+    return out.ToString()
+}
+
+# the narrower floats widen to F64 exactly, so their digits are F64's
+fn (x F32) Fixed(n I64) String { return F64(x).Fixed(n) }
+fn (x F16) Fixed(n I64) String { return F64(x).Fixed(n) }
+fn (x BF16) Fixed(n I64) String { return F64(x).Fixed(n) }
+
+# a times k (k below 2^32), in place, and its length now
+fn fixedMul(a mut Array<U64>&, len I64, k U64) I64 {
+    carry U64 = 0
+    for i in range len {
+        t U64 = a[i] * k + carry
+        a[i] = t & 0xFFFFFFFF
+        carry = t >> 32
+    }
+    if carry == 0 { return len }
+    a[len] = carry
+    return len + 1
+}
+
+# a shifted right by k bits, rounded to nearest with a tie to even, in place, and its length now
+fn fixedShiftRound(a mut Array<U64>&, len I64, k I64) I64 {
+    hl I64 = (k - 1) / 32                            # where the highest bit shifted out is
+    hb U64 = U64((k - 1) % 32)
+    half Bool = hl < len and ((a[hl] >> hb) & 1) == 1
+    below Bool = hl < len and (a[hl] & ((U64(1) << hb) - 1)) != 0
+    for i in range hl {
+        if i < len and a[i] != 0 { below = true }
+    }
+    ls I64 = k / 32
+    bs U64 = U64(k % 32)
+    n I64 = len - ls
+    if n <= 0 {
+        n = 0
+    } else {
+        for i in range n {
+            v U64 = a[i + ls] >> bs
+            if bs > 0 and i + ls + 1 < len { v = v | ((a[i + ls + 1] << (32 - bs)) & 0xFFFFFFFF) }
+            a[i] = v
+        }
+    }
+    if half and (below or (n > 0 and (a[0] & 1) == 1)) {
+        i I64 = 0
+        for {
+            if i == n {
+                a[n] = 1
+                n++
+                break
+            }
+            a[i] = a[i] + 1
+            if a[i] <= 0xFFFFFFFF { break }
+            a[i] = 0
+            i++
+        }
+    }
+    for n > 0 and a[n - 1] == 0 { n-- }
+    return n
+}
+
+# a's decimal digits, with no leading zero but the one zero has; a is used up
+fn fixedDecimal(a mut Array<U64>&, len I64) String {
+    pieces := List<U64>()                            # nine digits each, the lowest first
+    n I64 = len
+    for n > 0 {
+        rem U64 = 0
+        for j in range n {
+            i I64 = n - 1 - j
+            cur U64 = (rem << 32) | a[i]
+            a[i] = cur / 1000000000
+            rem = cur % 1000000000
+        }
+        pieces.Push(rem)
+        for n > 0 and a[n - 1] == 0 { n-- }
+    }
+    if pieces.Len() == 0 { return "0" }
+    out := StringBuilder()
+    out.Push($pieces[pieces.Len() - 1])
+    for j in range pieces.Len() - 1 {
+        piece := $pieces[pieces.Len() - 2 - j]
+        for k in range 9 - piece.Len() { out.PushChar('0') }
+        out.Push(piece)
+    }
+    return out.ToString()
+}

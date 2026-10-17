@@ -1,0 +1,23 @@
+if TargetOs == "plan9" {
+    fn only9() I32 { return 9 }
+}
+
+fn f() I32 {
+    TargetOs.Trim()
+    if TargetOs == "plan9" {
+        return only9()
+    }
+    return 1
+}
+
+fn g() I32 {
+    if TargetOs == "plan9" {
+        return only9()
+    }
+    return 1
+}
+
+test "a build-decided local if after a statement starting with the constant's name" {
+    assert g() == 1
+    assert f() == 1
+}

@@ -1,0 +1,12 @@
+# a method of a generic type writing the receiver's own storage, given x[i]'s hidden copy
+type Box<T> struct() {
+    N I64 = 0
+    v T = T(0)
+}
+fn (b mut Box<<T>>&) Bump() { b.N++ }
+fn main() ? {
+    l := List<Box<I64>>()
+    l.Push(Box<I64>())
+    l[0].Bump()
+    println("list " $l[0].N)
+}

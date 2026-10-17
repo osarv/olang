@@ -1,0 +1,37 @@
+type Log struct() {
+    s mut List<I64>& = List<I64>()
+}
+type V struct(l mut Log&) {
+    l
+    d mut Array<I64>& = Array<I64>(4)
+}
+fn (v mut V&) SetAt(i I64, x I64) {
+    v.l.s.Push(100 + i)
+    v.d[i] = x
+}
+fn (v V&) At(i I64) I64 {
+    v.l.s.Push(200 + i)
+    return v.d[i]
+}
+fn mark(l mut Log&, k I64) I64 {
+    l.s.Push(k)
+    return k
+}
+fn run() I64 {
+    l := Log()
+    a := Array<I64>(4)
+    v := V(l)
+    a[mark(l, 1)], v[mark(l, 2)] = mark(l, 3), mark(l, 4)
+    v[mark(l, 3)] += mark(l, 6)
+    v[mark(l, 0)]++
+    a[mark(l, 2)], a[mark(l, 3)] = a[mark(l, 1)], v[mark(l, 2)]
+    t I64 = 0
+    for x in l.s { t = t * 10 + (x % 10) + (x / 100) * 0 }
+    for x in l.s { t = t * 3 + x }
+    return t * 1000 + a[1] * 100 + a[2] * 10 + a[3] + v.d[2] * 7 + v.d[0]
+}
+B I64 = run()
+fn main() ? {
+    println("baked " $B)
+    println("run   " $run())
+}

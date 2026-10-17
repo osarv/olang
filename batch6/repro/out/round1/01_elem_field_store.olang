@@ -1,0 +1,33 @@
+# CONFIRMED, NEW in chk5 round 1 (771a922), still on 6af6a4e - a use after scope closed.
+# A field store through a generic call's result bound to a writable reference ("cells[i].s = x", List.At returning T =
+# mut Cell&) stores a loop body's text into an element that lives where the list does. The store is judged while At's
+# result scope is still landing; then the O18c pre-pass in flushPendingDischargesFrom (771a922: "a call whose result
+# nothing put anywhere") lands the At call by its obligations at the list's scope, which satisfies At's exact obligation,
+# and nothing judges the store again. 04f4a4d refused it (O10c at the '['); with the pre-pass skipped (a scratch build)
+# 6af6a4e refuses it too.
+#   -b:       299299-897xxx... (three times - churn()'s text read through the dangling references)
+#   -b -d -s: use after scope closed: storage a closed scope gave back was read or written (exit 134)
+#   -i:       w0-abc... w1-abc... w2-abc...
+type Cell struct() {
+    s String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    cells mut List<mut Cell&>& = List<mut Cell&>()
+    for i in range 3 { cells.Push(Cell()) }
+    for i in range 3 {
+        x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        cells[i].s = x
+        churn()
+    }
+    churn()
+    for c in cells { print($c.s " ") }
+    println("")
+}

@@ -1,0 +1,10 @@
+fn hasDot(path String&) Bool {
+    return "." in path
+}
+fn hasDot2(path String&) Bool {
+    if "." in path { return true }
+    return false
+}
+fn main() ? {
+    println($hasDot("a.b") " " $hasDot2("ab"))
+}

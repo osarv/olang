@@ -1,0 +1,14 @@
+extern fn usleep(us U32) I32
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(4, 0)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            spawn fn(k I64) {
+                usleep(20000)
+                out[i] = a[999] * 10 + k
+            }(1)
+        }
+    }
+    println($out[0] " " $out[1] " " $out[2] " " $out[3])
+}

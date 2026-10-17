@@ -1,0 +1,11 @@
+# K2b: two baked globals referring to one instance - is identity kept between them?
+import "std/io"
+type Node struct(v I32) { v mut }
+fn idr(n Node&) Node&n { return n }
+G0 Node& = Node(5)
+G1 Node& = idr(G0)
+GS Bool = same(G0, G1)
+fn main() ? {
+    a Bool = same(G0, G1)
+    try io.Print($GS " " $a "\n")
+}

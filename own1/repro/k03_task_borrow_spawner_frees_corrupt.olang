@@ -1,0 +1,33 @@
+# A fully synchronized (no data race) program where the spawner releases an owned object a task still
+# borrows. Ordered by channels: free happens-before the task's read. The spawner then reuses the freed
+# region, so even a plain -b build reads corrupted memory. The borrow check accepts it.
+import "std/chan"
+type Node struct(n I64) {
+    n
+    name String& = "the original node number is " $n
+}
+type Holder struct() {
+    cur own mut Node&
+}
+fn work(h Holder&, a mut chan.Chan<I64>&, b mut chan.Chan<I64>&) {
+    c := h.cur
+    chan.Send(a, 1)
+    r := try chan.Recv(b) catch { return }
+    println(c.name)                 # read after the spawner freed and reused the region
+}
+fn main() ? {
+    s := Holder()
+    s.cur = Node(111)
+    a := chan.Chan<I64>(1)
+    chan.Init(a)
+    b := chan.Chan<I64>(1)
+    chan.Init(b)
+    join {
+        spawn work(s, a, b)
+        r := try chan.Recv(a) catch { return }
+        s.cur = null                # free the Node's region (chunks to this thread's pool)
+        junk := List<String&>()
+        for i in range 400 { junk.Push("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" $i) }   # reuse the freed chunk on this thread
+        chan.Send(b, 1)             # release the task to read the (now reused) region
+    }
+}

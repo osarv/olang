@@ -1,0 +1,21 @@
+import "std/io"
+fn sum(a Array<I64>&) I64 {
+    t I64 = 0
+    for x in a { t += x }
+    return t
+}
+type W struct(a Array<I64>&) { a }
+fn sumW(w W&) I64 { return sum(w.a) }
+fn mkW(v I64) W& { return W(Array<I64>(1000, v)) }
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i)
+            spawn out[i] = sum(a[0:500])
+            spawn out[i] = sumW(W(a))
+            spawn out[i] = sumW(mkW(i))
+        }
+    }
+    try io.Print($out[3] "\n")
+}

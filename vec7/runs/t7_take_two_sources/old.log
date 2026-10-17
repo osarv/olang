@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/t7_take_two_sources.olang:18:10: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   18 |     w := take a.toks
+      |          ^~~~
+/home/user/review/vec7/work/t7_take_two_sources.olang:19:16: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   19 |     if c { w = take b.toks }
+      |                ^~~~
+compilation failed with 2 errors

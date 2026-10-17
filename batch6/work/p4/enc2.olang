@@ -1,0 +1,51 @@
+# P4: tasks through a function value, a generic, a method and a Call value, each failing with a word re-encoded
+error A {
+    A1
+    A2
+}
+error B {
+    B1
+    B2
+}
+fn fa(n I64) I64 ? B + A {
+    if n == 1 { error A.A2 }
+    if n == 2 { error B.B2 }
+    return n
+}
+fn gen(x <T>, n I64) T ? A + B {
+    if n == 1 { error B.B1 }
+    if n == 2 { error A.A1 }
+    return x
+}
+type Ctr struct(k I64) {
+    k
+}
+fn (c Ctr&) Call(n I64) I64 ? B {
+    if n == c.k { error B.B2 }
+    return n
+}
+fn (c Ctr&) m(n I64) I64 ? A {
+    if n == c.k { error A.A2 }
+    return n
+}
+fn run(which I64, n I64) I64 {
+    fv fn(n I64) I64 ? B + A = fa
+    c := Ctr(n)
+    try join {
+        if which == 0 { spawn try fv(n) }
+        if which == 1 { spawn try gen(I64(5), n) }
+        if which == 2 { spawn try c.m(n + 100) }
+        if which == 3 { spawn try c.m(n) }
+    } catch A.A1 { return 11 } catch A.A2 { return 12 } catch B.B1 { return 21 } catch B.B2 { return 22 }
+    return 0
+}
+R0 I64 = run(0, 1) * 1000 + run(0, 2)
+R1 I64 = run(1, 1) * 1000 + run(1, 2)
+R3 I64 = run(3, 1) * 1000 + run(3, 0)
+on mut I64 = 1
+fn main() ? {
+    println($(run(0, on) * 1000 + run(0, 2 * on)) " " $R0)
+    println($(run(1, on) * 1000 + run(1, 2 * on)) " " $R1)
+    println("-")
+    println($(run(3, on) * 1000 + run(3, 0 * on)) " " $R3)
+}

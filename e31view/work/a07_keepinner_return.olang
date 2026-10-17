@@ -1,0 +1,34 @@
+# the collection is a local the function returns (O26a: it lives in the result scope); the hidden copy is a stack slot of
+# the function; the view callee stores a borrow of the copy's value part into what the copy's reference names
+type Inner struct(x I64) {
+    x
+}
+type R struct() {
+    i Inner& = null
+}
+type V struct(ref mut R&, inner Inner) {
+    ref
+    inner
+}
+type Vs struct(r mut R&) {
+    r
+}
+fn (s Vs&) At(i I64) V { return V(s.r, Inner(i)) }
+fn keep(r mut R&, i Inner&) { r.i = i }
+fn f(c mut V&) { keep(c.ref, c.inner) }
+fn mk() Vs {
+    s := Vs(R())
+    f(s[42])
+    return s
+}
+fn clobber(n I64) I64 {
+    a := Array<I64, 64>()
+    for k in range 64 { a[k] = n * 1000 + k }
+    if n > 0 { return clobber(n - 1) + a[3] }
+    return a[5]
+}
+fn main() ? {
+    s := mk()
+    println($clobber(20))
+    println($s.r.i.x)
+}

@@ -1,0 +1,13 @@
+# check: fail error[S12b, D8c]: a match gives one value - to give several, return them from each case of a match statement: 'case P { return a, b }'
+# never: expected '}'
+# S12b/D8c: a match used as a value gives one value; several results are never one value
+fn power(op String&) (I32, I32) {
+    return match op {
+        case "+", "-" => 3, 4
+        nomatch => 0, 0
+    }
+}
+fn main() ? {
+    l, r := power("+")
+    println($l $r)
+}

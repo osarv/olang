@@ -1,0 +1,10 @@
+type Elem struct() { n I64 = 0 }
+fn (e Elem&) size() I64 { return e.n }
+fn (e Elem&) sizeOf(x I64) I64 { return e.n + x }
+type G struct() { arr mut Array<Elem>& = Array<Elem>(3) }
+fn f(g G&) I64 { return g.arr[0].size() }
+fn f2(g G&) I64 { return g.arr[0].sizeOf(1) }
+fn main() ? {
+    g := G()
+    println($f(g) " " $f2(g))
+}

@@ -1,0 +1,7 @@
+# check: fail error[D9a]: array parameter 'x' is passed by reference
+# D9a: a lambda parameter written with an array type by value is the error, as any parameter's - one whose type the
+# expected function type gives is not (see the corpus)
+fn main() ? {
+    a := Array<Array<I32, 2>>(3)
+    println($a.Any(fn(x Array<I32, 2>) Bool { return x[0] == 5 }))
+}

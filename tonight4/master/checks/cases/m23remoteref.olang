@@ -1,0 +1,4 @@
+# check: fail may hold only letters
+# M23a: a ref that would be read as an option of git's
+import "example.com/me/tools@--upload-pack=touch/x"
+fn main() ? { }

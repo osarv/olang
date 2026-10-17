@@ -1,0 +1,8 @@
+# lib struct compared in main
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($(pv.MakePair(3, 4) == pv.MakePair(13, 14)))
+}

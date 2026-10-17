@@ -1,0 +1,30 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<I64>& = Array<I64>(4, 7)
+}
+fn (c CB&) Len() I64 { return c.data.Len() }
+fn (c CB&) Slice(lo I64, hi I64) Array<I64>&c { return c.data[lo:hi] }
+fn (c CB&) RunFrom(at I64) Array<I64>&c ? Exhausted {
+    if at >= c.data.Len() { error Exhausted.END }
+    return c.data[at:]
+}
+fn use(c mut CB&) {
+    t := 0
+    for x in c {
+        t += x
+        c.data = Array<I64>(8, 9)
+        churn()
+    }
+    println($t)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

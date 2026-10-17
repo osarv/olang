@@ -1,0 +1,13 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) At(i I64) I64 {
+  a.c.n = 99
+  return i
+}
+fn main() ? {
+  k := G[5]
+  println($G.c.n " " $k)
+}

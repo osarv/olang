@@ -1,0 +1,306 @@
+# ecs - an entity-component simulation: particles with position, velocity, a lifetime and a kind, stored as
+# components in Maps keyed by entity id. Every step spawns new particles from emitters, moves everything, bounces off
+# the walls, rebuilds a spatial hash (cell -> entities) to find close pairs, lets "eaters" eat "food" they touch,
+# ages everything and destroys what died. Thousands of steps; entities are created and destroyed all the time.
+
+import "std/rand"
+import "std/math"
+
+Steps I64 = 3000
+Width F64 = 400.0
+Height F64 = 300.0
+Cell F64 = 8.0
+Radius F64 = 3.0
+
+type Vec2 struct(x F64, y F64) {
+    x
+    y
+}
+
+fn (a Vec2) Plus(b Vec2) Vec2 { return Vec2(a.x + b.x, a.y + b.y) }
+fn (a Vec2) Minus(b Vec2) Vec2 { return Vec2(a.x - b.x, a.y - b.y) }
+fn (a Vec2) Scale(k F64) Vec2 { return Vec2(a.x * k, a.y * k) }
+fn (a Vec2) Len2() F64 { return a.x * a.x + a.y * a.y }
+
+type Kind enum {
+    Food
+    Eater
+    Spark
+}
+
+type Emitter struct(at Vec2, kind Kind, rate I32) {
+    at
+    kind
+    rate
+}
+
+# the components, each a map from entity id
+type World struct(seed U64) {
+    rng mut rand.Rand& = rand.Rand(seed)
+    nextId I64 = 1
+    pos mut Map<I64, Vec2>& = Map<I64, Vec2>()
+    vel mut Map<I64, Vec2>& = Map<I64, Vec2>()
+    life mut Map<I64, I32>& = Map<I64, I32>()
+    kind mut Map<I64, Kind>& = Map<I64, Kind>()
+    energy mut Map<I64, F64>& = Map<I64, F64>()
+    emitters mut List<Emitter>& = List<Emitter>()
+    alive mut List<I64>& = List<I64>()
+    # the hierarchy: an eater carries up to 3 pieces of food it caught; cargo follows its carrier and is destroyed
+    # with it
+    parent mut Map<I64, I64>& = Map<I64, I64>()
+    cargo mut Map<I64, List<I64>>& = Map<I64, List<I64>>()
+    # the last 200 events, newest last
+    log mut List<String&>& = List<String&>()
+    now I64 = 0
+    # statistics
+    carried I64 = 0
+    born I64 = 0
+    died I64 = 0
+    eaten I64 = 0
+    pairs I64 = 0
+}
+
+fn (w mut World&) spawn(at Vec2, k Kind) I64 {
+    id := w.nextId
+    w.nextId++
+    angle := w.rng.Uniform(0.0, 2.0 * math.Pi)
+    speed := w.rng.Uniform(0.5, 2.0)
+    w.pos.Put(id, at)
+    w.vel.Put(id, Vec2(math.Cos(angle) * speed, math.Sin(angle) * speed))
+    lifetime := match k {
+        case Kind.Food => 400
+        case Kind.Eater => 900
+        case Kind.Spark => 30
+    }
+    w.life.Put(id, I32(lifetime))
+    w.kind.Put(id, k)
+    if k == Kind.Eater { w.energy.Put(id, 50.0) }
+    w.alive.Push(id)
+    w.born++
+    return id
+}
+
+fn (w mut World&) destroy(id I64) {
+    w.pos.Remove(id)
+    w.vel.Remove(id)
+    w.life.Remove(id)
+    w.kind.Remove(id)
+    w.energy.Remove(id)
+    w.died++
+}
+
+# ---- the hierarchy ----
+
+fn (w mut World&) attach(carrier I64, item I64) {
+    w.parent.Put(item, carrier)
+    if carrier not in w.cargo { w.cargo.Put(carrier, List<I64>()) }
+    l := try w.cargo.Get(carrier) catch { return }
+    l.Push(item)
+    w.carried++
+}
+
+# an item leaves its carrier's cargo
+fn (w mut World&) detach(item I64) {
+    carrier := try w.parent.Get(item) catch { return }
+    w.parent.Remove(item)
+    l := try w.cargo.Get(carrier) catch { return }
+    for i in range l.Len() {
+        if l[i] == item {
+            l.RemoveAt(i)
+            break
+        }
+    }
+}
+
+# destroys an entity and everything it carries, recursively
+fn (w mut World&) destroyTree(id I64) {
+    kids := try w.cargo.Get(id) catch default List<I64>()
+    # first: 'for k in kids' - each destroyTree(k) detaches k from this very list, and the walk then gave the run's
+    # last element again (r03): it was destroyed twice. Walk a copy.
+    for k in kids.ToArray() { w.destroyTree(k) }
+    w.cargo.Remove(id)
+    w.detach(id)
+    w.destroy(id)
+}
+
+fn (w mut World&) cargoOf(id I64) I64 {
+    l := try w.cargo.Get(id) catch { return 0 }
+    return l.Len()
+}
+
+# cargo sits on its carrier
+fn (w mut World&) follow() {
+    for e in w.parent {
+        p := try w.pos.Get(e.Value) catch { continue }
+        w.pos.Put(e.Key, p)
+    }
+}
+
+# ---- the event log ----
+
+fn (w mut World&) note(text String&) {
+    w.log.Push(text)
+    if w.log.Len() > 200 { w.log.RemoveAt(0) }
+}
+
+fn cellOf(p Vec2) I64 {
+    cx := I64(p.x / Cell)
+    cy := I64(p.y / Cell)
+    return cy * 100000 + cx
+}
+
+# moves every entity, bouncing off the walls
+fn (w mut World&) move() {
+    for id in w.alive {
+        p := try w.pos.Get(id) catch { continue }
+        v := try w.vel.Get(id) catch { continue }
+        n := p + v
+        if n.x < 0.0 or n.x >= Width {
+            v = Vec2(-v.x, v.y)
+            n = Vec2(math.Clamp(n.x, 0.0, Width - 0.001), n.y)
+        }
+        if n.y < 0.0 or n.y >= Height {
+            v = Vec2(v.x, -v.y)
+            n = Vec2(n.x, math.Clamp(n.y, 0.0, Height - 0.001))
+        }
+        w.pos.Put(id, n)
+        w.vel.Put(id, v)
+    }
+}
+
+# the spatial hash for this step: every cell's entities
+fn (w World&) buildGrid() Map<I64, List<I64>> {
+    grid := Map<I64, List<I64>>()
+    for id in w.alive {
+        p := try w.pos.Get(id) catch { continue }
+        c := cellOf(p)
+        if c in grid {
+            l := try grid.Get(c) catch { continue }
+            l.Push(id)
+        } else {
+            l := List<I64>()
+            l.Push(id)
+            grid.Put(c, l)
+        }
+    }
+    return grid
+}
+
+# eaters touching food eat it; sparks touching anything die
+fn (w mut World&) interact(grid Map<I64, List<I64>>&) {
+    dead := Map<I64, Bool>()
+    for id in w.alive {
+        k := try w.kind.Get(id) catch { continue }
+        if k != Kind.Eater { continue }
+        p := try w.pos.Get(id) catch { continue }
+        cx := I64(p.x / Cell)
+        cy := I64(p.y / Cell)
+        for dy in range 3 {
+            for dx in range 3 {
+                c := (cy + dy - 1) * 100000 + (cx + dx - 1)
+                others := try grid.Get(c) catch { continue }
+                for o in others {
+                    if o == id or o in dead { continue }
+                    q := try w.pos.Get(o) catch { continue }
+                    d := p - q
+                    if d.Len2() > Radius * Radius * 4.0 { continue }
+                    w.pairs++
+                    ok := try w.kind.Get(o) catch { continue }
+                    if ok == Kind.Food and o not in w.parent and w.cargoOf(id) < 3 {
+                        w.attach(id, o)
+                        w.note("t" $w.now ": eater " $id " picked up " $o)
+                    } else if ok == Kind.Food and o not in w.parent {
+                        dead.Put(o, true)
+                        w.note("t" $w.now ": eater " $id " ate " $o)
+                        e := try w.energy.Get(id) catch default 0.0
+                        w.energy.Put(id, e + 10.0)
+                        w.eaten++
+                    }
+                }
+            }
+        }
+    }
+    for e in dead {
+        w.life.Put(e.Key, 0)
+    }
+}
+
+# ages everything; eaters burn energy; the dead are destroyed, and the alive list rebuilt
+fn (w mut World&) age() {
+    # first written 'still := List<I64>()' ... 'w.alive = still': O25 at the assignment (r10). 'still mut List<I64>&w' compiles
+    # and grows the world by ~12KB a step for ever (each step's list lives where the world does, O8c); so the alive
+    # list is refilled in place from a list local to this step
+    still := List<I64>()
+    for id in w.alive {
+        l := try w.life.Get(id) catch { continue }
+        l--
+        k := try w.kind.Get(id) catch { continue }
+        if k == Kind.Eater {
+            e := try w.energy.Get(id) catch default 0.0
+            e -= 0.1
+            w.energy.Put(id, e)
+            if e <= 0.0 { l = 0 }
+        }
+        if l <= 0 {
+            if id in w.parent { w.detach(id) }
+            w.destroyTree(id)
+            # an eater that dies leaves sparks behind
+            if k == Kind.Eater {
+                p := try w.pos.Get(id) catch default Vec2(0.0, 0.0)
+                for s in range 3 { still.Push(w.spawn(p, Kind.Spark)) }
+            }
+        } else {
+            w.life.Put(id, l)
+            still.Push(id)
+        }
+    }
+    w.alive.Clear()
+    for id in still { w.alive.Push(id) }
+}
+
+fn (w mut World&) emit() {
+    for e in w.emitters {
+        for i in range e.rate {
+            w.spawn(e.at, e.kind)
+        }
+    }
+}
+
+fn (w mut World&) step() {
+    w.now++
+    w.emit()
+    w.move()
+    w.follow()
+    grid := w.buildGrid()
+    w.interact(grid)
+    w.age()
+}
+
+fn (w World&) census() String {
+    food I64 = 0
+    eaters I64 = 0
+    sparks I64 = 0
+    for id in w.alive {
+        k := try w.kind.Get(id) catch { continue }
+        match k {
+            case Kind.Food { food++ }
+            case Kind.Eater { eaters++ }
+            case Kind.Spark { sparks++ }
+        }
+    }
+    return "alive " $w.alive.Len() " food " $food " eaters " $eaters " sparks " $sparks
+}
+
+fn main() ? {
+    w := World(42)
+    w.emitters.Push(Emitter(Vec2(50.0, 50.0), Kind.Food, 3))
+    w.emitters.Push(Emitter(Vec2(350.0, 250.0), Kind.Food, 3))
+    w.emitters.Push(Emitter(Vec2(200.0, 150.0), Kind.Eater, 1))
+    for s in range Steps {
+        w.step()
+        if s % 500 == 0 { println("step " $s ": " $w.census()) }
+    }
+    println("final: " $w.census())
+    println("carried " $w.carried " log " $w.log.Len() " last: " $(try w.log.Last() catch default "-"))
+    println("born " $w.born " died " $w.died " eaten " $w.eaten " pairs " $w.pairs)
+}

@@ -1,0 +1,13 @@
+fn g() {
+    return -
+}
+fn h(x I32) I32 {
+    y I32 = x + 1
+    s := I32[1, 2]
+    s[0] = s[-]
+    return y
+}
+test "x" {
+    g()
+    assert h(1) == 2
+}

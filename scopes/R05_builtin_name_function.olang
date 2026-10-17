@@ -1,0 +1,6 @@
+import "std/io"
+fn same(n I32) I32 { return n + 1 }
+fn atomicLoad(n I32) I32 { return n + 2 }
+fn main() ? {
+    try io.Print($same(1) " " $atomicLoad(1) "\n")
+}

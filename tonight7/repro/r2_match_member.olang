@@ -1,0 +1,26 @@
+# 0859cbe accepts this Str; its parent rejected it (E11c): the match form of t17b
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&, other mut Mid&) {
+    m
+    other
+}
+fn poke(p mut In&) { p.k++ }
+fn (b Bag&) Str() String {
+    loc mut Mid& = Mid()
+    poke((match b.other.inner.k {
+        case 0 => b.m
+        nomatch => loc
+    }).inner)
+    return "b"
+}
+fn main() ? {
+    b := Bag(Mid(), Mid())
+    println("before: " $b.m.inner.k)
+    println($b)
+    println("after:  " $b.m.inner.k)
+}

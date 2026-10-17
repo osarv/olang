@@ -1,0 +1,1 @@
+fn main() ? { a Array<mut I32> = Array<mut I32>(3) }

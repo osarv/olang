@@ -1,0 +1,167 @@
+# rand - a seeded pseudo-random generator: rand.Rand(seed), xoshiro256** (Blackman and Vigna, 2018), its state seeded
+# through splitmix64 as its authors recommend. Fast (a few instructions per number), 256 bits of state, statistically
+# strong, and reproducible: one seed gives one sequence on every machine, so a simulation's draws, a network's
+# initialization and a dataset's shuffling can be repeated exactly. Not for anything secret.
+#
+# One generator is shared by whatever draws from it - std/linalg's random fills take the caller's, so one seed
+# decides a whole run. A generator is an ordinary value: two copies continue the same sequence independently.
+
+import "std/math"
+
+# splitmix64's output function: a bijection scattering the bits of x
+fn mix64(x U64) U64 {
+    z U64 = x
+    z = (z ^ (z >> 30)) * U64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * U64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+}
+
+golden U64 = 11400714819323198485        # 2^64 / the golden ratio, splitmix64's increment
+
+fn rotl(x U64, k U64) U64 {
+    return (x << k) | (x >> (64 - k))
+}
+
+# a generator whose sequence is decided by "seed" alone: the first four outputs of splitmix64 from it
+type Rand struct(seed U64) {
+    s0 mut U64 = mix64(seed + golden)
+    s1 mut U64 = mix64(seed + 2 * golden)
+    s2 mut U64 = mix64(seed + 3 * golden)
+    s3 mut U64 = mix64(seed + 4 * golden)
+}
+
+# the next 64 random bits
+fn (r mut Rand&) Next() U64 {
+    out U64 = rotl(r.s1 * 5, 7) * 9
+    t U64 = r.s1 << 17
+    r.s2 = r.s2 ^ r.s0
+    r.s3 = r.s3 ^ r.s1
+    r.s1 = r.s1 ^ r.s2
+    r.s0 = r.s0 ^ r.s3
+    r.s2 = r.s2 ^ t
+    r.s3 = rotl(r.s3, 45)
+    return out
+}
+
+# a uniform integer in [0, n), n > 0 - unbiased: a draw from the incomplete last stretch of 2^64 is drawn again
+fn (r mut Rand&) Below(n I64) I64 {
+    m := U64(n)
+    limit U64 = U64(0) - (U64(0) - m) % m        # the largest multiple of m that fits, wrapping to 0 for m = 2^k
+    for {
+        x := r.Next()
+        if limit == 0 or x < limit { return I64(x % m) }
+    }
+    unreachable
+}
+
+# a uniform F64 in [0, 1), with all 53 bits of the mantissa random
+fn (r mut Rand&) Float() F64 {
+    return F64(r.Next() >> 11) * (1.0 / 9007199254740992.0)
+}
+
+# a uniform F64 in [lo, hi)
+fn (r mut Rand&) Uniform(lo F64, hi F64) F64 {
+    return lo + (hi - lo) * r.Float()
+}
+
+# a normally distributed F64 with mean 0 and standard deviation 1 (Box-Muller; the second value of each pair is
+# dropped, which costs a logarithm and a square root per number and keeps the generator's state its only state)
+fn (r mut Rand&) Normal() F64 {
+    u F64 = 1.0 - r.Float()                       # in (0, 1], so its logarithm is finite
+    v := r.Float()
+    return math.Sqrt(-2.0 * math.Log(u)) * math.Cos(2.0 * math.Pi * v)
+}
+
+# puts the elements of "a" in a uniformly random order (Fisher-Yates), in place
+fn (r mut Rand&) Shuffle(a mut Array<<T>>&) {
+    i I64 = a.Len() - 1
+    for i > 0 {
+        j := r.Below(i + 1)
+        t := a[i]
+        a[i] = a[j]
+        a[j] = t
+        i--
+    }
+}
+
+test "the first numbers are xoshiro256** seeded by splitmix64" {
+    # splitmix64 from 0 gives 0xE220A8397B1DCDAF first, as its reference implementation does
+    assert mix64(golden) == 16294208416658607535
+    r := Rand(0)
+    a := r.Next()
+    b := r.Next()
+    assert a != b
+    again := Rand(0)
+    assert again.Next() == a and again.Next() == b
+    other := Rand(1)
+    assert other.Next() != a
+}
+
+test "from the state 1, 2, 3, 4 xoshiro256** gives its reference outputs" {
+    r := Rand(0)
+    r.s0 = 1
+    r.s1 = 2
+    r.s2 = 3
+    r.s3 = 4
+    assert r.Next() == 11520 and r.Next() == 0 and r.Next() == 1509978240 and r.Next() == 1215971899390074240
+}
+
+test "Below is uniform and in range" {
+    r := Rand(42)
+    counts := Array<I64>(10)
+    for i in range 100000 {
+        k := r.Below(10)
+        assert k >= 0 and k < 10
+        counts[k]++
+    }
+    for c in counts { assert c > 9500 and c < 10500 }
+    for i in range 1000 { assert r.Below(1) == 0 }
+}
+
+test "Float lies in [0, 1) with the mean of a uniform" {
+    r := Rand(7)
+    sum F64 = 0.0
+    for i in range 100000 {
+        x := r.Float()
+        assert x >= 0.0 and x < 1.0
+        sum += x
+    }
+    mean F64 = sum / 100000.0
+    assert mean > 0.49 and mean < 0.51
+}
+
+test "Normal has mean 0 and standard deviation 1" {
+    r := Rand(3)
+    n I64 = 200000
+    sum F64 = 0.0
+    sq F64 = 0.0
+    for i in range n {
+        x := r.Normal()
+        sum += x
+        sq += x * x
+    }
+    mean F64 = sum / F64(n)
+    sd := math.Sqrt(sq / F64(n) - mean * mean)
+    assert mean > -0.01 and mean < 0.01
+    assert sd > 0.99 and sd < 1.01
+}
+
+test "Shuffle permutes, and one seed gives one order" {
+    a := Array<I64>(1000)
+    for i in range 1000 { a[i] = i }
+    r := Rand(11)
+    r.Shuffle(a)
+    seen := Array<Bool>(1000)
+    moved I64 = 0
+    for i, x in a {
+        assert not seen[x]
+        seen[x] = true
+        if x != i { moved++ }
+    }
+    assert moved > 900
+    b := Array<I64>(1000)
+    for i in range 1000 { b[i] = i }
+    again := Rand(11)
+    again.Shuffle(b)
+    for i in range 1000 { assert a[i] == b[i] }
+}

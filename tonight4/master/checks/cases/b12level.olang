@@ -1,0 +1,15 @@
+# check: run
+# flags: -a x86-64-v2
+# B10a/B12: the build constants follow -a - an x86-64 level's CPU, SSE's 128-bit vectors and no FMA - while compiling
+# (decided asserts, a top-level condition) and at run time
+error E { X }
+if TargetVectorBits == 128 and not TargetHasFma {
+    Level String& = TargetCpu
+}
+Bits mut I32 = TargetVectorBits
+fn main() ? E {
+    assert TargetCpu == "x86-64-v2" and TargetArch == "x86_64" and TargetOs == "linux"
+    assert TargetVectorBits == 128 and not TargetHasFma
+    assert Level == "x86-64-v2"
+    if Bits != 128 { error E.X }
+}

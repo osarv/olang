@@ -1,0 +1,4 @@
+# M20: an import's alias is reserved in its module - for every kind of declaration
+import "lib"
+type lib struct() { }
+fn main() ? { }

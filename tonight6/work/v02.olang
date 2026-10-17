@@ -1,0 +1,37 @@
+type Box struct(s String&) { s }
+fn box(s String&) Box { return Box(s) }
+fn boxg(s <T>) Box { return Box(s) }
+fn (s String&) ToBox() Box { return Box(s) }
+fn wrap(b Box) Box { return b }
+fn mayBox(s String&) Box ? {
+    if s.Len() > 1000 { error }
+    return Box(s)
+}
+fn two(s String&) (Box, I64) { return Box(s), 1 }
+type Pairish struct(a Box, n I64) {
+    a
+    n
+}
+fn pairish(s String&) Pairish { return Pairish(Box(s), 1) }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+
+fn main() ? {
+    bs := List<Box>()
+    m := Map<I64, Box>()
+    arr := Array<Box>(4, Box("init"))
+    for k in range 4 {
+        t := $k "-some-text-of-moderate-length"
+        bs.Push(t.ToBox())
+    }
+    c := churn()
+    println($c)
+
+    for b in bs { println(b.s) }
+}

@@ -1,0 +1,20 @@
+# check: fail error[E12]: expected fn(n P&) I64, found R
+# also: error[E12]: expected fn(n P&) I64, found fn(n mut P&) I64
+# T22/E31: a function value - or a value whose type declares Call - fits a function type whose reference parameter is
+# writable when its own is read-only, never the other way: one writing through the parameter cannot stand for a type
+# promising to only read it
+type P struct(v I64) { v }
+fn w(n mut P&) I64 {
+    n.v = 9
+    return n.v
+}
+fn applyRo(f fn(n P&) I64, p P&) I64 { return f(p) }
+type R struct(k I64) { k }
+fn (r R&) Call(n mut P&) I64 {
+    n.v = 1
+    return r.k
+}
+fn main() ? {
+    p P& = P(4)
+    println($applyRo(w, p) " " $applyRo(R(3), p))
+}

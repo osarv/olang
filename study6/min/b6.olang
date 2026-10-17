@@ -1,0 +1,15 @@
+type Value enum {
+    Nil
+    Fn(c Closure&)
+}
+type Closure struct(env Holder&) {
+    env
+}
+type Holder struct() {
+    m mut Map<I64, Value>& = Map<I64, Value>()
+}
+fn main() ? {
+    h := Holder()
+    h.m.Put(1, Value.Nil)
+    println($h.m.Len())
+}

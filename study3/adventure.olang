@@ -1,0 +1,224 @@
+# adventure - a text adventure as a state machine: rooms in a map, items that move between rooms and the player,
+# commands parsed into an enum and dispatched with match (guards, nested patterns, several alternatives), and a
+# scripted session run to the end.
+
+type Dir enum {
+    North
+    South
+    East
+    West
+}
+
+fn (d Dir) Opposite() Dir {
+    return match d {
+        case Dir.North => Dir.South
+        case Dir.South => Dir.North
+        case Dir.East => Dir.West
+        case Dir.West => Dir.East
+    }
+}
+
+fn parseDir(w String&) Dir ? {
+    return match w {
+        case "n", "north" => Dir.North
+        case "s", "south" => Dir.South
+        case "e", "east" => Dir.East
+        case "w", "west" => Dir.West
+        nomatch { error }
+    }
+}
+
+type Item struct(name String&, weight I32, glows Bool = false) {
+    name
+    weight
+    glows
+}
+
+type Room struct(name String&, dark Bool = false) {
+    name
+    dark
+    exits Map<Dir, String&>
+    items List<Item&>
+    locked Map<Dir, String&>          # an exit that needs the named item
+}
+
+# anything that can be shown to the player
+type Shown trait {
+    Title() String
+    Detail() String
+}
+
+fn (r Room&) Title() String { return r.name }
+fn (r Room&) Detail() String {
+    if r.items.Len() == 0 { return "nothing here" }
+    b := StringBuilder()
+    for i, it in r.items {
+        if i > 0 { b.Push(", ") }
+        b.Push(it.name)
+    }
+    return "you see " $b.ToString()
+}
+fn (it Item&) Title() String { return it.name }
+fn (it Item&) Detail() String { return "weighs " $it.weight $(" and glows" if it.glows else "") }
+
+# a default every Shown thing has
+fn (s <S Shown>&) Describe() String { return $s.Title() ": " $s.Detail() }
+
+type Command enum {
+    Go(d Dir)
+    Take(what String&)
+    Drop(what String&)
+    Look
+    Inventory
+    Use(what String&, on Dir)
+    Quit
+    Unknown(text String&)
+}
+
+fn parseCommand(line String&) Command {
+    w := line.Trim().Split(" ")
+    return match w.Len() {
+        case 1 => match w[0] {
+            case "look", "l" => Command.Look
+            case "inv", "i" => Command.Inventory
+            case "quit", "q" => Command.Quit
+            nomatch => Command.Go(try parseDir(w[0]) catch { return Command.Unknown(line) })
+        }
+        case 2 if w[0] == "go" => Command.Go(try parseDir(w[1]) catch { return Command.Unknown(line) })
+        case 2 if w[0] == "take" => Command.Take(w[1])
+        case 2 if w[0] == "drop" => Command.Drop(w[1])
+        case 4 if w[0] == "use" and w[2] == "on" => Command.Use(w[1], try parseDir(w[3]) catch { return Command.Unknown(line) })
+        nomatch => Command.Unknown(line)
+    }
+}
+
+type Game struct() {
+    rooms Map<String&, mut Room&>
+    here String& = "hall"
+    bag List<Item&>
+    limit I32 = 10
+    moves I32 = 0
+    over Bool = false
+}
+
+fn (g Game&) room() mut Room& { return try g.rooms.Get(g.here) catch { unreachable } }
+
+fn (g Game&) carried() I32 { return g.bag.Iter().Fold(0, fn(acc I32, it Item&) I32 { return acc + it.weight }) }
+
+fn (g Game&) light() Bool { return g.bag.Iter().Any(fn(it Item&) Bool { return it.glows }) }
+
+fn removeNamed(l mut List<Item&>&, name String&) Item&l ? {
+    for i in range l.Len() {
+        if l[i].name == name { return l.RemoveAt(i) }
+    }
+    error
+}
+
+fn (g mut Game&) step(c Command) String {
+    g.moves++
+    r := g.room()
+    return match c {
+        case Command.Look if r.dark and not g.light() => "it is too dark to see"
+        case Command.Look => r.Describe()
+        case Command.Inventory if g.bag.Len() == 0 => "you carry nothing"
+        case Command.Inventory => "you carry " $g.bag.Len() " things, weight " $g.carried()
+        case Command.Go(d) if d in r.locked => "the way " $d " is locked"
+        case Command.Go(d) => g.move(d)
+        case Command.Take(what) => g.take(what)
+        case Command.Drop(what) => g.drop(what)
+        case Command.Use(key, d) => g.unlock(key, d)
+        case Command.Quit {
+            g.over = true
+            return "bye"
+        }
+        case Command.Unknown(t) => "I don't understand '" $t "'"
+    }
+}
+
+fn (g mut Game&) move(d Dir) String {
+    r := g.room()
+    next := try r.exits.Get(d) catch { return "you can't go " $d }
+    g.here = next
+    return "you go to the " $next
+}
+
+fn (g mut Game&) take(what String&) String {
+    r := g.room()
+    if r.dark and not g.light() { return "you fumble in the dark" }
+    it := try removeNamed(r.items, what) catch { return "there is no " $what " here" }
+    if g.carried() + it.weight > g.limit {
+        r.items.Push(it)
+        return "the " $what " is too heavy"
+    }
+    g.bag.Push(it)
+    return "taken: " $it.Describe()
+}
+
+fn (g mut Game&) drop(what String&) String {
+    it := try removeNamed(g.bag, what) catch { return "you have no " $what }
+    g.room().items.Push(it)
+    return "dropped " $what
+}
+
+fn (g mut Game&) unlock(key String&, d Dir) String {
+    r := g.room()
+    need := try r.locked.Get(d) catch { return "nothing to unlock " $d }
+    if need != key { return "the " $key " does not fit" }
+    if not g.bag.Iter().Any(fn(it Item&) Bool { return it.name == key }) { return "you have no " $key }
+    r.locked.Remove(d)
+    return "unlocked the way " $d
+}
+
+fn link(g mut Game&, a String&, d Dir, b String&) {
+    (try g.rooms.Get(a) catch { unreachable }).exits.Put(d, b)
+    (try g.rooms.Get(b) catch { unreachable }).exits.Put(d.Opposite(), a)
+}
+
+fn world() Game {
+    g := Game()
+    for name in String&["hall", "kitchen", "cellar", "garden", "vault"] {
+        g.rooms.Put(name, Room($name, name == "cellar"))
+    }
+    link(g, "hall", Dir.North, "kitchen")
+    link(g, "kitchen", Dir.East, "garden")
+    link(g, "kitchen", Dir.South, "cellar")
+    link(g, "cellar", Dir.West, "vault")
+    hall := try g.rooms.Get("hall") catch { unreachable }
+    hall.items.Push(Item("lamp", 3, true))
+    hall.items.Push(Item("anvil", 9))
+    (try g.rooms.Get("garden") catch { unreachable }).items.Push(Item("key", 1))
+    (try g.rooms.Get("cellar") catch { unreachable }).locked.Put(Dir.West, "key")
+    (try g.rooms.Get("vault") catch { unreachable }).items.Push(Item("gold", 5))
+    return g
+}
+
+Script := String&[
+    "look", "take anvil", "take lamp", "inv", "n", "e", "take key", "w",
+    "s", "look", "w", "use key on west", "w", "take gold", "take anvil",
+    "dance", "inv", "q",
+]
+
+fn main() ? {
+    g := world()
+    for line in Script {
+        if g.over { break }
+        println("> " $line)
+        println("  " $g.step(parseCommand(line)))
+    }
+    println("moves: " $g.moves ", in the " $g.here)
+}
+
+fn play() String {
+    g := world()
+    last String& = ""
+    for line in Script {
+        if g.over { break }
+        last = g.step(parseCommand(line))
+    }
+    return $g.here "/" $g.moves "/" $g.carried() "/" $last
+}
+Played := play()
+test "a whole session, baked and at run time" {
+    assert Played == "vault/18/10/bye"
+    assert play() == Played
+}

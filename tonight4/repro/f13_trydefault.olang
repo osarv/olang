@@ -1,0 +1,24 @@
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() { c mut Cell& = Cell() }
+fn maybe(h mut Box&) Box& ? {
+    h.c.kept = h
+    return h
+}
+fn stash(h mut Box&) {
+    x := try maybe(h) catch default h
+    x.c.v++
+}
+fn run(m mut Map<I64, Box>&) ? {
+    for i in range 3 {
+        c := try m.Get(1)
+        stash(c)
+    }
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try run(m)
+}

@@ -1,0 +1,150 @@
+# Iterator pipelines: hand-written iterators (a generator, the lines of a text), the prelude's helpers over them,
+# comprehensions, closures capturing references, a callable struct, and a table of function values.
+import "std/io"
+
+# Fibonacci numbers up to a limit
+type Fib struct(limit I64) {
+    limit
+    a mut I64 = 0
+    b mut I64 = 1
+}
+
+fn (f mut Fib&) Next() I64 ? Exhausted {
+    if f.a > f.limit { error Exhausted.END }
+    v := f.a
+    f.a, f.b = f.b, f.a + f.b
+    return v
+}
+
+# the lines of a text, as slices of it
+type Lines struct(src String&) {
+    text String&src = src
+    at mut I64 = 0
+}
+
+fn (l mut Lines&) Next() String&l ? Exhausted {
+    if l.at >= l.text.Len() { error Exhausted.END }
+    rest := l.text[l.at:]
+    end := rest.FindByte('\n')
+    if end < 0 { end = rest.Len() }
+    l.at += end + 1
+    return rest[:end]
+}
+
+# a running total, changed through a reference a lambda captures
+type Tally struct() {
+    sum mut I64 = 0
+    n mut I64 = 0
+}
+
+fn (t mut Tally&) add(x I64) {
+    t.sum += x
+    t.n++
+}
+
+# a callable thing: scales and offsets
+type Affine struct(k I64, c I64) {
+    k
+    c
+}
+fn (a Affine&) Call(x I64) I64 { return a.k * x + a.c }
+
+# a fixed-size ring of the last few values, indexable
+type Ring struct(cap I64) {
+    vals mut Array<I64>& = Array<I64>(cap)
+    start mut I64 = 0
+    count mut I64 = 0
+}
+fn (r mut Ring&) add(x I64) {
+    if r.count < r.vals.Len() {
+        r.vals[(r.start + r.count) % r.vals.Len()] = x
+        r.count++
+    } else {
+        r.vals[r.start] = x
+        r.start = (r.start + 1) % r.vals.Len()
+    }
+}
+fn (r Ring&) At(i I64) I64 { return r.vals[(r.start + i) % r.vals.Len()] }
+fn (r Ring&) Len() I64 { return r.count }
+
+fn applyAll(fs List<fn(x I64) I64>&, x I64) I64 {
+    v I64 = x
+    for f in fs { v = f(v) }
+    return v
+}
+
+# (not a function returning "fn(x I64) I64 { return g(f(x)) }": a lambda capturing two parameters is rejected,
+# min/j1.olang - so a callable struct)
+type Composed struct(f fn(x I64) I64, g fn(x I64) I64) {
+    f
+    g
+}
+fn (c Composed&) Call(x I64) I64 { return c.g(c.f(x)) }
+fn compose(f fn(x I64) I64, g fn(x I64) I64) Composed& { return Composed(f, g) }
+
+fn sumOf(it mut <I Iterator<I64>>&) I64 {
+    s I64 = 0
+    for x in it { s += x }
+    return s
+}
+
+fn main() ? io.IoError {
+    fibs := I64[x for x in Fib(100)]
+    try io.Print("fibs " $fibs "\n")
+    evens := I64[x * x for x in Fib(1000) if x % 2 == 0]
+    try io.Print("even squares " $evens "\n")
+    try io.Print("sum of fibs to 1e6: " $sumOf(Fib(1000000)) "\n")
+
+    text := "alpha 3\nbeta 14\n\ngamma 159\ndelta 2"
+    nonEmpty := Lines(text).Count(fn(l String&) Bool { return l.Len() > 0 })
+    longLine := Lines(text).Any(fn(l String&) Bool { return l.Len() > 8 })
+    try io.Print("lines " $nonEmpty ", any long: " $longLine "\n")
+
+    tally := Tally()
+    for line in Lines(text) {
+        parts := line.Split(" ")
+        if parts.Len() == 2 {
+            n := try parts[1].ParseInt() catch default 0
+            tally.add(n)
+        }
+    }
+    try io.Print("tally " $tally.sum " over " $tally.n "\n")
+
+    # a closure capturing a mutable reference updates outer state
+    seen Tally& = Tally()
+    record := fn(x I64) { seen.add(x) }
+    for x in Fib(50) { record(x) }
+    try io.Print("seen " $seen.sum " in " $seen.n " calls\n")
+
+    # a threshold captured by value
+    limit I64 = 10
+    small := Fib(1000).Filter(fn(x I64) Bool { return x < limit })
+    try io.Print("small fibs " $small.ToArray() "\n")
+    doubled := small.Iter().Map(fn(x I64) I64 { return x * 2 })
+    try io.Print("doubled " $doubled.ToArray() ", fold " $doubled.Iter().Fold(I64(0), fn(a I64, x I64) I64 { return a + x }) "\n")
+
+    # callable struct, function values in a list, composition
+    f := Affine(3, 1)
+    fs := List<fn(x I64) I64>()
+    fs.Push(f)
+    fs.Push(fn(x I64) I64 { return x * x })
+    fs.Push(compose(f, f))
+    try io.Print("applyAll(2) = " $applyAll(fs, 2) "\n")
+
+    # a ring buffer walked by index, and through Iter() derived from At/Len
+    r := Ring(4)
+    for i in range 1, 11 { r.add(i * i) }
+    walked := I64[x for x in r]
+    try io.Print("ring " $walked " sum " $sumOf(r.Iter()) " all big " $r.Iter().All(fn(x I64) Bool { return x > 30 }) "\n")
+
+    # nested comprehension over a range and pairs
+    triples := List<String&>()
+    for a in range 1, 20 {
+        for b in range a, 20 {
+            for c in range b, 30 {
+                if a * a + b * b == c * c { triples.Push($a "-" $b "-" $c) }
+            }
+        }
+    }
+    try io.Print("pythagorean " $triples.Len() ": " $triples.ToArray() "\n")
+}

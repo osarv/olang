@@ -1,0 +1,25 @@
+type R struct(id I64) {
+    id
+} destruct {
+    println("dtor " $id)
+}
+type Holder struct() {
+    res mut R& = null
+}
+fn pass(f fn(i I64)) fn(i I64) { return f }
+fn call(f fn(i I64), i I64) { f(i) }
+fn run() {
+    n mut Holder& = Holder()
+    g := fn(i I64) { n.res = R(i) }
+    k fn(i I64) = g
+    join {
+        spawn call(k, 2)
+    }
+    k(3)
+    g(4)
+    println("end of run")
+}
+fn main() ? {
+    run()
+    println("after run")
+}

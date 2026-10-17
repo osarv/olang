@@ -1,0 +1,39 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type E enum {
+    L(n Node&)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        q := Array<I64>(64, -7)
+        t += q[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn run() I64 {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    e := E.Z
+    h := Node(0)
+    for i in range 5 {
+        a = Node(i)
+        b = Node(i * 10)
+        e, h.next = E.L(Node(i + 100)), Node(i + 200)
+        a.next, b.next = Node(i + 1000), Node(i + 2000)
+        churn()
+    }
+    churn()
+    k := match e { case E.L(n) => n.v case E.Z => 0 }
+    return a.v + b.v + a.next.v + b.next.v + h.next.v + k
+}
+B I64 = run()
+fn main() ? {
+    println("baked " $B)
+    println("run   " $run())
+}

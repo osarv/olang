@@ -1,0 +1,14 @@
+# B9/B9c: top-level conditional declarations decided by a call
+import "std/io"
+fn four() I32 { return 4 }
+if four() == 4 {
+  type Num I64
+  fn pick() I32 { return 1 }
+} else {
+  type Num I32
+  fn pick() I32 { return 2 }
+}
+fn main() ? {
+  n Num = Num(5)
+  try io.Print($pick() " " $I64(n) "\n")
+}

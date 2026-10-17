@@ -1,0 +1,23 @@
+# F3: handles all the way, h := lll[0][0]; h.Push(x) (the hidden form lll[0][0].Push(x), hf/h25, is correct)
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn add(lll mut List<List<List<I64>>>&, x I64) {
+    h := lll[0][0]
+    h.Push(x)
+}
+fn main() ? {
+    lll := List<List<List<I64>>>()
+    lll.Push(List<List<I64>>())
+    lll[0].Push(List<I64>())
+    add(lll, 7)
+    churn()
+    for s in lll[0][0] { println("for " $s) }
+}

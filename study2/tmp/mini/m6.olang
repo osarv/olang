@@ -1,0 +1,22 @@
+type Sym struct(name String&) { name }
+type R struct() {
+    items mut List<Sym&>
+    byName mut Map<String&, Sym&>
+}
+fn (r R&) first() Sym&r {
+    s := r.items[0]
+    return s
+}
+fn (r R&) find(n String&) Sym&r {
+    s := try r.byName.Get(n) catch default null
+    return s
+}
+fn (r R&) direct(n String&) Sym&r {
+    return try r.byName.Get(n) catch default null
+}
+fn main() ? {
+    r := R()
+    r.items.Push(Sym("a"))
+    r.byName.Put("a", Sym("a"))
+    println($r.first() " " $r.find("a") " " $r.direct("a"))
+}
