@@ -108,7 +108,7 @@ olang: error[B10]: -define X=1e400: beyond F64's range
 === b10negbig.olang
 olang: error[B10]: -define X=-9223372036854775809: below I64's minimum
 === b10undefined.olang
-b10undefined.olang:5:4: error[B10]: unknown name 'Profile' - if it is a build constant, define it with '-D Profile=VALUE', or declare it with a default
+b10undefined.olang:5:4: error[B10]: unknown name 'Profile' - if it is a build constant, define it with '-define Profile=VALUE', or declare it with a default
     5 | if Profile == "prod" {
       |    ^~~~~~~
 b10undefined.olang:12:8: error[B10]: unknown name 'Mode' - if it is a build constant, define it with '-define Mode=VALUE', or declare it with a default

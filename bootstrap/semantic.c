@@ -30438,7 +30438,7 @@ static bool decidePendingConditions(void) {
         if (ErrMsgGetNErrors() != before && condUnknownTok.str.len) { //B10: a build constant -D did not define, most likely
             struct str n = condUnknownTok.str;
             err = ERR_COND_UNKNOWN_BUILD;
-            reason = StrFmt("'%.*s' - if it is a build constant, define it with '-D %.*s=VALUE', or declare it with a default",
+            reason = StrFmt("'%.*s' - if it is a build constant, define it with '-define %.*s=VALUE', or declare it with a default",
                             n.len, n.ptr, n.len, n.ptr);
         } else if (ErrMsgGetNErrors() != before) {
             err = ERR_COND_UNSEEN;

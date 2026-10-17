@@ -630,7 +630,7 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran tasks.olang unlike the built program", dir)
     try r.expect(outOf(dir) == "squares I64[1, 4, 9, 16]\nsum 10\ncleanup ran\n", "-i tasks.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
-    try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang -i: ") and outOf(dir).Contains(": it waits for another task")
+    try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang interpret: ") and outOf(dir).Contains(": it waits for another task")
                  and outOf(dir).Contains("in the task spawned at tasks.olang:39"), "-i tasks.olang x output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134,
                  "ends did not abort", dir)
@@ -1748,11 +1748,11 @@ test "format writes the layout, and -check lists what is not in it" { assert pas
 fn formatting(r mut report&) ? Failed {
     dir := fresh("format")
     os.Run("cp checks/fixtures/format/* " $os.Quote(dir) " && cd " $os.Quote(dir) " && cp ugly.olang u.olang && cp ugly.want w.olang && cp broken.olang b.olang")
-    try r.expect(sh(dir, "\"$OLANG\" format -check u.olang w.olang > out.txt 2>&1") == 1 and outOf(dir) == "u.olang\n",
+    try r.expect(sh(dir, "\"$OLANG\" format -check u.olang w.olang > out.txt 2> err.txt") == 1 and outOf(dir) == "u.olang\n",
                  "format -check lists the file not in the layout", dir)
     try r.expect(sh(dir, "cmp -s u.olang ugly.olang") == 0, "format -check rewrote a file", dir)
     try r.expect(sh(dir, "\"$OLANG\" format u.olang > out.txt 2>&1 && cmp -s u.olang ugly.want") == 0, "format's layout", dir)
-    try r.expect(sh(dir, "\"$OLANG\" format -check u.olang > out.txt 2>&1") == 0 and outOf(dir) == "", "formatted twice", dir)
+    try r.expect(sh(dir, "\"$OLANG\" format -check u.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "", "formatted twice", dir)
     try r.expect(sh(dir, "\"$OLANG\" u.olang > out.txt 2>&1") == 0, "the formatted program runs", dir)
     try r.expect(sh(dir, "\"$OLANG\" format b.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("b.olang:3:1: error")
                  and sh(dir, "cmp -s b.olang broken.olang") == 0, "a file that does not parse", dir)
@@ -1775,8 +1775,8 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" interpret -debug prog.olang > out.txt 2>&1") == 1
                  and outOf(dir).Contains("-debug applies to running a file, build, compile and test, not to interpret"),
                  "an option for another mode", dir)
-    try r.expect(sh(dir, "\"$OLANG\" build prog > out.txt 2>&1") == 1 and outOf(dir).Contains("'prog' is no olang file"),
-                 "a file without .olang", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -debug prog > out.txt 2>&1") == 1 and outOf(dir).Contains("'prog' is no olang file"),
+                 "running a file without .olang", dir)
     try r.expect(sh(dir, "\"$OLANG\" -debug build prog.olang > out.txt 2>&1") == 1
                  and outOf(dir).Contains("the mode comes first"), "a mode after an option", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -target > out.txt 2>&1") == 1 and outOf(dir).Contains("-target needs a value"),

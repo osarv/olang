@@ -19052,7 +19052,8 @@ std formatted and used through `OLANG_STD`).
 13. `-target` applies to running a file, build, compile, test and interpret, not only build and compile as first
     proposed: tests and interpret already took `-a` (checks run `test -target x86-64-v3` and `interpret -target x86-64`),
     and interpret reads the build constants a target decides. A foreign target still builds with `compile` only.
-14. A file argument must end in `.olang`; a mode word written after options (`olang -debug build f.olang`) is an error
+14. Running a file needs a name ending in `.olang` (that is what tells it from a mode); a mode's own files are taken
+    as named, so `test` still reports a missing file or a directory and runs the rest (B3a, M1); a mode word written after options (`olang -debug build f.olang`) is an error
     saying the mode comes first; an option's missing value is an error naming the value; `help run` lists the options of
     running a file.
 15. `olang interpret`'s own stops are prefixed `olang interpret:` (was `olang -i:`).

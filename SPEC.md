@@ -5744,8 +5744,8 @@ option    ::= "-output" PATH | "-debug" | "-race" | "-sanitize" | "-target" NAME
             | "-update" | "-check"
 ```
 
-A word ending in `.olang` is a file; any other word in the mode's place is a mode, and one that names none is an error
-listing the modes. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
+A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
+an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word

@@ -1074,9 +1074,11 @@ static int compilerMain(int argc, char** argv) {
             word = a;
             continue;
         }
-        if (!endsWithOlang(a)) {
-            //running a file: a mode's word after the options belongs before them
-            for (int k = 1; k < MODE_N; k++) if (mode == MODE_RUN && !strcmp(a, modeWords[k])) ErrUsage(ERR_MODE_FIRST, a);
+        //running a file, the file is what tells it from a mode: a mode's word after the options belongs before them, and
+        //any other word is no file to run. A mode's own files are taken as named, so a missing file or a directory is
+        //reported as it is (B3a, M1)
+        if (mode == MODE_RUN && !endsWithOlang(a)) {
+            for (int k = 1; k < MODE_N; k++) if (!strcmp(a, modeWords[k])) ErrUsage(ERR_MODE_FIRST, a);
             ErrUsage(ERR_NOT_A_SOURCE, a);
         }
         ListAdd(&files, &a);

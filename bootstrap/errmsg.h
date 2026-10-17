@@ -30,7 +30,7 @@ struct type;
     X(ERR_UNKNOWN_FLAG,                 "B1",    "unknown option '%s' - 'olang help' lists the options of %s") \
     X(ERR_OPTION_NOT_FOR_MODE,          "B1",    "%s applies to %s, not to %s") \
     X(ERR_OPTION_NEEDS_VALUE,           "B1",    "%s needs a value after it: %s") \
-    X(ERR_NOT_A_SOURCE,                 "B1",    "'%s' is no olang file - a file's name ends in .olang") \
+    X(ERR_NOT_A_SOURCE,                 "B1",    "'%s' is no olang file to run - a file's name ends in .olang") \
     X(ERR_MODE_FIRST,                   "B1",    "the mode comes first: 'olang %s' and then its options") \
     X(ERR_HELP_ONE_MODE,                "B1",    "help takes at most one mode") \
     X(ERR_OUTPUT_IS_DIR,                "B3h",   "-output %s is a directory - name the file to write") \

@@ -656,7 +656,7 @@ fn OptionNotForMode(text1 String&, text2 String&, text3 String&) Msg { return Ms
 fn OptionNeedsValue(text1 String&, text2 String&) Msg { return Msg(Diag.OptionNeedsValue, "B1", $text1 " needs a value after it: " $text2) }
 
 # ERR_NOT_A_SOURCE
-fn NotASource(text String&) Msg { return Msg(Diag.NotASource, "B1", "'" $text "' is no olang file - a file's name ends in .olang") }
+fn NotASource(text String&) Msg { return Msg(Diag.NotASource, "B1", "'" $text "' is no olang file to run - a file's name ends in .olang") }
 
 # ERR_MODE_FIRST
 fn ModeFirst(text String&) Msg { return Msg(Diag.ModeFirst, "B1", "the mode comes first: 'olang " $text "' and then its options") }
