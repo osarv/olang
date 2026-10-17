@@ -6,8 +6,8 @@ import "std/chan"
 import "std/os"
 import "std/io"
 
-fn produce(c mut chan.Chan<I32>&, n I32) {
-    for i in range n { chan.Send(c, i) }
+fn produce(c mut chan.Chan<I32>&, n I32) ? {
+    for i in range n { try chan.Send(c, i) }
     chan.Close(c)
 }
 

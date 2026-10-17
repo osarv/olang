@@ -6741,6 +6741,7 @@ void cgJoin(struct cgCtx* ctx, struct statement* s) {
     struct type jt = (struct type){0};
     jt.errors = *s->joinErrors;
     struct operand at = (struct operand){0};
+    at.tok = s->startTok;
     cgTrace(ctx, &at, "a task failed, and its join passed it on", true); //S18d: the task's own trace is its thread's
     if (!s->catchClauses.len || cgCatchDispatch(ctx, &at, &s->catchClauses, code, &jt, endLbl)) {
         if (ctx->curFunc) cgPropagateError(ctx, jt, code);

@@ -23533,7 +23533,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     ft.kw = kw;
     ft.errors = ListInit(sizeof(struct type*));
     ft.calls = ListInit(sizeof(struct operand*));
-    if (rangeNode && ft.on) Err(firstTokOfType(s, TOK_TRY), ERR_FOR_IN_TRY_NOTHING);
+    if (rangeNode && hasTokOfType(s, TOK_TRY)) Err(firstTokOfType(s, TOK_TRY), ERR_FOR_IN_TRY_NOTHING);
     if (rangeNode) return buildForRangeStmnt(ctx, s, rangeNode, kw, idxTok, elemTok, spec);
 
     //the block the whole lowering lives in, so its hidden names end with the loop

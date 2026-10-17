@@ -2803,6 +2803,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->errWord = jf.errWord;
             st->errBypass = false;
             st->errCheckRoot = NULL;
+            ctTrace(s->startTok.owner ? s->startTok : tok, "a task failed, and its join passed it on", true); //S18d: as the run time - a task's trace is its own
             for (int c = 0; c < s->catchClauses.len; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
                 bool match = cc->catchAll;
@@ -2812,6 +2813,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 }
                 if (!match) continue;
                 st->flow = CF_NORMAL;
+                ctErtN = 0; //S18d: taken
                 int mark = st->locals->len;
                 ctExecBlock(st, &cc->block);
                 st->locals->len = mark;
