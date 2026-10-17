@@ -54,6 +54,19 @@ self-hosted compiler is done.
   (2-hourly snapshots and commits survive restarts, as on 10-10 and 10-17). Recommended: yes, as `backup/<name>`
   branches, pushed by the 2-hourly check-in, deleted once merged.
 
+**Asked/answered 2026-10-17 (syntax talk):**
+- QN (Python-like indentation instead of `{}`): ANSWERED - keep `{}` ("Ok we keep {}"), after my recommendation
+  against (blocks inside expressions - lambdas, catch-with-default, match values - and silent misindentation).
+- QO1. `? IoError` reads as FEWER errors than bare `?`. The user proposed `? IoError` = "any error, and IoError's words
+  knowable". In effect: closed sets (R15, Swift's `throws` vs `throws(E)`). That proposal is what the first default-error
+  version did and the user reverted on 2026-10-05 ("it is the presence of error"; 51 `catch { unreachable }` removed).
+  Options: (a) keep closed; (b) named sets open; (c) closed by default plus an explicit open form `? IoError + error`
+  ("these, and anything else"). Recommended: (a), with (c) as an addition if mixed cases come up.
+- QO2. Too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
+  replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
+  Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
+  control flow). Recommended: (a) now, (b) only if real code still reads noisy.
+
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
 **Answered 2026-10-10 08:15 CEST:**
 - QD (integer literal's own type I64): YES ("1) yes"). BUILT 43ce396 (T6a; oann migrates with tools/int_literal_i64.py).
