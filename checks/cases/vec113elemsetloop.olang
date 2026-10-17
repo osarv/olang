@@ -1,5 +1,6 @@
 # check: fail error[C2d]: this instance holds a reference to an argument it would outlive
 # Vec phase 2a (T25e/C2d): v[i] = Tok(t) with t a loop turn's text
+import "std/io"
 type Tok struct(text String&, line I64) {
     text
     line
@@ -11,5 +12,5 @@ fn main() ? {
         t := "w" $i
         v[0] = Tok(t, 2)
     }
-    println($v[0].text)
+    try io.Println($v[0].text)
 }

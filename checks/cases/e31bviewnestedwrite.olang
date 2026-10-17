@@ -2,6 +2,7 @@
 # also: the callee is no view of the element because of this statement
 # E31b (r1's converse): a field held by value lent on to a method that writes the field's own storage ("m.off = 0")
 # - part of the copy's own storage written, so the callee is no view
+import "std/io"
 type M struct(d mut Array<I64>&, off I64) {
     d
     off
@@ -24,5 +25,5 @@ fn step(c mut Layer&) {
 fn main() ? {
     s := Layers(Array<I64>(4))
     step(s[1])
-    println($s.d)
+    try io.Println($s.d)
 }

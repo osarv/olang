@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec3 F2: the unrecorded return is a conditional
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -17,13 +18,13 @@ fn f(c CB&, n I64) String&c {
     if n == 0 { return String(c.data) }   # a source: marks f, type Array<Char>
     return h(c) if n == 1 else h(c)       # a conditional: no source recorded
 }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := f(c, 1)
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(t)
+    try io.Println(t)
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
 }

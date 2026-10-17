@@ -3,10 +3,11 @@
 # O17b (U2): "(try a[0] catch default Bag()).Sneak(v)" on a built-in array, Bag a handle and Sneak a read-only method
 # building through its reference - lent as its reference where the element's are (the default built there too), as the
 # List spelling already was; it was built in the loop body. Read back after a churn
-fn churn() {
+import "std/io"
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 type Node struct(v I64, next mut Node&) {
@@ -32,8 +33,8 @@ fn main() ? {
     for i in range 3 {
         (try a[0] catch default Bag()).Sneak(i + 1)
 
-        churn()
+        try churn()
     }
-    churn()
+    try churn()
     assert a[0].Sum() == 321, $a[0].Sum()
 }

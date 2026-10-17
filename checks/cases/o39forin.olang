@@ -1,5 +1,6 @@
 # check: fail error[O39]: assigning 't.bag' may release the Bag borrowed on line
 # a for-in walks what it was given until the loop ends
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -24,6 +25,6 @@ fn main() ? {
     t.bag.items.Push(1)
     for x in t.bag.items {
         t.bag = null
-        println($x)
+        try io.Println($x)
     }
 }

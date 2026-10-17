@@ -3,8 +3,9 @@
 # T29: a type over an array may not hold itself through its elements - its representation would be spelled in terms of
 # a type not yet declared, and nothing could be converted into it ("expected Nest&, found Nest&"); a struct holding
 # the array is how a value holds others of its own type. Reported once, at the declaration
+import "std/io"
 type Nest Array<Nest&>
 fn main() ? {
     n Nest& = Nest(Array<Nest&>(0))
-    println($n.Len())
+    try io.Println($n.Len())
 }

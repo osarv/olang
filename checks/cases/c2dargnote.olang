@@ -1,7 +1,8 @@
 # check: fail error[C2d]: this instance holds a reference to an argument it would outlive
-# also: 15:46: error[C2d]
+# also: 16:46: error[C2d]
 # also: declare it where 'r' lives: 'src mut String&r = ...'
 # B11/C2d: the error names the argument the instance would outlive, and the note says where to make it
+import "std/io"
 type Module struct(Path String&, Dir String&, Src String&) {
     Path
     Dir
@@ -18,5 +19,5 @@ fn (r mut R&) load(path String&) {
 fn main() ? {
     r := R()
     r.load("abc")
-    println($r.mods.Len())
+    try io.Println($r.mods.Len())
 }

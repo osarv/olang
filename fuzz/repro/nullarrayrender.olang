@@ -6,6 +6,7 @@
 # Found by the generator (seed 3193: a borrow of a zero-valued array local rendered into a case's text result).
 # Cause (comptime.c, ctRenderBody): a marked array was rendered "null" only for a CT_NULL value, not for a reference
 # to an aggregate with no storage, which ctArrayRefNull already reads as null for "==". Fixed.
+import "std/io"
 fn cc(n I32) String {
     d Array<U16>
     rd Array<U16>&d = d
@@ -14,6 +15,6 @@ fn cc(n I32) String {
 K String = cc(3)
 v mut I32 = 3
 fn main() ? {
-    println($K)
-    println($cc(v))
+    try io.Println($K)
+    try io.Println($cc(v))
 }

@@ -1,5 +1,6 @@
 # check: fail error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is
 # O17/O33: ...through a generic, the value made where the callee's variable is bound - the buffer's region
+import "std/io"
 type B struct() {
     names own mut Array<String&>& = Array<String&>(3)
 }
@@ -9,5 +10,5 @@ fn main() ? {
     setFirst(b.names, $5 "via-generic")
     f := b.names[0]
     b.names = Array<String&>(1)
-    println(f)
+    try io.Println(f)
 }

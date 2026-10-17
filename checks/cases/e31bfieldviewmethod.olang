@@ -1,5 +1,6 @@
 # check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
 # E31b/O17 (F1): as e31bfieldviewbuild, the view a method on the field, "l[0].w.Build(v)"
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -17,10 +18,10 @@ type Layer struct(w M, n I64) {
     w
     n
 }
-fn churn() {
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 fn (m mut M&) Build(v I64) { m.r.next = Node(v, null) }
@@ -29,6 +30,6 @@ fn main() ? {
     l := List<Layer>()
     l.Push(Layer(M(Node(1, null), 0), 0))
     add(l, 12)
-    churn()
-    println($l[0].w.r.next.v)
+    try churn()
+    try io.Println($l[0].w.r.next.v)
 }

@@ -1,5 +1,6 @@
-# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
+# check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
 # Vec phase 2a (O32/O39): a copy of a field's Vec is a borrowed copy rooted where the field is
+import "std/io"
 type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
@@ -9,5 +10,5 @@ fn main() ? {
     for i in range 3 { l.toks.Push(i) }
     c := l.toks
     l.toks.Push(9)
-    println($c[0])
+    try io.Println($c[0])
 }

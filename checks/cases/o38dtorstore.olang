@@ -1,6 +1,7 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # O38: a borrowed copy is held only by this function's locals - not by a local of a destructor type, which is a
 # reference (C11): its destructor would read the copy after the owners were released at the block's close (own4 N1)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -15,7 +16,7 @@ type Outer struct() {
 type Watch struct() {
     x Outer& = null
 } destruct {
-    if x != null { println($x.o.k) }
+    if x != null { try io.Println($x.o.k) catch io.IoError { } }
 }
 fn main() ? {
     w := Watch()

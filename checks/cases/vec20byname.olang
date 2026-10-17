@@ -3,6 +3,7 @@
 # the buffer's or a declared array type converted from it; a conversion copied into a value (a typed value declaration -
 # ':=' declares the reference the conversion names, T29a) is the copy's own; a function
 # giving a plain borrowed result is still a value
+import "std/io"
 type Ix Array<I64>
 fn view(v Vec<I64>&) Array<I64>&v { return v.View() }
 fn asIx(v Vec<I64>&) Ix&v { return Ix(v.View()) }
@@ -33,5 +34,5 @@ fn main() ? {
     f := first
     a := I64[4, 5]
     assert f(a)[0] == 4
-    println("ok")
+    try io.Println("ok")
 }

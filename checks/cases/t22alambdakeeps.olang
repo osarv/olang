@@ -1,6 +1,7 @@
 # check: fail error[T22a]: this lambda keeps 'k' beyond the call, which a call through a function value cannot check - keep a copy instead
 # never: lambda$
 # T22a/B11: a lambda has no written name - the error names the parameter it keeps
+import "std/io"
 type Cache struct() {
     onEvict fn(k String&) = null
 }
@@ -10,5 +11,5 @@ fn main() ? {
     goneRef mut List<String&>&gone = gone
     c.onEvict = fn(k String&) { goneRef.Push(k) }
     c.onEvict("a")
-    println($gone.Len())
+    try io.Println($gone.Len())
 }

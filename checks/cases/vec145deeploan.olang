@@ -1,6 +1,7 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed
 # Vec phase 2a review D: a borrowed copy's loans reach a Vec 70 owning value levels down (the walks bounded at 64 answer the
 # safe way past it)
+import "std/io"
 type L0 struct() {
     toks Vec<I64> = Vec<I64>()
 }
@@ -219,5 +220,5 @@ fn main() ? {
     for i in range 3 { o.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i + 1) }
     c := o
     for i in range 100 { o.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i) }
-    println($c.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.toks[0])
+    try io.Println($c.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.toks[0])
 }

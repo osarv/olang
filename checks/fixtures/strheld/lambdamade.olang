@@ -1,4 +1,5 @@
 # E11c/D16c: a Str making a capturing lambda it never calls
+import "std/io"
 type Bag struct(k I64) {
     k
 }
@@ -10,5 +11,5 @@ fn (b Bag&) Str() String {
     return "bag " $b.k
 }
 fn main() ? {
-    println($Bag(3))
+    try io.Println($Bag(3))
 }

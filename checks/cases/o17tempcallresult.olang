@@ -2,6 +2,7 @@
 # O17 (the third review of the view lend, U1): a call's value result holding a writable reference, lent to a
 # reference parameter whose callee builds through it in a loop - a split value: its copy is the block's, its references
 # seed's; the node was built in the loop body and hung off seed
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -12,20 +13,20 @@ type Box struct() {
 }
 fn idBox(seed mut Box&) Box { return seed }
 fn addRef(b mut Box&, v I64) { b.head.next = Node(v, b.head.next) }
-fn churn() {
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 fn main() ? {
     seed := Box()
     for i in range 3 {
         addRef(idBox(seed), i + 1)
-        churn()
+        try churn()
     }
-    churn()
+    try churn()
     n := 0
     for x := seed.head, x != null, x = x.next { n = n * 10 + x.v }
-    println("chain " $n)
+    try io.Println("chain " $n)
 }

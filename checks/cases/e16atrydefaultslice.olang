@@ -1,10 +1,11 @@
 # check: fail this value lives in this function's own scope, which closes first
 # E16a/R9a (U3): a slice of "try a[0] catch default v" returned as a borrow of a - the try's value is a copy made
 # where it is read, a temporary of the function's own block, so the slice cannot outlive it
-fn churn() {
+import "std/io"
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (try a[0] catch default Array<I64, 2>())[0:2] }
@@ -20,8 +21,8 @@ fn main() ? {
     a[0][1] = 22
     v := view(a)
     t := deep(5)
-    churn()
+    try churn()
     x := v[0]
     y := v[1]
-    println("v " $x " " $y " t " $t)
+    try io.Println("v " $x " " $y " t " $t)
 }

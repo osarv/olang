@@ -1,5 +1,5 @@
 # names - who each name is: every module's declaration table, and every name a body, a signature or a type writes
-# resolved against it (D2, D3, D3a, D8c, M10, M14, M19f, M20, B10, B10c, G22; compiler/DESIGN.md 1.5).
+# resolved against it (D2, D3, D3a, D8c, M10, M14, M20, B10, B10c, G22; compiler/DESIGN.md 1.5).
 #
 # A module's table holds its types, functions, globals and error types - those of the branches of its top-level ifs
 # that are chosen; a branch still pending (B9c) waits aside, and DecideTop resolves it once the checker has decided
@@ -30,7 +30,6 @@ type What enum {
     Type        # a type or an error type
     Import      # an import's alias: Index is the module it reaches
     Build       # a build constant (B10)
-    PreludeFn   # print, println, eprint, eprintln (M19f)
     Builtin     # a primitive, Bool or Array
     TypeVar     # a type variable or a constant variable of the declaration
 }
@@ -67,9 +66,6 @@ type local struct(Name source.NameId, Sp source.Span, Kind What, Const Bool) {
     Kind
     Const
 }
-
-# M19f: the prelude's words for writing text, seen in every module by bare name
-fn PreludeWord(t String&) Bool { return t == "print" or t == "println" or t == "eprint" or t == "eprintln" }
 
 # T4, T7: the names every module sees as a type
 fn BuiltinTypeName(t String&) Bool {
@@ -290,7 +286,7 @@ fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.T
     t.Entries.Push(Entry(n, sp, What.Type, false, decl))
 }
 
-# D2, D8c, B10, B10c, M19f, M20: a function or a global (a method is in no namespace of names)
+# D2, D8c, B10, B10c, M20: a function or a global (a method is in no namespace of names)
 fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool,
                               v ast.VarDecl&) {
     t := r.Tables[mi]
@@ -311,7 +307,6 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
             r.buildDefault(mi, n, sp, v)
         }
     }
-    if not m.Prelude and PreludeWord(name) { r.L.Diags.Error(r.at(mi, sp), msgs.PreludeWordRedeclared(r.tok(n))) }
     prev := try t.values.Get(n) catch default -1
     if prev >= 0 and not (isFunc and t.Entries[prev].Kind == What.Func) {
         r.L.Diags.Error(r.at(mi, sp), msgs.NameInUse(r.tok(n)))
@@ -377,7 +372,6 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     if a >= 0 { return Ref(What.Import, a, -1) }
     name := r.text(n)
     if r.L.Consts.Has(name) { return Ref(What.Build, -1, -1) }
-    if PreludeWord(name) { return Ref(What.PreludeFn, -1, -1) }
     p := try r.preludeTypes.Get(n) catch default -1
     if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
     if BuiltinTypeName(name) { return Ref(What.Builtin, -1, -1) }
@@ -433,7 +427,7 @@ fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What, constant B
     if n not in r.itemNames { r.itemNames.Push(n) }
 }
 
-# D3, D3a, D8c, M19f, M20, G22: a parameter or a local declared - a name its module, the build or a type already gives
+# D3, D3a, D8c, M20, G22: a parameter or a local declared - a name its module, the build or a type already gives
 # is an error, as is one already declared here
 fn (r mut Resolver&) declare(n source.NameId, sp source.Span) {
     name := r.text(n)
@@ -459,8 +453,6 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
         r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
-    } else if PreludeWord(name) {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeWordRedeclared(r.tok(n)))
     } else if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n)))
     } else {
@@ -469,8 +461,7 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
     }
 }
 
-# G22, D3a: a constant variable is named apart from the module's globals and functions, the build's constants and the
-# prelude's words. A type's name is G1's, reported where the variable is written
+# G22, D3a: a constant variable is named apart from the module's globals and functions and the build's constants. A type's name is G1's, reported where the variable is written
 fn (r mut Resolver&) noConstClash(n source.NameId, sp source.Span) {
     t := r.Tables[r.mi]
     name := r.text(n)
@@ -483,8 +474,6 @@ fn (r mut Resolver&) noConstClash(n source.NameId, sp source.Span) {
         r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
-    } else if PreludeWord(name) and not r.L.Mods[r.mi].Prelude {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeWordRedeclared(r.tok(n)))
     }
 }
 
@@ -1295,10 +1284,10 @@ fn lineCol(text String&, at I64) (I64, I64) {
     return line, col
 }
 
-test "D2, D3a, M19f and M20: a name means one thing in a module" {
+test "D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave" {
     got := testRules(String&["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in I32[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], String&[])
     assert got.Contains("D2 3:6\n") and got.Contains("D3a 5:6\n") and got.Contains("D3a 5:17\n"), got
-    assert got.Contains(" 5:46\n") and got.Contains("M19f 6:4\n") and got.Contains("M20 7:1\n"), got
+    assert got.Contains(" 5:46\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
 }
 
 test "B10, B10c: build constants and their defaults, and an unknown name in a condition" {

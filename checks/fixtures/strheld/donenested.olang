@@ -1,7 +1,8 @@
 # E11b/E11c: done inside a Str reached through a List element and a struct field, in a test
+import "std/io"
 type Res struct(k I64) {
     k
-} destruct { println("Res destructed " $k) }
+} destruct { try io.Println("Res destructed " $k) catch io.IoError { } }
 type Bag struct(n I64) {
     n
 }
@@ -20,13 +21,13 @@ test "done inside a List element's Str" {
     l.Push(Bag(7))
     l.Push(Bag(3))
     s := $l
-    println("not reached " $s)
+    try io.Println("not reached " $s) catch io.IoError { }
 }
 test "done inside a field's Str" {
     o := Outer(Bag(2), Bag(7))
     s := "x" $o "y"
-    println("not reached " $s)
+    try io.Println("not reached " $s) catch io.IoError { }
 }
 test "after" {
-    println("third test runs")
+    try io.Println("third test runs") catch io.IoError { }
 }

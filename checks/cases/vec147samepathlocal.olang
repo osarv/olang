@@ -1,6 +1,7 @@
 # check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
 # Vec phase 2a review vec7 F1: 'q' was read through a reference local repointed before the move - two reads by one
 # variable's name are not one object, so moving into 'q.more' from 'p.lx.toks' is checked as between two regions
+import "std/io"
 type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
     more Vec<String&> = Vec<String&>()
@@ -28,5 +29,5 @@ fn main() ? {
     q.more = take p.lx.toks
     b.lx = null
     churn()
-    println(a.lx.more[0])
+    try io.Println(a.lx.more[0])
 }

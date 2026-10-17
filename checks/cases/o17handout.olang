@@ -3,6 +3,7 @@
 # its caller build into the value's region through it - "h.next = Node()" would build the node in this block, under a
 # copy whose references claim the source's scope, and "src.b = b" would hand it back. Decided by headOf's body. (A Box
 # holding only its head would be a handle, lent as its reference - O17b, checks/cases/o17bhandleout.olang.)
+import "std/io"
 type Node struct() {
     next mut Node& = null
     v I64 = 0
@@ -24,5 +25,5 @@ fn bump(src mut W&) {
 fn main() ? {
     w := W(Box())
     bump(w)
-    println($w.b.head.next.v)
+    try io.Println($w.b.head.next.v)
 }

@@ -1,9 +1,10 @@
 # check: fail this value's references live where its own storage does not, and the callee can store through it
 # O17 (U2): a conditional of two built-in array elements, lent the same way
-fn churn() {
+import "std/io"
+fn churn() ? io.IoError {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { println("x") }
+        if a[0] == 3 { try io.Println("x") }
     }
 }
 type Node struct(v I64, next mut Node&) {
@@ -25,8 +26,8 @@ fn main() ? {
     a[1] = Box()
     for i in range 3 {
         addVia(a[0] if i >= 0 else a[1], i + 1)
-        churn()
+        try churn()
     }
-    churn()
-    println("a " $sum(a[0]))
+    try churn()
+    try io.Println("a " $sum(a[0]))
 }

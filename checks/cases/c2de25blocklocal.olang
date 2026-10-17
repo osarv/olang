@@ -1,6 +1,7 @@
 # check: fail error[C2d]: this instance holds a reference to an argument it would outlive
 # C2d/E25: an instance built where a scope argument says ('Env&c(...)') is judged there - holding a block's local,
 # which can be stored through, it is refused (study 6's r07 relaxed the same call holding c.env)
+import "std/io"
 type Env struct(parent mut Env&) {
     n I64 = 0
     parent
@@ -26,5 +27,5 @@ fn depth(f Value&) I64 {
 fn main() ? {
     g mut Env& = Env(null)
     f Value& = Value.Fn(Closure(g))
-    println($depth(f))
+    try io.Println($depth(f))
 }

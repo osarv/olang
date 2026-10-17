@@ -7,6 +7,7 @@
 # Cause (comptime.c): the evaluator lets an argument's error bypass a call's clauses only when the call is marked
 # isTried, which the checker sets on a try-expr's call and never on a try statement's; the statement now marks its
 # call for the evaluation (ctTried), the computed-callee path too. Fixed.
+import "std/io"
 error E {
     A
     B
@@ -21,5 +22,5 @@ fn c(n I32) I32 { return try f(n) catch default 1 }
 K I32 = c(3)
 v mut I32 = 3
 fn main() ? {
-    println($K " | " $c(v))
+    try io.Println($K " | " $c(v))
 }

@@ -1,5 +1,6 @@
-# check: fail error[O41]: assigning 'h.cur' may release the In3 the task spawned on line 18 may be using until the join
+# check: fail error[O41]: assigning 'h.cur' may release the In3 the task spawned on line 19 may be using until the join
 # O41 (own7 F1): an inline field lent to a task borrows the owned object until the join
+import "std/io"
 type Plain struct(k I64) {
     k
 }
@@ -18,5 +19,5 @@ fn main() ? {
         spawn useP(h.cur.pl, out)
         h.cur = null
     }
-    println($out[0])
+    try io.Println($out[0])
 }

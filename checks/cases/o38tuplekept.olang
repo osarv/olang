@@ -1,6 +1,7 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38 (own6 N1): one of several results of a method called on a borrowed copy (O32) holds what the copy reads - a List
 # does not keep it
+import "std/io"
 type Inner struct(k I64) {
     k
 }
@@ -18,5 +19,5 @@ fn main() ? {
     l := List<View>()
     a, n := b.Two()
     l.Push(a)
-    println($l.Len() " " $n)
+    try io.Println($l.Len() " " $n)
 }

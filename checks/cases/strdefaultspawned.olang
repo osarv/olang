@@ -1,5 +1,6 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/R9a: the same in a spawned lambda's body (C1f)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -34,7 +35,7 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Node(1), 3)
-    println($b)
+    try io.Println($b)
     t := churn(100)
-    println($nv(b.head) " " $t)
+    try io.Println($nv(b.head) " " $t)
 }

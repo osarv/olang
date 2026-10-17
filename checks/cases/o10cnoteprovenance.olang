@@ -3,6 +3,7 @@
 # B11/O10c: an entry parsed from a line made each turn is kept in a longer-lived table. The entry's references are the
 # line's (parse requires its argument to outlive its result), so the note points at the line, not at a scope argument
 # for parse - which would only move the error into parse
+import "std/io"
 type Entry struct(service String&) {
     service
 }
@@ -20,4 +21,4 @@ fn run(lines Array<String&>&) I64 {
     }
     return s.names.Len()
 }
-fn main() ? { println($run(String&["ab", "cd"])) }
+fn main() ? { try io.Println($run(String&["ab", "cd"])) }

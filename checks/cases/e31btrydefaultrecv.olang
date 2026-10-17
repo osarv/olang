@@ -1,5 +1,6 @@
 # check: fail x[i] gives a copy of the element, which this call would write
 # E31b/R9a (T1h): as e31btrydefaultfield, a "mut" method called on the field
+import "std/io"
 type Pt struct() {
     X I64 = 0
 }
@@ -14,5 +15,5 @@ fn (c mut Acc&) Bump() { c.N++ }
 fn main() ? {
     a := Acc[Acc(), Acc()]
     (try a[1] catch default Acc()).P.Bump()
-    println("array P " $a[1].P.X " N " $a[1].N)
+    try io.Println("array P " $a[1].P.X " N " $a[1].N)
 }
