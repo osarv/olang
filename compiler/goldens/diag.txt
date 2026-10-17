@@ -4393,6 +4393,26 @@ r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? IoErr
     4 |     Read() I64 ?
       |     ^~~~
 compilation failed with 1 error
+=== r1ccatchword.olang
+r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.EMPTY - it fails with LE.GONE
+   11 | fn main() { x := try g(1) catch LE.EMPTY default 0 catch LE.GONE default 1 }
+      |                                    ^~~~~
+compilation failed with 1 error
+=== r1cfuncword.olang
+r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.EMPTY, found fn(n I64) I64 ? LE.GONE
+   12 | fn main() { x := run(g) }
+      |                      ^
+compilation failed with 1 error
+=== r1cwordescapes.olang
+r1cwordescapes.olang:11:37: error[R9]: LE.GONE can escape here, and this function does not declare it - add it after '?', or catch it
+   11 | fn f(n I64) I64 ? LE.EMPTY { return try g(n) }
+      |                                     ^~~
+compilation failed with 1 error
+=== r1cwordraised.olang
+r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not this word - add it after '?'
+    8 |     if n == 0 { error LE.GONE }
+      |                          ^~~~
+compilation failed with 1 error
 === r20nothing.olang
 r20nothing.olang:4:13: error[R8]: nothing here can fail - write it without 'checked'
     4 |     r I32 = checked (a == 1) catch default 0
