@@ -8,3 +8,14 @@ MEMDEBUG cpu=  6.36s  own borrows settled                     inuse=   482MB mma
 MEMDEBUG cpu=  6.36s  comptime start                          inuse=   482MB mmapped=    35MB rss=   478MB
 MEMDEBUG cpu=  6.42s attempt end                              inuse=   539MB mmapped=    35MB rss=   535MB
 --- -t
+MEMDEBUG cpu=  0.00s attempt start                            inuse=     0MB mmapped=     0MB rss=     1MB
+MEMDEBUG cpu=  0.04s  prelude loaded                          inuse=    15MB mmapped=     4MB rss=    16MB
+MEMDEBUG cpu=  0.21s  all modules loaded (tokens+syntax)      inuse=    93MB mmapped=    26MB rss=    91MB
+MEMDEBUG cpu=  0.28s  signatures+globals                      inuse=   122MB mmapped=    30MB rss=   119MB
+MEMDEBUG cpu=  2.03s  bodies+instantiations checked           inuse=   502MB mmapped=    36MB rss=   496MB
+MEMDEBUG cpu=  2.05s  settled (regions, ro, maybuild)         inuse=   502MB mmapped=    36MB rss=   497MB
+MEMDEBUG cpu=  2.68s  own borrows settled                     inuse=   508MB mmapped=    36MB rss=   504MB
+MEMDEBUG cpu=  2.68s  comptime start                          inuse=   508MB mmapped=    36MB rss=   504MB
+MEMDEBUG cpu=  3.55s attempt end                              inuse=  1248MB mmapped=    36MB rss=  1254MB
+MEMDEBUG cpu=  3.62s codegen start                            inuse=  1254MB mmapped=    36MB rss=  1261MB
+MEMDEBUG cpu=  3.65s codegen end                              inuse=  1255MB mmapped=    36MB rss=  1262MB

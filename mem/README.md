@@ -53,6 +53,7 @@ The columns:
 | tools/checkdump | 67 | - | - | - | 561 MB | 1.71 GB |
 | **`-b` tools/checkdump** | (whole port) | **>6,017 MB** (killed at the limit; 13.6 GB reported) | >10.4 GB | 1,158 MB | **572 MB** | 1.71 GB |
 | `-t` check (in-process, `phases-*`) | | - | - | - | 1,262 MB | |
+| master: `-c shared.olang` (corpus) | 17,689 | 3,964 MB | 7.1 GB | - | 1,941 MB | 3.0 GB |
 
 Notes:
 - **The cost was not in proportion to the program.** msgs.olang imports nothing and holds 570 one-line functions, yet
@@ -62,8 +63,11 @@ Notes:
 - **Virtual size is RSS plus about 1.1 GB.** The compiler thread reserves a 1 GB stack (main.c), and the rest is
   malloc. Before the fixes, VM was 1.7 to 1.9 times RSS: realloc'd giant lists keep untouched capacity mapped. So
   the 7 GB virtual cap failed at about 3.6 GB RSS. After the fixes, VM is 1.2 to 1.7 GB everywhere.
-- **B9c is not a factor.** Every module and tool, `-c`, `-b` and `-t`, makes exactly **one** attempt (`attempts.txt`,
-  counted by an instrumented build).
+- **B9c is not a factor for the port.** Every module and tool, `-c`, `-b` and `-t`, makes exactly **one** attempt
+  (`attempts.txt`, counted by an instrumented build).
+- **B9c is a factor for the corpus.** `shared.olang` makes **4** attempts, and none is freed. Each takes about
+  330 MB, so three discarded attempts are about 1.0 GB of its 1.9 GB (`phases-shared-master-fix.txt`). This is fix 9
+  below; it does not matter for the port today.
 - **The work is in the checker.** CPU time of the analysis, after the fixes (`-t check`): 3.2 s. Most of the wall
   time is clang.
 
@@ -152,18 +156,26 @@ These are use-after-realloc bugs. Each is real on master today: it fires wheneve
   - The other five `bodyEnd` call sites store a header copy in the same way. Each is safe only while nothing is
     appended to that body afterwards. Better: store a pointer, or a list the bodyRec owns.
 
-With (a), all the port's modules and tools are ASan-clean (86d47f8). With (a)-(c), worker.olang and runner.olang are
-ASan-clean (master). shared.olang: see `asan-shared.txt`. More such sites are likely in code no test reaches with a
+With (a), all the port's modules and tools are ASan-clean (86d47f8). With (a)-(c) on master:
+- `-c` of worker.olang, runner.olang and shared.olang is ASan-clean;
+- `-t shared.olang` is ASan-clean and passes **740 of 740** tests (`asan-shared.txt`).
+
+The checks/ cases, the std tests and the other test files were not swept. More such sites are likely in code no test reaches with a
 long list. The pattern to look for is a `struct list x = y.someList` header copy that outlives a `ListAdd` to the
 original.
 
 ## 4. Fixes, ranked by saving per effort
 
-All of these keep the IR byte-for-byte identical. `tools/irsame.sh` compared the `.ll` and the diagnostics of every
-compiler/*.olang module and tool, 19 files. Fixes 1-3 were checked: base against fix 1+2+3 where base fits in memory,
-and fix 1 against fix 1+2+3 for the large ones. All 19 are the same. The patches are in `patches/`:
-`01`/`02`/`03` are against 86d47f8, and `master-01+03-semantic.patch` is against master 8238cce (all nine walkers,
-plus bug a). Bugs b and c are fixed in the scratch copy /tmp/claude-0/m0 (described in section 3).
+All of these keep the IR byte-for-byte identical. `tools/irsame.sh` compares the `.ll` and the diagnostics.
+
+How it was run:
+- The object and the `.ll` are deleted before each run, because B7 reuses an object newer than the compiler binary
+  and then writes no IR. This defeated the first comparison, which was redone.
+- For the 19 port files, where base fits in memory, fix 1 and fix 1+2+3 were each compared against base. For the
+  large ones, fix 1 was compared against fix 1+2+3.
+- On master, fixes 1-3 and b-c were compared against master's base on worker.olang, runner.olang and shared.olang.
+
+All of them are the same (`irsame.txt`). The patches are listed under Files, below.
 
 | # | fix | saving (check.olang `-c` / `-b` checkdump) | effort | risk |
 |---|---|---|---|---|
@@ -175,9 +187,9 @@ plus bug a). Bugs b and c are fixed in the scratch copy /tmp/claude-0/m0 (descri
 | 6 | `statement.var` (1,312 B) becomes a pointer for VAR_DECL/FOR only | about 20-40 MB (statements in lists, 34 MB after fix 2, and copies) | ~77 uses | medium (statements are copied by value; a decl's var is mutated in place) |
 | 7 | Memoize `TypeHoldsReferences`/`TypeHoldsWritableRefs`/`valueRefsAdmitStores` per declared non-generic struct or enum (key: canonical type plus `structMAlloc`), or walk `t.vars` in place instead of copying into a list | CPU only once fix 1 is in: 9.4 M calls and 5.1 GB copied per check `-c`, about 0.3 s; grows with (number of walks) x (cases in `Diag`) | small (in-place walk) | low |
 | 8 | Tokenize the prelude once per attempt rather than twice (`ScanTopLevelDecls` then `semaLoadModule`) | about 5 MB | small | low |
+| 9 | Free a discarded B9c attempt, or build each attempt in an arena released when the next one starts, after copying out the decisions it made (condition decisions, `constArgDecisions`) | the corpus: shared.olang 1.9 GB -> about 0.6 GB (3 of 4 attempts); the port: nothing today (1 attempt) | high: nothing in the checker is owned, so first find everything that outlives an attempt | medium |
 
-Considered and not worth it: freeing IR text (it is already freed per function and per module); freeing a failed
-B9c attempt's state (no build of the port makes a second attempt); and sharing instead of copying instantiation bodies
+Considered and not worth it: freeing IR text (it is already freed per function and per module), and sharing instead of copying instantiation bodies
 (TypeSubstitute 6 MB, instantiation body checks about 64 MB inclusive - an ordinary share of body checking).
 
 ## 5. Does it get checkdump under 4 GB?
@@ -202,12 +214,16 @@ together with the ASan sweep. Fix 3 matters for test builds.
 - `attempts.txt`: the B9c attempts per module. `phases-check-exp1.txt`: the phase table with fix 1 only.
 - `irsame.txt`: the IR and diagnostics comparison for all 19 files.
 - `asan-shared.txt`: the ASan pass on master's corpus with fixes 1-3 and b-c.
-- `ht/`: the heaptrack profiles (`*.gz`; open with `heaptrack_print` or `heaptrack --analyze`), the folded stacks
-  (`*.peak.collapsed`) and their aggregation (`*.agg.txt`):
+- `ht/`: the heaptrack profiles (`*.gz`; open with `heaptrack_print` or `heaptrack --analyze`), and their aggregation (`*.agg.txt`). The folded stacks were
+  deleted for size; `heaptrack_print -f X.gz -F X.collapsed --flamegraph-cost-type peak` remakes them:
   - `msgs100`, `cond`, `check-exp1`/`check-exp1d`: base and fix 1;
   - `check-exp3d2` and `checkt-exp3d`: fixes 1-3, for `-c` and `-t`.
 - `scale/`: msgs.olang cut to 0/50/100/200/400 functions.
 - `patches/`: the fixes as diffs.
+  - Against 86d47f8: `01` (fix 1), `02` (fix 2), `03` (bug a).
+  - Against master 8238cce: `master-01+03-semantic.patch` (fix 1 on all nine walkers, plus bug a);
+    `master-semantic-all.patch` (that, plus bugs b and c); `master-util-mincap.patch` (fix 2).
+  - All of them `git apply --check` cleanly.
 - `tools/`:
   - `peak.py`: peak RSS/VM of the compiler and its forked children, with a kill limit (`MAXRSS_MB`).
   - `agg.py`: folds heaptrack stacks.

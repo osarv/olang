@@ -1,0 +1,28 @@
+MEMDEBUG cpu=  0.00s attempt start                            inuse=     0MB mmapped=     0MB rss=     2MB
+MEMDEBUG cpu=  0.04s  prelude loaded                          inuse=    13MB mmapped=     3MB rss=    15MB
+MEMDEBUG cpu=  0.22s  all modules loaded (tokens+syntax)      inuse=    57MB mmapped=    15MB rss=    58MB
+MEMDEBUG cpu=  0.33s  signatures+globals                      inuse=    82MB mmapped=    21MB rss=    80MB
+MEMDEBUG cpu=  1.14s  bodies+instantiations checked           inuse=   336MB mmapped=    23MB rss=   332MB
+MEMDEBUG cpu=  1.14s attempt end                              inuse=   336MB mmapped=    23MB rss=   332MB
+MEMDEBUG cpu=  1.15s attempt start                            inuse=   339MB mmapped=    23MB rss=   336MB
+MEMDEBUG cpu=  1.19s  prelude loaded                          inuse=   352MB mmapped=    27MB rss=   348MB
+MEMDEBUG cpu=  1.33s  all modules loaded (tokens+syntax)      inuse=   396MB mmapped=    39MB rss=   391MB
+MEMDEBUG cpu=  1.44s  signatures+globals                      inuse=   421MB mmapped=    45MB rss=   413MB
+MEMDEBUG cpu=  2.18s  bodies+instantiations checked           inuse=   675MB mmapped=    47MB rss=   664MB
+MEMDEBUG cpu=  2.19s attempt end                              inuse=   675MB mmapped=    47MB rss=   664MB
+MEMDEBUG cpu=  2.19s attempt start                            inuse=   675MB mmapped=    47MB rss=   664MB
+MEMDEBUG cpu=  2.24s  prelude loaded                          inuse=   688MB mmapped=    51MB rss=   676MB
+MEMDEBUG cpu=  2.38s  all modules loaded (tokens+syntax)      inuse=   732MB mmapped=    63MB rss=   720MB
+MEMDEBUG cpu=  2.51s  signatures+globals                      inuse=   757MB mmapped=    69MB rss=   741MB
+MEMDEBUG cpu=  3.15s  bodies+instantiations checked           inuse=  1011MB mmapped=    71MB rss=   993MB
+MEMDEBUG cpu=  3.41s  comptime start                          inuse=  1020MB mmapped=    71MB rss=  1002MB
+MEMDEBUG cpu=  3.76s attempt end                              inuse=  1294MB mmapped=    71MB rss=  1277MB
+MEMDEBUG cpu=  3.76s attempt start                            inuse=  1294MB mmapped=    71MB rss=  1277MB
+MEMDEBUG cpu=  3.80s  prelude loaded                          inuse=  1306MB mmapped=    75MB rss=  1289MB
+MEMDEBUG cpu=  3.94s  all modules loaded (tokens+syntax)      inuse=  1351MB mmapped=    87MB rss=  1333MB
+MEMDEBUG cpu=  4.04s  signatures+globals                      inuse=  1375MB mmapped=    93MB rss=  1354MB
+MEMDEBUG cpu=  4.64s  bodies+instantiations checked           inuse=  1629MB mmapped=    95MB rss=  1606MB
+MEMDEBUG cpu=  4.86s  comptime start                          inuse=  1638MB mmapped=    95MB rss=  1615MB
+MEMDEBUG cpu=  5.24s attempt end                              inuse=  1914MB mmapped=    95MB rss=  1890MB
+MEMDEBUG cpu=  5.24s codegen start                            inuse=  1914MB mmapped=    95MB rss=  1890MB
+MEMDEBUG cpu=  5.46s codegen end                              inuse=  1932MB mmapped=    95MB rss=  1916MB

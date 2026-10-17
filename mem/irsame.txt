@@ -1,3 +1,8 @@
+# base vs fix 1
+SAME compiler/msgs.olang (1492152 bytes IR)
+SAME compiler/diag.olang (946946 bytes IR)
+SAME compiler/cond.olang (1403111 bytes IR)
+# base vs fix 1+2+3
 SAME compiler/source.olang (357572 bytes IR)
 SAME compiler/token.olang (262907 bytes IR)
 SAME compiler/scan.olang (481499 bytes IR)
@@ -10,6 +15,7 @@ SAME compiler/types.olang (1450382 bytes IR)
 SAME compiler/typed.olang (1569190 bytes IR)
 SAME compiler/tools/unparse.olang (1070107 bytes IR)
 SAME compiler/tools/diaggold.olang (817944 bytes IR)
+# fix 1 vs fix 1+2+3
 SAME compiler/load.olang (2364974 bytes IR)
 SAME compiler/parse.olang (3017214 bytes IR)
 SAME compiler/names.olang (3004540 bytes IR)
@@ -17,3 +23,6 @@ SAME compiler/generic.olang (4330663 bytes IR)
 SAME compiler/check.olang (7203348 bytes IR)
 SAME compiler/tools/dump.olang (3948624 bytes IR)
 SAME compiler/tools/checkdump.olang (4163731 bytes IR)
+SAME worker.olang (4593006 bytes IR)
+SAME runner.olang (4587915 bytes IR)
+SAME shared.olang (8607051 bytes IR)
