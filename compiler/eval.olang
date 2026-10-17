@@ -2753,10 +2753,12 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
         m.refuse(WhyNoBody)
         return m.Stopped
     }
+    f := m.fns[fi]
+    # where a refusal is reported until a statement with a place of its own is reached: the function itself
+    m.stopFile, m.stopSp = f.File, f.Sp
     base := m.frames.Len()
     nf := m.pushFrame(fi, rRequest, 0)
     if nf < 0 { return m.Stopped }
-    f := m.fns[fi]
     for i in range args.Len() {
         if i < f.Params.Len() {
             l := f.Params[i]
@@ -3445,4 +3447,124 @@ test "errors: raised under the function's own list, dispatched by a switch, re-e
     tdefine(t, m, passFn(t, 6, 1, gty, el, def))
     assert m.Eval(tkey(6), I64[-1]) == Stop.Raised(1 << 16)
     assert m.Eval(tkey(6), I64[3]) == Stop.None and m.Int(m.Result, i64) == 3
+}
+
+# a function of no parameters giving an I64, keyed Body(id), its blocks to be filled
+fn nfn(t mut types.Table&, id I64) mir.Fn { return tfn(t, id, t.Func(types.ListId(0), t.Prim("I64"), types.ListId(0))) }
+
+fn tspan(a I64) source.Span { return source.Span(I32(a), I32(a + 1)) }
+
+test "undefined behaviour stops with where: outside an array, after a scope closed, through null, budgets run out" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    i64 := t.Prim("I64")
+    arr := t.Array(i64, types.TypeId(0))
+    ri := t.Ref(i64, types.Writable)
+    # an index past the end: "a := Array<I64>(3, 0); return a[i]", the statement written at offset 7
+    f1 := tfn(t, 1, t.Func(t.List1(i64), i64, types.ListId(0)))
+    a1, x1 := f1.AddTemp(arr, Sp0), f1.AddTemp(i64, Sp0)
+    f1.Add(B0, mir.Stmt.Assign(Sp0, mir.L(a1), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 3),
+                                                                   mir.Operand.Const(i64, 9))))
+    f1.Add(B0, mir.Stmt.Assign(tspan(7), mir.L(x1), mir.Rvalue.Use(mir.Operand.Copy(
+        f1.Place(mir.Base.Local(a1), mir.Proj[mir.Proj.Index(mir.LocalId(0))])))))
+    f1.Add(B0, mir.Stmt.Close(Sp0, S0))
+    f1.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(x1))))
+    tdefine(t, m, f1)
+    assert m.Eval(tkey(1), I64[2]) == Stop.None and m.Int(m.Result, i64) == 9
+    assert m.Eval(tkey(1), I64[3]) == Stop.Refused(WhyOutside, 0, tspan(7))
+    assert m.Eval(tkey(1), I64[-1]) == Stop.Refused(WhyOutside, 0, tspan(7))
+    # a reference into a block's arena read after the block closed
+    f2 := nfn(t, 2)
+    blk := f2.AddScope(mir.ScopeKind.Block, S0, typed.BlockId(1), Sp0)
+    r2, x2 := f2.AddTemp(ri, Sp0), f2.AddTemp(i64, Sp0)
+    f2.Add(B0, mir.Stmt.Open(Sp0, blk))
+    f2.Add(B0, mir.Stmt.Assign(Sp0, mir.L(r2), mir.Rvalue.New(mir.ScopeRef.Scope(blk), mir.Operand.Const(i64, 5), ri)))
+    f2.Add(B0, mir.Stmt.Close(Sp0, blk))
+    f2.Add(B0, mir.Stmt.Assign(tspan(11), mir.L(x2), mir.Rvalue.Use(mir.Operand.Copy(
+        f2.Place(mir.Base.Local(r2), mir.Proj[mir.Proj.Deref])))))
+    f2.Add(B0, mir.Stmt.Close(Sp0, S0))
+    f2.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(x2))))
+    tdefine(t, m, f2)
+    assert m.Eval(tkey(2), I64[]) == Stop.Refused(WhyClosed, 0, tspan(11))
+    # a null reference read
+    f3 := nfn(t, 3)
+    r3, x3 := f3.AddTemp(ri, Sp0), f3.AddTemp(i64, Sp0)
+    f3.Add(B0, mir.Stmt.Assign(Sp0, mir.L(r3), mir.Rvalue.Use(mir.Operand.Const(ri, 0))))
+    f3.Add(B0, mir.Stmt.Assign(tspan(13), mir.L(x3), mir.Rvalue.Use(mir.Operand.Copy(
+        f3.Place(mir.Base.Local(r3), mir.Proj[mir.Proj.Deref])))))
+    f3.Add(B0, mir.Stmt.Close(Sp0, S0))
+    f3.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(x3))))
+    tdefine(t, m, f3)
+    assert m.Eval(tkey(3), I64[]) == Stop.Refused(WhyNull, 0, tspan(13))
+    # steps: a loop that never ends
+    f4 := nfn(t, 4)
+    spin := f4.NewBlock()
+    f4.End(B0, mir.Term.Goto(spin))
+    f4.End(spin, mir.Term.Goto(spin))
+    tdefine(t, m, f4)
+    m.StepBudget = 10000
+    sx := m.Eval(tkey(4), I64[])
+    assert sx == Stop.Refused(WhySteps, 0, Sp0) and m.Steps == 10001, $sx " " $m.Steps
+    m.StepBudget = 20000000
+    # depth: a recursion that never ends, 2,000 frames deep
+    i64fn := t.Func(t.List1(i64), i64, types.ListId(0))
+    f5 := tfn(t, 5, i64fn)
+    r5 := f5.AddTemp(i64, Sp0)
+    back := f5.NewBlock()
+    k5 := f5.AddCall(mir.Call(mir.Callee.Fn(tkey(5), i64fn), f5.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r5), true,
+                              back, mir.NoLocal, mir.NoBlock))
+    f5.End(B0, mir.Term.Call(tspan(17), k5))
+    f5.Add(back, mir.Stmt.Close(Sp0, S0))
+    f5.End(back, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(r5))))
+    tdefine(t, m, f5)
+    assert m.Eval(tkey(5), I64[1]) == Stop.Refused(WhyDepth, 0, tspan(17))
+    assert m.frames.Len() == 0 and m.closing.Len() == 0
+    # memory: a loop keeping an array every turn in the frame's scope
+    f6 := nfn(t, 6)
+    turn := f6.NewBlock()
+    a6 := f6.AddTemp(arr, Sp0)
+    f6.End(B0, mir.Term.Goto(turn))
+    f6.Add(turn, mir.Stmt.Assign(tspan(19), mir.L(a6), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr,
+                                                                           mir.Operand.Const(i64, 1000),
+                                                                           mir.Operand.Const(i64, 0))))
+    f6.End(turn, mir.Term.Goto(turn))
+    tdefine(t, m, f6)
+    m.MemBudget = 1 << 20
+    live := m.Live
+    assert m.Eval(tkey(6), I64[]) == Stop.Refused(WhyMemory, 0, tspan(19))
+    assert m.Live == live, "live " $live " -> " $m.Live
+    # and the machine goes on afterwards
+    assert m.Eval(tkey(1), I64[0]) == Stop.None and m.Int(m.Result, i64) == 9
+}
+
+test "exits: a failed check stops with FILE:LINE and its message (S18a); done and fail are refused while compiling" {
+    names := source.Names()
+    t := types.NewTable(names)
+    u8 := t.Prim("U8")
+    text := t.Ref(t.Array(u8, types.TypeId(0)), types.ReadOnly)
+    f := nfn(t, 1)
+    c := f.AddConst(typed.Const.Bytes(U8[98, 111, 111, 109]))
+    f.End(B0, mir.Term.Exit(source.Span(4, 9), mir.ExitKind.Assert, mir.Operand.Data(text, c, 0, source.Span(20, 25))))
+    g := nfn(t, 2)
+    g.End(B0, mir.Term.Exit(source.Span(2, 3), mir.ExitKind.Unreachable, mir.Operand.None))
+    h := nfn(t, 3)
+    h.End(B0, mir.Term.Exit(Sp0, mir.ExitKind.Done, mir.Operand.None))
+    src := source.Source("a.olang", "one\ntwo\nthree\n")
+    for mode in Mode[Mode.Compile, Mode.Run] {
+        m mut Machine&t = NewMachine(t, mode)
+        tdefine(t, m, f)
+        tdefine(t, m, g)
+        tdefine(t, m, h)
+        s := m.Eval(tkey(1), I64[])
+        assert s == Stop.Exited(mir.ExitKind.Assert, 0, source.Span(4, 9), "boom"), $s
+        assert s.Text(src) == "a.olang:2: assertion failed: boom", s.Text(src)
+        assert m.Eval(tkey(2), I64[]).Text(src) == "a.olang:1: reached unreachable code"
+        ended := m.Eval(tkey(3), I64[])
+        if mode == Mode.Compile {
+            assert ended == Stop.Refused(WhyEnds, 0, Sp0)
+        } else {
+            assert ended == Stop.Exited(mir.ExitKind.Done, 0, Sp0, "") and ended.Text(src) == ""
+        }
+    }
 }
