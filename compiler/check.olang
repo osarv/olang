@@ -856,6 +856,11 @@ fn (c mut Checker&) typeNamed(x ast.Expr&) types.TypeId {
                 return t if t != types.UnknownT else types.TypeId(-1)
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 { return c.declType(c.P.DeclFor(ref.Module, ref.Index)) }
+            if ref.Kind == names.What.TypeVar {
+                # a type variable bound here stands where a type's name may (G8b): T[a, b], x is T
+                t := try c.fr().Ctx.Vars.Get(n) catch default types.TypeId(-1)
+                if t >= types.TypeId(0) and c.P.T.KindOf(t) != types.Kind.Const and c.P.T.KindOf(t) != types.Kind.ConstExpr { return t }
+            }
         }
         case ast.Expr.Member(sp, _, _) {
             ref := c.P.R.Member(c.fr().File, sp.End)
@@ -2322,30 +2327,41 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
         if t == types.UnknownT or not c.isNamed(t) { return c.unknown(sp) }
         # x[lo:hi] on a declared type (E31): its Slice, under try its TrySlice (E31a); an absent end its Len()
         m := c.roleMethod(t, "TrySlice", 2) if c.fr().Tries > 0 else -1
+        derived := false
         if m < 0 {
             m = c.roleMethod(t, "Slice", 2)
-            if m >= 0 and c.fr().Tries > 0 {
-                c.gap(sp, "a derived TrySlice (E31a)")
-                return c.unknown(sp)
-            }
+            derived = m >= 0 and c.fr().Tries > 0
         }
         if m < 0 {
             c.err(sp, msgs.NotIndexable(c.ty(t)))
             return c.unknown(sp)
         }
-        from := c.exprs.Len()
-        c.exprs.Push(c.lit(sp, c.i64(), 0) if lo == null else c.exprTo(lo, c.i64()))
-        if hi == null {
-            lm := c.roleMethod(t, "Len", 0)
-            if lm < 0 {
-                c.gap(sp, "a slice with no end of a type with no Len (E31)")
-                c.exprs.Truncate(from)
-                return c.unknown(sp)
-            }
-            c.exprs.Push(c.invoke(sp, sp, lm, c.read(sp, base), Array<ast.Expr&>(0), null))
-        } else {
-            c.exprs.Push(c.exprTo(hi, c.i64()))
+        lm := c.roleMethod(t, "Len", 0)
+        if (hi == null or derived) and lm < 0 {
+            c.gap(sp, "a slice with no end, or a derived TrySlice, of a type with no Len (E31, E31a)")
+            return c.unknown(sp)
         }
+        l := c.lit(sp, c.i64(), 0) if lo == null else c.value(c.exprTo(lo, c.i64()), lo.Span())
+        h typed.Expr&c = null
+        if hi == null {
+            h = c.invoke(sp, sp, lm, c.read(sp, base), Array<ast.Expr&>(0), null)
+        } else {
+            h = c.value(c.exprTo(hi, c.i64()), hi.Span())
+        }
+        if derived {
+            # E31a's derived TrySlice: 0 <= lo <= hi <= Len(), failing with BuiltinError.OUT_OF_BOUNDS before Slice is
+            # called - both bounds held once, in order
+            hl := c.hidden(sp, c.i64())
+            c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(hl)), l))
+            hh := c.hidden(sp, c.i64())
+            c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(hh)), h))
+            n := c.invoke(sp, sp, lm, c.read(sp, base), Array<ast.Expr&>(0), null)
+            l = c.prim3(sp, typed.PrimOp.InRangeIncl, c.readLocal(sp, hl), c.lit(sp, c.i64(), 0), c.readLocal(sp, hh))
+            h = c.prim3(sp, typed.PrimOp.InRangeIncl, c.readLocal(sp, hh), c.lit(sp, c.i64(), 0), n)
+        }
+        from := c.exprs.Len()
+        c.exprs.Push(l)
+        c.exprs.Push(h)
         return c.invoke(sp, sp, m, c.read(sp, base), null, gather(c.exprs, from))
     }
     rt := t if c.isNamed(t) else c.P.T.Array(c.P.T.Elem(at), types.TypeId(0))
@@ -2875,7 +2891,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                 nomatch { }
             }
             if isDefault {
-                e = c.defaultArg(sp, f, k, recv != null, ps[k])
+                e = c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target))
             } else {
                 e = c.exprTo(args[i], ps[k])
             }
@@ -2886,7 +2902,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         k++
     }
     for k < ps.Len() {
-        c.exprs.Push(c.defaultArg(sp, f, k, recv != null, ps[k]))
+        c.exprs.Push(c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target)))
         k++
     }
     if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and c.fr().Tries == 0 { c.gap(nsp, "a fallible call outside a try (R8)") }
@@ -2947,7 +2963,22 @@ fn (c mut Checker&) spread(x ast.Expr&) Array<typed.Expr&>&c {
 
 # the default of parameter k of function f (D8a), checked in its declaration's module; written in another file, it is
 # wrapped in Away
-fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want types.TypeId) typed.Expr&c {
+# the type arguments of the instance a call reaches: a default reading a variable of its declaration reads this
+# instance's (D8a, G23)
+fn (c mut Checker&) calleeArgs(t typed.Callee&) types.ListId {
+    match t {
+        case typed.Callee.Body(id) {
+            match c.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) { return c.P.InstanceArgs(inst) }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    return types.ListId(0)
+}
+
+fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want types.TypeId, iargs types.ListId) typed.Expr&c {
     if f < 0 { return c.ctorDefault(sp, k, want) }
     fd := c.P.FnDecl(f)
     i := k - 1 if hasRecv or fd.Recv != null else k
@@ -2959,7 +2990,7 @@ fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want 
     here := c.fr().File
     fr := c.fr()
     inner := c.push(fr.Body, mi, types.VoidT, types.ListId(0))
-    inner.Ctx = c.P.FnContext(f, types.ListId(0))
+    inner.Ctx = c.P.FnContext(f, iargs)
     inner.Block = fr.Block
     x := c.exprTo(fd.S.Params[i].Dflt, want)
     file := c.fr().File
@@ -3267,6 +3298,15 @@ fn (c mut Checker&) derivedTryAt(sp source.Span, base typed.Place&c, t types.Typ
 }
 
 # an index checked against what Len() gives (E31a's derived forms): the one checked argument
+# a checked bounds prim over [v, lo, hi] (InRange, InRangeIncl): v once in range, else BuiltinError.OUT_OF_BOUNDS
+fn (c mut Checker&) prim3(sp source.Span, op typed.PrimOp, v typed.Expr&c, lo typed.Expr&c, hi typed.Expr&c) typed.Expr&c {
+    from := c.exprs.Len()
+    c.exprs.Push(v)
+    c.exprs.Push(lo)
+    c.exprs.Push(hi)
+    return typed.Expr.Prim(sp, typeOf(v), op, typed.Check.Try, gather(c.exprs, from))
+}
+
 fn (c mut Checker&) inRange(sp source.Span, base typed.Place&c, t types.TypeId, ix ast.Expr&) Array<typed.Expr&>&c {
     lm := c.roleMethod(t, "Len", 0)
     if lm < 0 {
@@ -3862,9 +3902,12 @@ fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
 # false where it has neither
 fn (c mut Checker&) stepMethod(sp source.Span, p typed.Place&c, t types.TypeId, inc Bool) Bool {
     if not c.isNamed(t) { return false }
-    m := c.roleMethod(t, "Inc" if inc else "Dec", 0)
+    # x = x.Inc() (E31); under try its TryInc where declared (E31a, R21)
+    m := c.roleMethod(t, "TryInc" if inc else "TryDec", 0) if c.fr().Tries > 0 else -1
+    if m < 0 { m = c.roleMethod(t, "Inc" if inc else "Dec", 0) }
     if m >= 0 {
-        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, m, c.read(sp, p), Array<ast.Expr&>(0), null)))
+        v := c.invoke(sp, sp, m, c.read(sp, typed.Place.Target(sp, t)), Array<ast.Expr&>(0), null)
+        c.emit(typed.Stmt.Assign(sp, p, c.fit(v, t, sp)))
         return true
     }
     pm := c.roleMethod(t, "Plus" if inc else "Minus", 1)
@@ -4175,36 +4218,55 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     vsp := value.Span() if value != null else sp
     ri := c.valueTemp(p)
     if ri < 0 { return false }
-    of := c.atRecs[ri].Of
-    tv := c.tempValue(p)
-    if c.valueTemp(c.atRecs[ri].Base) >= 0 {
-        c.gap(sp, "a store through two collections' elements (E31b)")
-        if value != null { c.expr(value, types.UnknownT) }
-        return true
+    # the levels, the store's own first: x[i][j].f has two, the element of x[i] read and written back last (E31b's
+    # nested collections, one level at a time)
+    recs List<I64>
+    calls mut List<Array<typed.Expr&>&>&c = List<Array<typed.Expr&>&>()
+    at := p
+    for ri >= 0 {
+        args := c.callArgs(c.tempValue(at))
+        if args == null {
+            c.gap(sp, "a store through an element read of this kind (E31b)")
+            return true
+        }
+        recs.Push(ri)
+        calls.Push(args)
+        at = c.atRecs[ri].Base
+        ri = c.valueTemp(at)
     }
-    args := c.callArgs(tv)
-    if args == null {
-        c.gap(sp, "a store through an element read of this kind (E31b)")
-        return true
+    nl := recs.Len()
+    sms List<I64>
+    for l in range nl {
+        of := c.atRecs[recs[l]].Of
+        n := calls[l].Len() - 1
+        sm := c.roleMethod(of, "SetAt", n + 1)
+        if c.fr().Tries > 0 {
+            tm := c.roleMethod(of, "TrySetAt", n + 1)
+            if tm >= 0 { sm = tm }
+        }
+        if sm < 0 {
+            c.err(sp, msgs.SetatUndeclared(c.ty(of)))
+            if value != null { c.expr(value, types.UnknownT) }
+            return true
+        }
+        sms.Push(sm)
     }
-    n := args.Len() - 1
-    sm := c.roleMethod(of, "SetAt", n + 1)
-    if c.fr().Tries > 0 {
-        tm := c.roleMethod(of, "TrySetAt", n + 1)
-        if tm >= 0 { sm = tm }
+    # the place: each level's indices held, the outermost's first, left to right
+    held mut List<Array<I64>&>&c = List<Array<I64>&>()
+    for k in range nl { held.Push(Array<I64>(0)) }
+    for kk in range nl {
+        l := nl - 1 - kk
+        args := calls[l]
+        hs mut Array<I64>&held = Array<I64>(args.Len() - 1)
+        for i in range args.Len() - 1 {
+            a := args[i + 1]
+            h := c.local(source.NameId(0), a.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
+            c.emit(typed.Stmt.Let(a.Span(), typed.LocalId(I32(h)), a))
+            hs[i] = h
+        }
+        held[l] = hs
     }
-    if sm < 0 {
-        c.err(sp, msgs.SetatUndeclared(c.ty(of)))
-        if value != null { c.expr(value, types.UnknownT) }
-        return true
-    }
-    held List<I64>
-    for i in range n {
-        a := args[i + 1]
-        h := c.local(source.NameId(0), a.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
-        c.emit(typed.Stmt.Let(a.Span(), typed.LocalId(I32(h)), a))
-        held.Push(h)
-    }
+    # then the value
     pt := p.Type()
     x typed.Expr&c = null
     if op == token.Tok.Assign {
@@ -4224,21 +4286,37 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     hv := c.local(source.NameId(0), vsp, typeOf(x), typed.LocalKind.Held, typed.Mark.None)
     c.emit(typed.Stmt.Let(vsp, typed.LocalId(I32(hv)), x))
-    reads mut Array<typed.Expr&>&c = Array<typed.Expr&>(n)
-    for i in range n { reads[i] = c.readLocal(sp, held[i]) }
-    am := c.roleMethod(of, "At", n)
-    el := c.invoke(sp, sp, am, c.read(sp, c.atRecs[ri].Base), null, reads)
-    t := c.hidden(sp, typeOf(el))
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(t)), el))
-    p2 := c.replaceTemp(p, t)
+    # each element read by At into a local, the outermost first, the next read out of it
+    temps Array<I64> = Array<I64>(nl, -1)
+    bases mut List<typed.Place&>&c = List<typed.Place&>()
+    for k in range nl { bases.Push(null) }
+    for kk in range nl {
+        l := nl - 1 - kk
+        base := c.atRecs[recs[l]].Base
+        if l + 1 < nl { base = c.replaceTemp(base, temps[l + 1]) }
+        bases[l] = base
+        hs := held[l]
+        reads mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len())
+        for i in range hs.Len() { reads[i] = c.readLocal(sp, hs[i]) }
+        am := c.roleMethod(c.atRecs[recs[l]].Of, "At", hs.Len())
+        el := c.invoke(sp, sp, am, c.read(sp, base), null, reads)
+        t := c.hidden(sp, typeOf(el))
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(t)), el))
+        temps[l] = t
+    }
+    # the store into the innermost, then every level written back by SetAt, the innermost first
+    p2 := c.replaceTemp(p, temps[0])
     c.notCapture(p2, sp)
     v := c.readLocal(sp, hv)
     if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Place.Target(sp, pt)), v) }
     c.emit(typed.Stmt.Assign(sp, p2, v))
-    sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(n + 1)
-    for i in range n { sargs[i] = c.readLocal(sp, held[i]) }
-    sargs[n] = c.readLocal(sp, t)
-    c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sm, c.read(sp, c.atRecs[ri].Base), null, sargs)))
+    for l in range nl {
+        hs := held[l]
+        sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len() + 1)
+        for i in range hs.Len() { sargs[i] = c.readLocal(sp, hs[i]) }
+        sargs[hs.Len()] = c.readLocal(sp, temps[l])
+        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]), null, sargs)))
+    }
     return true
 }
 
@@ -4884,10 +4962,6 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
 
 # for i in range [start,] end [, step] (S9b): upward, a count worked out once
 fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&>&, cm ast.Compr&, ce types.TypeId) typed.Expr&c {
-    if f.Key != source.NameId(0) {
-        c.gap(sp, "two names over a range")
-        return null
-    }
     # the first argument that is no literal gives the range its type; literals alone count in I64 (S9b)
     t types.TypeId = types.UnknownT
     vfrom := c.exprs.Len()
