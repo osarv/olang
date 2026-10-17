@@ -240,6 +240,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   stays as it is - free functions and constants; nothing built. QZ is closed.
   Queued after
   wt-errors2 merges (std files).
+- QZ3 ASKED 2026-10-17 (the user: "Do we have traits that only integers satisfy? Floats? Signed unsigned?"): no -
+  only Hashable, Iterator, Indexable; std/math limits types by `match T` exhaustiveness (an error at the call, worded as
+  a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
+  (maybe `Number`), sealed by a private method so only the primitives satisfy them (and declared types extending one),
+  used as `fn Sqrt(x <T Float>) T`. Reverses the user's 2026-10-07 deferral. Recommended yes. In effect: none.
 - QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
   Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
   and `a.ToList()` build Lists (M19d: methods on built-ins live only in the prelude) and for convenience. Options: (a)
