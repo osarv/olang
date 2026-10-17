@@ -1675,11 +1675,7 @@ fn (m mut Machine&) convert(bits I64, from types.TypeId, to types.TypeId) I64 {
     x := m.toF64(bits, from)
     if ts == vFloat { return m.fromF64(x, to) }
     # a float to an integer: in range after truncation, a NaN never
-    lim := 2.0
-    for i in range 8 * tw - 1 { lim = lim * 2.0 }
-    lo, hi := -lim / 2.0, lim / 2.0
-    if ts == vUint { lo, hi = 0.0, lim }
-    if x != x or x <= lo - 1.0 or x >= hi {
+    if not floatFits(x, tw, ts == vInt) {
         m.refuse(WhyConvert)
         return 0
     }
@@ -1762,14 +1758,7 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
     w := m.width(ty)
     signed := m.shape(ty) == vInt
     if op == typed.PrimOp.Convert {
-        if m.shape(at) == vFloat {
-            v := m.toF64(a, at)
-            lim := 2.0
-            for i in range 8 * w - 1 { lim = lim * 2.0 }
-            lo, hi := -lim / 2.0, lim / 2.0
-            if not signed { lo, hi = 0.0, lim }
-            return v != v or v <= lo - 1.0 or v >= hi
-        }
+        if m.shape(at) == vFloat { return not floatFits(m.toF64(a, at), w, signed) }
         v := m.intValue(a, at)
         big := m.shape(at) == vUint and m.width(at) == 8 and v < 0
         return not m.fits(v, big, w, signed)
@@ -1798,14 +1787,21 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
         if op == typed.PrimOp.Div { return x0 == m.minOf(w) and b == -1 }
         return r < m.minOf(w) or r > -(m.minOf(w) + 1)
     }
-    return match op {
-        case typed.PrimOp.Add => ((x0 ^ (x0 + b)) & (b ^ (x0 + b))) < 0
-        case typed.PrimOp.Sub => ((x0 ^ b) & (x0 ^ (x0 - b))) < 0
-        case typed.PrimOp.Mul => (x0 != 0 and b != 0 and ((x0 * b) / b != x0 or (x0 == -1 and b == m.minOf(8))
-                                                         or (b == -1 and x0 == m.minOf(8))))
-        case typed.PrimOp.Div => x0 == m.minOf(8) and b == -1
-        nomatch => false
+    if op == typed.PrimOp.Div { return x0 == m.minOf(8) and b == -1 }
+    r := try (x0 + b if op == typed.PrimOp.Add else (x0 - b if op == typed.PrimOp.Sub else x0 * b)) catch {
+        return true
     }
+    return false
+}
+
+# whether a float's value, truncated toward zero, fits an integer of w bytes and a signedness (E26) - a NaN never
+fn floatFits(v F64, w I64, signed Bool) Bool {
+    lim := 1.0
+    for i in range 8 * w - 1 { lim = lim * 2.0 }
+    if v != v { return false }
+    if not signed { return v > -1.0 and v < 2.0 * lim }
+    # the least is -lim itself; for 8 bytes -lim - 1 is not an F64 apart from -lim, so the test is >= there
+    return (v >= -lim if w >= 8 else v > -lim - 1.0) and v < lim
 }
 
 fn (m mut Machine&) minOf(w I64) I64 { return -9223372036854775807 - 1 if w >= 8 else -(I64(1) << (8 * w - 1)) }
@@ -3130,4 +3126,149 @@ test "integers at every width agree with the run time: wrapping, comparisons, sh
     intsAgree(t, "U32", U32[0, 1, 3, 3000000000, 4294967295], U32[0, 17, 31], false, 0)
     intsAgree(t, "U64", U64[0, 1, 3, 9223372036854775808, 18446744073709551615, 12345678901234], U64[0, 1, 63], false,
               0)
+}
+
+fn fbits(x <T>) I64 { return I64(x.Bits()) }
+
+fn hostFloat(op typed.PrimOp, a <T>, b T) T {
+    return match op {
+        case typed.PrimOp.Add => a + b
+        case typed.PrimOp.Sub => a - b
+        case typed.PrimOp.Mul => a * b
+        nomatch => a / b
+    }
+}
+
+FloatOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div]
+
+# + - * / and the comparisons on every pair of xs, at the float type named, against the host: the same bits, a NaN
+# wherever the host gives one (whose payload E33a leaves unspecified); negation the sign flipped
+fn floatsAgree(t mut types.Table&, name String&, xs Array<<T>>&) {
+    ty := t.Prim(name)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    w := m.width(ty)
+    id := 200
+    for op in FloatOps {
+        tdefine(t, m, opFn(t, id, op, ty, ty, true))
+        for a in xs {
+            for b in xs {
+                assert m.Eval(tkey(id), I64[fbits(a), fbits(b)]) == Stop.None
+                want := hostFloat(op, a, b)
+                got := m.Bits(m.Result, w)
+                if want != want {
+                    assert isNaNBits(got, name), $name " " $op " " $a " " $b ": " $got " is no NaN"
+                    continue
+                }
+                assert got == fbits(want), $name " " $op " " $a " " $b ": " $got " for " $fbits(want)
+            }
+        }
+        id++
+    }
+    for op in CmpOps {
+        tdefine(t, m, opFn(t, id, op, ty, types.BoolT, true))
+        for a in xs {
+            for b in xs {
+                assert m.Eval(tkey(id), I64[fbits(a), fbits(b)]) == Stop.None
+                assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name " " $op " " $a " " $b
+            }
+        }
+        id++
+    }
+    tdefine(t, m, opFn(t, id, typed.PrimOp.Neg, ty, ty, false))
+    for a in xs {
+        assert m.Eval(tkey(id), I64[fbits(a)]) == Stop.None
+        assert m.Bits(m.Result, w) == fbits(-a) or a != a, $name " Neg " $a
+    }
+}
+
+# whether bits of the float type named are a NaN's: every exponent bit set, a fraction not zero
+fn isNaNBits(bits I64, name String&) Bool {
+    fb := 10 if name == "F16" else (7 if name == "BF16" else (23 if name == "F32" else 52))
+    wb := 16 if name == "F16" or name == "BF16" else (32 if name == "F32" else 64)
+    em := ((I64(1) << (wb - 1 - fb)) - 1) << fb
+    return (bits & em) == em and (bits & ((I64(1) << fb) - 1)) != 0
+}
+
+test "floats at every width agree with the run time: one rounding at their own type, NaNs and infinities" {
+    names := source.Names()
+    t := types.NewTable(names)
+    z16 := F16(0.0)
+    floatsAgree(t, "F16", F16[0.0, -z16, 1.0, -2.5, 0.1, 65504.0, 0.00006103515625, 0.000000059604645, 1.0 / z16,
+                              z16 / z16, 3.140625])
+    zb := BF16(0.0)
+    floatsAgree(t, "BF16", BF16[0.0, -zb, 1.0, -2.5, 0.1, 3.0e38, 1.0e-38, 1.0 / zb, zb / zb, 7.0])
+    z32 := F32(0.0)
+    floatsAgree(t, "F32", F32[0.0, -z32, 1.0, -2.5, 0.1, 3.4e38, 1.0e-45, 1.0e-38, 1.0 / z32, z32 / z32, 16777217.0])
+    z64 := 0.0
+    floatsAgree(t, "F64", F64[0.0, -z64, 1.0, -2.5, 0.1, 1.7e308, 5.0e-324, 1.0 / z64, z64 / z64, 0.3, 1.0e16])
+}
+
+NumNames Array<String&>& = String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
+
+# x converted to the numeric type named, by the host, as that type's bits
+fn hostConv(to String&, x <S>) I64 {
+    return match to {
+        case "I8" => I64(I8(x))
+        case "I16" => I64(I16(x))
+        case "I32" => I64(I32(x))
+        case "I64" => I64(x)
+        case "U8" => I64(U8(x))
+        case "U16" => I64(U16(x))
+        case "U32" => I64(U32(x))
+        case "U64" => I64(U64(x))
+        case "F16" => I64(F16(x).Bits())
+        case "BF16" => I64(BF16(x).Bits())
+        case "F32" => I64(F32(x).Bits())
+        nomatch => I64(F64(x).Bits())
+    }
+}
+
+# every x, of the numeric type named, converted to every numeric type against the host: a float out of an integer
+# type's range, or a NaN, refused as undefined (E26)
+fn convsAgree(t mut types.Table&, name String&, xs Array<<S>>&, bits fn(x S) I64) {
+    from := t.Prim(name)
+    m mut Machine&t = NewMachine(t, Mode.Compile)
+    id := 300
+    for to in NumNames {
+        ty := t.Prim(to)
+        tdefine(t, m, opFn(t, id, typed.PrimOp.Convert, from, ty, false))
+        w := m.width(ty)
+        for x in xs {
+            s := m.Eval(tkey(id), I64[bits(x)])
+            if m.shape(from) == vFloat and m.shape(ty) != vFloat and not floatFits(F64(x), w, m.shape(ty) == vInt) {
+                assert s == Stop.Refused(WhyConvert, 0, Sp0), $name " " $x " to " $to ": " $s
+                continue
+            }
+            assert s == Stop.None, $name " " $x " to " $to ": " $s
+            got := m.Bits(m.Result, w)
+            want := hostConv(to, x) & m.mask(w)
+            assert got == want or (m.shape(ty) == vFloat and isNaNBits(got, to) and isNaNBits(want, to)),
+                   $name " " $x " to " $to ": " $got " for " $want
+        }
+        id++
+    }
+}
+
+test "conversions between every pair of numeric types agree with the run time: one rounding, the undefined refused" {
+    names := source.Names()
+    t := types.NewTable(names)
+    convsAgree(t, "I8", I8[0, -1, 127, -128, 5], fn(x I8) I64 { return I64(x) })
+    convsAgree(t, "I16", I16[0, -1, 32767, -32768, 300], fn(x I16) I64 { return I64(x) })
+    convsAgree(t, "I32", I32[0, -1, 16777217, -2147483648, 70000], fn(x I32) I64 { return I64(x) })
+    convsAgree(t, "I64", I64[0, -1, 9223372036854775807, -9223372036854775807 - 1, 9007199254740993, 65505], fn(x I64) I64 { return I64(x) })
+    convsAgree(t, "U8", U8[0, 255, 128], fn(x U8) I64 { return I64(x) })
+    convsAgree(t, "U16", U16[0, 65535, 2049], fn(x U16) I64 { return I64(x) })
+    convsAgree(t, "U32", U32[0, 4294967295, 16777217], fn(x U32) I64 { return I64(x) })
+    convsAgree(t, "U64", U64[0, 18446744073709551615, 9223372036854775808, 9007199254740993], fn(x U64) I64 { return I64(x) })
+    z16 := F16(0.0)
+    convsAgree(t, "F16", F16[0.0, -z16, 1.5, -2.75, 65504.0, 255.9, 1.0 / z16, z16 / z16, -128.5], fn(x F16) I64 { return I64(x.Bits()) })
+    zb := BF16(0.0)
+    convsAgree(t, "BF16", BF16[0.0, 1.5, -2.75, 3.0e38, -3.0e38, 1.0 / zb, zb / zb, 4.0e9], fn(x BF16) I64 { return I64(x.Bits()) })
+    z32 := F32(0.0)
+    convsAgree(t, "F32", F32[0.0, 1.5, -2.75, 16777217.0, 2147483520.0, 2147483648.0, -2147483648.0,
+                              9.2233715e18, 1.8446743e19, 1.0 / z32, z32 / z32, 0.1], fn(x F32) I64 { return I64(x.Bits()) })
+    z64 := 0.0
+    convsAgree(t, "F64", F64[0.0, 1.5, -2.75, 0.1, 65519.0, 65520.0, 9223372036854775807.0, -9223372036854775808.0,
+                              18446744073709549568.0, 18446744073709551616.0, -0.9, -1.0, 1.0 / z64, z64 / z64,
+                              9007199254740993.0, 1.0e300], fn(x F64) I64 { return I64(x.Bits()) })
 }
