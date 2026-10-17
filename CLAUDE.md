@@ -5209,6 +5209,39 @@ and literals made only of such, never existing storage anywhere in it) - it is
   (shape, types up to representation, initialization, scope nesting and joins on every path) and a dump, no parser.
   Found: a stage-0 use-after-free - `f.Blocks[b].Stmts.Push(s)` in a method builds the inner list's chunk in the call's
   frame (E31b's held copy; HISTORY.md has the reproducer).
+- **Vec phase 2a: a Vec in a field and a global, elements holding references, deep borrowed own results (O31, O32,
+  O33, O34, O37, O38, O39, T25e, M19d, K2, 2026-10-11; 19.4 items 1, 2, 4 and 7, details mine, docs/own.md section 25).**
+  An **owner value place** - a place holding an owning type by value whose owners its container owns - is now a body's
+  local, a field (to any depth of value fields) of one, of a borrowed copy's source or of an instance reached through a
+  reference, or a global (`OwnValuePlace`); `take`, assignment's release, borrowed copies and loans' roots all ask that.
+  So a struct holding `toks Vec<Tok>` is an owning type (its copies borrowed copies, `take l.toks`, its buffers released
+  with the instance), a typed global may hold a Vec (never released, never baked), and `c := l.toks` is a borrowed copy;
+  one is not declared from a global (`vec126`). An own array's (a Vec's) elements may be values holding references:
+  stored in the buffer, what they hold in the slot's reach, so an element copied out takes no loan on the buffer and a
+  loop turn's text pushed in is C2d's error. `return x.First().deep` is a borrowed own result whose loan any release of
+  a holder meets. `TakeAt`/`SwapTake` give the element; `RemoveAt`/`SwapRemove` give nothing. Twelve relaxations listed
+  for review in 25.7; enum payloads, type arguments, elements, by-value parameters and lambda captures of an owning value
+  stay O31/O32 (phase 2b, whose design consequences are 25.6). Cases `vec88`-`vec127`, corpus tests in shared.olang and
+  std/prelude/tests/vec.olang (baked beside the run time, also under `-s`), and fifteen shapes in the scope fuzzer.
+  **Its review (vec6) found three holes, fixed (docs/own.md section 26).** R1, a use-after-free in natural code (`return
+  take p.lx.toks`): a Vec field of an OWNED object was given the region's reach, where its words are built in the region -
+  its reach is the region now, so its field moves only within that object by one path (`p.lx.more = take p.lx.toks`) or
+  with it (`take p.lx`). D: a borrowed copy's loans stopped 8 owning value levels down (`ownOwnSlotReads`), and the value
+  walks §8 and own rely on (`TypeHoldsReferences`, `valueRefsAdmitStores`, typeHoldsWritableRefs, the O31 written-type
+  check) answered "holds nothing" past 64 - no cap now where a path guard ends the walk, the safe answer past 64
+  elsewhere, and own's operand-path loops unbounded. L1: a borrowed copy's owning-value part (`c.a = Lexer(1)`) is O32's
+  error - it was held to the function's end. Also: a conversion of a reference a call gives names its storage at run
+  time (T29a, `String(v.View())` copied), `take` is a flow for O26a (`w := take l.toks; return w`), and a destructor's
+  O40 is reported at its own call, not inside Push (B11). Cases `vec128`-`vec146`; fuzzer shapes for all three.
+  **The review of that round (vec7) found two more use-after-frees, fixed (docs/own.md section 27).** F1: the same-path
+  move trusted a variable's name - a cursor repointed between `prev := c.lx` and `prev.more = take c.lx.toks` gave two
+  objects; it now holds only for two reads made in the statement being checked by pure paths (a variable that is no
+  global, then fields; the coordinator's call). F2: a take through a getter giving a borrowed own result (`take
+  p.Lx().toks`, or through a local holding one) read the call's `&p` tag as the reach; it is refused (O34), decided once
+  borrowed own results are settled, so a factory's new object is still taken from. F3 (building through a getter keeps the
+  words in `p`'s block, memory only) recorded. Also: T29a retypes only a call's reference (a conditional of views is a
+  copy again, N1) and a fixed-length one too (X1b); a type too deep to walk is its own error, not O31 (N2); a generic
+  holding itself by value is T16, where the compiler crashed (V1). Cases `vec147`-`vec160`; five fuzzer shapes.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative,
   current-state-only reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`,
   `O13`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md, Claude, or the design

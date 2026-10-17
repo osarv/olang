@@ -242,10 +242,14 @@ fn (l mut List<<T>>&) Truncate(n I64) {
     s.count = n
 }
 
+# removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
+# moving down one place as TakeAt moves them
+fn (l mut List<<T>>&) RemoveAt(i I64) { l.TakeAt(i) }
+
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
 # checked once per call, and stops it as a slice out of range does
-fn (l mut List<<T>>&) RemoveAt(i I64) T {
+fn (l mut List<<T>>&) TakeAt(i I64) T {
     s := l.s
     assert i >= 0 and i < s.count
     p I64 = i + firstChunk
@@ -572,10 +576,13 @@ fn (l mut List<<T>>&) Remove(x T) Bool {
     return true
 }
 
+# removes the element at position i as SwapTake does, giving nothing
+fn (l mut List<<T>>&) SwapRemove(i I64) { l.SwapTake(i) }
+
 # removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
-# the length, where RemoveAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
-# one that is not is a mistake in the program, checked once per call, as RemoveAt checks it
-fn (l mut List<<T>>&) SwapRemove(i I64) T {
+# the length, where TakeAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
+# one that is not is a mistake in the program, checked once per call, as TakeAt checks it
+fn (l mut List<<T>>&) SwapTake(i I64) T {
     s := l.s
     assert i >= 0 and i < s.count
     x := l.At(i)

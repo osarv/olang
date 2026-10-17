@@ -16211,3 +16211,119 @@ fn main() ? {
 }
 ```
 The same push written in `main` on a local is correct.
+### Vec phase 2a: a Vec in a field and a global, elements holding references, deep borrowed own results (§8.8 O31, O32, O33, O34, O37, O38, O39, T25e, M19d, K2, 2026-10-11)
+
+Phase 1 left `Vec` usable only as a local or a result. The coordinator asked for four of docs/own.md 19.4's items - a Vec
+held by value in a field ("the most important"), a Vec global, elements that are values holding references, and `return
+v.First().deep` with `TakeAt`/`SwapTake` - with the rest left to phase 2b, and asked for every hard shape to be refused
+rather than proved, with the refusal recorded.
+
+**One generalization did most of it.** An owner value local was the only place an owning type could be held by value,
+and every rule that mattered - `take`, an assignment releasing what it overwrites, a borrowed copy's source, the root a
+loan is keyed by - asked "is this an owner value local". A field holding a Vec, of such a local or of an instance reached
+through a reference, and a global holding one, are the same thing one level out: a place whose container owns its
+owners. So those rules now ask `OwnValuePlace`, and the reach (O34) of such a place is where its instance keeps its
+references - a global's the program's scope. Owning types compose (`TypeIsOwning` recurses through value fields), a
+constructor field of a Vec type is an owner value local of the constructor moved into the instance as it is assembled,
+and codegen's drop function releases value fields' owners after the own fields'. A global must be written with its type:
+making `G := Vec<I64>()` a value global was tried and reverted, since it changed what programs already declaring such a
+global with `:=` meant (`o41global`).
+
+**Elements that are values holding references** follow 13.1's decision 5 rather than a new design: an element is stored
+in the buffer, its own storage the region, while everything it holds lives where a reference element's referent would -
+the slot's reach - at every depth of a read through it (`ownElemRegion` on the index operand, read by
+`lvalueStorageScope`, `splitValueHome`, `valueRefsHome` and `RefExactScope`). Three consequences had to be made right
+for `Vec<Tok>` to be usable rather than merely accepted: a value element copied out must take no loan on the buffer for
+what it holds (`ownLoansIn`'s index case), or `d := v[1]` could never be kept across a push; two value types must meet
+only where one could be the other's storage (`ownSameReferent`), or the `String&` in a `Tok` named the `Array<Tok>`
+buffer and every release of it; and `v.Push(Tok(...))` must keep nothing of the borrow of `v` (`ownCallConfined` now asks
+whether the parameter's type can refer to the loaned objects or the argument's storage at all - the first version asked
+something weaker and refused `Push` of any element holding a writable reference). `Vec<Link>.At` then failed T25c:
+a borrow of an own slot reached through an instantiation's read-only parameter has to be read-only as the argument is
+(`roRefOf`). And `v.Push(v.Len())` failed O39 - two borrows of one owner value local's storage in one expression made two
+loans with no single place to release them through - so a merged loan keeps only the owner a borrow is of.
+
+**The deep borrowed own result** (19.1's case left over) is a source kind beside the parameter: a borrow reached by own
+fields from another call's borrowed own result, its loan on the deeper type, which a release of any holder meets because
+`ownHeld` walks own fields; the callee's parameter set is settled with the rest, and a return whose call settles on
+nothing is O10's error then.
+
+**Found on the way.** A type holding itself through a reference (`next mut Node&`) was walked by `ownMayReferToIn` until
+its depth limit and then taken to refer to anything, which made every list of such nodes look like it could hold the
+loaned buffer - it is walked once now. O32's message for a `:=` from something that is neither an owner nor a borrowed
+copy's source still described the local-only rule; it names fields now, and what to do for a global (`vec126`).
+
+**The relaxations**, twelve, are listed in docs/own.md 25.7 for review, each beside the must-fail cases on its hazard.
+`vec88`-`vec127` (40 cases) cover the hazards the coordinator named - a borrow of a field's Vec kept across a push through
+the struct, a take of the field while borrowed, a copy of the struct used after the original's Vec grows, a task, a
+lambda and a global keeping a borrow, a release through a method of the struct - and the element and deep shapes. The
+corpus tests in `shared.olang` and `std/prelude/tests/vec.olang` read every value back after an arena churn and compare
+globals baked while compiling with the same computation at run time; both files also pass under `-t -s`.
+The scope fuzzer's own mode writes fifteen vec2a shapes, each checked alone (the seven meant to be refused are, the
+eight accepted agree built, built `-d -s` and interpreted). Own seeds 1-300, one generator under both compilers: f743da5
+0 findings (773 scenarios run, 2827 refused), this tip 0 findings (870 run, 2730 refused). A first master run used a
+stale copy of the compiler from before the fifth review's fixes and reported three findings (seeds 53, 58, 71; the one
+examined was the fifth review's R2b shape) that f743da5 does not have; the comparison was rerun on a fresh build of it.
+
+### Vec phase 2a's review, fixed: a Vec field of an owned object, loans at any depth, a borrowed copy's owning part (§8.8 O26a, O32, O33, O34, O38, O39, O40, T29a, 2026-10-12)
+
+The review of d5ddcda (`/home/user/review/vec6`) said the phase was not safe to merge: one high-severity hole, new in
+this phase, two smaller ones, an older disagreement between the run time and `-i`, and four over-rejections.
+
+**R1 was the own-slot rule applied to a value field.** O34 gives an own slot inside an owned object the object's region's
+reach, so that what an owned object owns reaches as far as it does and may be moved out of it. `ownValuePlaceReach` gave
+a Vec field of an owned object (`p.lx.toks`) the same answer through `ownReachOfBase` - but a Vec held by value is not an
+own slot of the object: its buffer's elements are built where the field lives, in the region itself (Push's obligations
+bind to the field's exact scope). So `return take p.lx.toks`, the natural way to hand a lexer's words out, returned words
+built in a region that `p`'s release freed: under the scope sanitizer "use after scope closed", under `-b` churn text.
+The own-array path had always answered this right (`RefExactScope` of the read), and the fix gives the value-place path
+the same answer: the region, which outlives nothing. Refusing every move out of the region would also refuse a move
+between two fields of the one object, because each read of `p.lx` is a region of its own to §8; `ownValueTakeReach`
+accepts two regions whose slots are one path, the rule O39 already uses for loans, sound because a live borrow keeps the
+slot from being given another object in between.
+
+**D was a constant, and finding its siblings found one more limit.** `ownOwnSlotReads` stopped at depth 8. Uncapping it
+was not enough at 64 levels: `TypeHoldsReferences` - which every value walk §8 relies on goes through - answered "no
+reference" past its limit of 64, so `ownHold` held nothing for the copy. Those limits exist because a walk can meet a type
+holding itself by value before T16 reports it (C2e), so they stay, but each walk §8 or own relies on answers the safe way
+past it; the own pass's own walks have no limit (a path of struct types, or a seen-set, ends them). The operand-path
+loops with guards of 64 were unbounded too: past 64 they had only refused with the wrong message, never accepted.
+
+**L1** was O32 checking only own-reference parts of a borrowed copy; an owning-value part is refused the same way now.
+**x1**: T29a's retyping in place covered a variable, a field, an element and a slice, but not a reference a call gives,
+which became a value conversion that codegen promoted by copying; a reference argument is retyped too. It made `k09`
+(a converted view handed to a callee that may keep it) an O38 error - the conversion now names the buffer, as T29a says.
+Two over-rejections were cheap and sound to lift: O26a follows `take` as a flow, and a destructor's O40 points at its own
+call. The other two stay recorded.
+
+The fuzzer writes R1, D and L1 now (seven shapes); on d5ddcda, own seeds 1-300 found 22 use-after-frees (14 R1, 8 D); on the fixed tip none.
+
+### Vec phase 2a's fix round reviewed (vec7), fixed: the same path within a statement, a take through a getter (§8.8 O31, O34, T16, T29a, 2026-10-12)
+
+The review of c7099f6 (`/home/user/review/vec7`) found that two of the round's answers were narrower than they looked.
+
+**F1 was an argument that held for the slots and not for the root.** 26.1 accepted a move between two fields of one owned
+object when both were read by one path, reasoning that a live borrow keeps the slot from changing between the two reads.
+True of every own slot on the path - and beside the point for the variable the path starts at, which a reference local,
+a parameter used as a cursor or a global lets the program repoint without releasing anything. A cursor walking a chain
+(`prev := c.lx; c = c.next; prev.more = take c.lx.toks`) is the natural shape, and it moved the second lexer's words into
+the first. The coordinator narrowed it rather than trying to prove a local un-repointed across statements: both reads in
+the statement being checked, by a non-global variable and fields only. Within one statement nothing repoints a local; a
+call can repoint a global, so a global root is not trusted. Each region now records the statement that made it.
+
+**F2 was R1 again, through a call.** R1's fix asked where the instance lives by its region, but an instance reached
+through a getter giving a borrowed own result carries the getter's `&p` tag - `p`'s scope - until borrowed own results
+are settled after every body. Answering "not known" for every call would also refuse taking from a factory's new object,
+so the take is recorded and decided after the settle: refused when the callee gives a borrowed own result, or when such a
+result may reach the variable the instance was read through (a flow-insensitive fixed point over the checked bodies,
+which also covers a variable assigned the getter's result only after the take, on a later loop turn). F3, its building
+twin (`p.Lx().toks.Push(x)` builds in `p`'s block), costs memory only and stays recorded: making the call the region for
+building would need the landing to know at the call what the settle decides later.
+
+**The rest.** N1: the round's T29a retype had reached conditionals and matches, whose values kept their own type - the
+retype is a call's only, and of a fixed-length reference too, which closes X1b (a copy at run time, a name under `-i`).
+N2: the safe answer past the walk limit was reported as "owns objects" with a nonsense spelling; it is its own error now.
+V1: T16 was checked over declared types only, so a generic holding itself by value reached codegen's layout and
+overflowed the stack; each instantiation is checked as it is made.
+
+The fuzzer writes both shapes now; own seeds 1-300 found 18 use-after-frees on c7099f6 (10 F1, 8 F2) and none on the fix.

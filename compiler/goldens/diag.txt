@@ -839,8 +839,8 @@ compilation failed with 2 errors
 derivedhelpercount.olang:11:26: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    11 |     println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                          ^~~~~
-$ROOT/std/prelude/list.olang:439:21: note: in the standard library's code, here
-  439 |             if keep(x) { c++ }
+$ROOT/std/prelude/list.olang:443:21: note: in the standard library's code, here
+  443 |             if keep(x) { c++ }
       |                     ^
 derivedhelpercount.olang:11:26: note: instantiated here, with T = Bag&
    11 |     println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
@@ -2124,8 +2124,8 @@ compilation failed with 1 error
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/list.olang:459:5: note: the callee requires it because of this statement
-  459 |     return acc
+$ROOT/std/prelude/list.olang:463:5: note: the callee requires it because of this statement
+  463 |     return acc
       |     ^~~~~~
 compilation failed with 1 error
 === o14btypevar.olang
@@ -2520,12 +2520,12 @@ o26two.olang:8:9: error[O26]: '&return' names the result scope, and this functio
       |         ^~~~~~
 compilation failed with 2 errors
 === o31byvalue.olang
-o31byvalue.olang:17:7: error[O31]: Server owns objects - a field of it is 'own' - so only a local or a result holds one by value: write Server&, or 'own mut Server&' to own one
-   17 |     s Server
-      |       ^~~~~~
+o31byvalue.olang:19:14: error[O31]: Server owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write Server&, or 'own mut Server&' to own one
+   19 |     xs Array<Server>& = null
+      |              ^~~~~~
 compilation failed with 1 error
 === o31valueparam.olang
-o31valueparam.olang:22:8: error[O31]: Buf owns objects - a field of it is 'own' - so only a local or a result holds one by value: write Buf&, or 'own mut Buf&' to own one
+o31valueparam.olang:22:8: error[O31]: Buf owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write Buf&, or 'own mut Buf&' to own one
    22 | fn f(b Buf) I64 {
       |        ^~~
 compilation failed with 1 error
@@ -2996,9 +2996,9 @@ compilation failed with 1 error
 o37borrowres28.olang:64:14: error[O39]: calling 'rel' may release the Inner borrowed on line 64, which is used after it
    64 |     println($rel(v, v.First()))
       |              ^~~
-o37borrowres28.olang:64:18: note: borrowed here
+o37borrowres28.olang:64:23: note: borrowed here
    64 |     println($rel(v, v.First()))
-      |                  ^
+      |                       ^~~~~
 o37borrowres28.olang:58:7: note: 'rel' releases here
    58 |     v.o = null
       |       ^
@@ -4191,8 +4191,8 @@ compilation failed with 1 error
 rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
     6 |     c := ro.Clone()
       |          ^~
-$ROOT/std/prelude/list.olang:334:5: note: 'l' is declared here
-  334 | fn (l List<<T>>&) Clone() List<T> {
+$ROOT/std/prelude/list.olang:338:5: note: 'l' is declared here
+  338 | fn (l List<<T>>&) Clone() List<T> {
       |     ^
 compilation failed with 1 error
 === rv3rofilter.olang
@@ -5466,21 +5466,8 @@ t25cforinwrites.olang:18:5: error[T25c]: a read-only reference cannot become wri
    18 |     for x in hs[0].ring { t += x }
       |     ^~~
 compilation failed with 1 error
-=== t25earrinst.olang
-t25earrinst.olang:8:23: error[T25e]: 'own' on Array<P>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
-    8 | fn main() ? { b := SV<P>() }
-      |                       ^
-t25earrinst.olang:8:23: note: its elements, P, are values holding references - hold them by reference, 'P&'
-    8 | fn main() ? { b := SV<P>() }
-      |                       ^
-compilation failed with 1 error
-=== t25earrvalue.olang
-t25earrvalue.olang:6:10: error[T25e]: 'own' on Array<P>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
-    6 |     data own mut Array<P>& = null
-      |          ^~~
-compilation failed with 1 error
 === t25ekind.olang
-t25ekind.olang:16:7: error[T25e]: 'own' on Array<I64, 4>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
+t25ekind.olang:16:7: error[T25e]: 'own' on Array<I64, 4>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')
    16 |     a own Array<I64, 4>&
       |       ^~~
 compilation failed with 1 error
@@ -5889,9 +5876,9 @@ compilation failed with 1 error
 vec04lend.olang:10:14: error[O39]: calling 'grow' may release the Array<I64> borrowed on line 10, which is used after it
    10 |     println($grow(v, v.View()))
       |              ^~~~
-vec04lend.olang:10:19: note: borrowed here
+vec04lend.olang:10:24: note: borrowed here
    10 |     println($grow(v, v.View()))
-      |                   ^
+      |                        ^~~~
 $ROOT/std/prelude/vec.olang:31:32: note: 'grow' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
@@ -5900,9 +5887,9 @@ compilation failed with 1 error
 vec05elem.olang:11:14: error[O39]: calling 'grow' may release the Array<Pt> borrowed on line 11, which is used after it
    11 |     println($grow(v, v.View()[0]))
       |              ^~~~
-vec05elem.olang:11:19: note: borrowed here
+vec05elem.olang:11:24: note: borrowed here
    11 |     println($grow(v, v.View()[0]))
-      |                   ^
+      |                        ^~~~
 $ROOT/std/prelude/vec.olang:31:32: note: 'grow' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
@@ -5960,6 +5947,190 @@ $ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
+=== vec100wrapreplaced.olang
+vec100wrapreplaced.olang:14:5: error[O39]: assigning 'w' may release the Array<I64> borrowed on line 13, which is used after it
+   14 |     w = Wrap()
+      |     ^
+vec100wrapreplaced.olang:13:20: note: borrowed here
+   13 |     d := w.lx.toks.View()
+      |                    ^~~~
+vec100wrapreplaced.olang:15:14: note: used here, after it
+   15 |     println($d[0])
+      |              ^
+compilation failed with 1 error
+=== vec101wrapfieldreplaced.olang
+vec101wrapfieldreplaced.olang:14:7: error[O39]: assigning 'w.lx' may release the Array<I64> borrowed on line 13, which is used after it
+   14 |     w.lx = Lexer(2)
+      |       ^~
+vec101wrapfieldreplaced.olang:13:20: note: borrowed here
+   13 |     d := w.lx.toks.View()
+      |                    ^~~~
+vec101wrapfieldreplaced.olang:15:14: note: used here, after it
+   15 |     println($d[0])
+      |              ^
+compilation failed with 1 error
+=== vec102walkpush.olang
+vec102walkpush.olang:10:30: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
+   10 |     for x in l.toks { l.toks.Push(x) }
+      |                              ^~~~
+vec102walkpush.olang:10:16: note: borrowed here
+   10 |     for x in l.toks { l.toks.Push(x) }
+      |                ^~~~
+vec102walkpush.olang:10:5: note: used here, after it
+   10 |     for x in l.toks { l.toks.Push(x) }
+      |     ^~~
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec103refview.olang
+vec103refview.olang:12:12: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     l.toks.Push(2)
+      |            ^~~~
+vec103refview.olang:11:17: note: borrowed here
+   11 |     d := r.toks.View()
+      |                 ^~~~
+vec103refview.olang:13:14: note: used here, after it
+   13 |     println($d[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec104viewfn.olang
+vec104viewfn.olang:12:12: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     l.toks.Push(2)
+      |            ^~~~
+vec104viewfn.olang:11:10: note: borrowed here
+   11 |     d := view(l)
+      |          ^~~~
+vec104viewfn.olang:13:14: note: used here, after it
+   13 |     println($d[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec105takeholder.olang
+vec105takeholder.olang:12:9: error[O39]: taking 'm' moves the Array<I64> borrowed on line 11, which is used after it - a borrowed object is not moved until its borrow is done
+   12 |     l = take m
+      |         ^~~~
+vec105takeholder.olang:11:17: note: borrowed here
+   11 |     d := m.toks.View()
+      |                 ^~~~
+vec105takeholder.olang:13:14: note: used here, after it
+   13 |     println($d[0])
+      |              ^
+compilation failed with 1 error
+=== vec106fieldnotake.olang
+vec106fieldnotake.olang:10:16: error[O34]: moving out of 'm.toks' would leave it empty - write 'take m.toks'
+   10 |     l.toks = m.toks
+      |                ^~~~
+compilation failed with 1 error
+=== vec107lambdaholder.olang
+vec107lambdaholder.olang:10:28: error[O32]: a lambda does not capture the owner local 'l' - capture a borrow of it, 'b := l' outside the lambda
+   10 |     f := fn() I64 { return l.toks.Len() }
+      |                            ^
+compilation failed with 1 error
+=== vec108payload.olang
+vec108payload.olang:4:9: error[O31]: Vec<I64> owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write Vec<I64>&, or 'own mut Vec<I64>&' to own one
+    4 |     A(v Vec<I64>)
+      |         ^~~
+compilation failed with 1 error
+=== vec109typearg.olang
+vec109typearg.olang:9:15: error[O31]: Lexer owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write Lexer&, or 'own mut Lexer&' to own one
+    9 |     a := List<Lexer>()
+      |               ^~~~~
+compilation failed with 1 error
+=== vec110elemtextloop.olang
+vec110elemtextloop.olang:11:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   11 |         v.Push(Tok(t, i))
+      |                    ^
+compilation failed with 1 error
+=== vec111elemrocopy.olang
+vec111elemrocopy.olang:15:13: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
+   15 |     c[0].to.n = 5
+      |             ^
+compilation failed with 1 error
+=== vec112elemviewstore.olang
+vec112elemviewstore.olang:14:19: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+   14 |         m[0].text = t
+      |                   ^
+compilation failed with 1 error
+=== vec113elemsetloop.olang
+vec113elemsetloop.olang:12:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   12 |         v[0] = Tok(t, 2)
+      |                    ^
+compilation failed with 1 error
+=== vec114elemkeepfn.olang
+vec114elemkeepfn.olang:15:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |         keep(v, t)
+      |         ^~~~
+vec114elemkeepfn.olang:9:5: note: the callee requires it because of this statement
+    9 |     v.Push(Tok(t, 0))
+      |     ^
+vec114elemkeepfn.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'v' lives: 't mut String&v = ...'
+   14 |         t := "w" $i
+      |         ^
+vec114elemkeepfn.olang:15:17: note: this text lives in a block that closes first - pass a copy, which is made where 'v' lives: write '$' before it
+   15 |         keep(v, t)
+      |                 ^
+compilation failed with 1 error
+=== vec115elemkeptlist.olang
+vec115elemkeptlist.olang:20:15: error[O38]: this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead
+   20 |     keep.Push(r)
+      |               ^
+compilation failed with 1 error
+=== vec116elemkeptfield.olang
+vec116elemkeptfield.olang:20:27: error[O39]: calling 'Push' may release the Array<Link> borrowed on line 18, which is used after it
+   20 |     for i in range 40 { v.Push(Link("b", nd)) }
+      |                           ^~~~
+vec116elemkeptfield.olang:18:12: note: borrowed here
+   18 |     m := v.ViewMut()
+      |            ^~~~~~~
+vec116elemkeptfield.olang:21:14: note: used here, after it
+   21 |     println($h.l.name)
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec117elemviewkept.olang
+vec117elemviewkept.olang:19:27: error[O39]: calling 'Push' may release the Array<Link> borrowed on line 18, which is used after it
+   19 |     for i in range 40 { v.Push(Link("b", nd)) }
+      |                           ^~~~
+vec117elemviewkept.olang:18:13: note: borrowed here
+   18 |     h.l = v.View()[0]
+      |             ^~~~
+vec117elemviewkept.olang:20:14: note: used here, after it
+   20 |     println($h.l.name)
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec118elemslice.olang
+vec118elemslice.olang:16:7: error[O39]: assigning 'b.data' may release the Array<Q> borrowed on line 15, which is used after it
+   16 |     b.data = Array<Q>(1)
+      |       ^~~~
+vec118elemslice.olang:15:13: note: borrowed here
+   15 |     sl := b.data[0].arr[0:2]
+      |             ^~~~
+vec118elemslice.olang:17:14: note: used here, after it
+   17 |     println($sl[0])
+      |              ^~
+compilation failed with 1 error
+=== vec119elemreturned.olang
+vec119elemreturned.olang:16:7: error[O39]: assigning 'b.data' may release the Array<Q> borrowed on line 15, which is used after it
+   16 |     b.data = Array<Q>(1)
+      |       ^~~~
+vec119elemreturned.olang:15:21: note: borrowed here
+   15 |     x := pick(b.data[0])
+      |                     ^
+vec119elemreturned.olang:17:14: note: used here, after it
+   17 |     println($x.n)
+      |              ^
+compilation failed with 1 error
 === vec11inplace.olang
 vec11inplace.olang:5:41: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
     5 | fn el(v Vec<Pt>&) Pt&v { return v.View()[0] }
@@ -5977,22 +6148,147 @@ $ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 2 errors
-=== vec12elemvalue.olang
-vec12elemvalue.olang:9:14: error[T25e]: 'own' on Array<Tok>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
-    9 |     v := Vec<Tok>()
-      |              ^~~
-vec12elemvalue.olang:9:14: note: its elements, Tok, are values holding references - hold them by reference, 'Tok&'
-    9 |     v := Vec<Tok>()
-      |              ^~~
-vec12elemvalue.olang:9:14: error[O34]: an own array slot takes an array made here - 'Array<T>(n)', or a literal, text or join of elements referring nowhere - 'take' from another own slot, or null
-    9 |     v := Vec<Tok>()
-      |              ^~~
-$ROOT/std/prelude/vec.olang:16:30: note: in the standard library's code, here
-   16 |     data own mut Array<T>& = Array<T>(cap if cap > 0 else 0)  # the buffer; its first n elements are the Vec's
-      |                              ^~~~~
-vec12elemvalue.olang:9:14: note: instantiated here, with T = Tok
-    9 |     v := Vec<Tok>()
-      |              ^~~
+=== vec120elemselfref.olang
+vec120elemselfref.olang:13:20: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+   13 |     b.data[0].back = b.data
+      |                    ^
+compilation failed with 1 error
+=== vec121deepreleased.olang
+vec121deepreleased.olang:20:7: error[O39]: assigning 'v.o' may release the Leaf borrowed on line 19, which is used after it
+   20 |     v.o = Inner(2)
+      |       ^
+vec121deepreleased.olang:19:12: note: borrowed here
+   19 |     d := v.Deep()
+      |            ^~~~
+vec121deepreleased.olang:21:13: note: used here, after it
+   21 |     println(d.text)
+      |             ^
+compilation failed with 1 error
+=== vec122deepleaf.olang
+vec122deepleaf.olang:20:9: error[O39]: assigning 'v.o.deep' may release the Leaf borrowed on line 19, which is used after it
+   20 |     v.o.deep = Leaf(3)
+      |         ^~~~
+vec122deepleaf.olang:19:12: note: borrowed here
+   19 |     d := v.Deep()
+      |            ^~~~
+vec122deepleaf.olang:21:13: note: used here, after it
+   21 |     println(d.text)
+      |             ^
+compilation failed with 1 error
+=== vec123deeptaken.olang
+vec123deeptaken.olang:20:10: error[O39]: taking 'v.o' moves the Leaf borrowed on line 19, which is used after it - a borrowed object is not moved until its borrow is done
+   20 |     t := take v.o
+      |          ^~~~
+vec123deeptaken.olang:19:12: note: borrowed here
+   19 |     d := v.Deep()
+      |            ^~~~
+vec123deeptaken.olang:21:13: note: used here, after it
+   21 |     println(d.text)
+      |             ^
+compilation failed with 1 error
+=== vec124deepthrough.olang
+vec124deepthrough.olang:21:7: error[O39]: assigning 'v.o' may release the Leaf borrowed on line 20, which is used after it
+   21 |     v.o = Inner(4)
+      |       ^
+vec124deepthrough.olang:20:10: note: borrowed here
+   20 |     d := deeper(v)
+      |          ^~~~~~
+vec124deepthrough.olang:22:13: note: used here, after it
+   22 |     println(d.text)
+      |             ^
+compilation failed with 1 error
+=== vec125deepplain.olang
+vec125deepplain.olang:19:49: error[O10d]: this value lives in this function's own scope, which closes first
+   19 | fn (x Outer&) Deep2() Leaf&x { return x.Plain().deep }
+      |                                                 ^~~~
+vec125deepplain.olang:19:49: note: a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow
+   19 | fn (x Outer&) Deep2() Leaf&x { return x.Plain().deep }
+      |                                                 ^~~~
+compilation failed with 1 error
+=== vec126globalcopy.olang
+vec126globalcopy.olang:11:10: error[O32]: Vec<I64> owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it
+   11 |     x := G
+      |          ^
+compilation failed with 1 error
+=== vec127globalfieldcopy.olang
+vec127globalfieldcopy.olang:9:13: error[O32]: Vec<I64> owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it
+    9 |     c := GL.toks
+      |             ^~~~
+compilation failed with 1 error
+=== vec128ownedfieldtake.olang
+vec128ownedfieldtake.olang:24:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   24 |     d.lx.toks = take p.lx.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec129ownedfieldvialocal.olang
+vec129ownedfieldvialocal.olang:23:10: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   23 |     m := take h.lx.toks
+      |          ^~~~
+compilation failed with 1 error
+=== vec130ownedstructfield.olang
+vec130ownedstructfield.olang:26:13: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   26 |     g.m.l = take h.m.l
+      |             ^~~~
+compilation failed with 1 error
+=== vec131ownedglobals.olang
+vec131ownedglobals.olang:23:18: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   23 |     GG.lx.toks = take GH.lx.toks
+      |                  ^~~~
+compilation failed with 1 error
+=== vec132ownedtoks.olang
+vec132ownedtoks.olang:28:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   28 |     g.lx.toks = take h.lx.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec133ownedsteal.olang
+vec133ownedsteal.olang:17:42: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   17 | fn steal(h mut H&) Vec<String&> { return take h.lx.toks }
+      |                                          ^~~~
+compilation failed with 1 error
+=== vec134ownedreturn.olang
+vec134ownedreturn.olang:21:12: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   21 |     return take p.lx.toks
+      |            ^~~~
+compilation failed with 1 error
+=== vec135ownedborrowlocal.olang
+vec135ownedborrowlocal.olang:24:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   24 |     d.lx.toks = take q.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec136deepcopy.olang
+vec136deepcopy.olang:42:49: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 41, which is used after it
+   42 |     for i in range 100 { o.x.x.x.x.x.x.x.x.toks.Push(i) }
+      |                                                 ^~~~
+vec136deepcopy.olang:41:10: note: borrowed here
+   41 |     c := o
+      |          ^
+vec136deepcopy.olang:46:14: note: used here, after it
+   46 |     println($c.x.x.x.x.x.x.x.x.toks[0] " " $z.Len())
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec137deepreturn.olang
+vec137deepreturn.olang:33:12: error[O38, O26a]: this result reaches the owner value local 'o' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('L8'), where 'return o' moves it
+   33 |     return o
+      |            ^
+vec137deepreturn.olang:42:12: error[O38, O26a]: this result reaches the owner value local 'o' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('L8'), where 'return o' moves it
+   42 |     return h
+      |            ^
+compilation failed with 2 errors
+=== vec138copyfieldowner.olang
+vec138copyfieldowner.olang:22:13: error[O32]: 'c.a' belongs to what 't' was copied from - assign it there
+   22 |         c.a = Lexer(7 + i)
+      |             ^
+compilation failed with 1 error
+=== vec139copyfieldloop.olang
+vec139copyfieldloop.olang:21:13: error[O32]: 'c.a' belongs to what 't' was copied from - assign it there
+   21 |         c.a = Lexer(7)
+      |             ^
+vec139copyfieldloop.olang:22:13: error[O32]: 'c.b' belongs to what 't' was copied from - assign it there
+   22 |         c.b = Lexer(8)
+      |             ^
 compilation failed with 2 errors
 === vec13nominal.olang
 vec13nominal.olang:14:29: error[O39]: calling 'Push' may release the Array<Char> borrowed on line 13, which is used after it
@@ -6008,6 +6304,48 @@ $ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
+=== vec140fieldcopypart.olang
+vec140fieldcopypart.olang:14:12: error[O32]: 'e.toks' belongs to what 't' was copied from - assign it there
+   14 |     e.toks = Vec<I64>()
+      |            ^
+compilation failed with 1 error
+=== vec141dtorglobal.olang
+vec141dtorglobal.olang:15:37: error[O40]: a destructor may not release owned objects - its instance's own fields are released after it runs
+   15 | } destruct { for i in range 100 { G.Push(i) } }
+      |                                     ^~~~
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec145deeploan.olang
+vec145deeploan.olang:221:173: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 220, which is used after it
+  221 | ....x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i) }
+      |                                                                          ^~~~
+vec145deeploan.olang:220:10: note: borrowed here
+  220 |     c := o
+      |          ^
+vec145deeploan.olang:222:14: note: used here, after it
+  222 |     println($c.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x...
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec147samepathlocal.olang
+vec147samepathlocal.olang:28:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   28 |     q.more = take p.lx.toks
+      |              ^~~~
+compilation failed with 1 error
+=== vec148samepathchain.olang
+vec148samepathchain.olang:29:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   29 |     prev.more = take c.lx.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec149samepathparam.olang
+vec149samepathparam.olang:21:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   21 |     q.more = take p.lx.toks
+      |              ^~~~
+compilation failed with 1 error
 === vec14nominalconv.olang
 vec14nominalconv.olang:14:29: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 13, which is used after it
    14 |     for i in range 1000 { w.Push(i + 100) }
@@ -6022,10 +6360,60 @@ $ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
    31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
       |                                ^~~~
 compilation failed with 1 error
+=== vec150samepathglobal.olang
+vec150samepathglobal.olang:27:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   27 |     q.more = take G.lx.toks
+      |              ^~~~
+compilation failed with 1 error
+=== vec152getter.olang
+vec152getter.olang:25:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   25 |     d.lx.toks = take p.Lx().toks
+      |                 ^~~~
+vec152getter.olang:25:17: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   25 |     d.lx.toks = take p.Lx().toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec153getterlocal.olang
+vec153getterlocal.olang:26:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   26 |     d.lx.toks = take q.toks
+      |                 ^~~~
+vec153getterlocal.olang:26:17: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   26 |     d.lx.toks = take q.toks
+      |                 ^~~~
+compilation failed with 1 error
+=== vec154getterglobal.olang
+vec154getterglobal.olang:23:10: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   23 |     G2 = take GP.Lx().toks
+      |          ^~~~
+vec154getterglobal.olang:23:10: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   23 |     G2 = take GP.Lx().toks
+      |          ^~~~
+compilation failed with 1 error
+=== vec155getterlater.olang
+vec155getterlater.olang:28:21: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   28 |         d.lx.toks = take q.toks
+      |                     ^~~~
+vec155getterlater.olang:28:21: note: this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads
+   28 |         d.lx.toks = take q.toks
+      |                     ^~~~
+vec155getterlater.olang:29:15: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   29 |         q = p.Lx()
+      |               ^~
+compilation failed with 2 errors
+=== vec158deeparray.olang
+vec158deeparray.olang:4:37: error[O31]: this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less
+    4 |     a Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Arr...
+      |                                     ^~~~~
+compilation failed with 1 error
 === vec15fnvalue.olang
 vec15fnvalue.olang:13:10: error[O37]: 'view' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'view' by name
    13 |     f := view            # view as a function value
       |          ^~~~
+compilation failed with 1 error
+=== vec160genericselfhold.olang
+vec160genericselfhold.olang:4:5: error[T16]: N<I64> cannot hold itself by value - hold it through a reference ('&')
+    4 |     x N<T> = N<T>()
+      |     ^
 compilation failed with 1 error
 === vec16calladapter.olang
 vec16calladapter.olang:13:16: error[O37]: 'Call' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'Call' by name
@@ -6058,9 +6446,9 @@ vec18ownlocal.olang:20:13: note: used here, after it
       |             ^
 compilation failed with 1 error
 === vec19listconv.olang
-vec19listconv.olang:8:12: error[O38]: this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead
+vec19listconv.olang:8:21: error[O38]: this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead
     8 |     l.Push(String(v.View()))
-      |            ^~~~~~
+      |                     ^~~~
 compilation failed with 1 error
 === vec21stalerec.olang
 vec21stalerec.olang:24:7: error[O39]: assigning 'c.text' may release the String borrowed on line 23, which is used after it
@@ -6099,8 +6487,8 @@ compilation failed with 1 error
 vec27cloneshort.olang:9:18: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
     9 |         keep = w.Clone()
       |                  ^~~~~
-$ROOT/std/prelude/vec.olang:180:26: note: the callee requires it because of this statement
-  180 |     for i in range v.n { c.data[i] = v.data[i] }
+$ROOT/std/prelude/vec.olang:187:26: note: the callee requires it because of this statement
+  187 |     for i in range v.n { c.data[i] = v.data[i] }
       |                          ^
 compilation failed with 1 error
 === vec28builtleak.olang
@@ -6129,8 +6517,8 @@ compilation failed with 2 errors
 vec30sortmut.olang:12:7: error[O17, O33]: an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is - lend it what holds the array, or hand it the array as an owner ('b.names = f(take b.names)')
    12 |     s.Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })
       |       ^~~~
-$ROOT/std/prelude/vec.olang:148:59: note: in the standard library's code, here
-  148 | fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.data[:v.n].Sort(less) }
+$ROOT/std/prelude/vec.olang:155:59: note: in the standard library's code, here
+  155 | fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.data[:v.n].Sort(less) }
       |                                                           ^
 vec30sortmut.olang:12:7: note: instantiated here, with T = Node&
    12 |     s.Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })
@@ -6566,6 +6954,162 @@ vec84releasedefer.olang:8:12: note: borrowed here
 vec84releasedefer.olang:10:9: note: used here, after it
    10 |         d mut String&x = $5 "-built-on-the-way-out"
       |         ^
+compilation failed with 1 error
+=== vec88fieldviewpush.olang
+vec88fieldviewpush.olang:11:12: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
+   11 |     l.toks.Push(9)
+      |            ^~~~
+vec88fieldviewpush.olang:10:17: note: borrowed here
+   10 |     d := l.toks.View()
+      |                 ^~~~
+vec88fieldviewpush.olang:12:14: note: used here, after it
+   12 |     println($d[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec89fieldtakeborrowed.olang
+vec89fieldtakeborrowed.olang:11:10: error[O39]: taking 'l.toks' moves the Array<I64> borrowed on line 10, which is used after it - a borrowed object is not moved until its borrow is done
+   11 |     t := take l.toks
+      |          ^~~~
+vec89fieldtakeborrowed.olang:10:17: note: borrowed here
+   10 |     d := l.toks.View()
+      |                 ^~~~
+vec89fieldtakeborrowed.olang:12:14: note: used here, after it
+   12 |     println($d[0] " " $t.Len())
+      |              ^
+compilation failed with 1 error
+=== vec90structcopygrows.olang
+vec90structcopygrows.olang:12:12: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     l.toks.Push(9)
+      |            ^~~~
+vec90structcopygrows.olang:11:10: note: borrowed here
+   11 |     c := l
+      |          ^
+vec90structcopygrows.olang:13:14: note: used here, after it
+   13 |     println($c.toks[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec91fieldcopygrows.olang
+vec91fieldcopygrows.olang:11:12: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
+   11 |     l.toks.Push(9)
+      |            ^~~~
+vec91fieldcopygrows.olang:10:12: note: borrowed here
+   10 |     c := l.toks
+      |            ^~~~
+vec91fieldcopygrows.olang:12:14: note: used here, after it
+   12 |     println($c[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec92methodgrows.olang
+vec92methodgrows.olang:12:7: error[O39]: calling 'grow' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     l.grow()
+      |       ^~~~
+vec92methodgrows.olang:11:17: note: borrowed here
+   11 |     d := l.toks.View()
+      |                 ^~~~
+vec92methodgrows.olang:13:14: note: used here, after it
+   13 |     println($d[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'grow' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec93methodresets.olang
+vec93methodresets.olang:12:7: error[O39]: calling 'reset' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     l.reset()
+      |       ^~~~~
+vec93methodresets.olang:11:17: note: borrowed here
+   11 |     d := l.toks.View()
+      |                 ^~~~
+vec93methodresets.olang:13:14: note: used here, after it
+   13 |     println($d[0])
+      |              ^
+vec93methodresets.olang:7:31: note: 'reset' releases here
+    7 | fn (l mut Lexer&) reset() { l.toks = Vec<I64>() }
+      |                               ^~~~
+compilation failed with 1 error
+=== vec94lambdakeeps.olang
+vec94lambdakeeps.olang:12:12: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 10, which is used after it
+   12 |     l.toks.Push(4)
+      |            ^~~~
+vec94lambdakeeps.olang:10:17: note: borrowed here
+   10 |     d := l.toks.View()
+      |                 ^~~~
+vec94lambdakeeps.olang:13:14: note: used here, after it
+   13 |     println($f())
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec95globalkeeps.olang
+vec95globalkeeps.olang:11:16: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+   11 |     G = l.toks.View()
+      |                ^~~~
+vec95globalkeeps.olang:11:7: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   11 |     G = l.toks.View()
+      |       ^
+compilation failed with 2 errors
+=== vec96taskkeeps.olang
+vec96taskkeeps.olang:14:16: error[O39]: calling 'Push' may release the Array<I64> borrowed on line 11, which is used after it
+   14 |         l.toks.Push(4)
+      |                ^~~~
+vec96taskkeeps.olang:11:17: note: borrowed here
+   11 |     d := l.toks.View()
+      |                 ^~~~
+vec96taskkeeps.olang:13:20: note: used here, after it
+   13 |         spawn look(d)
+      |                    ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec97globalfieldgrows.olang
+vec97globalfieldgrows.olang:12:5: error[O39]: calling 'bump' may release the Array<I64> borrowed on line 11, which is used after it
+   12 |     bump()
+      |     ^~~~
+vec97globalfieldgrows.olang:11:18: note: borrowed here
+   11 |     d := GL.toks.View()
+      |                  ^~~~
+vec97globalfieldgrows.olang:13:14: note: used here, after it
+   13 |     println($d[0])
+      |              ^
+$ROOT/std/prelude/vec.olang:31:32: note: 'bump' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error
+=== vec98ownedholder.olang
+vec98ownedholder.olang:15:7: error[O39]: assigning 'h.lx' may release the Array<I64> borrowed on line 14, which is used after it
+   15 |     h.lx = null
+      |       ^~
+vec98ownedholder.olang:14:20: note: borrowed here
+   14 |     d := h.lx.toks.View()
+      |                    ^~~~
+vec98ownedholder.olang:16:14: note: used here, after it
+   16 |     println($d[0])
+      |              ^
+compilation failed with 1 error
+=== vec99ownedholdercall.olang
+vec99ownedholdercall.olang:16:5: error[O39]: calling 'drop' may release the Lexer borrowed on line 15, which is used after it
+   16 |     drop(h)
+      |     ^~~~
+vec99ownedholdercall.olang:15:15: note: borrowed here
+   15 |     d := h.lx.toks.View()
+      |               ^~~~
+vec99ownedholdercall.olang:17:14: note: used here, after it
+   17 |     println($d[0])
+      |              ^
+vec99ownedholdercall.olang:10:26: note: 'drop' releases here
+   10 | fn drop(h mut Host&) { h.lx = null }
+      |                          ^~
 compilation failed with 1 error
 === zeroeffect.olang
 zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written

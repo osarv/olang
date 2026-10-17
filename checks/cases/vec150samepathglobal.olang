@@ -1,0 +1,31 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# vec7 F1 through a global reference repointed between the two reads
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+G mut Parser& = Parser()
+H mut Parser& = Parser()
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    keep := G
+    G.lx = Lexer()
+    H.lx = Lexer()
+    for i in range 3 { H.lx.toks.Push($i "-word-in-H's-lexer-region") }
+    q := G.lx
+    G = H
+    q.more = take G.lx.toks
+    H.lx = null
+    churn()
+    println(keep.lx.more[0])
+}

@@ -17509,3 +17509,118 @@ test "O35, O36: an owner left behind by a checked operation under try, and a fai
     }
     assert OwnDropped == 8
 }
+
+# ---- own, Vec phase 2a: an owning value held by a field or a global, an own array of values holding references, a
+#      borrow two own fields deep handed back (§8.8 O31, O33, O37) ----
+type OwnPair2a struct() {
+    left OwnNamed = OwnNamed()                   # O31: an owning value held by a field - its owners are the instance's
+    right OwnNamed = OwnNamed()
+}
+fn ownPairOf(k I64) OwnPair2a {
+    p := OwnPair2a()
+    p.left = ownNamedOf(k)                       # the field given an owner (O34), the one it held released
+    p.right.cur = OwnPart(k + 1)
+    p.right.name = "r" $k
+    return p
+}
+fn ownPairSum(k I64) I64 {
+    p := ownPairOf(k)
+    t := p.left.cur.k + p.right.cur.k * 10 + p.left.name.Len()
+    q := take p.left                             # E34: a field holding an owning value taken, left its zero value
+    t += q.cur.k * 100 + (1 if p.left.cur == null else 0)
+    p.left = take q
+    p.right = OwnNamed()                         # released
+    return t * 10 + p.left.cur.k
+}
+OwnPairBaked I64 = ownPairSum(4)                 # K2: computed while compiling
+type OwnHolder2a struct() {
+    c own mut OwnConn& = null
+}
+type OwnPairD struct() {
+    left OwnHolder2a = OwnHolder2a()
+    right OwnHolder2a = OwnHolder2a()
+}
+test "O31/O34/O35: an owning value held by a field - given owners, taken, replaced, released with its instance" {
+    assert ownPairSum(4 * OwnRun) == OwnPairBaked and OwnPairBaked == 4574
+    p := ownPairOf(6 * OwnRun)
+    assert sbChurn() > 0
+    assert p.left.cur.k == 6 and p.left.name == "n6" and p.right.name == "r6" and p.right.cur.k == 7
+    OwnDropped = 0
+    {
+        d := OwnPairD()
+        d.left.c = OwnConn(1)
+        d.right.c = OwnConn(2)
+        d.left = OwnHolder2a()                   # the Conn it held released (O35)
+        assert OwnDropped == 1 and d.right.c.fd == 2
+        e mut OwnPairD& = OwnPairD()             # an instance in the block's scope: its fields' owners released with it
+        e.right.c = OwnConn(3)
+    }
+    assert OwnDropped == 3
+}
+OwnGPair mut OwnPair2a = OwnPair2a()             # O31: a global holding an owning value - never released, never baked
+fn ownGSet(k I64) { OwnGPair.left = ownNamedOf(k) }
+test "O31: a global holding an owning value, given owners from functions" {
+    ownGSet(5 * OwnRun)
+    ownGSet(8 * OwnRun)                          # the first released
+    assert sbChurn() > 0
+    assert OwnGPair.left.cur.k == 8 and OwnGPair.left.name == "n8"
+}
+
+type OwnTextPair struct(s String&, n I64) {
+    s
+    n
+}
+type OwnTexts2a struct() {
+    data own mut Array<OwnTextPair>& = null      # T25e: elements holding references - what they hold where the slot is
+}
+fn ownTextsWork(k I64) I64 {
+    b := OwnTexts2a()
+    b.data = Array<OwnTextPair>(3)
+    for i in range 3 { b.data[i] = OwnTextPair("p" $(i * k), i) }
+    e := b.data[1]                               # a copy: what it holds is not in the buffer (O38)
+    b.data = Array<OwnTextPair>(5)               # the buffer replaced
+    b.data[4] = OwnTextPair(e.s, 9)
+    return e.s.Len() * 100 + b.data[4].n * 10 + b.data.Len()
+}
+OwnTextsBaked I64 = ownTextsWork(7)
+test "O33/T25e: an own array of values holding references - an element kept across its buffer's release" {
+    assert ownTextsWork(7 * OwnRun) == OwnTextsBaked and OwnTextsBaked == 295
+    b := OwnTexts2a()
+    b.data = Array<OwnTextPair>(2)
+    b.data[0] = OwnTextPair("first" $OwnRun, 1)
+    k := b.data[0]
+    b.data = Array<OwnTextPair>(1)
+    assert sbChurn() > 0
+    assert k.s == "first1" and k.n == 1 and b.data[0].n == 0
+}
+
+type OwnLeaf2a struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type OwnInner2a struct(k I64) {
+    k
+    deep own mut OwnLeaf2a& = OwnLeaf2a(k * 10)
+}
+type OwnOuter2a struct() {
+    o own mut OwnInner2a& = OwnInner2a(1)
+}
+fn (x OwnOuter2a&) First() OwnInner2a&x { return x.o }
+fn (x OwnOuter2a&) Deep() OwnLeaf2a&x { return x.First().deep }   # O37: a borrow two own fields below x
+fn ownDeepWork(k I64) I64 {
+    v := OwnOuter2a()
+    v.o = OwnInner2a(k)
+    d := v.Deep()
+    t := d.n + d.text.Len()
+    v.o = OwnInner2a(k + 1)                      # d's last use was above: the holder may be released
+    e := v.Deep()
+    return t * 1000 + e.n
+}
+OwnDeepBaked I64 = ownDeepWork(3)
+test "O37: a borrow two own fields deep handed back - while compiling and at run time" {
+    assert ownDeepWork(3 * OwnRun) == OwnDeepBaked and OwnDeepBaked == 36040
+    v := OwnOuter2a()
+    d := v.Deep()
+    assert sbChurn() > 0
+    assert d.text == "leaf10" and d.n == 10
+}

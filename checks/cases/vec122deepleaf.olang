@@ -1,0 +1,22 @@
+# check: fail error[O39]: assigning 'v.o.deep' may release the Leaf borrowed on line 19, which is used after it
+# Vec phase 2a (O37/O38): ...and releasing the borrowed object itself
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf& = Leaf(k * 10)
+}
+type Outer struct() {
+    o own mut Inner& = Inner(1)
+    p Inner& = null
+}
+fn (x Outer&) First() Inner&x { return x.o }
+fn (x Outer&) Deep() Leaf&x { return x.First().deep }
+fn main() ? {
+    v := Outer()
+    d := v.Deep()
+    v.o.deep = Leaf(3)
+    println(d.text)
+}

@@ -1,0 +1,32 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# Vec phase 2a review vec7 F1: 'q' was read through a reference local repointed before the move - two reads by one
+# variable's name are not one object, so moving into 'q.more' from 'p.lx.toks' is checked as between two regions
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    a mut Parser& = Parser()
+    b mut Parser& = Parser()
+    a.lx = Lexer()
+    b.lx = Lexer()
+    for i in range 3 { b.lx.toks.Push($i "-word-in-b's-lexer-region") }
+    p mut Parser& = a
+    q := p.lx
+    p = b
+    q.more = take p.lx.toks
+    b.lx = null
+    churn()
+    println(a.lx.more[0])
+}
