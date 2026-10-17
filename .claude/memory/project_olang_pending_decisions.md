@@ -319,6 +319,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QAB APPROVED IN ADVANCE 2026-10-17 (the user, on docs/memory.md: "1) do it"): build as soon as the doc lands - own
   and take removed from both compilers, Vec as a handle with explicit `v.View()`, early freeing by the compiler,
   destructors unchanged at scope close, idempotent Close in std; come back only for a real direction question.
+- QAD ASKED (for the morning) from docs/memory.md (merged cb80059, section 6): (1) pins - a view held across a call
+  that may let go makes that place keep everything; pins (two stores at each such call, listed by the report) would
+  make it exact. Recommended: no pins in the first version (additive later). (2) disarming a destructor - a type's own
+  methods may cancel its destructor once Close() has done its work (`x.Disarm()`), so a closed resource's storage can be
+  freed when removed; without it long-lived structures holding std resources grow with every resource ever held.
+  Recommended yes. In effect: neither; both matter only for round 6 (the port's early freeing). Rounds 1-4 proceed.
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
